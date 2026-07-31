@@ -291,6 +291,7 @@ export default function Kanban() {
         cliente_whatsapp: editando.cliente_whatsapp,
         cidade: editando.cidade,
         acabamento: editando.acabamento,
+        acabamento_outro_texto: editando.acabamento === 'outro' ? editando.acabamento_outro_texto : null,
         contramarco: editando.contramarco,
         arquiteto_nome: editando.arquiteto_nome,
         arquiteto_contato: editando.arquiteto_contato,
@@ -595,28 +596,51 @@ export default function Kanban() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Cor / Acabamento</label>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Cor / Acabamento</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {([
+                    { value: 'preto', label: 'Preto' },
+                    { value: 'branco', label: 'Branco' },
+                    { value: 'madeirado', label: 'Amadeirado' },
+                    { value: 'outro', label: 'Outra cor' },
+                  ] as const).map(a => (
+                    <button
+                      key={a.value}
+                      type="button"
+                      onClick={() => atualizarCampo('acabamento', a.value)}
+                      className={`p-2 rounded-lg text-xs border transition ${
+                        editando.acabamento === a.value
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+                {editando.acabamento === 'outro' && (
                   <input
                     type="text"
-                    value={editando.acabamento || ''}
-                    onChange={e => atualizarCampo('acabamento', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                    value={editando.acabamento_outro_texto || ''}
+                    onChange={e => atualizarCampo('acabamento_outro_texto', e.target.value)}
+                    placeholder="Qual cor?"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-2"
                   />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Contramarco</label>
-                  <select
-                    value={editando.contramarco || ''}
-                    onChange={e => atualizarCampo('contramarco', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  >
-                    <option value="">—</option>
-                    <option value="com">Com contramarco</option>
-                    <option value="sem">Sem contramarco</option>
-                  </select>
-                </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Contramarco</label>
+                <select
+                  value={editando.contramarco || ''}
+                  onChange={e => atualizarCampo('contramarco', e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                >
+                  <option value="">—</option>
+                  <option value="com">Com contramarco</option>
+                  <option value="sem">Sem contramarco</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -694,6 +718,13 @@ export default function Kanban() {
                         <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
                       </label>
                     </div>
+                    <input
+                      type="text"
+                      value={item.cor || ''}
+                      onChange={e => atualizarItemEdit(item.id, 'cor', e.target.value)}
+                      placeholder="Cor desta esquadria (opcional, se diferente da geral)"
+                      className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                    />
                     <textarea
                       value={item.descricao || ''}
                       onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
