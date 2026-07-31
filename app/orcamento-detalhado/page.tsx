@@ -138,7 +138,7 @@ export default function OrcamentoDetalhado() {
         id: it.id,
         tipo_esquadria: it.tipo as TipoEsquadria,
         tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-        folhas: it.folhas ? parseInt(it.folhas) : null,
+        folhas: it.folhas || null,
         largura_mm: parseFloat(it.largura),
         altura_mm: parseFloat(it.altura),
         quantidade: parseInt(it.quantidade) || 1,
@@ -395,11 +395,10 @@ export default function OrcamentoDetalhado() {
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional)</label>
                   <input
-                    type="number"
+                    type="text"
                     value={item.folhas}
                     onChange={e => atualizarItem(item.id, 'folhas', e.target.value)}
-                    placeholder="Ex: 2"
-                    min="1"
+                    placeholder="Ex: 2 ou 2 fixas + 1 móvel"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
                   />
                 </div>
