@@ -19,10 +19,13 @@ export default function Configuracoes() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+  const [whatsappNovo, setWhatsappNovo] = useState('')
   const [role, setRole] = useState<'funcionario' | 'master'>('funcionario')
   const [salvandoUsuario, setSalvandoUsuario] = useState(false)
   const [erroUsuario, setErroUsuario] = useState('')
   const [sucessoUsuario, setSucessoUsuario] = useState('')
+  const [whatsappEdit, setWhatsappEdit] = useState<Record<string, string>>({})
+  const [salvandoWhatsapp, setSalvandoWhatsapp] = useState<string | null>(null)
 
   useEffect(() => {
     carregar()
@@ -38,7 +41,11 @@ export default function Configuracoes() {
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
       ])
-      setUsuarios((users as Usuario[]) || [])
+      const listaUsuarios = (users as Usuario[]) || []
+      setUsuarios(listaUsuarios)
+      const whatsInicial: Record<string, string> = {}
+      listaUsuarios.forEach(u => { whatsInicial[u.id] = u.whatsapp || '' })
+      setWhatsappEdit(whatsInicial)
       setColunas(cols)
       const inicial: Record<string, { amarelo: string; vermelho: string }> = {}
       const coresIniciais: Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }> = {}
@@ -73,7 +80,7 @@ export default function Configuracoes() {
     const resp = await fetch('/api/criar-usuario', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ nome, email, senha, role }),
+      body: JSON.stringify({ nome, email, senha, role, whatsapp: whatsappNovo }),
     })
     const json = await resp.json()
     setSalvandoUsuario(false)
@@ -85,8 +92,24 @@ export default function Configuracoes() {
     setNome('')
     setEmail('')
     setSenha('')
+    setWhatsappNovo('')
     setRole('funcionario')
     carregar()
+  }
+
+  async function salvarWhatsappUsuario(id: string) {
+    setSalvandoWhatsapp(id)
+    const token = await tokenAtual()
+    const whatsapp = whatsappEdit[id] || ''
+    const resp = await fetch('/api/atualizar-usuario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id, whatsapp }),
+    })
+    setSalvandoWhatsapp(null)
+    if (resp.ok) {
+      setUsuarios(prev => prev.map(u => (u.id === id ? { ...u, whatsapp: whatsapp || null } : u)))
+    }
   }
 
   async function salvarSla(colunaId: string) {
@@ -154,14 +177,32 @@ export default function Configuracoes() {
           </h2>
           <div className="space-y-2 mb-6">
             {usuarios.map(u => (
-              <div key={u.id} className="flex items-center justify-between text-sm border border-slate-100 rounded-lg px-3 py-2">
-                <div>
-                  <p className="text-slate-800 font-medium">{u.nome}</p>
-                  <p className="text-slate-400 text-xs">{u.email}</p>
+              <div key={u.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="text-slate-800 font-medium">{u.nome}</p>
+                    <p className="text-slate-400 text-xs">{u.email}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-600'}`}>
+                    {u.role === 'master' ? 'Master' : 'Funcionário'}
+                  </span>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-600'}`}>
-                  {u.role === 'master' ? 'Master' : 'Funcionário'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={whatsappEdit[u.id] ?? ''}
+                    onChange={e => setWhatsappEdit(prev => ({ ...prev, [u.id]: e.target.value }))}
+                    placeholder="WhatsApp (ex: 11999998888)"
+                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                  />
+                  <button
+                    onClick={() => salvarWhatsappUsuario(u.id)}
+                    disabled={salvandoWhatsapp === u.id}
+                    className="px-2.5 py-1.5 bg-brand-navyLight text-brand-navyDark rounded-lg text-xs font-medium hover:bg-brand-navy hover:text-white transition disabled:opacity-50"
+                  >
+                    {salvandoWhatsapp === u.id ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -189,6 +230,13 @@ export default function Configuracoes() {
               value={senha}
               onChange={e => setSenha(e.target.value)}
               placeholder="Senha (mínimo 6 caracteres)"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <input
+              type="text"
+              value={whatsappNovo}
+              onChange={e => setWhatsappNovo(e.target.value)}
+              placeholder="WhatsApp (ex: 11999998888) — opcional"
               className="w-full border border-slate-300 rounded-xl p-3 text-sm"
             />
             <select
