@@ -29,6 +29,14 @@ export interface Cliente {
   observacoes?: string
 }
 
+export interface KanbanColuna {
+  id: string
+  nome: string
+  ordem: number
+  cor?: string
+  created_at?: string
+}
+
 export interface OrcamentoRapido {
   id: string
   created_at: string
@@ -43,8 +51,9 @@ export interface OrcamentoRapido {
   quantidade: number
   acabamento?: Acabamento
   descricao_livre?: string
-  valor_estimado: number
+  valor_estimado?: number | null
   status: StatusOrcamento
+  coluna_id?: string | null
   observacoes?: string
 }
 

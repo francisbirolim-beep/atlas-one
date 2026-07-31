@@ -1,0 +1,78 @@
+import { supabase } from './supabase'
+import { KanbanColuna } from './tipos'
+
+export async function listarColunas(): Promise<KanbanColuna[]> {
+  const { data, error } = await supabase
+    .from('kanban_colunas')
+    .select('*')
+    .order('ordem', { ascending: true })
+
+  if (error || !data) {
+    console.error('Erro ao listar colunas:', error)
+    return []
+  }
+  return data as KanbanColuna[]
+}
+
+export async function primeiraColunaId(): Promise<string | null> {
+  const { data } = await supabase
+    .from('kanban_colunas')
+    .select('id')
+    .order('ordem', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  return data?.id || null
+}
+
+export async function criarColuna(nome: string): Promise<KanbanColuna | null> {
+  const { data: colunas } = await supabase
+    .from('kanban_colunas')
+    .select('ordem')
+    .order('ordem', { ascending: false })
+    .limit(1)
+
+  const proximaOrdem = colunas && colunas.length > 0 ? colunas[0].ordem + 1 : 1
+
+  const { data, error } = await supabase
+    .from('kanban_colunas')
+    .insert({ nome, ordem: proximaOrdem })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Erro ao criar coluna:', error)
+    return null
+  }
+  return data as KanbanColuna
+}
+
+export async function renomearColuna(id: string, nome: string): Promise<boolean> {
+  const { error } = await supabase.from('kanban_colunas').update({ nome }).eq('id', id)
+  return !error
+}
+
+export async function excluirColuna(id: string, colunaDestinoId: string): Promise<boolean> {
+  // Move os cards da coluna que vai ser excluída para outra coluna antes de apagar
+  const { error: moveError } = await supabase
+    .from('orcamentos')
+    .update({ coluna_id: colunaDestinoId })
+    .eq('coluna_id', id)
+
+  if (moveError) {
+    console.error('Erro ao mover cards antes de excluir coluna:', moveError)
+    return false
+  }
+
+  const { error } = await supabase.from('kanban_colunas').delete().eq('id', id)
+  return !error
+}
+
+export async function moverCard(orcamentoId: string, colunaId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('orcamentos')
+    .update({ coluna_id: colunaId })
+    .eq('id', orcamentoId)
+
+  return !error
+}
