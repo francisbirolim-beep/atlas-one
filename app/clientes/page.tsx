@@ -52,13 +52,15 @@ export default function Clientes() {
   })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
               <ArrowLeft size={20} />
             </Link>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
             <div>
               <h1 className="text-lg font-bold text-slate-800">Clientes</h1>
               <p className="text-sm text-slate-500">{clientes.length} cadastrados</p>
@@ -66,7 +68,7 @@ export default function Clientes() {
           </div>
           <Link
             href="/clientes/novo"
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+            className="flex items-center gap-1.5 px-4 py-2 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-brand-navyDark transition"
           >
             <UserPlus size={16} />
             Novo cliente
@@ -100,7 +102,7 @@ export default function Clientes() {
               <Link
                 key={c.id}
                 href={`/clientes/${c.id}`}
-                className="block bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm hover:border-blue-300 transition"
+                className="block bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm hover:border-brand-navy transition"
               >
                 <div className="flex items-center justify-between">
                   <div>
