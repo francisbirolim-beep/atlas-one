@@ -54,8 +54,11 @@ export interface KanbanColuna {
   nome: string
   ordem: number
   cor?: string
+  cor_cards?: string | null
   sla_amarelo_horas?: number | null
   sla_vermelho_horas?: number | null
+  sla_amarelo_cor?: string | null
+  sla_vermelho_cor?: string | null
   created_at?: string
 }
 

@@ -88,3 +88,20 @@ export async function atualizarSlaColuna(
     .eq('id', id)
   return !error
 }
+
+export async function atualizarCoresColuna(
+  id: string,
+  corCards: string | null,
+  slaAmareloCor: string | null,
+  slaVermelhoCor: string | null
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('kanban_colunas')
+    .update({
+      cor_cards: corCards,
+      sla_amarelo_cor: slaAmareloCor,
+      sla_vermelho_cor: slaVermelhoCor,
+    })
+    .eq('id', id)
+  return !error
+}
