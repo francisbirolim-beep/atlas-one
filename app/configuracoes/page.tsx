@@ -5,7 +5,7 @@ import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
-import { listarColunas, atualizarSlaColuna } from '@/lib/kanban'
+import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
 import { Usuario, KanbanColuna } from '@/lib/tipos'
 
 export default function Configuracoes() {
@@ -14,6 +14,7 @@ export default function Configuracoes() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [colunas, setColunas] = useState<KanbanColuna[]>([])
   const [slaEdit, setSlaEdit] = useState<Record<string, { amarelo: string; vermelho: string }>>({})
+  const [corEdit, setCorEdit] = useState<Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }>>({})
 
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
@@ -40,13 +41,21 @@ export default function Configuracoes() {
       setUsuarios((users as Usuario[]) || [])
       setColunas(cols)
       const inicial: Record<string, { amarelo: string; vermelho: string }> = {}
+      const coresIniciais: Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }> = {}
       cols.forEach(c => {
         inicial[c.id] = {
           amarelo: c.sla_amarelo_horas != null ? String(c.sla_amarelo_horas) : '',
           vermelho: c.sla_vermelho_horas != null ? String(c.sla_vermelho_horas) : '',
         }
+        coresIniciais[c.id] = {
+          ativa: !!c.cor_cards,
+          corCards: c.cor_cards || '#3b82f6',
+          amareloCor: c.sla_amarelo_cor || '#f59e0b',
+          vermelhoCor: c.sla_vermelho_cor || '#ef4444',
+        }
       })
       setSlaEdit(inicial)
+      setCorEdit(coresIniciais)
     }
     setCarregando(false)
   }
@@ -84,9 +93,27 @@ export default function Configuracoes() {
     const valores = slaEdit[colunaId]
     const amarelo = valores.amarelo.trim() ? parseInt(valores.amarelo) : null
     const vermelho = valores.vermelho.trim() ? parseInt(valores.vermelho) : null
-    await atualizarSlaColuna(colunaId, amarelo, vermelho)
+    const cores = corEdit[colunaId]
+    const corCards = cores?.ativa ? cores.corCards : null
+
+    await Promise.all([
+      atualizarSlaColuna(colunaId, amarelo, vermelho),
+      atualizarCoresColuna(colunaId, corCards, cores?.amareloCor || '#f59e0b', cores?.vermelhoCor || '#ef4444'),
+    ])
+
     setColunas(prev =>
-      prev.map(c => (c.id === colunaId ? { ...c, sla_amarelo_horas: amarelo, sla_vermelho_horas: vermelho } : c))
+      prev.map(c =>
+        c.id === colunaId
+          ? {
+              ...c,
+              sla_amarelo_horas: amarelo,
+              sla_vermelho_horas: vermelho,
+              cor_cards: corCards,
+              sla_amarelo_cor: cores?.amareloCor || '#f59e0b',
+              sla_vermelho_cor: cores?.vermelhoCor || '#ef4444',
+            }
+          : c
+      )
     )
   }
 
@@ -186,16 +213,16 @@ export default function Configuracoes() {
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
-            <Clock size={16} /> Tempo de alerta por coluna do painel
+            <Clock size={16} /> Alertas e cores por coluna do painel
           </h2>
           <p className="text-xs text-slate-400 mb-4">
-            Defina depois de quantas horas parado o card fica amarelo (atenção) e depois de quantas horas fica vermelho (atrasado). Deixe em branco pra não usar alerta nessa coluna.
+            Defina depois de quantas horas parado o card fica amarelo (atenção) e depois de quantas horas fica vermelho (atrasado) — o card inteiro fica pintado com a cor escolhida. Também dá pra escolher uma cor automática pros cards que estiverem nessa coluna (ex: verde quando o orçamento é feito).
           </p>
           <div className="space-y-3">
             {colunas.map(col => (
               <div key={col.id} className="border border-slate-100 rounded-xl p-3">
                 <p className="text-sm font-medium text-slate-700 mb-2">{col.nome}</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Amarelo após (horas)</label>
                     <input
@@ -221,11 +248,69 @@ export default function Configuracoes() {
                     />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Cor do alerta amarelo</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={corEdit[col.id]?.amareloCor || '#f59e0b'}
+                        onChange={e =>
+                          setCorEdit(prev => ({ ...prev, [col.id]: { ...prev[col.id], amareloCor: e.target.value } }))
+                        }
+                        className="w-9 h-9 rounded-lg border border-slate-300 cursor-pointer"
+                      />
+                      <span className="text-xs text-slate-400">{corEdit[col.id]?.amareloCor || '#f59e0b'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Cor do alerta vermelho</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={corEdit[col.id]?.vermelhoCor || '#ef4444'}
+                        onChange={e =>
+                          setCorEdit(prev => ({ ...prev, [col.id]: { ...prev[col.id], vermelhoCor: e.target.value } }))
+                        }
+                        className="w-9 h-9 rounded-lg border border-slate-300 cursor-pointer"
+                      />
+                      <span className="text-xs text-slate-400">{corEdit[col.id]?.vermelhoCor || '#ef4444'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={corEdit[col.id]?.ativa || false}
+                      onChange={e =>
+                        setCorEdit(prev => ({ ...prev, [col.id]: { ...prev[col.id], ativa: e.target.checked } }))
+                      }
+                    />
+                    Pintar automaticamente os cards que caírem nessa coluna
+                  </label>
+                  {corEdit[col.id]?.ativa && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={corEdit[col.id]?.corCards || '#3b82f6'}
+                        onChange={e =>
+                          setCorEdit(prev => ({ ...prev, [col.id]: { ...prev[col.id], corCards: e.target.value } }))
+                        }
+                        className="w-9 h-9 rounded-lg border border-slate-300 cursor-pointer"
+                      />
+                      <span className="text-xs text-slate-400">{corEdit[col.id]?.corCards || '#3b82f6'}</span>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={() => salvarSla(col.id)}
-                  className="mt-2 text-xs text-blue-600 hover:underline"
+                  className="text-xs text-blue-600 hover:underline"
                 >
-                  Salvar tempo dessa coluna
+                  Salvar configurações dessa coluna
                 </button>
               </div>
             ))}
