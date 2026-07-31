@@ -50,6 +50,7 @@ export default function Kanban() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [agora, setAgora] = useState(Date.now())
   const [novoAnexoTitulo, setNovoAnexoTitulo] = useState('')
+  const [sessaoAtiva, setSessaoAtiva] = useState(false)
 
   useEffect(() => {
     carregar()
@@ -150,6 +151,7 @@ export default function Kanban() {
     setCardSelecionado(card)
     setEditando({ ...card, itens: card.itens ? card.itens.map(it => ({ ...it })) : [] })
     setNovoAnexoTitulo('')
+    setSessaoAtiva(false)
     listarHistorico(card.id).then(setHistorico)
   }
 
@@ -188,8 +190,16 @@ export default function Kanban() {
       setEditando(prev => (prev ? { ...prev, orcamento_iniciado_em: agoraIso } : prev))
       setCardSelecionado(prev => (prev ? { ...prev, orcamento_iniciado_em: agoraIso } : prev))
       setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? { ...c, orcamento_iniciado_em: agoraIso } : c)))
+      setSessaoAtiva(true)
       await registrarHistorico(cardSelecionado.id, usuario, 'Iniciou o orçamento')
     }
+  }
+
+  async function retornarOrcamento() {
+    if (!cardSelecionado) return
+    setSessaoAtiva(true)
+    await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orçamento')
+    listarHistorico(cardSelecionado.id).then(setHistorico)
   }
 
   async function adicionarAnexo(file: File | undefined) {
@@ -249,7 +259,7 @@ export default function Kanban() {
   }
 
   function tentarFechar() {
-    if (editando?.orcamento_iniciado_em && !editando?.orcamento_finalizado_em) {
+    if (editando?.orcamento_iniciado_em && !editando?.orcamento_finalizado_em && sessaoAtiva) {
       const motivo = window.prompt(
         'Você iniciou esse orçamento e ainda não finalizou. Por que está saindo agora? (fica registrado no histórico)'
       )
@@ -257,10 +267,14 @@ export default function Kanban() {
         alert('Precisa informar o motivo pra sair sem finalizar.')
         return
       }
-      if (cardSelecionado) registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', motivo.trim())
+      const duracao = formatarDuracao(editando.orcamento_iniciado_em, new Date().toISOString())
+      if (cardSelecionado) {
+        registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', `${motivo.trim()} — ficou aberto ${duracao}`)
+      }
     }
     setCardSelecionado(null)
     setEditando(null)
+    setSessaoAtiva(false)
   }
 
   function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): string {
@@ -449,17 +463,26 @@ export default function Kanban() {
             </div>
 
             <div className="p-5 space-y-4">
-              {!editando.orcamento_iniciado_em ? (
+              {!editando.orcamento_finalizado_em && !sessaoAtiva ? (
                 <div className="text-center py-10 space-y-4">
                   <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
                   <p className="text-2xl font-bold text-slate-800">{cardSelecionado.cliente_nome}</p>
+                  {editando.orcamento_iniciado_em && (
+                    <p className="text-xs text-indigo-600">
+                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
+                    </p>
+                  )}
                   <button
-                    onClick={iniciarOrcamento}
+                    onClick={editando.orcamento_iniciado_em ? retornarOrcamento : iniciarOrcamento}
                     className="w-full py-3 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition"
                   >
-                    <Play size={16} /> Iniciar orçamento
+                    <Play size={16} /> {editando.orcamento_iniciado_em ? 'Retornar orçamento' : 'Iniciar orçamento'}
                   </button>
-                  <p className="text-xs text-slate-400">Os detalhes do pedido liberam depois de iniciar.</p>
+                  <p className="text-xs text-slate-400">
+                    {editando.orcamento_iniciado_em
+                      ? 'Clique para continuar de onde parou.'
+                      : 'Os detalhes do pedido liberam depois de iniciar.'}
+                  </p>
                   {usuario?.role === 'master' && (
                     <button
                       onClick={excluirCard}
@@ -688,6 +711,23 @@ export default function Kanban() {
                         <option key={v} value={v}>{l}</option>
                       ))}
                     </select>
+                    {item.tipo_esquadria === 'outro' && (
+                      <input
+                        type="text"
+                        value={item.tipo_outro_texto || ''}
+                        onChange={e => atualizarItemEdit(item.id, 'tipo_outro_texto', e.target.value)}
+                        placeholder="Qual é o tipo de esquadria?"
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                      />
+                    )}
+                    <input
+                      type="number"
+                      value={item.folhas || ''}
+                      onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value ? parseInt(e.target.value) : null)}
+                      placeholder="Quantidade de folhas (opcional)"
+                      min="1"
+                      className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                    />
                     <div className="grid grid-cols-3 gap-2">
                       <input
                         type="number"
@@ -790,6 +830,9 @@ export default function Kanban() {
                 </button>
               )}
 
+                </>
+              )}
+
               {historico.length > 0 && (
                 <div className="pt-2 border-t border-slate-100">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-2">
@@ -806,8 +849,6 @@ export default function Kanban() {
                     ))}
                   </div>
                 </div>
-              )}
-                </>
               )}
             </div>
           </div>
