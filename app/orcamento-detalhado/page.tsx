@@ -26,13 +26,10 @@ const tipos: { value: TipoEsquadria; label: string }[] = [
 ]
 
 const acabamentos: { value: Acabamento; label: string }[] = [
-  { value: 'natural', label: 'Natural (bruto)' },
-  { value: 'branco', label: 'Branco' },
   { value: 'preto', label: 'Preto' },
-  { value: 'cinza', label: 'Cinza' },
-  { value: 'madeirado', label: 'Madeirado' },
-  { value: 'pintura_eletrostatica', label: 'Pintura Eletrostática' },
-  { value: 'outro', label: 'Outro' },
+  { value: 'branco', label: 'Branco' },
+  { value: 'madeirado', label: 'Amadeirado' },
+  { value: 'outro', label: 'Outra cor' },
 ]
 
 interface ItemForm {
@@ -42,12 +39,13 @@ interface ItemForm {
   altura: string
   quantidade: string
   descricao: string
+  cor: string
   foto?: File
   fotoPreview?: string
 }
 
 function novoItem(): ItemForm {
-  return { id: uuidv4(), tipo: 'porta_correr', largura: '', altura: '', quantidade: '1', descricao: '' }
+  return { id: uuidv4(), tipo: 'porta_correr', largura: '', altura: '', quantidade: '1', descricao: '', cor: '' }
 }
 
 export default function OrcamentoDetalhado() {
@@ -59,6 +57,7 @@ export default function OrcamentoDetalhado() {
   const [cidade, setCidade] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
+  const [acabamentoOutroTexto, setAcabamentoOutroTexto] = useState('')
   const [contramarco, setContramarco] = useState<Contramarco | ''>('')
   const [arquitetoNome, setArquitetoNome] = useState('')
   const [arquitetoContato, setArquitetoContato] = useState('')
@@ -104,6 +103,7 @@ export default function OrcamentoDetalhado() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
     if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
+    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual é a cor'); return }
     if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
     for (const it of itens) {
       if (!it.largura || !it.altura || parseFloat(it.largura) <= 0 || parseFloat(it.altura) <= 0) {
@@ -132,6 +132,7 @@ export default function OrcamentoDetalhado() {
         quantidade: parseInt(it.quantidade) || 1,
         foto_url,
         descricao: it.descricao || undefined,
+        cor: it.cor || null,
       })
     }
 
@@ -156,6 +157,7 @@ export default function OrcamentoDetalhado() {
       altura_mm: primeiro.altura_mm,
       quantidade: primeiro.quantidade,
       acabamento,
+      acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
       contramarco,
       itens: itensSalvos,
       valor_estimado: null,
@@ -263,7 +265,7 @@ export default function OrcamentoDetalhado() {
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {acabamentos.map(a => (
               <button
                 key={a.value}
@@ -278,6 +280,15 @@ export default function OrcamentoDetalhado() {
               </button>
             ))}
           </div>
+          {acabamento === 'outro' && (
+            <input
+              type="text"
+              value={acabamentoOutroTexto}
+              onChange={e => setAcabamentoOutroTexto(e.target.value)}
+              placeholder="Qual cor?"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3"
+            />
+          )}
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
@@ -414,6 +425,17 @@ export default function OrcamentoDetalhado() {
                     />
                   </label>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label>
+                <input
+                  type="text"
+                  value={item.cor}
+                  onChange={e => atualizarItem(item.id, 'cor', e.target.value)}
+                  placeholder="Só preencha se for diferente da cor geral da obra"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                />
               </div>
 
               <div>
