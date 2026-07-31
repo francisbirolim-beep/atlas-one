@@ -54,7 +54,7 @@ function novoItem(): ItemForm {
 export default function OrcamentoRapido() {
   const [modo, setModo] = useState<ModoEntrada>('formulario')
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
-  const [descricaoLivre, setDescricaoLivre] = useState('')
+  const [textosLivres, setTextosLivres] = useState<string[]>([''])
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -80,6 +80,14 @@ export default function OrcamentoRapido() {
     if (itens.length > 1) setItens(itens.filter(it => it.id !== id))
   }
 
+  function atualizarTexto(idx: number, valor: string) {
+    setTextosLivres(prev => prev.map((t, i) => (i === idx ? valor : t)))
+  }
+
+  function removerTexto(idx: number) {
+    if (textosLivres.length > 1) setTextosLivres(prev => prev.filter((_, i) => i !== idx))
+  }
+
   async function salvar() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
@@ -95,7 +103,7 @@ export default function OrcamentoRapido() {
           return
         }
       }
-    } else if (!descricaoLivre.trim()) {
+    } else if (!textosLivres.some(t => t.trim())) {
       setErro('Descreva o que o cliente precisa')
       return
     }
@@ -141,7 +149,7 @@ export default function OrcamentoRapido() {
       acabamento,
       contramarco,
       itens: itensSalvos,
-      descricao_livre: modo === 'texto_livre' ? descricaoLivre : null,
+      descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
       valor_estimado: null,
       status: 'rascunho',
       modo_entrada: modo,
@@ -166,7 +174,7 @@ export default function OrcamentoRapido() {
     setSalvo(false)
     setErro('')
     setItens([novoItem()])
-    setDescricaoLivre('')
+    setTextosLivres([''])
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
@@ -340,19 +348,38 @@ export default function OrcamentoRapido() {
         </div>
 
         {modo === 'texto_livre' ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Descreva o que precisa
-            </label>
-            <textarea
-              value={descricaoLivre}
-              onChange={e => setDescricaoLivre(e.target.value)}
-              placeholder="Ex: Preciso de uma porta de correr 2 folhas com 1,80m de largura por 2,10m de altura, e mais uma janela de correr 1,20m x 1,00m..."
-              className="w-full h-32 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-slate-400 mt-2">
-              Pode colar o mesmo texto que manda no WhatsApp. Pode descrever quantas esquadrias precisar.
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-slate-700">Descreva o que precisa</h3>
+
+            {textosLivres.map((texto, idx) => (
+              <div key={idx} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>
+                  {textosLivres.length > 1 && (
+                    <button onClick={() => removerTexto(idx)} className="p-1 text-red-400 hover:text-red-600">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={texto}
+                  onChange={e => atualizarTexto(idx, e.target.value)}
+                  placeholder="Ex: Porta de correr 2 folhas com 1,80m de largura por 2,10m de altura..."
+                  className="w-full h-28 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            ))}
+
+            <p className="text-xs text-slate-400">
+              Pode colar o mesmo texto que manda no WhatsApp. Se forem esquadrias diferentes, adicione um bloco pra cada uma.
             </p>
+
+            <button
+              onClick={() => setTextosLivres([...textosLivres, ''])}
+              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition text-sm font-medium"
+            >
+              <Plus size={16} /> Adicionar outra esquadria
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
