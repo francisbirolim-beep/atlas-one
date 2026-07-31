@@ -325,15 +325,7 @@ export default function OrcamentoDetalhado() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-slate-700">Esquadrias a orçar</h3>
-            <button
-              onClick={() => setItens([...itens, novoItem()])}
-              className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700"
-            >
-              <Plus size={16} /> Adicionar esquadria
-            </button>
-          </div>
+          <h3 className="text-sm font-medium text-slate-700">Esquadrias a orçar</h3>
 
           {itens.map((item, idx) => (
             <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
@@ -435,6 +427,13 @@ export default function OrcamentoDetalhado() {
               </div>
             </div>
           ))}
+
+          <button
+            onClick={() => setItens([...itens, novoItem()])}
+            className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition text-sm font-medium"
+          >
+            <Plus size={16} /> Adicionar outra esquadria
+          </button>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
