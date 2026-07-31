@@ -30,11 +30,12 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          <h1 className="text-xl font-bold text-slate-800">Atlas One</h1>
-          <p className="text-sm text-slate-500">Esquadrifácio — entrar no sistema</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Esquadrifácio" className="h-14 w-auto mx-auto mb-3" />
+          <p className="text-sm text-slate-500">Atlas One — entrar no sistema</p>
         </div>
 
         <form onSubmit={entrar} className="space-y-3">
@@ -60,7 +61,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={carregando}
-            className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <LogIn size={18} />
             {carregando ? 'Entrando...' : 'Entrar'}
