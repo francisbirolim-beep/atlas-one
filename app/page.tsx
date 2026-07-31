@@ -1,6 +1,6 @@
 'use client'
 
-import { FileText, Camera, ArrowRight, History, BarChart3, Users } from 'lucide-react'
+import { FileText, Camera, ArrowRight, History, BarChart3, Users, Columns3 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -16,6 +16,10 @@ export default function Home() {
             <Link href="/clientes" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
               <Users size={16} />
               Clientes
+            </Link>
+            <Link href="/kanban" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
+              <Columns3 size={16} />
+              Painel
             </Link>
             <Link href="/historico" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
               <History size={16} />
