@@ -22,6 +22,7 @@ export interface Usuario {
   nome: string
   email: string
   role: RoleUsuario
+  whatsapp?: string | null
   created_at?: string
 }
 
@@ -111,6 +112,7 @@ export interface OrcamentoRapido {
   criado_por_id?: string | null
   orcamento_iniciado_em?: string | null
   orcamento_finalizado_em?: string | null
+  enviado_vendedor_em?: string | null
   anexo_url?: string | null
   anexo_nome?: string | null
   anexos?: Anexo[] | null
