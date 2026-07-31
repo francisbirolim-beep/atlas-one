@@ -66,12 +66,14 @@ export default function NovoCliente() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/clientes" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <h1 className="text-lg font-bold text-slate-800">Novo cliente</h1>
         </div>
       </header>
@@ -155,7 +157,7 @@ export default function NovoCliente() {
           <button
             onClick={salvar}
             disabled={salvando}
-            className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <CheckCircle size={16} />
             {salvando ? 'Salvando...' : 'Salvar cliente'}
