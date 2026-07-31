@@ -38,6 +38,16 @@ function formatarDuracao(inicioIso: string, fimIso: string): string {
   return `${h}h${m > 0 ? ` ${m}min` : ''}`
 }
 
+function mensagemPadraoVendedor(card: OrcamentoRapido): string {
+  return `Olá! O orçamento de ${card.cliente_nome || 'cliente'} está pronto. Segue em anexo.`
+}
+
+function numeroWhatsApp(raw: string): string {
+  const digitos = raw.replace(/\D/g, '')
+  if (!digitos) return ''
+  return digitos.startsWith('55') ? digitos : `55${digitos}`
+}
+
 export default function Kanban() {
   const [colunas, setColunas] = useState<KanbanColuna[]>([])
   const [cards, setCards] = useState<OrcamentoRapido[]>([])
@@ -51,6 +61,9 @@ export default function Kanban() {
   const [agora, setAgora] = useState(Date.now())
   const [novoAnexoTitulo, setNovoAnexoTitulo] = useState('')
   const [sessaoAtiva, setSessaoAtiva] = useState(false)
+  const [vendedorInfo, setVendedorInfo] = useState<Usuario | null>(null)
+  const [whatsappVendedor, setWhatsappVendedor] = useState('')
+  const [mensagemVendedor, setMensagemVendedor] = useState('')
 
   useEffect(() => {
     carregar()
@@ -152,7 +165,24 @@ export default function Kanban() {
     setEditando({ ...card, itens: card.itens ? card.itens.map(it => ({ ...it })) : [] })
     setNovoAnexoTitulo('')
     setSessaoAtiva(false)
+    setVendedorInfo(null)
+    setWhatsappVendedor('')
+    setMensagemVendedor(mensagemPadraoVendedor(card))
     listarHistorico(card.id).then(setHistorico)
+    if (card.criado_por_id) {
+      supabase
+        .from('usuarios')
+        .select('*')
+        .eq('id', card.criado_por_id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            const v = data as Usuario
+            setVendedorInfo(v)
+            setWhatsappVendedor(v.whatsapp || '')
+          }
+        })
+    }
   }
 
   function atualizarCampo(campo: keyof OrcamentoRapido, valor: any) {
@@ -226,22 +256,52 @@ export default function Kanban() {
       alert('Informe o valor total do orçamento antes de finalizar.')
       return
     }
+    const numero = numeroWhatsApp(whatsappVendedor)
+    if (!numero) {
+      alert('Informe o WhatsApp do vendedor para enviar o orçamento antes de finalizar.')
+      return
+    }
+
     setSalvando(true)
     const agoraIso = new Date().toISOString()
+
+    const colunaFeito =
+      colunas.find(c => c.nome.trim().toLowerCase() === 'orçamento feito') ||
+      colunas.find(c => c.nome.trim().toLowerCase().includes('feito'))
+    const novaColunaId = colunaFeito ? colunaFeito.id : editando.coluna_id
+
     const { error } = await supabase
       .from('orcamentos')
       .update({
         anexos: editando.anexos,
         valor_estimado: editando.valor_estimado,
         orcamento_finalizado_em: agoraIso,
+        enviado_vendedor_em: agoraIso,
+        coluna_id: novaColunaId,
+        coluna_atualizada_em: colunaFeito ? agoraIso : editando.coluna_atualizada_em,
       })
       .eq('id', cardSelecionado.id)
     setSalvando(false)
     if (!error) {
+      const linksAnexos = (editando.anexos || []).map(a => `${a.titulo}: ${a.url}`).join('\n')
+      const textoCompleto = `${mensagemVendedor}\n\n${linksAnexos}`
+      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(textoCompleto)}`, '_blank')
+
       const duracao = editando.orcamento_iniciado_em ? formatarDuracao(editando.orcamento_iniciado_em, agoraIso) : null
-      const atualizado = { ...editando, orcamento_finalizado_em: agoraIso }
+      const atualizado = {
+        ...editando,
+        orcamento_finalizado_em: agoraIso,
+        enviado_vendedor_em: agoraIso,
+        coluna_id: novaColunaId,
+        coluna_atualizada_em: colunaFeito ? agoraIso : editando.coluna_atualizada_em,
+      }
       setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
-      await registrarHistorico(cardSelecionado.id, usuario, 'Finalizou o orçamento', duracao ? `Levou ${duracao}` : undefined)
+      await registrarHistorico(
+        cardSelecionado.id,
+        usuario,
+        'Enviou o orçamento para o vendedor e finalizou',
+        `${duracao ? `Levou ${duracao}. ` : ''}Para ${vendedorInfo?.nome || 'vendedor'} — "${mensagemVendedor}"`
+      )
       setCardSelecionado(null)
       setEditando(null)
     }
@@ -275,6 +335,9 @@ export default function Kanban() {
     setCardSelecionado(null)
     setEditando(null)
     setSessaoAtiva(false)
+    setVendedorInfo(null)
+    setWhatsappVendedor('')
+    setMensagemVendedor('')
   }
 
   function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): string {
@@ -513,6 +576,12 @@ export default function Kanban() {
                       <CheckCircle2 size={14} /> Finalizado — levou{' '}
                       {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
                     </p>
+                    {editando.enviado_vendedor_em && (
+                      <p className="flex items-center gap-1.5 text-brand-navy">
+                        <Phone size={12} /> Enviado para {vendedorInfo?.nome || 'o vendedor'} em{' '}
+                        {new Date(editando.enviado_vendedor_em).toLocaleString('pt-BR')}
+                      </p>
+                    )}
                     {(editando.anexos || []).map((a, i) => (
                       <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
                         <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
@@ -579,12 +648,44 @@ export default function Kanban() {
                       />
                     </div>
 
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <p className="text-xs font-medium text-slate-500">
+                        Enviar para {vendedorInfo?.nome || 'o vendedor'} e finalizar
+                      </p>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
+                          <Phone size={12} /> WhatsApp do vendedor
+                        </label>
+                        <input
+                          type="text"
+                          value={whatsappVendedor}
+                          onChange={e => setWhatsappVendedor(e.target.value)}
+                          placeholder="Ex: 11999998888"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Mensagem</label>
+                        <textarea
+                          value={mensagemVendedor}
+                          onChange={e => setMensagemVendedor(e.target.value)}
+                          className="w-full h-20 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                        />
+                      </div>
+                    </div>
+
                     <button
                       onClick={finalizarOrcamento}
-                      disabled={salvando || !editando.anexos || editando.anexos.length === 0 || editando.valor_estimado == null}
+                      disabled={
+                        salvando ||
+                        !editando.anexos ||
+                        editando.anexos.length === 0 ||
+                        editando.valor_estimado == null ||
+                        !whatsappVendedor.trim()
+                      }
                       className="w-full py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-brand-tealDark transition disabled:opacity-50"
                     >
-                      {salvando ? 'Finalizando...' : 'Finalizar orçamento'}
+                      {salvando ? 'Enviando...' : 'Enviar para o vendedor e finalizar'}
                     </button>
                   </div>
                 )}
