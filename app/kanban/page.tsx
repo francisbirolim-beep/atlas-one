@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo } from '@/lib/tipos'
@@ -64,6 +64,8 @@ export default function Kanban() {
   const [vendedorInfo, setVendedorInfo] = useState<Usuario | null>(null)
   const [whatsappVendedor, setWhatsappVendedor] = useState('')
   const [mensagemVendedor, setMensagemVendedor] = useState('')
+  const [busca, setBusca] = useState('')
+  const [filtroData, setFiltroData] = useState('')
 
   useEffect(() => {
     carregar()
@@ -86,8 +88,30 @@ export default function Kanban() {
     setCarregando(false)
   }
 
+  function passaFiltro(c: OrcamentoRapido): boolean {
+    if (busca.trim()) {
+      const alvo = busca.trim().toLowerCase()
+      const bate =
+        (c.cliente_nome || '').toLowerCase().includes(alvo) ||
+        (c.cidade || '').toLowerCase().includes(alvo) ||
+        (c.arquiteto_nome || '').toLowerCase().includes(alvo) ||
+        (c.criado_por_nome || '').toLowerCase().includes(alvo) ||
+        (c.cliente_whatsapp || '').toLowerCase().includes(alvo) ||
+        (tipoLabels[c.tipo_esquadria] || c.tipo_esquadria || '').toLowerCase().includes(alvo)
+      if (!bate) return false
+    }
+    if (filtroData) {
+      const d = new Date(c.created_at)
+      const dataCard = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      if (dataCard !== filtroData) return false
+    }
+    return true
+  }
+
   function cardsDaColuna(colunaId: string, index: number) {
-    return cards.filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
+    return cards
+      .filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
+      .filter(passaFiltro)
   }
 
   function estiloCard(card: OrcamentoRapido, coluna: KanbanColuna | undefined): { fundo: string; texto: string; alerta: boolean } | null {
@@ -414,6 +438,33 @@ export default function Kanban() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por cliente, cidade, arquiteto, vendedor, tipo..."
+              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
+            />
+          </div>
+          <input
+            type="date"
+            value={filtroData}
+            onChange={e => setFiltroData(e.target.value)}
+            className="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
+          />
+          {(busca || filtroData) && (
+            <button
+              onClick={() => { setBusca(''); setFiltroData('') }}
+              className="text-xs text-slate-400 hover:text-slate-600 px-2"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
         <div className="flex gap-4 overflow-x-auto pb-4">
           {colunas.map((col, index) => {
             const cardsColuna = cardsDaColuna(col.id, index)
@@ -528,7 +579,7 @@ export default function Kanban() {
             </div>
 
             <div className="p-5 space-y-4">
-              {!editando.orcamento_finalizado_em && !sessaoAtiva ? (
+              {(editando.coluna_id || colunas[0]?.id) === colunas[0]?.id && !sessaoAtiva ? (
                 <div className="text-center py-10 space-y-4">
                   <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
                   <p className="text-2xl font-bold text-slate-800">{cardSelecionado.cliente_nome}</p>
@@ -824,11 +875,10 @@ export default function Kanban() {
                       />
                     )}
                     <input
-                      type="number"
+                      type="text"
                       value={item.folhas || ''}
-                      onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value ? parseInt(e.target.value) : null)}
-                      placeholder="Quantidade de folhas (opcional)"
-                      min="1"
+                      onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
+                      placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
                       className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                     />
                     <div className="grid grid-cols-3 gap-2">
