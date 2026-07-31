@@ -75,7 +75,7 @@ export interface ItemEsquadria {
   id: string
   tipo_esquadria: TipoEsquadria
   tipo_outro_texto?: string | null
-  folhas?: number | null
+  folhas?: string | null
   largura_mm: number
   altura_mm: number
   quantidade: number
