@@ -9,6 +9,7 @@ import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard } 
 import { usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto } from '@/lib/upload'
+import { corTextoParaFundo } from '@/lib/cor'
 import { v4 as uuidv4 } from 'uuid'
 
 const tipoLabels: Record<string, string> = {
@@ -65,14 +66,24 @@ export default function Kanban() {
     return cards.filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
   }
 
-  function corDoCard(card: OrcamentoRapido, coluna: KanbanColuna | undefined): string {
-    if (!coluna) return 'border-slate-200'
+  function estiloCard(card: OrcamentoRapido, coluna: KanbanColuna | undefined): { fundo: string; texto: string; alerta: boolean } | null {
+    if (!coluna) return null
     const base = card.coluna_atualizada_em || card.created_at
-    if (!base) return 'border-slate-200'
-    const horas = (agora - new Date(base).getTime()) / 3600000
-    if (coluna.sla_vermelho_horas != null && horas >= coluna.sla_vermelho_horas) return 'border-red-400 bg-red-50'
-    if (coluna.sla_amarelo_horas != null && horas >= coluna.sla_amarelo_horas) return 'border-amber-400 bg-amber-50'
-    return 'border-slate-200'
+    if (base) {
+      const horas = (agora - new Date(base).getTime()) / 3600000
+      if (coluna.sla_vermelho_horas != null && horas >= coluna.sla_vermelho_horas) {
+        const cor = coluna.sla_vermelho_cor || '#ef4444'
+        return { fundo: cor, texto: corTextoParaFundo(cor), alerta: true }
+      }
+      if (coluna.sla_amarelo_horas != null && horas >= coluna.sla_amarelo_horas) {
+        const cor = coluna.sla_amarelo_cor || '#f59e0b'
+        return { fundo: cor, texto: corTextoParaFundo(cor), alerta: true }
+      }
+    }
+    if (coluna.cor_cards) {
+      return { fundo: coluna.cor_cards, texto: corTextoParaFundo(coluna.cor_cards), alerta: false }
+    }
+    return null
   }
 
   async function handleDrop(e: React.DragEvent, colunaId: string) {
@@ -257,40 +268,55 @@ export default function Kanban() {
                 </div>
 
                 <div className="space-y-2 min-h-[80px]">
-                  {cardsColuna.map(card => (
-                    <div
-                      key={card.id}
-                      draggable
-                      onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
-                      onClick={() => abrirCard(card)}
-                      className={`bg-white rounded-xl border p-3 cursor-pointer hover:shadow-md transition ${corDoCard(card, col)}`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={`p-1 rounded ${(card as any).modo_entrada === 'detalhado' ? 'bg-emerald-100' : 'bg-blue-100'}`}>
-                          {(card as any).modo_entrada === 'detalhado'
-                            ? <Camera size={12} className="text-emerald-600" />
-                            : <FileText size={12} className="text-blue-600" />}
+                  {cardsColuna.map(card => {
+                    const est = estiloCard(card, col)
+                    return (
+                      <div
+                        key={card.id}
+                        draggable
+                        onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
+                        onClick={() => abrirCard(card)}
+                        style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
+                        className={`rounded-xl border-2 p-3 cursor-pointer hover:shadow-md transition ${
+                          est ? (est.alerta ? 'shadow-md' : 'shadow-sm') : 'bg-white border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div
+                            className="p-1 rounded"
+                            style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
+                          >
+                            {(card as any).modo_entrada === 'detalhado'
+                              ? <Camera size={12} style={{ color: est ? est.texto : '#059669' }} />
+                              : <FileText size={12} style={{ color: est ? est.texto : '#2563eb' }} />}
+                          </div>
+                          <p className="font-medium text-sm truncate" style={{ color: est ? est.texto : '#1e293b' }}>
+                            {card.cliente_nome}
+                          </p>
                         </div>
-                        <p className="font-medium text-slate-800 text-sm truncate">{card.cliente_nome}</p>
-                      </div>
-                      <p className="text-xs text-slate-500 mb-1">
-                        {(card as any).itens?.length > 1
-                          ? `${(card as any).itens.length} esquadrias`
-                          : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
-                      </p>
-                      {card.descricao_livre && (
-                        <p className="text-xs text-slate-400 line-clamp-2">{card.descricao_livre}</p>
-                      )}
-                      {card.criado_por_nome && (
-                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                          <User size={11} /> {card.criado_por_nome}
+                        <p className="text-xs mb-1" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
+                          {(card as any).itens?.length > 1
+                            ? `${(card as any).itens.length} esquadrias`
+                            : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
                         </p>
-                      )}
-                      {card.valor_estimado != null && (
-                        <p className="text-xs font-semibold text-emerald-600 mt-1">R$ {card.valor_estimado.toFixed(2)}</p>
-                      )}
-                    </div>
-                  ))}
+                        {card.descricao_livre && (
+                          <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.8 : 1 }}>
+                            {card.descricao_livre}
+                          </p>
+                        )}
+                        {card.criado_por_nome && (
+                          <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}>
+                            <User size={11} /> {card.criado_por_nome}
+                          </p>
+                        )}
+                        {card.valor_estimado != null && (
+                          <p className="text-xs font-semibold mt-1" style={{ color: est ? est.texto : '#059669' }}>
+                            R$ {card.valor_estimado.toFixed(2)}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
