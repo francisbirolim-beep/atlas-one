@@ -267,7 +267,7 @@ export default function Kanban() {
         alert('Precisa informar o motivo pra sair sem finalizar.')
         return
       }
-      const duracao = formatarDuracao(editando.orcamento_iniciado_em, new Date().toISOString())
+      const duracao = formatarDuracao(editando.orcamento_iniciado_em || '', new Date().toISOString())
       if (cardSelecionado) {
         registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', `${motivo.trim()} — ficou aberto ${duracao}`)
       }
@@ -509,7 +509,7 @@ export default function Kanban() {
                   <div className="text-xs text-emerald-700 space-y-1">
                     <p className="flex items-center gap-1.5">
                       <CheckCircle2 size={14} /> Finalizado — levou{' '}
-                      {formatarDuracao(editando.orcamento_iniciado_em, editando.orcamento_finalizado_em)}
+                      {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
                     </p>
                     {(editando.anexos || []).map((a, i) => (
                       <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
@@ -520,7 +520,7 @@ export default function Kanban() {
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs text-indigo-600">
-                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
+                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
                     </p>
 
                     <div>
