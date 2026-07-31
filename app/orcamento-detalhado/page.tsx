@@ -391,16 +391,6 @@ export default function OrcamentoDetalhado() {
               </div>
 
               <div>
-                <label className="block text-xs text-slate-500 mb-1">O que quer orçar (opcional)</label>
-                <textarea
-                  value={item.descricao}
-                  onChange={e => atualizarItem(item.id, 'descricao', e.target.value)}
-                  placeholder="Detalhes específicos dessa esquadria..."
-                  className="w-full h-16 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs text-slate-500 mb-2">Foto dessa esquadria (opcional)</label>
                 {item.fotoPreview ? (
                   <div className="relative w-24 h-24">
@@ -424,6 +414,16 @@ export default function OrcamentoDetalhado() {
                     />
                   </label>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label>
+                <textarea
+                  value={item.descricao}
+                  onChange={e => atualizarItem(item.id, 'descricao', e.target.value)}
+                  placeholder="Alguma observação da obra pro orçamentista saber..."
+                  className="w-full h-16 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                />
               </div>
             </div>
           ))}
