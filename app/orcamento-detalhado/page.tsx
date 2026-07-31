@@ -196,15 +196,15 @@ export default function OrcamentoDetalhado() {
 
   if (salvo) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-tealLight flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
-          <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4" />
+          <CheckCircle size={48} className="text-brand-teal mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Pedido detalhado enviado!</h2>
           <p className="text-slate-500 mb-6">
             {clienteNome} entrou no painel de orçamentos. Um funcionário vai preparar o valor.
           </p>
           <div className="flex gap-3 justify-center">
-            <Link href="/orcamento-detalhado" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+            <Link href="/orcamento-detalhado" className="px-4 py-2 bg-brand-teal text-white rounded-lg hover:bg-brand-tealDark transition">
               Novo orçamento
             </Link>
             <Link href="/kanban" className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
@@ -217,12 +217,14 @@ export default function OrcamentoDetalhado() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-tealLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Orçamento Detalhado</h1>
             <p className="text-sm text-slate-500">Com fotos, várias esquadrias e medidas completas</p>
@@ -284,7 +286,7 @@ export default function OrcamentoDetalhado() {
                 onClick={() => setAcabamento(a.value)}
                 className={`p-3 rounded-xl text-sm border transition ${
                   acabamento === a.value
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium'
+                    ? 'border-brand-teal bg-brand-tealLight text-brand-tealDark font-medium'
                     : 'border-slate-200 hover:border-slate-300 text-slate-600'
                 }`}
               >
@@ -310,7 +312,7 @@ export default function OrcamentoDetalhado() {
               onClick={() => setContramarco('com')}
               className={`p-3 rounded-xl text-sm border transition ${
                 contramarco === 'com'
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium'
+                  ? 'border-brand-teal bg-brand-tealLight text-brand-tealDark font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
@@ -320,7 +322,7 @@ export default function OrcamentoDetalhado() {
               onClick={() => setContramarco('sem')}
               className={`p-3 rounded-xl text-sm border transition ${
                 contramarco === 'sem'
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium'
+                  ? 'border-brand-teal bg-brand-tealLight text-brand-tealDark font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
@@ -370,7 +372,7 @@ export default function OrcamentoDetalhado() {
                       onClick={() => atualizarItem(item.id, 'tipo', t.value)}
                       className={`p-2.5 rounded-lg text-xs border transition ${
                         item.tipo === t.value
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium'
+                          ? 'border-brand-teal bg-brand-tealLight text-brand-tealDark font-medium'
                           : 'border-slate-200 hover:border-slate-300 text-slate-600'
                       }`}
                     >
@@ -449,7 +451,7 @@ export default function OrcamentoDetalhado() {
                     </button>
                   </div>
                 ) : (
-                  <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-emerald-400 hover:text-emerald-500">
+                  <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-teal hover:text-brand-teal">
                     <Camera size={14} />
                     Adicionar foto
                     <input
@@ -487,7 +489,7 @@ export default function OrcamentoDetalhado() {
 
           <button
             onClick={() => setItens([...itens, novoItem()])}
-            className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition text-sm font-medium"
+            className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-teal hover:text-brand-teal transition text-sm font-medium"
           >
             <Plus size={16} /> Adicionar outra esquadria
           </button>
@@ -500,13 +502,13 @@ export default function OrcamentoDetalhado() {
           <div
             {...getRootProps()}
             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
-              isDragActive ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 hover:border-emerald-400'
+              isDragActive ? 'border-brand-teal bg-brand-tealLight' : 'border-slate-300 hover:border-brand-teal'
             }`}
           >
             <input {...getInputProps()} />
             <Camera size={32} className="mx-auto mb-2 text-slate-400" />
             {isDragActive ? (
-              <p className="text-emerald-600 font-medium">Solte as fotos aqui...</p>
+              <p className="text-brand-teal font-medium">Solte as fotos aqui...</p>
             ) : (
               <div>
                 <p className="text-slate-600 font-medium">Arraste fotos ou clique para selecionar</p>
@@ -547,7 +549,7 @@ export default function OrcamentoDetalhado() {
         <button
           onClick={salvar}
           disabled={salvando}
-          className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full py-3.5 bg-brand-teal text-white rounded-xl font-medium hover:bg-brand-tealDark transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
           <Send size={18} />
           {salvando ? 'Enviando...' : 'Enviar pedido detalhado'}
