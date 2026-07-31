@@ -78,6 +78,7 @@ export interface ItemEsquadria {
   quantidade: number
   foto_url?: string | null
   descricao?: string
+  cor?: string | null
 }
 
 export interface OrcamentoRapido {
@@ -93,6 +94,7 @@ export interface OrcamentoRapido {
   altura_mm: number
   quantidade: number
   acabamento?: Acabamento
+  acabamento_outro_texto?: string | null
   contramarco?: Contramarco | null
   itens?: ItemEsquadria[]
   descricao_livre?: string
