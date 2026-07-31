@@ -459,6 +459,14 @@ export default function Kanban() {
                     <Play size={16} /> Iniciar orçamento
                   </button>
                   <p className="text-xs text-slate-400">Os detalhes do pedido liberam depois de iniciar.</p>
+                  {usuario?.role === 'master' && (
+                    <button
+                      onClick={excluirCard}
+                      className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 size={13} /> Excluir este orçamento
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
