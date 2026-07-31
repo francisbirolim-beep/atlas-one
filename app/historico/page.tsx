@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Search, FileText, Camera } from 'lucide-react'
+import { ArrowLeft, Search, FileText, Camera, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
@@ -10,9 +10,20 @@ interface OrcamentoResumo {
   created_at: string
   cliente_nome: string
   tipo_esquadria: string
-  valor_estimado: number
+  valor_estimado: number | null
   status: string
   modo_entrada: string
+  orcamento_iniciado_em: string | null
+  orcamento_finalizado_em: string | null
+}
+
+function formatarDuracao(inicioIso: string, fimIso: string): string {
+  const ms = Math.max(0, new Date(fimIso).getTime() - new Date(inicioIso).getTime())
+  const totalMin = Math.floor(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h === 0) return `${m}min`
+  return `${h}h${m > 0 ? ` ${m}min` : ''}`
 }
 
 const statusLabels: Record<string, string> = {
@@ -55,7 +66,7 @@ export default function Historico() {
     setCarregando(true)
     const { data } = await supabase
       .from('orcamentos')
-      .select('id, created_at, cliente_nome, tipo_esquadria, valor_estimado, status, modo_entrada')
+      .select('id, created_at, cliente_nome, tipo_esquadria, valor_estimado, status, modo_entrada, orcamento_iniciado_em, orcamento_finalizado_em')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -135,10 +146,17 @@ export default function Historico() {
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="font-bold text-slate-800">R$ {o.valor_estimado.toFixed(2)}</p>
+                    <p className="font-bold text-slate-800">
+                      {o.valor_estimado != null ? `R$ ${o.valor_estimado.toFixed(2)}` : 'Aguardando orçamento'}
+                    </p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[o.status]}`}>
                       {statusLabels[o.status]}
                     </span>
+                    {o.orcamento_iniciado_em && o.orcamento_finalizado_em && (
+                      <p className="text-xs text-slate-400 flex items-center justify-end gap-1 mt-1">
+                        <Clock size={11} /> Levou {formatarDuracao(o.orcamento_iniciado_em, o.orcamento_finalizado_em)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
