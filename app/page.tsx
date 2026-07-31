@@ -1,18 +1,34 @@
 'use client'
 
-import { FileText, Camera, ArrowRight, History, BarChart3, Users, Columns3 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { FileText, Camera, ArrowRight, History, BarChart3, Users, Columns3, Settings, LogOut } from 'lucide-react'
 import Link from 'next/link'
+import { usuarioAtual, logout } from '@/lib/auth'
+import { Usuario } from '@/lib/tipos'
+import { useRouter } from 'next/navigation'
 
 export default function Home() {
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    usuarioAtual().then(setUsuario)
+  }, [])
+
+  async function sair() {
+    await logout()
+    router.replace('/login')
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="text-xl font-bold text-slate-800">Atlas One</h1>
             <p className="text-sm text-slate-500">Esquadrifácio — Orçamento Inteligente</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <Link href="/clientes" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
               <Users size={16} />
               Clientes
@@ -29,6 +45,20 @@ export default function Home() {
               <BarChart3 size={16} />
               Dashboard
             </Link>
+            {usuario?.role === 'master' && (
+              <Link href="/configuracoes" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
+                <Settings size={16} />
+                Configurações
+              </Link>
+            )}
+            {usuario && (
+              <div className="flex items-center gap-2 pl-2 ml-1 border-l border-slate-200">
+                <span className="text-xs text-slate-400 hidden sm:inline">{usuario.nome}</span>
+                <button onClick={sair} className="p-1.5 text-slate-400 hover:text-red-500 transition" title="Sair">
+                  <LogOut size={16} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import AuthGate from '@/components/AuthGate'
 
 export const metadata: Metadata = {
   title: 'Atlas One - Esquadrifácio',
@@ -27,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body>
-        {children}
+        <AuthGate>{children}</AuthGate>
         <script
           dangerouslySetInnerHTML={{
             __html: `
