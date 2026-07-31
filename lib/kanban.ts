@@ -89,6 +89,12 @@ export async function atualizarSlaColuna(
   return !error
 }
 
+export async function excluirOrcamento(id: string): Promise<boolean> {
+  await supabase.from('historico').delete().eq('orcamento_id', id)
+  const { error } = await supabase.from('orcamentos').delete().eq('id', id)
+  return !error
+}
+
 export async function atualizarCoresColuna(
   id: string,
   corCards: string | null,

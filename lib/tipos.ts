@@ -25,6 +25,12 @@ export interface Usuario {
   created_at?: string
 }
 
+export interface Anexo {
+  titulo: string
+  nome: string
+  url: string
+}
+
 export interface HistoricoItem {
   id: string
   orcamento_id: string
@@ -103,6 +109,7 @@ export interface OrcamentoRapido {
   orcamento_finalizado_em?: string | null
   anexo_url?: string | null
   anexo_nome?: string | null
+  anexos?: Anexo[] | null
 }
 
 export interface OrcamentoDetalhado extends OrcamentoRapido {
