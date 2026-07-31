@@ -36,8 +36,8 @@ const statusLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   rascunho: 'bg-slate-100 text-slate-600',
-  enviado: 'bg-blue-100 text-blue-600',
-  aprovado: 'bg-emerald-100 text-emerald-600',
+  enviado: 'bg-brand-navyLight text-brand-navy',
+  aprovado: 'bg-brand-tealLight text-brand-teal',
   recusado: 'bg-red-100 text-red-600',
   convertido: 'bg-purple-100 text-purple-600',
 }
@@ -81,12 +81,14 @@ export default function Historico() {
   })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Histórico de Orçamentos</h1>
             <p className="text-sm text-slate-500">{orcamentos.length} orçamentos registrados</p>
@@ -131,10 +133,10 @@ export default function Historico() {
             {filtrados.map(o => (
               <div key={o.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between hover:shadow-sm transition">
                 <div className="flex items-center gap-4">
-                  <div className={`p-2 rounded-lg ${o.modo_entrada === 'detalhado' ? 'bg-emerald-100' : 'bg-blue-100'}`}>
+                  <div className={`p-2 rounded-lg ${o.modo_entrada === 'detalhado' ? 'bg-brand-tealLight' : 'bg-brand-navyLight'}`}>
                     {o.modo_entrada === 'detalhado'
-                      ? <Camera size={18} className="text-emerald-600" />
-                      : <FileText size={18} className="text-blue-600" />
+                      ? <Camera size={18} className="text-brand-teal" />
+                      : <FileText size={18} className="text-brand-navy" />
                     }
                   </div>
                   <div>
