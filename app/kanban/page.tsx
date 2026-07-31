@@ -428,6 +428,20 @@ export default function Kanban() {
             </div>
 
             <div className="p-5 space-y-4">
+              {!editando.orcamento_iniciado_em ? (
+                <div className="text-center py-10 space-y-4">
+                  <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
+                  <p className="text-2xl font-bold text-slate-800">{cardSelecionado.cliente_nome}</p>
+                  <button
+                    onClick={iniciarOrcamento}
+                    className="w-full py-3 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition"
+                  >
+                    <Play size={16} /> Iniciar orçamento
+                  </button>
+                  <p className="text-xs text-slate-400">Os detalhes do pedido liberam depois de iniciar.</p>
+                </div>
+              ) : (
+                <>
               {cardSelecionado.criado_por_nome && (
                 <p className="text-xs text-slate-400 flex items-center gap-1.5">
                   <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
@@ -439,14 +453,7 @@ export default function Kanban() {
                   <Clock size={13} /> Elaboração do orçamento
                 </p>
 
-                {!editando.orcamento_iniciado_em ? (
-                  <button
-                    onClick={iniciarOrcamento}
-                    className="w-full py-2.5 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
-                  >
-                    <Play size={14} /> Iniciar orçamento
-                  </button>
-                ) : editando.orcamento_finalizado_em ? (
+                {editando.orcamento_finalizado_em ? (
                   <div className="text-xs text-emerald-700 space-y-1">
                     <p className="flex items-center gap-1.5">
                       <CheckCircle2 size={14} /> Finalizado — levou{' '}
@@ -708,6 +715,8 @@ export default function Kanban() {
                     ))}
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
           </div>
