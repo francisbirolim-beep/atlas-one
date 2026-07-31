@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const email = (body.email || '').trim().toLowerCase()
     const senha = (body.senha || '').trim()
     const role = body.role === 'master' ? 'master' : 'funcionario'
+    const whatsapp = (body.whatsapp || '').trim() || null
 
     if (!nome || !email || !senha) {
       return NextResponse.json({ error: 'Preencha nome, e-mail e senha' }, { status: 400 })
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
       nome,
       email,
       role,
+      whatsapp,
     })
 
     if (perfilErr) {
