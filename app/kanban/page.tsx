@@ -335,12 +335,14 @@ export default function Kanban() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Painel de Orçamentos</h1>
             <p className="text-sm text-slate-500">Arraste os cards entre as colunas</p>
@@ -359,7 +361,7 @@ export default function Kanban() {
                 onDragLeave={() => setColunaArrastando(null)}
                 onDrop={e => handleDrop(e, col.id)}
                 className={`flex-shrink-0 w-72 bg-slate-100 rounded-2xl p-3 transition ${
-                  colunaArrastando === col.id ? 'ring-2 ring-blue-400 bg-blue-50' : ''
+                  colunaArrastando === col.id ? 'ring-2 ring-brand-navy bg-brand-navyLight' : ''
                 }`}
               >
                 <div className="flex items-center justify-between mb-3 px-1">
@@ -445,7 +447,7 @@ export default function Kanban() {
 
           <button
             onClick={novaColuna}
-            className="flex-shrink-0 w-72 h-12 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-blue-400 hover:text-blue-500 transition"
+            className="flex-shrink-0 w-72 h-12 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-brand-navy hover:text-brand-navy transition"
           >
             <Plus size={16} /> Nova coluna
           </button>
@@ -468,13 +470,13 @@ export default function Kanban() {
                   <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
                   <p className="text-2xl font-bold text-slate-800">{cardSelecionado.cliente_nome}</p>
                   {editando.orcamento_iniciado_em && (
-                    <p className="text-xs text-indigo-600">
+                    <p className="text-xs text-brand-navy">
                       Em andamento há {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
                     </p>
                   )}
                   <button
                     onClick={editando.orcamento_iniciado_em ? retornarOrcamento : iniciarOrcamento}
-                    className="w-full py-3 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition"
+                    className="w-full py-3 flex items-center justify-center gap-2 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition"
                   >
                     <Play size={16} /> {editando.orcamento_iniciado_em ? 'Retornar orçamento' : 'Iniciar orçamento'}
                   </button>
@@ -506,30 +508,30 @@ export default function Kanban() {
                 </p>
 
                 {editando.orcamento_finalizado_em ? (
-                  <div className="text-xs text-emerald-700 space-y-1">
+                  <div className="text-xs text-brand-tealDark space-y-1">
                     <p className="flex items-center gap-1.5">
                       <CheckCircle2 size={14} /> Finalizado — levou{' '}
                       {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
                     </p>
                     {(editando.anexos || []).map((a, i) => (
-                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
                         <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
                       </a>
                     ))}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-xs text-indigo-600">
+                    <p className="text-xs text-brand-navy">
                       Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
                     </p>
 
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
                       {(editando.anexos || []).map((a, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-emerald-600 mb-1">
+                        <div key={i} className="flex items-center gap-2 text-xs text-brand-teal mb-1">
                           <Paperclip size={12} className="flex-shrink-0" />
                           <span className="font-medium truncate">{a.titulo}</span>
-                          <a href={a.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex-shrink-0">
+                          <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex-shrink-0">
                             ver
                           </a>
                           <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
@@ -548,7 +550,7 @@ export default function Kanban() {
                         <label
                           className={`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
                             novoAnexoTitulo.trim()
-                              ? 'border-indigo-400 text-indigo-600 cursor-pointer hover:bg-indigo-50'
+                              ? 'border-brand-navy text-brand-navy cursor-pointer hover:bg-brand-navyLight'
                               : 'border-slate-200 text-slate-300'
                           }`}
                         >
@@ -580,7 +582,7 @@ export default function Kanban() {
                     <button
                       onClick={finalizarOrcamento}
                       disabled={salvando || !editando.anexos || editando.anexos.length === 0 || editando.valor_estimado == null}
-                      className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-50"
+                      className="w-full py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-brand-tealDark transition disabled:opacity-50"
                     >
                       {salvando ? 'Finalizando...' : 'Finalizar orçamento'}
                     </button>
@@ -634,7 +636,7 @@ export default function Kanban() {
                       onClick={() => atualizarCampo('acabamento', a.value)}
                       className={`p-2 rounded-lg text-xs border transition ${
                         editando.acabamento === a.value
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                          ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
                           : 'border-slate-200 hover:border-slate-300 text-slate-600'
                       }`}
                     >
@@ -690,7 +692,7 @@ export default function Kanban() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs text-slate-500">Esquadrias</label>
-                  <button onClick={adicionarItemEdit} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
+                  <button onClick={adicionarItemEdit} className="flex items-center gap-1 text-xs text-brand-navy hover:text-brand-navyDark">
                     <Plus size={13} /> Adicionar
                   </button>
                 </div>
@@ -753,7 +755,7 @@ export default function Kanban() {
                     </div>
                     <div className="flex items-center gap-2">
                       {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
-                      <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-blue-400">
+                      <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy">
                         <Camera size={12} /> Trocar foto
                         <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
                       </label>
@@ -816,7 +818,7 @@ export default function Kanban() {
               <button
                 onClick={salvarCard}
                 disabled={salvando}
-                className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50"
+                className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
               >
                 {salvando ? 'Salvando...' : 'Salvar alterações'}
               </button>
