@@ -71,8 +71,20 @@ export async function excluirColuna(id: string, colunaDestinoId: string): Promis
 export async function moverCard(orcamentoId: string, colunaId: string): Promise<boolean> {
   const { error } = await supabase
     .from('orcamentos')
-    .update({ coluna_id: colunaId })
+    .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
     .eq('id', orcamentoId)
 
+  return !error
+}
+
+export async function atualizarSlaColuna(
+  id: string,
+  slaAmarelo: number | null,
+  slaVermelho: number | null
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('kanban_colunas')
+    .update({ sla_amarelo_horas: slaAmarelo, sla_vermelho_horas: slaVermelho })
+    .eq('id', id)
   return !error
 }

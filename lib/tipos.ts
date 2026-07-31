@@ -15,6 +15,26 @@ export type OrigemCliente =
   | 'instagram' | 'facebook' | 'google' | 'whatsapp'
   | 'cliente_antigo' | 'passou_na_frente' | 'outros'
 
+export type RoleUsuario = 'master' | 'funcionario'
+
+export interface Usuario {
+  id: string
+  nome: string
+  email: string
+  role: RoleUsuario
+  created_at?: string
+}
+
+export interface HistoricoItem {
+  id: string
+  orcamento_id: string
+  usuario_nome?: string | null
+  usuario_id?: string | null
+  acao: string
+  detalhes?: string | null
+  created_at: string
+}
+
 export interface Cliente {
   id: string
   created_at: string
@@ -34,6 +54,8 @@ export interface KanbanColuna {
   nome: string
   ordem: number
   cor?: string
+  sla_amarelo_horas?: number | null
+  sla_vermelho_horas?: number | null
   created_at?: string
 }
 
@@ -68,7 +90,12 @@ export interface OrcamentoRapido {
   valor_estimado?: number | null
   status: StatusOrcamento
   coluna_id?: string | null
+  coluna_atualizada_em?: string | null
   observacoes?: string
+  arquiteto_nome?: string | null
+  arquiteto_contato?: string | null
+  criado_por_nome?: string | null
+  criado_por_id?: string | null
 }
 
 export interface OrcamentoDetalhado extends OrcamentoRapido {
