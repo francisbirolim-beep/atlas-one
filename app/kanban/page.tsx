@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario } from '@/lib/tipos'
-import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard } from '@/lib/kanban'
+import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo } from '@/lib/tipos'
+import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard, excluirOrcamento } from '@/lib/kanban'
 import { usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
@@ -49,6 +49,7 @@ export default function Kanban() {
   const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [agora, setAgora] = useState(Date.now())
+  const [novoAnexoTitulo, setNovoAnexoTitulo] = useState('')
 
   useEffect(() => {
     carregar()
@@ -148,6 +149,7 @@ export default function Kanban() {
   function abrirCard(card: OrcamentoRapido) {
     setCardSelecionado(card)
     setEditando({ ...card, itens: card.itens ? card.itens.map(it => ({ ...it })) : [] })
+    setNovoAnexoTitulo('')
     listarHistorico(card.id).then(setHistorico)
   }
 
@@ -190,16 +192,24 @@ export default function Kanban() {
     }
   }
 
-  async function anexarArquivoOrcamento(file: File | undefined) {
-    if (!file) return
+  async function adicionarAnexo(file: File | undefined) {
+    if (!file || !novoAnexoTitulo.trim()) return
     const url = await uploadArquivo(file)
-    if (url) setEditando(prev => (prev ? { ...prev, anexo_url: url, anexo_nome: file.name } : prev))
+    if (url) {
+      const novo: Anexo = { titulo: novoAnexoTitulo.trim(), nome: file.name, url }
+      setEditando(prev => (prev ? { ...prev, anexos: [...(prev.anexos || []), novo] } : prev))
+      setNovoAnexoTitulo('')
+    }
+  }
+
+  function removerAnexo(idx: number) {
+    setEditando(prev => (prev ? { ...prev, anexos: (prev.anexos || []).filter((_, i) => i !== idx) } : prev))
   }
 
   async function finalizarOrcamento() {
     if (!cardSelecionado || !editando) return
-    if (!editando.anexo_url) {
-      alert('Anexe o arquivo do orçamento antes de finalizar.')
+    if (!editando.anexos || editando.anexos.length === 0) {
+      alert('Anexe pelo menos um arquivo do orçamento (com título) antes de finalizar.')
       return
     }
     if (editando.valor_estimado == null) {
@@ -211,8 +221,7 @@ export default function Kanban() {
     const { error } = await supabase
       .from('orcamentos')
       .update({
-        anexo_url: editando.anexo_url,
-        anexo_nome: editando.anexo_nome,
+        anexos: editando.anexos,
         valor_estimado: editando.valor_estimado,
         orcamento_finalizado_em: agoraIso,
       })
@@ -223,6 +232,17 @@ export default function Kanban() {
       const atualizado = { ...editando, orcamento_finalizado_em: agoraIso }
       setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
       await registrarHistorico(cardSelecionado.id, usuario, 'Finalizou o orçamento', duracao ? `Levou ${duracao}` : undefined)
+      setCardSelecionado(null)
+      setEditando(null)
+    }
+  }
+
+  async function excluirCard() {
+    if (!cardSelecionado) return
+    if (!window.confirm(`Excluir o orçamento de ${cardSelecionado.cliente_nome}? Essa ação não pode ser desfeita.`)) return
+    const ok = await excluirOrcamento(cardSelecionado.id)
+    if (ok) {
+      setCards(prev => prev.filter(c => c.id !== cardSelecionado.id))
       setCardSelecionado(null)
       setEditando(null)
     }
@@ -459,11 +479,11 @@ export default function Kanban() {
                       <CheckCircle2 size={14} /> Finalizado — levou{' '}
                       {formatarDuracao(editando.orcamento_iniciado_em, editando.orcamento_finalizado_em)}
                     </p>
-                    {editando.anexo_url && (
-                      <a href={editando.anexo_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
-                        <Paperclip size={12} /> {editando.anexo_nome || 'Ver anexo'}
+                    {(editando.anexos || []).map((a, i) => (
+                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                        <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
                       </a>
-                    )}
+                    ))}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -472,21 +492,44 @@ export default function Kanban() {
                     </p>
 
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Anexar arquivo do orçamento</label>
-                      {editando.anexo_url ? (
-                        <div className="flex items-center gap-2 text-xs text-emerald-600">
-                          <Paperclip size={13} />
-                          <span className="truncate">{editando.anexo_nome || 'Arquivo anexado'}</span>
-                          <a href={editando.anexo_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex-shrink-0">
+                      <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
+                      {(editando.anexos || []).map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-emerald-600 mb-1">
+                          <Paperclip size={12} className="flex-shrink-0" />
+                          <span className="font-medium truncate">{a.titulo}</span>
+                          <a href={a.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex-shrink-0">
                             ver
                           </a>
+                          <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                            <Trash2 size={12} />
+                          </button>
                         </div>
-                      ) : (
-                        <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-indigo-400 hover:text-indigo-600">
-                          <Paperclip size={13} /> Escolher arquivo
-                          <input type="file" className="hidden" onChange={e => anexarArquivoOrcamento(e.target.files?.[0])} />
+                      ))}
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={novoAnexoTitulo}
+                          onChange={e => setNovoAnexoTitulo(e.target.value)}
+                          placeholder="Título (ex: Orçamento com contramarco)"
+                          className="flex-1 border border-slate-300 rounded-lg p-2 text-xs"
+                        />
+                        <label
+                          className={`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
+                            novoAnexoTitulo.trim()
+                              ? 'border-indigo-400 text-indigo-600 cursor-pointer hover:bg-indigo-50'
+                              : 'border-slate-200 text-slate-300'
+                          }`}
+                        >
+                          <Paperclip size={13} /> Anexar
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={!novoAnexoTitulo.trim()}
+                            onChange={e => adicionarAnexo(e.target.files?.[0])}
+                          />
                         </label>
-                      )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco").</p>
                     </div>
 
                     <div>
@@ -504,7 +547,7 @@ export default function Kanban() {
 
                     <button
                       onClick={finalizarOrcamento}
-                      disabled={salvando || !editando.anexo_url || editando.valor_estimado == null}
+                      disabled={salvando || !editando.anexos || editando.anexos.length === 0 || editando.valor_estimado == null}
                       className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-50"
                     >
                       {salvando ? 'Finalizando...' : 'Finalizar orçamento'}
@@ -636,12 +679,6 @@ export default function Kanban() {
                         className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                       />
                     </div>
-                    <textarea
-                      value={item.descricao || ''}
-                      onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
-                      placeholder="Descrição (opcional)"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
-                    />
                     <div className="flex items-center gap-2">
                       {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
                       <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-blue-400">
@@ -649,6 +686,12 @@ export default function Kanban() {
                         <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
                       </label>
                     </div>
+                    <textarea
+                      value={item.descricao || ''}
+                      onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
+                      placeholder="Observação (opcional)"
+                      className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
+                    />
                   </div>
                 ))}
               </div>
@@ -698,6 +741,15 @@ export default function Kanban() {
               >
                 {salvando ? 'Salvando...' : 'Salvar alterações'}
               </button>
+
+              {usuario?.role === 'master' && (
+                <button
+                  onClick={excluirCard}
+                  className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
+                >
+                  <Trash2 size={13} /> Excluir este orçamento
+                </button>
+              )}
 
               {historico.length > 0 && (
                 <div className="pt-2 border-t border-slate-100">
