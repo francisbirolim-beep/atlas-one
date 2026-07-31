@@ -26,13 +26,10 @@ const tipos: { value: TipoEsquadria; label: string }[] = [
 ]
 
 const acabamentos: { value: Acabamento; label: string }[] = [
-  { value: 'natural', label: 'Natural (bruto)' },
-  { value: 'branco', label: 'Branco' },
   { value: 'preto', label: 'Preto' },
-  { value: 'cinza', label: 'Cinza' },
-  { value: 'madeirado', label: 'Madeirado' },
-  { value: 'pintura_eletrostatica', label: 'Pintura Eletrostática' },
-  { value: 'outro', label: 'Outro' },
+  { value: 'branco', label: 'Branco' },
+  { value: 'madeirado', label: 'Amadeirado' },
+  { value: 'outro', label: 'Outra cor' },
 ]
 
 type ModoEntrada = 'formulario' | 'texto_livre'
@@ -44,12 +41,13 @@ interface ItemForm {
   altura: string
   quantidade: string
   descricao: string
+  cor: string
   foto?: File
   fotoPreview?: string
 }
 
 function novoItem(): ItemForm {
-  return { id: uuidv4(), tipo: 'porta_correr', largura: '', altura: '', quantidade: '1', descricao: '' }
+  return { id: uuidv4(), tipo: 'porta_correr', largura: '', altura: '', quantidade: '1', descricao: '', cor: '' }
 }
 
 export default function OrcamentoRapido() {
@@ -61,6 +59,7 @@ export default function OrcamentoRapido() {
   const [cidade, setCidade] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
+  const [acabamentoOutroTexto, setAcabamentoOutroTexto] = useState('')
   const [contramarco, setContramarco] = useState<Contramarco | ''>('')
   const [arquitetoNome, setArquitetoNome] = useState('')
   const [arquitetoContato, setArquitetoContato] = useState('')
@@ -93,6 +92,7 @@ export default function OrcamentoRapido() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
     if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
+    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual é a cor'); return }
     if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
 
     if (modo === 'formulario') {
@@ -130,6 +130,7 @@ export default function OrcamentoRapido() {
           quantidade: parseInt(it.quantidade) || 1,
           foto_url,
           descricao: it.descricao || undefined,
+          cor: it.cor || null,
         })
       }
     }
@@ -149,6 +150,7 @@ export default function OrcamentoRapido() {
       altura_mm: primeiro?.altura_mm || null,
       quantidade: primeiro?.quantidade || 1,
       acabamento,
+      acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
       contramarco,
       itens: itensSalvos,
       descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
@@ -181,6 +183,7 @@ export default function OrcamentoRapido() {
     setClienteWhatsapp('')
     setCidade('')
     setAcabamento('')
+    setAcabamentoOutroTexto('')
     setContramarco('')
     setArquitetoNome('')
     setArquitetoContato('')
@@ -284,6 +287,15 @@ export default function OrcamentoRapido() {
               </button>
             ))}
           </div>
+          {acabamento === 'outro' && (
+            <input
+              type="text"
+              value={acabamentoOutroTexto}
+              onChange={e => setAcabamentoOutroTexto(e.target.value)}
+              placeholder="Qual cor?"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3"
+            />
+          )}
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
@@ -474,6 +486,17 @@ export default function OrcamentoRapido() {
                       />
                     </label>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label>
+                  <input
+                    type="text"
+                    value={item.cor}
+                    onChange={e => atualizarItem(item.id, 'cor', e.target.value)}
+                    placeholder="Só preencha se for diferente da cor geral da obra"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
                 </div>
 
                 <div>
