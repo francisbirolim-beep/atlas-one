@@ -126,18 +126,20 @@ export default function Configuracoes() {
       <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 gap-3">
         <ShieldAlert size={40} className="text-slate-300" />
         <p className="text-slate-500">Só o usuário master pode acessar as Configurações.</p>
-        <Link href="/" className="text-blue-600 text-sm hover:underline">Voltar ao início</Link>
+        <Link href="/" className="text-brand-navy text-sm hover:underline">Voltar ao início</Link>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Configurações</h1>
             <p className="text-sm text-slate-500">Usuários e tempos de alerta do painel</p>
@@ -157,7 +159,7 @@ export default function Configuracoes() {
                   <p className="text-slate-800 font-medium">{u.nome}</p>
                   <p className="text-slate-400 text-xs">{u.email}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-600'}`}>
                   {u.role === 'master' ? 'Master' : 'Funcionário'}
                 </span>
               </div>
@@ -199,12 +201,12 @@ export default function Configuracoes() {
             </select>
 
             {erroUsuario && <p className="text-red-500 text-sm">{erroUsuario}</p>}
-            {sucessoUsuario && <p className="text-emerald-600 text-sm">{sucessoUsuario}</p>}
+            {sucessoUsuario && <p className="text-brand-teal text-sm">{sucessoUsuario}</p>}
 
             <button
               type="submit"
               disabled={salvandoUsuario}
-              className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50"
+              className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
             >
               {salvandoUsuario ? 'Cadastrando...' : 'Cadastrar usuário'}
             </button>
@@ -308,7 +310,7 @@ export default function Configuracoes() {
 
                 <button
                   onClick={() => salvarSla(col.id)}
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-brand-navy hover:underline"
                 >
                   Salvar configurações dessa coluna
                 </button>
