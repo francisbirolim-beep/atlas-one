@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { ArrowLeft, Camera, Plus, Trash2, Calculator, Send, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Camera, Plus, Trash2, Send, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useDropzone } from 'react-dropzone'
-import { calcularEsquadria, calcularValorVenda } from '@/lib/calculos'
 import { TipoEsquadria, Acabamento, OrigemCliente } from '@/lib/tipos'
 import { supabase } from '@/lib/supabase'
 import { obterOuCriarCliente } from '@/lib/clientes'
+import { primeiraColunaId } from '@/lib/kanban'
 import { v4 as uuidv4 } from 'uuid'
 
 const tipos: { value: TipoEsquadria; label: string }[] = [
@@ -43,7 +43,6 @@ export default function OrcamentoDetalhado() {
   const [cidade, setCidade] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [observacoes, setObservacoes] = useState('')
-  const [resultado, setResultado] = useState<{ custo: number; venda: number } | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [erro, setErro] = useState('')
@@ -80,7 +79,11 @@ export default function OrcamentoDetalhado() {
     if (medidas.length > 1) setMedidas(medidas.filter(m => m.id !== id))
   }
 
-  function calcular() {
+  async function salvar() {
+    if (!clienteNome.trim()) {
+      setErro('Informe o nome do cliente')
+      return
+    }
     const medidasValidas = medidas.filter(m => m.largura_mm > 0 && m.altura_mm > 0)
     if (medidasValidas.length === 0) {
       setErro('Adicione pelo menos uma medida válida')
@@ -88,32 +91,12 @@ export default function OrcamentoDetalhado() {
     }
 
     setErro('')
-    const q = parseInt(quantidade) || 1
-    const totalCusto = medidasValidas.reduce((sum, m) => {
-      const calc = calcularEsquadria(tipo, m.largura_mm, m.altura_mm)
-      return sum + calc.custo_material
-    }, 0)
-
-    const custo = Math.round(totalCusto * q * 100) / 100
-    const venda = calcularValorVenda(custo, 40)
-    setResultado({ custo, venda })
-  }
-
-  async function salvar() {
-    if (!clienteNome.trim()) {
-      setErro('Informe o nome do cliente')
-      return
-    }
-    if (!resultado) return
-
     setSalvando(true)
 
-    const clienteId = await obterOuCriarCliente({
-      nome: clienteNome,
-      whatsapp: clienteWhatsapp,
-      cidade,
-      origem,
-    })
+    const [clienteId, colunaId] = await Promise.all([
+      obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
+      primeiraColunaId(),
+    ])
 
     const fotosUrls: string[] = []
     for (const foto of fotos) {
@@ -134,16 +117,17 @@ export default function OrcamentoDetalhado() {
       cidade,
       origem,
       tipo_esquadria: tipo,
-      largura_mm: medidas[0].largura_mm,
-      altura_mm: medidas[0].altura_mm,
+      largura_mm: medidasValidas[0].largura_mm,
+      altura_mm: medidasValidas[0].altura_mm,
       quantidade: parseInt(quantidade) || 1,
       acabamento,
-      valor_estimado: resultado.venda,
+      valor_estimado: null,
       status: 'rascunho',
       modo_entrada: 'detalhado',
       fotos_urls: fotosUrls,
       medidas_trena: medidas,
       observacoes,
+      coluna_id: colunaId,
     })
 
     setSalvando(false)
@@ -159,15 +143,16 @@ export default function OrcamentoDetalhado() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
           <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Orçamento detalhado salvo!</h2>
-          <p className="text-slate-500 mb-2">{clienteNome}</p>
-          <p className="text-2xl font-bold text-emerald-600 mb-6">R$ {resultado?.venda.toFixed(2)}</p>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Pedido detalhado enviado!</h2>
+          <p className="text-slate-500 mb-6">
+            {clienteNome} entrou no painel de orçamentos. Um funcionário vai preparar o valor.
+          </p>
           <div className="flex gap-3 justify-center">
             <Link href="/orcamento-detalhado" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
               Novo orçamento
             </Link>
-            <Link href="/historico" className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
-              Ver histórico
+            <Link href="/kanban" className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+              Ver painel
             </Link>
           </div>
         </div>
@@ -337,86 +322,60 @@ export default function OrcamentoDetalhado() {
           />
         </div>
 
-        {!resultado && (
-          <button
-            onClick={calcular}
-            className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition flex items-center justify-center gap-2"
-          >
-            <Calculator size={18} />
-            Calcular orçamento detalhado
-          </button>
-        )}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
+          <input
+            type="text"
+            value={clienteNome}
+            onChange={e => setClienteNome(e.target.value)}
+            placeholder="Nome do cliente *"
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+          />
+          <input
+            type="text"
+            value={clienteWhatsapp}
+            onChange={e => setClienteWhatsapp(e.target.value)}
+            placeholder="WhatsApp (opcional)"
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={cidade}
+              onChange={e => setCidade(e.target.value)}
+              placeholder="Cidade da obra"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <select
+              value={origem}
+              onChange={e => setOrigem(e.target.value as OrigemCliente)}
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            >
+              <option value="indicacao">Indicação</option>
+              <option value="arquiteto">Arquiteto</option>
+              <option value="engenheiro">Engenheiro</option>
+              <option value="construtora">Construtora</option>
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+              <option value="google">Google</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="cliente_antigo">Cliente antigo</option>
+              <option value="passou_na_frente">Passou em frente</option>
+              <option value="outros">Outros</option>
+            </select>
+          </div>
+        </div>
 
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
 
-        {resultado && (
-          <div className="bg-white rounded-2xl border-2 border-emerald-200 p-6">
-            <h3 className="text-sm font-medium text-slate-700 mb-4">Resultado do orçamento</h3>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-slate-50 rounded-xl p-4">
-                <p className="text-xs text-slate-500 mb-1">Custo estimado</p>
-                <p className="text-xl font-bold text-slate-700">R$ {resultado.custo.toFixed(2)}</p>
-              </div>
-              <div className="bg-emerald-50 rounded-xl p-4">
-                <p className="text-xs text-slate-500 mb-1">Valor de venda sugerido</p>
-                <p className="text-2xl font-bold text-emerald-600">R$ {resultado.venda.toFixed(2)}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <input
-                type="text"
-                value={clienteNome}
-                onChange={e => setClienteNome(e.target.value)}
-                placeholder="Nome do cliente *"
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              />
-              <input
-                type="text"
-                value={clienteWhatsapp}
-                onChange={e => setClienteWhatsapp(e.target.value)}
-                placeholder="WhatsApp (opcional)"
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  value={cidade}
-                  onChange={e => setCidade(e.target.value)}
-                  placeholder="Cidade da obra"
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                />
-                <select
-                  value={origem}
-                  onChange={e => setOrigem(e.target.value as OrigemCliente)}
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                >
-                  <option value="indicacao">Indicação</option>
-                  <option value="arquiteto">Arquiteto</option>
-                  <option value="engenheiro">Engenheiro</option>
-                  <option value="construtora">Construtora</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="facebook">Facebook</option>
-                  <option value="google">Google</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="cliente_antigo">Cliente antigo</option>
-                  <option value="passou_na_frente">Passou em frente</option>
-                  <option value="outros">Outros</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              onClick={salvar}
-              disabled={salvando}
-              className="w-full py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Send size={16} />
-              {salvando ? 'Salvando...' : 'Salvar orçamento detalhado'}
-            </button>
-          </div>
-        )}
+        <button
+          onClick={salvar}
+          disabled={salvando}
+          className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <Send size={18} />
+          {salvando ? 'Enviando...' : 'Enviar pedido detalhado'}
+        </button>
       </main>
     </div>
   )
