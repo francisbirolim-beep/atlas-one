@@ -37,6 +37,18 @@ export interface KanbanColuna {
   created_at?: string
 }
 
+export type Contramarco = 'com' | 'sem'
+
+export interface ItemEsquadria {
+  id: string
+  tipo_esquadria: TipoEsquadria
+  largura_mm: number
+  altura_mm: number
+  quantidade: number
+  foto_url?: string | null
+  descricao?: string
+}
+
 export interface OrcamentoRapido {
   id: string
   created_at: string
@@ -50,6 +62,8 @@ export interface OrcamentoRapido {
   altura_mm: number
   quantidade: number
   acabamento?: Acabamento
+  contramarco?: Contramarco | null
+  itens?: ItemEsquadria[]
   descricao_livre?: string
   valor_estimado?: number | null
   status: StatusOrcamento
