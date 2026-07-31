@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabase'
 import { obterOuCriarCliente } from '@/lib/clientes'
 import { primeiraColunaId } from '@/lib/kanban'
 import { uploadFoto } from '@/lib/upload'
+import { usuarioAtual } from '@/lib/auth'
+import { registrarHistorico } from '@/lib/historico'
 import { v4 as uuidv4 } from 'uuid'
 
 const tipos: { value: TipoEsquadria; label: string }[] = [
@@ -59,6 +61,8 @@ export default function OrcamentoRapido() {
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
   const [contramarco, setContramarco] = useState<Contramarco | ''>('')
+  const [arquitetoNome, setArquitetoNome] = useState('')
+  const [arquitetoContato, setArquitetoContato] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [erro, setErro] = useState('')
@@ -99,9 +103,10 @@ export default function OrcamentoRapido() {
     setErro('')
     setSalvando(true)
 
-    const [clienteId, colunaId] = await Promise.all([
+    const [clienteId, colunaId, usuario] = await Promise.all([
       obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
       primeiraColunaId(),
+      usuarioAtual(),
     ])
 
     let itensSalvos: ItemEsquadria[] = []
@@ -120,9 +125,10 @@ export default function OrcamentoRapido() {
     }
 
     const primeiro = itensSalvos[0]
+    const novoId = uuidv4()
 
     const { error } = await supabase.from('orcamentos').insert({
-      id: uuidv4(),
+      id: novoId,
       cliente_id: clienteId,
       cliente_nome: clienteNome,
       cliente_whatsapp: clienteWhatsapp,
@@ -140,12 +146,18 @@ export default function OrcamentoRapido() {
       status: 'rascunho',
       modo_entrada: modo,
       coluna_id: colunaId,
+      coluna_atualizada_em: new Date().toISOString(),
+      arquiteto_nome: arquitetoNome || null,
+      arquiteto_contato: arquitetoContato || null,
+      criado_por_nome: usuario?.nome || null,
+      criado_por_id: usuario?.id || null,
     })
 
     setSalvando(false)
     if (error) {
       setErro('Erro ao salvar: ' + error.message)
     } else {
+      registrarHistorico(novoId, usuario, 'Criou o orçamento')
       setSalvo(true)
     }
   }
@@ -160,6 +172,8 @@ export default function OrcamentoRapido() {
     setCidade('')
     setAcabamento('')
     setContramarco('')
+    setArquitetoNome('')
+    setArquitetoContato('')
   }
 
   if (salvo) {
@@ -286,6 +300,24 @@ export default function OrcamentoRapido() {
               Sem contramarco
             </button>
           </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Arquiteto / Engenheiro (opcional)</h3>
+          <input
+            type="text"
+            value={arquitetoNome}
+            onChange={e => setArquitetoNome(e.target.value)}
+            placeholder="Nome do arquiteto ou engenheiro"
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+          />
+          <input
+            type="text"
+            value={arquitetoContato}
+            onChange={e => setArquitetoContato(e.target.value)}
+            placeholder="Telefone / WhatsApp de contato"
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+          />
         </div>
 
         <div className="flex gap-2 bg-white rounded-xl p-1 border border-slate-200">
