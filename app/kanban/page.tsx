@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { KanbanColuna, OrcamentoRapido } from '@/lib/tipos'
+import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario } from '@/lib/tipos'
 import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard } from '@/lib/kanban'
+import { usuarioAtual } from '@/lib/auth'
+import { registrarHistorico, listarHistorico } from '@/lib/historico'
+import { uploadFoto } from '@/lib/upload'
+import { v4 as uuidv4 } from 'uuid'
 
 const tipoLabels: Record<string, string> = {
   porta_correr: 'Porta de Correr',
@@ -20,18 +24,27 @@ const tipoLabels: Record<string, string> = {
   outro: 'Outro',
 }
 
+function novoItemEdit(): ItemEsquadria {
+  return { id: uuidv4(), tipo_esquadria: 'porta_correr', largura_mm: 0, altura_mm: 0, quantidade: 1 }
+}
+
 export default function Kanban() {
   const [colunas, setColunas] = useState<KanbanColuna[]>([])
   const [cards, setCards] = useState<OrcamentoRapido[]>([])
   const [carregando, setCarregando] = useState(true)
   const [cardSelecionado, setCardSelecionado] = useState<OrcamentoRapido | null>(null)
-  const [valorEdit, setValorEdit] = useState('')
-  const [colunaEdit, setColunaEdit] = useState('')
+  const [editando, setEditando] = useState<OrcamentoRapido | null>(null)
+  const [historico, setHistorico] = useState<HistoricoItem[]>([])
   const [salvando, setSalvando] = useState(false)
   const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [agora, setAgora] = useState(Date.now())
 
   useEffect(() => {
     carregar()
+    usuarioAtual().then(setUsuario)
+    const t = setInterval(() => setAgora(Date.now()), 60000)
+    return () => clearInterval(t)
   }, [])
 
   async function carregar() {
@@ -52,13 +65,30 @@ export default function Kanban() {
     return cards.filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
   }
 
+  function corDoCard(card: OrcamentoRapido, coluna: KanbanColuna | undefined): string {
+    if (!coluna) return 'border-slate-200'
+    const base = card.coluna_atualizada_em || card.created_at
+    if (!base) return 'border-slate-200'
+    const horas = (agora - new Date(base).getTime()) / 3600000
+    if (coluna.sla_vermelho_horas != null && horas >= coluna.sla_vermelho_horas) return 'border-red-400 bg-red-50'
+    if (coluna.sla_amarelo_horas != null && horas >= coluna.sla_amarelo_horas) return 'border-amber-400 bg-amber-50'
+    return 'border-slate-200'
+  }
+
   async function handleDrop(e: React.DragEvent, colunaId: string) {
     e.preventDefault()
     setColunaArrastando(null)
     const cardId = e.dataTransfer.getData('text/plain')
     if (!cardId) return
-    setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId } : c)))
+    const card = cards.find(c => c.id === cardId)
+    const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]?.id))
+    const colunaNova = colunas.find(c => c.id === colunaId)
+    const agoraIso = new Date().toISOString()
+    setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: agoraIso } : c)))
     await moverCard(cardId, colunaId)
+    if (colunaAnterior?.id !== colunaNova?.id) {
+      registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || '—'} → ${colunaNova?.nome || '—'}`)
+    }
   }
 
   async function novaColuna() {
@@ -97,24 +127,83 @@ export default function Kanban() {
 
   function abrirCard(card: OrcamentoRapido) {
     setCardSelecionado(card)
-    setValorEdit(card.valor_estimado != null ? String(card.valor_estimado) : '')
-    setColunaEdit(card.coluna_id || colunas[0]?.id || '')
+    setEditando({ ...card, itens: card.itens ? card.itens.map(it => ({ ...it })) : [] })
+    listarHistorico(card.id).then(setHistorico)
+  }
+
+  function atualizarCampo(campo: keyof OrcamentoRapido, valor: any) {
+    setEditando(prev => (prev ? { ...prev, [campo]: valor } : prev))
+  }
+
+  function atualizarItemEdit(id: string, campo: keyof ItemEsquadria, valor: any) {
+    setEditando(prev =>
+      prev ? { ...prev, itens: (prev.itens || []).map(it => (it.id === id ? { ...it, [campo]: valor } : it)) } : prev
+    )
+  }
+
+  function adicionarItemEdit() {
+    setEditando(prev => (prev ? { ...prev, itens: [...(prev.itens || []), novoItemEdit()] } : prev))
+  }
+
+  function removerItemEdit(id: string) {
+    setEditando(prev => (prev ? { ...prev, itens: (prev.itens || []).filter(it => it.id !== id) } : prev))
+  }
+
+  async function trocarFotoItem(id: string, file: File | undefined) {
+    if (!file) return
+    const url = await uploadFoto(file)
+    if (url) atualizarItemEdit(id, 'foto_url', url)
+  }
+
+  function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): string {
+    const partes: string[] = []
+    if (original.cliente_nome !== novo.cliente_nome) partes.push('nome')
+    if (original.cidade !== novo.cidade) partes.push('cidade')
+    if (original.acabamento !== novo.acabamento) partes.push('cor')
+    if (original.contramarco !== novo.contramarco) partes.push('contramarco')
+    if (original.arquiteto_nome !== novo.arquiteto_nome) partes.push('arquiteto/engenheiro')
+    if (original.valor_estimado !== novo.valor_estimado) partes.push('valor')
+    if (original.coluna_id !== novo.coluna_id) partes.push('coluna')
+    if ((original.itens?.length || 0) !== (novo.itens?.length || 0)) partes.push('esquadrias (quantidade)')
+    else if (JSON.stringify(original.itens) !== JSON.stringify(novo.itens)) partes.push('esquadrias (dados)')
+    return partes.length > 0 ? `Alterou: ${partes.join(', ')}` : 'Salvou sem mudanças'
   }
 
   async function salvarCard() {
-    if (!cardSelecionado) return
+    if (!editando || !cardSelecionado) return
     setSalvando(true)
-    const valor = valorEdit.trim() ? parseFloat(valorEdit.replace(',', '.')) : null
+
+    const colunaAnterior = cardSelecionado.coluna_id
+    const mudouColuna = colunaAnterior !== editando.coluna_id
+
     const { error } = await supabase
       .from('orcamentos')
-      .update({ valor_estimado: valor, coluna_id: colunaEdit })
+      .update({
+        cliente_nome: editando.cliente_nome,
+        cliente_whatsapp: editando.cliente_whatsapp,
+        cidade: editando.cidade,
+        acabamento: editando.acabamento,
+        contramarco: editando.contramarco,
+        arquiteto_nome: editando.arquiteto_nome,
+        arquiteto_contato: editando.arquiteto_contato,
+        itens: editando.itens,
+        valor_estimado: editando.valor_estimado,
+        coluna_id: editando.coluna_id,
+        coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
+      })
       .eq('id', cardSelecionado.id)
+
     setSalvando(false)
     if (!error) {
-      setCards(prev =>
-        prev.map(c => (c.id === cardSelecionado.id ? { ...c, valor_estimado: valor, coluna_id: colunaEdit } : c))
-      )
+      const atualizado = {
+        ...editando,
+        coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
+      }
+      setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
+      const resumo = resumoMudancas(cardSelecionado, editando)
+      await registrarHistorico(cardSelecionado.id, usuario, 'Editou o orçamento', resumo)
       setCardSelecionado(null)
+      setEditando(null)
     }
   }
 
@@ -174,7 +263,7 @@ export default function Kanban() {
                       draggable
                       onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
                       onClick={() => abrirCard(card)}
-                      className="bg-white rounded-xl border border-slate-200 p-3 cursor-pointer hover:shadow-md transition"
+                      className={`bg-white rounded-xl border p-3 cursor-pointer hover:shadow-md transition ${corDoCard(card, col)}`}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <div className={`p-1 rounded ${(card as any).modo_entrada === 'detalhado' ? 'bg-emerald-100' : 'bg-blue-100'}`}>
@@ -191,6 +280,11 @@ export default function Kanban() {
                       </p>
                       {card.descricao_livre && (
                         <p className="text-xs text-slate-400 line-clamp-2">{card.descricao_livre}</p>
+                      )}
+                      {card.criado_por_nome && (
+                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                          <User size={11} /> {card.criado_por_nome}
+                        </p>
                       )}
                       {card.valor_estimado != null && (
                         <p className="text-xs font-semibold text-emerald-600 mt-1">R$ {card.valor_estimado.toFixed(2)}</p>
@@ -211,78 +305,167 @@ export default function Kanban() {
         </div>
       </main>
 
-      {cardSelecionado && (
+      {cardSelecionado && editando && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800">{cardSelecionado.cliente_nome}</h3>
-              <button onClick={() => setCardSelecionado(null)} className="p-1 text-slate-400 hover:text-slate-600">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
+              <h3 className="font-bold text-slate-800">Editar orçamento</h3>
+              <button onClick={() => { setCardSelecionado(null); setEditando(null) }} className="p-1 text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
 
             <div className="p-5 space-y-4">
-              <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-                {cardSelecionado.cliente_whatsapp && (
-                  <span className="flex items-center gap-1.5"><Phone size={14} /> {cardSelecionado.cliente_whatsapp}</span>
-                )}
-                {cardSelecionado.cidade && (
-                  <span className="flex items-center gap-1.5"><MapPin size={14} /> {cardSelecionado.cidade}</span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2 text-xs">
-                {(cardSelecionado as any).acabamento && (
-                  <span className="px-2 py-1 bg-slate-100 rounded-full text-slate-600">
-                    Cor: {(cardSelecionado as any).acabamento}
-                  </span>
-                )}
-                {(cardSelecionado as any).contramarco && (
-                  <span className="px-2 py-1 bg-slate-100 rounded-full text-slate-600">
-                    {(cardSelecionado as any).contramarco === 'com' ? 'Com contramarco' : 'Sem contramarco'}
-                  </span>
-                )}
-              </div>
-
-              {(cardSelecionado as any).itens?.length > 0 ? (
-                <div className="space-y-2">
-                  {(cardSelecionado as any).itens.map((item: any, i: number) => (
-                    <div key={item.id || i} className="bg-slate-50 rounded-xl p-3 text-sm flex gap-3">
-                      {item.foto_url && (
-                        <img src={item.foto_url} alt="" className="w-16 h-16 object-cover rounded-lg flex-shrink-0" />
-                      )}
-                      <div>
-                        <p className="text-slate-700 font-medium">
-                          {tipoLabels[item.tipo_esquadria] || item.tipo_esquadria}
-                        </p>
-                        <p className="text-slate-500">
-                          {item.largura_mm}mm × {item.altura_mm}mm — qtd {item.quantidade}
-                        </p>
-                        {item.descricao && <p className="text-slate-400 text-xs mt-1">{item.descricao}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-slate-50 rounded-xl p-3 text-sm">
-                  <p className="text-slate-700 font-medium mb-1">
-                    {tipoLabels[cardSelecionado.tipo_esquadria] || cardSelecionado.tipo_esquadria}
-                  </p>
-                  {cardSelecionado.largura_mm ? (
-                    <p className="text-slate-500">
-                      {cardSelecionado.largura_mm}mm × {cardSelecionado.altura_mm}mm — qtd {cardSelecionado.quantidade}
-                    </p>
-                  ) : null}
-                </div>
+              {cardSelecionado.criado_por_nome && (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
+                </p>
               )}
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Nome do cliente</label>
+                <input
+                  type="text"
+                  value={editando.cliente_nome || ''}
+                  onChange={e => atualizarCampo('cliente_nome', e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Phone size={12} /> WhatsApp</label>
+                  <input
+                    type="text"
+                    value={editando.cliente_whatsapp || ''}
+                    onChange={e => atualizarCampo('cliente_whatsapp', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><MapPin size={12} /> Cidade</label>
+                  <input
+                    type="text"
+                    value={editando.cidade || ''}
+                    onChange={e => atualizarCampo('cidade', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Cor / Acabamento</label>
+                  <input
+                    type="text"
+                    value={editando.acabamento || ''}
+                    onChange={e => atualizarCampo('acabamento', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Contramarco</label>
+                  <select
+                    value={editando.contramarco || ''}
+                    onChange={e => atualizarCampo('contramarco', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  >
+                    <option value="">—</option>
+                    <option value="com">Com contramarco</option>
+                    <option value="sem">Sem contramarco</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12} /> Arquiteto/Eng.</label>
+                  <input
+                    type="text"
+                    value={editando.arquiteto_nome || ''}
+                    onChange={e => atualizarCampo('arquiteto_nome', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Contato</label>
+                  <input
+                    type="text"
+                    value={editando.arquiteto_contato || ''}
+                    onChange={e => atualizarCampo('arquiteto_contato', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs text-slate-500">Esquadrias</label>
+                  <button onClick={adicionarItemEdit} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
+                    <Plus size={13} /> Adicionar
+                  </button>
+                </div>
+                {(editando.itens || []).map((item, i) => (
+                  <div key={item.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Esquadria {i + 1}</span>
+                      <button onClick={() => removerItemEdit(item.id)} className="p-1 text-red-400 hover:text-red-600">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                    <select
+                      value={item.tipo_esquadria}
+                      onChange={e => atualizarItemEdit(item.id, 'tipo_esquadria', e.target.value as TipoEsquadria)}
+                      className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                    >
+                      {Object.entries(tipoLabels).map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="number"
+                        value={item.largura_mm || ''}
+                        onChange={e => atualizarItemEdit(item.id, 'largura_mm', parseFloat(e.target.value) || 0)}
+                        placeholder="Largura"
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                      />
+                      <input
+                        type="number"
+                        value={item.altura_mm || ''}
+                        onChange={e => atualizarItemEdit(item.id, 'altura_mm', parseFloat(e.target.value) || 0)}
+                        placeholder="Altura"
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                      />
+                      <input
+                        type="number"
+                        value={item.quantidade || ''}
+                        onChange={e => atualizarItemEdit(item.id, 'quantidade', parseInt(e.target.value) || 1)}
+                        placeholder="Qtd"
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                      />
+                    </div>
+                    <textarea
+                      value={item.descricao || ''}
+                      onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
+                      placeholder="Descrição (opcional)"
+                      className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
+                    />
+                    <div className="flex items-center gap-2">
+                      {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
+                      <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-blue-400">
+                        <Camera size={12} /> Trocar foto
+                        <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               {cardSelecionado.descricao_livre && (
                 <p className="text-slate-500 text-sm whitespace-pre-wrap bg-slate-50 rounded-xl p-3">
                   {cardSelecionado.descricao_livre}
                 </p>
-              )}
-              {cardSelecionado.observacoes && (
-                <p className="text-slate-400 text-xs whitespace-pre-wrap">Obs: {cardSelecionado.observacoes}</p>
               )}
 
               {(cardSelecionado as any).fotos_urls?.length > 0 && (
@@ -297,8 +480,8 @@ export default function Kanban() {
                 <label className="block text-xs text-slate-500 mb-1">Valor do orçamento (opcional)</label>
                 <input
                   type="text"
-                  value={valorEdit}
-                  onChange={e => setValorEdit(e.target.value)}
+                  value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
+                  onChange={e => atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)}
                   placeholder="Ex: 2500.00"
                   className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                 />
@@ -307,8 +490,8 @@ export default function Kanban() {
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Coluna</label>
                 <select
-                  value={colunaEdit}
-                  onChange={e => setColunaEdit(e.target.value)}
+                  value={editando.coluna_id || ''}
+                  onChange={e => atualizarCampo('coluna_id', e.target.value)}
                   className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                 >
                   {colunas.map(c => (
@@ -322,8 +505,26 @@ export default function Kanban() {
                 disabled={salvando}
                 className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50"
               >
-                {salvando ? 'Salvando...' : 'Salvar'}
+                {salvando ? 'Salvando...' : 'Salvar alterações'}
               </button>
+
+              {historico.length > 0 && (
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-2">
+                    <Clock size={13} /> Histórico
+                  </p>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {historico.map(h => (
+                      <div key={h.id} className="text-xs text-slate-500">
+                        <span className="font-medium text-slate-700">{h.usuario_nome || 'Sistema'}</span>
+                        {' — '}{h.acao}
+                        {h.detalhes && <span className="text-slate-400"> ({h.detalhes})</span>}
+                        <div className="text-slate-300">{new Date(h.created_at).toLocaleString('pt-BR')}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
