@@ -203,15 +203,15 @@ export default function OrcamentoRapido() {
 
   if (salvo) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
-          <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4" />
+          <CheckCircle size={48} className="text-brand-teal mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Pedido enviado!</h2>
           <p className="text-slate-500 mb-6">
             {clienteNome} entrou no painel de orçamentos. Um funcionário vai preparar o valor.
           </p>
           <div className="flex gap-3 justify-center">
-            <button onClick={resetar} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">
               Novo pedido
             </button>
             <Link href="/kanban" className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition">
@@ -224,12 +224,14 @@ export default function OrcamentoRapido() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Orçamento Rápido</h1>
             <p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p>
@@ -291,7 +293,7 @@ export default function OrcamentoRapido() {
                 onClick={() => setAcabamento(a.value)}
                 className={`p-3 rounded-xl text-sm border transition ${
                   acabamento === a.value
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                    ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
                     : 'border-slate-200 hover:border-slate-300 text-slate-600'
                 }`}
               >
@@ -317,7 +319,7 @@ export default function OrcamentoRapido() {
               onClick={() => setContramarco('com')}
               className={`p-3 rounded-xl text-sm border transition ${
                 contramarco === 'com'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                  ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
@@ -327,7 +329,7 @@ export default function OrcamentoRapido() {
               onClick={() => setContramarco('sem')}
               className={`p-3 rounded-xl text-sm border transition ${
                 contramarco === 'sem'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                  ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
@@ -358,7 +360,7 @@ export default function OrcamentoRapido() {
           <button
             onClick={() => setModo('formulario')}
             className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
-              modo === 'formulario' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+              modo === 'formulario' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             Formulário rápido
@@ -366,7 +368,7 @@ export default function OrcamentoRapido() {
           <button
             onClick={() => setModo('texto_livre')}
             className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
-              modo === 'texto_livre' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+              modo === 'texto_livre' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             Descrever em texto
@@ -391,7 +393,7 @@ export default function OrcamentoRapido() {
                   value={texto}
                   onChange={e => atualizarTexto(idx, e.target.value)}
                   placeholder="Ex: Porta de correr 2 folhas com 1,80m de largura por 2,10m de altura..."
-                  className="w-full h-28 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full h-28 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-navy"
                 />
               </div>
             ))}
@@ -402,7 +404,7 @@ export default function OrcamentoRapido() {
 
             <button
               onClick={() => setTextosLivres([...textosLivres, ''])}
-              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition text-sm font-medium"
+              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-navy hover:text-brand-navy transition text-sm font-medium"
             >
               <Plus size={16} /> Adicionar outra esquadria
             </button>
@@ -431,7 +433,7 @@ export default function OrcamentoRapido() {
                         onClick={() => atualizarItem(item.id, 'tipo', t.value)}
                         className={`p-2.5 rounded-lg text-xs border transition ${
                           item.tipo === t.value
-                            ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                            ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
                             : 'border-slate-200 hover:border-slate-300 text-slate-600'
                         }`}
                       >
@@ -510,7 +512,7 @@ export default function OrcamentoRapido() {
                       </button>
                     </div>
                   ) : (
-                    <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-500">
+                    <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
                       <Camera size={14} />
                       Adicionar foto
                       <input
@@ -548,7 +550,7 @@ export default function OrcamentoRapido() {
 
             <button
               onClick={() => setItens([...itens, novoItem()])}
-              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition text-sm font-medium"
+              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-navy hover:text-brand-navy transition text-sm font-medium"
             >
               <Plus size={16} /> Adicionar outra esquadria
             </button>
@@ -560,7 +562,7 @@ export default function OrcamentoRapido() {
         <button
           onClick={salvar}
           disabled={salvando}
-          className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
           <Send size={18} />
           {salvando ? 'Enviando...' : 'Enviar pedido'}
