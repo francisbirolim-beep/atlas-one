@@ -185,8 +185,9 @@ export default function Kanban() {
                         <p className="font-medium text-slate-800 text-sm truncate">{card.cliente_nome}</p>
                       </div>
                       <p className="text-xs text-slate-500 mb-1">
-                        {tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}
-                        {card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}
+                        {(card as any).itens?.length > 1
+                          ? `${(card as any).itens.length} esquadrias`
+                          : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
                       </p>
                       {card.descricao_livre && (
                         <p className="text-xs text-slate-400 line-clamp-2">{card.descricao_livre}</p>
@@ -230,22 +231,59 @@ export default function Kanban() {
                 )}
               </div>
 
-              <div className="bg-slate-50 rounded-xl p-3 text-sm">
-                <p className="text-slate-700 font-medium mb-1">
-                  {tipoLabels[cardSelecionado.tipo_esquadria] || cardSelecionado.tipo_esquadria}
-                </p>
-                {cardSelecionado.largura_mm ? (
-                  <p className="text-slate-500">
-                    {cardSelecionado.largura_mm}mm × {cardSelecionado.altura_mm}mm — qtd {cardSelecionado.quantidade}
-                  </p>
-                ) : null}
-                {cardSelecionado.descricao_livre && (
-                  <p className="text-slate-500 mt-2 whitespace-pre-wrap">{cardSelecionado.descricao_livre}</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {(cardSelecionado as any).acabamento && (
+                  <span className="px-2 py-1 bg-slate-100 rounded-full text-slate-600">
+                    Cor: {(cardSelecionado as any).acabamento}
+                  </span>
                 )}
-                {cardSelecionado.observacoes && (
-                  <p className="text-slate-400 mt-2 text-xs whitespace-pre-wrap">Obs: {cardSelecionado.observacoes}</p>
+                {(cardSelecionado as any).contramarco && (
+                  <span className="px-2 py-1 bg-slate-100 rounded-full text-slate-600">
+                    {(cardSelecionado as any).contramarco === 'com' ? 'Com contramarco' : 'Sem contramarco'}
+                  </span>
                 )}
               </div>
+
+              {(cardSelecionado as any).itens?.length > 0 ? (
+                <div className="space-y-2">
+                  {(cardSelecionado as any).itens.map((item: any, i: number) => (
+                    <div key={item.id || i} className="bg-slate-50 rounded-xl p-3 text-sm flex gap-3">
+                      {item.foto_url && (
+                        <img src={item.foto_url} alt="" className="w-16 h-16 object-cover rounded-lg flex-shrink-0" />
+                      )}
+                      <div>
+                        <p className="text-slate-700 font-medium">
+                          {tipoLabels[item.tipo_esquadria] || item.tipo_esquadria}
+                        </p>
+                        <p className="text-slate-500">
+                          {item.largura_mm}mm × {item.altura_mm}mm — qtd {item.quantidade}
+                        </p>
+                        {item.descricao && <p className="text-slate-400 text-xs mt-1">{item.descricao}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-slate-50 rounded-xl p-3 text-sm">
+                  <p className="text-slate-700 font-medium mb-1">
+                    {tipoLabels[cardSelecionado.tipo_esquadria] || cardSelecionado.tipo_esquadria}
+                  </p>
+                  {cardSelecionado.largura_mm ? (
+                    <p className="text-slate-500">
+                      {cardSelecionado.largura_mm}mm × {cardSelecionado.altura_mm}mm — qtd {cardSelecionado.quantidade}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
+              {cardSelecionado.descricao_livre && (
+                <p className="text-slate-500 text-sm whitespace-pre-wrap bg-slate-50 rounded-xl p-3">
+                  {cardSelecionado.descricao_livre}
+                </p>
+              )}
+              {cardSelecionado.observacoes && (
+                <p className="text-slate-400 text-xs whitespace-pre-wrap">Obs: {cardSelecionado.observacoes}</p>
+              )}
 
               {(cardSelecionado as any).fotos_urls?.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
