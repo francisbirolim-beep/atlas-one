@@ -36,7 +36,9 @@ type ModoEntrada = 'formulario' | 'texto_livre'
 
 interface ItemForm {
   id: string
-  tipo: TipoEsquadria
+  tipo: TipoEsquadria | ''
+  tipoOutroTexto: string
+  folhas: string
   largura: string
   altura: string
   quantidade: string
@@ -47,7 +49,7 @@ interface ItemForm {
 }
 
 function novoItem(): ItemForm {
-  return { id: uuidv4(), tipo: 'porta_correr', largura: '', altura: '', quantidade: '1', descricao: '', cor: '' }
+  return { id: uuidv4(), tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '' }
 }
 
 export default function OrcamentoRapido() {
@@ -97,6 +99,14 @@ export default function OrcamentoRapido() {
 
     if (modo === 'formulario') {
       for (const it of itens) {
+        if (!it.tipo) {
+          setErro('Selecione o tipo de cada esquadria')
+          return
+        }
+        if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) {
+          setErro('Escreva qual é o tipo de esquadria')
+          return
+        }
         const l = parseFloat(it.largura.replace(',', '.'))
         const a = parseFloat(it.altura.replace(',', '.'))
         if (!l || !a || l < 100 || a < 100) {
@@ -124,7 +134,9 @@ export default function OrcamentoRapido() {
         const foto_url = it.foto ? await uploadFoto(it.foto) : null
         itensSalvos.push({
           id: it.id,
-          tipo_esquadria: it.tipo,
+          tipo_esquadria: it.tipo as TipoEsquadria,
+          tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
+          folhas: it.folhas ? parseInt(it.folhas) : null,
           largura_mm: parseFloat(it.largura),
           altura_mm: parseFloat(it.altura),
           quantidade: parseInt(it.quantidade) || 1,
@@ -411,7 +423,7 @@ export default function OrcamentoRapido() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-500 mb-2">Tipo de esquadria</label>
+                  <label className="block text-xs text-slate-500 mb-2">Tipo de esquadria *</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {tipos.map(t => (
                       <button
@@ -427,7 +439,30 @@ export default function OrcamentoRapido() {
                       </button>
                     ))}
                   </div>
+                  {item.tipo === 'outro' && (
+                    <input
+                      type="text"
+                      value={item.tipoOutroTexto}
+                      onChange={e => atualizarItem(item.id, 'tipoOutroTexto', e.target.value)}
+                      placeholder="Qual é o tipo de esquadria?"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-2"
+                    />
+                  )}
                 </div>
+
+                {item.tipo && (
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional)</label>
+                    <input
+                      type="number"
+                      value={item.folhas}
+                      onChange={e => atualizarItem(item.id, 'folhas', e.target.value)}
+                      placeholder="Ex: 2"
+                      min="1"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
