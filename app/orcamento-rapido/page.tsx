@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Send, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X } from 'lucide-react'
 import Link from 'next/link'
-import { TipoEsquadria, Acabamento, OrigemCliente } from '@/lib/tipos'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria } from '@/lib/tipos'
 import { supabase } from '@/lib/supabase'
 import { obterOuCriarCliente } from '@/lib/clientes'
 import { primeiraColunaId } from '@/lib/kanban'
+import { uploadFoto } from '@/lib/upload'
 import { v4 as uuidv4 } from 'uuid'
 
 const tipos: { value: TipoEsquadria; label: string }[] = [
@@ -34,33 +35,61 @@ const acabamentos: { value: Acabamento; label: string }[] = [
 
 type ModoEntrada = 'formulario' | 'texto_livre'
 
+interface ItemForm {
+  id: string
+  tipo: TipoEsquadria
+  largura: string
+  altura: string
+  quantidade: string
+  foto?: File
+  fotoPreview?: string
+}
+
+function novoItem(): ItemForm {
+  return { id: uuidv4(), tipo: 'porta_correr', largura: '', altura: '', quantidade: '1' }
+}
+
 export default function OrcamentoRapido() {
   const [modo, setModo] = useState<ModoEntrada>('formulario')
-  const [tipo, setTipo] = useState<TipoEsquadria>('porta_correr')
-  const [largura, setLargura] = useState('')
-  const [altura, setAltura] = useState('')
-  const [quantidade, setQuantidade] = useState('1')
-  const [acabamento, setAcabamento] = useState<Acabamento>('natural')
+  const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [descricaoLivre, setDescricaoLivre] = useState('')
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
+  const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
+  const [contramarco, setContramarco] = useState<Contramarco | ''>('')
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [erro, setErro] = useState('')
 
+  function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
+    setItens(itens.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
+  }
+
+  function definirFoto(id: string, file: File | undefined) {
+    if (!file) return
+    setItens(itens.map(it => (it.id === id ? { ...it, foto: file, fotoPreview: URL.createObjectURL(file) } : it)))
+  }
+
+  function removerItem(id: string) {
+    if (itens.length > 1) setItens(itens.filter(it => it.id !== id))
+  }
+
   async function salvar() {
-    if (!clienteNome.trim()) {
-      setErro('Informe o nome do cliente')
-      return
-    }
+    if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
+    if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
+    if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
+    if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
+
     if (modo === 'formulario') {
-      const l = parseFloat(largura.replace(',', '.'))
-      const a = parseFloat(altura.replace(',', '.'))
-      if (!l || !a || l < 100 || a < 100) {
-        setErro('Medidas mínimas: 100mm x 100mm')
-        return
+      for (const it of itens) {
+        const l = parseFloat(it.largura.replace(',', '.'))
+        const a = parseFloat(it.altura.replace(',', '.'))
+        if (!l || !a || l < 100 || a < 100) {
+          setErro('Preencha as medidas de todas as esquadrias (mínimo 100mm x 100mm)')
+          return
+        }
       }
     } else if (!descricaoLivre.trim()) {
       setErro('Descreva o que o cliente precisa')
@@ -75,6 +104,23 @@ export default function OrcamentoRapido() {
       primeiraColunaId(),
     ])
 
+    let itensSalvos: ItemEsquadria[] = []
+    if (modo === 'formulario') {
+      for (const it of itens) {
+        const foto_url = it.foto ? await uploadFoto(it.foto) : null
+        itensSalvos.push({
+          id: it.id,
+          tipo_esquadria: it.tipo,
+          largura_mm: parseFloat(it.largura),
+          altura_mm: parseFloat(it.altura),
+          quantidade: parseInt(it.quantidade) || 1,
+          foto_url,
+        })
+      }
+    }
+
+    const primeiro = itensSalvos[0]
+
     const { error } = await supabase.from('orcamentos').insert({
       id: uuidv4(),
       cliente_id: clienteId,
@@ -82,11 +128,13 @@ export default function OrcamentoRapido() {
       cliente_whatsapp: clienteWhatsapp,
       cidade,
       origem,
-      tipo_esquadria: tipo,
-      largura_mm: modo === 'formulario' ? parseFloat(largura) : null,
-      altura_mm: modo === 'formulario' ? parseFloat(altura) : null,
-      quantidade: parseInt(quantidade) || 1,
-      acabamento: modo === 'formulario' ? acabamento : null,
+      tipo_esquadria: primeiro?.tipo_esquadria || 'outro',
+      largura_mm: primeiro?.largura_mm || null,
+      altura_mm: primeiro?.altura_mm || null,
+      quantidade: primeiro?.quantidade || 1,
+      acabamento,
+      contramarco,
+      itens: itensSalvos,
       descricao_livre: modo === 'texto_livre' ? descricaoLivre : null,
       valor_estimado: null,
       status: 'rascunho',
@@ -105,12 +153,13 @@ export default function OrcamentoRapido() {
   function resetar() {
     setSalvo(false)
     setErro('')
-    setLargura('')
-    setAltura('')
-    setQuantidade('1')
+    setItens([novoItem()])
     setDescricaoLivre('')
     setClienteNome('')
     setClienteWhatsapp('')
+    setCidade('')
+    setAcabamento('')
+    setContramarco('')
   }
 
   if (salvo) {
@@ -150,6 +199,95 @@ export default function OrcamentoRapido() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
+          <input
+            type="text"
+            value={clienteNome}
+            onChange={e => setClienteNome(e.target.value)}
+            placeholder="Nome do cliente *"
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+          />
+          <input
+            type="text"
+            value={clienteWhatsapp}
+            onChange={e => setClienteWhatsapp(e.target.value)}
+            placeholder="WhatsApp (opcional)"
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={cidade}
+              onChange={e => setCidade(e.target.value)}
+              placeholder="Cidade da obra *"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <select
+              value={origem}
+              onChange={e => setOrigem(e.target.value as OrigemCliente)}
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            >
+              <option value="indicacao">Indicação</option>
+              <option value="arquiteto">Arquiteto</option>
+              <option value="engenheiro">Engenheiro</option>
+              <option value="construtora">Construtora</option>
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+              <option value="google">Google</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="cliente_antigo">Cliente antigo</option>
+              <option value="passou_na_frente">Passou em frente</option>
+              <option value="outros">Outros</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {acabamentos.map(a => (
+              <button
+                key={a.value}
+                onClick={() => setAcabamento(a.value)}
+                className={`p-3 rounded-xl text-sm border transition ${
+                  acabamento === a.value
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <label className="block text-sm font-medium text-slate-700 mb-3">Contramarco *</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setContramarco('com')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                contramarco === 'com'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              Com contramarco
+            </button>
+            <button
+              onClick={() => setContramarco('sem')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                contramarco === 'sem'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              Sem contramarco
+            </button>
+          </div>
+        </div>
+
         <div className="flex gap-2 bg-white rounded-xl p-1 border border-slate-200">
           <button
             onClick={() => setModo('formulario')}
@@ -177,134 +315,117 @@ export default function OrcamentoRapido() {
             <textarea
               value={descricaoLivre}
               onChange={e => setDescricaoLivre(e.target.value)}
-              placeholder="Ex: Preciso de uma porta de correr 2 folhas com 1,80m de largura por 2,10m de altura, na cor branca, para área de serviço..."
+              placeholder="Ex: Preciso de uma porta de correr 2 folhas com 1,80m de largura por 2,10m de altura, e mais uma janela de correr 1,20m x 1,00m..."
               className="w-full h-32 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-slate-400 mt-2">
-              Pode colar o mesmo texto que manda no WhatsApp. Seja específico: tipo, medidas, cor, local.
+              Pode colar o mesmo texto que manda no WhatsApp. Pode descrever quantas esquadrias precisar.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6">
-              <label className="block text-sm font-medium text-slate-700 mb-3">Tipo de esquadria</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {tipos.map(t => (
-                  <button
-                    key={t.value}
-                    onClick={() => setTipo(t.value)}
-                    className={`p-3 rounded-xl text-sm border transition ${
-                      tipo === t.value
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>
+              <button
+                onClick={() => setItens([...itens, novoItem()])}
+                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+              >
+                <Plus size={16} /> Adicionar esquadria
+              </button>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-6">
-              <h3 className="text-sm font-medium text-slate-700 mb-4">Medidas</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Largura (mm)</label>
-                  <input
-                    type="number"
-                    value={largura}
-                    onChange={e => setLargura(e.target.value)}
-                    placeholder="1800"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+            {itens.map((item, idx) => (
+              <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>
+                  {itens.length > 1 && (
+                    <button onClick={() => removerItem(item.id)} className="p-1 text-red-400 hover:text-red-600">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Altura (mm)</label>
-                  <input
-                    type="number"
-                    value={altura}
-                    onChange={e => setAltura(e.target.value)}
-                    placeholder="2100"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
-                  <input
-                    type="number"
-                    value={quantidade}
-                    onChange={e => setQuantidade(e.target.value)}
-                    min="1"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-6">
-              <label className="block text-sm font-medium text-slate-700 mb-3">Acabamento / Cor</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {acabamentos.map(a => (
-                  <button
-                    key={a.value}
-                    onClick={() => setAcabamento(a.value)}
-                    className={`p-3 rounded-xl text-sm border transition ${
-                      acabamento === a.value
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
+                <div>
+                  <label className="block text-xs text-slate-500 mb-2">Tipo de esquadria</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {tipos.map(t => (
+                      <button
+                        key={t.value}
+                        onClick={() => atualizarItem(item.id, 'tipo', t.value)}
+                        className={`p-2.5 rounded-lg text-xs border transition ${
+                          item.tipo === t.value
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Largura (mm)</label>
+                    <input
+                      type="number"
+                      value={item.largura}
+                      onChange={e => atualizarItem(item.id, 'largura', e.target.value)}
+                      placeholder="1800"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Altura (mm)</label>
+                    <input
+                      type="number"
+                      value={item.altura}
+                      onChange={e => atualizarItem(item.id, 'altura', e.target.value)}
+                      placeholder="2100"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
+                    <input
+                      type="number"
+                      value={item.quantidade}
+                      onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
+                      min="1"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-500 mb-2">Foto (opcional)</label>
+                  {item.fotoPreview ? (
+                    <div className="relative w-24 h-24">
+                      <img src={item.fotoPreview} alt="Foto" className="w-24 h-24 object-cover rounded-lg" />
+                      <button
+                        onClick={() => atualizarItem(item.id, 'foto', undefined)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-500">
+                      <Camera size={14} />
+                      Adicionar foto
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => definirFoto(item.id, e.target.files?.[0])}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
-
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
-          <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
-          <input
-            type="text"
-            value={clienteNome}
-            onChange={e => setClienteNome(e.target.value)}
-            placeholder="Nome do cliente *"
-            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-          />
-          <input
-            type="text"
-            value={clienteWhatsapp}
-            onChange={e => setClienteWhatsapp(e.target.value)}
-            placeholder="WhatsApp (opcional)"
-            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="text"
-              value={cidade}
-              onChange={e => setCidade(e.target.value)}
-              placeholder="Cidade da obra"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <select
-              value={origem}
-              onChange={e => setOrigem(e.target.value as OrigemCliente)}
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            >
-              <option value="indicacao">Indicação</option>
-              <option value="arquiteto">Arquiteto</option>
-              <option value="engenheiro">Engenheiro</option>
-              <option value="construtora">Construtora</option>
-              <option value="instagram">Instagram</option>
-              <option value="facebook">Facebook</option>
-              <option value="google">Google</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="cliente_antigo">Cliente antigo</option>
-              <option value="passou_na_frente">Passou em frente</option>
-              <option value="outros">Outros</option>
-            </select>
-          </div>
-        </div>
 
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
 
