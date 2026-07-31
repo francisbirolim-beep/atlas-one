@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario } from '@/lib/tipos'
 import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard } from '@/lib/kanban'
 import { usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
-import { uploadFoto } from '@/lib/upload'
+import { uploadFoto, uploadArquivo } from '@/lib/upload'
 import { corTextoParaFundo } from '@/lib/cor'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -27,6 +27,15 @@ const tipoLabels: Record<string, string> = {
 
 function novoItemEdit(): ItemEsquadria {
   return { id: uuidv4(), tipo_esquadria: 'porta_correr', largura_mm: 0, altura_mm: 0, quantidade: 1 }
+}
+
+function formatarDuracao(inicioIso: string, fimIso: string): string {
+  const ms = Math.max(0, new Date(fimIso).getTime() - new Date(inicioIso).getTime())
+  const totalMin = Math.floor(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h === 0) return `${m}min`
+  return `${h}h${m > 0 ? ` ${m}min` : ''}`
 }
 
 export default function Kanban() {
@@ -164,6 +173,74 @@ export default function Kanban() {
     if (!file) return
     const url = await uploadFoto(file)
     if (url) atualizarItemEdit(id, 'foto_url', url)
+  }
+
+  async function iniciarOrcamento() {
+    if (!cardSelecionado) return
+    const agoraIso = new Date().toISOString()
+    const { error } = await supabase
+      .from('orcamentos')
+      .update({ orcamento_iniciado_em: agoraIso })
+      .eq('id', cardSelecionado.id)
+    if (!error) {
+      setEditando(prev => (prev ? { ...prev, orcamento_iniciado_em: agoraIso } : prev))
+      setCardSelecionado(prev => (prev ? { ...prev, orcamento_iniciado_em: agoraIso } : prev))
+      setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? { ...c, orcamento_iniciado_em: agoraIso } : c)))
+      await registrarHistorico(cardSelecionado.id, usuario, 'Iniciou o orçamento')
+    }
+  }
+
+  async function anexarArquivoOrcamento(file: File | undefined) {
+    if (!file) return
+    const url = await uploadArquivo(file)
+    if (url) setEditando(prev => (prev ? { ...prev, anexo_url: url, anexo_nome: file.name } : prev))
+  }
+
+  async function finalizarOrcamento() {
+    if (!cardSelecionado || !editando) return
+    if (!editando.anexo_url) {
+      alert('Anexe o arquivo do orçamento antes de finalizar.')
+      return
+    }
+    if (editando.valor_estimado == null) {
+      alert('Informe o valor total do orçamento antes de finalizar.')
+      return
+    }
+    setSalvando(true)
+    const agoraIso = new Date().toISOString()
+    const { error } = await supabase
+      .from('orcamentos')
+      .update({
+        anexo_url: editando.anexo_url,
+        anexo_nome: editando.anexo_nome,
+        valor_estimado: editando.valor_estimado,
+        orcamento_finalizado_em: agoraIso,
+      })
+      .eq('id', cardSelecionado.id)
+    setSalvando(false)
+    if (!error) {
+      const duracao = editando.orcamento_iniciado_em ? formatarDuracao(editando.orcamento_iniciado_em, agoraIso) : null
+      const atualizado = { ...editando, orcamento_finalizado_em: agoraIso }
+      setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
+      await registrarHistorico(cardSelecionado.id, usuario, 'Finalizou o orçamento', duracao ? `Levou ${duracao}` : undefined)
+      setCardSelecionado(null)
+      setEditando(null)
+    }
+  }
+
+  function tentarFechar() {
+    if (editando?.orcamento_iniciado_em && !editando?.orcamento_finalizado_em) {
+      const motivo = window.prompt(
+        'Você iniciou esse orçamento e ainda não finalizou. Por que está saindo agora? (fica registrado no histórico)'
+      )
+      if (!motivo || !motivo.trim()) {
+        alert('Precisa informar o motivo pra sair sem finalizar.')
+        return
+      }
+      if (cardSelecionado) registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', motivo.trim())
+    }
+    setCardSelecionado(null)
+    setEditando(null)
   }
 
   function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): string {
@@ -314,6 +391,15 @@ export default function Kanban() {
                             R$ {card.valor_estimado.toFixed(2)}
                           </p>
                         )}
+                        {card.orcamento_finalizado_em && card.orcamento_iniciado_em ? (
+                          <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}>
+                            <Clock size={11} /> Levou {formatarDuracao(card.orcamento_iniciado_em, card.orcamento_finalizado_em)}
+                          </p>
+                        ) : card.orcamento_iniciado_em ? (
+                          <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#6366f1', opacity: est ? 0.9 : 1 }}>
+                            <Play size={11} /> Em andamento
+                          </p>
+                        ) : null}
                       </div>
                     )
                   })}
@@ -336,7 +422,7 @@ export default function Kanban() {
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
               <h3 className="font-bold text-slate-800">Editar orçamento</h3>
-              <button onClick={() => { setCardSelecionado(null); setEditando(null) }} className="p-1 text-slate-400 hover:text-slate-600">
+              <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
@@ -347,6 +433,78 @@ export default function Kanban() {
                   <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
                 </p>
               )}
+
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                  <Clock size={13} /> Elaboração do orçamento
+                </p>
+
+                {!editando.orcamento_iniciado_em ? (
+                  <button
+                    onClick={iniciarOrcamento}
+                    className="w-full py-2.5 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+                  >
+                    <Play size={14} /> Iniciar orçamento
+                  </button>
+                ) : editando.orcamento_finalizado_em ? (
+                  <div className="text-xs text-emerald-700 space-y-1">
+                    <p className="flex items-center gap-1.5">
+                      <CheckCircle2 size={14} /> Finalizado — levou{' '}
+                      {formatarDuracao(editando.orcamento_iniciado_em, editando.orcamento_finalizado_em)}
+                    </p>
+                    {editando.anexo_url && (
+                      <a href={editando.anexo_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                        <Paperclip size={12} /> {editando.anexo_nome || 'Ver anexo'}
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-indigo-600">
+                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
+                    </p>
+
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Anexar arquivo do orçamento</label>
+                      {editando.anexo_url ? (
+                        <div className="flex items-center gap-2 text-xs text-emerald-600">
+                          <Paperclip size={13} />
+                          <span className="truncate">{editando.anexo_nome || 'Arquivo anexado'}</span>
+                          <a href={editando.anexo_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex-shrink-0">
+                            ver
+                          </a>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-indigo-400 hover:text-indigo-600">
+                          <Paperclip size={13} /> Escolher arquivo
+                          <input type="file" className="hidden" onChange={e => anexarArquivoOrcamento(e.target.files?.[0])} />
+                        </label>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
+                      <input
+                        type="text"
+                        value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
+                        onChange={e =>
+                          atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
+                        }
+                        placeholder="Ex: 2500.00"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+
+                    <button
+                      onClick={finalizarOrcamento}
+                      disabled={salvando || !editando.anexo_url || editando.valor_estimado == null}
+                      className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-50"
+                    >
+                      {salvando ? 'Finalizando...' : 'Finalizar orçamento'}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Nome do cliente</label>
