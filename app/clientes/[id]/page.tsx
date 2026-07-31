@@ -11,7 +11,7 @@ interface OrcamentoResumo {
   id: string
   created_at: string
   tipo_esquadria: string
-  valor_estimado: number
+  valor_estimado: number | null
   status: string
   modo_entrada: string
 }
@@ -32,8 +32,8 @@ const origemLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   rascunho: 'bg-slate-100 text-slate-600',
-  enviado: 'bg-blue-100 text-blue-600',
-  aprovado: 'bg-emerald-100 text-emerald-600',
+  enviado: 'bg-brand-navyLight text-brand-navy',
+  aprovado: 'bg-brand-tealLight text-brand-teal',
   recusado: 'bg-red-100 text-red-600',
   convertido: 'bg-purple-100 text-purple-600',
 }
@@ -80,12 +80,14 @@ export default function DetalheCliente() {
   const valorTotal = orcamentos.reduce((s, o) => s + (o.valor_estimado || 0), 0)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/clientes" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">{cliente.nome}</h1>
             <p className="text-sm text-slate-500">Cliente desde {new Date(cliente.created_at).toLocaleDateString('pt-BR')}</p>
@@ -118,14 +120,14 @@ export default function DetalheCliente() {
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <p className="text-xs text-slate-500 mb-1">Valor total orçado</p>
-            <p className="text-2xl font-bold text-emerald-600">R$ {valorTotal.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-brand-teal">R$ {valorTotal.toFixed(2)}</p>
           </div>
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-slate-700">Histórico de orçamentos</h2>
-            <Link href="/orcamento-rapido" className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700">
+            <Link href="/orcamento-rapido" className="flex items-center gap-1 text-sm text-brand-navy hover:text-brand-navyDark">
               <Plus size={14} /> Novo orçamento
             </Link>
           </div>
@@ -139,10 +141,10 @@ export default function DetalheCliente() {
               {orcamentos.map(o => (
                 <div key={o.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${o.modo_entrada === 'detalhado' ? 'bg-emerald-100' : 'bg-blue-100'}`}>
+                    <div className={`p-2 rounded-lg ${o.modo_entrada === 'detalhado' ? 'bg-brand-tealLight' : 'bg-brand-navyLight'}`}>
                       {o.modo_entrada === 'detalhado'
-                        ? <Camera size={16} className="text-emerald-600" />
-                        : <FileText size={16} className="text-blue-600" />}
+                        ? <Camera size={16} className="text-brand-teal" />
+                        : <FileText size={16} className="text-brand-navy" />}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-800">{o.tipo_esquadria}</p>
@@ -150,7 +152,9 @@ export default function DetalheCliente() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-slate-800 text-sm">R$ {o.valor_estimado.toFixed(2)}</p>
+                    <p className="font-bold text-slate-800 text-sm">
+                      {o.valor_estimado != null ? `R$ ${o.valor_estimado.toFixed(2)}` : 'Aguardando'}
+                    </p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[o.status]}`}>{o.status}</span>
                   </div>
                 </div>
