@@ -99,6 +99,10 @@ export interface OrcamentoRapido {
   arquiteto_contato?: string | null
   criado_por_nome?: string | null
   criado_por_id?: string | null
+  orcamento_iniciado_em?: string | null
+  orcamento_finalizado_em?: string | null
+  anexo_url?: string | null
+  anexo_nome?: string | null
 }
 
 export interface OrcamentoDetalhado extends OrcamentoRapido {

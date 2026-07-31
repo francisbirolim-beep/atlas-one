@@ -12,3 +12,15 @@ export async function uploadFoto(file: File): Promise<string | null> {
   const { data } = supabase.storage.from('fotos').getPublicUrl(path)
   return data.publicUrl
 }
+
+export async function uploadArquivo(file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop()
+  const path = `anexos/${uuidv4()}.${ext}`
+  const { error } = await supabase.storage.from('fotos').upload(path, file)
+  if (error) {
+    console.error('Erro ao subir arquivo:', error)
+    return null
+  }
+  const { data } = supabase.storage.from('fotos').getPublicUrl(path)
+  return data.publicUrl
+}
