@@ -1,15 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff } from 'lucide-react'
 import Link from 'next/link'
-import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead } from '@/lib/tipos'
-import { supabase } from '@/lib/supabase'
-import { obterOuCriarCliente } from '@/lib/clientes'
-import { primeiraColunaId } from '@/lib/kanban'
-import { uploadFoto } from '@/lib/upload'
-import { usuarioAtual } from '@/lib/auth'
-import { registrarHistorico } from '@/lib/historico'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead } from '@/lib/tipos'
+import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
+import { salvarPendente } from '@/lib/offlineFila'
 import { v4 as uuidv4 } from 'uuid'
 
 const tipos: { value: TipoEsquadria; label: string }[] = [
@@ -78,6 +74,7 @@ export default function OrcamentoRapido() {
   const [arquitetoContato, setArquitetoContato] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  const [salvoOffline, setSalvoOffline] = useState(false)
   const [erro, setErro] = useState('')
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
@@ -99,6 +96,17 @@ export default function OrcamentoRapido() {
 
   function removerTexto(idx: number) {
     if (textosLivres.length > 1) setTextosLivres(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  async function salvarComoPendente(dadosForm: DadosOrcamentoForm) {
+    await salvarPendente({
+      id: uuidv4(),
+      tipo: 'orcamento',
+      criadoEm: new Date().toISOString(),
+      dados: dadosForm,
+    })
+    setSalvando(false)
+    setSalvoOffline(true)
   }
 
   async function salvar() {
@@ -146,101 +154,36 @@ export default function OrcamentoRapido() {
     setErro('')
     setSalvando(true)
 
-    const [clienteId, colunaId, usuario] = await Promise.all([
-      obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
-      primeiraColunaId(),
-      usuarioAtual(),
-    ])
-
-    let itensSalvos: ItemEsquadria[] = []
-    if (modo === 'formulario') {
-      for (const it of itens) {
-        const foto_url = it.foto ? await uploadFoto(it.foto) : null
-        if (tipoMedida === 'final') {
-          const lb = parseFloat(it.larguraBaixo.replace(',', '.'))
-          const lm = parseFloat(it.larguraMeio.replace(',', '.'))
-          const lc = parseFloat(it.larguraCima.replace(',', '.'))
-          const ad = parseFloat(it.alturaDireita.replace(',', '.'))
-          const am = parseFloat(it.alturaMeio.replace(',', '.'))
-          const ae = parseFloat(it.alturaEsquerda.replace(',', '.'))
-          itensSalvos.push({
-            id: it.id,
-            tipo_esquadria: it.tipo as TipoEsquadria,
-            tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-            folhas: it.folhas || null,
-            largura_mm: lm,
-            altura_mm: am,
-            largura_baixo_mm: lb,
-            largura_meio_mm: lm,
-            largura_cima_mm: lc,
-            altura_direita_mm: ad,
-            altura_meio_mm: am,
-            altura_esquerda_mm: ae,
-            quantidade: parseInt(it.quantidade) || 1,
-            foto_url,
-            descricao: it.descricao || undefined,
-            cor: it.cor || null,
-          })
-        } else {
-          itensSalvos.push({
-            id: it.id,
-            tipo_esquadria: it.tipo as TipoEsquadria,
-            tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-            folhas: it.folhas || null,
-            largura_mm: parseFloat(it.largura),
-            altura_mm: parseFloat(it.altura),
-            quantidade: parseInt(it.quantidade) || 1,
-            foto_url,
-            descricao: it.descricao || undefined,
-            cor: it.cor || null,
-          })
-        }
-      }
+    const dadosForm: DadosOrcamentoForm = {
+      modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
+      temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
+      arquitetoNome, arquitetoContato,
     }
 
-    const primeiro = itensSalvos[0]
-    const novoId = uuidv4()
+    const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
 
-    const { error } = await supabase.from('orcamentos').insert({
-      id: novoId,
-      cliente_id: clienteId,
-      cliente_nome: clienteNome,
-      cliente_whatsapp: clienteWhatsapp,
-      cidade,
-      origem,
-      tipo_esquadria: primeiro?.tipo_esquadria || 'outro',
-      largura_mm: primeiro?.largura_mm || null,
-      altura_mm: primeiro?.altura_mm || null,
-      quantidade: primeiro?.quantidade || 1,
-      acabamento,
-      acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
-      temperatura,
-      contramarco,
-      itens: itensSalvos,
-      tipo_medida: modo === 'formulario' ? tipoMedida : null,
-      descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
-      valor_estimado: null,
-      status: 'rascunho',
-      modo_entrada: modo,
-      coluna_id: colunaId,
-      coluna_atualizada_em: new Date().toISOString(),
-      arquiteto_nome: arquitetoNome || null,
-      arquiteto_contato: arquitetoContato || null,
-      criado_por_nome: usuario?.nome || null,
-      criado_por_id: usuario?.id || null,
-    })
+    if (semInternet) {
+      await salvarComoPendente(dadosForm)
+      return
+    }
 
-    setSalvando(false)
-    if (error) {
-      setErro('Erro ao salvar: ' + error.message)
-    } else {
-      registrarHistorico(novoId, usuario, 'Criou o orçamento')
-      setSalvo(true)
+    try {
+      const resultado = await criarOrcamentoNoServidor(dadosForm)
+      setSalvando(false)
+      if (resultado.ok) {
+        setSalvo(true)
+      } else {
+        setErro('Erro ao salvar: ' + resultado.error)
+      }
+    } catch (e) {
+      // Internet caiu bem na hora de enviar: salva local e envia depois.
+      await salvarComoPendente(dadosForm)
     }
   }
 
   function resetar() {
     setSalvo(false)
+    setSalvoOffline(false)
     setErro('')
     setItens([novoItem()])
     setTextosLivres([''])
@@ -254,6 +197,25 @@ export default function OrcamentoRapido() {
     setTipoMedida('')
     setArquitetoNome('')
     setArquitetoContato('')
+  }
+
+  if (salvoOffline) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
+          <WifiOff size={48} className="text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Salvo neste aparelho!</h2>
+          <p className="text-slate-500 mb-6">
+            Sem internet agora. O pedido de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar — não precisa reenviar.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">
+              Novo pedido
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (salvo) {
