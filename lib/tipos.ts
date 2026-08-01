@@ -82,6 +82,13 @@ export interface ItemEsquadria {
   foto_url?: string | null
   descricao?: string
   cor?: string | null
+  // Medida final: 3 larguras (baixo/meio/cima) e 3 alturas (direita/meio/esquerda)
+  largura_baixo_mm?: number | null
+  largura_meio_mm?: number | null
+  largura_cima_mm?: number | null
+  altura_direita_mm?: number | null
+  altura_meio_mm?: number | null
+  altura_esquerda_mm?: number | null
 }
 
 export interface OrcamentoRapido {
