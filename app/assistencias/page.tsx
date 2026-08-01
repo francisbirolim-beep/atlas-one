@@ -52,11 +52,16 @@ export default function Assistencias() {
   }
 
   const filtrados = lista.filter(a => {
-    const alvo = `${a.cliente_nome} ${a.cidade || ''} ${a.endereco || ''} ${a.descricao_problema}`.toLowerCase()
+    const alvo = `${a.cliente_nome} ${a.cidade || ''} ${a.endereco || ''} ${a.numero || ''} ${a.bairro || ''} ${a.descricao_problema} ${a.criado_por_nome || ''}`.toLowerCase()
     const matchBusca = !busca || alvo.includes(busca.toLowerCase())
     const matchStatus = filtroStatus === 'todos' || a.status === filtroStatus
     return matchBusca && matchStatus
   })
+
+  function enderecoCompleto(a: Assistencia): string {
+    const partes = [a.endereco, a.numero, a.bairro].filter(Boolean)
+    return partes.join(', ')
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -123,6 +128,7 @@ export default function Assistencias() {
                         <p className="font-medium text-slate-800 truncate">{a.cliente_nome}</p>
                         <p className="text-sm text-slate-500 truncate">
                           {a.cidade ? `${a.cidade} — ` : ''}{new Date(a.created_at).toLocaleDateString('pt-BR')}
+                          {a.criado_por_nome ? ` — por ${a.criado_por_nome}` : ''}
                         </p>
                       </div>
                     </div>
@@ -140,11 +146,11 @@ export default function Assistencias() {
                         {a.cliente_whatsapp && (
                           <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> {a.cliente_whatsapp}</span>
                         )}
-                        {a.endereco && (
-                          <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {a.endereco}</span>
+                        {enderecoCompleto(a) && (
+                          <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {enderecoCompleto(a)}</span>
                         )}
                         {a.criado_por_nome && (
-                          <span className="text-slate-400">Registrado por {a.criado_por_nome}</span>
+                          <span className="text-slate-400">Registrado por <span className="font-medium text-slate-600">{a.criado_por_nome}</span></span>
                         )}
                       </div>
 
