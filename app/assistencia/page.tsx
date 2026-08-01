@@ -20,6 +20,8 @@ export default function Assistencia() {
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
   const [endereco, setEndereco] = useState('')
+  const [numero, setNumero] = useState('')
+  const [bairro, setBairro] = useState('')
   const [descricao, setDescricao] = useState('')
   const [fotos, setFotos] = useState<FotoItem[]>([])
   const [salvando, setSalvando] = useState(false)
@@ -64,6 +66,8 @@ export default function Assistencia() {
       cliente_whatsapp: clienteWhatsapp || null,
       cidade: cidade || null,
       endereco: endereco || null,
+      numero: numero || null,
+      bairro: bairro || null,
       descricao_problema: descricao,
       fotos_urls: fotosUrls,
       status: 'aberto',
@@ -86,6 +90,8 @@ export default function Assistencia() {
     setClienteWhatsapp('')
     setCidade('')
     setEndereco('')
+    setNumero('')
+    setBairro('')
     setDescricao('')
     setFotos([])
   }
@@ -158,6 +164,22 @@ export default function Assistencia() {
               value={endereco}
               onChange={e => setEndereco(e.target.value)}
               placeholder="Endereço da obra"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={numero}
+              onChange={e => setNumero(e.target.value)}
+              placeholder="Número da casa"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <input
+              type="text"
+              value={bairro}
+              onChange={e => setBairro(e.target.value)}
+              placeholder="Bairro"
               className="w-full border border-slate-300 rounded-xl p-3 text-sm"
             />
           </div>
