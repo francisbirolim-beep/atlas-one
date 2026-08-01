@@ -59,13 +59,39 @@ export function agruparSetores(setores: Setor[]): Record<string, Setor[]> {
   return grupos
 }
 
-
-  // Edita so os campos de dados do setor (nome, grupo, ordem, descricao).
+// Edita so os campos de dados do setor (nome, grupo, ordem, descricao).
 // Nao mexe em "ativo" nem "rota": esses dois so fazem sentido quando a
 // funcionalidade real do setor ja foi programada e ligada.
 export async function atualizarSetor(
-    id: string,
-    dados: { nome: string; grupo: string; ordem: number; descricao: string | null }
-  ) {
-    return supabase.from('setores').update(dados).eq('id', id)
+  id: string,
+  dados: { nome: string; grupo: string; ordem: number; descricao: string | null }
+) {
+  return supabase.from('setores').update(dados).eq('id', id)
+}
+
+// Cria um novo setor "pendente de desenvolvimento": so nome, grupo, ordem e
+// descricao. Fica marcado como nao ativo (sem rota) ate a funcionalidade
+// real ser programada e ligada por um desenvolvedor.
+export async function criarSetor(
+  nome: string,
+  grupo: string,
+  ordem: number,
+  descricao: string | null
+) {
+  const slug = nome
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+  const id = `${slug || 'setor'}-${Date.now().toString(36)}`
+  return supabase.from('setores').insert({
+    id,
+    nome,
+    grupo,
+    ordem,
+    ativo: false,
+    rota: null,
+    descricao,
+  })
 }
