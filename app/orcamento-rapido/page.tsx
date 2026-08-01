@@ -63,6 +63,7 @@ export default function OrcamentoRapido() {
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
   const [acabamentoOutroTexto, setAcabamentoOutroTexto] = useState('')
   const [contramarco, setContramarco] = useState<Contramarco | ''>('')
+  const [tipoMedida, setTipoMedida] = useState<'comum' | 'final' | ''>('')
   const [arquitetoNome, setArquitetoNome] = useState('')
   const [arquitetoContato, setArquitetoContato] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -98,6 +99,10 @@ export default function OrcamentoRapido() {
     if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
 
     if (modo === 'formulario') {
+      if (!tipoMedida) {
+        setErro('Selecione se é medida final ou orçamento comum')
+        return
+      }
       for (const it of itens) {
         if (!it.tipo) {
           setErro('Selecione o tipo de cada esquadria')
@@ -165,6 +170,7 @@ export default function OrcamentoRapido() {
       acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
       contramarco,
       itens: itensSalvos,
+      tipo_medida: modo === 'formulario' ? tipoMedida : null,
       descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
       valor_estimado: null,
       status: 'rascunho',
@@ -197,6 +203,7 @@ export default function OrcamentoRapido() {
     setAcabamento('')
     setAcabamentoOutroTexto('')
     setContramarco('')
+    setTipoMedida('')
     setArquitetoNome('')
     setArquitetoContato('')
   }
@@ -374,6 +381,34 @@ export default function OrcamentoRapido() {
             Detalhado (formulário completo)
           </button>
         </div>
+
+        {modo === 'formulario' && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <label className="block text-sm font-medium text-slate-700 mb-3">Esse orçamento já é medida final ou é um orçamento comum? *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setTipoMedida('comum')}
+                className={`p-3 rounded-xl text-sm border transition ${
+                  tipoMedida === 'comum'
+                    ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                }`}
+              >
+                Orçamento comum
+              </button>
+              <button
+                onClick={() => setTipoMedida('final')}
+                className={`p-3 rounded-xl text-sm border transition ${
+                  tipoMedida === 'final'
+                    ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                }`}
+              >
+                Medida final
+              </button>
+            </div>
+          </div>
+        )}
 
         {modo === 'texto_livre' ? (
           <div className="space-y-4">
