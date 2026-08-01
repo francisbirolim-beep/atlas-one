@@ -14,7 +14,8 @@
     "@supabase/supabase-js": "^2.43.0",
     "lucide-react": "^0.400.0",
     "react-dropzone": "^14.2.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "jspdf": "^2.5.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
