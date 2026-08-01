@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo } from '@/lib/tipos'
@@ -10,6 +11,7 @@ import { usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
 import { corTextoParaFundo } from '@/lib/cor'
+import { lerCorAssistencia } from '@/lib/configGeral'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
 
@@ -160,6 +162,7 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
 }
 
 export default function Kanban() {
+  const router = useRouter()
   const [colunas, setColunas] = useState<KanbanColuna[]>([])
   const [cards, setCards] = useState<OrcamentoRapido[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -178,10 +181,12 @@ export default function Kanban() {
   const [busca, setBusca] = useState('')
   const [filtroData, setFiltroData] = useState('')
   const [filtroTemperatura, setFiltroTemperatura] = useState('')
+  const [corAssistencia, setCorAssistencia] = useState('#8b5cf6')
 
   useEffect(() => {
     carregar()
     usuarioAtual().then(setUsuario)
+    lerCorAssistencia().then(setCorAssistencia)
     const t = setInterval(() => setAgora(Date.now()), 60000)
     return () => clearInterval(t)
   }, [])
@@ -244,6 +249,9 @@ export default function Kanban() {
   }
 
   function estiloCard(card: OrcamentoRapido, coluna: KanbanColuna | undefined): { fundo: string; texto: string; alerta: boolean } | null {
+    if (card.eh_assistencia) {
+      return { fundo: corAssistencia, texto: corTextoParaFundo(corAssistencia), alerta: false }
+    }
     if (!coluna) return null
     const base = card.coluna_atualizada_em || card.created_at
     if (base) {
@@ -269,6 +277,7 @@ export default function Kanban() {
     const cardId = e.dataTransfer.getData('text/plain')
     if (!cardId) return
     const card = cards.find(c => c.id === cardId)
+    if (card?.eh_assistencia) return
     const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]?.id))
     const colunaNova = colunas.find(c => c.id === colunaId)
     const agoraIso = new Date().toISOString()
@@ -277,6 +286,14 @@ export default function Kanban() {
     if (colunaAnterior?.id !== colunaNova?.id) {
       registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || '—'} → ${colunaNova?.nome || '—'}`)
     }
+  }
+
+  function abrirCardOuAssistencia(card: OrcamentoRapido) {
+    if (card.eh_assistencia) {
+      router.push('/assistencias')
+      return
+    }
+    abrirCard(card)
   }
 
   async function novaColuna() {
@@ -684,9 +701,9 @@ export default function Kanban() {
                     return (
                       <div
                         key={card.id}
-                        draggable
+                        draggable={!card.eh_assistencia}
                         onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
-                        onClick={() => abrirCard(card)}
+                        onClick={() => abrirCardOuAssistencia(card)}
                         style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
                         className={`rounded-xl border-2 p-3 cursor-pointer hover:shadow-md transition ${
                           est ? (est.alerta ? 'shadow-md' : 'shadow-sm') : 'bg-white border-slate-200'
@@ -697,9 +714,11 @@ export default function Kanban() {
                             className="p-1 rounded"
                             style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
                           >
-                            {(card as any).modo_entrada === 'detalhado'
-                              ? <Camera size={12} style={{ color: est ? est.texto : '#059669' }} />
-                              : <FileText size={12} style={{ color: est ? est.texto : '#2563eb' }} />}
+                            {card.eh_assistencia
+                              ? <Wrench size={12} style={{ color: est ? est.texto : '#8b5cf6' }} />
+                              : (card as any).modo_entrada === 'detalhado'
+                                ? <Camera size={12} style={{ color: est ? est.texto : '#059669' }} />
+                                : <FileText size={12} style={{ color: est ? est.texto : '#2563eb' }} />}
                           </div>
                           <p className="font-medium text-sm truncate flex-1" style={{ color: est ? est.texto : '#1e293b' }}>
                             {card.cliente_nome}
@@ -710,27 +729,45 @@ export default function Kanban() {
                             </span>
                           )}
                         </div>
-                        <p className="text-xs mb-1" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
-                          {(card as any).itens?.length > 1
-                            ? `${(card as any).itens.length} esquadrias`
-                            : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
-                        </p>
-                        {card.descricao_livre && (
-                          <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.8 : 1 }}>
-                            {card.descricao_livre}
-                          </p>
+                        {card.eh_assistencia ? (
+                          <>
+                            <span
+                              className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium mb-1"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.35)', color: est ? est.texto : '#8b5cf6' }}
+                            >
+                              Assistência
+                            </span>
+                            {card.descricao_livre && (
+                              <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.9 : 1 }}>
+                                {card.descricao_livre}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs mb-1" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
+                              {(card as any).itens?.length > 1
+                                ? `${(card as any).itens.length} esquadrias`
+                                : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
+                            </p>
+                            {card.descricao_livre && (
+                              <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.8 : 1 }}>
+                                {card.descricao_livre}
+                              </p>
+                            )}
+                          </>
                         )}
                         {card.criado_por_nome && (
                           <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}>
                             <User size={11} /> {card.criado_por_nome}
                           </p>
                         )}
-                        {card.valor_estimado != null && (
+                        {!card.eh_assistencia && card.valor_estimado != null && (
                           <p className="text-xs font-semibold mt-1" style={{ color: est ? est.texto : '#059669' }}>
                             R$ {card.valor_estimado.toFixed(2)}
                           </p>
                         )}
-                        {card.orcamento_finalizado_em && card.orcamento_iniciado_em ? (
+                        {!card.eh_assistencia && (card.orcamento_finalizado_em && card.orcamento_iniciado_em ? (
                           <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}>
                             <Clock size={11} /> Levou {formatarDuracao(card.orcamento_iniciado_em, card.orcamento_finalizado_em)}
                           </p>
@@ -738,7 +775,7 @@ export default function Kanban() {
                           <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#6366f1', opacity: est ? 0.9 : 1 }}>
                             <Play size={11} /> Em andamento
                           </p>
-                        ) : null}
+                        ) : null)}
                       </div>
                     )
                   })}
@@ -798,487 +835,487 @@ export default function Kanban() {
                 </div>
               ) : (
                 <>
-              {cardSelecionado.criado_por_nome && (
-                <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                  <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
-                </p>
-              )}
-              {cardSelecionado.cliente_id && (
-                <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="text-xs text-brand-navy hover:underline">
-                  Ver histórico e negociação no CRM
-                </Link>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                {cardSelecionado.tipo_medida && (
-                  <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                    cardSelecionado.tipo_medida === 'final' ? 'bg-brand-tealLight text-brand-teal' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}
-                  </span>
-                )}
-                {cardSelecionado.temperatura && temperaturaInfo[cardSelecionado.temperatura] && (
-                  <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${temperaturaInfo[cardSelecionado.temperatura].fundo} ${temperaturaInfo[cardSelecionado.temperatura].texto}`}>
-                    {temperaturaInfo[cardSelecionado.temperatura].emoji} {temperaturaInfo[cardSelecionado.temperatura].label}
-                  </span>
-                )}
-              </div>
+                  {cardSelecionado.criado_por_nome && (
+                    <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                      <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
+                    </p>
+                  )}
+                  {cardSelecionado.cliente_id && (
+                    <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="text-xs text-brand-navy hover:underline">
+                      Ver histórico e negociação no CRM
+                    </Link>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {cardSelecionado.tipo_medida && (
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                        cardSelecionado.tipo_medida === 'final' ? 'bg-brand-tealLight text-brand-teal' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}
+                      </span>
+                    )}
+                    {cardSelecionado.temperatura && temperaturaInfo[cardSelecionado.temperatura] && (
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${temperaturaInfo[cardSelecionado.temperatura].fundo} ${temperaturaInfo[cardSelecionado.temperatura].texto}`}>
+                        {temperaturaInfo[cardSelecionado.temperatura].emoji} {temperaturaInfo[cardSelecionado.temperatura].label}
+                      </span>
+                    )}
+                  </div>
 
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Nome do cliente</label>
-                <input
-                  type="text"
-                  value={editando.cliente_nome || ''}
-                  onChange={e => atualizarCampo('cliente_nome', e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Nome do cliente</label>
+                    <input
+                      type="text"
+                      value={editando.cliente_nome || ''}
+                      onChange={e => atualizarCampo('cliente_nome', e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Phone size={12} /> WhatsApp</label>
-                  <input
-                    type="text"
-                    value={editando.cliente_whatsapp || ''}
-                    onChange={e => atualizarCampo('cliente_whatsapp', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><MapPin size={12} /> Cidade</label>
-                  <input
-                    type="text"
-                    value={editando.cidade || ''}
-                    onChange={e => atualizarCampo('cidade', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Cor / Acabamento</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {([
-                    { value: 'preto', label: 'Preto' },
-                    { value: 'branco', label: 'Branco' },
-                    { value: 'madeirado', label: 'Amadeirado' },
-                    { value: 'outro', label: 'Outra cor' },
-                  ] as const).map(a => (
-                    <button
-                      key={a.value}
-                      type="button"
-                      onClick={() => atualizarCampo('acabamento', a.value)}
-                      className={`p-2 rounded-lg text-xs border transition ${
-                        editando.acabamento === a.value
-                          ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
-                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                      }`}
-                    >
-                      {a.label}
-                    </button>
-                  ))}
-                </div>
-                {editando.acabamento === 'outro' && (
-                  <input
-                    type="text"
-                    value={editando.acabamento_outro_texto || ''}
-                    onChange={e => atualizarCampo('acabamento_outro_texto', e.target.value)}
-                    placeholder="Qual cor?"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-2"
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Contramarco</label>
-                <select
-                  value={editando.contramarco || ''}
-                  onChange={e => atualizarCampo('contramarco', e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                >
-                  <option value="">—</option>
-                  <option value="com">Com contramarco</option>
-                  <option value="sem">Sem contramarco</option>
-                </select>
-              </div>
-
-              {editando.tipo_medida && (
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Tipo de medida</label>
-                  <select
-                    value={editando.tipo_medida || ''}
-                    onChange={e => atualizarCampo('tipo_medida', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  >
-                    <option value="comum">Orçamento comum</option>
-                    <option value="final">Medida final</option>
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Temperatura do orçamento</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['quente', 'morno', 'frio'] as const).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => atualizarCampo('temperatura', t)}
-                      className={`p-2 rounded-lg text-xs border transition ${
-                        editando.temperatura === t
-                          ? `${temperaturaInfo[t].borda} ${temperaturaInfo[t].fundo} ${temperaturaInfo[t].texto} font-medium`
-                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                      }`}
-                    >
-                      {temperaturaInfo[t].emoji} {temperaturaInfo[t].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12} /> Arquiteto/Eng.</label>
-                  <input
-                    type="text"
-                    value={editando.arquiteto_nome || ''}
-                    onChange={e => atualizarCampo('arquiteto_nome', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Contato</label>
-                  <input
-                    type="text"
-                    value={editando.arquiteto_contato || ''}
-                    onChange={e => atualizarCampo('arquiteto_contato', e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs text-slate-500">Esquadrias</label>
-                  <button onClick={adicionarItemEdit} className="flex items-center gap-1 text-xs text-brand-navy hover:text-brand-navyDark">
-                    <Plus size={13} /> Adicionar
-                  </button>
-                </div>
-                {(editando.itens || []).map((item, i) => (
-                  <div key={item.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400">Esquadria {i + 1}</span>
-                      <button onClick={() => removerItemEdit(item.id)} className="p-1 text-red-400 hover:text-red-600">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                    <select
-                      value={item.tipo_esquadria}
-                      onChange={e => atualizarItemEdit(item.id, 'tipo_esquadria', e.target.value as TipoEsquadria)}
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                    >
-                      {Object.entries(tipoLabels).map(([v, l]) => (
-                        <option key={v} value={v}>{l}</option>
-                      ))}
-                    </select>
-                    {item.tipo_esquadria === 'outro' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Phone size={12} /> WhatsApp</label>
                       <input
                         type="text"
-                        value={item.tipo_outro_texto || ''}
-                        onChange={e => atualizarItemEdit(item.id, 'tipo_outro_texto', e.target.value)}
-                        placeholder="Qual é o tipo de esquadria?"
-                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                      />
-                    )}
-                    <input
-                      type="text"
-                      value={item.folhas || ''}
-                      onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
-                      placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                    />
-                    {editando.tipo_medida === 'final' ? (
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-[11px] text-slate-400 mb-1">Larguras (mm) — baixo, meio, cima</p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <input
-                              type="number"
-                              value={item.largura_baixo_mm || ''}
-                              onChange={e => atualizarItemEdit(item.id, 'largura_baixo_mm', parseFloat(e.target.value) || 0)}
-                              placeholder="Baixo"
-                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            />
-                            <input
-                              type="number"
-                              value={item.largura_meio_mm || ''}
-                              onChange={e => atualizarItemEdit(item.id, 'largura_meio_mm', parseFloat(e.target.value) || 0)}
-                              placeholder="Meio"
-                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            />
-                            <input
-                              type="number"
-                              value={item.largura_cima_mm || ''}
-                              onChange={e => atualizarItemEdit(item.id, 'largura_cima_mm', parseFloat(e.target.value) || 0)}
-                              placeholder="Cima"
-                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-slate-400 mb-1">Alturas (mm) — direita, meio, esquerda</p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <input
-                              type="number"
-                              value={item.altura_direita_mm || ''}
-                              onChange={e => atualizarItemEdit(item.id, 'altura_direita_mm', parseFloat(e.target.value) || 0)}
-                              placeholder="Direita"
-                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            />
-                            <input
-                              type="number"
-                              value={item.altura_meio_mm || ''}
-                              onChange={e => atualizarItemEdit(item.id, 'altura_meio_mm', parseFloat(e.target.value) || 0)}
-                              placeholder="Meio"
-                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            />
-                            <input
-                              type="number"
-                              value={item.altura_esquerda_mm || ''}
-                              onChange={e => atualizarItemEdit(item.id, 'altura_esquerda_mm', parseFloat(e.target.value) || 0)}
-                              placeholder="Esquerda"
-                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            />
-                          </div>
-                        </div>
-                        <input
-                          type="number"
-                          value={item.quantidade || ''}
-                          onChange={e => atualizarItemEdit(item.id, 'quantidade', parseInt(e.target.value) || 1)}
-                          placeholder="Qtd"
-                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                        />
-                      </div>
-                    ) : (
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number"
-                        value={item.largura_mm || ''}
-                        onChange={e => atualizarItemEdit(item.id, 'largura_mm', parseFloat(e.target.value) || 0)}
-                        placeholder="Largura"
-                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                      />
-                      <input
-                        type="number"
-                        value={item.altura_mm || ''}
-                        onChange={e => atualizarItemEdit(item.id, 'altura_mm', parseFloat(e.target.value) || 0)}
-                        placeholder="Altura"
-                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                      />
-                      <input
-                        type="number"
-                        value={item.quantidade || ''}
-                        onChange={e => atualizarItemEdit(item.id, 'quantidade', parseInt(e.target.value) || 1)}
-                        placeholder="Qtd"
-                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                        value={editando.cliente_whatsapp || ''}
+                        onChange={e => atualizarCampo('cliente_whatsapp', e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       />
                     </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
-                      <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy">
-                        <Camera size={12} /> Trocar foto
-                        <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
-                      </label>
-                    </div>
-                    <input
-                      type="text"
-                      value={item.cor || ''}
-                      onChange={e => atualizarItemEdit(item.id, 'cor', e.target.value)}
-                      placeholder="Cor desta esquadria (opcional, se diferente da geral)"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                    />
-                    <textarea
-                      value={item.descricao || ''}
-                      onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
-                      placeholder="Observação (opcional)"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {cardSelecionado.descricao_livre && (
-                <p className="text-slate-500 text-sm whitespace-pre-wrap bg-slate-50 rounded-xl p-3">
-                  {cardSelecionado.descricao_livre}
-                </p>
-              )}
-
-              {(cardSelecionado as any).fotos_urls?.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {(cardSelecionado as any).fotos_urls.map((url: string, i: number) => (
-                    <img key={i} src={url} alt={`Foto ${i + 1}`} className="w-full h-16 object-cover rounded-lg" />
-                  ))}
-                </div>
-              )}
-
-              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                  <Clock size={13} /> Elaboração do orçamento
-                </p>
-
-                {editando.orcamento_finalizado_em ? (
-                  <div className="text-xs text-brand-tealDark space-y-1">
-                    <p className="flex items-center gap-1.5">
-                      <CheckCircle2 size={14} /> Finalizado — levou{' '}
-                      {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
-                    </p>
-                    {editando.enviado_vendedor_em && (
-                      <p className="flex items-center gap-1.5 text-brand-navy">
-                        <Phone size={12} /> Enviado para {vendedorInfo?.nome || 'o vendedor'} em{' '}
-                        {new Date(editando.enviado_vendedor_em).toLocaleString('pt-BR')}
-                      </p>
-                    )}
-                    {(editando.anexos || []).map((a, i) => (
-                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
-                        <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-xs text-brand-navy">
-                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
-                    </p>
-
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
-                      {(editando.anexos || []).map((a, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-brand-teal mb-1">
-                          <Paperclip size={12} className="flex-shrink-0" />
-                          <span className="font-medium truncate">{a.titulo}</span>
-                          <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex-shrink-0">
-                            ver
-                          </a>
-                          <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="text"
-                          value={novoAnexoTitulo}
-                          onChange={e => setNovoAnexoTitulo(e.target.value)}
-                          placeholder="Título (ex: Orçamento com contramarco)"
-                          className="flex-1 border border-slate-300 rounded-lg p-2 text-xs"
-                        />
-                        <label
-                          className={`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
-                            novoAnexoTitulo.trim()
-                              ? 'border-brand-navy text-brand-navy cursor-pointer hover:bg-brand-navyLight'
-                              : 'border-slate-200 text-slate-300'
+                      <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><MapPin size={12} /> Cidade</label>
+                      <input
+                        type="text"
+                        value={editando.cidade || ''}
+                        onChange={e => atualizarCampo('cidade', e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Cor / Acabamento</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {([
+                        { value: 'preto', label: 'Preto' },
+                        { value: 'branco', label: 'Branco' },
+                        { value: 'madeirado', label: 'Amadeirado' },
+                        { value: 'outro', label: 'Outra cor' },
+                      ] as const).map(a => (
+                        <button
+                          key={a.value}
+                          type="button"
+                          onClick={() => atualizarCampo('acabamento', a.value)}
+                          className={`p-2 rounded-lg text-xs border transition ${
+                            editando.acabamento === a.value
+                              ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                              : 'border-slate-200 hover:border-slate-300 text-slate-600'
                           }`}
                         >
-                          <Paperclip size={13} /> Anexar
-                          <input
-                            type="file"
-                            className="hidden"
-                            disabled={!novoAnexoTitulo.trim()}
-                            onChange={e => adicionarAnexo(e.target.files?.[0])}
-                          />
-                        </label>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF: no celular, abre o menu de compartilhar para anexar o PDF de verdade no WhatsApp; se não for possível, envia o link do PDF na mensagem.</p>
+                          {a.label}
+                        </button>
+                      ))}
                     </div>
-
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
+                    {editando.acabamento === 'outro' && (
                       <input
                         type="text"
-                        value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
-                        onChange={e =>
-                          atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
-                        }
-                        placeholder="Ex: 2500.00"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        value={editando.acabamento_outro_texto || ''}
+                        onChange={e => atualizarCampo('acabamento_outro_texto', e.target.value)}
+                        placeholder="Qual cor?"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-2"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Contramarco</label>
+                    <select
+                      value={editando.contramarco || ''}
+                      onChange={e => atualizarCampo('contramarco', e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                    >
+                      <option value="">—</option>
+                      <option value="com">Com contramarco</option>
+                      <option value="sem">Sem contramarco</option>
+                    </select>
+                  </div>
+
+                  {editando.tipo_medida && (
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Tipo de medida</label>
+                      <select
+                        value={editando.tipo_medida || ''}
+                        onChange={e => atualizarCampo('tipo_medida', e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      >
+                        <option value="comum">Orçamento comum</option>
+                        <option value="final">Medida final</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Temperatura do orçamento</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['quente', 'morno', 'frio'] as const).map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => atualizarCampo('temperatura', t)}
+                          className={`p-2 rounded-lg text-xs border transition ${
+                            editando.temperatura === t
+                              ? `${temperaturaInfo[t].borda} ${temperaturaInfo[t].fundo} ${temperaturaInfo[t].texto} font-medium`
+                              : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                          }`}
+                        >
+                          {temperaturaInfo[t].emoji} {temperaturaInfo[t].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12} /> Arquiteto/Eng.</label>
+                      <input
+                        type="text"
+                        value={editando.arquiteto_nome || ''}
+                        onChange={e => atualizarCampo('arquiteto_nome', e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Contato</label>
+                      <input
+                        type="text"
+                        value={editando.arquiteto_contato || ''}
+                        onChange={e => atualizarCampo('arquiteto_contato', e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
+                    </div>
+                  </div>
 
-                    <div className="pt-2 border-t border-slate-200 space-y-2">
-                      <p className="text-xs font-medium text-slate-500">
-                        Enviar para {vendedorInfo?.nome || 'o vendedor'} e finalizar
-                      </p>
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
-                          <Phone size={12} /> WhatsApp do vendedor
-                        </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs text-slate-500">Esquadrias</label>
+                      <button onClick={adicionarItemEdit} className="flex items-center gap-1 text-xs text-brand-navy hover:text-brand-navyDark">
+                        <Plus size={13} /> Adicionar
+                      </button>
+                    </div>
+                    {(editando.itens || []).map((item, i) => (
+                      <div key={item.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400">Esquadria {i + 1}</span>
+                          <button onClick={() => removerItemEdit(item.id)} className="p-1 text-red-400 hover:text-red-600">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                        <select
+                          value={item.tipo_esquadria}
+                          onChange={e => atualizarItemEdit(item.id, 'tipo_esquadria', e.target.value as TipoEsquadria)}
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                        >
+                          {Object.entries(tipoLabels).map(([v, l]) => (
+                            <option key={v} value={v}>{l}</option>
+                          ))}
+                        </select>
+                        {item.tipo_esquadria === 'outro' && (
+                          <input
+                            type="text"
+                            value={item.tipo_outro_texto || ''}
+                            onChange={e => atualizarItemEdit(item.id, 'tipo_outro_texto', e.target.value)}
+                            placeholder="Qual é o tipo de esquadria?"
+                            className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                          />
+                        )}
                         <input
                           type="text"
-                          value={whatsappVendedor}
-                          onChange={e => setWhatsappVendedor(e.target.value)}
-                          placeholder="Ex: 11999998888"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                          value={item.folhas || ''}
+                          onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
+                          placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                         />
-                        <p className="text-xs text-slate-400 mt-1">
-                          {vendedorInfo?.whatsapp
-                            ? 'Preenchido automaticamente com o número cadastrado. Pode trocar por outro se precisar.'
-                            : 'Não há número cadastrado para este vendedor — informe um número.'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1">Mensagem</label>
+                        {editando.tipo_medida === 'final' ? (
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-[11px] text-slate-400 mb-1">Larguras (mm) — baixo, meio, cima</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                <input
+                                  type="number"
+                                  value={item.largura_baixo_mm || ''}
+                                  onChange={e => atualizarItemEdit(item.id, 'largura_baixo_mm', parseFloat(e.target.value) || 0)}
+                                  placeholder="Baixo"
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.largura_meio_mm || ''}
+                                  onChange={e => atualizarItemEdit(item.id, 'largura_meio_mm', parseFloat(e.target.value) || 0)}
+                                  placeholder="Meio"
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.largura_cima_mm || ''}
+                                  onChange={e => atualizarItemEdit(item.id, 'largura_cima_mm', parseFloat(e.target.value) || 0)}
+                                  placeholder="Cima"
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[11px] text-slate-400 mb-1">Alturas (mm) — direita, meio, esquerda</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                <input
+                                  type="number"
+                                  value={item.altura_direita_mm || ''}
+                                  onChange={e => atualizarItemEdit(item.id, 'altura_direita_mm', parseFloat(e.target.value) || 0)}
+                                  placeholder="Direita"
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.altura_meio_mm || ''}
+                                  onChange={e => atualizarItemEdit(item.id, 'altura_meio_mm', parseFloat(e.target.value) || 0)}
+                                  placeholder="Meio"
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                                />
+                                <input
+                                  type="number"
+                                  value={item.altura_esquerda_mm || ''}
+                                  onChange={e => atualizarItemEdit(item.id, 'altura_esquerda_mm', parseFloat(e.target.value) || 0)}
+                                  placeholder="Esquerda"
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                                />
+                              </div>
+                            </div>
+                            <input
+                              type="number"
+                              value={item.quantidade || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'quantidade', parseInt(e.target.value) || 1)}
+                              placeholder="Qtd"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="number"
+                              value={item.largura_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'largura_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Largura"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              value={item.altura_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'altura_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Altura"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              value={item.quantidade || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'quantidade', parseInt(e.target.value) || 1)}
+                              placeholder="Qtd"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
+                          <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy">
+                            <Camera size={12} /> Trocar foto
+                            <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          value={item.cor || ''}
+                          onChange={e => atualizarItemEdit(item.id, 'cor', e.target.value)}
+                          placeholder="Cor desta esquadria (opcional, se diferente da geral)"
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                        />
                         <textarea
-                          value={mensagemVendedor}
-                          onChange={e => setMensagemVendedor(e.target.value)}
-                          className="w-full h-20 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                          value={item.descricao || ''}
+                          onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
+                          placeholder="Observação (opcional)"
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
                         />
                       </div>
-                    </div>
-
-                    <button
-                      onClick={finalizarOrcamento}
-                      disabled={
-                        salvando ||
-                        editando.valor_estimado == null ||
-                        !whatsappVendedor.trim()
-                      }
-                      className="w-full py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-brand-tealDark transition disabled:opacity-50"
-                    >
-                      {salvando ? 'Gerando PDF e enviando...' : 'Enviar para o vendedor e finalizar'}
-                    </button>
+                    ))}
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Coluna</label>
-                <select
-                  value={editando.coluna_id || ''}
-                  onChange={e => atualizarCampo('coluna_id', e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                >
-                  {colunas.map(c => (
-                    <option key={c.id} value={c.id}>{c.nome}</option>
-                  ))}
-                </select>
-              </div>
+                  {cardSelecionado.descricao_livre && (
+                    <p className="text-slate-500 text-sm whitespace-pre-wrap bg-slate-50 rounded-xl p-3">
+                      {cardSelecionado.descricao_livre}
+                    </p>
+                  )}
 
-              <button
-                onClick={salvarCard}
-                disabled={salvando}
-                className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-              >
-                {salvando ? 'Salvando...' : 'Salvar alterações'}
-              </button>
+                  {(cardSelecionado as any).fotos_urls?.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {(cardSelecionado as any).fotos_urls.map((url: string, i: number) => (
+                        <img key={i} src={url} alt={`Foto ${i + 1}`} className="w-full h-16 object-cover rounded-lg" />
+                      ))}
+                    </div>
+                  )}
 
-              {usuario?.role === 'master' && (
-                <button
-                  onClick={excluirCard}
-                  className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
-                >
-                  <Trash2 size={13} /> Excluir este orçamento
-                </button>
-              )}
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                      <Clock size={13} /> Elaboração do orçamento
+                    </p>
+
+                    {editando.orcamento_finalizado_em ? (
+                      <div className="text-xs text-brand-tealDark space-y-1">
+                        <p className="flex items-center gap-1.5">
+                          <CheckCircle2 size={14} /> Finalizado — levou{' '}
+                          {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
+                        </p>
+                        {editando.enviado_vendedor_em && (
+                          <p className="flex items-center gap-1.5 text-brand-navy">
+                            <Phone size={12} /> Enviado para {vendedorInfo?.nome || 'o vendedor'} em{' '}
+                            {new Date(editando.enviado_vendedor_em).toLocaleString('pt-BR')}
+                          </p>
+                        )}
+                        {(editando.anexos || []).map((a, i) => (
+                          <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
+                            <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs text-brand-navy">
+                          Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
+                        </p>
+
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
+                          {(editando.anexos || []).map((a, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs text-brand-teal mb-1">
+                              <Paperclip size={12} className="flex-shrink-0" />
+                              <span className="font-medium truncate">{a.titulo}</span>
+                              <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex-shrink-0">
+                                ver
+                              </a>
+                              <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="text"
+                              value={novoAnexoTitulo}
+                              onChange={e => setNovoAnexoTitulo(e.target.value)}
+                              placeholder="Título (ex: Orçamento com contramarco)"
+                              className="flex-1 border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <label
+                              className={`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
+                                novoAnexoTitulo.trim()
+                                  ? 'border-brand-navy text-brand-navy cursor-pointer hover:bg-brand-navyLight'
+                                  : 'border-slate-200 text-slate-300'
+                              }`}
+                            >
+                              <Paperclip size={13} /> Anexar
+                              <input
+                                type="file"
+                                className="hidden"
+                                disabled={!novoAnexoTitulo.trim()}
+                                onChange={e => adicionarAnexo(e.target.files?.[0])}
+                              />
+                            </label>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF: no celular, abre o menu de compartilhar para anexar o PDF de verdade no WhatsApp; se não for possível, envia o link do PDF na mensagem.</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
+                          <input
+                            type="text"
+                            value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
+                            onChange={e =>
+                              atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
+                            }
+                            placeholder="Ex: 2500.00"
+                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                          />
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200 space-y-2">
+                          <p className="text-xs font-medium text-slate-500">
+                            Enviar para {vendedorInfo?.nome || 'o vendedor'} e finalizar
+                          </p>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
+                              <Phone size={12} /> WhatsApp do vendedor
+                            </label>
+                            <input
+                              type="text"
+                              value={whatsappVendedor}
+                              onChange={e => setWhatsappVendedor(e.target.value)}
+                              placeholder="Ex: 11999998888"
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">
+                              {vendedorInfo?.whatsapp
+                                ? 'Preenchido automaticamente com o número cadastrado. Pode trocar por outro se precisar.'
+                                : 'Não há número cadastrado para este vendedor — informe um número.'}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Mensagem</label>
+                            <textarea
+                              value={mensagemVendedor}
+                              onChange={e => setMensagemVendedor(e.target.value)}
+                              className="w-full h-20 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={finalizarOrcamento}
+                          disabled={
+                            salvando ||
+                            editando.valor_estimado == null ||
+                            !whatsappVendedor.trim()
+                          }
+                          className="w-full py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-brand-tealDark transition disabled:opacity-50"
+                        >
+                          {salvando ? 'Gerando PDF e enviando...' : 'Enviar para o vendedor e finalizar'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Coluna</label>
+                    <select
+                      value={editando.coluna_id || ''}
+                      onChange={e => atualizarCampo('coluna_id', e.target.value)}
+                      className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                    >
+                      {colunas.map(c => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={salvarCard}
+                    disabled={salvando}
+                    className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                  >
+                    {salvando ? 'Salvando...' : 'Salvar alterações'}
+                  </button>
+
+                  {usuario?.role === 'master' && (
+                    <button
+                      onClick={excluirCard}
+                      className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 size={13} /> Excluir este orçamento
+                    </button>
+                  )}
 
                 </>
               )}
