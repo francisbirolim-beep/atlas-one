@@ -11,6 +11,7 @@ import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
 import { corTextoParaFundo } from '@/lib/cor'
 import { v4 as uuidv4 } from 'uuid'
+import { jsPDF } from 'jspdf'
 
 const tipoLabels: Record<string, string> = {
   porta_correr: 'Porta de Correr',
@@ -46,6 +47,116 @@ function numeroWhatsApp(raw: string): string {
   const digitos = raw.replace(/\D/g, '')
   if (!digitos) return ''
   return digitos.startsWith('55') ? digitos : `55${digitos}`
+}
+
+const acabamentoLabelsPdf: Record<string, string> = {
+  preto: 'Preto',
+  branco: 'Branco',
+  madeirado: 'Amadeirado',
+  outro: 'Outra cor',
+}
+
+function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const margem = 15
+  const largura = 210 - margem * 2
+  let y = margem
+
+  function linhaNova(altura = 6) {
+    y += altura
+    if (y > 280) {
+      doc.addPage()
+      y = margem
+    }
+  }
+
+  doc.setFontSize(16)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Esquadrifácio — Orçamento', margem, y)
+  linhaNova(10)
+
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(100)
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, margem, y)
+  doc.setTextColor(0)
+  linhaNova(10)
+
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Cliente', margem, y)
+  linhaNova(6)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Nome: ${card.cliente_nome || '-'}`, margem, y)
+  linhaNova()
+  if (card.cliente_whatsapp) { doc.text(`WhatsApp: ${card.cliente_whatsapp}`, margem, y); linhaNova() }
+  if (card.cidade) { doc.text(`Cidade: ${card.cidade}`, margem, y); linhaNova() }
+  if (card.arquiteto_nome) { doc.text(`Arquiteto/Engenheiro: ${card.arquiteto_nome}${card.arquiteto_contato ? ' — ' + card.arquiteto_contato : ''}`, margem, y); linhaNova() }
+  linhaNova(4)
+
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Especificações', margem, y)
+  linhaNova(6)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'normal')
+  const acabLabel = card.acabamento === 'outro' ? (card.acabamento_outro_texto || 'Outra cor') : (acabamentoLabelsPdf[card.acabamento || ''] || '-')
+  doc.text(`Cor/Acabamento: ${acabLabel}`, margem, y)
+  linhaNova()
+  if (card.contramarco) { doc.text(`Contramarco: ${card.contramarco === 'com' ? 'Com contramarco' : 'Sem contramarco'}`, margem, y); linhaNova() }
+  if (card.tipo_medida) { doc.text(`Tipo de medida: ${card.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}`, margem, y); linhaNova() }
+  linhaNova(4)
+
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Esquadrias', margem, y)
+  linhaNova(7)
+
+  const itens = card.itens || []
+  itens.forEach((item, i) => {
+    if (y > 260) { doc.addPage(); y = margem }
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'bold')
+    const tituloTipo = item.tipo_esquadria === 'outro' ? (item.tipo_outro_texto || 'Outro') : (tipoLabels[item.tipo_esquadria] || item.tipo_esquadria)
+    doc.text(`${i + 1}. ${tituloTipo}${item.quantidade > 1 ? ` (x${item.quantidade})` : ''}`, margem, y)
+    linhaNova(5.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+
+    if (item.folhas) { doc.text(`Folhas: ${item.folhas}`, margem + 4, y); linhaNova(5) }
+
+    if (card.tipo_medida === 'final' && (item.largura_baixo_mm || item.largura_meio_mm || item.largura_cima_mm)) {
+      doc.text(
+        `Larguras (mm) — baixo: ${item.largura_baixo_mm ?? '-'} | meio: ${item.largura_meio_mm ?? '-'} | cima: ${item.largura_cima_mm ?? '-'}`,
+        margem + 4, y
+      )
+      linhaNova(5)
+      doc.text(
+        `Alturas (mm) — direita: ${item.altura_direita_mm ?? '-'} | meio: ${item.altura_meio_mm ?? '-'} | esquerda: ${item.altura_esquerda_mm ?? '-'}`,
+        margem + 4, y
+      )
+      linhaNova(5)
+    } else {
+      doc.text(`Medidas: ${item.largura_mm || '-'}mm x ${item.altura_mm || '-'}mm`, margem + 4, y)
+      linhaNova(5)
+    }
+
+    if (item.cor) { doc.text(`Cor: ${item.cor}`, margem + 4, y); linhaNova(5) }
+    if (item.descricao) {
+      const linhas = doc.splitTextToSize(`Observação: ${item.descricao}`, largura - 4)
+      doc.text(linhas, margem + 4, y)
+      linhaNova(5 * linhas.length)
+    }
+    linhaNova(2)
+  })
+
+  linhaNova(2)
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`Valor total: R$ ${(card.valor_estimado ?? 0).toFixed(2)}`, margem, y)
+
+  return doc.output('blob')
 }
 
 export default function Kanban() {
@@ -294,10 +405,23 @@ export default function Kanban() {
       colunas.find(c => c.nome.trim().toLowerCase().includes('feito'))
     const novaColunaId = colunaFeito ? colunaFeito.id : editando.coluna_id
 
+    let anexosFinais = editando.anexos || []
+    try {
+      const pdfBlob = gerarPdfOrcamento(editando)
+      const nomeArquivoPdf = `orcamento-${(editando.cliente_nome || 'cliente').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`
+      const pdfFile = new File([pdfBlob], nomeArquivoPdf, { type: 'application/pdf' })
+      const pdfUrl = await uploadArquivo(pdfFile)
+      if (pdfUrl) {
+        anexosFinais = [...anexosFinais, { titulo: 'Orçamento (PDF)', nome: nomeArquivoPdf, url: pdfUrl }]
+      }
+    } catch (e) {
+      console.error('Erro ao gerar PDF do orçamento:', e)
+    }
+
     const { error } = await supabase
       .from('orcamentos')
       .update({
-        anexos: editando.anexos,
+        anexos: anexosFinais,
         valor_estimado: editando.valor_estimado,
         orcamento_finalizado_em: agoraIso,
         enviado_vendedor_em: agoraIso,
@@ -307,13 +431,14 @@ export default function Kanban() {
       .eq('id', cardSelecionado.id)
     setSalvando(false)
     if (!error) {
-      const linksAnexos = (editando.anexos || []).map(a => `${a.titulo}: ${a.url}`).join('\n')
+      const linksAnexos = anexosFinais.map(a => `${a.titulo}: ${a.url}`).join('\n')
       const textoCompleto = `${mensagemVendedor}\n\n${linksAnexos}`
       window.open(`https://wa.me/${numero}?text=${encodeURIComponent(textoCompleto)}`, '_blank')
 
       const duracao = editando.orcamento_iniciado_em ? formatarDuracao(editando.orcamento_iniciado_em, agoraIso) : null
       const atualizado = {
         ...editando,
+        anexos: anexosFinais,
         orcamento_finalizado_em: agoraIso,
         enviado_vendedor_em: agoraIso,
         coluna_id: novaColunaId,
@@ -625,132 +750,6 @@ export default function Kanban() {
                 </span>
               )}
 
-              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                  <Clock size={13} /> Elaboração do orçamento
-                </p>
-
-                {editando.orcamento_finalizado_em ? (
-                  <div className="text-xs text-brand-tealDark space-y-1">
-                    <p className="flex items-center gap-1.5">
-                      <CheckCircle2 size={14} /> Finalizado — levou{' '}
-                      {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
-                    </p>
-                    {editando.enviado_vendedor_em && (
-                      <p className="flex items-center gap-1.5 text-brand-navy">
-                        <Phone size={12} /> Enviado para {vendedorInfo?.nome || 'o vendedor'} em{' '}
-                        {new Date(editando.enviado_vendedor_em).toLocaleString('pt-BR')}
-                      </p>
-                    )}
-                    {(editando.anexos || []).map((a, i) => (
-                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
-                        <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-xs text-brand-navy">
-                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
-                    </p>
-
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
-                      {(editando.anexos || []).map((a, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-brand-teal mb-1">
-                          <Paperclip size={12} className="flex-shrink-0" />
-                          <span className="font-medium truncate">{a.titulo}</span>
-                          <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex-shrink-0">
-                            ver
-                          </a>
-                          <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="text"
-                          value={novoAnexoTitulo}
-                          onChange={e => setNovoAnexoTitulo(e.target.value)}
-                          placeholder="Título (ex: Orçamento com contramarco)"
-                          className="flex-1 border border-slate-300 rounded-lg p-2 text-xs"
-                        />
-                        <label
-                          className={`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
-                            novoAnexoTitulo.trim()
-                              ? 'border-brand-navy text-brand-navy cursor-pointer hover:bg-brand-navyLight'
-                              : 'border-slate-200 text-slate-300'
-                          }`}
-                        >
-                          <Paperclip size={13} /> Anexar
-                          <input
-                            type="file"
-                            className="hidden"
-                            disabled={!novoAnexoTitulo.trim()}
-                            onChange={e => adicionarAnexo(e.target.files?.[0])}
-                          />
-                        </label>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco").</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
-                      <input
-                        type="text"
-                        value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
-                        onChange={e =>
-                          atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
-                        }
-                        placeholder="Ex: 2500.00"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200 space-y-2">
-                      <p className="text-xs font-medium text-slate-500">
-                        Enviar para {vendedorInfo?.nome || 'o vendedor'} e finalizar
-                      </p>
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
-                          <Phone size={12} /> WhatsApp do vendedor
-                        </label>
-                        <input
-                          type="text"
-                          value={whatsappVendedor}
-                          onChange={e => setWhatsappVendedor(e.target.value)}
-                          placeholder="Ex: 11999998888"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1">Mensagem</label>
-                        <textarea
-                          value={mensagemVendedor}
-                          onChange={e => setMensagemVendedor(e.target.value)}
-                          className="w-full h-20 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={finalizarOrcamento}
-                      disabled={
-                        salvando ||
-                        !editando.anexos ||
-                        editando.anexos.length === 0 ||
-                        editando.valor_estimado == null ||
-                        !whatsappVendedor.trim()
-                      }
-                      className="w-full py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-brand-tealDark transition disabled:opacity-50"
-                    >
-                      {salvando ? 'Enviando...' : 'Enviar para o vendedor e finalizar'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Nome do cliente</label>
                 <input
@@ -904,6 +903,69 @@ export default function Kanban() {
                       placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
                       className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                     />
+                    {editando.tipo_medida === 'final' ? (
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-[11px] text-slate-400 mb-1">Larguras (mm) — baixo, meio, cima</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="number"
+                              value={item.largura_baixo_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'largura_baixo_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Baixo"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              value={item.largura_meio_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'largura_meio_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Meio"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              value={item.largura_cima_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'largura_cima_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Cima"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-400 mb-1">Alturas (mm) — direita, meio, esquerda</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="number"
+                              value={item.altura_direita_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'altura_direita_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Direita"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              value={item.altura_meio_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'altura_meio_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Meio"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              value={item.altura_esquerda_mm || ''}
+                              onChange={e => atualizarItemEdit(item.id, 'altura_esquerda_mm', parseFloat(e.target.value) || 0)}
+                              placeholder="Esquerda"
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+                        </div>
+                        <input
+                          type="number"
+                          value={item.quantidade || ''}
+                          onChange={e => atualizarItemEdit(item.id, 'quantidade', parseInt(e.target.value) || 1)}
+                          placeholder="Qtd"
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                        />
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-3 gap-2">
                       <input
                         type="number"
@@ -927,6 +989,7 @@ export default function Kanban() {
                         className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                       />
                     </div>
+                    )}
                     <div className="flex items-center gap-2">
                       {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
                       <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy">
@@ -965,15 +1028,135 @@ export default function Kanban() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Valor do orçamento (opcional)</label>
-                <input
-                  type="text"
-                  value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
-                  onChange={e => atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)}
-                  placeholder="Ex: 2500.00"
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                />
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                  <Clock size={13} /> Elaboração do orçamento
+                </p>
+
+                {editando.orcamento_finalizado_em ? (
+                  <div className="text-xs text-brand-tealDark space-y-1">
+                    <p className="flex items-center gap-1.5">
+                      <CheckCircle2 size={14} /> Finalizado — levou{' '}
+                      {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
+                    </p>
+                    {editando.enviado_vendedor_em && (
+                      <p className="flex items-center gap-1.5 text-brand-navy">
+                        <Phone size={12} /> Enviado para {vendedorInfo?.nome || 'o vendedor'} em{' '}
+                        {new Date(editando.enviado_vendedor_em).toLocaleString('pt-BR')}
+                      </p>
+                    )}
+                    {(editando.anexos || []).map((a, i) => (
+                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
+                        <Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-brand-navy">
+                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
+                    </p>
+
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
+                      {(editando.anexos || []).map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-brand-teal mb-1">
+                          <Paperclip size={12} className="flex-shrink-0" />
+                          <span className="font-medium truncate">{a.titulo}</span>
+                          <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex-shrink-0">
+                            ver
+                          </a>
+                          <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={novoAnexoTitulo}
+                          onChange={e => setNovoAnexoTitulo(e.target.value)}
+                          placeholder="Título (ex: Orçamento com contramarco)"
+                          className="flex-1 border border-slate-300 rounded-lg p-2 text-xs"
+                        />
+                        <label
+                          className={`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
+                            novoAnexoTitulo.trim()
+                              ? 'border-brand-navy text-brand-navy cursor-pointer hover:bg-brand-navyLight'
+                              : 'border-slate-200 text-slate-300'
+                          }`}
+                        >
+                          <Paperclip size={13} /> Anexar
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={!novoAnexoTitulo.trim()}
+                            onChange={e => adicionarAnexo(e.target.files?.[0])}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF e enviado junto.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
+                      <input
+                        type="text"
+                        value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
+                        onChange={e =>
+                          atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
+                        }
+                        placeholder="Ex: 2500.00"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <p className="text-xs font-medium text-slate-500">
+                        Enviar para {vendedorInfo?.nome || 'o vendedor'} e finalizar
+                      </p>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
+                          <Phone size={12} /> WhatsApp do vendedor
+                        </label>
+                        <input
+                          type="text"
+                          value={whatsappVendedor}
+                          onChange={e => setWhatsappVendedor(e.target.value)}
+                          placeholder="Ex: 11999998888"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                          {vendedorInfo?.whatsapp
+                            ? 'Preenchido automaticamente com o número cadastrado. Pode trocar por outro se precisar.'
+                            : 'Não há número cadastrado para este vendedor — informe um número.'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Mensagem</label>
+                        <textarea
+                          value={mensagemVendedor}
+                          onChange={e => setMensagemVendedor(e.target.value)}
+                          className="w-full h-20 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={finalizarOrcamento}
+                      disabled={
+                        salvando ||
+                        !editando.anexos ||
+                        editando.anexos.length === 0 ||
+                        editando.valor_estimado == null ||
+                        !whatsappVendedor.trim()
+                      }
+                      className="w-full py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-brand-tealDark transition disabled:opacity-50"
+                    >
+                      {salvando ? 'Gerando PDF e enviando...' : 'Enviar para o vendedor e finalizar'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
