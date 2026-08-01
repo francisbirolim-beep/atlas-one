@@ -156,3 +156,21 @@ export interface ItemVidro {
   area_m2: number
   preco_m2: number
 }
+
+export type StatusAssistencia = 'aberto' | 'em_atendimento' | 'resolvido'
+
+export interface Assistencia {
+  id: string
+  created_at: string
+  cliente_id?: string | null
+  cliente_nome: string
+  cliente_whatsapp?: string | null
+  cidade?: string | null
+  endereco?: string | null
+  descricao_problema: string
+  fotos_urls?: string[] | null
+  status: StatusAssistencia
+  criado_por_nome?: string | null
+  criado_por_id?: string | null
+  atualizado_em?: string | null
+}
