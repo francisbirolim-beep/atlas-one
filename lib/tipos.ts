@@ -128,6 +128,49 @@ export interface OrcamentoRapido {
   anexos?: Anexo[] | null
   tipo_medida?: 'comum' | 'final' | null
   temperatura?: TemperaturaLead | null
+  motivo_perda?: string | null
+}
+
+// CRM: tarefas, interações/negociações e metas comerciais
+
+export type TipoInteracao = 'ligacao' | 'whatsapp' | 'visita' | 'proposta' | 'negociacao' | 'nota' | 'outro'
+
+export interface Tarefa {
+  id: string
+  cliente_id?: string | null
+  cliente_nome?: string | null
+  orcamento_id?: string | null
+  titulo: string
+  descricao?: string | null
+  data_vencimento?: string | null
+  concluida: boolean
+  concluida_em?: string | null
+  responsavel_id?: string | null
+  responsavel_nome?: string | null
+  created_at: string
+}
+
+export interface Interacao {
+  id: string
+  cliente_id: string
+  orcamento_id?: string | null
+  tipo: TipoInteracao
+  descricao?: string | null
+  anexos?: Anexo[] | null
+  usuario_id?: string | null
+  usuario_nome?: string | null
+  created_at: string
+}
+
+export interface Meta {
+  id: string
+  mes: string
+  usuario_id?: string | null
+  usuario_nome?: string | null
+  meta_valor?: number | null
+  meta_quantidade?: number | null
+  created_at?: string
+  updated_at?: string
 }
 
 export interface OrcamentoDetalhado extends OrcamentoRapido {
