@@ -402,16 +402,42 @@ export default function Kanban() {
     const novaColunaId = colunaFeito ? colunaFeito.id : editando.coluna_id
 
     let anexosFinais = editando.anexos || []
+    let pdfFile: File | null = null
+    const nomeArquivoPdf = `orcamento-${(editando.cliente_nome || 'cliente').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`
     try {
       const pdfBlob = gerarPdfOrcamento(editando)
-      const nomeArquivoPdf = `orcamento-${(editando.cliente_nome || 'cliente').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`
-      const pdfFile = new File([pdfBlob], nomeArquivoPdf, { type: 'application/pdf' })
-      const pdfUrl = await uploadArquivo(pdfFile)
-      if (pdfUrl) {
-        anexosFinais = [...anexosFinais, { titulo: 'Orçamento (PDF)', nome: nomeArquivoPdf, url: pdfUrl }]
-      }
+      pdfFile = new File([pdfBlob], nomeArquivoPdf, { type: 'application/pdf' })
     } catch (e) {
       console.error('Erro ao gerar PDF do orçamento:', e)
+    }
+
+    // Tenta compartilhar o PDF de verdade (abre o menu "Compartilhar" do celular, escolhendo o WhatsApp
+    // aí o arquivo vai anexado de verdade, não só um link). Só funciona em celular com suporte a isso.
+    const nav = typeof navigator !== 'undefined' ? (navigator as any) : null
+    const podeCompartilharArquivo = !!(pdfFile && nav?.canShare && nav.canShare({ files: [pdfFile] }))
+    let compartilhouArquivo = false
+    if (podeCompartilharArquivo && pdfFile) {
+      try {
+        await nav.share({
+          files: [pdfFile],
+          title: `Orçamento - ${editando.cliente_nome}`,
+          text: mensagemVendedor,
+        })
+        compartilhouArquivo = true
+      } catch (e) {
+        console.log('Compartilhamento do PDF cancelado ou indisponível:', e)
+      }
+    }
+
+    if (pdfFile) {
+      try {
+        const pdfUrl = await uploadArquivo(pdfFile)
+        if (pdfUrl) {
+          anexosFinais = [...anexosFinais, { titulo: 'Orçamento (PDF)', nome: nomeArquivoPdf, url: pdfUrl }]
+        }
+      } catch (e) {
+        console.error('Erro ao salvar PDF do orçamento:', e)
+      }
     }
 
     const { error } = await supabase
@@ -427,9 +453,11 @@ export default function Kanban() {
       .eq('id', cardSelecionado.id)
     setSalvando(false)
     if (!error) {
-      const linksAnexos = anexosFinais.map(a => `${a.titulo}: ${a.url}`).join('\n')
-      const textoCompleto = `${mensagemVendedor}\n\n${linksAnexos}`
-      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(textoCompleto)}`, '_blank')
+      if (!compartilhouArquivo) {
+        const linksAnexos = anexosFinais.map(a => `${a.titulo}: ${a.url}`).join('\n')
+        const textoCompleto = `${mensagemVendedor}\n\n${linksAnexos}`
+        window.open(`https://wa.me/${numero}?text=${encodeURIComponent(textoCompleto)}`, '_blank')
+      }
 
       const duracao = editando.orcamento_iniciado_em ? formatarDuracao(editando.orcamento_iniciado_em, agoraIso) : null
       const atualizado = {
@@ -1091,7 +1119,7 @@ export default function Kanban() {
                           />
                         </label>
                       </div>
-                      <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF e enviado junto.</p>
+                      <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF: no celular, abre o menu de compartilhar para anexar o PDF de verdade no WhatsApp; se não for possível, envia o link do PDF na mensagem.</p>
                     </div>
 
                     <div>
