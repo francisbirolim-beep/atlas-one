@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import Sidebar from '@/components/Sidebar'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
@@ -47,5 +48,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!autenticado) return null
 
-  return <>{children}</>
+  return (
+    <div className="lg:flex lg:min-h-screen">
+      <Sidebar />
+      <div className="pb-20 lg:flex-1 lg:overflow-y-auto lg:pb-0">{children}</div>
+    </div>
+  )
 }
