@@ -370,6 +370,7 @@ export default function Kanban() {
     if (original.cidade !== novo.cidade) partes.push('cidade')
     if (original.acabamento !== novo.acabamento) partes.push('cor')
     if (original.contramarco !== novo.contramarco) partes.push('contramarco')
+    if (original.tipo_medida !== novo.tipo_medida) partes.push('tipo de medida')
     if (original.arquiteto_nome !== novo.arquiteto_nome) partes.push('arquiteto/engenheiro')
     if (original.valor_estimado !== novo.valor_estimado) partes.push('valor')
     if (original.coluna_id !== novo.coluna_id) partes.push('coluna')
@@ -394,6 +395,7 @@ export default function Kanban() {
         acabamento: editando.acabamento,
         acabamento_outro_texto: editando.acabamento === 'outro' ? editando.acabamento_outro_texto : null,
         contramarco: editando.contramarco,
+        tipo_medida: editando.tipo_medida,
         arquiteto_nome: editando.arquiteto_nome,
         arquiteto_contato: editando.arquiteto_contato,
         itens: editando.itens,
@@ -615,6 +617,13 @@ export default function Kanban() {
                   <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
                 </p>
               )}
+              {cardSelecionado.tipo_medida && (
+                <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                  cardSelecionado.tipo_medida === 'final' ? 'bg-brand-tealLight text-brand-teal' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}
+                </span>
+              )}
 
               <div className="bg-slate-50 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
@@ -819,6 +828,20 @@ export default function Kanban() {
                   <option value="sem">Sem contramarco</option>
                 </select>
               </div>
+
+              {editando.tipo_medida && (
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Tipo de medida</label>
+                  <select
+                    value={editando.tipo_medida || ''}
+                    onChange={e => atualizarCampo('tipo_medida', e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  >
+                    <option value="comum">Orçamento comum</option>
+                    <option value="final">Medida final</option>
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
