@@ -177,6 +177,7 @@ export default function Kanban() {
   const [mensagemVendedor, setMensagemVendedor] = useState('')
   const [busca, setBusca] = useState('')
   const [filtroData, setFiltroData] = useState('')
+  const [filtroTemperatura, setFiltroTemperatura] = useState('')
 
   useEffect(() => {
     carregar()
@@ -195,7 +196,17 @@ export default function Kanban() {
         .order('created_at', { ascending: false }),
     ])
     setColunas(cols)
-    if (orc) setCards(orc as OrcamentoRapido[])
+    if (orc) {
+      const lista = orc as OrcamentoRapido[]
+      setCards(lista)
+      if (typeof window !== 'undefined') {
+        const idAlvo = new URLSearchParams(window.location.search).get('orcamento')
+        if (idAlvo) {
+          const alvo = lista.find(c => c.id === idAlvo)
+          if (alvo) abrirCard(alvo)
+        }
+      }
+    }
     setCarregando(false)
   }
 
@@ -216,7 +227,14 @@ export default function Kanban() {
       const dataCard = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       if (dataCard !== filtroData) return false
     }
+    if (filtroTemperatura && c.temperatura !== filtroTemperatura) return false
     return true
+  }
+
+  const temperaturaInfo: Record<string, { emoji: string; label: string; texto: string; fundo: string; borda: string }> = {
+    quente: { emoji: '🔥', label: 'Quente', texto: 'text-red-600', fundo: 'bg-red-50', borda: 'border-red-500' },
+    morno: { emoji: '🌤️', label: 'Morno', texto: 'text-amber-600', fundo: 'bg-amber-50', borda: 'border-amber-500' },
+    frio: { emoji: '❄️', label: 'Frio', texto: 'text-blue-600', fundo: 'bg-blue-50', borda: 'border-blue-500' },
   }
 
   function cardsDaColuna(colunaId: string, index: number) {
@@ -520,6 +538,7 @@ export default function Kanban() {
     if (original.acabamento !== novo.acabamento) partes.push('cor')
     if (original.contramarco !== novo.contramarco) partes.push('contramarco')
     if (original.tipo_medida !== novo.tipo_medida) partes.push('tipo de medida')
+    if (original.temperatura !== novo.temperatura) partes.push('temperatura')
     if (original.arquiteto_nome !== novo.arquiteto_nome) partes.push('arquiteto/engenheiro')
     if (original.valor_estimado !== novo.valor_estimado) partes.push('valor')
     if (original.coluna_id !== novo.coluna_id) partes.push('coluna')
@@ -545,6 +564,7 @@ export default function Kanban() {
         acabamento_outro_texto: editando.acabamento === 'outro' ? editando.acabamento_outro_texto : null,
         contramarco: editando.contramarco,
         tipo_medida: editando.tipo_medida,
+        temperatura: editando.temperatura,
         arquiteto_nome: editando.arquiteto_nome,
         arquiteto_contato: editando.arquiteto_contato,
         itens: editando.itens,
@@ -606,9 +626,19 @@ export default function Kanban() {
             onChange={e => setFiltroData(e.target.value)}
             className="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
           />
-          {(busca || filtroData) && (
+          <select
+            value={filtroTemperatura}
+            onChange={e => setFiltroTemperatura(e.target.value)}
+            className="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
+          >
+            <option value="">Todas temperaturas</option>
+            <option value="quente">🔥 Quente</option>
+            <option value="morno">🌤️ Morno</option>
+            <option value="frio">❄️ Frio</option>
+          </select>
+          {(busca || filtroData || filtroTemperatura) && (
             <button
-              onClick={() => { setBusca(''); setFiltroData('') }}
+              onClick={() => { setBusca(''); setFiltroData(''); setFiltroTemperatura('') }}
               className="text-xs text-slate-400 hover:text-slate-600 px-2"
             >
               Limpar filtros
@@ -669,9 +699,14 @@ export default function Kanban() {
                               ? <Camera size={12} style={{ color: est ? est.texto : '#059669' }} />
                               : <FileText size={12} style={{ color: est ? est.texto : '#2563eb' }} />}
                           </div>
-                          <p className="font-medium text-sm truncate" style={{ color: est ? est.texto : '#1e293b' }}>
+                          <p className="font-medium text-sm truncate flex-1" style={{ color: est ? est.texto : '#1e293b' }}>
                             {card.cliente_nome}
                           </p>
+                          {card.temperatura && temperaturaInfo[card.temperatura] && (
+                            <span className="text-xs flex-shrink-0" title={temperaturaInfo[card.temperatura].label}>
+                              {temperaturaInfo[card.temperatura].emoji}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs mb-1" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
                           {(card as any).itens?.length > 1
@@ -766,13 +801,20 @@ export default function Kanban() {
                   <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
                 </p>
               )}
-              {cardSelecionado.tipo_medida && (
-                <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                  cardSelecionado.tipo_medida === 'final' ? 'bg-brand-tealLight text-brand-teal' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}
-                </span>
-              )}
+              <div className="flex flex-wrap gap-1.5">
+                {cardSelecionado.tipo_medida && (
+                  <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                    cardSelecionado.tipo_medida === 'final' ? 'bg-brand-tealLight text-brand-teal' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}
+                  </span>
+                )}
+                {cardSelecionado.temperatura && temperaturaInfo[cardSelecionado.temperatura] && (
+                  <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${temperaturaInfo[cardSelecionado.temperatura].fundo} ${temperaturaInfo[cardSelecionado.temperatura].texto}`}>
+                    {temperaturaInfo[cardSelecionado.temperatura].emoji} {temperaturaInfo[cardSelecionado.temperatura].label}
+                  </span>
+                )}
+              </div>
 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Nome do cliente</label>
@@ -865,6 +907,26 @@ export default function Kanban() {
                   </select>
                 </div>
               )}
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Temperatura do orçamento</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['quente', 'morno', 'frio'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => atualizarCampo('temperatura', t)}
+                      className={`p-2 rounded-lg text-xs border transition ${
+                        editando.temperatura === t
+                          ? `${temperaturaInfo[t].borda} ${temperaturaInfo[t].fundo} ${temperaturaInfo[t].texto} font-medium`
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      {temperaturaInfo[t].emoji} {temperaturaInfo[t].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
