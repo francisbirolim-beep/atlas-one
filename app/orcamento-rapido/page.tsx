@@ -46,10 +46,19 @@ interface ItemForm {
   cor: string
   foto?: File
   fotoPreview?: string
+  larguraBaixo: string
+  larguraMeio: string
+  larguraCima: string
+  alturaDireita: string
+  alturaMeio: string
+  alturaEsquerda: string
 }
 
 function novoItem(): ItemForm {
-  return { id: uuidv4(), tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '' }
+  return {
+    id: uuidv4(), tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '',
+    larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
+  }
 }
 
 export default function OrcamentoRapido() {
@@ -112,11 +121,19 @@ export default function OrcamentoRapido() {
           setErro('Escreva qual é o tipo de esquadria')
           return
         }
-        const l = parseFloat(it.largura.replace(',', '.'))
-        const a = parseFloat(it.altura.replace(',', '.'))
-        if (!l || !a || l < 100 || a < 100) {
-          setErro('Preencha as medidas de todas as esquadrias (mínimo 100mm x 100mm)')
-          return
+        if (tipoMedida === 'final') {
+          const medidas = [it.larguraBaixo, it.larguraMeio, it.larguraCima, it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
+          if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
+            setErro('Preencha as 3 larguras e as 3 alturas de todas as esquadrias (mínimo 100mm)')
+            return
+          }
+        } else {
+          const l = parseFloat(it.largura.replace(',', '.'))
+          const a = parseFloat(it.altura.replace(',', '.'))
+          if (!l || !a || l < 100 || a < 100) {
+            setErro('Preencha as medidas de todas as esquadrias (mínimo 100mm x 100mm)')
+            return
+          }
         }
       }
     } else if (!textosLivres.some(t => t.trim())) {
@@ -137,18 +154,45 @@ export default function OrcamentoRapido() {
     if (modo === 'formulario') {
       for (const it of itens) {
         const foto_url = it.foto ? await uploadFoto(it.foto) : null
-        itensSalvos.push({
-          id: it.id,
-          tipo_esquadria: it.tipo as TipoEsquadria,
-          tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-          folhas: it.folhas || null,
-          largura_mm: parseFloat(it.largura),
-          altura_mm: parseFloat(it.altura),
-          quantidade: parseInt(it.quantidade) || 1,
-          foto_url,
-          descricao: it.descricao || undefined,
-          cor: it.cor || null,
-        })
+        if (tipoMedida === 'final') {
+          const lb = parseFloat(it.larguraBaixo.replace(',', '.'))
+          const lm = parseFloat(it.larguraMeio.replace(',', '.'))
+          const lc = parseFloat(it.larguraCima.replace(',', '.'))
+          const ad = parseFloat(it.alturaDireita.replace(',', '.'))
+          const am = parseFloat(it.alturaMeio.replace(',', '.'))
+          const ae = parseFloat(it.alturaEsquerda.replace(',', '.'))
+          itensSalvos.push({
+            id: it.id,
+            tipo_esquadria: it.tipo as TipoEsquadria,
+            tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
+            folhas: it.folhas || null,
+            largura_mm: lm,
+            altura_mm: am,
+            largura_baixo_mm: lb,
+            largura_meio_mm: lm,
+            largura_cima_mm: lc,
+            altura_direita_mm: ad,
+            altura_meio_mm: am,
+            altura_esquerda_mm: ae,
+            quantidade: parseInt(it.quantidade) || 1,
+            foto_url,
+            descricao: it.descricao || undefined,
+            cor: it.cor || null,
+          })
+        } else {
+          itensSalvos.push({
+            id: it.id,
+            tipo_esquadria: it.tipo as TipoEsquadria,
+            tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
+            folhas: it.folhas || null,
+            largura_mm: parseFloat(it.largura),
+            altura_mm: parseFloat(it.altura),
+            quantidade: parseInt(it.quantidade) || 1,
+            foto_url,
+            descricao: it.descricao || undefined,
+            cor: it.cor || null,
+          })
+        }
       }
     }
 
@@ -500,38 +544,105 @@ export default function OrcamentoRapido() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Largura (mm)</label>
-                    <input
-                      type="number"
-                      value={item.largura}
-                      onChange={e => atualizarItem(item.id, 'largura', e.target.value)}
-                      placeholder="1800"
-                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                    />
+                {tipoMedida === 'final' ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Larguras (mm) — baixo, meio, cima</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="number"
+                          value={item.larguraBaixo}
+                          onChange={e => atualizarItem(item.id, 'larguraBaixo', e.target.value)}
+                          placeholder="Baixo"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.larguraMeio}
+                          onChange={e => atualizarItem(item.id, 'larguraMeio', e.target.value)}
+                          placeholder="Meio"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.larguraCima}
+                          onChange={e => atualizarItem(item.id, 'larguraCima', e.target.value)}
+                          placeholder="Cima"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Alturas (mm) — direita, meio, esquerda</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="number"
+                          value={item.alturaDireita}
+                          onChange={e => atualizarItem(item.id, 'alturaDireita', e.target.value)}
+                          placeholder="Direita"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.alturaMeio}
+                          onChange={e => atualizarItem(item.id, 'alturaMeio', e.target.value)}
+                          placeholder="Meio"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.alturaEsquerda}
+                          onChange={e => atualizarItem(item.id, 'alturaEsquerda', e.target.value)}
+                          placeholder="Esquerda"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
+                      <input
+                        type="number"
+                        value={item.quantidade}
+                        onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
+                        min="1"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Altura (mm)</label>
-                    <input
-                      type="number"
-                      value={item.altura}
-                      onChange={e => atualizarItem(item.id, 'altura', e.target.value)}
-                      placeholder="2100"
-                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                    />
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Largura (mm)</label>
+                      <input
+                        type="number"
+                        value={item.largura}
+                        onChange={e => atualizarItem(item.id, 'largura', e.target.value)}
+                        placeholder="1800"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Altura (mm)</label>
+                      <input
+                        type="number"
+                        value={item.altura}
+                        onChange={e => atualizarItem(item.id, 'altura', e.target.value)}
+                        placeholder="2100"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
+                      <input
+                        type="number"
+                        value={item.quantidade}
+                        onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
+                        min="1"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
-                    <input
-                      type="number"
-                      value={item.quantidade}
-                      onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
-                      min="1"
-                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                    />
-                  </div>
-                </div>
+                )}
 
                 <div>
                   <label className="block text-xs text-slate-500 mb-2">Foto (opcional)</label>
