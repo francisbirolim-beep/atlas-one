@@ -116,6 +116,7 @@ export interface OrcamentoRapido {
   anexo_url?: string | null
   anexo_nome?: string | null
   anexos?: Anexo[] | null
+  tipo_medida?: 'comum' | 'final' | null
 }
 
 export interface OrcamentoDetalhado extends OrcamentoRapido {
@@ -167,6 +168,8 @@ export interface Assistencia {
   cliente_whatsapp?: string | null
   cidade?: string | null
   endereco?: string | null
+  numero?: string | null
+  bairro?: string | null
   descricao_problema: string
   fotos_urls?: string[] | null
   status: StatusAssistencia
