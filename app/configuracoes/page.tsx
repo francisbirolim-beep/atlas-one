@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -9,6 +9,7 @@ import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/k
 import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
+import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
 import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
@@ -57,6 +58,10 @@ export default function Configuracoes() {
   const [novoSetorNome, setNovoSetorNome] = useState('')
   const [criandoSetor, setCriandoSetor] = useState(false)
 
+  const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
+  const [salvandoCorAssistencia, setSalvandoCorAssistencia] = useState(false)
+  const [msgCorAssistencia, setMsgCorAssistencia] = useState('')
+
   useEffect(() => {
     carregar()
   }, [])
@@ -67,14 +72,16 @@ export default function Configuracoes() {
     setEuSouMaster(me?.role === 'master')
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups] = await Promise.all([
+      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
         listarSetores(),
         listarMetas(mesMetaAtual),
         listarBackups(),
+        lerCorAssistencia(),
       ])
       setBackups(listaBackups)
+      setCorAssistenciaEdit(corAssistencia)
       setSetores(listaSetores)
       const setoresIniciais: Record<string, { nome: string; grupo: string; ordem: string; descricao: string }> = {}
       listaSetores.forEach(s => {
@@ -296,6 +303,14 @@ export default function Configuracoes() {
           : c
       )
     )
+  }
+
+  async function salvarCorAssistenciaConfig() {
+    setSalvandoCorAssistencia(true)
+    setMsgCorAssistencia('')
+    const ok = await salvarCorAssistencia(corAssistenciaEdit)
+    setSalvandoCorAssistencia(false)
+    setMsgCorAssistencia(ok ? 'Cor salva.' : 'Erro ao salvar a cor.')
   }
 
   if (carregando) {
@@ -582,6 +597,32 @@ export default function Configuracoes() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+            <Wrench size={16} /> Cor dos chamados de assistência
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            Quando um chamado de assistência técnica é aberto, ele aparece com essa cor na coluna "Fazer orçamento" do painel de orçamento, só pra avisar o time. O acompanhamento em si acontece no painel de Assistências Técnicas.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={corAssistenciaEdit}
+              onChange={e => setCorAssistenciaEdit(e.target.value)}
+              className="w-9 h-9 rounded-lg border border-slate-300 cursor-pointer"
+            />
+            <span className="text-xs text-slate-400">{corAssistenciaEdit}</span>
+            <button
+              onClick={salvarCorAssistenciaConfig}
+              disabled={salvandoCorAssistencia}
+              className="text-xs text-brand-navy hover:underline disabled:opacity-50"
+            >
+              {salvandoCorAssistencia ? 'Salvando...' : 'Salvar cor'}
+            </button>
+          </div>
+          {msgCorAssistencia && <p className="text-xs text-brand-teal mt-2">{msgCorAssistencia}</p>}
         </section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6">
