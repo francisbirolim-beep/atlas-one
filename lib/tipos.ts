@@ -17,6 +17,9 @@ export type OrigemCliente =
 
 export type RoleUsuario = 'master' | 'funcionario'
 
+// Temperatura do lead/orçamento: classificação padrão de mercado (quente/morno/frio)
+export type TemperaturaLead = 'quente' | 'morno' | 'frio'
+
 export interface Usuario {
   id: string
   nome: string
@@ -124,6 +127,7 @@ export interface OrcamentoRapido {
   anexo_nome?: string | null
   anexos?: Anexo[] | null
   tipo_medida?: 'comum' | 'final' | null
+  temperatura?: TemperaturaLead | null
 }
 
 export interface OrcamentoDetalhado extends OrcamentoRapido {
