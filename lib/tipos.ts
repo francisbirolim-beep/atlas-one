@@ -184,3 +184,28 @@ export interface Assistencia {
   criado_por_id?: string | null
   atualizado_em?: string | null
 }
+
+export type GrupoSetor =
+  | 'Comercial' | 'Técnico' | 'Operações' | 'Administrativo'
+  | 'Relacionamento' | 'Conhecimento' | 'Sistema'
+
+export type NivelPermissao = 'oculto' | 'consulta' | 'edicao'
+
+export interface Setor {
+  id: string
+  nome: string
+  grupo: GrupoSetor
+  ordem: number
+  ativo: boolean
+  rota?: string | null
+  descricao?: string | null
+}
+
+export interface Permissao {
+  id: string
+  usuario_id: string
+  setor_id: string
+  nivel: NivelPermissao
+  created_at?: string
+  updated_at?: string
+}
