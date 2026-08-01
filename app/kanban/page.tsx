@@ -467,6 +467,7 @@ export default function Kanban() {
         enviado_vendedor_em: agoraIso,
         coluna_id: novaColunaId,
         coluna_atualizada_em: colunaFeito ? agoraIso : editando.coluna_atualizada_em,
+        status: 'enviado',
       })
       .eq('id', cardSelecionado.id)
     setSalvando(false)
@@ -485,6 +486,7 @@ export default function Kanban() {
         enviado_vendedor_em: agoraIso,
         coluna_id: novaColunaId,
         coluna_atualizada_em: colunaFeito ? agoraIso : editando.coluna_atualizada_em,
+        status: 'enviado' as const,
       }
       setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
       await registrarHistorico(
@@ -800,6 +802,11 @@ export default function Kanban() {
                 <p className="text-xs text-slate-400 flex items-center gap-1.5">
                   <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
                 </p>
+              )}
+              {cardSelecionado.cliente_id && (
+                <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="text-xs text-brand-navy hover:underline">
+                  Ver histórico e negociação no CRM
+                </Link>
               )}
               <div className="flex flex-wrap gap-1.5">
                 {cardSelecionado.tipo_medida && (
