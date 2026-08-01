@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FileText, Camera, ArrowRight, History, BarChart3, Users, Columns3, Settings, LogOut } from 'lucide-react'
+import { FileText, Wrench, ArrowRight, History, BarChart3, Users, Columns3, Settings, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual, logout } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
@@ -45,6 +45,10 @@ export default function Home() {
               <History size={16} />
               Histórico
             </Link>
+            <Link href="/assistencias" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
+              <Wrench size={16} />
+              Assistências
+            </Link>
             <Link href="/dashboard" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
               <BarChart3 size={16} />
               Dashboard
@@ -69,10 +73,10 @@ export default function Home() {
 
       <main className="max-w-5xl mx-auto px-4 py-12">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-slate-800 mb-3">Como deseja orçar?</h2>
+          <h2 className="text-3xl font-bold text-slate-800 mb-3">O que você precisa?</h2>
           <p className="text-slate-500 max-w-lg mx-auto">
-            Escolha o modo rápido para orçamentos simples ou o modo detalhado
-            para medições completas com fotos e cálculos precisos.
+            Faça um orçamento novo ou registre um chamado de assistência técnica
+            para um cliente que já comprou.
           </p>
         </div>
 
@@ -83,41 +87,39 @@ export default function Home() {
             <div className="w-14 h-14 bg-brand-navyLight rounded-xl flex items-center justify-center mb-5 group-hover:bg-brand-navy transition-colors">
               <FileText size={28} className="text-brand-navy group-hover:text-white transition-colors" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">Orçamento Rápido</h3>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">Orçamento</h3>
             <p className="text-slate-500 text-sm mb-4">
-              Informe o tipo de esquadria e medidas. Ideal para respostas rápidas
-              no WhatsApp ou atendimento presencial.
+              Registre um pedido novo. Dentro você escolhe entre descrever em texto
+              (rápido) ou preencher o formulário completo (detalhado).
             </p>
             <ul className="text-sm text-slate-600 space-y-1.5 mb-6">
-              <li className="flex items-center gap-2">Tipo + medidas básicas</li>
-              <li className="flex items-center gap-2">Acabamento e cor</li>
-              <li className="flex items-center gap-2">Cálculo automático</li>
-              <li className="flex items-center gap-2">Texto livre para descrever</li>
+              <li className="flex items-center gap-2">Rápido: descreva em texto</li>
+              <li className="flex items-center gap-2">Detalhado: tipo, medidas, acabamento e fotos</li>
+              <li className="flex items-center gap-2">Vai direto pro painel de orçamentos</li>
             </ul>
             <div className="flex items-center text-brand-navy font-medium group-hover:gap-2 transition-all">
-              Fazer orçamento rápido <ArrowRight size={16} className="ml-1" />
+              Fazer orçamento <ArrowRight size={16} className="ml-1" />
             </div>
           </Link>
 
-          <Link href="/orcamento-detalhado"
+          <Link href="/assistencia"
             className="group bg-white rounded-2xl border-2 border-brand-tealLight hover:border-brand-teal
                        p-8 transition-all hover:shadow-lg hover:-translate-y-1">
             <div className="w-14 h-14 bg-brand-tealLight rounded-xl flex items-center justify-center mb-5 group-hover:bg-brand-teal transition-colors">
-              <Camera size={28} className="text-brand-teal group-hover:text-white transition-colors" />
+              <Wrench size={28} className="text-brand-teal group-hover:text-white transition-colors" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">Orçamento Detalhado</h3>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">Assistência Técnica</h3>
             <p className="text-slate-500 text-sm mb-4">
-              Com fotos do local, medidas da trena e cálculos completos.
-              Perfeito para obras e projetos complexos.
+              Para cliente que já comprou e está com algum problema ou precisa
+              de manutenção em obra já entregue.
             </p>
             <ul className="text-sm text-slate-600 space-y-1.5 mb-6">
-              <li className="flex items-center gap-2">Upload de fotos do local</li>
-              <li className="flex items-center gap-2">Múltiplas medidas da trena</li>
-              <li className="flex items-center gap-2">Detalhamento de perfis e vidros</li>
-              <li className="flex items-center gap-2">Margem de lucro por item</li>
+              <li className="flex items-center gap-2">Endereço e descrição do problema</li>
+              <li className="flex items-center gap-2">Fotos do problema</li>
+              <li className="flex items-center gap-2">Acompanhamento até resolver</li>
             </ul>
             <div className="flex items-center text-brand-teal font-medium group-hover:gap-2 transition-all">
-              Fazer orçamento detalhado <ArrowRight size={16} className="ml-1" />
+              Abrir assistência <ArrowRight size={16} className="ml-1" />
             </div>
           </Link>
         </div>
