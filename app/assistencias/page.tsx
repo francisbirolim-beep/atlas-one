@@ -1,72 +1,142 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Search, Wrench, ChevronDown, ChevronUp, Phone, MapPin } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { Assistencia, StatusAssistencia } from '@/lib/tipos'
-
-const statusLabels: Record<StatusAssistencia, string> = {
-  aberto: 'Aberto',
-  em_atendimento: 'Em atendimento',
-  resolvido: 'Resolvido',
-}
-
-const statusColors: Record<StatusAssistencia, string> = {
-  aberto: 'bg-red-100 text-red-600',
-  em_atendimento: 'bg-amber-100 text-amber-700',
-  resolvido: 'bg-brand-tealLight text-brand-teal',
-}
+import { AssistenciaColuna, Assistencia } from '@/lib/tipos'
+import {
+  listarColunasAssistencia,
+  criarColunaAssistencia,
+  renomearColunaAssistencia,
+  excluirColunaAssistencia,
+  moverCardAssistencia,
+  excluirAssistencia,
+} from '@/lib/assistenciaKanban'
+import { usuarioAtual } from '@/lib/auth'
+import { Usuario } from '@/lib/tipos'
 
 export default function Assistencias() {
-  const [lista, setLista] = useState<Assistencia[]>([])
-  const [busca, setBusca] = useState('')
-  const [filtroStatus, setFiltroStatus] = useState<StatusAssistencia | 'todos'>('todos')
-  const [expandido, setExpandido] = useState<string | null>(null)
+  const [colunas, setColunas] = useState<AssistenciaColuna[]>([])
+  const [cards, setCards] = useState<Assistencia[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [atualizando, setAtualizando] = useState<string | null>(null)
+  const [selecionado, setSelecionado] = useState<Assistencia | null>(null)
+  const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [busca, setBusca] = useState('')
 
   useEffect(() => {
     carregar()
+    usuarioAtual().then(setUsuario)
   }, [])
 
   async function carregar() {
     setCarregando(true)
-    const { data } = await supabase
-      .from('assistencias')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (data) setLista(data as Assistencia[])
+    const [cols, { data }] = await Promise.all([
+      listarColunasAssistencia(),
+      supabase.from('assistencias').select('*').order('created_at', { ascending: false }),
+    ])
+    setColunas(cols)
+    if (data) setCards(data as Assistencia[])
     setCarregando(false)
   }
 
-  async function mudarStatus(id: string, status: StatusAssistencia) {
-    setAtualizando(id)
-    await supabase
-      .from('assistencias')
-      .update({ status, atualizado_em: new Date().toISOString() })
-      .eq('id', id)
-    setLista(prev => prev.map(a => (a.id === id ? { ...a, status } : a)))
-    setAtualizando(null)
+  function passaFiltro(c: Assistencia): boolean {
+    if (!busca.trim()) return true
+    const alvo = busca.trim().toLowerCase()
+    return (
+      (c.cliente_nome || '').toLowerCase().includes(alvo) ||
+      (c.cidade || '').toLowerCase().includes(alvo) ||
+      (c.endereco || '').toLowerCase().includes(alvo) ||
+      (c.bairro || '').toLowerCase().includes(alvo) ||
+      (c.descricao_problema || '').toLowerCase().includes(alvo) ||
+      (c.criado_por_nome || '').toLowerCase().includes(alvo)
+    )
   }
 
-  const filtrados = lista.filter(a => {
-    const alvo = `${a.cliente_nome} ${a.cidade || ''} ${a.endereco || ''} ${a.numero || ''} ${a.bairro || ''} ${a.descricao_problema} ${a.criado_por_nome || ''}`.toLowerCase()
-    const matchBusca = !busca || alvo.includes(busca.toLowerCase())
-    const matchStatus = filtroStatus === 'todos' || a.status === filtroStatus
-    return matchBusca && matchStatus
-  })
+  function cardsDaColuna(colunaId: string, index: number) {
+    return cards
+      .filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
+      .filter(passaFiltro)
+  }
 
   function enderecoCompleto(a: Assistencia): string {
     const partes = [a.endereco, a.numero, a.bairro].filter(Boolean)
     return partes.join(', ')
   }
 
+  async function handleDrop(e: React.DragEvent, colunaId: string) {
+    e.preventDefault()
+    setColunaArrastando(null)
+    const cardId = e.dataTransfer.getData('text/plain')
+    if (!cardId) return
+    setCards(prev =>
+      prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() } : c))
+    )
+    await moverCardAssistencia(cardId, colunaId)
+  }
+
+  async function novaColuna() {
+    const nome = window.prompt('Nome da nova etapa:')
+    if (!nome || !nome.trim()) return
+    const col = await criarColunaAssistencia(nome.trim())
+    if (col) setColunas(prev => [...prev, col])
+  }
+
+  async function editarColuna(col: AssistenciaColuna) {
+    const novoNome = window.prompt('Renomear etapa:', col.nome)
+    if (!novoNome || !novoNome.trim() || novoNome === col.nome) return
+    const ok = await renomearColunaAssistencia(col.id, novoNome.trim())
+    if (ok) setColunas(prev => prev.map(c => (c.id === col.id ? { ...c, nome: novoNome.trim() } : c)))
+  }
+
+  async function apagarColuna(col: AssistenciaColuna) {
+    if (colunas.length <= 1) {
+      alert('Precisa ter pelo menos uma etapa.')
+      return
+    }
+    const outras = colunas.filter(c => c.id !== col.id)
+    const destino = outras[0]
+    const qtd = cards.filter(c => (c.coluna_id || colunas[0]?.id) === col.id).length
+    const msg = qtd > 0
+      ? `Essa etapa tem ${qtd} chamado(s). Eles vão pra etapa "${destino.nome}". Apagar mesmo assim?`
+      : `Apagar a etapa "${col.nome}"?`
+    if (!window.confirm(msg)) return
+
+    const ok = await excluirColunaAssistencia(col.id, destino.id)
+    if (ok) {
+      setColunas(prev => prev.filter(c => c.id !== col.id))
+      setCards(prev => prev.map(c => (c.coluna_id === col.id ? { ...c, coluna_id: destino.id } : c)))
+    }
+  }
+
+  async function mudarColunaSelecionado(colunaId: string) {
+    if (!selecionado) return
+    setCards(prev =>
+      prev.map(c => (c.id === selecionado.id ? { ...c, coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() } : c))
+    )
+    setSelecionado(prev => (prev ? { ...prev, coluna_id: colunaId } : prev))
+    await moverCardAssistencia(selecionado.id, colunaId)
+  }
+
+  async function excluirSelecionado() {
+    if (!selecionado) return
+    if (!window.confirm(`Excluir o chamado de ${selecionado.cliente_nome}? Essa ação não pode ser desfeita.`)) return
+    const ok = await excluirAssistencia(selecionado.id)
+    if (ok) {
+      setCards(prev => prev.filter(c => c.id !== selecionado.id))
+      setSelecionado(null)
+    }
+  }
+
+  if (carregando) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
@@ -74,125 +144,164 @@ export default function Assistencias() {
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Assistências Técnicas</h1>
-            <p className="text-sm text-slate-500">{lista.length} chamados registrados</p>
+            <p className="text-sm text-slate-500">Arraste os cards entre as etapas</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6">
-        <div className="flex gap-3 mb-6 flex-wrap">
-          <div className="flex-1 min-w-[200px] relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar por cliente, cidade, endereço..."
-              className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm"
-            />
-          </div>
-          <select
-            value={filtroStatus}
-            onChange={e => setFiltroStatus(e.target.value as StatusAssistencia | 'todos')}
-            className="border border-slate-300 rounded-xl px-4 py-2.5 text-sm"
-          >
-            <option value="todos">Todos os status</option>
-            <option value="aberto">Aberto</option>
-            <option value="em_atendimento">Em atendimento</option>
-            <option value="resolvido">Resolvido</option>
-          </select>
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="relative mb-4 max-w-md">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por cliente, cidade, endereço..."
+            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
+          />
         </div>
 
-        {carregando ? (
-          <div className="text-center py-12 text-slate-400">Carregando...</div>
-        ) : filtrados.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 flex flex-col items-center gap-2">
-            <Wrench size={28} className="text-slate-300" />
-            Nenhuma assistência encontrada
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filtrados.map(a => {
-              const aberto = expandido === a.id
-              return (
-                <div key={a.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                  <button
-                    onClick={() => setExpandido(aberto ? null : a.id)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition text-left"
-                  >
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="p-2 bg-brand-tealLight rounded-lg shrink-0">
-                        <Wrench size={18} className="text-brand-teal" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-800 truncate">{a.cliente_nome}</p>
-                        <p className="text-sm text-slate-500 truncate">
-                          {a.cidade ? `${a.cidade} — ` : ''}{new Date(a.created_at).toLocaleDateString('pt-BR')}
-                          {a.criado_por_nome ? ` — por ${a.criado_por_nome}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[a.status]}`}>
-                        {statusLabels[a.status]}
-                      </span>
-                      {aberto ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
-                    </div>
-                  </button>
-
-                  {aberto && (
-                    <div className="border-t border-slate-100 p-4 space-y-4">
-                      <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-                        {a.cliente_whatsapp && (
-                          <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> {a.cliente_whatsapp}</span>
-                        )}
-                        {enderecoCompleto(a) && (
-                          <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {enderecoCompleto(a)}</span>
-                        )}
-                        {a.criado_por_nome && (
-                          <span className="text-slate-400">Registrado por <span className="font-medium text-slate-600">{a.criado_por_nome}</span></span>
-                        )}
-                      </div>
-
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
-                        {a.descricao_problema}
-                      </p>
-
-                      {a.fotos_urls && a.fotos_urls.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {a.fotos_urls.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={url} alt="Foto do problema" className="w-20 h-20 object-cover rounded-lg border border-slate-200" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        {(['aberto', 'em_atendimento', 'resolvido'] as StatusAssistencia[]).map(s => (
-                          <button
-                            key={s}
-                            onClick={() => mudarStatus(a.id, s)}
-                            disabled={atualizando === a.id}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition disabled:opacity-50 ${
-                              a.status === s
-                                ? 'border-brand-teal bg-brand-tealLight text-brand-teal'
-                                : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                            }`}
-                          >
-                            {statusLabels[s]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {colunas.map((col, index) => {
+            const cardsColuna = cardsDaColuna(col.id, index)
+            return (
+              <div
+                key={col.id}
+                onDragOver={e => { e.preventDefault(); setColunaArrastando(col.id) }}
+                onDragLeave={() => setColunaArrastando(null)}
+                onDrop={e => handleDrop(e, col.id)}
+                className={`flex-shrink-0 w-72 bg-slate-100 rounded-2xl p-3 transition ${
+                  colunaArrastando === col.id ? 'ring-2 ring-brand-navy bg-brand-navyLight' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-slate-700 text-sm">{col.nome}</h3>
+                    <span className="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">
+                      {cardsColuna.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => editarColuna(col)} className="p-1 text-slate-400 hover:text-slate-600">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => apagarColuna(col)} className="p-1 text-slate-400 hover:text-red-500">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
+
+                <div className="space-y-2 min-h-[80px]">
+                  {cardsColuna.map(card => (
+                    <div
+                      key={card.id}
+                      draggable
+                      onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
+                      onClick={() => setSelecionado(card)}
+                      className="rounded-xl border-2 border-slate-200 bg-white p-3 cursor-pointer hover:shadow-md transition"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="p-1 rounded bg-brand-tealLight">
+                          <Wrench size={12} className="text-brand-teal" />
+                        </div>
+                        <p className="font-medium text-sm truncate flex-1 text-slate-800">{card.cliente_nome}</p>
+                      </div>
+                      <p className="text-xs mb-1 text-slate-500 truncate">
+                        {card.cidade ? `${card.cidade} — ` : ''}
+                        {new Date(card.created_at).toLocaleDateString('pt-BR')}
+                      </p>
+                      <p className="text-xs line-clamp-2 text-slate-400">{card.descricao_problema}</p>
+                      {card.criado_por_nome && (
+                        <p className="text-xs flex items-center gap-1 mt-1 text-slate-400">
+                          <User size={11} /> {card.criado_por_nome}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          <button
+            onClick={novaColuna}
+            className="flex-shrink-0 w-72 h-12 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-brand-navy hover:text-brand-navy transition"
+          >
+            <Plus size={16} /> Nova etapa
+          </button>
+        </div>
       </main>
+
+      {selecionado && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
+              <h3 className="font-bold text-slate-800">Chamado de assistência</h3>
+              <button onClick={() => setSelecionado(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
+                <p className="text-lg font-bold text-slate-800">{selecionado.cliente_nome}</p>
+              </div>
+
+              <div className="flex flex-wrap gap-4 text-sm text-slate-600">
+                {selecionado.cliente_whatsapp && (
+                  <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> {selecionado.cliente_whatsapp}</span>
+                )}
+                {enderecoCompleto(selecionado) && (
+                  <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {enderecoCompleto(selecionado)}</span>
+                )}
+              </div>
+              {selecionado.criado_por_nome && (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <User size={13} /> Registrado por {selecionado.criado_por_nome}
+                </p>
+              )}
+
+              <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">
+                {selecionado.descricao_problema}
+              </p>
+
+              {selecionado.fotos_urls && selecionado.fotos_urls.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selecionado.fotos_urls.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="Foto do problema" className="w-20 h-20 object-cover rounded-lg border border-slate-200" />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Etapa</label>
+                <select
+                  value={selecionado.coluna_id || colunas[0]?.id || ''}
+                  onChange={e => mudarColunaSelecionado(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                >
+                  {colunas.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              {usuario?.role === 'master' && (
+                <button
+                  onClick={excluirSelecionado}
+                  className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
+                >
+                  <Trash2 size={13} /> Excluir este chamado
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
