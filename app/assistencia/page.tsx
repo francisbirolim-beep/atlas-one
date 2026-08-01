@@ -1,12 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Camera, X } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff } from 'lucide-react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { obterOuCriarCliente } from '@/lib/clientes'
-import { uploadFoto } from '@/lib/upload'
-import { usuarioAtual } from '@/lib/auth'
+import { criarAssistenciaNoServidor, DadosAssistenciaForm } from '@/lib/assistencias'
+import { salvarPendente } from '@/lib/offlineFila'
 import { v4 as uuidv4 } from 'uuid'
 
 interface FotoItem {
@@ -26,6 +24,7 @@ export default function Assistencia() {
   const [fotos, setFotos] = useState<FotoItem[]>([])
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  const [salvoOffline, setSalvoOffline] = useState(false)
   const [erro, setErro] = useState('')
 
   function adicionarFotos(files: FileList | null) {
@@ -42,6 +41,17 @@ export default function Assistencia() {
     setFotos(prev => prev.filter(f => f.id !== id))
   }
 
+  async function salvarComoPendente(dadosForm: DadosAssistenciaForm) {
+    await salvarPendente({
+      id: uuidv4(),
+      tipo: 'assistencia',
+      criadoEm: new Date().toISOString(),
+      dados: dadosForm,
+    })
+    setSalvando(false)
+    setSalvoOffline(true)
+  }
+
   async function salvar() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!descricao.trim()) { setErro('Descreva o problema'); return }
@@ -49,42 +59,35 @@ export default function Assistencia() {
     setErro('')
     setSalvando(true)
 
-    const [clienteId, usuario] = await Promise.all([
-      obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade }),
-      usuarioAtual(),
-    ])
-
-    const fotosUrls: string[] = []
-    for (const f of fotos) {
-      const url = await uploadFoto(f.file)
-      if (url) fotosUrls.push(url)
+    const dadosForm: DadosAssistenciaForm = {
+      clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao,
+      fotos: fotos.map(f => f.file),
     }
 
-    const { error } = await supabase.from('assistencias').insert({
-      cliente_id: clienteId,
-      cliente_nome: clienteNome,
-      cliente_whatsapp: clienteWhatsapp || null,
-      cidade: cidade || null,
-      endereco: endereco || null,
-      numero: numero || null,
-      bairro: bairro || null,
-      descricao_problema: descricao,
-      fotos_urls: fotosUrls,
-      status: 'aberto',
-      criado_por_nome: usuario?.nome || null,
-      criado_por_id: usuario?.id || null,
-    })
+    const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
 
-    setSalvando(false)
-    if (error) {
-      setErro('Erro ao salvar: ' + error.message)
-    } else {
-      setSalvo(true)
+    if (semInternet) {
+      await salvarComoPendente(dadosForm)
+      return
+    }
+
+    try {
+      const resultado = await criarAssistenciaNoServidor(dadosForm)
+      setSalvando(false)
+      if (resultado.ok) {
+        setSalvo(true)
+      } else {
+        setErro('Erro ao salvar: ' + resultado.error)
+      }
+    } catch (e) {
+      // Internet caiu bem na hora de enviar: salva local e envia depois.
+      await salvarComoPendente(dadosForm)
     }
   }
 
   function resetar() {
     setSalvo(false)
+    setSalvoOffline(false)
     setErro('')
     setClienteNome('')
     setClienteWhatsapp('')
@@ -94,6 +97,25 @@ export default function Assistencia() {
     setBairro('')
     setDescricao('')
     setFotos([])
+  }
+
+  if (salvoOffline) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
+          <WifiOff size={48} className="text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Salvo neste aparelho!</h2>
+          <p className="text-slate-500 mb-6">
+            Sem internet agora. O chamado de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar — não precisa reenviar.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">
+              Nova assistência
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (salvo) {
