@@ -1,12 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
-import { Usuario, KanbanColuna } from '@/lib/tipos'
+import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM } from '@/lib/setores'
+import { Usuario, KanbanColuna, Setor, NivelPermissao } from '@/lib/tipos'
+
+const nivelLabel: Record<NivelPermissao, string> = {
+  oculto: 'Oculto',
+  consulta: 'Só consulta',
+  edicao: 'Consulta e edição',
+}
 
 export default function Configuracoes() {
   const [carregando, setCarregando] = useState(true)
@@ -27,6 +34,12 @@ export default function Configuracoes() {
   const [whatsappEdit, setWhatsappEdit] = useState<Record<string, string>>({})
   const [salvandoWhatsapp, setSalvandoWhatsapp] = useState<string | null>(null)
 
+  const [setores, setSetores] = useState<Setor[]>([])
+  const [permissoesExpandido, setPermissoesExpandido] = useState<string | null>(null)
+  const [permissoesPorUsuario, setPermissoesPorUsuario] = useState<Record<string, Record<string, NivelPermissao>>>({})
+  const [salvandoPermissoes, setSalvandoPermissoes] = useState<string | null>(null)
+  const [permissoesCarregando, setPermissoesCarregando] = useState<string | null>(null)
+
   useEffect(() => {
     carregar()
   }, [])
@@ -37,10 +50,12 @@ export default function Configuracoes() {
     setEuSouMaster(me?.role === 'master')
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols] = await Promise.all([
+      const [{ data: users }, cols, listaSetores] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
+        listarSetores(),
       ])
+      setSetores(listaSetores)
       const listaUsuarios = (users as Usuario[]) || []
       setUsuarios(listaUsuarios)
       const whatsInicial: Record<string, string> = {}
@@ -110,6 +125,33 @@ export default function Configuracoes() {
     if (resp.ok) {
       setUsuarios(prev => prev.map(u => (u.id === id ? { ...u, whatsapp: whatsapp || null } : u)))
     }
+  }
+
+  async function alternarPermissoes(usuarioId: string) {
+    if (permissoesExpandido === usuarioId) {
+      setPermissoesExpandido(null)
+      return
+    }
+    setPermissoesExpandido(usuarioId)
+    if (!permissoesPorUsuario[usuarioId]) {
+      setPermissoesCarregando(usuarioId)
+      const mapa = await listarPermissoesUsuario(usuarioId)
+      setPermissoesPorUsuario(prev => ({ ...prev, [usuarioId]: mapa }))
+      setPermissoesCarregando(null)
+    }
+  }
+
+  function mudarNivel(usuarioId: string, setorId: string, nivel: NivelPermissao) {
+    setPermissoesPorUsuario(prev => ({
+      ...prev,
+      [usuarioId]: { ...(prev[usuarioId] || {}), [setorId]: nivel },
+    }))
+  }
+
+  async function salvarPermissoes(usuarioId: string) {
+    setSalvandoPermissoes(usuarioId)
+    await salvarPermissoesUsuario(usuarioId, permissoesPorUsuario[usuarioId] || {})
+    setSalvandoPermissoes(null)
   }
 
   async function salvarSla(colunaId: string) {
@@ -203,6 +245,65 @@ export default function Configuracoes() {
                     {salvandoWhatsapp === u.id ? 'Salvando...' : 'Salvar'}
                   </button>
                 </div>
+
+                {u.role !== 'master' && (
+                  <div>
+                    <button
+                      onClick={() => alternarPermissoes(u.id)}
+                      className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
+                    >
+                      <LayoutGrid size={13} />
+                      Permissões por setor
+                      {permissoesExpandido === u.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    </button>
+
+                    {permissoesExpandido === u.id && (
+                      <div className="mt-2 border border-slate-100 rounded-lg p-3 space-y-4">
+                        {permissoesCarregando === u.id ? (
+                          <p className="text-xs text-slate-400">Carregando permissões...</p>
+                        ) : (
+                          <>
+                            {GRUPOS_ORDEM.map(grupo => {
+                              const itens = agruparSetores(setores)[grupo] || []
+                              if (itens.length === 0) return null
+                              return (
+                                <div key={grupo}>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{grupo}</p>
+                                  <div className="space-y-1.5">
+                                    {itens.map(setor => {
+                                      const nivelAtual = permissoesPorUsuario[u.id]?.[setor.id] || 'oculto'
+                                      return (
+                                        <div key={setor.id} className="flex items-center justify-between gap-2">
+                                          <span className="text-xs text-slate-600 flex-1">{setor.nome}</span>
+                                          <select
+                                            value={nivelAtual}
+                                            onChange={e => mudarNivel(u.id, setor.id, e.target.value as NivelPermissao)}
+                                            className="border border-slate-200 rounded-lg px-2 py-1 text-xs"
+                                          >
+                                            <option value="oculto">{nivelLabel.oculto}</option>
+                                            <option value="consulta">{nivelLabel.consulta}</option>
+                                            <option value="edicao">{nivelLabel.edicao}</option>
+                                          </select>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            <button
+                              onClick={() => salvarPermissoes(u.id)}
+                              disabled={salvandoPermissoes === u.id}
+                              className="w-full py-2 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                            >
+                              {salvandoPermissoes === u.id ? 'Salvando...' : 'Salvar permissões'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
