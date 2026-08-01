@@ -129,6 +129,11 @@ export interface OrcamentoRapido {
   tipo_medida?: 'comum' | 'final' | null
   temperatura?: TemperaturaLead | null
   motivo_perda?: string | null
+  // Card espelho de um chamado de assistencia (aparece na 1a coluna so pra
+  // avisar o time; some sozinho quando o chamado sai da 1a coluna do kanban
+  // de assistencia).
+  eh_assistencia?: boolean
+  assistencia_id?: string | null
 }
 
 // CRM: tarefas, interações/negociações e metas comerciais
@@ -214,6 +219,14 @@ export interface ItemVidro {
 
 export type StatusAssistencia = 'aberto' | 'em_atendimento' | 'resolvido'
 
+export interface AssistenciaColuna {
+  id: string
+  nome: string
+  ordem: number
+  cor_cards?: string | null
+  created_at?: string
+}
+
 export interface Assistencia {
   id: string
   created_at: string
@@ -230,6 +243,8 @@ export interface Assistencia {
   criado_por_nome?: string | null
   criado_por_id?: string | null
   atualizado_em?: string | null
+  coluna_id?: string | null
+  coluna_atualizada_em?: string | null
 }
 
 export type GrupoSetor =
