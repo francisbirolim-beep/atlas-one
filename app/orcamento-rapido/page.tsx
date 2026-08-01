@@ -53,7 +53,7 @@ function novoItem(): ItemForm {
 }
 
 export default function OrcamentoRapido() {
-  const [modo, setModo] = useState<ModoEntrada>('formulario')
+  const [modo, setModo] = useState<ModoEntrada>('texto_livre')
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [textosLivres, setTextosLivres] = useState<string[]>([''])
   const [clienteNome, setClienteNome] = useState('')
@@ -233,7 +233,7 @@ export default function OrcamentoRapido() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Orçamento Rápido</h1>
+            <h1 className="text-lg font-bold text-slate-800">Orçamento</h1>
             <p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p>
           </div>
         </div>
@@ -358,20 +358,20 @@ export default function OrcamentoRapido() {
 
         <div className="flex gap-2 bg-white rounded-xl p-1 border border-slate-200">
           <button
-            onClick={() => setModo('formulario')}
-            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
-              modo === 'formulario' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Formulário rápido
-          </button>
-          <button
             onClick={() => setModo('texto_livre')}
             className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
               modo === 'texto_livre' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Descrever em texto
+            Rápido (descrever em texto)
+          </button>
+          <button
+            onClick={() => setModo('formulario')}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
+              modo === 'formulario' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Detalhado (formulário completo)
           </button>
         </div>
 
