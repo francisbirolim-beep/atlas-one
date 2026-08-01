@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
 import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM } from '@/lib/setores'
-import { Usuario, KanbanColuna, Setor, NivelPermissao } from '@/lib/tipos'
+import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -34,6 +35,10 @@ export default function Configuracoes() {
   const [whatsappEdit, setWhatsappEdit] = useState<Record<string, string>>({})
   const [salvandoWhatsapp, setSalvandoWhatsapp] = useState<string | null>(null)
 
+  const [metas, setMetas] = useState<Record<string, { valor: string; quantidade: string }>>({})
+  const [salvandoMeta, setSalvandoMeta] = useState<string | null>(null)
+  const mesMetaAtual = mesAtual()
+
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoesExpandido, setPermissoesExpandido] = useState<string | null>(null)
   const [permissoesPorUsuario, setPermissoesPorUsuario] = useState<Record<string, Record<string, NivelPermissao>>>({})
@@ -50,14 +55,25 @@ export default function Configuracoes() {
     setEuSouMaster(me?.role === 'master')
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaSetores] = await Promise.all([
+      const [{ data: users }, cols, listaSetores, listaMetas] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
         listarSetores(),
+        listarMetas(mesMetaAtual),
       ])
       setSetores(listaSetores)
       const listaUsuarios = (users as Usuario[]) || []
       setUsuarios(listaUsuarios)
+
+      const metasIniciais: Record<string, { valor: string; quantidade: string }> = {}
+      listaMetas.forEach((m: Meta) => {
+        const chave = m.usuario_id || 'geral'
+        metasIniciais[chave] = {
+          valor: m.meta_valor != null ? String(m.meta_valor) : '',
+          quantidade: m.meta_quantidade != null ? String(m.meta_quantidade) : '',
+        }
+      })
+      setMetas(metasIniciais)
       const whatsInicial: Record<string, string> = {}
       listaUsuarios.forEach(u => { whatsInicial[u.id] = u.whatsapp || '' })
       setWhatsappEdit(whatsInicial)
@@ -152,6 +168,16 @@ export default function Configuracoes() {
     setSalvandoPermissoes(usuarioId)
     await salvarPermissoesUsuario(usuarioId, permissoesPorUsuario[usuarioId] || {})
     setSalvandoPermissoes(null)
+  }
+
+  async function salvarMetaUsuario(usuarioId: string | null, usuarioNome: string | null) {
+    const chave = usuarioId || 'geral'
+    setSalvandoMeta(chave)
+    const valores = metas[chave] || { valor: '', quantidade: '' }
+    const metaValor = valores.valor.trim() ? parseFloat(valores.valor) : null
+    const metaQuantidade = valores.quantidade.trim() ? parseInt(valores.quantidade) : null
+    await salvarMeta(mesMetaAtual, usuarioId, usuarioNome, metaValor, metaQuantidade)
+    setSalvandoMeta(null)
   }
 
   async function salvarSla(colunaId: string) {
@@ -462,6 +488,84 @@ export default function Configuracoes() {
                   className="text-xs text-brand-navy hover:underline"
                 >
                   Salvar configurações dessa coluna
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+            <Target size={16} /> Metas comerciais do mês
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            Meta de {new Date(mesMetaAtual + '-01T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}. Vale como valor fechado (aprovado/convertido) e/ou quantidade de negócios fechados no mês. Aparece como progresso no CRM.
+          </p>
+          <div className="space-y-2">
+            <div className="border border-slate-100 rounded-xl p-3">
+              <p className="text-sm font-medium text-slate-700 mb-2">Empresa toda</p>
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Meta em R$</label>
+                  <input
+                    type="number"
+                    value={metas.geral?.valor ?? ''}
+                    onChange={e => setMetas(prev => ({ ...prev, geral: { ...(prev.geral || { valor: '', quantidade: '' }), valor: e.target.value } }))}
+                    placeholder="Ex: 50000"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Meta em quantidade</label>
+                  <input
+                    type="number"
+                    value={metas.geral?.quantidade ?? ''}
+                    onChange={e => setMetas(prev => ({ ...prev, geral: { ...(prev.geral || { valor: '', quantidade: '' }), quantidade: e.target.value } }))}
+                    placeholder="Ex: 10"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => salvarMetaUsuario(null, null)}
+                disabled={salvandoMeta === 'geral'}
+                className="text-xs text-brand-navy hover:underline"
+              >
+                {salvandoMeta === 'geral' ? 'Salvando...' : 'Salvar meta da empresa'}
+              </button>
+            </div>
+
+            {usuarios.map(u => (
+              <div key={u.id} className="border border-slate-100 rounded-xl p-3">
+                <p className="text-sm font-medium text-slate-700 mb-2">{u.nome}</p>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Meta em R$</label>
+                    <input
+                      type="number"
+                      value={metas[u.id]?.valor ?? ''}
+                      onChange={e => setMetas(prev => ({ ...prev, [u.id]: { ...(prev[u.id] || { valor: '', quantidade: '' }), valor: e.target.value } }))}
+                      placeholder="Ex: 15000"
+                      className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Meta em quantidade</label>
+                    <input
+                      type="number"
+                      value={metas[u.id]?.quantidade ?? ''}
+                      onChange={e => setMetas(prev => ({ ...prev, [u.id]: { ...(prev[u.id] || { valor: '', quantidade: '' }), quantidade: e.target.value } }))}
+                      placeholder="Ex: 3"
+                      className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => salvarMetaUsuario(u.id, u.nome)}
+                  disabled={salvandoMeta === u.id}
+                  className="text-xs text-brand-navy hover:underline"
+                >
+                  {salvandoMeta === u.id ? 'Salvando...' : 'Salvar meta'}
                 </button>
               </div>
             ))}
