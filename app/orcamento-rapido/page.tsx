@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X } from 'lucide-react'
 import Link from 'next/link'
-import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria } from '@/lib/tipos'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead } from '@/lib/tipos'
 import { supabase } from '@/lib/supabase'
 import { obterOuCriarCliente } from '@/lib/clientes'
 import { primeiraColunaId } from '@/lib/kanban'
@@ -69,6 +69,7 @@ export default function OrcamentoRapido() {
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
+  const [temperatura, setTemperatura] = useState<TemperaturaLead | ''>('')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
   const [acabamentoOutroTexto, setAcabamentoOutroTexto] = useState('')
   const [contramarco, setContramarco] = useState<Contramarco | ''>('')
@@ -103,6 +104,7 @@ export default function OrcamentoRapido() {
   async function salvar() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
+    if (!temperatura) { setErro('Selecione a temperatura do orçamento (quente, morno ou frio)'); return }
     if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
     if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual é a cor'); return }
     if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
@@ -212,6 +214,7 @@ export default function OrcamentoRapido() {
       quantidade: primeiro?.quantidade || 1,
       acabamento,
       acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
+      temperatura,
       contramarco,
       itens: itensSalvos,
       tipo_medida: modo === 'formulario' ? tipoMedida : null,
@@ -244,6 +247,7 @@ export default function OrcamentoRapido() {
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
+    setTemperatura('')
     setAcabamento('')
     setAcabamentoOutroTexto('')
     setContramarco('')
@@ -332,6 +336,43 @@ export default function OrcamentoRapido() {
               <option value="passou_na_frente">Passou em frente</option>
               <option value="outros">Outros</option>
             </select>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label>
+          <p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={() => setTemperatura('quente')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                temperatura === 'quente'
+                  ? 'border-red-500 bg-red-50 text-red-600 font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              🔥 Quente
+            </button>
+            <button
+              onClick={() => setTemperatura('morno')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                temperatura === 'morno'
+                  ? 'border-amber-500 bg-amber-50 text-amber-600 font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              🌤️ Morno
+            </button>
+            <button
+              onClick={() => setTemperatura('frio')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                temperatura === 'frio'
+                  ? 'border-blue-500 bg-blue-50 text-blue-600 font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              ❄️ Frio
+            </button>
           </div>
         </div>
 
