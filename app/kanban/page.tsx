@@ -383,10 +383,6 @@ export default function Kanban() {
 
   async function finalizarOrcamento() {
     if (!cardSelecionado || !editando) return
-    if (!editando.anexos || editando.anexos.length === 0) {
-      alert('Anexe pelo menos um arquivo do orçamento (com título) antes de finalizar.')
-      return
-    }
     if (editando.valor_estimado == null) {
       alert('Informe o valor total do orçamento antes de finalizar.')
       return
@@ -1146,8 +1142,6 @@ export default function Kanban() {
                       onClick={finalizarOrcamento}
                       disabled={
                         salvando ||
-                        !editando.anexos ||
-                        editando.anexos.length === 0 ||
                         editando.valor_estimado == null ||
                         !whatsappVendedor.trim()
                       }
