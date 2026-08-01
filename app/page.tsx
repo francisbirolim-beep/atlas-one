@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FileText, Wrench, ArrowRight, History, BarChart3, Users, Columns3, Settings, LogOut } from 'lucide-react'
+import { FileText, Wrench, ArrowRight, History, BarChart3, Users, Columns3, Settings, LogOut, LayoutGrid } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual, logout } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
@@ -33,6 +33,10 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/setores" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
+              <LayoutGrid size={16} />
+              Setores
+            </Link>
             <Link href="/clientes" className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
               <Users size={16} />
               Clientes
