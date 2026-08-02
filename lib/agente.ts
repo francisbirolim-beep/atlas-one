@@ -1,7 +1,7 @@
 import { supabaseAdmin } from './supabaseAdmin'
 import { gerarProximasOcorrencias } from './recorrencia'
 
-export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento']
+export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'propor_editar_arquivo_codigo']
 
 export const TOOLS = [
   {
@@ -104,7 +104,40 @@ export const TOOLS = [
   },
 ]
 
-export async function executarFerramenta(nome: string, input: any, usuarioId: string): Promise<any> {
+export const MASTER_TOOLS = [
+  {
+    name: 'ler_arquivo_codigo',
+    description: 'Somente para o usuario master. Le o conteudo de um arquivo do codigo-fonte do sistema Atlas One (repositorio no GitHub). Use para entender o codigo antes de propor uma alteracao.',
+    input_schema: {
+      type: 'object',
+      properties: { caminho: { type: 'string', description: 'Caminho do arquivo no repositorio, ex: lib/agente.ts' } },
+      required: ['caminho'],
+    },
+  },
+  {
+    name: 'listar_arquivos_codigo',
+    description: 'Somente para o usuario master. Lista arquivos e pastas dentro de um diretorio do repositorio do Atlas One.',
+    input_schema: {
+      type: 'object',
+      properties: { caminho: { type: 'string', description: 'Caminho da pasta no repositorio, vazio para a raiz' } },
+    },
+  },
+  {
+    name: 'propor_editar_arquivo_codigo',
+    description: 'Somente para o usuario master. Propoe criar ou substituir o conteudo de um arquivo do codigo-fonte do sistema. NAO aplica direto: o usuario confirma antes. Apos confirmar, o commit e feito no GitHub e o deploy acontece automaticamente. Use ler_arquivo_codigo antes para ver o conteudo atual do arquivo, e sempre proponha o conteudo COMPLETO e final do arquivo, nao apenas o trecho alterado.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caminho: { type: 'string', description: 'Caminho do arquivo no repositorio' },
+        novo_conteudo: { type: 'string', description: 'Conteudo completo e final do arquivo apos a alteracao' },
+        mensagem_commit: { type: 'string', description: 'Mensagem curta descrevendo a alteracao, em portugues' },
+      },
+      required: ['caminho', 'novo_conteudo', 'mensagem_commit'],
+    },
+  },
+]
+
+export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string): Promise<any> {
   const limite = Math.min(Number(input && input.limite) || 20, 50)
   try {
     if (nome === 'buscar_tarefas') {
@@ -172,10 +205,74 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       await supabaseAdmin.from('agente_memorias').insert({ usuario_id: usuarioId, chave: 'fato', valor: fato })
       return { ok: true, salvo: fato }
     }
+    if (nome === 'ler_arquivo_codigo') {
+      if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
+      return await lerArquivoCodigo(input.caminho)
+    }
+    if (nome === 'listar_arquivos_codigo') {
+      if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
+      return await listarArquivosCodigo(input.caminho || '')
+    }
     return { erro: 'ferramenta desconhecida' }
   } catch (e: any) {
     return { erro: String(e && e.message ? e.message : e) }
   }
+}
+
+const GITHUB_REPO = 'francisbirolim-beep/atlas-one'
+
+function githubHeaders(): any {
+  return {
+    'Authorization': 'Bearer ' + process.env.GITHUB_PAT,
+    'Accept': 'application/vnd.github+json',
+  }
+}
+
+async function lerArquivoCodigo(caminho: string): Promise<any> {
+  if (!process.env.GITHUB_PAT) return { erro: 'GITHUB_PAT nao configurado no servidor' }
+  const resp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, { headers: githubHeaders() })
+  if (!resp.ok) return { erro: 'Nao encontrei o arquivo (' + resp.status + ')' }
+  const data = await resp.json()
+  if (Array.isArray(data)) return { erro: 'Isso e uma pasta, use listar_arquivos_codigo' }
+  const conteudo = Buffer.from(data.content, 'base64').toString('utf-8')
+  return { caminho, conteudo: conteudo.slice(0, 12000), truncado: conteudo.length > 12000 }
+}
+
+async function listarArquivosCodigo(caminho: string): Promise<any> {
+  if (!process.env.GITHUB_PAT) return { erro: 'GITHUB_PAT nao configurado no servidor' }
+  const resp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, { headers: githubHeaders() })
+  if (!resp.ok) return { erro: 'Nao encontrei a pasta (' + resp.status + ')' }
+  const data = await resp.json()
+  if (!Array.isArray(data)) return { erro: 'Isso e um arquivo, use ler_arquivo_codigo' }
+  return { itens: data.map((i: any) => ({ nome: i.name, tipo: i.type, caminho: i.path })) }
+}
+
+export async function commitArquivoCodigo(caminho: string, novoConteudo: string, mensagem: string): Promise<any> {
+  if (!process.env.GITHUB_PAT) return { erro: 'GITHUB_PAT nao configurado no servidor' }
+  const headers = githubHeaders()
+  let sha: string | undefined
+  const getResp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, { headers })
+  if (getResp.ok) {
+    const getData = await getResp.json()
+    sha = getData.sha
+  }
+  const body: any = {
+    message: mensagem || 'Alteracao via Agente IA',
+    content: Buffer.from(novoConteudo, 'utf-8').toString('base64'),
+    branch: 'main',
+  }
+  if (sha) body.sha = sha
+  const putResp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!putResp.ok) {
+    const errText = await putResp.text()
+    return { erro: 'Falha ao commitar (' + putResp.status + '): ' + errText.slice(0, 300) }
+  }
+  const putData = await putResp.json()
+  return { ok: true, commitSha: putData.commit ? putData.commit.sha : null }
 }
 
 export async function executarPropostaTarefa(usuarioId: string, input: any): Promise<any> {
@@ -250,14 +347,24 @@ export async function executarPropostaEvento(usuarioId: string, input: any): Pro
   return { ok: true, titulo: input.titulo, id: novo.id }
 }
 
-function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: string[]): string {
+function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: string[], setoresInfo: any[]): string {
   const hoje = new Date().toISOString().slice(0, 10)
   let prompt = 'Voce e o Agente IA do Atlas One, sistema interno da Esquadrifacio (esquadrias de aluminio e vidro).\n'
-  prompt += 'Setores do sistema: Orcamento, Assistencia Tecnica, Clientes (CRM), Tarefas pessoais, Calendario, Setores/Configuracoes.\n'
   prompt += 'Data de hoje: ' + hoje + '.\n'
   prompt += 'Usuario atual: ' + usuarioNome + ' (' + (usuarioRole === 'master' ? 'administrador' : 'funcionario') + ').\n'
+  prompt += 'REGRA MAIS IMPORTANTE: voce SO responde sobre o sistema Atlas One (dados internos da empresa: tarefas, orcamentos, assistencias, clientes/CRM, calendario, setores). Se perguntarem qualquer coisa fora disso (conhecimento geral, noticias, outros assuntos), recuse educadamente em uma frase curta e redirecione para o que voce pode ajudar no sistema. Nao gaste tempo nem tokens respondendo perguntas fora do escopo.\n'
+  if (usuarioRole === 'master') {
+    prompt += 'Este usuario e o administrador master: voce tem acesso total a todos os setores do sistema, sem restricao. Alem disso, voce pode ler e propor alteracoes no proprio codigo-fonte do sistema Atlas One usando as ferramentas ler_arquivo_codigo, listar_arquivos_codigo e propor_editar_arquivo_codigo. TODA alteracao de codigo deve ser proposta com propor_editar_arquivo_codigo (nunca aplicada direto) e so acontece apos o usuario confirmar explicitamente. Ao propor uma alteracao de codigo, explique em poucas palavras o que vai mudar e por que.\n'
+  } else if (setoresInfo && setoresInfo.length > 0) {
+    prompt += 'Voce e especialista SOMENTE nos setores que este usuario tem acesso, listados abaixo. Se perguntarem sobre outro setor do sistema que nao esta nessa lista, informe que voce so pode ajudar com os setores abaixo e sugira falar com o administrador para liberar acesso.\n'
+    for (const s of setoresInfo) {
+      prompt += '- Setor: ' + s.nome + (s.instrucoes_ia ? ('. Instrucoes especificas: ' + s.instrucoes_ia) : '') + '\n'
+    }
+  } else {
+    prompt += 'Este usuario ainda nao tem setores liberados. Informe que ele deve pedir ao administrador para liberar acesso a algum setor.\n'
+  }
   prompt += 'Use as ferramentas de busca para responder com dados reais, nunca invente numeros, nomes ou datas.\n'
-  prompt += 'Quando o usuario pedir algo que muda dados (criar tarefa, criar evento), use a ferramenta propor_* sozinha nessa resposta. O sistema vai pedir confirmacao ao usuario antes de executar de verdade. Nunca diga que ja fez algo que so foi proposto.\n'
+  prompt += 'Quando o usuario pedir algo que muda dados (criar tarefa, criar evento, editar codigo), use a ferramenta propor_* sozinha nessa resposta. O sistema vai pedir confirmacao ao usuario antes de executar de verdade. Nunca diga que ja fez algo que so foi proposto.\n'
   prompt += 'Se perceber uma preferencia clara e util do usuario, ou se ele pedir para voce lembrar de algo, guarde com lembrar_fato.\n'
   prompt += 'Responda sempre em portugues do Brasil, de forma direta e objetiva, sem enrolacao.\n'
   if (fatos && fatos.length > 0) {
@@ -275,7 +382,22 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
     .order('created_at', { ascending: false })
     .limit(30)
   const fatos = (memoriasData || []).map((m: any) => m.valor)
-  const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos)
+  let setoresInfo: any[] = []
+  if (usuarioRole !== 'master') {
+    const { data: permData } = await supabaseAdmin
+      .from('permissoes')
+      .select('setor_id')
+      .eq('usuario_id', usuarioId)
+    const setorIds = (permData || []).map((p: any) => p.setor_id)
+    if (setorIds.length > 0) {
+      const { data: setoresData } = await supabaseAdmin
+        .from('setores')
+        .select('nome,instrucoes_ia')
+        .in('id', setorIds)
+      setoresInfo = setoresData || []
+    }
+  }
+  const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
 
   let msgs = messages
   for (let i = 0; i < 5; i++) {
@@ -291,7 +413,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
         max_tokens: 1024,
         system,
         messages: msgs,
-        tools: TOOLS,
+        tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
       }),
     })
     if (!resp.ok) {
@@ -316,7 +438,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
 
     const toolResults = []
     for (const t of toolUses) {
-      const resultado = await executarFerramenta(t.name, t.input, usuarioId)
+      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole)
       toolResults.push({ type: 'tool_result', tool_use_id: t.id, content: JSON.stringify(resultado) })
     }
     msgs = [...msgs, { role: 'user', content: toolResults }]
