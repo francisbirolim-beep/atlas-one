@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar, Repeat } from 'lucide-react'
 import Link from 'next/link'
 import { TarefaPessoalColuna, TarefaPessoal, Usuario } from '@/lib/tipos'
 import {
@@ -15,7 +15,9 @@ import {
   concluirTarefa,
   reabrirTarefa,
   excluirTarefa,
+  criarTarefaRecorrente,
 } from '@/lib/tarefas'
+import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
 import { usuarioAtual } from '@/lib/auth'
 
 function formatarDuracao(ms: number) {
@@ -38,6 +40,8 @@ export default function Tarefas() {
   const [tituloNovo, setTituloNovo] = useState('')
   const [descNova, setDescNova] = useState('')
   const [dataNova, setDataNova] = useState('')
+  const [repetirNova, setRepetirNova] = useState<TipoRecorrencia | ''>('')
+  const [repetirValorNova, setRepetirValorNova] = useState(5)
   const [selecionada, setSelecionada] = useState<TarefaPessoal | null>(null)
 
   useEffect(() => {
@@ -109,12 +113,21 @@ export default function Tarefas() {
     setTituloNovo('')
     setDescNova('')
     setDataNova('')
+    setRepetirNova('')
+    setRepetirValorNova(5)
   }
 
   async function salvarNovaTarefa() {
     if (!usuario || !novaEm || !tituloNovo.trim()) return
-    const t = await criarTarefa(usuario.id, novaEm, tituloNovo.trim(), descNova.trim() || undefined, dataNova || null)
-    if (t) setTarefas((prev) => [...prev, t])
+    if (repetirNova) {
+      if (!dataNova) { alert('Defina uma data para a tarefa repetir a partir dela.'); return }
+      await criarTarefaRecorrente(usuario.id, novaEm, tituloNovo.trim(), new Date(dataNova).toISOString(), repetirNova, repetirValorNova, descNova.trim() || undefined)
+      const tfs = await listarTarefas(usuario.id)
+      setTarefas(tfs)
+    } else {
+      const t = await criarTarefa(usuario.id, novaEm, tituloNovo.trim(), descNova.trim() || undefined, dataNova || null)
+      if (t) setTarefas((prev) => [...prev, t])
+    }
     setNovaEm(null)
   }
 
@@ -279,6 +292,41 @@ export default function Tarefas() {
                 onChange={(e) => setDataNova(e.target.value)}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
               />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Repetir</label>
+              <select
+                value={repetirNova}
+                onChange={(e) => setRepetirNova(e.target.value as TipoRecorrencia | '')}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              >
+                <option value="">Nao se repete</option>
+                <option value="semanal">{LABEL_RECORRENCIA.semanal} (mesmo dia da semana)</option>
+                <option value="dia_util_mes">{LABEL_RECORRENCIA.dia_util_mes}</option>
+                <option value="dia_fixo_mes">{LABEL_RECORRENCIA.dia_fixo_mes}</option>
+              </select>
+              {repetirNova === 'dia_util_mes' && (
+                <input
+                  type="number"
+                  min={1}
+                  max={23}
+                  value={repetirValorNova}
+                  onChange={(e) => setRepetirValorNova(Number(e.target.value))}
+                  placeholder="Ex: 5 = 5o dia util"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm mt-2"
+                />
+              )}
+              {repetirNova === 'dia_fixo_mes' && (
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={repetirValorNova}
+                  onChange={(e) => setRepetirValorNova(Number(e.target.value))}
+                  placeholder="Ex: 10 = todo dia 10"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm mt-2"
+                />
+              )}
             </div>
             <button
               onClick={salvarNovaTarefa}
