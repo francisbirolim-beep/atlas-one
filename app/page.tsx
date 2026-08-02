@@ -1,11 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye, ListTodo, UserPlus, ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye, ListTodo, UserPlus, ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
-import { Usuario, TarefaPessoal, TarefaPessoalColuna } from '@/lib/tipos'
+import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento } from '@/lib/tipos'
 import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId } from '@/lib/tarefas'
+import {
+  listarEventosDoUsuario,
+  criarEvento,
+  excluirEvento,
+  responderConvite,
+  gerarIcs,
+  listarUsuariosConvidaveis,
+  EventoComConvite,
+} from '@/lib/eventos'
 
 type Guia = {
   href: string
@@ -40,16 +49,25 @@ export default function Home() {
   const [mostrarOcultos, setMostrarOcultos] = useState(false)
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
-  const [carregandoTarefas, setCarregandoTarefas] = useState(true)
+  const [eventos, setEventos] = useState<EventoComConvite[]>([])
+  const [carregandoPainel, setCarregandoPainel] = useState(true)
   const [mesVisto, setMesVisto] = useState(() => { const d = new Date(); d.setDate(1); return d })
   const [diaSelecionado, setDiaSelecionado] = useState<Date | null>(null)
   const [novaTarefaTexto, setNovaTarefaTexto] = useState('')
   const [salvandoTarefa, setSalvandoTarefa] = useState(false)
+  const [mostrarNovoEvento, setMostrarNovoEvento] = useState(false)
+  const [tituloEvento, setTituloEvento] = useState('')
+  const [localEvento, setLocalEvento] = useState('')
+  const [horaInicioEvento, setHoraInicioEvento] = useState('09:00')
+  const [horaFimEvento, setHoraFimEvento] = useState('10:00')
+  const [usuariosDisponiveis, setUsuariosDisponiveis] = useState<{ id: string; nome: string }[]>([])
+  const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>([])
+  const [salvandoEvento, setSalvandoEvento] = useState(false)
 
   useEffect(() => {
     usuarioAtual().then((u) => {
       setUsuario(u)
-      if (u) carregarTarefas(u.id)
+      if (u) carregarPainel(u.id)
     })
     try {
       const salvo = localStorage.getItem(CHAVE_OCULTOS)
@@ -57,12 +75,17 @@ export default function Home() {
     } catch {}
   }, [])
 
-  async function carregarTarefas(usuarioId: string) {
-    setCarregandoTarefas(true)
-    const [tfs, cols] = await Promise.all([listarTarefas(usuarioId), listarColunasTarefas(usuarioId)])
+  async function carregarPainel(usuarioId: string) {
+    setCarregandoPainel(true)
+    const [tfs, cols, evs] = await Promise.all([
+      listarTarefas(usuarioId),
+      listarColunasTarefas(usuarioId),
+      listarEventosDoUsuario(usuarioId),
+    ])
     setTarefas(tfs)
     setColunas(cols)
-    setCarregandoTarefas(false)
+    setEventos(evs)
+    setCarregandoPainel(false)
   }
 
   function alternarOculto(href: string) {
@@ -111,6 +134,60 @@ export default function Home() {
     setSalvandoTarefa(false)
   }
 
+  async function abrirNovoEvento() {
+    setMostrarNovoEvento(true)
+    setTituloEvento('')
+    setLocalEvento('')
+    setConvidadosSelecionados([])
+    if (usuario && usuariosDisponiveis.length === 0) {
+      const lista = await listarUsuariosConvidaveis(usuario.id)
+      setUsuariosDisponiveis(lista)
+    }
+  }
+
+  function alternarConvidado(id: string) {
+    setConvidadosSelecionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  async function salvarNovoEvento() {
+    if (!usuario || !tituloEvento.trim() || !diaSelecionado) return
+    setSalvandoEvento(true)
+    const base = new Date(diaSelecionado)
+    const [hi, mi] = horaInicioEvento.split(':').map(Number)
+    const [hf, mf] = horaFimEvento.split(':').map(Number)
+    const inicio = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hi, mi)
+    const fim = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hf, mf)
+    const ev = await criarEvento(
+      usuario.id,
+      { titulo: tituloEvento.trim(), local: localEvento.trim() || undefined, data_inicio: inicio.toISOString(), data_fim: fim.toISOString() },
+      convidadosSelecionados
+    )
+    if (ev) setEventos((prev) => [...prev, { ...ev, meuStatus: 'proprio' }])
+    setMostrarNovoEvento(false)
+    setSalvandoEvento(false)
+  }
+
+  async function apagarEvento(ev: Evento) {
+    if (!window.confirm(`Apagar o evento "${ev.titulo}"?`)) return
+    const ok = await excluirEvento(ev.id)
+    if (ok) setEventos((prev) => prev.filter((x) => x.id !== ev.id))
+  }
+
+  async function responder(ev: EventoComConvite, status: 'aceito' | 'recusado') {
+    if (!usuario) return
+    setEventos((prev) => prev.map((x) => (x.id === ev.id ? { ...x, meuStatus: status } : x)))
+    await responderConvite(ev.id, usuario.id, status)
+  }
+
+  function baixarIcs(ev: Evento) {
+    const conteudo = gerarIcs(ev)
+    const url = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(conteudo)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = ev.titulo.replace(/[^a-z0-9]/gi, '_') + '.ics'
+    a.click()
+  }
+
   // grade do calendario: dias do mes visto, preenchendo espacos vazios do inicio
   const primeiroDiaSemana = mesVisto.getDay()
   const diasNoMes = new Date(mesVisto.getFullYear(), mesVisto.getMonth() + 1, 0).getDate()
@@ -120,6 +197,10 @@ export default function Home() {
 
   function tarefasDoDia(dia: Date) {
     return tarefas.filter((t) => t.data_hora && !t.concluida_em && mesmodia(new Date(t.data_hora), dia))
+  }
+
+  function eventosDoDia(dia: Date) {
+    return eventos.filter((e) => mesmodia(new Date(e.data_inicio), dia))
   }
 
   const hoje = new Date()
@@ -221,7 +302,7 @@ export default function Home() {
               </button>
             </div>
 
-            {carregandoTarefas ? (
+            {carregandoPainel ? (
               <p className="text-sm text-slate-400">Carregando...</p>
             ) : tarefasAbertas.length === 0 ? (
               <p className="text-sm text-slate-400">Nenhuma tarefa em aberto.</p>
@@ -288,7 +369,8 @@ export default function Home() {
             <div className="grid grid-cols-7 gap-1">
               {celulas.map((dia, i) => {
                 if (!dia) return <div key={i} />
-                const qtd = tarefasDoDia(dia).length
+                const qtdTarefas = tarefasDoDia(dia).length
+                const qtdEventos = eventosDoDia(dia).length
                 const ehHoje = mesmodia(dia, hoje)
                 const selecionado = diaSelecionado && mesmodia(dia, diaSelecionado)
                 return (
@@ -299,8 +381,11 @@ export default function Home() {
                       ${selecionado ? 'bg-brand-navy text-white' : ehHoje ? 'bg-brand-navyLight text-brand-navy font-semibold' : 'hover:bg-slate-100 text-slate-600'}`}
                   >
                     {dia.getDate()}
-                    {qtd > 0 && (
-                      <span className={`w-1 h-1 rounded-full ${selecionado ? 'bg-white' : 'bg-brand-teal'}`} />
+                    {(qtdTarefas > 0 || qtdEventos > 0) && (
+                      <span className="flex gap-0.5">
+                        {qtdTarefas > 0 && <span className={`w-1 h-1 rounded-full ${selecionado ? 'bg-white' : 'bg-brand-teal'}`} />}
+                        {qtdEventos > 0 && <span className={`w-1 h-1 rounded-full ${selecionado ? 'bg-white' : 'bg-amber-500'}`} />}
+                      </span>
                     )}
                   </button>
                 )
@@ -309,19 +394,73 @@ export default function Home() {
 
             {diaSelecionado && (
               <div className="mt-4 border-t border-slate-200 pt-3">
-                <p className="text-xs text-slate-400 mb-2">
-                  {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
-                </p>
-                {tarefasDoDia(diaSelecionado).length === 0 ? (
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-slate-400">
+                    {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+                  </p>
+                  <button
+                    onClick={abrirNovoEvento}
+                    className="text-xs text-brand-navy hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Novo evento
+                  </button>
+                </div>
+
+                {tarefasDoDia(diaSelecionado).length === 0 && eventosDoDia(diaSelecionado).length === 0 ? (
                   <p className="text-xs text-slate-400 flex items-center gap-1">
-                    <Clock size={12} /> Nenhuma tarefa com horário nesse dia.
+                    <Clock size={12} /> Nada agendado nesse dia.
                   </p>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {tarefasDoDia(diaSelecionado).map((t) => (
                       <div key={t.id} className="text-xs text-slate-600 flex items-center gap-1.5">
-                        <Clock size={12} className="text-slate-400" />
-                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {t.titulo}
+                        <Clock size={12} className="text-brand-teal flex-shrink-0" />
+                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {t.titulo}
+                      </div>
+                    ))}
+                    {eventosDoDia(diaSelecionado).map((ev) => (
+                      <div key={ev.id} className="rounded-lg border border-amber-100 bg-amber-50 p-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-700 truncate">{ev.titulo}</p>
+                            <p className="text-xs text-slate-400">
+                              {new Date(ev.data_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              {ev.local && (
+                                <span className="inline-flex items-center gap-0.5 ml-1">
+                                  <MapPin size={10} /> {ev.local}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button onClick={() => baixarIcs(ev)} title="Baixar .ics" className="p-1 text-slate-400 hover:text-slate-600">
+                              <Download size={12} />
+                            </button>
+                            {ev.meuStatus === 'proprio' && (
+                              <button onClick={() => apagarEvento(ev)} title="Apagar" className="p-1 text-slate-400 hover:text-red-500">
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {ev.meuStatus === 'pendente' && (
+                          <div className="flex gap-2 mt-1.5">
+                            <button
+                              onClick={() => responder(ev, 'aceito')}
+                              className="flex items-center gap-1 text-xs bg-emerald-500 text-white rounded-lg px-2 py-0.5"
+                            >
+                              <Check size={10} /> Aceitar
+                            </button>
+                            <button
+                              onClick={() => responder(ev, 'recusado')}
+                              className="flex items-center gap-1 text-xs bg-slate-200 text-slate-600 rounded-lg px-2 py-0.5"
+                            >
+                              <X size={10} /> Recusar
+                            </button>
+                          </div>
+                        )}
+                        {ev.meuStatus === 'aceito' && <p className="text-xs text-emerald-600 mt-1">Confirmado</p>}
+                        {ev.meuStatus === 'recusado' && <p className="text-xs text-slate-400 mt-1">Recusado</p>}
                       </div>
                     ))}
                   </div>
@@ -331,6 +470,78 @@ export default function Home() {
           </section>
         </div>
       </main>
+
+      {mostrarNovoEvento && diaSelecionado && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-700">
+                Novo evento — {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              </h3>
+              <button onClick={() => setMostrarNovoEvento(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              value={tituloEvento}
+              onChange={(e) => setTituloEvento(e.target.value)}
+              placeholder="Título"
+              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              autoFocus
+            />
+            <input
+              value={localEvento}
+              onChange={(e) => setLocalEvento(e.target.value)}
+              placeholder="Local (opcional)"
+              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+            />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-slate-400">Início</label>
+                <input
+                  type="time"
+                  value={horaInicioEvento}
+                  onChange={(e) => setHoraInicioEvento(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-slate-400">Fim</label>
+                <input
+                  type="time"
+                  value={horaFimEvento}
+                  onChange={(e) => setHoraFimEvento(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            {usuariosDisponiveis.length > 0 && (
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Convidar</label>
+                <div className="space-y-1 max-h-32 overflow-y-auto border border-slate-200 rounded-xl p-2">
+                  {usuariosDisponiveis.map((u) => (
+                    <label key={u.id} className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={convidadosSelecionados.includes(u.id)}
+                        onChange={() => alternarConvidado(u.id)}
+                      />
+                      {u.nome}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={salvarNovoEvento}
+              disabled={!tituloEvento.trim() || salvandoEvento}
+              className="w-full bg-brand-navy text-white rounded-xl py-2 text-sm font-medium disabled:opacity-40"
+            >
+              Salvar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
