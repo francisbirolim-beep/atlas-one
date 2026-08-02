@@ -173,7 +173,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       return { ok: true, salvo: fato }
     }
     return { erro: 'ferramenta desconhecida' }
-  } catch (e) {
+  } catch (e: any) {
     return { erro: String(e && e.message ? e.message : e) }
   }
 }
