@@ -36,6 +36,9 @@ function descreverAcao(acao: AcaoPendente): string {
     if (acao.input.recorrencia_tipo) desc += ', repetindo (' + acao.input.recorrencia_tipo + ')'
     return desc
   }
+  if (acao.name === 'propor_editar_arquivo_codigo') {
+    return 'Editar o arquivo "' + acao.input.caminho + '" (' + (acao.input.mensagem_commit || 'sem mensagem') + ')'
+  }
   return 'Executar acao'
 }
 
