@@ -1,9 +1,9 @@
 import { supabase } from './supabase'
-import { Tarefa, TarefaColuna } from './tipos'
+import { TarefaPessoal, TarefaPessoalColuna } from './tipos'
 
 const COLUNAS_PADRAO = ['A fazer', 'Em andamento', 'Concluido']
 
-export async function listarColunasTarefas(usuarioId: string): Promise<TarefaColuna[]> {
+export async function listarColunasTarefas(usuarioId: string): Promise<TarefaPessoalColuna[]> {
   const { data, error } = await supabase
     .from('tarefa_colunas')
     .select('*')
@@ -19,10 +19,10 @@ export async function listarColunasTarefas(usuarioId: string): Promise<TarefaCol
     return await criarColunasPadrao(usuarioId)
   }
 
-  return data as TarefaColuna[]
+  return data as TarefaPessoalColuna[]
 }
 
-async function criarColunasPadrao(usuarioId: string): Promise<TarefaColuna[]> {
+async function criarColunasPadrao(usuarioId: string): Promise<TarefaPessoalColuna[]> {
   const linhas = COLUNAS_PADRAO.map((nome, i) => ({ usuario_id: usuarioId, nome, ordem: i }))
   const { data, error } = await supabase.from('tarefa_colunas').insert(linhas).select()
 
@@ -30,7 +30,7 @@ async function criarColunasPadrao(usuarioId: string): Promise<TarefaColuna[]> {
     console.error('Erro ao criar colunas padrao de tarefas:', error)
     return []
   }
-  return (data as TarefaColuna[]).sort((a, b) => a.ordem - b.ordem)
+  return (data as TarefaPessoalColuna[]).sort((a, b) => a.ordem - b.ordem)
 }
 
 export async function primeiraColunaTarefaId(usuarioId: string): Promise<string | null> {
@@ -38,7 +38,7 @@ export async function primeiraColunaTarefaId(usuarioId: string): Promise<string 
   return colunas[0]?.id || null
 }
 
-export async function criarColunaTarefa(usuarioId: string, nome: string): Promise<TarefaColuna | null> {
+export async function criarColunaTarefa(usuarioId: string, nome: string): Promise<TarefaPessoalColuna | null> {
   const { data: colunas } = await supabase
     .from('tarefa_colunas')
     .select('ordem')
@@ -58,7 +58,7 @@ export async function criarColunaTarefa(usuarioId: string, nome: string): Promis
     console.error('Erro ao criar coluna de tarefa:', error)
     return null
   }
-  return data as TarefaColuna
+  return data as TarefaPessoalColuna
 }
 
 export async function renomearColunaTarefa(id: string, nome: string): Promise<boolean> {
@@ -81,7 +81,7 @@ export async function excluirColunaTarefa(id: string, colunaDestinoId: string): 
   return !error
 }
 
-export async function listarTarefas(usuarioId: string): Promise<Tarefa[]> {
+export async function listarTarefas(usuarioId: string): Promise<TarefaPessoal[]> {
   const { data, error } = await supabase
     .from('tarefas')
     .select('*')
@@ -92,7 +92,7 @@ export async function listarTarefas(usuarioId: string): Promise<Tarefa[]> {
     console.error('Erro ao listar tarefas:', error)
     return []
   }
-  return data as Tarefa[]
+  return data as TarefaPessoal[]
 }
 
 export async function criarTarefa(
@@ -101,7 +101,7 @@ export async function criarTarefa(
   titulo: string,
   descricao?: string,
   dataHora?: string | null
-): Promise<Tarefa | null> {
+): Promise<TarefaPessoal | null> {
   const { data, error } = await supabase
     .from('tarefas')
     .insert({
@@ -118,7 +118,7 @@ export async function criarTarefa(
     console.error('Erro ao criar tarefa:', error)
     return null
   }
-  return data as Tarefa
+  return data as TarefaPessoal
 }
 
 export async function moverTarefa(tarefaId: string, colunaId: string): Promise<boolean> {
