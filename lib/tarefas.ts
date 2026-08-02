@@ -153,6 +153,11 @@ export async function excluirTarefa(tarefaId: string): Promise<boolean> {
   return !error
 }
 
+export async function alternarFavoritoTarefa(tarefaId: string, favorito: boolean): Promise<boolean> {
+  const { error } = await supabase.from('tarefas').update({ favorito }).eq('id', tarefaId)
+  return !error
+}
+
 export async function criarTarefaRecorrente(
   usuarioId: string,
   colunaId: string,
