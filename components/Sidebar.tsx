@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { FileText, Wrench, LogOut } from 'lucide-react'
+import { FileText, Wrench, LogOut, Home } from 'lucide-react'
 import { logout } from '@/lib/auth'
 
 const ATALHOS = [
@@ -30,6 +30,16 @@ export default function Sidebar() {
         className="hidden h-11 w-11 items-center justify-center rounded-xl bg-brand-navy font-bold text-white lg:mb-4 lg:flex"
       >
         A1
+      </Link>
+
+      <Link
+        href="/"
+        title="Início"
+        className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition lg:h-16 lg:w-16
+                    ${pathname === '/' ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:bg-slate-100'}`}
+      >
+        <Home size={20} />
+        <span className="text-[10px] leading-none">Início</span>
       </Link>
 
       {ATALHOS.map((a) => {
