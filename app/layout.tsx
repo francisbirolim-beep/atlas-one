@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import AuthGate from '@/components/AuthGate'
 import SincronizadorOffline from '@/components/SincronizadorOffline'
+import AgenteChat from '@/components/AgenteChat'
 
 export const metadata: Metadata = {
   title: 'Atlas One - Esquadrifácio',
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthGate>{children}</AuthGate>
         <SincronizadorOffline />
+        <AgenteChat />
         <script
           dangerouslySetInnerHTML={{
             __html: `
