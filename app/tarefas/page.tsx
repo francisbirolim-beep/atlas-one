@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react'
 import Link from 'next/link'
-import { TarefaColuna, Tarefa, Usuario } from '@/lib/tipos'
+import { TarefaPessoalColuna, TarefaPessoal, Usuario } from '@/lib/tipos'
 import {
   listarColunasTarefas,
   criarColunaTarefa,
@@ -30,15 +30,15 @@ function formatarDuracao(ms: number) {
 
 export default function Tarefas() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
-  const [colunas, setColunas] = useState<TarefaColuna[]>([])
-  const [tarefas, setTarefas] = useState<Tarefa[]>([])
+  const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
+  const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [carregando, setCarregando] = useState(true)
   const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
   const [novaEm, setNovaEm] = useState<string | null>(null)
   const [tituloNovo, setTituloNovo] = useState('')
   const [descNova, setDescNova] = useState('')
   const [dataNova, setDataNova] = useState('')
-  const [selecionada, setSelecionada] = useState<Tarefa | null>(null)
+  const [selecionada, setSelecionada] = useState<TarefaPessoal | null>(null)
 
   useEffect(() => {
     carregar()
@@ -77,14 +77,14 @@ export default function Tarefas() {
     if (col) setColunas((prev) => [...prev, col])
   }
 
-  async function editarColuna(col: TarefaColuna) {
+  async function editarColuna(col: TarefaPessoalColuna) {
     const novoNome = window.prompt('Renomear coluna:', col.nome)
     if (!novoNome || !novoNome.trim() || novoNome === col.nome) return
     const ok = await renomearColunaTarefa(col.id, novoNome.trim())
     if (ok) setColunas((prev) => prev.map((c) => (c.id === col.id ? { ...c, nome: novoNome.trim() } : c)))
   }
 
-  async function apagarColuna(col: TarefaColuna) {
+  async function apagarColuna(col: TarefaPessoalColuna) {
     if (colunas.length <= 1) {
       alert('Precisa ter pelo menos uma coluna.')
       return
@@ -118,7 +118,7 @@ export default function Tarefas() {
     setNovaEm(null)
   }
 
-  async function alternarConcluida(t: Tarefa) {
+  async function alternarConcluida(t: TarefaPessoal) {
     if (t.concluida_em) {
       const ok = await reabrirTarefa(t.id)
       if (ok) setTarefas((prev) => prev.map((x) => (x.id === t.id ? { ...x, concluida_em: null } : x)))
@@ -129,7 +129,7 @@ export default function Tarefas() {
     setSelecionada(null)
   }
 
-  async function apagarTarefa(t: Tarefa) {
+  async function apagarTarefa(t: TarefaPessoal) {
     if (!window.confirm(`Apagar a tarefa "${t.titulo}"?`)) return
     const ok = await excluirTarefa(t.id)
     if (ok) {
@@ -138,7 +138,7 @@ export default function Tarefas() {
     }
   }
 
-  function estaAtrasada(t: Tarefa) {
+  function estaAtrasada(t: TarefaPessoal) {
     return !t.concluida_em && !!t.data_hora && new Date(t.data_hora).getTime() < Date.now()
   }
 
