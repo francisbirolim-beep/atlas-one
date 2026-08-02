@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verificarUsuario, rodarLoop, executarPropostaTarefa, executarPropostaEvento, obterOuCriarConversaHoje, salvarMensagem, ACTION_TOOLS } from '@/lib/agente'
 
-export async function POST(req) {
+export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || ''
     const usuario = await verificarUsuario(authHeader)
