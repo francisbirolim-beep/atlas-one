@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { Evento, EventoConvidado } from './tipos'
+import { TipoRecorrencia, gerarProximasOcorrencias } from './recorrencia'
 
 export type EventoComConvite = Evento & { meuStatus?: 'proprio' | 'pendente' | 'aceito' | 'recusado' }
 
@@ -112,4 +113,48 @@ export async function listarUsuariosConvidaveis(excluirId: string): Promise<{ id
     return []
   }
   return data
+}
+
+export async function criarEventoRecorrente(
+  usuarioId: string,
+  dados: { titulo: string; descricao?: string; local?: string; data_inicio: string; data_fim?: string | null },
+  tipo: TipoRecorrencia,
+  valor: number,
+  convidadosIds: string[] = []
+): Promise<Evento | null> {
+  const base = await criarEvento(usuarioId, dados, convidadosIds)
+  if (!base) return null
+
+  await supabase.from('eventos').update({ recorrencia_tipo: tipo, recorrencia_valor: valor }).eq('id', base.id)
+
+  const duracaoMs = dados.data_fim ? new Date(dados.data_fim).getTime() - new Date(dados.data_inicio).getTime() : 0
+  const proximas = gerarProximasOcorrencias(new Date(dados.data_inicio), tipo, valor)
+
+  for (const data of proximas) {
+    const { data: novo, error } = await supabase
+      .from('eventos')
+      .insert({
+        usuario_id: usuarioId,
+        titulo: dados.titulo,
+        descricao: dados.descricao || null,
+        local: dados.local || null,
+        data_inicio: data.toISOString(),
+        data_fim: duracaoMs > 0 ? new Date(data.getTime() + duracaoMs).toISOString() : null,
+        regra_origem_id: base.id,
+      })
+      .select()
+      .single()
+
+    if (error || !novo) {
+      console.error('Erro ao gerar ocorrencia de evento:', error)
+      continue
+    }
+
+    if (convidadosIds.length > 0) {
+      const linhas = convidadosIds.map((usuario_id) => ({ evento_id: novo.id, usuario_id }))
+      await supabase.from('evento_convidados').insert(linhas)
+    }
+  }
+
+  return { ...base, recorrencia_tipo: tipo, recorrencia_valor: valor }
 }
