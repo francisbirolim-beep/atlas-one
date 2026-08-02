@@ -104,7 +104,7 @@ export const TOOLS = [
   },
 ]
 
-export async function executarFerramenta(nome, input, usuarioId) {
+export async function executarFerramenta(nome: string, input: any, usuarioId: string): Promise<any> {
   const limite = Math.min(Number(input && input.limite) || 20, 50)
   try {
     if (nome === 'buscar_tarefas') {
@@ -178,7 +178,7 @@ export async function executarFerramenta(nome, input, usuarioId) {
   }
 }
 
-export async function executarPropostaTarefa(usuarioId, input) {
+export async function executarPropostaTarefa(usuarioId: string, input: any): Promise<any> {
   const { data: coluna } = await supabaseAdmin
     .from('tarefa_colunas')
     .select('id')
@@ -218,7 +218,7 @@ export async function executarPropostaTarefa(usuarioId, input) {
   return { ok: true, titulo: input.titulo, id: nova.id }
 }
 
-export async function executarPropostaEvento(usuarioId, input) {
+export async function executarPropostaEvento(usuarioId: string, input: any): Promise<any> {
   const base = {
     usuario_id: usuarioId,
     titulo: input.titulo,
@@ -250,7 +250,7 @@ export async function executarPropostaEvento(usuarioId, input) {
   return { ok: true, titulo: input.titulo, id: novo.id }
 }
 
-function montarSystemPrompt(usuarioNome, usuarioRole, fatos) {
+function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: string[]): string {
   const hoje = new Date().toISOString().slice(0, 10)
   let prompt = 'Voce e o Agente IA do Atlas One, sistema interno da Esquadrifacio (esquadrias de aluminio e vidro).\n'
   prompt += 'Setores do sistema: Orcamento, Assistencia Tecnica, Clientes (CRM), Tarefas pessoais, Calendario, Setores/Configuracoes.\n'
@@ -267,7 +267,7 @@ function montarSystemPrompt(usuarioNome, usuarioRole, fatos) {
   return prompt
 }
 
-export async function rodarLoop(messages, usuarioId, usuarioNome, usuarioRole, apiKey) {
+export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string): Promise<any> {
   const { data: memoriasData } = await supabaseAdmin
     .from('agente_memorias')
     .select('valor')
@@ -324,7 +324,7 @@ export async function rodarLoop(messages, usuarioId, usuarioNome, usuarioRole, a
   return { done: true, text: 'Atingi o limite de passos para essa pergunta. Pode reformular de forma mais direta?', messages: msgs }
 }
 
-export async function verificarUsuario(authHeader) {
+export async function verificarUsuario(authHeader: string | null): Promise<any> {
   const token = (authHeader || '').replace('Bearer ', '').trim()
   if (!token) return null
   const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token)
@@ -333,7 +333,7 @@ export async function verificarUsuario(authHeader) {
   return usuario || null
 }
 
-export async function obterOuCriarConversaHoje(usuarioId) {
+export async function obterOuCriarConversaHoje(usuarioId: string): Promise<string | null> {
   const inicioHoje = new Date()
   inicioHoje.setHours(0, 0, 0, 0)
   const { data: existente } = await supabaseAdmin
@@ -349,7 +349,7 @@ export async function obterOuCriarConversaHoje(usuarioId) {
   return nova ? nova.id : null
 }
 
-export async function salvarMensagem(conversaId, papel, conteudo) {
+export async function salvarMensagem(conversaId: string | null, papel: string, conteudo: string): Promise<void> {
   if (!conversaId || !conteudo) return
   await supabaseAdmin.from('agente_mensagens').insert({ conversa_id: conversaId, papel, conteudo })
 }
