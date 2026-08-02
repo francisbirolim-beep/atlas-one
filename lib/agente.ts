@@ -375,6 +375,38 @@ function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: str
   return prompt
 }
 
+function sanitizarMensagens(mensagens: any[]): any[] {
+  if (!Array.isArray(mensagens)) return []
+  const resultado: any[] = []
+  for (let i = 0; i < mensagens.length; i++) {
+    const m = mensagens[i]
+    resultado.push(m)
+    if (m && m.role === 'assistant' && Array.isArray(m.content)) {
+      const toolUses = m.content.filter((b: any) => b && b.type === 'tool_use')
+      if (toolUses.length > 0) {
+        const prox = mensagens[i + 1]
+        const idsResolvidos = new Set(
+          prox && prox.role === 'user' && Array.isArray(prox.content)
+            ? prox.content.filter((b: any) => b && b.type === 'tool_result').map((b: any) => b.tool_use_id)
+            : []
+        )
+        const pendentes = toolUses.filter((tu: any) => !idsResolvidos.has(tu.id))
+        if (pendentes.length > 0) {
+          resultado.push({
+            role: 'user',
+            content: pendentes.map((tu: any) => ({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: JSON.stringify({ ok: false, cancelado: true, motivo: 'Acao anterior nao foi confirmada nem cancelada; cancelada automaticamente para continuar a conversa.' }),
+            })),
+          })
+        }
+      }
+    }
+  }
+  return resultado
+}
+
 export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string): Promise<any> {
   const { data: memoriasData } = await supabaseAdmin
     .from('agente_memorias')
@@ -400,7 +432,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
   }
   const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
 
-  let msgs = messages
+  let msgs = sanitizarMensagens(messages)
   const maxPassos = usuarioRole === 'master' ? 20 : 5
   for (let i = 0; i < maxPassos; i++) {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
