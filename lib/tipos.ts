@@ -17,7 +17,7 @@ export type OrigemCliente =
 
 export type RoleUsuario = 'master' | 'funcionario'
 
-// Temperatura do lead/orÃ§amento: classificaÃ§Ã£o padrÃ£o de mercado (quente/morno/frio)
+// Temperatura do lead/orÃÂ§amento: classificaÃÂ§ÃÂ£o padrÃÂ£o de mercado (quente/morno/frio)
 export type TemperaturaLead = 'quente' | 'morno' | 'frio'
 
 export interface Usuario {
@@ -136,7 +136,7 @@ export interface OrcamentoRapido {
   assistencia_id?: string | null
 }
 
-// CRM: tarefas, interaÃ§Ãµes/negociaÃ§Ãµes e metas comerciais
+// CRM: tarefas, interaÃÂ§ÃÂµes/negociaÃÂ§ÃÂµes e metas comerciais
 
 export type TipoInteracao = 'ligacao' | 'whatsapp' | 'visita' | 'proposta' | 'negociacao' | 'nota' | 'outro'
 
@@ -248,7 +248,7 @@ export interface Assistencia {
 }
 
 export type GrupoSetor =
-  | 'Comercial' | 'TÃ©cnico' | 'OperaÃ§Ãµes' | 'Administrativo'
+  | 'Comercial' | 'TÃÂ©cnico' | 'OperaÃÂ§ÃÂµes' | 'Administrativo'
   | 'Relacionamento' | 'Conhecimento' | 'Sistema'
 
 export type NivelPermissao = 'oculto' | 'consulta' | 'edicao'
@@ -272,7 +272,7 @@ export interface Permissao {
   updated_at?: string
 }
 
-export interface TarefaColuna {
+export interface TarefaPessoalColuna {
   id: string
   usuario_id: string
   nome: string
@@ -280,7 +280,7 @@ export interface TarefaColuna {
   created_at?: string
 }
 
-export interface Tarefa {
+export interface TarefaPessoal {
   id: string
   usuario_id: string
   coluna_id: string
