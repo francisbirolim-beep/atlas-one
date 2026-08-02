@@ -204,7 +204,7 @@ export async function executarPropostaTarefa(usuarioId: string, input: any): Pro
     const ocorrencias = gerarProximasOcorrencias(new Date(input.data_hora), input.recorrencia_tipo, input.recorrencia_valor || 1)
     if (ocorrencias.length > 0) {
       await supabaseAdmin.from('tarefas').insert(
-        ocorrencias.map((d) => ({
+        ocorrencias.map((d: any) => ({
           usuario_id: usuarioId,
           coluna_id: coluna.id,
           titulo: input.titulo,
@@ -236,7 +236,7 @@ export async function executarPropostaEvento(usuarioId: string, input: any): Pro
     const ocorrencias = gerarProximasOcorrencias(new Date(input.data_inicio), input.recorrencia_tipo, input.recorrencia_valor || 1)
     if (ocorrencias.length > 0) {
       await supabaseAdmin.from('eventos').insert(
-        ocorrencias.map((d) => ({
+        ocorrencias.map((d: any) => ({
           usuario_id: usuarioId,
           titulo: input.titulo,
           local: input.local || null,
@@ -262,7 +262,7 @@ function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: str
   prompt += 'Responda sempre em portugues do Brasil, de forma direta e objetiva, sem enrolacao.\n'
   if (fatos && fatos.length > 0) {
     prompt += '\nO que voce ja sabe sobre este usuario (memoria de conversas anteriores):\n'
-    prompt += fatos.map((f) => '- ' + f).join('\n')
+    prompt += fatos.map((f: any) => '- ' + f).join('\n')
   }
   return prompt
 }
@@ -274,7 +274,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
     .eq('usuario_id', usuarioId)
     .order('created_at', { ascending: false })
     .limit(30)
-  const fatos = (memoriasData || []).map((m) => m.valor)
+  const fatos = (memoriasData || []).map((m: any) => m.valor)
   const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos)
 
   let msgs = messages
@@ -300,17 +300,17 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
     }
     const data = await resp.json()
     const blocks = data.content || []
-    const toolUses = blocks.filter((b) => b.type === 'tool_use')
+    const toolUses = blocks.filter((b: any) => b.type === 'tool_use')
     msgs = [...msgs, { role: 'assistant', content: blocks }]
 
     if (toolUses.length === 0) {
-      const texto = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+      const texto = blocks.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
       return { done: true, text: texto, messages: msgs }
     }
 
-    const acao = toolUses.find((t) => ACTION_TOOLS.indexOf(t.name) !== -1)
+    const acao = toolUses.find((t: any) => ACTION_TOOLS.indexOf(t.name) !== -1)
     if (acao) {
-      const texto = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+      const texto = blocks.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
       return { done: false, text: texto, pendingAction: { toolUseId: acao.id, name: acao.name, input: acao.input }, messages: msgs }
     }
 
