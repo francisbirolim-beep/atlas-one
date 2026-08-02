@@ -11,11 +11,11 @@ export const GUIAS: Guia[] = [
   { href: '/setores', label: 'Setores', icon: LayoutGrid },
   { href: '/tarefas', label: 'Tarefas', icon: ListTodo },
   { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3 },
-  { href: '/assistencias', label: 'Assistências', icon: Wrench },
-  { href: '/historico', label: 'Histórico', icon: History },
+  { href: '/kanban', label: 'Painel de OrÃ§amentos', icon: Columns3 },
+  { href: '/assistencias', label: 'AssistÃªncias', icon: Wrench },
+  { href: '/historico', label: 'HistÃ³rico', icon: History },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true },
+  { href: '/configuracoes', label: 'ConfiguraÃ§Ãµes', icon: Settings, masterOnly: true },
   { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true },
 ]
 
@@ -27,7 +27,8 @@ export function lerOcultos(): string[] {
     const salvo = localStorage.getItem(CHAVE_OCULTOS)
     if (salvo) return JSON.parse(salvo)
   } catch {}
-  return []
+  // Por padrao, comeca tudo na lista lateral ("Mais"); o usuario adiciona ao guia rapido o que quiser.
+  return GUIAS.map((g) => g.href)
 }
 
 export function salvarOcultos(ocultos: string[]) {
