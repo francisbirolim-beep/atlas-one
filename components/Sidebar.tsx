@@ -3,15 +3,10 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { FileText, Wrench, LogOut, Home, Menu, X, Star } from 'lucide-react'
+import { LogOut, Menu, X, Star } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
-import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU } from '@/lib/guias'
-
-const ATALHOS = [
-  { href: '/orcamento-rapido', label: 'Orçamento', icon: FileText, cor: 'navy' as const },
-  { href: '/assistencia', label: 'Assistência', icon: Wrench, cor: 'teal' as const },
-]
+import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU, guiasFavoritos } from '@/lib/guias'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -35,9 +30,9 @@ export default function Sidebar() {
     router.replace('/login')
   }
 
-  const resto = GUIAS.filter((g) => !g.masterOnly || usuario?.role === 'master').filter((g) =>
-    ocultos.includes(g.href)
-  )
+  const isMaster = usuario?.role === 'master'
+  const favoritos = guiasFavoritos(ocultos, isMaster)
+  const resto = GUIAS.filter((g) => !g.masterOnly || isMaster).filter((g) => ocultos.includes(g.href))
 
   function favoritar(href: string) {
     setOcultos(alternarOculto(href))
@@ -47,48 +42,34 @@ export default function Sidebar() {
     <>
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-slate-200 bg-white px-2 py-1.5
-                   lg:static lg:h-screen lg:w-56 lg:flex-col lg:items-stretch lg:justify-start lg:gap-0 lg:border-r lg:border-t-0 lg:py-6"
+                   lg:static lg:h-screen lg:w-56 lg:flex-col lg:items-stretch lg:justify-start lg:gap-0 lg:border-r lg:border-t-0 lg:py-5"
       >
-        <div className="hidden lg:flex lg:flex-col lg:items-center lg:gap-2 lg:px-2">
-          <Link
-            href="/"
-            title="Início"
-            className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-navy font-bold text-white"
-          >
-            A1
-          </Link>
+        <div className="hidden lg:flex lg:flex-col lg:px-3">
+          <span className="mb-3 px-1 text-base font-bold tracking-tight text-brand-navy">Atlas One</span>
 
-          <Link
-            href="/"
-            title="Início"
-            className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition
-                        ${pathname === '/' ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:bg-slate-100'}`}
-          >
-            <Home size={20} />
-            <span className="text-[10px] leading-none">Início</span>
-          </Link>
-
-          {ATALHOS.map((a) => {
-            const ativo = pathname === a.href
-            const Icon = a.icon
-            const corAtiva = a.cor === 'navy' ? 'bg-brand-navy text-white' : 'bg-brand-teal text-white'
-            return (
-              <Link
-                key={a.href}
-                href={a.href}
-                title={a.label}
-                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition
-                            ${ativo ? corAtiva : 'text-slate-500 hover:bg-slate-100'}`}
-              >
-                <Icon size={20} />
-                <span className="text-[10px] leading-none">{a.label}</span>
-              </Link>
-            )
-          })}
+          {favoritos.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-1.5 px-1">
+              {favoritos.map((g) => {
+                const Icon = g.icon
+                const ativo = pathname === g.href
+                return (
+                  <Link
+                    key={g.href}
+                    href={g.href}
+                    title={g.label}
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg transition
+                                ${ativo ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  >
+                    <Icon size={16} />
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {resto.length > 0 && (
-          <div className="hidden lg:mt-6 lg:block lg:flex-1 lg:overflow-y-auto lg:px-3">
+          <div className="hidden lg:block lg:flex-1 lg:overflow-y-auto lg:px-3">
             <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Mais</p>
             <div className="space-y-0.5">
               {resto.map((g) => {
@@ -127,30 +108,19 @@ export default function Sidebar() {
           </button>
         </div>
 
-        <Link
-          href="/"
-          title="Início"
-          className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition lg:hidden
-                      ${pathname === '/' ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:bg-slate-100'}`}
-        >
-          <Home size={20} />
-          <span className="text-[10px] leading-none">Início</span>
-        </Link>
-
-        {ATALHOS.map((a) => {
-          const ativo = pathname === a.href
-          const Icon = a.icon
-          const corAtiva = a.cor === 'navy' ? 'bg-brand-navy text-white' : 'bg-brand-teal text-white'
+        {favoritos.map((g) => {
+          const Icon = g.icon
+          const ativo = pathname === g.href
           return (
             <Link
-              key={a.href}
-              href={a.href}
-              title={a.label}
+              key={g.href}
+              href={g.href}
+              title={g.label}
               className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition lg:hidden
-                          ${ativo ? corAtiva : 'text-slate-500 hover:bg-slate-100'}`}
+                          ${ativo ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-100'}`}
             >
               <Icon size={20} />
-              <span className="text-[10px] leading-none">{a.label}</span>
+              <span className="text-[10px] leading-none">{g.label}</span>
             </Link>
           )
         })}
