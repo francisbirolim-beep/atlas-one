@@ -196,7 +196,7 @@ export default function Home() {
       <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Esquadrifácio" width={40} height={40} className="rounded-lg" />
+            <Image src="/logo.png" alt="Esquadrifácio" width={140} height={40} className="h-9 w-auto object-contain" />
             <div>
               <h1 className="text-lg font-bold text-brand-navy">Atlas One</h1>
               <p className="text-xs text-slate-400">Esquadrifácio</p>
