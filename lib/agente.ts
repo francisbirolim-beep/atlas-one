@@ -235,7 +235,7 @@ async function lerArquivoCodigo(caminho: string): Promise<any> {
   const data = await resp.json()
   if (Array.isArray(data)) return { erro: 'Isso e uma pasta, use listar_arquivos_codigo' }
   const conteudo = Buffer.from(data.content, 'base64').toString('utf-8')
-  return { caminho, conteudo: conteudo.slice(0, 12000), truncado: conteudo.length > 12000 }
+  return { caminho, conteudo: conteudo.slice(0, 60000), truncado: conteudo.length > 60000 }
 }
 
 async function listarArquivosCodigo(caminho: string): Promise<any> {
