@@ -290,3 +290,24 @@ export interface TarefaPessoal {
   concluida_em?: string | null
   created_at?: string
 }
+
+export type StatusConvite = 'pendente' | 'aceito' | 'recusado'
+
+export interface Evento {
+  id: string
+  usuario_id: string
+  titulo: string
+  descricao?: string | null
+  local?: string | null
+  data_inicio: string
+  data_fim?: string | null
+  created_at?: string
+}
+
+export interface EventoConvidado {
+  id: string
+  evento_id: string
+  usuario_id: string
+  status: StatusConvite
+  created_at?: string
+}
