@@ -400,7 +400,8 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
   const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
 
   let msgs = messages
-  for (let i = 0; i < 5; i++) {
+  const maxPassos = usuarioRole === 'master' ? 20 : 5
+  for (let i = 0; i < maxPassos; i++) {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
