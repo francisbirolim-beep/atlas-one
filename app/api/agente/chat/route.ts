@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
       pendingAction: resultado.pendingAction || null,
       messages: resultado.messages,
       conversaId,
+      debugDetalhe: resultado.detalhe || null,
+      debugChavePrefixo: apiKey.slice(0, 15),
+      debugChaveTamanho: apiKey.length,
     })
   } catch (e: any) {
     return NextResponse.json({ error: 'Erro inesperado no agente: ' + String(e && e.message ? e.message : e) }, { status: 500 })
