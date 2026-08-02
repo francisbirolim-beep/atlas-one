@@ -288,6 +288,9 @@ export interface TarefaPessoal {
   descricao?: string | null
   data_hora?: string | null
   concluida_em?: string | null
+  recorrencia_tipo?: string | null
+  recorrencia_valor?: number | null
+  regra_origem_id?: string | null
   created_at?: string
 }
 
@@ -301,6 +304,9 @@ export interface Evento {
   local?: string | null
   data_inicio: string
   data_fim?: string | null
+  recorrencia_tipo?: string | null
+  recorrencia_valor?: number | null
+  regra_origem_id?: string | null
   created_at?: string
 }
 
