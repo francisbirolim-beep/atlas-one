@@ -1,4 +1,4 @@
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, ListTodo, UserPlus } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, ListTodo, UserPlus, Home, FileText } from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -8,14 +8,17 @@ export type Guia = {
 }
 
 export const GUIAS: Guia[] = [
+  { href: '/', label: 'Início', icon: Home },
   { href: '/setores', label: 'Setores', icon: LayoutGrid },
   { href: '/tarefas', label: 'Tarefas', icon: ListTodo },
   { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/kanban', label: 'Painel de OrÃ§amentos', icon: Columns3 },
-  { href: '/assistencias', label: 'AssistÃªncias', icon: Wrench },
-  { href: '/historico', label: 'HistÃ³rico', icon: History },
+  { href: '/orcamento-rapido', label: 'Orçamento Rápido', icon: FileText },
+  { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3 },
+  { href: '/assistencia', label: 'Abrir Assistência', icon: Wrench },
+  { href: '/assistencias', label: 'Assistências', icon: Wrench },
+  { href: '/historico', label: 'Histórico', icon: History },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { href: '/configuracoes', label: 'ConfiguraÃ§Ãµes', icon: Settings, masterOnly: true },
+  { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true },
   { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true },
 ]
 
@@ -43,4 +46,9 @@ export function alternarOculto(href: string): string[] {
   salvarOcultos(novo)
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENTO_OCULTOS_MUDOU))
   return novo
+}
+
+// Itens marcados com a estrela (fora da lista de ocultos) = guia rapido do usuario.
+export function guiasFavoritos(ocultos: string[], isMaster: boolean): Guia[] {
+  return GUIAS.filter((g) => (!g.masterOnly || isMaster) && !ocultos.includes(g.href))
 }
