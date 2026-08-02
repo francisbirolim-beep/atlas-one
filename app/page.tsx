@@ -1,14 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye, ListTodo, UserPlus, ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin } from 'lucide-react'
+import Image from 'next/image'
+import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, EyeOff, Repeat } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento } from '@/lib/tipos'
-import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId } from '@/lib/tarefas'
+import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU } from '@/lib/guias'
+import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId, criarTarefaRecorrente } from '@/lib/tarefas'
+import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
 import {
   listarEventosDoUsuario,
   criarEvento,
+  criarEventoRecorrente,
   excluirEvento,
   responderConvite,
   gerarIcs,
@@ -16,26 +20,6 @@ import {
   EventoComConvite,
 } from '@/lib/eventos'
 
-type Guia = {
-  href: string
-  label: string
-  icon: typeof LayoutGrid
-  masterOnly?: boolean
-}
-
-const GUIAS: Guia[] = [
-  { href: '/setores', label: 'Setores', icon: LayoutGrid },
-  { href: '/tarefas', label: 'Tarefas', icon: ListTodo },
-  { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3 },
-  { href: '/assistencias', label: 'Assistências', icon: Wrench },
-  { href: '/historico', label: 'Histórico', icon: History },
-  { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true },
-  { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true },
-]
-
-const CHAVE_OCULTOS = 'atlas_guias_ocultos'
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
@@ -46,7 +30,6 @@ function mesmodia(a: Date, b: Date) {
 export default function Home() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [ocultos, setOcultos] = useState<string[]>([])
-  const [mostrarOcultos, setMostrarOcultos] = useState(false)
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
@@ -63,16 +46,20 @@ export default function Home() {
   const [usuariosDisponiveis, setUsuariosDisponiveis] = useState<{ id: string; nome: string }[]>([])
   const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>([])
   const [salvandoEvento, setSalvandoEvento] = useState(false)
+  const [repetirEvento, setRepetirEvento] = useState<TipoRecorrencia | ''>('')
+  const [repetirValorEvento, setRepetirValorEvento] = useState(5)
 
   useEffect(() => {
     usuarioAtual().then((u) => {
       setUsuario(u)
       if (u) carregarPainel(u.id)
     })
-    try {
-      const salvo = localStorage.getItem(CHAVE_OCULTOS)
-      if (salvo) setOcultos(JSON.parse(salvo))
-    } catch {}
+    setOcultos(lerOcultos())
+    function sync() {
+      setOcultos(lerOcultos())
+    }
+    window.addEventListener(EVENTO_OCULTOS_MUDOU, sync)
+    return () => window.removeEventListener(EVENTO_OCULTOS_MUDOU, sync)
   }, [])
 
   async function carregarPainel(usuarioId: string) {
@@ -88,19 +75,12 @@ export default function Home() {
     setCarregandoPainel(false)
   }
 
-  function alternarOculto(href: string) {
-    const novo = ocultos.includes(href) ? ocultos.filter((h) => h !== href) : [...ocultos, href]
-    setOcultos(novo)
-    try {
-      localStorage.setItem(CHAVE_OCULTOS, JSON.stringify(novo))
-    } catch {}
+  function esconder(href: string) {
+    setOcultos(alternarOculto(href))
   }
 
   const visiveis = GUIAS.filter((g) => !g.masterOnly || usuario?.role === 'master').filter(
     (g) => !ocultos.includes(g.href)
-  )
-  const escondidos = GUIAS.filter((g) => !g.masterOnly || usuario?.role === 'master').filter((g) =>
-    ocultos.includes(g.href)
   )
 
   const tarefasAbertas = tarefas
@@ -139,6 +119,8 @@ export default function Home() {
     setTituloEvento('')
     setLocalEvento('')
     setConvidadosSelecionados([])
+    setRepetirEvento('')
+    setRepetirValorEvento(5)
     if (usuario && usuariosDisponiveis.length === 0) {
       const lista = await listarUsuariosConvidaveis(usuario.id)
       setUsuariosDisponiveis(lista)
@@ -157,12 +139,16 @@ export default function Home() {
     const [hf, mf] = horaFimEvento.split(':').map(Number)
     const inicio = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hi, mi)
     const fim = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hf, mf)
-    const ev = await criarEvento(
-      usuario.id,
-      { titulo: tituloEvento.trim(), local: localEvento.trim() || undefined, data_inicio: inicio.toISOString(), data_fim: fim.toISOString() },
-      convidadosSelecionados
-    )
-    if (ev) setEventos((prev) => [...prev, { ...ev, meuStatus: 'proprio' }])
+    const dadosEvento = { titulo: tituloEvento.trim(), local: localEvento.trim() || undefined, data_inicio: inicio.toISOString(), data_fim: fim.toISOString() }
+
+    const ev = repetirEvento
+      ? await criarEventoRecorrente(usuario.id, dadosEvento, repetirEvento, repetirValorEvento, convidadosSelecionados)
+      : await criarEvento(usuario.id, dadosEvento, convidadosSelecionados)
+
+    if (ev) {
+      const evs = await listarEventosDoUsuario(usuario.id)
+      setEventos(evs)
+    }
     setMostrarNovoEvento(false)
     setSalvandoEvento(false)
   }
@@ -209,9 +195,12 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h1 className="text-lg font-bold text-brand-navy">Atlas One</h1>
-            <p className="text-xs text-slate-400">Esquadrifácio</p>
+          <div className="flex items-center gap-3">
+            <Image src="/logo.png" alt="Esquadrifácio" width={40} height={40} className="rounded-lg" />
+            <div>
+              <h1 className="text-lg font-bold text-brand-navy">Atlas One</h1>
+              <p className="text-xs text-slate-400">Esquadrifácio</p>
+            </div>
           </div>
           {usuario && <span className="text-sm text-slate-500">Olá, {usuario.nome}</span>}
         </div>
@@ -220,15 +209,7 @@ export default function Home() {
       <main className="max-w-5xl mx-auto px-4 py-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-700">Guias rápidos</h2>
-          {escondidos.length > 0 && (
-            <button
-              onClick={() => setMostrarOcultos((v) => !v)}
-              className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
-            >
-              <Eye size={14} />
-              {mostrarOcultos ? 'Ocultar lista' : `${escondidos.length} escondido(s)`}
-            </button>
-          )}
+          <p className="text-xs text-slate-400">Passe o mouse e clique no olho pra tirar daqui</p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
@@ -247,7 +228,7 @@ export default function Home() {
                   <span className="text-sm font-medium text-slate-700">{g.label}</span>
                 </Link>
                 <button
-                  onClick={() => alternarOculto(g.href)}
+                  onClick={() => esconder(g.href)}
                   title="Esconder"
                   className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition p-1 rounded-md text-slate-300 hover:text-slate-500 hover:bg-slate-100"
                 >
@@ -257,24 +238,6 @@ export default function Home() {
             )
           })}
         </div>
-
-        {mostrarOcultos && escondidos.length > 0 && (
-          <div className="mt-6 border-t border-slate-200 pt-4">
-            <p className="text-xs text-slate-400 mb-3">Escondidos — clique pra trazer de volta</p>
-            <div className="flex flex-wrap gap-2">
-              {escondidos.map((g) => (
-                <button
-                  key={g.href}
-                  onClick={() => alternarOculto(g.href)}
-                  className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-full px-3 py-1.5 transition"
-                >
-                  <g.icon size={12} />
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <section className="bg-white rounded-2xl border border-slate-200 p-5">
@@ -321,7 +284,12 @@ export default function Home() {
                         className="w-5 h-5 rounded-full border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50 flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-700 truncate">{t.titulo}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm text-slate-700 truncate">{t.titulo}</p>
+                          {(t.recorrencia_tipo || t.regra_origem_id) && (
+                            <Repeat size={11} className="text-slate-300 flex-shrink-0" />
+                          )}
+                        </div>
                         {t.data_hora && (
                           <p className={`text-xs ${atrasada ? 'text-red-500' : 'text-slate-400'}`}>
                             {new Date(t.data_hora).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
@@ -416,13 +384,17 @@ export default function Home() {
                       <div key={t.id} className="text-xs text-slate-600 flex items-center gap-1.5">
                         <Clock size={12} className="text-brand-teal flex-shrink-0" />
                         {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {t.titulo}
+                        {(t.recorrencia_tipo || t.regra_origem_id) && <Repeat size={10} className="text-slate-300" />}
                       </div>
                     ))}
                     {eventosDoDia(diaSelecionado).map((ev) => (
                       <div key={ev.id} className="rounded-lg border border-amber-100 bg-amber-50 p-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-700 truncate">{ev.titulo}</p>
+                            <p className="text-xs font-medium text-slate-700 truncate flex items-center gap-1">
+                              {ev.titulo}
+                              {(ev.recorrencia_tipo || ev.regra_origem_id) && <Repeat size={10} className="text-slate-400" />}
+                            </p>
                             <p className="text-xs text-slate-400">
                               {new Date(ev.data_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                               {ev.local && (
@@ -515,6 +487,43 @@ export default function Home() {
                 />
               </div>
             </div>
+
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Repetir</label>
+              <select
+                value={repetirEvento}
+                onChange={(e) => setRepetirEvento(e.target.value as TipoRecorrencia | '')}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              >
+                <option value="">Não se repete</option>
+                <option value="semanal">{LABEL_RECORRENCIA.semanal} (mesmo dia da semana)</option>
+                <option value="dia_util_mes">{LABEL_RECORRENCIA.dia_util_mes}</option>
+                <option value="dia_fixo_mes">{LABEL_RECORRENCIA.dia_fixo_mes}</option>
+              </select>
+              {repetirEvento === 'dia_util_mes' && (
+                <input
+                  type="number"
+                  min={1}
+                  max={23}
+                  value={repetirValorEvento}
+                  onChange={(e) => setRepetirValorEvento(Number(e.target.value))}
+                  placeholder="Ex: 5 = 5º dia útil"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm mt-2"
+                />
+              )}
+              {repetirEvento === 'dia_fixo_mes' && (
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={repetirValorEvento}
+                  onChange={(e) => setRepetirValorEvento(Number(e.target.value))}
+                  placeholder="Ex: 10 = todo dia 10"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm mt-2"
+                />
+              )}
+            </div>
+
             {usuariosDisponiveis.length > 0 && (
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Convidar</label>
