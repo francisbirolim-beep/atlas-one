@@ -38,6 +38,12 @@ export default function Sidebar() {
     setOcultos(alternarOculto(href))
   }
 
+  function removerFavorito(e: React.MouseEvent, href: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    favoritar(href)
+  }
+
   return (
     <>
       <nav
@@ -53,15 +59,23 @@ export default function Sidebar() {
                 const Icon = g.icon
                 const ativo = pathname === g.href
                 return (
-                  <Link
-                    key={g.href}
-                    href={g.href}
-                    title={g.label}
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg transition
-                                ${ativo ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                  >
-                    <Icon size={16} />
-                  </Link>
+                  <div key={g.href} className="group relative">
+                    <Link
+                      href={g.href}
+                      title={g.label}
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition
+                                  ${ativo ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                    >
+                      <Icon size={16} />
+                    </Link>
+                    <button
+                      onClick={(e) => removerFavorito(e, g.href)}
+                      title="Remover dos favoritos"
+                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white opacity-0 transition hover:bg-red-500 group-hover:opacity-100"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
                 )
               })}
             </div>
@@ -112,16 +126,24 @@ export default function Sidebar() {
           const Icon = g.icon
           const ativo = pathname === g.href
           return (
-            <Link
-              key={g.href}
-              href={g.href}
-              title={g.label}
-              className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition lg:hidden
-                          ${ativo ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-100'}`}
-            >
-              <Icon size={20} />
-              <span className="text-[10px] leading-none">{g.label}</span>
-            </Link>
+            <div key={g.href} className="group relative lg:hidden">
+              <Link
+                href={g.href}
+                title={g.label}
+                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition
+                            ${ativo ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              >
+                <Icon size={20} />
+                <span className="text-[10px] leading-none">{g.label}</span>
+              </Link>
+              <button
+                onClick={(e) => removerFavorito(e, g.href)}
+                title="Remover dos favoritos"
+                className="absolute right-1 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white active:bg-red-500"
+              >
+                <X size={10} />
+              </button>
+            </div>
           )
         })}
 
