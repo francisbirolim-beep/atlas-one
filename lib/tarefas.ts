@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { TarefaPessoal, TarefaPessoalColuna } from './tipos'
+import { TipoRecorrencia, gerarProximasOcorrencias } from './recorrencia'
 
 const COLUNAS_PADRAO = ['A fazer', 'Em andamento', 'Concluido']
 
@@ -150,4 +151,35 @@ export async function editarTarefa(
 export async function excluirTarefa(tarefaId: string): Promise<boolean> {
   const { error } = await supabase.from('tarefas').delete().eq('id', tarefaId)
   return !error
+}
+
+export async function criarTarefaRecorrente(
+  usuarioId: string,
+  colunaId: string,
+  titulo: string,
+  dataHoraBase: string,
+  tipo: TipoRecorrencia,
+  valor: number,
+  descricao?: string
+): Promise<TarefaPessoal | null> {
+  const base = await criarTarefa(usuarioId, colunaId, titulo, descricao, dataHoraBase)
+  if (!base) return null
+
+  await supabase.from('tarefas').update({ recorrencia_tipo: tipo, recorrencia_valor: valor }).eq('id', base.id)
+
+  const proximas = gerarProximasOcorrencias(new Date(dataHoraBase), tipo, valor)
+  if (proximas.length > 0) {
+    const linhas = proximas.map((data) => ({
+      usuario_id: usuarioId,
+      coluna_id: colunaId,
+      titulo,
+      descricao: descricao || null,
+      data_hora: data.toISOString(),
+      regra_origem_id: base.id,
+    }))
+    const { error } = await supabase.from('tarefas').insert(linhas)
+    if (error) console.error('Erro ao gerar ocorrencias de tarefa:', error)
+  }
+
+  return { ...base, recorrencia_tipo: tipo, recorrencia_valor: valor }
 }
