@@ -249,6 +249,7 @@ async function listarArquivosCodigo(caminho: string): Promise<any> {
 
 export async function commitArquivoCodigo(caminho: string, novoConteudo: string, mensagem: string): Promise<any> {
   if (!process.env.GITHUB_PAT) return { erro: 'GITHUB_PAT nao configurado no servidor' }
+  if (!novoConteudo || typeof novoConteudo !== 'string') return { erro: 'Conteudo do arquivo veio vazio ou incompleto (resposta da IA truncada). Peca uma mudanca menor, em um arquivo por vez.' }
   const headers = githubHeaders()
   let sha: string | undefined
   const getResp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, { headers })
