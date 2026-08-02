@@ -420,7 +420,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
     })
     if (!resp.ok) {
       const errText = await resp.text()
-      return { done: true, text: 'Nao consegui falar com a IA agora (erro ' + resp.status + '). Tente novamente em instantes.', erro: true, messages: msgs, detalhe: errText.slice(0, 300) }
+      return { done: true, text: 'Nao consegui falar com a IA agora (erro ' + resp.status + '): ' + errText.slice(0, 500), erro: true, messages: msgs, detalhe: errText.slice(0, 500) }
     }
     const data = await resp.json()
     const blocks = data.content || []
