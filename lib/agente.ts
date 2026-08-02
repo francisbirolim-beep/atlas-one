@@ -411,7 +411,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 1024,
+        max_tokens: usuarioRole === 'master' ? 16000 : 1024,
         system,
         messages: msgs,
         tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
