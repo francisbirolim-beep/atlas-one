@@ -17,7 +17,7 @@ export type OrigemCliente =
 
 export type RoleUsuario = 'master' | 'funcionario'
 
-// Temperatura do lead/orÃÂ§amento: classificaÃÂ§ÃÂ£o padrÃÂ£o de mercado (quente/morno/frio)
+// Temperatura do lead/orçamento: classificação padrão de mercado (quente/morno/frio)
 export type TemperaturaLead = 'quente' | 'morno' | 'frio'
 
 export interface Usuario {
@@ -136,7 +136,7 @@ export interface OrcamentoRapido {
   assistencia_id?: string | null
 }
 
-// CRM: tarefas, interaÃÂ§ÃÂµes/negociaÃÂ§ÃÂµes e metas comerciais
+// CRM: tarefas, interações/negociações e metas comerciais
 
 export type TipoInteracao = 'ligacao' | 'whatsapp' | 'visita' | 'proposta' | 'negociacao' | 'nota' | 'outro'
 
@@ -248,7 +248,7 @@ export interface Assistencia {
 }
 
 export type GrupoSetor =
-  | 'Comercial' | 'TÃÂ©cnico' | 'OperaÃÂ§ÃÂµes' | 'Administrativo'
+  | 'Comercial' | 'Técnico' | 'Operações' | 'Administrativo'
   | 'Relacionamento' | 'Conhecimento' | 'Sistema'
 
 export type NivelPermissao = 'oculto' | 'consulta' | 'edicao'
