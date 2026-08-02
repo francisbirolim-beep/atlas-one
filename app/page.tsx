@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye, UserPlus } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye, ListTodo, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
@@ -15,12 +15,13 @@ type Guia = {
 
 const GUIAS: Guia[] = [
   { href: '/setores', label: 'Setores', icon: LayoutGrid },
+  { href: '/tarefas', label: 'Tarefas', icon: ListTodo },
   { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3 },
-  { href: '/assistencias', label: 'Assistências', icon: Wrench },
-  { href: '/historico', label: 'Histórico', icon: History },
+  { href: '/kanban', label: 'Painel de OrÃ§amentos', icon: Columns3 },
+  { href: '/assistencias', label: 'AssistÃªncias', icon: Wrench },
+  { href: '/historico', label: 'HistÃ³rico', icon: History },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true },
+  { href: '/configuracoes', label: 'ConfiguraÃ§Ãµes', icon: Settings, masterOnly: true },
   { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true },
 ]
 
@@ -60,15 +61,15 @@ export default function Home() {
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="text-lg font-bold text-brand-navy">Atlas One</h1>
-            <p className="text-xs text-slate-400">Esquadrifácio</p>
+            <p className="text-xs text-slate-400">EsquadrifÃ¡cio</p>
           </div>
-          {usuario && <span className="text-sm text-slate-500">Olá, {usuario.nome}</span>}
+          {usuario && <span className="text-sm text-slate-500">OlÃ¡, {usuario.nome}</span>}
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-10">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-700">Guias rápidos</h2>
+          <h2 className="text-lg font-semibold text-slate-700">Guias rÃ¡pidos</h2>
           {escondidos.length > 0 && (
             <button
               onClick={() => setMostrarOcultos((v) => !v)}
@@ -109,7 +110,7 @@ export default function Home() {
 
         {mostrarOcultos && escondidos.length > 0 && (
           <div className="mt-6 border-t border-slate-200 pt-4">
-            <p className="text-xs text-slate-400 mb-3">Escondidos — clique pra trazer de volta</p>
+            <p className="text-xs text-slate-400 mb-3">Escondidos â clique pra trazer de volta</p>
             <div className="flex flex-wrap gap-2">
               {escondidos.map((g) => (
                 <button
