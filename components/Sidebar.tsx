@@ -54,24 +54,26 @@ export default function Sidebar() {
           <span className="mb-3 px-1 text-base font-bold tracking-tight text-brand-navy">Atlas One</span>
 
           {favoritos.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-1.5 px-1">
+            <div className="mb-4 space-y-0.5 px-1">
               {favoritos.map((g) => {
                 const Icon = g.icon
                 const ativo = pathname === g.href
                 return (
-                  <div key={g.href} className="group relative">
+                  <div key={g.href} className="group relative flex items-center">
                     <Link
                       href={g.href}
                       title={g.label}
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition
-                                  ${ativo ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                      className={`flex flex-1 items-center gap-2 truncate rounded-lg px-2 py-1.5 text-xs transition
+                                  ${ativo ? 'bg-brand-navy text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                     >
-                      <Icon size={16} />
+                      <Icon size={15} className="flex-shrink-0" />
+                      <span className="truncate">{g.label}</span>
                     </Link>
                     <button
                       onClick={(e) => removerFavorito(e, g.href)}
                       title="Remover dos favoritos"
-                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white opacity-0 transition hover:bg-red-500 group-hover:opacity-100"
+                      className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full text-white opacity-0 transition hover:bg-red-500 group-hover:opacity-100
+                                  ${ativo ? 'bg-white/30' : 'bg-slate-400'}`}
                     >
                       <X size={10} />
                     </button>
