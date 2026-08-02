@@ -370,11 +370,6 @@ export default function Configuracoes() {
             <ChevronDown size={16} className="-rotate-90 text-slate-300" />
           </button>
 
-          <button onClick={() => setAbaAtiva('metas')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
-            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Target size={18} className="text-brand-navy" /> Metas comerciais</span>
-            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-          </button>
-
           <button onClick={() => setAbaAtiva('backup')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
             <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><RotateCcw size={18} className="text-brand-navy" /> Backup e restauração</span>
             <ChevronDown size={16} className="-rotate-90 text-slate-300" />
@@ -684,93 +679,6 @@ export default function Configuracoes() {
             </button>
           </div>
           {msgCorAssistencia && <p className="text-xs text-brand-teal mt-2">{msgCorAssistencia}</p>}
-        </section>
-
-        
-        </div>
-      )}
-
-      {abaAtiva === 'metas' && (
-        <div>
-        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
-          <ArrowLeft size={16} /> Configurações
-        </button>
-<section className="bg-white rounded-2xl border border-slate-200 p-6">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
-            <Target size={16} /> Metas comerciais do mês
-          </h2>
-          <p className="text-xs text-slate-400 mb-4">
-            Meta de {new Date(mesMetaAtual + '-01T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}. Vale como valor fechado (aprovado/convertido) e/ou quantidade de negócios fechados no mês. Aparece como progresso no CRM.
-          </p>
-          <div className="space-y-2">
-            <div className="border border-slate-100 rounded-xl p-3">
-              <p className="text-sm font-medium text-slate-700 mb-2">Empresa toda</p>
-              <div className="grid grid-cols-2 gap-3 mb-2">
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Meta em R$</label>
-                  <input
-                    type="number"
-                    value={metas.geral?.valor ?? ''}
-                    onChange={e => setMetas(prev => ({ ...prev, geral: { ...(prev.geral || { valor: '', quantidade: '' }), valor: e.target.value } }))}
-                    placeholder="Ex: 50000"
-                    className="w-full border border-slate-300 rounded-lg p-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Meta em quantidade</label>
-                  <input
-                    type="number"
-                    value={metas.geral?.quantidade ?? ''}
-                    onChange={e => setMetas(prev => ({ ...prev, geral: { ...(prev.geral || { valor: '', quantidade: '' }), quantidade: e.target.value } }))}
-                    placeholder="Ex: 10"
-                    className="w-full border border-slate-300 rounded-lg p-2 text-sm"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={() => salvarMetaUsuario(null, null)}
-                disabled={salvandoMeta === 'geral'}
-                className="text-xs text-brand-navy hover:underline"
-              >
-                {salvandoMeta === 'geral' ? 'Salvando...' : 'Salvar meta da empresa'}
-              </button>
-            </div>
-
-            {usuarios.map(u => (
-              <div key={u.id} className="border border-slate-100 rounded-xl p-3">
-                <p className="text-sm font-medium text-slate-700 mb-2">{u.nome}</p>
-                <div className="grid grid-cols-2 gap-3 mb-2">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Meta em R$</label>
-                    <input
-                      type="number"
-                      value={metas[u.id]?.valor ?? ''}
-                      onChange={e => setMetas(prev => ({ ...prev, [u.id]: { ...(prev[u.id] || { valor: '', quantidade: '' }), valor: e.target.value } }))}
-                      placeholder="Ex: 15000"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Meta em quantidade</label>
-                    <input
-                      type="number"
-                      value={metas[u.id]?.quantidade ?? ''}
-                      onChange={e => setMetas(prev => ({ ...prev, [u.id]: { ...(prev[u.id] || { valor: '', quantidade: '' }), quantidade: e.target.value } }))}
-                      placeholder="Ex: 3"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-sm"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => salvarMetaUsuario(u.id, u.nome)}
-                  disabled={salvandoMeta === u.id}
-                  className="text-xs text-brand-navy hover:underline"
-                >
-                  {salvandoMeta === u.id ? 'Salvando...' : 'Salvar meta'}
-                </button>
-              </div>
-            ))}
-          </div>
         </section>
 
         
