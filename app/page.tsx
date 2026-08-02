@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, EyeOff, Repeat } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento } from '@/lib/tipos'
-import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU } from '@/lib/guias'
 import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId, criarTarefaRecorrente } from '@/lib/tarefas'
 import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
 import {
@@ -29,7 +28,6 @@ function mesmodia(a: Date, b: Date) {
 
 export default function Home() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
-  const [ocultos, setOcultos] = useState<string[]>([])
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
@@ -54,12 +52,6 @@ export default function Home() {
       setUsuario(u)
       if (u) carregarPainel(u.id)
     })
-    setOcultos(lerOcultos())
-    function sync() {
-      setOcultos(lerOcultos())
-    }
-    window.addEventListener(EVENTO_OCULTOS_MUDOU, sync)
-    return () => window.removeEventListener(EVENTO_OCULTOS_MUDOU, sync)
   }, [])
 
   async function carregarPainel(usuarioId: string) {
@@ -74,14 +66,6 @@ export default function Home() {
     setEventos(evs)
     setCarregandoPainel(false)
   }
-
-  function esconder(href: string) {
-    setOcultos(alternarOculto(href))
-  }
-
-  const visiveis = GUIAS.filter((g) => !g.masterOnly || usuario?.role === 'master').filter(
-    (g) => !ocultos.includes(g.href)
-  )
 
   const tarefasAbertas = tarefas
     .filter((t) => !t.concluida_em)
@@ -207,45 +191,7 @@ export default function Home() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-10">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-700">Guias rÃ¡pidos</h2>
-          <p className="text-xs text-slate-400">Passe o mouse e clique no olho pra tirar daqui</p>
-        </div>
-
-        {visiveis.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-8 text-center">
-            <p className="text-sm text-slate-500">Nenhum guia adicionado ainda. Abra a lista <strong>&quot;Mais&quot;</strong> no menu lateral e clique na estrela para adicionar aqui os que voce mais usa.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {visiveis.map((g) => {
-            const Icon = g.icon
-            return (
-              <div key={g.href} className="relative group">
-                <Link
-                  href={g.href}
-                  className="flex flex-col items-center justify-center gap-2 bg-white rounded-2xl border border-slate-200
-                             hover:border-brand-navy hover:shadow-md transition-all p-5 text-center h-full"
-                >
-                  <div className="w-11 h-11 bg-brand-navyLight rounded-xl flex items-center justify-center">
-                    <Icon size={20} className="text-brand-navy" />
-                  </div>
-                  <span className="text-sm font-medium text-slate-700">{g.label}</span>
-                </Link>
-                <button
-                  onClick={() => esconder(g.href)}
-                  title="Esconder"
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition p-1 rounded-md text-slate-300 hover:text-slate-500 hover:bg-slate-100"
-                >
-                  <EyeOff size={14} />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-        )}
-
-        <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <section className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-slate-700">Minhas tarefas</h2>
@@ -389,7 +335,7 @@ export default function Home() {
                     {tarefasDoDia(diaSelecionado).map((t) => (
                       <div key={t.id} className="text-xs text-slate-600 flex items-center gap-1.5">
                         <Clock size={12} className="text-brand-teal flex-shrink-0" />
-                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} â {t.titulo}
+                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} â {t.titulo}
                         {(t.recorrencia_tipo || t.regra_origem_id) && <Repeat size={10} className="text-slate-300" />}
                       </div>
                     ))}
@@ -454,7 +400,7 @@ export default function Home() {
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-slate-700">
-                Novo evento â {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                Novo evento â {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
               </h3>
               <button onClick={() => setMostrarNovoEvento(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
