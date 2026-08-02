@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -19,6 +19,8 @@ const nivelLabel: Record<NivelPermissao, string> = {
 }
 
 export default function Configuracoes() {
+  const [abaAtiva, setAbaAtiva] = useState<string | null>(null)
+  const [setorAberto, setSetorAberto] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
@@ -344,7 +346,48 @@ export default function Configuracoes() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+      {abaAtiva === null && (
+        <div className="space-y-2">
+          <button onClick={() => setAbaAtiva('usuarios')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Users size={18} className="text-brand-navy" /> Usuários</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <p className="flex items-center gap-3 text-sm font-medium text-slate-700 mb-3"><Columns3 size={18} className="text-brand-navy" /> Kanban</p>
+            <div className="space-y-1 pl-2">
+              <button onClick={() => setAbaAtiva('kanban-orcamento')} className="w-full flex items-center justify-between text-left text-sm text-slate-600 hover:text-brand-navy px-2 py-1.5 rounded-lg hover:bg-slate-50 transition">
+                Orçamento <ChevronDown size={14} className="-rotate-90 text-slate-300" />
+              </button>
+              <button onClick={() => setAbaAtiva('kanban-assistencia')} className="w-full flex items-center justify-between text-left text-sm text-slate-600 hover:text-brand-navy px-2 py-1.5 rounded-lg hover:bg-slate-50 transition">
+                Assistência <ChevronDown size={14} className="-rotate-90 text-slate-300" />
+              </button>
+            </div>
+          </div>
+
+          <button onClick={() => setAbaAtiva('setores')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Building2 size={18} className="text-brand-navy" /> Setores</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <button onClick={() => setAbaAtiva('metas')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Target size={18} className="text-brand-navy" /> Metas comerciais</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <button onClick={() => setAbaAtiva('backup')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><RotateCcw size={18} className="text-brand-navy" /> Backup e restauração</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+        </div>
+      )}
+
+      {abaAtiva === 'usuarios' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+<section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
             <Users size={16} /> Usuários cadastrados
           </h2>
@@ -493,7 +536,16 @@ export default function Configuracoes() {
           </form>
         </section>
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        
+        </div>
+      )}
+
+      {abaAtiva === 'kanban-orcamento' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+<section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
             <Clock size={16} /> Alertas e cores por coluna do painel
           </h2>
@@ -599,7 +651,16 @@ export default function Configuracoes() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        
+        </div>
+      )}
+
+      {abaAtiva === 'kanban-assistencia' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+<section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
             <Wrench size={16} /> Cor dos chamados de assistência
           </h2>
@@ -625,7 +686,16 @@ export default function Configuracoes() {
           {msgCorAssistencia && <p className="text-xs text-brand-teal mt-2">{msgCorAssistencia}</p>}
         </section>
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        
+        </div>
+      )}
+
+      {abaAtiva === 'metas' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+<section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
             <Target size={16} /> Metas comerciais do mês
           </h2>
@@ -703,7 +773,16 @@ export default function Configuracoes() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        
+        </div>
+      )}
+
+      {abaAtiva === 'backup' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+<section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
             <Save size={16} /> Backup e restauração
           </h2>
@@ -751,7 +830,16 @@ export default function Configuracoes() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        
+        </div>
+      )}
+
+      {abaAtiva === 'setores' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+<section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
             <LayoutGrid size={16} /> Setores do sistema
           </h2>
@@ -768,7 +856,13 @@ export default function Configuracoes() {
                     {itens.map(s => {
                       const edit = setoresEdit[s.id] || { nome: s.nome, grupo: s.grupo, ordem: String(s.ordem), descricao: s.descricao || '' }
                       return (
-                        <div key={s.id} className="border border-slate-100 rounded-xl p-3 space-y-2">
+                        <div key={s.id} className="border border-slate-100 rounded-xl p-3">
+                          <button type="button" onClick={() => setSetorAberto(setorAberto === s.id ? null : s.id)} className="w-full flex items-center justify-between gap-2 text-left">
+                            <span className="text-sm font-medium text-slate-700">{edit.nome || s.nome}</span>
+                            <ChevronDown size={14} className={`text-slate-400 transition ${setorAberto === s.id ? 'rotate-180' : ''}`} />
+                          </button>
+                          {setorAberto === s.id && (
+                          <div className="space-y-2 mt-2">
                           <div className="grid grid-cols-2 gap-2">
                             <input
                               type="text"
@@ -810,6 +904,8 @@ export default function Configuracoes() {
                           >
                             {salvandoSetor === s.id ? 'Salvando...' : 'Salvar'}
                           </button>
+                          </div>
+                          )}
                         </div>
                       )
                     })}
@@ -852,6 +948,9 @@ export default function Configuracoes() {
             })}
           </div>
         </section>
+        </div>
+      )}
+
       </main>
     </div>
   )
