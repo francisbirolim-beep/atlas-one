@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, Wrench, EyeOff, Eye, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
@@ -21,6 +21,7 @@ const GUIAS: Guia[] = [
   { href: '/historico', label: 'Histórico', icon: History },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true },
+  { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true },
 ]
 
 const CHAVE_OCULTOS = 'atlas_guias_ocultos'
