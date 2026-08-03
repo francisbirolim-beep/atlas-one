@@ -6,7 +6,7 @@ import { LogIn } from 'lucide-react'
 import { login } from '@/lib/auth'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [identificador, setIdentificador] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
@@ -14,16 +14,16 @@ export default function Login() {
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault()
-    if (!email.trim() || !senha.trim()) {
-      setErro('Preencha e-mail e senha')
+    if (!identificador.trim() || !senha.trim()) {
+      setErro('Preencha usuário/e-mail e senha')
       return
     }
     setErro('')
     setCarregando(true)
-    const { error } = await login(email.trim(), senha)
+    const { error } = await login(identificador.trim(), senha)
     setCarregando(false)
     if (error) {
-      setErro('E-mail ou senha incorretos')
+      setErro('Usuário ou senha incorretos')
       return
     }
     router.replace('/')
@@ -40,10 +40,10 @@ export default function Login() {
 
         <form onSubmit={entrar} className="space-y-3">
           <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="E-mail"
+            type="text"
+            value={identificador}
+            onChange={e => setIdentificador(e.target.value)}
+            placeholder="Usuário ou e-mail"
             autoComplete="username"
             className="w-full border border-slate-300 rounded-xl p-3 text-sm"
           />
