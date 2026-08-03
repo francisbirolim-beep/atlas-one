@@ -490,8 +490,8 @@ export default function Kanban() {
       .eq('id', cardSelecionado.id)
     setSalvando(false)
     if (!error) {
-      if (colunaFeito && editando.coluna_id !== novaColunaId) {
-        executarAutomacoesColuna(novaColunaId, {
+      if (colunaFeito && editando.coluna_id !== colunaFeito.id) {
+        executarAutomacoesColuna(colunaFeito.id, {
           cliente_nome: editando.cliente_nome,
           criado_por_id: editando.criado_por_id,
         }).catch(() => {})
@@ -602,7 +602,7 @@ export default function Kanban() {
 
     setSalvando(false)
     if (!error) {
-      if (mudouColuna) {
+      if (mudouColuna && editando.coluna_id) {
         executarAutomacoesColuna(editando.coluna_id, {
           cliente_nome: editando.cliente_nome,
           criado_por_id: editando.criado_por_id,
