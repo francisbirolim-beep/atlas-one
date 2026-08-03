@@ -60,6 +60,10 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [novoSetorGrupo, setNovoSetorGrupo] = useState<string | null>(null)
   const [novoSetorNome, setNovoSetorNome] = useState('')
   const [criandoSetor, setCriandoSetor] = useState(false)
+                const [novoSetorTopoAberto, setNovoSetorTopoAberto] = useState(false)
+                const [novoSetorTopoNome, setNovoSetorTopoNome] = useState('')
+                const [novoSetorTopoGrupo, setNovoSetorTopoGrupo] = useState(GRUPOS_ORDEM[0] || '')
+                const [criandoSetorTopo, setCriandoSetorTopo] = useState(false)
 
   const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
   const [salvandoCorAssistencia, setSalvandoCorAssistencia] = useState(false)
@@ -288,7 +292,28 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
     setCriandoSetor(false)
   }
 
-  async function salvarSla(colunaId: string) {
+  async function criarNovoSetorTopo() {
+  if (!novoSetorTopoNome.trim()) return
+  setCriandoSetorTopo(true)
+  const grupo = novoSetorTopoGrupo || GRUPOS_ORDEM[0]
+  const itensGrupo = agruparSetores(setores)[grupo] || []
+  const maiorOrdem = itensGrupo.reduce((max, s) => (s.ordem > max ? s.ordem : max), 0)
+  await criarSetor(novoSetorTopoNome.trim(), grupo, maiorOrdem + 1, null)
+  const listaAtual = await listarSetores()
+  setSetores(listaAtual)
+  setSetoresEdit(prev => {
+    const novo = { ...prev }
+    listaAtual.forEach(s => {
+      if (!novo[s.id]) novo[s.id] = { nome: s.nome, grupo: s.grupo, ordem: String(s.ordem), descricao: s.descricao || '' }
+    })
+    return novo
+  })
+  setNovoSetorTopoNome('')
+  setNovoSetorTopoAberto(false)
+  setCriandoSetorTopo(false)
+}
+
+async function salvarSla(colunaId: string) {
     const valores = slaEdit[colunaId]
     const amarelo = valores.amarelo.trim() ? parseInt(valores.amarelo) : null
     const vermelho = valores.vermelho.trim() ? parseInt(valores.vermelho) : null
@@ -600,7 +625,52 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
           <p className="text-xs text-slate-400 mb-4">
             Edite o nome, o grupo, a ordem e a descrição de cada setor que aparece no menu de Setores. Isso não liga nem desliga nenhuma funcionalidade, só muda como o setor aparece na tela. Use o botão "+" para pedir um campo novo — ele aparece no menu de Setores marcado como "Em construção" até ser desenvolvido de verdade.
           </p>
-          <div className="space-y-4">
+                    <div className="mb-4 p-3 rounded-xl border border-dashed border-brand-navy/40 bg-brand-navyLight/40">
+            {novoSetorTopoAberto ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-600">Novo setor</p>
+                <input
+                  type="text"
+                  value={novoSetorTopoNome}
+                  onChange={e => setNovoSetorTopoNome(e.target.value)}
+                  placeholder="Nome do setor (ex: Recursos Humanos)"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
+                />
+                <select
+                  value={novoSetorTopoGrupo}
+                  onChange={e => setNovoSetorTopoGrupo(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
+                >
+                  {GRUPOS_ORDEM.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={criarNovoSetorTopo}
+                    disabled={criandoSetorTopo || !novoSetorTopoNome.trim()}
+                    className="px-3 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                  >
+                    {criandoSetorTopo ? 'Criando...' : 'Criar setor'}
+                  </button>
+                  <button
+                    onClick={() => { setNovoSetorTopoAberto(false); setNovoSetorTopoNome('') }}
+                    className="text-xs text-slate-400 hover:underline"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setNovoSetorTopoAberto(true)}
+                className="flex items-center gap-1.5 text-sm text-brand-navy font-medium hover:underline"
+              >
+                <Plus size={16} /> Criar novo setor
+              </button>
+            )}
+          </div>
+<div className="space-y-4">
             {GRUPOS_ORDEM.map(grupo => {
               const itens = agruparSetores(setores)[grupo] || []
               return (
