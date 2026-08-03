@@ -29,7 +29,7 @@ export default function Configuracoes() {
   const [automacoes, setAutomacoes] = useState<AutomacaoOrcamento[]>([])
   const [novaAutomacaoColuna, setNovaAutomacaoColuna] = useState('')
   const [novaAutomacaoUsuario, setNovaAutomacaoUsuario] = useState('')
-  const [novaAutomacaoTitulo, setNovaAutomacaoTitulo] = useState('')
+  const [novaAutomacaoTitulo, setNovaAutomacaoTitulo] = useState('Orçamento {cliente}')
   const [salvandoAutomacao, setSalvandoAutomacao] = useState(false)
   const [erroAutomacao, setErroAutomacao] = useState('')
   const [slaEdit, setSlaEdit] = useState<Record<string, { amarelo: string; vermelho: string }>>({})
@@ -387,7 +387,7 @@ async function salvarSla(colunaId: string) {
     setAutomacoes(prev => [...prev, nova])
     setNovaAutomacaoColuna('')
     setNovaAutomacaoUsuario('')
-    setNovaAutomacaoTitulo('')
+    setNovaAutomacaoTitulo('Orçamento {cliente}')
   }
 
   async function alternarAutomacao(id: string, ativoAtual: boolean) {
@@ -624,10 +624,14 @@ async function salvarSla(colunaId: string) {
                     type="text"
                     value={novaAutomacaoTitulo}
                     onChange={e => setNovaAutomacaoTitulo(e.target.value)}
-                    placeholder="Titulo da tarefa (ex: Orcar {cliente})"
+                    placeholder="Titulo da tarefa"
                     className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
                   />
                 </div>
+
+                <p className="text-xs text-slate-400 mt-2">
+                  Dica: o título já vem preenchido como <span className="font-mono">Orçamento {'{cliente}'}</span> — o trecho <span className="font-mono">{'{cliente}'}</span> é substituído automaticamente pelo nome do cliente do orçamento. Pode apagar e escrever o título que quiser.
+                </p>
 
                 {erroAutomacao && <p className="text-xs text-red-600 mt-2">{erroAutomacao}</p>}
 
