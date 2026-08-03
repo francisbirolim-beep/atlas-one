@@ -15,7 +15,7 @@ const tipos: { value: TipoEsquadria; label: string }[] = [
   { value: 'janela_correr', label: 'Janela de Correr' },
   { value: 'janela_maximiar', label: 'Janela Maximiar' },
   { value: 'janela_basculante', label: 'Janela Basculante' },
-  { value: 'vitro', label: 'Vitrô' },
+  { value: 'vitro', label: 'VitrÃ´' },
   { value: 'fachada', label: 'Fachada' },
   { value: 'box', label: 'Box de Banheiro' },
   { value: 'outro', label: 'Outro' },
@@ -72,6 +72,8 @@ export default function OrcamentoRapido() {
   const [tipoMedida, setTipoMedida] = useState<'comum' | 'final' | ''>('')
   const [arquitetoNome, setArquitetoNome] = useState('')
   const [arquitetoContato, setArquitetoContato] = useState('')
+  const [fotos, setFotos] = useState<File[]>([])
+  const [fotosPreviews, setFotosPreviews] = useState<string[]>([])
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [salvoOffline, setSalvoOffline] = useState(false)
@@ -98,6 +100,18 @@ export default function OrcamentoRapido() {
     if (textosLivres.length > 1) setTextosLivres(prev => prev.filter((_, i) => i !== idx))
   }
 
+  function adicionarFotos(files: FileList | null) {
+    if (!files) return
+    const novos = Array.from(files)
+    setFotos(prev => [...prev, ...novos])
+    setFotosPreviews(prev => [...prev, ...novos.map(f => URL.createObjectURL(f))])
+  }
+
+  function removerFoto(idx: number) {
+    setFotos(prev => prev.filter((_, i) => i !== idx))
+    setFotosPreviews(prev => prev.filter((_, i) => i !== idx))
+  }
+
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm) {
     await salvarPendente({
       id: uuidv4(),
@@ -112,14 +126,14 @@ export default function OrcamentoRapido() {
   async function salvar() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
-    if (!temperatura) { setErro('Selecione a temperatura do orçamento (quente, morno ou frio)'); return }
+    if (!temperatura) { setErro('Selecione a temperatura do orÃ§amento (quente, morno ou frio)'); return }
     if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
-    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual é a cor'); return }
+    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual Ã© a cor'); return }
     if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
 
     if (modo === 'formulario') {
       if (!tipoMedida) {
-        setErro('Selecione se é medida final ou orçamento comum')
+        setErro('Selecione se Ã© medida final ou orÃ§amento comum')
         return
       }
       for (const it of itens) {
@@ -128,20 +142,20 @@ export default function OrcamentoRapido() {
           return
         }
         if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) {
-          setErro('Escreva qual é o tipo de esquadria')
+          setErro('Escreva qual Ã© o tipo de esquadria')
           return
         }
         if (tipoMedida === 'final') {
           const medidas = [it.larguraBaixo, it.larguraMeio, it.larguraCima, it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
           if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
-            setErro('Preencha as 3 larguras e as 3 alturas de todas as esquadrias (mínimo 100mm)')
+            setErro('Preencha as 3 larguras e as 3 alturas de todas as esquadrias (mÃ­nimo 100mm)')
             return
           }
         } else {
           const l = parseFloat(it.largura.replace(',', '.'))
           const a = parseFloat(it.altura.replace(',', '.'))
           if (!l || !a || l < 100 || a < 100) {
-            setErro('Preencha as medidas de todas as esquadrias (mínimo 100mm x 100mm)')
+            setErro('Preencha as medidas de todas as esquadrias (mÃ­nimo 100mm x 100mm)')
             return
           }
         }
@@ -157,7 +171,7 @@ export default function OrcamentoRapido() {
     const dadosForm: DadosOrcamentoForm = {
       modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
-      arquitetoNome, arquitetoContato,
+      arquitetoNome, arquitetoContato, fotos,
     }
 
     const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
@@ -197,6 +211,8 @@ export default function OrcamentoRapido() {
     setTipoMedida('')
     setArquitetoNome('')
     setArquitetoContato('')
+    setFotos([])
+    setFotosPreviews([])
   }
 
   if (salvoOffline) {
@@ -206,7 +222,7 @@ export default function OrcamentoRapido() {
           <WifiOff size={48} className="text-amber-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Salvo neste aparelho!</h2>
           <p className="text-slate-500 mb-6">
-            Sem internet agora. O pedido de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar — não precisa reenviar.
+            Sem internet agora. O pedido de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar â nÃ£o precisa reenviar.
           </p>
           <div className="flex gap-3 justify-center">
             <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">
@@ -225,7 +241,7 @@ export default function OrcamentoRapido() {
           <CheckCircle size={48} className="text-brand-teal mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Pedido enviado!</h2>
           <p className="text-slate-500 mb-6">
-            {clienteNome} entrou no painel de orçamentos. Um funcionário vai preparar o valor.
+            {clienteNome} entrou no painel de orÃ§amentos. Um funcionÃ¡rio vai preparar o valor.
           </p>
           <div className="flex gap-3 justify-center">
             <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">
@@ -250,7 +266,7 @@ export default function OrcamentoRapido() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Orçamento</h1>
+            <h1 className="text-lg font-bold text-slate-800">OrÃ§amento</h1>
             <p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p>
           </div>
         </div>
@@ -286,7 +302,7 @@ export default function OrcamentoRapido() {
               onChange={e => setOrigem(e.target.value as OrigemCliente)}
               className="w-full border border-slate-300 rounded-xl p-3 text-sm"
             >
-              <option value="indicacao">Indicação</option>
+              <option value="indicacao">IndicaÃ§Ã£o</option>
               <option value="arquiteto">Arquiteto</option>
               <option value="engenheiro">Engenheiro</option>
               <option value="construtora">Construtora</option>
@@ -302,8 +318,8 @@ export default function OrcamentoRapido() {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label>
-          <p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orÃ§amento *</label>
+          <p className="text-xs text-slate-400 mb-3">Como estÃ¡ esse cliente: quÃ£o perto de fechar ele estÃ¡?</p>
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => setTemperatura('quente')}
@@ -313,7 +329,7 @@ export default function OrcamentoRapido() {
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
-              🔥 Quente
+              ð¥ Quente
             </button>
             <button
               onClick={() => setTemperatura('morno')}
@@ -323,7 +339,7 @@ export default function OrcamentoRapido() {
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
-              🌤️ Morno
+              ð¤ï¸ Morno
             </button>
             <button
               onClick={() => setTemperatura('frio')}
@@ -333,7 +349,7 @@ export default function OrcamentoRapido() {
                   : 'border-slate-200 hover:border-slate-300 text-slate-600'
               }`}
             >
-              ❄️ Frio
+              âï¸ Frio
             </button>
           </div>
         </div>
@@ -417,7 +433,7 @@ export default function OrcamentoRapido() {
               modo === 'texto_livre' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Rápido (descrever em texto)
+            RÃ¡pido (descrever em texto)
           </button>
           <button
             onClick={() => setModo('formulario')}
@@ -425,13 +441,13 @@ export default function OrcamentoRapido() {
               modo === 'formulario' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Detalhado (formulário completo)
+            Detalhado (formulÃ¡rio completo)
           </button>
         </div>
 
         {modo === 'formulario' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <label className="block text-sm font-medium text-slate-700 mb-3">Esse orçamento já é medida final ou é um orçamento comum? *</label>
+            <label className="block text-sm font-medium text-slate-700 mb-3">Esse orÃ§amento jÃ¡ Ã© medida final ou Ã© um orÃ§amento comum? *</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setTipoMedida('comum')}
@@ -441,7 +457,7 @@ export default function OrcamentoRapido() {
                     : 'border-slate-200 hover:border-slate-300 text-slate-600'
                 }`}
               >
-                Orçamento comum
+                OrÃ§amento comum
               </button>
               <button
                 onClick={() => setTipoMedida('final')}
@@ -490,10 +506,31 @@ export default function OrcamentoRapido() {
             >
               <Plus size={16} /> Adicionar outra esquadria
             </button>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+              <h3 className="text-sm font-medium text-slate-700">Fotos (opcional)</h3>
+              <div className="flex flex-wrap gap-3">
+                {fotosPreviews.map((url, i) => (
+                  <div key={i} className="relative w-20 h-20">
+                    <a href={url} target="_blank" rel="noreferrer">
+                      <img src={url} alt="Foto" className="w-20 h-20 object-cover rounded-lg" />
+                    </a>
+                    <button onClick={() => removerFoto(i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                <label className="flex flex-col items-center justify-center gap-1 w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
+                  <Camera size={18} />
+                  Adicionar
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={e => adicionarFotos(e.target.files)} />
+                </label>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>
+            <h3 className="text-sm font-medium text-slate-700">Esquadrias do orÃ§amento</h3>
 
             {itens.map((item, idx) => (
               <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
@@ -528,7 +565,7 @@ export default function OrcamentoRapido() {
                       type="text"
                       value={item.tipoOutroTexto}
                       onChange={e => atualizarItem(item.id, 'tipoOutroTexto', e.target.value)}
-                      placeholder="Qual é o tipo de esquadria?"
+                      placeholder="Qual Ã© o tipo de esquadria?"
                       className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-2"
                     />
                   )}
@@ -541,7 +578,7 @@ export default function OrcamentoRapido() {
                       type="text"
                       value={item.folhas}
                       onChange={e => atualizarItem(item.id, 'folhas', e.target.value)}
-                      placeholder="Ex: 2 ou 2 fixas + 1 móvel"
+                      placeholder="Ex: 2 ou 2 fixas + 1 mÃ³vel"
                       className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
                     />
                   </div>
@@ -550,7 +587,7 @@ export default function OrcamentoRapido() {
                 {tipoMedida === 'final' ? (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Larguras (mm) — baixo, meio, cima</label>
+                      <label className="block text-xs text-slate-500 mb-1">Larguras (mm) â baixo, meio, cima</label>
                       <div className="grid grid-cols-3 gap-2">
                         <input
                           type="number"
@@ -576,7 +613,7 @@ export default function OrcamentoRapido() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Alturas (mm) — direita, meio, esquerda</label>
+                      <label className="block text-xs text-slate-500 mb-1">Alturas (mm) â direita, meio, esquerda</label>
                       <div className="grid grid-cols-3 gap-2">
                         <input
                           type="number"
@@ -679,17 +716,17 @@ export default function OrcamentoRapido() {
                     type="text"
                     value={item.cor}
                     onChange={e => atualizarItem(item.id, 'cor', e.target.value)}
-                    placeholder="Só preencha se for diferente da cor geral da obra"
+                    placeholder="SÃ³ preencha se for diferente da cor geral da obra"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label>
+                  <label className="block text-xs text-slate-500 mb-1">ObservaÃ§Ã£o (opcional)</label>
                   <textarea
                     value={item.descricao}
                     onChange={e => atualizarItem(item.id, 'descricao', e.target.value)}
-                    placeholder="Alguma observação da obra pro orçamentista saber..."
+                    placeholder="Alguma observaÃ§Ã£o da obra pro orÃ§amentista saber..."
                     className="w-full h-16 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
                   />
                 </div>
