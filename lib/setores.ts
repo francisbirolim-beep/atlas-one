@@ -95,3 +95,12 @@ export async function criarSetor(
     descricao,
   })
 }
+
+
+// Exclui um setor definitivamente. Remove tambem as permissoes cadastradas
+// para esse setor (senao ficam registros orfaos apontando pra um setor que
+// nao existe mais).
+export async function excluirSetor(id: string) {
+  await supabase.from('permissoes').delete().eq('setor_id', id)
+  return supabase.from('setores').delete().eq('id', id)
+}
