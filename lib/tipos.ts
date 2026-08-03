@@ -360,7 +360,8 @@ export interface AutomacaoOrcamento {
   id: string
   nome?: string | null
   coluna_id: string
-  usuario_id: string
+  destino_tipo: 'fixo' | 'solicitante'
+  usuario_id: string | null
   titulo_tarefa: string
   ativo: boolean
   created_at?: string
