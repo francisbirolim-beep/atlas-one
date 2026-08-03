@@ -19,6 +19,8 @@ import {
 } from '@/lib/tarefas'
 import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
 import { usuarioAtual } from '@/lib/auth'
+import BotaoMicrofone from '@/components/BotaoMicrofone'
+import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 
 function formatarDuracao(ms: number) {
   const min = Math.floor(ms / 60000)
@@ -129,6 +131,17 @@ export default function Tarefas() {
       if (t) setTarefas((prev) => [...prev, t])
     }
     setNovaEm(null)
+  }
+
+  function paraDatetimeLocal(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+  function aoFalarNovaTarefa(texto: string) {
+    const { titulo, data } = interpretarComandoDeVoz(texto)
+    setTituloNovo(titulo)
+    if (data) setDataNova(paraDatetimeLocal(data))
   }
 
   async function alternarConcluida(t: TarefaPessoal) {
@@ -268,13 +281,16 @@ export default function Tarefas() {
                 <X size={18} />
               </button>
             </div>
-            <input
-              value={tituloNovo}
-              onChange={(e) => setTituloNovo(e.target.value)}
-              placeholder="Titulo"
-              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
-              autoFocus
-            />
+            <div className="flex gap-2 items-center">
+              <input
+                value={tituloNovo}
+                onChange={(e) => setTituloNovo(e.target.value)}
+                placeholder="Titulo"
+                className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                autoFocus
+              />
+              <BotaoMicrofone onResultado={aoFalarNovaTarefa} titulo="Falar (ex: hoje medir obra)" />
+            </div>
             <textarea
               value={descNova}
               onChange={(e) => setDescNova(e.target.value)}
