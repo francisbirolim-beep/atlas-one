@@ -366,3 +366,13 @@ export interface AutomacaoOrcamento {
   ativo: boolean
   created_at?: string
 }
+
+export interface AutomacaoAssistencia {
+  id: string
+  nome?: string | null
+  destino_tipo: 'fixo' | 'solicitante'
+  usuario_id: string | null
+  titulo_tarefa: string
+  ativo: boolean
+  created_at?: string
+}
