@@ -6,11 +6,12 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
+import { listarAutomacoesOrcamento, criarAutomacaoOrcamento, alternarAtivoAutomacao, excluirAutomacaoOrcamento } from '@/lib/automacoes'
 import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor, excluirSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta } from '@/lib/tipos'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -25,6 +26,12 @@ export default function Configuracoes() {
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [colunas, setColunas] = useState<KanbanColuna[]>([])
+  const [automacoes, setAutomacoes] = useState<AutomacaoOrcamento[]>([])
+  const [novaAutomacaoColuna, setNovaAutomacaoColuna] = useState('')
+  const [novaAutomacaoUsuario, setNovaAutomacaoUsuario] = useState('')
+  const [novaAutomacaoTitulo, setNovaAutomacaoTitulo] = useState('')
+  const [salvandoAutomacao, setSalvandoAutomacao] = useState(false)
+  const [erroAutomacao, setErroAutomacao] = useState('')
   const [slaEdit, setSlaEdit] = useState<Record<string, { amarelo: string; vermelho: string }>>({})
   const [corEdit, setCorEdit] = useState<Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }>>({})
 
@@ -78,9 +85,10 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
     setEuSouMaster(me?.role === 'master')
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia] = await Promise.all([
+      const [{ data: users }, cols, listaAutomacoes, listaSetores, listaMetas, listaBackups, corAssistencia] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
+        listarAutomacoesOrcamento(),
         listarSetores(),
         listarMetas(mesMetaAtual),
         listarBackups(),
@@ -110,6 +118,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
       listaUsuarios.forEach(u => { whatsInicial[u.id] = u.whatsapp || '' })
       setWhatsappEdit(whatsInicial)
       setColunas(cols)
+      setAutomacoes(listaAutomacoes)
       const inicial: Record<string, { amarelo: string; vermelho: string }> = {}
       const coresIniciais: Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }> = {}
       cols.forEach(c => {
@@ -362,6 +371,39 @@ async function salvarSla(colunaId: string) {
     )
   }
 
+  async function criarAutomacao() {
+    if (!novaAutomacaoColuna || !novaAutomacaoUsuario || !novaAutomacaoTitulo.trim()) {
+      setErroAutomacao('Preencha coluna, usuário e título da tarefa.')
+      return
+    }
+    setSalvandoAutomacao(true)
+    setErroAutomacao('')
+    const nova = await criarAutomacaoOrcamento(novaAutomacaoColuna, novaAutomacaoUsuario, novaAutomacaoTitulo.trim())
+    setSalvandoAutomacao(false)
+    if (!nova) {
+      setErroAutomacao('Erro ao criar automação.')
+      return
+    }
+    setAutomacoes(prev => [...prev, nova])
+    setNovaAutomacaoColuna('')
+    setNovaAutomacaoUsuario('')
+    setNovaAutomacaoTitulo('')
+  }
+
+  async function alternarAutomacao(id: string, ativoAtual: boolean) {
+    const ok = await alternarAtivoAutomacao(id, !ativoAtual)
+    if (ok) {
+      setAutomacoes(prev => prev.map(a => (a.id === id ? { ...a, ativo: !ativoAtual } : a)))
+    }
+  }
+
+  async function removerAutomacao(id: string) {
+    const ok = await excluirAutomacaoOrcamento(id)
+    if (ok) {
+      setAutomacoes(prev => prev.filter(a => a.id !== id))
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
@@ -515,6 +557,89 @@ async function salvarSla(colunaId: string) {
             ))}
           </div>
         </section>
+
+              <section className="bg-white rounded-2xl border border-slate-200 p-5">
+                <h3 className="text-sm font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                  <Wrench className="w-4 h-4" /> Automações
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  Quando um orçamento entrar na coluna escolhida, uma tarefa é criada automaticamente para o usuário selecionado. Use {'{cliente}'} no título para inserir o nome do cliente.
+                </p>
+
+                {automacoes.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    {automacoes.map(a => {
+                      const colunaAuto = colunas.find(c => c.id === a.coluna_id)
+                      const usuarioAuto = usuarios.find(u => u.id === a.usuario_id)
+                      return (
+                        <div key={a.id} className="flex items-center justify-between gap-3 border border-slate-200 rounded-xl px-3 py-2">
+                          <div className="text-xs text-slate-600">
+                            <span className="font-medium text-slate-800">{colunaAuto?.nome || 'Coluna removida'}</span>
+                            {' → tarefa para '}
+                            <span className="font-medium text-slate-800">{usuarioAuto?.nome || 'Usuário removido'}</span>
+                            {': "'}{a.titulo_tarefa}{'"'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => alternarAutomacao(a.id, a.ativo)}
+                              className={`text-xs px-2 py-1 rounded-lg border ${a.ativo ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-slate-300 text-slate-500 bg-slate-50'}`}
+                            >
+                              {a.ativo ? 'Ativa' : 'Inativa'}
+                            </button>
+                            <button
+                              onClick={() => removerAutomacao(a.id)}
+                              className="text-xs text-red-600 hover:underline"
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <select
+                    value={novaAutomacaoColuna}
+                    onChange={e => setNovaAutomacaoColuna(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">Coluna do kanban</option>
+                    {colunas.map(col => (
+                      <option key={col.id} value={col.id}>{col.nome}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={novaAutomacaoUsuario}
+                    onChange={e => setNovaAutomacaoUsuario(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">Usuário que recebe a tarefa</option>
+                    {usuarios.map(u => (
+                      <option key={u.id} value={u.id}>{u.nome}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={novaAutomacaoTitulo}
+                    onChange={e => setNovaAutomacaoTitulo(e.target.value)}
+                    placeholder="Titulo da tarefa (ex: Orcar {cliente})"
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+
+                {erroAutomacao && <p className="text-xs text-red-600 mt-2">{erroAutomacao}</p>}
+
+                <button
+                  onClick={criarAutomacao}
+                  disabled={salvandoAutomacao}
+                  className="mt-3 text-xs font-medium text-white bg-brand-navy px-4 py-2 rounded-lg disabled:opacity-50"
+                >
+                  {salvandoAutomacao ? 'Salvando...' : '+ Criar automação'}
+                </button>
+              </section>
+
 
         
         </div>
