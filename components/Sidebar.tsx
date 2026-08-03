@@ -1,31 +1,4 @@
-{restoOrdenado.map((g, i) => (
-                <div key={g.href} className="flex items-center">
-                  <Link
-                    href={g.href}
-                    onClick={() => setAbrirMais(false)}
-                    className="flex-1 rounded-lg px-2 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                  >
-                    {g.label}
-                  </Link>
-                  <button
-                    onClick={() => mover(g.href, 'cima')}
-                    disabled={i === 0}
-                    className="p-2 text-slate-300 disabled:opacity-30"
-                  >
-                    <ChevronUp size={14} />
-                  </button>
-                  <button
-                    onClick={() => mover(g.href, 'baixo')}
-                    disabled={i === restoOrdenado.length - 1}
-                    className="p-2 text-slate-300 disabled:opacity-30"
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                  <button onClick={() => favoritar(g.href)} className="p-2 text-slate-300 hover:text-amber-400">
-                    <Star size={14} />
-                  </button>
-                </div>
-              ))}'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -242,7 +215,7 @@ export default function Sidebar() {
               </button>
             </div>
             <div className="space-y-1">
-              {resto.map((g) => (
+              {restoOrdenado.map((g, i) => (
                 <div key={g.href} className="flex items-center">
                   <Link
                     href={g.href}
@@ -251,6 +224,20 @@ export default function Sidebar() {
                   >
                     {g.label}
                   </Link>
+                  <button
+                    onClick={() => mover(g.href, 'cima')}
+                    disabled={i === 0}
+                    className="p-2 text-slate-300 disabled:opacity-30"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => mover(g.href, 'baixo')}
+                    disabled={i === restoOrdenado.length - 1}
+                    className="p-2 text-slate-300 disabled:opacity-30"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
                   <button onClick={() => favoritar(g.href)} className="p-2 text-slate-300 hover:text-amber-400">
                     <Star size={14} />
                   </button>
