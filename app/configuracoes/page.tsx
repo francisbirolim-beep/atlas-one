@@ -62,8 +62,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [criandoSetor, setCriandoSetor] = useState(false)
                 const [novoSetorTopoAberto, setNovoSetorTopoAberto] = useState(false)
                 const [novoSetorTopoNome, setNovoSetorTopoNome] = useState('')
-                const [novoSetorTopoGrupo, setNovoSetorTopoGrupo] = useState<string>(GRUPOS_ORDEM[0] || '')
-                const [criandoSetorTopo, setCriandoSetorTopo] = useState(false)
+                                const [criandoSetorTopo, setCriandoSetorTopo] = useState(false)
 
   const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
   const [salvandoCorAssistencia, setSalvandoCorAssistencia] = useState(false)
@@ -295,7 +294,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   async function criarNovoSetorTopo() {
   if (!novoSetorTopoNome.trim()) return
   setCriandoSetorTopo(true)
-  const grupo = novoSetorTopoGrupo || GRUPOS_ORDEM[0]
+  const grupo = 'Administrativo'
   const itensGrupo = agruparSetores(setores)[grupo] || []
   const maiorOrdem = itensGrupo.reduce((max, s) => (s.ordem > max ? s.ordem : max), 0)
   await criarSetor(novoSetorTopoNome.trim(), grupo, maiorOrdem + 1, null)
@@ -636,16 +635,7 @@ async function salvarSla(colunaId: string) {
                   placeholder="Nome do setor (ex: Recursos Humanos)"
                   className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
                 />
-                <select
-                  value={novoSetorTopoGrupo}
-                  onChange={e => setNovoSetorTopoGrupo(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
-                >
-                  {GRUPOS_ORDEM.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2">
                   <button
                     onClick={criarNovoSetorTopo}
                     disabled={criandoSetorTopo || !novoSetorTopoNome.trim()}
