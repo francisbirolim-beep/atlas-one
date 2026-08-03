@@ -42,6 +42,7 @@ export interface DadosOrcamentoForm {
   tipoMedida: 'comum' | 'final' | ''
   arquitetoNome: string
   arquitetoContato: string
+  fotos: File[]
 }
 
 // Faz de fato a gravacao no Supabase (cliente, upload de fotos, orcamento e
@@ -53,7 +54,7 @@ export async function criarOrcamentoNoServidor(
   const {
     modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
-    arquitetoNome, arquitetoContato,
+    arquitetoNome, arquitetoContato, fotos,
   } = dados
 
   const [clienteId, colunaId, usuario] = await Promise.all([
@@ -63,6 +64,8 @@ export async function criarOrcamentoNoServidor(
   ])
 
   let itensSalvos: ItemEsquadria[] = []
+  const fotosUrls: string[] = []
+  for (const foto of fotos) { const url = await uploadFoto(foto); if (url) fotosUrls.push(url) }
   if (modo === 'formulario') {
     for (const it of itens) {
       const foto_url = it.foto ? await uploadFoto(it.foto) : null
@@ -127,6 +130,7 @@ export async function criarOrcamentoNoServidor(
     temperatura,
     contramarco,
     itens: itensSalvos,
+    fotos_urls: fotosUrls,
     tipo_medida: modo === 'formulario' ? tipoMedida : null,
     descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
     valor_estimado: null,
