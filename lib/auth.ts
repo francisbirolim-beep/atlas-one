@@ -1,7 +1,26 @@
 import { supabase } from './supabase'
 import { Usuario } from './tipos'
 
-export async function login(email: string, senha: string) {
+export async function login(identificador: string, senha: string) {
+  const valor = identificador.trim()
+  let email = valor.toLowerCase()
+
+  if (!valor.includes('@')) {
+    const resp = await fetch('/api/resolver-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identificador: valor }),
+    })
+    const json = await resp.json()
+    if (!resp.ok || !json.email) {
+      return {
+        data: { user: null, session: null },
+        error: { message: json.error || 'Usuário ou senha incorretos', name: 'AuthApiError', status: resp.status } as any,
+      } as any
+    }
+    email = json.email
+  }
+
   return supabase.auth.signInWithPassword({ email, password: senha })
 }
 
