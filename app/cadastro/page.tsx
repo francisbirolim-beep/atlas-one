@@ -109,9 +109,6 @@ export default function Cadastro() {
         }
       })
       setMetas(metasIniciais)
-      const whatsInicial: Record<string, string> = {}
-      listaUsuarios.forEach(u => { whatsInicial[u.id] = u.whatsapp || '' })
-      setWhatsappEdit(whatsInicial)
       setColunas(cols)
       const inicial: Record<string, { amarelo: string; vermelho: string }> = {}
       const coresIniciais: Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }> = {}
