@@ -17,7 +17,8 @@ export async function listarAutomacoesOrcamento(): Promise<AutomacaoOrcamento[]>
 
 export async function criarAutomacaoOrcamento(
   colunaId: string,
-  usuarioId: string,
+  destinoTipo: 'fixo' | 'solicitante',
+  usuarioId: string | null,
   tituloTarefa: string,
   nome?: string
 ): Promise<AutomacaoOrcamento | null> {
@@ -25,7 +26,8 @@ export async function criarAutomacaoOrcamento(
     .from('automacoes_orcamento')
     .insert({
       coluna_id: colunaId,
-      usuario_id: usuarioId,
+      destino_tipo: destinoTipo,
+      usuario_id: destinoTipo === 'fixo' ? usuarioId : null,
       titulo_tarefa: tituloTarefa,
       nome: nome || null,
       ativo: true,
@@ -60,7 +62,7 @@ export async function excluirAutomacaoOrcamento(id: string): Promise<boolean> {
 
 export async function executarAutomacoesColuna(
   colunaId: string,
-  orcamento: { cliente_nome?: string | null }
+  orcamento: { cliente_nome?: string | null; criado_por_id?: string | null }
 ): Promise<void> {
   try {
     const { data, error } = await supabase
@@ -72,13 +74,20 @@ export async function executarAutomacoesColuna(
     if (error || !data || data.length === 0) return
 
     for (const automacao of data as AutomacaoOrcamento[]) {
-      const colunaTarefaId = await primeiraColunaTarefaId(automacao.usuario_id)
+      const usuarioAlvo =
+        automacao.destino_tipo === 'solicitante'
+          ? orcamento.criado_por_id || null
+          : automacao.usuario_id
+
+      if (!usuarioAlvo) continue
+
+      const colunaTarefaId = await primeiraColunaTarefaId(usuarioAlvo)
       if (!colunaTarefaId) continue
 
       const cliente = orcamento.cliente_nome || 'cliente'
       const titulo = automacao.titulo_tarefa.replace(/\{cliente\}/g, cliente)
 
-      await criarTarefa(automacao.usuario_id, colunaTarefaId, titulo)
+      await criarTarefa(usuarioAlvo, colunaTarefaId, titulo)
     }
   } catch (e) {
     console.error('Erro ao executar automacoes da coluna:', e)
