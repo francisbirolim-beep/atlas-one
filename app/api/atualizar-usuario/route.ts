@@ -32,9 +32,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Usuário inválido' }, { status: 400 })
     }
 
+    const nomeInformado = typeof body.nome === 'string' ? body.nome.trim() : undefined
+    const emailInformado = typeof body.email === 'string' ? body.email.trim().toLowerCase() : undefined
+    const roleInformado = body.role === 'master' || body.role === 'funcionario' ? body.role : undefined
+    const novaSenha = typeof body.novaSenha === 'string' ? body.novaSenha.trim() : ''
+
+    if (nomeInformado !== undefined && !nomeInformado) {
+      return NextResponse.json({ error: 'Nome não pode ficar em branco' }, { status: 400 })
+    }
+    if (novaSenha && novaSenha.length < 6) {
+      return NextResponse.json({ error: 'A nova senha precisa ter pelo menos 6 caracteres' }, { status: 400 })
+    }
+
+    if (novaSenha || emailInformado) {
+      const authUpdate: { email?: string; password?: string } = {}
+      if (emailInformado) authUpdate.email = emailInformado
+      if (novaSenha) authUpdate.password = novaSenha
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(id, authUpdate)
+      if (authErr) {
+        return NextResponse.json({ error: authErr.message }, { status: 400 })
+      }
+    }
+
+    const camposPerfil: Record<string, any> = { whatsapp }
+    if (nomeInformado !== undefined) camposPerfil.nome = nomeInformado
+    if (emailInformado) camposPerfil.email = emailInformado
+    if (roleInformado !== undefined) camposPerfil.role = roleInformado
+
     const { error: updErr } = await supabaseAdmin
       .from('usuarios')
-      .update({ whatsapp })
+      .update(camposPerfil)
       .eq('id', id)
 
     if (updErr) {
