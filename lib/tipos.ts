@@ -247,13 +247,20 @@ export interface Assistencia {
   coluna_atualizada_em?: string | null
 }
 
+export interface ProducaoColuna {
+  id: string
+  nome: string
+  ordem: number
+  created_at?: string
+}
+
 export interface ProducaoItem {
   id: string
   created_at?: string
   atualizado_em?: string
   titulo: string
   descricao?: string | null
-  coluna: string
+  coluna_id: string
   orcamento_id?: string | null
   criado_por_id?: string | null
   criado_por_nome?: string | null
