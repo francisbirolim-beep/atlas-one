@@ -3,6 +3,7 @@ import { obterOuCriarCliente } from './clientes'
 import { uploadFoto } from './upload'
 import { usuarioAtual } from './auth'
 import { primeiraColunaAssistenciaId } from './assistenciaKanban'
+import { executarAutomacoesAssistencia } from './automacoesAssistencia'
 import { primeiraColunaId } from './kanban'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -58,6 +59,11 @@ export async function criarAssistenciaNoServidor(
   })
 
   if (error) return { ok: false, error: error.message }
+
+  executarAutomacoesAssistencia({
+    cliente_nome: clienteNome,
+    criado_por_id: usuario?.id || null,
+  }).catch(() => {})
 
   // Card espelho no painel de orcamento (aba "Fazer orçamento") so pra
   // avisar o time que tem um chamado de assistencia novo. Some de la sozinho
