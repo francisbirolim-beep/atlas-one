@@ -29,6 +29,7 @@ export default function Configuracoes() {
   const [automacoes, setAutomacoes] = useState<AutomacaoOrcamento[]>([])
   const [novaAutomacaoColuna, setNovaAutomacaoColuna] = useState('')
   const [novaAutomacaoUsuario, setNovaAutomacaoUsuario] = useState('')
+  const [novaAutomacaoDestinoTipo, setNovaAutomacaoDestinoTipo] = useState<'fixo' | 'solicitante'>('fixo')
   const [novaAutomacaoTitulo, setNovaAutomacaoTitulo] = useState('Orçamento {cliente}')
   const [salvandoAutomacao, setSalvandoAutomacao] = useState(false)
   const [erroAutomacao, setErroAutomacao] = useState('')
@@ -372,13 +373,18 @@ async function salvarSla(colunaId: string) {
   }
 
   async function criarAutomacao() {
-    if (!novaAutomacaoColuna || !novaAutomacaoUsuario || !novaAutomacaoTitulo.trim()) {
-      setErroAutomacao('Preencha coluna, usuário e título da tarefa.')
+    if (!novaAutomacaoColuna || (novaAutomacaoDestinoTipo === 'fixo' && !novaAutomacaoUsuario) || !novaAutomacaoTitulo.trim()) {
+      setErroAutomacao('Preencha coluna, destino e título da tarefa.')
       return
     }
     setSalvandoAutomacao(true)
     setErroAutomacao('')
-    const nova = await criarAutomacaoOrcamento(novaAutomacaoColuna, novaAutomacaoUsuario, novaAutomacaoTitulo.trim())
+    const nova = await criarAutomacaoOrcamento(
+      novaAutomacaoColuna,
+      novaAutomacaoDestinoTipo,
+      novaAutomacaoDestinoTipo === 'fixo' ? novaAutomacaoUsuario : null,
+      novaAutomacaoTitulo.trim()
+    )
     setSalvandoAutomacao(false)
     if (!nova) {
       setErroAutomacao('Erro ao criar automação.')
@@ -387,6 +393,7 @@ async function salvarSla(colunaId: string) {
     setAutomacoes(prev => [...prev, nova])
     setNovaAutomacaoColuna('')
     setNovaAutomacaoUsuario('')
+    setNovaAutomacaoDestinoTipo('fixo')
     setNovaAutomacaoTitulo('Orçamento {cliente}')
   }
 
@@ -571,12 +578,13 @@ async function salvarSla(colunaId: string) {
                     {automacoes.map(a => {
                       const colunaAuto = colunas.find(c => c.id === a.coluna_id)
                       const usuarioAuto = usuarios.find(u => u.id === a.usuario_id)
+                      const destinoLabel = a.destino_tipo === 'solicitante' ? 'vendedor que pediu o orçamento' : (usuarioAuto?.nome || 'Usuário removido')
                       return (
                         <div key={a.id} className="flex items-center justify-between gap-3 border border-slate-200 rounded-xl px-3 py-2">
                           <div className="text-xs text-slate-600">
                             <span className="font-medium text-slate-800">{colunaAuto?.nome || 'Coluna removida'}</span>
                             {' → tarefa para '}
-                            <span className="font-medium text-slate-800">{usuarioAuto?.nome || 'Usuário removido'}</span>
+                            <span className="font-medium text-slate-800">{destinoLabel}</span>
                             {': "'}{a.titulo_tarefa}{'"'}
                           </div>
                           <div className="flex items-center gap-2">
@@ -599,6 +607,27 @@ async function salvarSla(colunaId: string) {
                   </div>
                 )}
 
+                <div className="flex items-center gap-4 mb-3">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="destinoTipoAutomacao"
+                      checked={novaAutomacaoDestinoTipo === 'fixo'}
+                      onChange={() => setNovaAutomacaoDestinoTipo('fixo')}
+                    />
+                    Usuário fixo
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="destinoTipoAutomacao"
+                      checked={novaAutomacaoDestinoTipo === 'solicitante'}
+                      onChange={() => setNovaAutomacaoDestinoTipo('solicitante')}
+                    />
+                    Vendedor que pediu o orçamento
+                  </label>
+                </div>
+
                 <div className="grid sm:grid-cols-3 gap-3">
                   <select
                     value={novaAutomacaoColuna}
@@ -610,16 +639,22 @@ async function salvarSla(colunaId: string) {
                       <option key={col.id} value={col.id}>{col.nome}</option>
                     ))}
                   </select>
-                  <select
-                    value={novaAutomacaoUsuario}
-                    onChange={e => setNovaAutomacaoUsuario(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">Usuário que recebe a tarefa</option>
-                    {usuarios.map(u => (
-                      <option key={u.id} value={u.id}>{u.nome}</option>
-                    ))}
-                  </select>
+                  {novaAutomacaoDestinoTipo === 'fixo' ? (
+                    <select
+                      value={novaAutomacaoUsuario}
+                      onChange={e => setNovaAutomacaoUsuario(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">Usuário que recebe a tarefa</option>
+                      {usuarios.map(u => (
+                        <option key={u.id} value={u.id}>{u.nome}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm text-slate-500 flex items-center">
+                      Vendedor que pediu o orçamento
+                    </div>
+                  )}
                   <input
                     type="text"
                     value={novaAutomacaoTitulo}
