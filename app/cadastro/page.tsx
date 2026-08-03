@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -38,8 +38,12 @@ export default function Cadastro() {
   const [salvandoUsuario, setSalvandoUsuario] = useState(false)
   const [erroUsuario, setErroUsuario] = useState('')
   const [sucessoUsuario, setSucessoUsuario] = useState('')
-  const [whatsappEdit, setWhatsappEdit] = useState<Record<string, string>>({})
-  const [salvandoWhatsapp, setSalvandoWhatsapp] = useState<string | null>(null)
+  const [meuId, setMeuId] = useState<string | null>(null)
+  const [editandoUsuarioId, setEditandoUsuarioId] = useState<string | null>(null)
+  const [usuarioEditForm, setUsuarioEditForm] = useState<Record<string, { nome: string; email: string; whatsapp: string; role: 'funcionario' | 'master'; novaSenha: string; confirmarNovaSenha: string }>>({})
+  const [salvandoEdicaoUsuario, setSalvandoEdicaoUsuario] = useState<string | null>(null)
+  const [erroEdicaoUsuario, setErroEdicaoUsuario] = useState('')
+  const [sucessoEdicaoUsuario, setSucessoEdicaoUsuario] = useState('')
 
   const [metas, setMetas] = useState<Record<string, { valor: string; quantidade: string }>>({})
   const [salvandoMeta, setSalvandoMeta] = useState<string | null>(null)
@@ -74,6 +78,7 @@ export default function Cadastro() {
     setCarregando(true)
     const me = await usuarioAtual()
     setEuSouMaster(me?.role === 'master')
+    setMeuId(me?.id || null)
 
     if (me?.role === 'master') {
       const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia] = await Promise.all([
@@ -171,20 +176,78 @@ export default function Cadastro() {
     carregar()
   }
 
-  async function salvarWhatsappUsuario(id: string) {
-    setSalvandoWhatsapp(id)
-    const token = await tokenAtual()
-    const whatsapp = whatsappEdit[id] || ''
+  function iniciarEdicaoUsuario(u: Usuario) {
+    setEditandoUsuarioId(u.id)
+    setErroEdicaoUsuario('')
+    setSucessoEdicaoUsuario('')
+    setUsuarioEditForm(prev => ({
+      ...prev,
+      [u.id]: {
+        nome: u.nome,
+        email: u.email,
+        whatsapp: u.whatsapp || '',
+        role: u.role,
+        novaSenha: '',
+        confirmarNovaSenha: '',
+      },
+    }))
+  }
 
+  function cancelarEdicaoUsuario() {
+    setEditandoUsuarioId(null)
+    setErroEdicaoUsuario('')
+    setSucessoEdicaoUsuario('')
+  }
+
+  function mudarCampoEdicaoUsuario(id: string, campo: string, valor: string) {
+    setUsuarioEditForm(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [campo]: valor },
+    }))
+  }
+
+  async function salvarEdicaoUsuario(id: string) {
+    const dados = usuarioEditForm[id]
+    if (!dados) return
+    setErroEdicaoUsuario('')
+    setSucessoEdicaoUsuario('')
+    if (!dados.nome.trim()) {
+      setErroEdicaoUsuario('Preencha o nome')
+      return
+    }
+    if (dados.novaSenha) {
+      if (dados.novaSenha.length < 6) {
+        setErroEdicaoUsuario('A nova senha precisa ter pelo menos 6 caracteres')
+        return
+      }
+      if (dados.novaSenha !== dados.confirmarNovaSenha) {
+        setErroEdicaoUsuario('As senhas não coincidem')
+        return
+      }
+    }
+    setSalvandoEdicaoUsuario(id)
+    const token = await tokenAtual()
     const resp = await fetch('/api/atualizar-usuario', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id, whatsapp }),
+      body: JSON.stringify({
+        id,
+        nome: dados.nome,
+        email: dados.email,
+        whatsapp: dados.whatsapp,
+        role: dados.role,
+        novaSenha: dados.novaSenha || undefined,
+      }),
     })
-    setSalvandoWhatsapp(null)
-    if (resp.ok) {
-      setUsuarios(prev => prev.map(u => (u.id === id ? { ...u, whatsapp: whatsapp || null } : u)))
+    const json = await resp.json()
+    setSalvandoEdicaoUsuario(null)
+    if (!resp.ok) {
+      setErroEdicaoUsuario(json.error || 'Erro ao salvar usuário')
+      return
     }
+    setSucessoEdicaoUsuario('Usuário atualizado com sucesso.')
+    setEditandoUsuarioId(null)
+    carregar()
   }
 
   async function alternarPermissoes(usuarioId: string) {
@@ -483,27 +546,91 @@ export default function Cadastro() {
                   <div>
                     <p className="text-slate-800 font-medium">{u.nome}</p>
                     <p className="text-slate-400 text-xs">{u.email}</p>
+                    {u.whatsapp && <p className="text-slate-400 text-xs">{u.whatsapp}</p>}
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-600'}`}>
                     {u.role === 'master' ? 'Master' : 'Funcionário'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={whatsappEdit[u.id] ?? ''}
-                    onChange={e => setWhatsappEdit(prev => ({ ...prev, [u.id]: e.target.value }))}
-                    placeholder="WhatsApp (ex: 11999998888)"
-                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                  />
+
+                {editandoUsuarioId === u.id ? (
+                  <div className="border border-slate-100 rounded-lg p-3 space-y-2">
+                    <input
+                      type="text"
+                      value={usuarioEditForm[u.id]?.nome ?? ''}
+                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'nome', e.target.value)}
+                      placeholder="Nome"
+                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      type="email"
+                      value={usuarioEditForm[u.id]?.email ?? ''}
+                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'email', e.target.value)}
+                      placeholder="E-mail de acesso"
+                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={usuarioEditForm[u.id]?.novaSenha ?? ''}
+                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'novaSenha', e.target.value)}
+                      placeholder="Nova senha — deixe em branco para não alterar"
+                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={usuarioEditForm[u.id]?.confirmarNovaSenha ?? ''}
+                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'confirmarNovaSenha', e.target.value)}
+                      placeholder="Confirmar nova senha"
+                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={usuarioEditForm[u.id]?.whatsapp ?? ''}
+                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'whatsapp', e.target.value)}
+                      placeholder="WhatsApp (ex: 11999998888)"
+                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    {u.id === meuId ? (
+                      <p className="text-xs text-slate-400">Tipo de acesso: Master (você não pode alterar o seu próprio nível)</p>
+                    ) : (
+                      <select
+                        value={usuarioEditForm[u.id]?.role ?? 'funcionario'}
+                        onChange={e => mudarCampoEdicaoUsuario(u.id, 'role', e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                      >
+                        <option value="funcionario">Funcionário</option>
+                        <option value="master">Master (acesso total)</option>
+                      </select>
+                    )}
+
+                    {erroEdicaoUsuario && <p className="text-red-500 text-xs">{erroEdicaoUsuario}</p>}
+                    {sucessoEdicaoUsuario && <p className="text-brand-teal text-xs">{sucessoEdicaoUsuario}</p>}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => salvarEdicaoUsuario(u.id)}
+                        disabled={salvandoEdicaoUsuario === u.id}
+                        className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                      >
+                        {salvandoEdicaoUsuario === u.id ? 'Salvando...' : 'Salvar'}
+                      </button>
+                      <button
+                        onClick={cancelarEdicaoUsuario}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                   <button
-                    onClick={() => salvarWhatsappUsuario(u.id)}
-                    disabled={salvandoWhatsapp === u.id}
-                    className="px-2.5 py-1.5 bg-brand-navyLight text-brand-navyDark rounded-lg text-xs font-medium hover:bg-brand-navy hover:text-white transition disabled:opacity-50"
+                    onClick={() => iniciarEdicaoUsuario(u)}
+                    className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
                   >
-                    {salvandoWhatsapp === u.id ? 'Salvando...' : 'Salvar'}
+                    <Pencil size={13} />
+                    Editar
                   </button>
-                </div>
+                )}
 
                 {u.role !== 'master' && (
                   <div>
