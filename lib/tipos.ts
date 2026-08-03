@@ -247,6 +247,18 @@ export interface Assistencia {
   coluna_atualizada_em?: string | null
 }
 
+export interface ProducaoItem {
+  id: string
+  created_at?: string
+  atualizado_em?: string
+  titulo: string
+  descricao?: string | null
+  coluna: string
+  orcamento_id?: string | null
+  criado_por_id?: string | null
+  criado_por_nome?: string | null
+}
+
 export type GrupoSetor =
   | 'Comercial' | 'Técnico' | 'Operações' | 'Administrativo'
   | 'Relacionamento' | 'Conhecimento' | 'Sistema'
