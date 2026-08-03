@@ -4,6 +4,7 @@ import { primeiraColunaId } from './kanban'
 import { uploadFoto } from './upload'
 import { usuarioAtual } from './auth'
 import { registrarHistorico } from './historico'
+import { executarAutomacoesColuna } from './automacoes'
 import { v4 as uuidv4 } from 'uuid'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead } from './tipos'
 
@@ -142,6 +143,7 @@ export async function criarOrcamentoNoServidor(
   if (error) {
     return { ok: false, error: error.message }
   }
+  executarAutomacoesColuna(colunaId, { cliente_nome: clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
 
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true }
