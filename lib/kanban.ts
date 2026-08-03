@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { KanbanColuna } from './tipos'
+import { executarAutomacoesColuna } from './automacoes'
 
 export async function listarColunas(): Promise<KanbanColuna[]> {
   const { data, error } = await supabase
@@ -69,10 +70,16 @@ export async function excluirColuna(id: string, colunaDestinoId: string): Promis
 }
 
 export async function moverCard(orcamentoId: string, colunaId: string): Promise<boolean> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('orcamentos')
     .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
     .eq('id', orcamentoId)
+    .select('cliente_nome')
+    .single()
+
+  if (!error) {
+    executarAutomacoesColuna(colunaId, { cliente_nome: data?.cliente_nome || null }).catch(() => {})
+  }
 
   return !error
 }
