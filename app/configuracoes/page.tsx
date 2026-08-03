@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
-import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor } from '@/lib/setores'
+import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor, excluirSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
@@ -56,6 +56,7 @@ export default function Configuracoes() {
 
   const [setoresEdit, setSetoresEdit] = useState<Record<string, { nome: string; grupo: string; ordem: string; descricao: string }>>({})
   const [salvandoSetor, setSalvandoSetor] = useState<string | null>(null)
+const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [novoSetorGrupo, setNovoSetorGrupo] = useState<string | null>(null)
   const [novoSetorNome, setNovoSetorNome] = useState('')
   const [criandoSetor, setCriandoSetor] = useState(false)
@@ -257,6 +258,14 @@ export default function Configuracoes() {
     })
     setSetores(await listarSetores())
     setSalvandoSetor(null)
+  }
+
+  async function apagarSetor(s: Setor) {
+    if (!window.confirm(`Excluir o setor "${s.nome}"? Isso tambem remove as permissoes cadastradas para ele.`)) return
+    setApagandoSetor(s.id)
+    await excluirSetor(s.id)
+    setSetores(await listarSetores())
+    setApagandoSetor(null)
   }
 
   async function criarNovoSetor(grupo: string) {
@@ -642,6 +651,7 @@ export default function Configuracoes() {
                               className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
                             />
                           </div>
+                          <div className="flex items-center gap-3">
                           <button
                             onClick={() => salvarSetor(s.id)}
                             disabled={salvandoSetor === s.id}
@@ -649,6 +659,14 @@ export default function Configuracoes() {
                           >
                             {salvandoSetor === s.id ? 'Salvando...' : 'Salvar'}
                           </button>
+                          <button
+                            onClick={() => apagarSetor(s)}
+                            disabled={apagandoSetor === s.id}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            {apagandoSetor === s.id ? 'Excluindo...' : 'Excluir'}
+                          </button>
+                        </div>
                           </div>
                           )}
                         </div>
