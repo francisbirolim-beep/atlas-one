@@ -355,3 +355,13 @@ export interface EventoConvidado {
   status: StatusConvite
   created_at?: string
 }
+
+export interface AutomacaoOrcamento {
+  id: string
+  nome?: string | null
+  coluna_id: string
+  usuario_id: string
+  titulo_tarefa: string
+  ativo: boolean
+  created_at?: string
+}
