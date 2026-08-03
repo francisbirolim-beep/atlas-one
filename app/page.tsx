@@ -5,6 +5,8 @@ import Image from 'next/image'
 import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
+import BotaoMicrofone from '@/components/BotaoMicrofone'
+import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento } from '@/lib/tipos'
 import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId, criarTarefaRecorrente } from '@/lib/tarefas'
 import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
@@ -20,7 +22,7 @@ import {
 } from '@/lib/eventos'
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
-const MESES = ['Janeiro', 'Fevereiro', 'MarÃ§o', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 function mesmodia(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
@@ -96,6 +98,18 @@ export default function Home() {
     }
     setNovaTarefaTexto('')
     setSalvandoTarefa(false)
+  }
+
+  function aoFalarNovaTarefa(texto: string) {
+    const { titulo, data } = interpretarComandoDeVoz(texto)
+    setNovaTarefaTexto(titulo)
+    if (data) setDiaSelecionado(data)
+  }
+
+  function aoFalarNovoEvento(texto: string) {
+    const { titulo, data } = interpretarComandoDeVoz(texto)
+    setTituloEvento(titulo)
+    if (data) setDiaSelecionado(data)
   }
 
   async function abrirNovoEvento() {
@@ -180,13 +194,13 @@ export default function Home() {
       <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="EsquadrifÃ¡cio" width={140} height={40} className="h-9 w-auto object-contain" />
+            <Image src="/logo.png" alt="Esquadrifácio" width={140} height={40} className="h-9 w-auto object-contain" />
             <div>
               <h1 className="text-lg font-bold text-brand-navy">Atlas One</h1>
-              <p className="text-xs text-slate-400">EsquadrifÃ¡cio</p>
+              <p className="text-xs text-slate-400">Esquadrifácio</p>
             </div>
           </div>
-          {usuario && <span className="text-sm text-slate-500">OlÃ¡, {usuario.nome}</span>}
+          {usuario && <span className="text-sm text-slate-500">Olá, {usuario.nome}</span>}
         </div>
       </header>
 
@@ -208,6 +222,7 @@ export default function Home() {
                 placeholder="Adicionar tarefa..."
                 className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm"
               />
+              <BotaoMicrofone onResultado={aoFalarNovaTarefa} titulo="Falar (ex: hoje medir obra)" />
               <button
                 onClick={adicionarTarefaRapida}
                 disabled={!novaTarefaTexto.trim() || salvandoTarefa}
@@ -258,7 +273,7 @@ export default function Home() {
 
           <section className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-slate-700">CalendÃ¡rio</h2>
+              <h2 className="text-base font-semibold text-slate-700">Calendário</h2>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setMesVisto((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
@@ -335,7 +350,7 @@ export default function Home() {
                     {tarefasDoDia(diaSelecionado).map((t) => (
                       <div key={t.id} className="text-xs text-slate-600 flex items-center gap-1.5">
                         <Clock size={12} className="text-brand-teal flex-shrink-0" />
-                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} â {t.titulo}
+                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} � {t.titulo}
                         {(t.recorrencia_tipo || t.regra_origem_id) && <Repeat size={10} className="text-slate-300" />}
                       </div>
                     ))}
@@ -400,19 +415,22 @@ export default function Home() {
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-slate-700">
-                Novo evento â {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                Novo evento � {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
               </h3>
               <button onClick={() => setMostrarNovoEvento(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
-            <input
-              value={tituloEvento}
-              onChange={(e) => setTituloEvento(e.target.value)}
-              placeholder="TÃ­tulo"
-              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
-              autoFocus
-            />
+            <div className="flex gap-2 items-center">
+              <input
+                value={tituloEvento}
+                onChange={(e) => setTituloEvento(e.target.value)}
+                placeholder="Título"
+                className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                autoFocus
+              />
+              <BotaoMicrofone onResultado={aoFalarNovoEvento} titulo="Falar (ex: amanha reuniao com cliente)" />
+            </div>
             <input
               value={localEvento}
               onChange={(e) => setLocalEvento(e.target.value)}
@@ -421,7 +439,7 @@ export default function Home() {
             />
             <div className="flex gap-2">
               <div className="flex-1">
-                <label className="text-xs text-slate-400">InÃ­cio</label>
+                <label className="text-xs text-slate-400">Início</label>
                 <input
                   type="time"
                   value={horaInicioEvento}
@@ -447,7 +465,7 @@ export default function Home() {
                 onChange={(e) => setRepetirEvento(e.target.value as TipoRecorrencia | '')}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
               >
-                <option value="">NÃ£o se repete</option>
+                <option value="">Não se repete</option>
                 <option value="semanal">{LABEL_RECORRENCIA.semanal} (mesmo dia da semana)</option>
                 <option value="dia_util_mes">{LABEL_RECORRENCIA.dia_util_mes}</option>
                 <option value="dia_fixo_mes">{LABEL_RECORRENCIA.dia_fixo_mes}</option>
@@ -459,7 +477,7 @@ export default function Home() {
                   max={23}
                   value={repetirValorEvento}
                   onChange={(e) => setRepetirValorEvento(Number(e.target.value))}
-                  placeholder="Ex: 5 = 5Âº dia Ãºtil"
+                  placeholder="Ex: 5 = 5º dia útil"
                   className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm mt-2"
                 />
               )}
