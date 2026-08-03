@@ -74,11 +74,14 @@ export async function moverCard(orcamentoId: string, colunaId: string): Promise<
     .from('orcamentos')
     .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
     .eq('id', orcamentoId)
-    .select('cliente_nome')
+    .select('cliente_nome, criado_por_id')
     .single()
 
   if (!error) {
-    executarAutomacoesColuna(colunaId, { cliente_nome: data?.cliente_nome || null }).catch(() => {})
+    executarAutomacoesColuna(colunaId, {
+      cliente_nome: data?.cliente_nome || null,
+      criado_por_id: data?.criado_por_id || null,
+    }).catch(() => {})
   }
 
   return !error
