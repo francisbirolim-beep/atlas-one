@@ -31,6 +31,8 @@ export default function Cadastro() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+  const [confirmarSenha, setConfirmarSenha] = useState('')
+  const [novoUsuarioAberto, setNovoUsuarioAberto] = useState(false)
   const [whatsappNovo, setWhatsappNovo] = useState('')
   const [role, setRole] = useState<'funcionario' | 'master'>('funcionario')
   const [salvandoUsuario, setSalvandoUsuario] = useState(false)
@@ -130,8 +132,16 @@ export default function Cadastro() {
     e.preventDefault()
     setErroUsuario('')
     setSucessoUsuario('')
-    if (!nome.trim() || !email.trim() || !senha.trim()) {
-      setErroUsuario('Preencha nome, e-mail e senha')
+    if (!nome.trim() || !senha.trim()) {
+      setErroUsuario('Preencha nome e senha')
+      return
+    }
+    if (senha.trim().length < 6) {
+      setErroUsuario('A senha precisa ter pelo menos 6 caracteres')
+      return
+    }
+    if (senha !== confirmarSenha) {
+      setErroUsuario('As senhas não coincidem')
       return
     }
     setSalvandoUsuario(true)
@@ -147,10 +157,15 @@ export default function Cadastro() {
       setErroUsuario(json.error || 'Erro ao cadastrar usuário')
       return
     }
-    setSucessoUsuario(`Usuário ${nome} cadastrado com sucesso.`)
+    setSucessoUsuario(
+      json.emailGerado
+        ? `Usuário ${nome} cadastrado. E-mail de login gerado automaticamente: ${json.email} (anote e informe ao funcionário).`
+        : `Usuário ${nome} cadastrado com sucesso.`
+    )
     setNome('')
     setEmail('')
     setSenha('')
+    setConfirmarSenha('')
     setWhatsappNovo('')
     setRole('funcionario')
     carregar()
@@ -376,6 +391,88 @@ export default function Cadastro() {
           <ArrowLeft size={16} /> Cadastro
         </button>
 <section className="bg-white rounded-2xl border border-slate-200 p-6">
+          <div className="mb-8">
+            {!novoUsuarioAberto ? (
+              <button
+                onClick={() => setNovoUsuarioAberto(true)}
+                className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
+              >
+                <Plus size={16} /> Cadastrar usuário novo
+              </button>
+            ) : (
+              <div className="border border-slate-200 rounded-xl p-4">
+                <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                  <UserPlus size={16} /> Cadastrar usuário novo
+                </h3>
+                <form onSubmit={cadastrarUsuario} className="space-y-3">
+                  <input
+                    type="text"
+                    value={nome}
+                    onChange={e => setNome(e.target.value)}
+                    placeholder="Nome do funcionário"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={senha}
+                    onChange={e => setSenha(e.target.value)}
+                    placeholder="Senha (mínimo 6 caracteres)"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={confirmarSenha}
+                    onChange={e => setConfirmarSenha(e.target.value)}
+                    placeholder="Confirmar senha"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="E-mail de acesso — opcional"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={whatsappNovo}
+                    onChange={e => setWhatsappNovo(e.target.value)}
+                    placeholder="WhatsApp (ex: 11999998888) — opcional"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <select
+                    value={role}
+                    onChange={e => setRole(e.target.value as 'funcionario' | 'master')}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  >
+                    <option value="funcionario">Funcionário</option>
+                    <option value="master">Master (acesso total)</option>
+                  </select>
+
+                  {erroUsuario && <p className="text-red-500 text-sm">{erroUsuario}</p>}
+                  {sucessoUsuario && <p className="text-brand-teal text-sm">{sucessoUsuario}</p>}
+
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={salvandoUsuario}
+                      className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                    >
+                      {salvandoUsuario ? 'Cadastrando...' : 'Cadastrar usuário'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNovoUsuarioAberto(false)}
+                      className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
             <Users size={16} /> Usuários cadastrados
           </h2>
@@ -469,59 +566,6 @@ export default function Cadastro() {
               </div>
             ))}
           </div>
-
-          <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
-            <UserPlus size={16} /> Cadastrar novo usuário
-          </h3>
-          <form onSubmit={cadastrarUsuario} className="space-y-3">
-            <input
-              type="text"
-              value={nome}
-              onChange={e => setNome(e.target.value)}
-              placeholder="Nome do funcionário"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="E-mail de acesso"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <input
-              type="text"
-              value={senha}
-              onChange={e => setSenha(e.target.value)}
-              placeholder="Senha (mínimo 6 caracteres)"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <input
-              type="text"
-              value={whatsappNovo}
-              onChange={e => setWhatsappNovo(e.target.value)}
-              placeholder="WhatsApp (ex: 11999998888) — opcional"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <select
-              value={role}
-              onChange={e => setRole(e.target.value as 'funcionario' | 'master')}
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            >
-              <option value="funcionario">Funcionário</option>
-              <option value="master">Master (acesso total)</option>
-            </select>
-
-            {erroUsuario && <p className="text-red-500 text-sm">{erroUsuario}</p>}
-            {sucessoUsuario && <p className="text-brand-teal text-sm">{sucessoUsuario}</p>}
-
-            <button
-              type="submit"
-              disabled={salvandoUsuario}
-              className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-            >
-              {salvandoUsuario ? 'Cadastrando...' : 'Cadastrar usuário'}
-            </button>
-          </form>
         </section>
 
         
