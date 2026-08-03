@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'A senha precisa ter pelo menos 6 caracteres' }, { status: 400 })
     }
 
-    function gerarEmailAuto(nomeBase: string): string {
+    const gerarEmailAuto = (nomeBase: string): string => {
       const base = nomeBase
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
