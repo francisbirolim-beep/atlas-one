@@ -23,7 +23,7 @@ const tipoLabels: Record<string, string> = {
   janela_correr: 'Janela de Correr',
   janela_maximiar: 'Janela Maximiar',
   janela_basculante: 'Janela Basculante',
-  vitro: 'Vitrô',
+  vitro: 'VitrÃ´',
   fachada: 'Fachada',
   box: 'Box de Banheiro',
   outro: 'Outro',
@@ -43,7 +43,7 @@ function formatarDuracao(inicioIso: string, fimIso: string): string {
 }
 
 function mensagemPadraoVendedor(card: OrcamentoRapido): string {
-  return `Olá! O orçamento de ${card.cliente_nome || 'cliente'} está pronto. Segue em anexo.`
+  return `OlÃ¡! O orÃ§amento de ${card.cliente_nome || 'cliente'} estÃ¡ pronto. Segue em anexo.`
 }
 
 function numeroWhatsApp(raw: string): string {
@@ -75,7 +75,7 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
 
   doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
-  doc.text('Esquadrifácio — Orçamento', margem, y)
+  doc.text('EsquadrifÃ¡cio â OrÃ§amento', margem, y)
   linhaNova(10)
 
   doc.setFontSize(10)
@@ -95,12 +95,12 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
   linhaNova()
   if (card.cliente_whatsapp) { doc.text(`WhatsApp: ${card.cliente_whatsapp}`, margem, y); linhaNova() }
   if (card.cidade) { doc.text(`Cidade: ${card.cidade}`, margem, y); linhaNova() }
-  if (card.arquiteto_nome) { doc.text(`Arquiteto/Engenheiro: ${card.arquiteto_nome}${card.arquiteto_contato ? ' — ' + card.arquiteto_contato : ''}`, margem, y); linhaNova() }
+  if (card.arquiteto_nome) { doc.text(`Arquiteto/Engenheiro: ${card.arquiteto_nome}${card.arquiteto_contato ? ' â ' + card.arquiteto_contato : ''}`, margem, y); linhaNova() }
   linhaNova(4)
 
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text('Especificações', margem, y)
+  doc.text('EspecificaÃ§Ãµes', margem, y)
   linhaNova(6)
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
@@ -108,7 +108,7 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
   doc.text(`Cor/Acabamento: ${acabLabel}`, margem, y)
   linhaNova()
   if (card.contramarco) { doc.text(`Contramarco: ${card.contramarco === 'com' ? 'Com contramarco' : 'Sem contramarco'}`, margem, y); linhaNova() }
-  if (card.tipo_medida) { doc.text(`Tipo de medida: ${card.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}`, margem, y); linhaNova() }
+  if (card.tipo_medida) { doc.text(`Tipo de medida: ${card.tipo_medida === 'final' ? 'Medida final' : 'OrÃ§amento comum'}`, margem, y); linhaNova() }
   linhaNova(4)
 
   doc.setFontSize(12)
@@ -131,12 +131,12 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
 
     if (card.tipo_medida === 'final' && (item.largura_baixo_mm || item.largura_meio_mm || item.largura_cima_mm)) {
       doc.text(
-        `Larguras (mm) — baixo: ${item.largura_baixo_mm ?? '-'} | meio: ${item.largura_meio_mm ?? '-'} | cima: ${item.largura_cima_mm ?? '-'}`,
+        `Larguras (mm) â baixo: ${item.largura_baixo_mm ?? '-'} | meio: ${item.largura_meio_mm ?? '-'} | cima: ${item.largura_cima_mm ?? '-'}`,
         margem + 4, y
       )
       linhaNova(5)
       doc.text(
-        `Alturas (mm) — direita: ${item.altura_direita_mm ?? '-'} | meio: ${item.altura_meio_mm ?? '-'} | esquerda: ${item.altura_esquerda_mm ?? '-'}`,
+        `Alturas (mm) â direita: ${item.altura_direita_mm ?? '-'} | meio: ${item.altura_meio_mm ?? '-'} | esquerda: ${item.altura_esquerda_mm ?? '-'}`,
         margem + 4, y
       )
       linhaNova(5)
@@ -147,7 +147,7 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
 
     if (item.cor) { doc.text(`Cor: ${item.cor}`, margem + 4, y); linhaNova(5) }
     if (item.descricao) {
-      const linhas = doc.splitTextToSize(`Observação: ${item.descricao}`, largura - 4)
+      const linhas = doc.splitTextToSize(`ObservaÃ§Ã£o: ${item.descricao}`, largura - 4)
       doc.text(linhas, margem + 4, y)
       linhaNova(5 * linhas.length)
     }
@@ -238,9 +238,9 @@ export default function Kanban() {
   }
 
   const temperaturaInfo: Record<string, { emoji: string; label: string; texto: string; fundo: string; borda: string }> = {
-    quente: { emoji: '🔥', label: 'Quente', texto: 'text-red-600', fundo: 'bg-red-50', borda: 'border-red-500' },
-    morno: { emoji: '🌤️', label: 'Morno', texto: 'text-amber-600', fundo: 'bg-amber-50', borda: 'border-amber-500' },
-    frio: { emoji: '❄️', label: 'Frio', texto: 'text-blue-600', fundo: 'bg-blue-50', borda: 'border-blue-500' },
+    quente: { emoji: 'ð¥', label: 'Quente', texto: 'text-red-600', fundo: 'bg-red-50', borda: 'border-red-500' },
+    morno: { emoji: 'ð¤ï¸', label: 'Morno', texto: 'text-amber-600', fundo: 'bg-amber-50', borda: 'border-amber-500' },
+    frio: { emoji: 'âï¸', label: 'Frio', texto: 'text-blue-600', fundo: 'bg-blue-50', borda: 'border-blue-500' },
   }
 
   function cardsDaColuna(colunaId: string, index: number) {
@@ -285,7 +285,7 @@ export default function Kanban() {
     setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: agoraIso } : c)))
     await moverCard(cardId, colunaId)
     if (colunaAnterior?.id !== colunaNova?.id) {
-      registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || '—'} → ${colunaNova?.nome || '—'}`)
+      registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || 'â'} â ${colunaNova?.nome || 'â'}`)
     }
   }
 
@@ -320,7 +320,7 @@ export default function Kanban() {
     const destino = outras[0]
     const qtd = cards.filter(c => (c.coluna_id || colunas[0]?.id) === col.id).length
     const msg = qtd > 0
-      ? `Essa coluna tem ${qtd} card(s). Eles vão pra coluna "${destino.nome}". Apagar mesmo assim?`
+      ? `Essa coluna tem ${qtd} card(s). Eles vÃ£o pra coluna "${destino.nome}". Apagar mesmo assim?`
       : `Apagar a coluna "${col.nome}"?`
     if (!window.confirm(msg)) return
 
@@ -392,14 +392,14 @@ export default function Kanban() {
       setCardSelecionado(prev => (prev ? { ...prev, orcamento_iniciado_em: agoraIso } : prev))
       setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? { ...c, orcamento_iniciado_em: agoraIso } : c)))
       setSessaoAtiva(true)
-      await registrarHistorico(cardSelecionado.id, usuario, 'Iniciou o orçamento')
+      await registrarHistorico(cardSelecionado.id, usuario, 'Iniciou o orÃ§amento')
     }
   }
 
   async function retornarOrcamento() {
     if (!cardSelecionado) return
     setSessaoAtiva(true)
-    await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orçamento')
+    await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orÃ§amento')
     listarHistorico(cardSelecionado.id).then(setHistorico)
   }
 
@@ -420,12 +420,12 @@ export default function Kanban() {
   async function finalizarOrcamento() {
     if (!cardSelecionado || !editando) return
     if (editando.valor_estimado == null) {
-      alert('Informe o valor total do orçamento antes de finalizar.')
+      alert('Informe o valor total do orÃ§amento antes de finalizar.')
       return
     }
     const numero = numeroWhatsApp(whatsappVendedor)
     if (!numero) {
-      alert('Informe o WhatsApp do vendedor para enviar o orçamento antes de finalizar.')
+      alert('Informe o WhatsApp do vendedor para enviar o orÃ§amento antes de finalizar.')
       return
     }
 
@@ -433,7 +433,7 @@ export default function Kanban() {
     const agoraIso = new Date().toISOString()
 
     const colunaFeito =
-      colunas.find(c => c.nome.trim().toLowerCase() === 'orçamento feito') ||
+      colunas.find(c => c.nome.trim().toLowerCase() === 'orÃ§amento feito') ||
       colunas.find(c => c.nome.trim().toLowerCase().includes('feito'))
     const novaColunaId = colunaFeito ? colunaFeito.id : editando.coluna_id
 
@@ -444,11 +444,11 @@ export default function Kanban() {
       const pdfBlob = gerarPdfOrcamento(editando)
       pdfFile = new File([pdfBlob], nomeArquivoPdf, { type: 'application/pdf' })
     } catch (e) {
-      console.error('Erro ao gerar PDF do orçamento:', e)
+      console.error('Erro ao gerar PDF do orÃ§amento:', e)
     }
 
     // Tenta compartilhar o PDF de verdade (abre o menu "Compartilhar" do celular, escolhendo o WhatsApp
-    // aí o arquivo vai anexado de verdade, não só um link). Só funciona em celular com suporte a isso.
+    // aÃ­ o arquivo vai anexado de verdade, nÃ£o sÃ³ um link). SÃ³ funciona em celular com suporte a isso.
     const nav = typeof navigator !== 'undefined' ? (navigator as any) : null
     const podeCompartilharArquivo = !!(pdfFile && nav?.canShare && nav.canShare({ files: [pdfFile] }))
     let compartilhouArquivo = false
@@ -456,12 +456,12 @@ export default function Kanban() {
       try {
         await nav.share({
           files: [pdfFile],
-          title: `Orçamento - ${editando.cliente_nome}`,
+          title: `OrÃ§amento - ${editando.cliente_nome}`,
           text: mensagemVendedor,
         })
         compartilhouArquivo = true
       } catch (e) {
-        console.log('Compartilhamento do PDF cancelado ou indisponível:', e)
+        console.log('Compartilhamento do PDF cancelado ou indisponÃ­vel:', e)
       }
     }
 
@@ -469,10 +469,10 @@ export default function Kanban() {
       try {
         const pdfUrl = await uploadArquivo(pdfFile)
         if (pdfUrl) {
-          anexosFinais = [...anexosFinais, { titulo: 'Orçamento (PDF)', nome: nomeArquivoPdf, url: pdfUrl }]
+          anexosFinais = [...anexosFinais, { titulo: 'OrÃ§amento (PDF)', nome: nomeArquivoPdf, url: pdfUrl }]
         }
       } catch (e) {
-        console.error('Erro ao salvar PDF do orçamento:', e)
+        console.error('Erro ao salvar PDF do orÃ§amento:', e)
       }
     }
 
@@ -516,8 +516,8 @@ export default function Kanban() {
       await registrarHistorico(
         cardSelecionado.id,
         usuario,
-        'Enviou o orçamento para o vendedor e finalizou',
-        `${duracao ? `Levou ${duracao}. ` : ''}Para ${vendedorInfo?.nome || 'vendedor'} — "${mensagemVendedor}"`
+        'Enviou o orÃ§amento para o vendedor e finalizou',
+        `${duracao ? `Levou ${duracao}. ` : ''}Para ${vendedorInfo?.nome || 'vendedor'} â "${mensagemVendedor}"`
       )
       setCardSelecionado(null)
       setEditando(null)
@@ -526,7 +526,7 @@ export default function Kanban() {
 
   async function excluirCard() {
     if (!cardSelecionado) return
-    if (!window.confirm(`Excluir o orçamento de ${cardSelecionado.cliente_nome}? Essa ação não pode ser desfeita.`)) return
+    if (!window.confirm(`Excluir o orÃ§amento de ${cardSelecionado.cliente_nome}? Essa aÃ§Ã£o nÃ£o pode ser desfeita.`)) return
     const ok = await excluirOrcamento(cardSelecionado.id)
     if (ok) {
       setCards(prev => prev.filter(c => c.id !== cardSelecionado.id))
@@ -538,7 +538,7 @@ export default function Kanban() {
   function tentarFechar() {
     if (editando?.orcamento_iniciado_em && !editando?.orcamento_finalizado_em && sessaoAtiva) {
       const motivo = window.prompt(
-        'Você iniciou esse orçamento e ainda não finalizou. Por que está saindo agora? (fica registrado no histórico)'
+        'VocÃª iniciou esse orÃ§amento e ainda nÃ£o finalizou. Por que estÃ¡ saindo agora? (fica registrado no histÃ³rico)'
       )
       if (!motivo || !motivo.trim()) {
         alert('Precisa informar o motivo pra sair sem finalizar.')
@@ -546,7 +546,7 @@ export default function Kanban() {
       }
       const duracao = formatarDuracao(editando.orcamento_iniciado_em || '', new Date().toISOString())
       if (cardSelecionado) {
-        registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', `${motivo.trim()} — ficou aberto ${duracao}`)
+        registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orÃ§amento', `${motivo.trim()} â ficou aberto ${duracao}`)
       }
     }
     setCardSelecionado(null)
@@ -570,7 +570,7 @@ export default function Kanban() {
     if (original.coluna_id !== novo.coluna_id) partes.push('coluna')
     if ((original.itens?.length || 0) !== (novo.itens?.length || 0)) partes.push('esquadrias (quantidade)')
     else if (JSON.stringify(original.itens) !== JSON.stringify(novo.itens)) partes.push('esquadrias (dados)')
-    return partes.length > 0 ? `Alterou: ${partes.join(', ')}` : 'Salvou sem mudanças'
+    return partes.length > 0 ? `Alterou: ${partes.join(', ')}` : 'Salvou sem mudanÃ§as'
   }
 
   async function salvarCard() {
@@ -614,7 +614,7 @@ export default function Kanban() {
       }
       setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
       const resumo = resumoMudancas(cardSelecionado, editando)
-      await registrarHistorico(cardSelecionado.id, usuario, 'Editou o orçamento', resumo)
+      await registrarHistorico(cardSelecionado.id, usuario, 'Editou o orÃ§amento', resumo)
       setCardSelecionado(null)
       setEditando(null)
     }
@@ -634,7 +634,7 @@ export default function Kanban() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Painel de Orçamentos</h1>
+            <h1 className="text-lg font-bold text-slate-800">Painel de OrÃ§amentos</h1>
             <p className="text-sm text-slate-500">Arraste os cards entre as colunas</p>
           </div>
         </div>
@@ -664,9 +664,9 @@ export default function Kanban() {
             className="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
           >
             <option value="">Todas temperaturas</option>
-            <option value="quente">🔥 Quente</option>
-            <option value="morno">🌤️ Morno</option>
-            <option value="frio">❄️ Frio</option>
+            <option value="quente">ð¥ Quente</option>
+            <option value="morno">ð¤ï¸ Morno</option>
+            <option value="frio">âï¸ Frio</option>
           </select>
           {(busca || filtroData || filtroTemperatura) && (
             <button
@@ -748,7 +748,7 @@ export default function Kanban() {
                               className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium mb-1"
                               style={{ backgroundColor: 'rgba(255,255,255,0.35)', color: est ? est.texto : '#8b5cf6' }}
                             >
-                              Assistência
+                              AssistÃªncia
                             </span>
                             {card.descricao_livre && (
                               <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.9 : 1 }}>
@@ -761,7 +761,7 @@ export default function Kanban() {
                             <p className="text-xs mb-1" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
                               {(card as any).itens?.length > 1
                                 ? `${(card as any).itens.length} esquadrias`
-                                : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
+                                : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` â ${card.largura_mm}Ã${card.altura_mm}mm` : ''}`}
                             </p>
                             {card.descricao_livre && (
                               <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.8 : 1 }}>
@@ -810,7 +810,7 @@ export default function Kanban() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
-              <h3 className="font-bold text-slate-800">Editar orçamento</h3>
+              <h3 className="font-bold text-slate-800">Editar orÃ§amento</h3>
               <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
@@ -823,14 +823,14 @@ export default function Kanban() {
                   <p className="text-2xl font-bold text-slate-800">{cardSelecionado.cliente_nome}</p>
                   {editando.orcamento_iniciado_em && (
                     <p className="text-xs text-brand-navy">
-                      Em andamento há {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
+                      Em andamento hÃ¡ {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
                     </p>
                   )}
                   <button
                     onClick={editando.orcamento_iniciado_em ? retornarOrcamento : iniciarOrcamento}
                     className="w-full py-3 flex items-center justify-center gap-2 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition"
                   >
-                    <Play size={16} /> {editando.orcamento_iniciado_em ? 'Retornar orçamento' : 'Iniciar orçamento'}
+                    <Play size={16} /> {editando.orcamento_iniciado_em ? 'Retornar orÃ§amento' : 'Iniciar orÃ§amento'}
                   </button>
                   <p className="text-xs text-slate-400">
                     {editando.orcamento_iniciado_em
@@ -842,7 +842,7 @@ export default function Kanban() {
                       onClick={excluirCard}
                       className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
                     >
-                      <Trash2 size={13} /> Excluir este orçamento
+                      <Trash2 size={13} /> Excluir este orÃ§amento
                     </button>
                   )}
                 </div>
@@ -855,7 +855,7 @@ export default function Kanban() {
                   )}
                   {cardSelecionado.cliente_id && (
                     <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="text-xs text-brand-navy hover:underline">
-                      Ver histórico e negociação no CRM
+                      Ver histÃ³rico e negociaÃ§Ã£o no CRM
                     </Link>
                   )}
                   <div className="flex flex-wrap gap-1.5">
@@ -863,7 +863,7 @@ export default function Kanban() {
                       <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
                         cardSelecionado.tipo_medida === 'final' ? 'bg-brand-tealLight text-brand-teal' : 'bg-slate-100 text-slate-600'
                       }`}>
-                        {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'Orçamento comum'}
+                        {cardSelecionado.tipo_medida === 'final' ? 'Medida final' : 'OrÃ§amento comum'}
                       </span>
                     )}
                     {cardSelecionado.temperatura && temperaturaInfo[cardSelecionado.temperatura] && (
@@ -945,7 +945,7 @@ export default function Kanban() {
                       onChange={e => atualizarCampo('contramarco', e.target.value)}
                       className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                     >
-                      <option value="">—</option>
+                      <option value="">â</option>
                       <option value="com">Com contramarco</option>
                       <option value="sem">Sem contramarco</option>
                     </select>
@@ -959,14 +959,14 @@ export default function Kanban() {
                         onChange={e => atualizarCampo('tipo_medida', e.target.value)}
                         className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       >
-                        <option value="comum">Orçamento comum</option>
+                        <option value="comum">OrÃ§amento comum</option>
                         <option value="final">Medida final</option>
                       </select>
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Temperatura do orçamento</label>
+                    <label className="block text-xs text-slate-500 mb-1">Temperatura do orÃ§amento</label>
                     <div className="grid grid-cols-3 gap-2">
                       {(['quente', 'morno', 'frio'] as const).map(t => (
                         <button
@@ -1035,7 +1035,7 @@ export default function Kanban() {
                             type="text"
                             value={item.tipo_outro_texto || ''}
                             onChange={e => atualizarItemEdit(item.id, 'tipo_outro_texto', e.target.value)}
-                            placeholder="Qual é o tipo de esquadria?"
+                            placeholder="Qual Ã© o tipo de esquadria?"
                             className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                           />
                         )}
@@ -1043,13 +1043,13 @@ export default function Kanban() {
                           type="text"
                           value={item.folhas || ''}
                           onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
-                          placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
+                          placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 mÃ³vel)"
                           className="w-full border border-slate-300 rounded-lg p-2 text-xs"
                         />
                         {editando.tipo_medida === 'final' ? (
                           <div className="space-y-2">
                             <div>
-                              <p className="text-[11px] text-slate-400 mb-1">Larguras (mm) — baixo, meio, cima</p>
+                              <p className="text-[11px] text-slate-400 mb-1">Larguras (mm) â baixo, meio, cima</p>
                               <div className="grid grid-cols-3 gap-2">
                                 <input
                                   type="number"
@@ -1075,7 +1075,7 @@ export default function Kanban() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[11px] text-slate-400 mb-1">Alturas (mm) — direita, meio, esquerda</p>
+                              <p className="text-[11px] text-slate-400 mb-1">Alturas (mm) â direita, meio, esquerda</p>
                               <div className="grid grid-cols-3 gap-2">
                                 <input
                                   type="number"
@@ -1134,7 +1134,7 @@ export default function Kanban() {
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          {item.foto_url && <img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" />}
+                          {item.foto_url && <a href={item.foto_url} target="_blank" rel="noreferrer"><img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" /></a>}
                           <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy">
                             <Camera size={12} /> Trocar foto
                             <input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
@@ -1150,7 +1150,7 @@ export default function Kanban() {
                         <textarea
                           value={item.descricao || ''}
                           onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
-                          placeholder="Observação (opcional)"
+                          placeholder="ObservaÃ§Ã£o (opcional)"
                           className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
                         />
                       </div>
@@ -1166,20 +1166,20 @@ export default function Kanban() {
                   {(cardSelecionado as any).fotos_urls?.length > 0 && (
                     <div className="grid grid-cols-4 gap-2">
                       {(cardSelecionado as any).fotos_urls.map((url: string, i: number) => (
-                        <img key={i} src={url} alt={`Foto ${i + 1}`} className="w-full h-16 object-cover rounded-lg" />
+                        <a key={i} href={url} target="_blank" rel="noreferrer"><img src={url} alt={`Foto ${i + 1}`} className="w-full h-16 object-cover rounded-lg" /></a>
                       ))}
                     </div>
                   )}
 
                   <div className="bg-slate-50 rounded-xl p-4 space-y-3">
                     <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                      <Clock size={13} /> Elaboração do orçamento
+                      <Clock size={13} /> ElaboraÃ§Ã£o do orÃ§amento
                     </p>
 
                     {editando.orcamento_finalizado_em ? (
                       <div className="text-xs text-brand-tealDark space-y-1">
                         <p className="flex items-center gap-1.5">
-                          <CheckCircle2 size={14} /> Finalizado — levou{' '}
+                          <CheckCircle2 size={14} /> Finalizado â levou{' '}
                           {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
                         </p>
                         {editando.enviado_vendedor_em && (
@@ -1197,11 +1197,11 @@ export default function Kanban() {
                     ) : (
                       <div className="space-y-3">
                         <p className="text-xs text-brand-navy">
-                          Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
+                          Em andamento hÃ¡ {formatarDuracao(editando.orcamento_iniciado_em || '', new Date(agora).toISOString())}
                         </p>
 
                         <div>
-                          <label className="block text-xs text-slate-500 mb-1">Anexos do orçamento</label>
+                          <label className="block text-xs text-slate-500 mb-1">Anexos do orÃ§amento</label>
                           {(editando.anexos || []).map((a, i) => (
                             <div key={i} className="flex items-center gap-2 text-xs text-brand-teal mb-1">
                               <Paperclip size={12} className="flex-shrink-0" />
@@ -1219,7 +1219,7 @@ export default function Kanban() {
                               type="text"
                               value={novoAnexoTitulo}
                               onChange={e => setNovoAnexoTitulo(e.target.value)}
-                              placeholder="Título (ex: Orçamento com contramarco)"
+                              placeholder="TÃ­tulo (ex: OrÃ§amento com contramarco)"
                               className="flex-1 border border-slate-300 rounded-lg p-2 text-xs"
                             />
                             <label
@@ -1238,11 +1238,11 @@ export default function Kanban() {
                               />
                             </label>
                           </div>
-                          <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF: no celular, abre o menu de compartilhar para anexar o PDF de verdade no WhatsApp; se não for possível, envia o link do PDF na mensagem.</p>
+                          <p className="text-xs text-slate-400 mt-1">DÃª um tÃ­tulo antes de escolher o arquivo (ex: "OrÃ§amento com contramarco"). O orÃ§amento tambÃ©m Ã© gerado automaticamente em PDF: no celular, abre o menu de compartilhar para anexar o PDF de verdade no WhatsApp; se nÃ£o for possÃ­vel, envia o link do PDF na mensagem.</p>
                         </div>
 
                         <div>
-                          <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
+                          <label className="block text-xs text-slate-500 mb-1">Valor total do orÃ§amento</label>
                           <input
                             type="text"
                             value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
@@ -1271,8 +1271,8 @@ export default function Kanban() {
                             />
                             <p className="text-xs text-slate-400 mt-1">
                               {vendedorInfo?.whatsapp
-                                ? 'Preenchido automaticamente com o número cadastrado. Pode trocar por outro se precisar.'
-                                : 'Não há número cadastrado para este vendedor — informe um número.'}
+                                ? 'Preenchido automaticamente com o nÃºmero cadastrado. Pode trocar por outro se precisar.'
+                                : 'NÃ£o hÃ¡ nÃºmero cadastrado para este vendedor â informe um nÃºmero.'}
                             </p>
                           </div>
                           <div>
@@ -1318,7 +1318,7 @@ export default function Kanban() {
                     disabled={salvando}
                     className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
                   >
-                    {salvando ? 'Salvando...' : 'Salvar alterações'}
+                    {salvando ? 'Salvando...' : 'Salvar alteraÃ§Ãµes'}
                   </button>
 
                   {usuario?.role === 'master' && (
@@ -1326,7 +1326,7 @@ export default function Kanban() {
                       onClick={excluirCard}
                       className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
                     >
-                      <Trash2 size={13} /> Excluir este orçamento
+                      <Trash2 size={13} /> Excluir este orÃ§amento
                     </button>
                   )}
 
@@ -1336,13 +1336,13 @@ export default function Kanban() {
               {historico.length > 0 && (
                 <div className="pt-2 border-t border-slate-100">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-2">
-                    <Clock size={13} /> Histórico
+                    <Clock size={13} /> HistÃ³rico
                   </p>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {historico.map(h => (
                       <div key={h.id} className="text-xs text-slate-500">
                         <span className="font-medium text-slate-700">{h.usuario_nome || 'Sistema'}</span>
-                        {' — '}{h.acao}
+                        {' â '}{h.acao}
                         {h.detalhes && <span className="text-slate-400"> ({h.detalhes})</span>}
                         <div className="text-slate-300">{new Date(h.created_at).toLocaleString('pt-BR')}</div>
                       </div>
