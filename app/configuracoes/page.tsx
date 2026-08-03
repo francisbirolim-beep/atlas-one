@@ -62,7 +62,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [criandoSetor, setCriandoSetor] = useState(false)
                 const [novoSetorTopoAberto, setNovoSetorTopoAberto] = useState(false)
                 const [novoSetorTopoNome, setNovoSetorTopoNome] = useState('')
-                const [novoSetorTopoGrupo, setNovoSetorTopoGrupo] = useState(GRUPOS_ORDEM[0] || '')
+                const [novoSetorTopoGrupo, setNovoSetorTopoGrupo] = useState<string>(GRUPOS_ORDEM[0] || '')
                 const [criandoSetorTopo, setCriandoSetorTopo] = useState(false)
 
   const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
