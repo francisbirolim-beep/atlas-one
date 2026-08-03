@@ -47,7 +47,8 @@ export default function Producao() {
   }
 
   async function apagar(item: ProducaoItem) {
-    if (!window.confirm(\`Apagar o card "\${item.titulo}"?\`)) return
+    const confirmar = window.confirm('Apagar o card "' + item.titulo + '"?')
+    if (!confirmar) return
     const ok = await excluirItemProducao(item.id)
     if (ok) {
       setItens((prev) => prev.filter((x) => x.id !== item.id))
