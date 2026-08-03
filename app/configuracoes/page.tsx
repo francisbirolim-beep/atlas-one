@@ -7,11 +7,12 @@ import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
 import { listarAutomacoesOrcamento, criarAutomacaoOrcamento, alternarAtivoAutomacao, excluirAutomacaoOrcamento } from '@/lib/automacoes'
+import { listarAutomacoesAssistencia, criarAutomacaoAssistencia, alternarAtivoAutomacaoAssistencia, excluirAutomacaoAssistencia } from '@/lib/automacoesAssistencia'
 import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor, excluirSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento } from '@/lib/tipos'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -33,6 +34,12 @@ export default function Configuracoes() {
   const [novaAutomacaoTitulo, setNovaAutomacaoTitulo] = useState('Orçamento {cliente}')
   const [salvandoAutomacao, setSalvandoAutomacao] = useState(false)
   const [erroAutomacao, setErroAutomacao] = useState('')
+  const [automacoesAssistencia, setAutomacoesAssistencia] = useState<AutomacaoAssistencia[]>([])
+  const [novaAutomAssistDestinoTipo, setNovaAutomAssistDestinoTipo] = useState<'fixo' | 'solicitante'>('fixo')
+  const [novaAutomAssistUsuario, setNovaAutomAssistUsuario] = useState('')
+  const [novaAutomAssistTitulo, setNovaAutomAssistTitulo] = useState('Assistência aberta {cliente}')
+  const [salvandoAutomAssist, setSalvandoAutomAssist] = useState(false)
+  const [erroAutomAssist, setErroAutomAssist] = useState('')
   const [slaEdit, setSlaEdit] = useState<Record<string, { amarelo: string; vermelho: string }>>({})
   const [corEdit, setCorEdit] = useState<Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }>>({})
 
@@ -86,10 +93,11 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
     setEuSouMaster(me?.role === 'master')
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaAutomacoes, listaSetores, listaMetas, listaBackups, corAssistencia] = await Promise.all([
+      const [{ data: users }, cols, listaAutomacoes, listaAutomacoesAssist, listaSetores, listaMetas, listaBackups, corAssistencia] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
         listarAutomacoesOrcamento(),
+        listarAutomacoesAssistencia(),
         listarSetores(),
         listarMetas(mesMetaAtual),
         listarBackups(),
@@ -120,6 +128,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
       setWhatsappEdit(whatsInicial)
       setColunas(cols)
       setAutomacoes(listaAutomacoes)
+      setAutomacoesAssistencia(listaAutomacoesAssist)
       const inicial: Record<string, { amarelo: string; vermelho: string }> = {}
       const coresIniciais: Record<string, { ativa: boolean; corCards: string; amareloCor: string; vermelhoCor: string }> = {}
       cols.forEach(c => {
@@ -408,6 +417,43 @@ async function salvarSla(colunaId: string) {
     const ok = await excluirAutomacaoOrcamento(id)
     if (ok) {
       setAutomacoes(prev => prev.filter(a => a.id !== id))
+    }
+  }
+
+  async function criarAutomacaoAssist() {
+    if ((novaAutomAssistDestinoTipo === 'fixo' && !novaAutomAssistUsuario) || !novaAutomAssistTitulo.trim()) {
+      setErroAutomAssist('Preencha destino e título da tarefa.')
+      return
+    }
+    setSalvandoAutomAssist(true)
+    setErroAutomAssist('')
+    const nova = await criarAutomacaoAssistencia(
+      novaAutomAssistDestinoTipo,
+      novaAutomAssistDestinoTipo === 'fixo' ? novaAutomAssistUsuario : null,
+      novaAutomAssistTitulo.trim()
+    )
+    setSalvandoAutomAssist(false)
+    if (!nova) {
+      setErroAutomAssist('Erro ao criar automação.')
+      return
+    }
+    setAutomacoesAssistencia(prev => [...prev, nova])
+    setNovaAutomAssistUsuario('')
+    setNovaAutomAssistDestinoTipo('fixo')
+    setNovaAutomAssistTitulo('Assistência aberta {cliente}')
+  }
+
+  async function alternarAutomacaoAssist(id: string, ativoAtual: boolean) {
+    const ok = await alternarAtivoAutomacaoAssistencia(id, !ativoAtual)
+    if (ok) {
+      setAutomacoesAssistencia(prev => prev.map(a => (a.id === id ? { ...a, ativo: !ativoAtual } : a)))
+    }
+  }
+
+  async function removerAutomacaoAssist(id: string) {
+    const ok = await excluirAutomacaoAssistencia(id)
+    if (ok) {
+      setAutomacoesAssistencia(prev => prev.filter(a => a.id !== id))
     }
   }
 
@@ -714,6 +760,105 @@ async function salvarSla(colunaId: string) {
           </div>
           {msgCorAssistencia && <p className="text-xs text-brand-teal mt-2">{msgCorAssistencia}</p>}
         </section>
+
+              <section className="bg-white rounded-2xl border border-slate-200 p-5">
+                <h3 className="text-sm font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                  <Wrench className="w-4 h-4" /> Automações
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  Quando um vendedor abre uma nova solicitação de assistência, uma tarefa é criada automaticamente. Use {'{cliente}'} no título para inserir o nome do cliente.
+                </p>
+
+                {automacoesAssistencia.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    {automacoesAssistencia.map(a => {
+                      const usuarioAuto = usuarios.find(u => u.id === a.usuario_id)
+                      const destinoLabel = a.destino_tipo === 'solicitante' ? 'vendedor que pediu a assistência' : (usuarioAuto?.nome || 'Usuário removido')
+                      return (
+                        <div key={a.id} className="flex items-center justify-between gap-3 border border-slate-200 rounded-xl px-3 py-2">
+                          <div className="text-xs text-slate-600">
+                            {'Tarefa para '}
+                            <span className="font-medium text-slate-800">{destinoLabel}</span>
+                            {': "'}{a.titulo_tarefa}{'"'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => alternarAutomacaoAssist(a.id, a.ativo)}
+                              className={`text-xs px-2 py-1 rounded-lg border ${a.ativo ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-slate-300 text-slate-500 bg-slate-50'}`}
+                            >
+                              {a.ativo ? 'Ativa' : 'Inativa'}
+                            </button>
+                            <button
+                              onClick={() => removerAutomacaoAssist(a.id)}
+                              className="text-xs text-red-600 hover:underline"
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 mb-3">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="destinoTipoAutomAssist"
+                      checked={novaAutomAssistDestinoTipo === 'fixo'}
+                      onChange={() => setNovaAutomAssistDestinoTipo('fixo')}
+                    />
+                    Usuário fixo
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="destinoTipoAutomAssist"
+                      checked={novaAutomAssistDestinoTipo === 'solicitante'}
+                      onChange={() => setNovaAutomAssistDestinoTipo('solicitante')}
+                    />
+                    Vendedor que pediu a assistência
+                  </label>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {novaAutomAssistDestinoTipo === 'fixo' ? (
+                    <select
+                      value={novaAutomAssistUsuario}
+                      onChange={e => setNovaAutomAssistUsuario(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">Usuário que recebe a tarefa</option>
+                      {usuarios.map(u => (
+                        <option key={u.id} value={u.id}>{u.nome}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm text-slate-500 flex items-center">
+                      Vendedor que pediu a assistência
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={novaAutomAssistTitulo}
+                    onChange={e => setNovaAutomAssistTitulo(e.target.value)}
+                    placeholder="Titulo da tarefa"
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+
+                {erroAutomAssist && <p className="text-xs text-red-600 mt-2">{erroAutomAssist}</p>}
+
+                <button
+                  onClick={criarAutomacaoAssist}
+                  disabled={salvandoAutomAssist}
+                  className="mt-3 text-xs font-medium text-white bg-brand-navy px-4 py-2 rounded-lg disabled:opacity-50"
+                >
+                  {salvandoAutomAssist ? 'Salvando...' : '+ Criar automação'}
+                </button>
+              </section>
+
 
         
         </div>
