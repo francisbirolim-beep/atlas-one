@@ -1,28 +1,64 @@
-'use client'
+{restoOrdenado.map((g, i) => (
+                <div key={g.href} className="flex items-center">
+                  <Link
+                    href={g.href}
+                    onClick={() => setAbrirMais(false)}
+                    className="flex-1 rounded-lg px-2 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  >
+                    {g.label}
+                  </Link>
+                  <button
+                    onClick={() => mover(g.href, 'cima')}
+                    disabled={i === 0}
+                    className="p-2 text-slate-300 disabled:opacity-30"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => mover(g.href, 'baixo')}
+                    disabled={i === restoOrdenado.length - 1}
+                    className="p-2 text-slate-300 disabled:opacity-30"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                  <button onClick={() => favoritar(g.href)} className="p-2 text-slate-300 hover:text-amber-400">
+                    <Star size={14} />
+                  </button>
+                </div>
+              ))}'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LogOut, Menu, X, Star } from 'lucide-react'
+import { LogOut, Menu, X, Star, ChevronUp, ChevronDown } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
-import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU, guiasFavoritos } from '@/lib/guias'
+import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU, guiasFavoritos, lerOrdem, ordenarPorPreferencia, moverGuia, EVENTO_ORDEM_MUDOU } from '@/lib/guias'
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [ocultos, setOcultos] = useState<string[]>([])
+  const [ordem, setOrdem] = useState<string[]>([])
   const [abrirMais, setAbrirMais] = useState(false)
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
     setOcultos(lerOcultos())
+    setOrdem(lerOrdem())
     function sync() {
       setOcultos(lerOcultos())
     }
+    function syncOrdem() {
+      setOrdem(lerOrdem())
+    }
     window.addEventListener(EVENTO_OCULTOS_MUDOU, sync)
-    return () => window.removeEventListener(EVENTO_OCULTOS_MUDOU, sync)
+    window.addEventListener(EVENTO_ORDEM_MUDOU, syncOrdem)
+    return () => {
+      window.removeEventListener(EVENTO_OCULTOS_MUDOU, sync)
+      window.removeEventListener(EVENTO_ORDEM_MUDOU, syncOrdem)
+    }
   }, [])
 
   async function sair() {
@@ -33,6 +69,11 @@ export default function Sidebar() {
   const isMaster = usuario?.role === 'master'
   const favoritos = guiasFavoritos(ocultos, isMaster)
   const resto = GUIAS.filter((g) => !g.masterOnly || isMaster).filter((g) => ocultos.includes(g.href))
+  const restoOrdenado = ordenarPorPreferencia(resto, ordem)
+
+  function mover(href: string, direcao: 'cima' | 'baixo') {
+    moverGuia(restoOrdenado, href, direcao)
+  }
 
   function favoritar(href: string) {
     setOcultos(alternarOculto(href))
@@ -88,7 +129,7 @@ export default function Sidebar() {
           <div className="hidden lg:block lg:flex-1 lg:overflow-y-auto lg:px-3">
             <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Mais</p>
             <div className="space-y-0.5">
-              {resto.map((g) => {
+              {restoOrdenado.map((g, i) => {
                 const ativo = pathname === g.href
                 return (
                   <div key={g.href} className="group flex items-center">
@@ -99,6 +140,24 @@ export default function Sidebar() {
                     >
                       {g.label}
                     </Link>
+                    {i > 0 && (
+                      <button
+                        onClick={() => mover(g.href, 'cima')}
+                        title="Mover para cima"
+                        className="p-1 text-slate-300 opacity-0 hover:text-brand-navy group-hover:opacity-100"
+                      >
+                        <ChevronUp size={12} />
+                      </button>
+                    )}
+                    {i < restoOrdenado.length - 1 && (
+                      <button
+                        onClick={() => mover(g.href, 'baixo')}
+                        title="Mover para baixo"
+                        className="p-1 text-slate-300 opacity-0 hover:text-brand-navy group-hover:opacity-100"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                    )}
                     <button
                       onClick={() => favoritar(g.href)}
                       title="Colocar no guia rápido"
