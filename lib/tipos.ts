@@ -266,6 +266,25 @@ export interface ProducaoItem {
   criado_por_nome?: string | null
 }
 
+export interface SetorKanbanColuna {
+  id: string
+  setor_id: string
+  nome: string
+  ordem: number
+  created_at?: string
+}
+
+export interface SetorKanbanItem {
+  id: string
+  created_at?: string
+  atualizado_em?: string
+  titulo: string
+  descricao?: string | null
+  coluna_id: string
+  criado_por_id?: string | null
+  criado_por_nome?: string | null
+}
+
 export type GrupoSetor =
   | 'Comercial' | 'Técnico' | 'Operações' | 'Administrativo'
   | 'Relacionamento' | 'Conhecimento' | 'Sistema'
