@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo } from '@/lib/tipos'
 import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard, excluirOrcamento } from '@/lib/kanban'
+import { executarAutomacoesColuna } from '@/lib/automacoes'
 import { usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
@@ -489,6 +490,12 @@ export default function Kanban() {
       .eq('id', cardSelecionado.id)
     setSalvando(false)
     if (!error) {
+      if (colunaFeito && editando.coluna_id !== novaColunaId) {
+        executarAutomacoesColuna(novaColunaId, {
+          cliente_nome: editando.cliente_nome,
+          criado_por_id: editando.criado_por_id,
+        }).catch(() => {})
+      }
       if (!compartilhouArquivo) {
         const linksAnexos = anexosFinais.map(a => `${a.titulo}: ${a.url}`).join('\n')
         const textoCompleto = `${mensagemVendedor}\n\n${linksAnexos}`
@@ -595,6 +602,12 @@ export default function Kanban() {
 
     setSalvando(false)
     if (!error) {
+      if (mudouColuna) {
+        executarAutomacoesColuna(editando.coluna_id, {
+          cliente_nome: editando.cliente_nome,
+          criado_por_id: editando.criado_por_id,
+        }).catch(() => {})
+      }
       const atualizado = {
         ...editando,
         coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
