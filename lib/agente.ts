@@ -1,5 +1,8 @@
 import { supabaseAdmin } from './supabaseAdmin'
 import { gerarProximasOcorrencias } from './recorrencia'
+import { chamarProvider } from './ai/providerManager'
+import { carregarConfigAgente } from './ai/agentManager'
+import { registrarUsoIA } from './ai/auditoria'
 
 export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'propor_editar_arquivo_codigo']
 
@@ -416,12 +419,14 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
     .limit(30)
   const fatos = (memoriasData || []).map((m: any) => m.valor)
   let setoresInfo: any[] = []
+  let setorIdPrincipal: string | null = null
   if (usuarioRole !== 'master') {
     const { data: permData } = await supabaseAdmin
       .from('permissoes')
       .select('setor_id')
       .eq('usuario_id', usuarioId)
     const setorIds = (permData || []).map((p: any) => p.setor_id)
+    setorIdPrincipal = setorIds[0] || null
     if (setorIds.length > 0) {
       const { data: setoresData } = await supabaseAdmin
         .from('setores')
@@ -430,37 +435,33 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
       setoresInfo = setoresData || []
     }
   }
+  const escopoAgente: 'setor' | 'master' = usuarioRole === 'master' ? 'master' : 'setor'
+  const configAgente = await carregarConfigAgente(setorIdPrincipal, escopoAgente)
   const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
 
   let msgs = sanitizarMensagens(messages)
   const maxPassos = usuarioRole === 'master' ? 20 : 5
   for (let i = 0; i < maxPassos; i++) {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        max_tokens: usuarioRole === 'master' ? 16000 : 1024,
-        system,
-        messages: msgs,
-        tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
-      }),
+    const respostaIA = await chamarProvider(configAgente.provider, {
+      apiKey,
+      model: configAgente.modelo,
+      maxTokens: configAgente.maxTokens,
+      system,
+      messages: msgs,
+      tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
     })
-    if (!resp.ok) {
-      const errText = await resp.text()
-      return { done: true, text: 'Nao consegui falar com a IA agora (erro ' + resp.status + '): ' + errText.slice(0, 500), erro: true, messages: msgs, detalhe: errText.slice(0, 500) }
+    if (!respostaIA.ok) {
+      await registrarUsoIA({ agenteId: configAgente.id, usuarioId, usuarioNome, provider: configAgente.provider, modelo: configAgente.modelo, passos: i + 1, sucesso: false, erro: respostaIA.erro })
+      return { done: true, text: 'Nao consegui falar com a IA agora (erro ' + (respostaIA.status || '?') + '): ' + (respostaIA.erro || ''), erro: true, messages: msgs, detalhe: respostaIA.erro }
     }
-    const data = await resp.json()
+    const data = respostaIA.data
     const blocks = data.content || []
     const toolUses = blocks.filter((b: any) => b.type === 'tool_use')
     msgs = [...msgs, { role: 'assistant', content: blocks }]
 
     if (toolUses.length === 0) {
       const texto = blocks.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
+      await registrarUsoIA({ agenteId: configAgente.id, usuarioId, usuarioNome, provider: configAgente.provider, modelo: configAgente.modelo, passos: i + 1, sucesso: true })
       return { done: true, text: texto, messages: msgs }
     }
 
