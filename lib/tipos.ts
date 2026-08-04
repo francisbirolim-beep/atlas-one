@@ -54,6 +54,10 @@ export interface Cliente {
   cpf_cnpj?: string
   data_nascimento?: string
   endereco?: string
+  bairro?: string
+  cep?: string
+  email?: string
+  telefone?: string
   origem: OrigemCliente
   responsavel?: string
   observacoes?: string
