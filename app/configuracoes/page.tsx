@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2 } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -80,6 +80,16 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
                 const [novoSetorTopoGrupo, setNovoSetorTopoGrupo] = useState('')
                                 const [criandoSetorTopo, setCriandoSetorTopo] = useState(false)
 
+  const [agentesIA, setAgentesIA] = useState<any[]>([])
+  const [carregandoAgentesIA, setCarregandoAgentesIA] = useState(false)
+  const [novoAgenteNome, setNovoAgenteNome] = useState('')
+  const [novoAgenteEscopo, setNovoAgenteEscopo] = useState<'setor' | 'master'>('setor')
+  const [novoAgenteSetorId, setNovoAgenteSetorId] = useState('')
+  const [novoAgenteProvider, setNovoAgenteProvider] = useState('anthropic')
+  const [novoAgenteModelo, setNovoAgenteModelo] = useState('claude-sonnet-5')
+  const [novoAgenteTemperatura, setNovoAgenteTemperatura] = useState('1')
+  const [criandoAgenteIA, setCriandoAgenteIA] = useState(false)
+
   const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
   const [salvandoCorAssistencia, setSalvandoCorAssistencia] = useState(false)
   const [msgCorAssistencia, setMsgCorAssistencia] = useState('')
@@ -87,6 +97,46 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   useEffect(() => {
     carregar()
   }, [])
+
+  useEffect(() => {
+    if (abaAtiva === 'agentes-ia') carregarAgentesIA()
+  }, [abaAtiva])
+
+  async function carregarAgentesIA() {
+    setCarregandoAgentesIA(true)
+    const { data } = await supabase.from('agentes_ia').select('*').order('created_at', { ascending: false })
+    setAgentesIA(data || [])
+    setCarregandoAgentesIA(false)
+  }
+
+  async function criarNovoAgenteIA() {
+    if (!novoAgenteNome.trim()) return
+    setCriandoAgenteIA(true)
+    await supabase.from('agentes_ia').insert({
+      nome: novoAgenteNome.trim(),
+      escopo: novoAgenteEscopo,
+      setor_id: novoAgenteEscopo === 'setor' ? (novoAgenteSetorId || null) : null,
+      provider: novoAgenteProvider,
+      modelo: novoAgenteModelo.trim() || 'claude-sonnet-5',
+      temperatura: Number(novoAgenteTemperatura) || 1,
+      ativo: true,
+    })
+    setNovoAgenteNome('')
+    setNovoAgenteSetorId('')
+    setCriandoAgenteIA(false)
+    carregarAgentesIA()
+  }
+
+  async function alternarAtivoAgenteIA(id: string, ativo: boolean) {
+    await supabase.from('agentes_ia').update({ ativo: !ativo }).eq('id', id)
+    carregarAgentesIA()
+  }
+
+  async function excluirAgenteIA(id: string) {
+    if (!confirm('Excluir este agente de IA? O setor volta a usar o agente padrão.')) return
+    await supabase.from('agentes_ia').delete().eq('id', id)
+    carregarAgentesIA()
+  }
 
   async function carregar() {
     setCarregando(true)
@@ -497,6 +547,11 @@ async function salvarSla(colunaId: string) {
 
           <button onClick={() => setAbaAtiva('backup')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
             <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><RotateCcw size={18} className="text-brand-navy" /> Backup e restauração</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <button onClick={() => setAbaAtiva('agentes-ia')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Bot size={18} className="text-brand-navy" /> Agentes de IA (Atlas AI Core)</span>
             <ChevronDown size={16} className="-rotate-90 text-slate-300" />
           </button>
         </div>
@@ -1088,6 +1143,120 @@ async function salvarSla(colunaId: string) {
               )
             })}
           </div>
+        </section>
+        </div>
+      )}
+
+      {abaAtiva === 'agentes-ia' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Configurações
+        </button>
+        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+            <Bot size={16} /> Agentes de IA (Atlas AI Core)
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            Cadastre um agente de IA para um setor especifico (ou para o modo master) escolhendo provider, modelo e temperatura. Setores sem agente cadastrado continuam usando o agente padrao do sistema normalmente.
+          </p>
+
+          <div className="mb-6 p-4 rounded-xl border border-dashed border-brand-navy/40 bg-brand-navyLight/40 space-y-2">
+            <p className="text-xs font-semibold text-slate-600">Novo agente</p>
+            <input
+              type="text"
+              value={novoAgenteNome}
+              onChange={(e) => setNovoAgenteNome(e.target.value)}
+              placeholder="Nome (ex: Agente Comercial)"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={novoAgenteEscopo}
+                onChange={(e) => setNovoAgenteEscopo(e.target.value as 'setor' | 'master')}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="setor">Escopo: Setor</option>
+                <option value="master">Escopo: Master</option>
+              </select>
+              {novoAgenteEscopo === 'setor' && (
+                <select
+                  value={novoAgenteSetorId}
+                  onChange={(e) => setNovoAgenteSetorId(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione o setor...</option>
+                  {setores.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={novoAgenteProvider}
+                onChange={(e) => setNovoAgenteProvider(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (em breve)</option>
+                <option value="gemini">Gemini (em breve)</option>
+                <option value="ollama">Ollama (em breve)</option>
+                <option value="openrouter">OpenRouter (em breve)</option>
+              </select>
+              <input
+                type="text"
+                value={novoAgenteModelo}
+                onChange={(e) => setNovoAgenteModelo(e.target.value)}
+                placeholder="Modelo (ex: claude-sonnet-5)"
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              />
+              <input
+                type="number"
+                step="0.1"
+                value={novoAgenteTemperatura}
+                onChange={(e) => setNovoAgenteTemperatura(e.target.value)}
+                placeholder="Temperatura"
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <button
+              onClick={criarNovoAgenteIA}
+              disabled={criandoAgenteIA || !novoAgenteNome.trim()}
+              className="w-full py-2 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+            >
+              {criandoAgenteIA ? 'Criando...' : 'Criar agente'}
+            </button>
+          </div>
+
+          {carregandoAgentesIA ? (
+            <p className="text-xs text-slate-400">Carregando...</p>
+          ) : agentesIA.length === 0 ? (
+            <p className="text-xs text-slate-400">Nenhum agente cadastrado ainda. Todos os setores estao usando o agente padrao.</p>
+          ) : (
+            <div className="space-y-2">
+              {agentesIA.map((a: any) => (
+                <div key={a.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{a.nome}</p>
+                    <p className="text-xs text-slate-400">
+                      {a.escopo === 'master' ? 'Master' : (setores.find((s: any) => s.id === a.setor_id)?.nome || 'Setor removido')} · {a.provider} · {a.modelo} · temp {a.temperatura}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => alternarAtivoAgenteIA(a.id, a.ativo)}
+                      className={"text-xs px-2 py-1 rounded-full " + (a.ativo ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400")}
+                    >
+                      {a.ativo ? 'Ativo' : 'Inativo'}
+                    </button>
+                    <button onClick={() => excluirAgenteIA(a.id)} className="text-xs text-red-400 hover:underline">
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
         </div>
       )}
