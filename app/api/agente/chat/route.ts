@@ -11,10 +11,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Agente IA nao configurado (falta ANTHROPIC_API_KEY no servidor)' }, { status: 500 })
-    }
+    const apiKey = process.env.ANTHROPIC_API_KEY || ''
 
     const body = await req.json()
     const mensagemTexto = (body.mensagem || '').trim()
