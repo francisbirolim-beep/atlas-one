@@ -1,6 +1,9 @@
 // Atlas AI Core - carrega a configuracao do agente de IA (provider/modelo/limites)
-// Busca em agentes_ia (tabela nova). Se nao existir configuracao cadastrada,
-// cai no comportamento padrao que o sistema sempre teve (100% compativel).
+// Busca em agentes_ia (tabela nova). Se nao existir configuracao cadastrada (ou o
+// agente encontrado estiver inativo), cai no agente padrao do sistema - que e
+// Ollama local, custo zero. Anthropic (pago) so e usado quando alguem cadastra
+// explicitamente um agente com provider: 'anthropic' em Configuracoes. Nunca ha
+// fallback automatico de Ollama para um provider pago.
 
 import { supabaseAdmin } from '../supabaseAdmin'
 import { ProviderNome } from './providerManager'
@@ -18,8 +21,8 @@ function padrao(escopo: 'setor' | 'master'): ConfigAgente {
   return {
     id: null,
     nome: escopo === 'master' ? 'Agente padrao (master)' : 'Agente padrao (setor)',
-    provider: 'anthropic',
-    modelo: 'claude-sonnet-5',
+    provider: 'ollama',
+    modelo: process.env.OLLAMA_DEFAULT_MODEL || 'llama3.1',
     maxTokens: escopo === 'master' ? 16000 : 1024,
     temperatura: 1,
   }
