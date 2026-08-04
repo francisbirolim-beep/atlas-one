@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Lock, Eye, Pencil, Construction } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
-import { listarSetores, listarPermissoesUsuario, nivelEfetivo, agruparSetores, GRUPOS_ORDEM } from '@/lib/setores'
+import { listarSetores, listarPermissoesUsuario, nivelEfetivo, agruparSetores, GRUPOS_ORDEM, listarGruposComItens } from '@/lib/setores'
 import { Usuario, Setor, NivelPermissao } from '@/lib/tipos'
 
 const nivelInfo: Record<NivelPermissao, { label: string; icon: any; className: string }> = {
@@ -41,7 +41,7 @@ export default function Setores() {
   }
 
   const grupos = agruparSetores(setores)
-  const gruposComAcesso = GRUPOS_ORDEM
+  const gruposComAcesso = listarGruposComItens(setores)
     .map(grupo => ({
       grupo,
       itens: (grupos[grupo] || []).filter(s => nivelEfetivo(usuario, s.id, permissoes) !== 'oculto'),
