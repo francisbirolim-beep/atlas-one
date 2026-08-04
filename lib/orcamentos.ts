@@ -1,12 +1,12 @@
 import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
 import { primeiraColunaId } from './kanban'
-import { uploadFoto } from './upload'
+import { uploadFoto, uploadArquivo } from './upload'
 import { usuarioAtual } from './auth'
 import { registrarHistorico } from './historico'
 import { executarAutomacoesColuna } from './automacoes'
 import { v4 as uuidv4 } from 'uuid'
-import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead } from './tipos'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead, Anexo } from './tipos'
 
 export interface ItemOrcamentoForm {
   id: string
@@ -43,6 +43,7 @@ export interface DadosOrcamentoForm {
   arquitetoNome: string
   arquitetoContato: string
   fotos: File[]
+  arquivos: File[]
 }
 
 // Faz de fato a gravacao no Supabase (cliente, upload de fotos, orcamento e
@@ -54,7 +55,7 @@ export async function criarOrcamentoNoServidor(
   const {
     modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
-    arquitetoNome, arquitetoContato, fotos,
+    arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
 
   const [clienteId, colunaId, usuario] = await Promise.all([
@@ -66,6 +67,11 @@ export async function criarOrcamentoNoServidor(
   let itensSalvos: ItemEsquadria[] = []
   const fotosUrls: string[] = []
   for (const foto of fotos) { const url = await uploadFoto(foto); if (url) fotosUrls.push(url) }
+  const anexosSalvos: Anexo[] = []
+  for (const arquivo of arquivos) {
+    const url = await uploadArquivo(arquivo)
+    if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
+  }
   if (modo === 'formulario') {
     for (const it of itens) {
       const foto_url = it.foto ? await uploadFoto(it.foto) : null
@@ -131,6 +137,7 @@ export async function criarOrcamentoNoServidor(
     contramarco,
     itens: itensSalvos,
     fotos_urls: fotosUrls,
+    anexos: anexosSalvos,
     tipo_medida: modo === 'formulario' ? tipoMedida : null,
     descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
     valor_estimado: null,
