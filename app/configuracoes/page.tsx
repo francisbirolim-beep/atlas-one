@@ -89,6 +89,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [novoAgenteModelo, setNovoAgenteModelo] = useState('claude-sonnet-5')
   const [novoAgenteTemperatura, setNovoAgenteTemperatura] = useState('1')
   const [criandoAgenteIA, setCriandoAgenteIA] = useState(false)
+  const [mostrarArquivados, setMostrarArquivados] = useState(false)
 
   const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
   const [salvandoCorAssistencia, setSalvandoCorAssistencia] = useState(false)
@@ -133,8 +134,8 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   }
 
   async function excluirAgenteIA(id: string) {
-    if (!confirm('Excluir este agente de IA? O setor volta a usar o agente padrão.')) return
-    await supabase.from('agentes_ia').delete().eq('id', id)
+    if (!confirm('Arquivar este agente de IA? Ele deixa de ser usado (o setor volta a usar o agente padrão) mas o histórico de uso é preservado.')) return
+    await supabase.from('agentes_ia').update({ arquivado: true, arquivado_em: new Date().toISOString(), ativo: false }).eq('id', id)
     carregarAgentesIA()
   }
 
@@ -1228,16 +1229,21 @@ async function salvarSla(colunaId: string) {
             </button>
           </div>
 
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            <input type="checkbox" checked={mostrarArquivados} onChange={(e) => setMostrarArquivados(e.target.checked)} />
+            Mostrar arquivados
+          </label>
+
           {carregandoAgentesIA ? (
             <p className="text-xs text-slate-400">Carregando...</p>
-          ) : agentesIA.length === 0 ? (
+          ) : (mostrarArquivados ? agentesIA : agentesIA.filter((a: any) => !a.arquivado)).length === 0 ? (
             <p className="text-xs text-slate-400">Nenhum agente cadastrado ainda. Todos os setores estao usando o agente padrao.</p>
           ) : (
             <div className="space-y-2">
-              {agentesIA.map((a: any) => (
+              {(mostrarArquivados ? agentesIA : agentesIA.filter((a: any) => !a.arquivado)).map((a: any) => (
                 <div key={a.id} className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2">
                   <div>
-                    <p className="text-sm font-medium text-slate-700">{a.nome}</p>
+                    <p className="text-sm font-medium text-slate-700">{a.nome}{a.arquivado ? <span className="ml-2 text-xs text-slate-400">(arquivado)</span> : null}</p>
                     <p className="text-xs text-slate-400">
                       {a.escopo === 'master' ? 'Master' : (setores.find((s: any) => s.id === a.setor_id)?.nome || 'Setor removido')} · {a.provider} · {a.modelo} · temp {a.temperatura}
                     </p>
@@ -1249,9 +1255,13 @@ async function salvarSla(colunaId: string) {
                     >
                       {a.ativo ? 'Ativo' : 'Inativo'}
                     </button>
-                    <button onClick={() => excluirAgenteIA(a.id)} className="text-xs text-red-400 hover:underline">
-                      Excluir
-                    </button>
+                    {a.arquivado ? (
+                      <span className="text-xs text-slate-300">Arquivado</span>
+                    ) : (
+                      <button onClick={() => excluirAgenteIA(a.id)} className="text-xs text-red-400 hover:underline">
+                        Arquivar
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
