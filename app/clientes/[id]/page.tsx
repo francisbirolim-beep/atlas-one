@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Phone, MapPin, FileText, Camera, Plus, CheckSquare, Square,
   Trash2, Paperclip, MessageCircle, PhoneCall, Handshake, StickyNote, Send,
+  Pencil, X, Save, Mail, Cake, Hash,
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -59,6 +60,36 @@ const tipoInteracaoInfo: Record<TipoInteracao, { label: string; icon: any }> = {
   outro: { label: 'Outro', icon: FileText },
 }
 
+interface FormEdicaoCliente {
+  nome: string
+  whatsapp: string
+  telefone: string
+  email: string
+  cidade: string
+  cpfCnpj: string
+  endereco: string
+  bairro: string
+  cep: string
+  dataNascimento: string
+  observacoes: string
+}
+
+function clienteParaForm(c: Cliente): FormEdicaoCliente {
+  return {
+    nome: c.nome || '',
+    whatsapp: c.whatsapp || '',
+    telefone: c.telefone || '',
+    email: c.email || '',
+    cidade: c.cidade || '',
+    cpfCnpj: c.cpf_cnpj || '',
+    endereco: c.endereco || '',
+    bairro: c.bairro || '',
+    cep: c.cep || '',
+    dataNascimento: c.data_nascimento || '',
+    observacoes: c.observacoes || '',
+  }
+}
+
 export default function DetalheCliente() {
   const params = useParams()
   const id = params?.id as string
@@ -69,6 +100,11 @@ export default function DetalheCliente() {
   const [interacoes, setInteracoes] = useState<Interacao[]>([])
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [carregando, setCarregando] = useState(true)
+
+  const [editando, setEditando] = useState(false)
+  const [formEdicao, setFormEdicao] = useState<FormEdicaoCliente | null>(null)
+  const [salvandoCliente, setSalvandoCliente] = useState(false)
+  const [erroCliente, setErroCliente] = useState('')
 
   const [novaTarefaTitulo, setNovaTarefaTitulo] = useState('')
   const [novaTarefaData, setNovaTarefaData] = useState('')
@@ -103,6 +139,59 @@ export default function DetalheCliente() {
     setTarefas(tarefasData)
     setInteracoes(interacoesData)
     setCarregando(false)
+  }
+
+  function iniciarEdicao() {
+    if (!cliente) return
+    setFormEdicao(clienteParaForm(cliente))
+    setErroCliente('')
+    setEditando(true)
+  }
+
+  function cancelarEdicao() {
+    setEditando(false)
+    setFormEdicao(null)
+    setErroCliente('')
+  }
+
+  function atualizarCampoEdicao(campo: keyof FormEdicaoCliente, valor: string) {
+    setFormEdicao(prev => (prev ? { ...prev, [campo]: valor } : prev))
+  }
+
+  async function salvarEdicaoCliente() {
+    if (!cliente || !formEdicao) return
+    if (!formEdicao.nome.trim()) { setErroCliente('Informe o nome completo do cliente'); return }
+    if (!formEdicao.cpfCnpj.trim()) { setErroCliente('Informe o CPF ou CNPJ do cliente'); return }
+    if (!formEdicao.endereco.trim()) { setErroCliente('Informe o endereço da obra'); return }
+
+    setErroCliente('')
+    setSalvandoCliente(true)
+
+    const dados = {
+      nome: formEdicao.nome.trim(),
+      whatsapp: formEdicao.whatsapp.trim() || null,
+      telefone: formEdicao.telefone.trim() || null,
+      email: formEdicao.email.trim() || null,
+      cidade: formEdicao.cidade.trim() || null,
+      cpf_cnpj: formEdicao.cpfCnpj.trim(),
+      endereco: formEdicao.endereco.trim(),
+      bairro: formEdicao.bairro.trim() || null,
+      cep: formEdicao.cep.trim() || null,
+      data_nascimento: formEdicao.dataNascimento || null,
+      observacoes: formEdicao.observacoes.trim() || null,
+    }
+
+    const { error } = await supabase.from('clientes').update(dados).eq('id', cliente.id)
+    setSalvandoCliente(false)
+
+    if (error) {
+      setErroCliente('Erro ao salvar: ' + error.message)
+      return
+    }
+
+    setCliente({ ...cliente, ...dados } as Cliente)
+    setEditando(false)
+    setFormEdicao(null)
   }
 
   async function mudarStatus(orcamentoId: string, novoStatus: string) {
@@ -189,20 +278,181 @@ export default function DetalheCliente() {
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-3">
-            {cliente.whatsapp && (
-              <span className="flex items-center gap-1.5"><Phone size={14} /> {cliente.whatsapp}</span>
-            )}
-            {cliente.cidade && (
-              <span className="flex items-center gap-1.5"><MapPin size={14} /> {cliente.cidade}</span>
-            )}
-            <span className="px-2 py-0.5 bg-slate-100 rounded-full text-xs">
-              Origem: {origemLabels[cliente.origem] || cliente.origem}
-            </span>
-          </div>
-          {cliente.cpf_cnpj && <p className="text-sm text-slate-500">CPF/CNPJ: {cliente.cpf_cnpj}</p>}
-          {cliente.endereco && <p className="text-sm text-slate-500">Endereço: {cliente.endereco}</p>}
-          {cliente.observacoes && <p className="text-sm text-slate-500 mt-2">{cliente.observacoes}</p>}
+          {editando && formEdicao ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Nome completo *</label>
+                <input
+                  value={formEdicao.nome}
+                  onChange={e => atualizarCampoEdicao('nome', e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">WhatsApp</label>
+                  <input
+                    value={formEdicao.whatsapp}
+                    onChange={e => atualizarCampoEdicao('whatsapp', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Telefone fixo</label>
+                  <input
+                    value={formEdicao.telefone}
+                    onChange={e => atualizarCampoEdicao('telefone', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    value={formEdicao.email}
+                    onChange={e => atualizarCampoEdicao('email', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Data de nascimento</label>
+                  <input
+                    type="date"
+                    value={formEdicao.dataNascimento}
+                    onChange={e => atualizarCampoEdicao('dataNascimento', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Cidade</label>
+                  <input
+                    value={formEdicao.cidade}
+                    onChange={e => atualizarCampoEdicao('cidade', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">CPF ou CNPJ *</label>
+                  <input
+                    value={formEdicao.cpfCnpj}
+                    onChange={e => atualizarCampoEdicao('cpfCnpj', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Endereço da obra *</label>
+                <input
+                  value={formEdicao.endereco}
+                  onChange={e => atualizarCampoEdicao('endereco', e.target.value)}
+                  placeholder="Rua, número"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Bairro</label>
+                  <input
+                    value={formEdicao.bairro}
+                    onChange={e => atualizarCampoEdicao('bairro', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">CEP</label>
+                  <input
+                    value={formEdicao.cep}
+                    onChange={e => atualizarCampoEdicao('cep', e.target.value)}
+                    placeholder="00000-000"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Observações</label>
+                <textarea
+                  value={formEdicao.observacoes}
+                  onChange={e => atualizarCampoEdicao('observacoes', e.target.value)}
+                  rows={2}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                />
+              </div>
+
+              {erroCliente && <p className="text-red-500 text-sm">{erroCliente}</p>}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={salvarEdicaoCliente}
+                  disabled={salvandoCliente}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                >
+                  <Save size={14} /> {salvandoCliente ? 'Salvando...' : 'Salvar'}
+                </button>
+                <button
+                  onClick={cancelarEdicao}
+                  disabled={salvandoCliente}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <X size={14} /> Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-3">
+                  {cliente.whatsapp && (
+                    <span className="flex items-center gap-1.5"><Phone size={14} /> {cliente.whatsapp}</span>
+                  )}
+                  {cliente.telefone && (
+                    <span className="flex items-center gap-1.5"><Phone size={14} /> {cliente.telefone}</span>
+                  )}
+                  {cliente.email && (
+                    <span className="flex items-center gap-1.5"><Mail size={14} /> {cliente.email}</span>
+                  )}
+                  {cliente.cidade && (
+                    <span className="flex items-center gap-1.5"><MapPin size={14} /> {cliente.cidade}</span>
+                  )}
+                  <span className="px-2 py-0.5 bg-slate-100 rounded-full text-xs">
+                    Origem: {origemLabels[cliente.origem] || cliente.origem}
+                  </span>
+                </div>
+                <button
+                  onClick={iniciarEdicao}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:border-brand-navy hover:text-brand-navy transition flex-shrink-0"
+                >
+                  <Pencil size={13} /> Editar
+                </button>
+              </div>
+              {cliente.cpf_cnpj && <p className="text-sm text-slate-500 flex items-center gap-1.5"><Hash size={13} /> CPF/CNPJ: {cliente.cpf_cnpj}</p>}
+              {cliente.endereco && (
+                <p className="text-sm text-slate-500">
+                  Endereço: {cliente.endereco}
+                  {cliente.bairro ? ` - ${cliente.bairro}` : ''}
+                  {cliente.cep ? ` - CEP ${cliente.cep}` : ''}
+                </p>
+              )}
+              {cliente.data_nascimento && (
+                <p className="text-sm text-slate-500 flex items-center gap-1.5"><Cake size={13} /> Nascimento: {new Date(cliente.data_nascimento + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+              )}
+              {cliente.observacoes && <p className="text-sm text-slate-500 mt-2">{cliente.observacoes}</p>}
+              {(!cliente.cpf_cnpj || !cliente.endereco) && (
+                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mt-3">
+                  Cadastro incompleto: falta {[!cliente.cpf_cnpj && 'CPF/CNPJ', !cliente.endereco && 'endereço da obra'].filter(Boolean).join(' e ')}. Clique em "Editar" para completar.
+                </p>
+              )}
+            </>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
