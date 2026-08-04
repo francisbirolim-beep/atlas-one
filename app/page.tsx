@@ -61,9 +61,10 @@ export default function Home() {
 
   useEffect(() => {
     if (!usuario) return
-    carregarSetoresFavoritos(usuario)
+    const usuarioLogado = usuario
+    carregarSetoresFavoritos(usuarioLogado)
     function sync() {
-      carregarSetoresFavoritos(usuario)
+      carregarSetoresFavoritos(usuarioLogado)
     }
     window.addEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, sync)
     return () => window.removeEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, sync)
