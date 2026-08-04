@@ -1,4 +1,5 @@
 -- Atlas One v9: Atlas AI Core - agentes de IA configuraveis + auditoria de uso
+-- OBS: setores.id e do tipo text (nao uuid), entao setor_id aqui tambem e text.
 
 create table if not exists agentes_ia (
   id uuid primary key default gen_random_uuid(),
@@ -6,10 +7,10 @@ create table if not exists agentes_ia (
   atualizado_em timestamptz default now(),
 
   nome text not null,
-  escopo text not null default 'setor', -- 'setor' ou 'master'
-  setor_id uuid references setores(id),
+  escopo text not null default 'setor',
+  setor_id text references setores(id),
 
-  provider text not null default 'anthropic', -- anthropic, openai, gemini, ollama, openrouter
+  provider text not null default 'anthropic',
   modelo text not null default 'claude-sonnet-5',
   temperatura numeric not null default 1,
 
