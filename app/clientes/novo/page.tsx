@@ -25,9 +25,14 @@ export default function NovoCliente() {
   const router = useRouter()
   const [nome, setNome] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [telefone, setTelefone] = useState('')
+  const [email, setEmail] = useState('')
   const [cidade, setCidade] = useState('')
   const [cpfCnpj, setCpfCnpj] = useState('')
   const [endereco, setEndereco] = useState('')
+  const [bairro, setBairro] = useState('')
+  const [cep, setCep] = useState('')
+  const [dataNascimento, setDataNascimento] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [observacoes, setObservacoes] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -35,7 +40,15 @@ export default function NovoCliente() {
 
   async function salvar() {
     if (!nome.trim()) {
-      setErro('Informe o nome do cliente')
+      setErro('Informe o nome completo do cliente')
+      return
+    }
+    if (!cpfCnpj.trim()) {
+      setErro('Informe o CPF ou CNPJ do cliente')
+      return
+    }
+    if (!endereco.trim()) {
+      setErro('Informe o endereço da obra')
       return
     }
     setErro('')
@@ -46,9 +59,14 @@ export default function NovoCliente() {
       .insert({
         nome,
         whatsapp: whatsapp || null,
+        telefone: telefone || null,
+        email: email || null,
         cidade: cidade || null,
-        cpf_cnpj: cpfCnpj || null,
-        endereco: endereco || null,
+        cpf_cnpj: cpfCnpj,
+        endereco,
+        bairro: bairro || null,
+        cep: cep || null,
+        data_nascimento: dataNascimento || null,
         origem,
         observacoes: observacoes || null,
       })
@@ -81,7 +99,7 @@ export default function NovoCliente() {
       <main className="max-w-2xl mx-auto px-4 py-8">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome *</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo *</label>
             <input
               value={nome}
               onChange={e => setNome(e.target.value)}
@@ -101,6 +119,40 @@ export default function NovoCliente() {
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Telefone fixo</label>
+              <input
+                value={telefone}
+                onChange={e => setTelefone(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                placeholder="(11) 3333-3333"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                placeholder="cliente@email.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data de nascimento</label>
+              <input
+                type="date"
+                value={dataNascimento}
+                onChange={e => setDataNascimento(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
               <input
                 value={cidade}
@@ -109,38 +161,57 @@ export default function NovoCliente() {
                 placeholder="Cidade da obra"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">CPF ou CNPJ</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">CPF ou CNPJ *</label>
               <input
                 value={cpfCnpj}
                 onChange={e => setCpfCnpj(e.target.value)}
                 className="w-full border border-slate-300 rounded-xl p-3 text-sm"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Origem</label>
-              <select
-                value={origem}
-                onChange={e => setOrigem(e.target.value as OrigemCliente)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              >
-                {origens.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Endereço</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Origem</label>
+            <select
+              value={origem}
+              onChange={e => setOrigem(e.target.value as OrigemCliente)}
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            >
+              {origens.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Endereço da obra *</label>
             <input
               value={endereco}
               onChange={e => setEndereco(e.target.value)}
               className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+              placeholder="Rua, número"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Bairro</label>
+              <input
+                value={bairro}
+                onChange={e => setBairro(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">CEP</label>
+              <input
+                value={cep}
+                onChange={e => setCep(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                placeholder="00000-000"
+              />
+            </div>
           </div>
 
           <div>
