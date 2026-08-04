@@ -19,6 +19,9 @@ export interface ParametrosChamadaIA {
 }
 
 export async function chamarAnthropic(params: ParametrosChamadaIA): Promise<RespostaProvider> {
+  if (!params.apiKey) {
+    return { ok: false, erro: 'ANTHROPIC_API_KEY nao configurada no servidor' }
+  }
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
