@@ -8,7 +8,7 @@ import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
 import { listarAutomacoesOrcamento, criarAutomacaoOrcamento, alternarAtivoAutomacao, excluirAutomacaoOrcamento } from '@/lib/automacoes'
 import { listarAutomacoesAssistencia, criarAutomacaoAssistencia, alternarAtivoAutomacaoAssistencia, excluirAutomacaoAssistencia } from '@/lib/automacoesAssistencia'
-import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor, excluirSetor } from '@/lib/setores'
+import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, listarGruposComItens, atualizarSetor, criarSetor, excluirSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
@@ -77,6 +77,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [criandoSetor, setCriandoSetor] = useState(false)
                 const [novoSetorTopoAberto, setNovoSetorTopoAberto] = useState(false)
                 const [novoSetorTopoNome, setNovoSetorTopoNome] = useState('')
+                const [novoSetorTopoGrupo, setNovoSetorTopoGrupo] = useState('')
                                 const [criandoSetorTopo, setCriandoSetorTopo] = useState(false)
 
   const [corAssistenciaEdit, setCorAssistenciaEdit] = useState('#8b5cf6')
@@ -313,7 +314,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   async function criarNovoSetorTopo() {
   if (!novoSetorTopoNome.trim()) return
   setCriandoSetorTopo(true)
-  const grupo = 'Administrativo'
+  const grupo = novoSetorTopoGrupo.trim() || 'Administrativo'
   const itensGrupo = agruparSetores(setores)[grupo] || []
   const maiorOrdem = itensGrupo.reduce((max, s) => (s.ordem > max ? s.ordem : max), 0)
   await criarSetor(novoSetorTopoNome.trim(), grupo, maiorOrdem + 1, null)
@@ -327,6 +328,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
     return novo
   })
   setNovoSetorTopoNome('')
+  setNovoSetorTopoGrupo('')
   setNovoSetorTopoAberto(false)
   setCriandoSetorTopo(false)
 }
@@ -944,6 +946,13 @@ async function salvarSla(colunaId: string) {
                   placeholder="Nome do setor (ex: Recursos Humanos)"
                   className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
                 />
+                <input
+                  type="text"
+                  value={novoSetorTopoGrupo}
+                  onChange={e => setNovoSetorTopoGrupo(e.target.value)}
+                  placeholder="Grupo (ex: Comercial, Técnico, Financeiro)"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
+                />
                                 <div className="flex items-center gap-2">
                   <button
                     onClick={criarNovoSetorTopo}
@@ -953,7 +962,7 @@ async function salvarSla(colunaId: string) {
                     {criandoSetorTopo ? 'Criando...' : 'Criar setor'}
                   </button>
                   <button
-                    onClick={() => { setNovoSetorTopoAberto(false); setNovoSetorTopoNome('') }}
+                    onClick={() => { setNovoSetorTopoAberto(false); setNovoSetorTopoNome(''); setNovoSetorTopoGrupo('') }}
                     className="text-xs text-slate-400 hover:underline"
                   >
                     Cancelar
@@ -970,7 +979,7 @@ async function salvarSla(colunaId: string) {
             )}
           </div>
 <div className="space-y-4">
-            {GRUPOS_ORDEM.map(grupo => {
+            {listarGruposComItens(setores).map(grupo => {
               const itens = agruparSetores(setores)[grupo] || []
               return (
                 <div key={grupo}>
@@ -999,7 +1008,7 @@ async function salvarSla(colunaId: string) {
                               onChange={e => setSetoresEdit(prev => ({ ...prev, [s.id]: { ...edit, grupo: e.target.value } }))}
                               className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm"
                             >
-                              {GRUPOS_ORDEM.map(g => (
+                              {listarGruposComItens(setores).map(g => (
                                 <option key={g} value={g}>{g}</option>
                               ))}
                             </select>
