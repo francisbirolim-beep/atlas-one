@@ -3,8 +3,12 @@ import { gerarProximasOcorrencias } from './recorrencia'
 import { chamarProvider } from './ai/providerManager'
 import { carregarConfigAgente } from './ai/agentManager'
 import { registrarUsoIA } from './ai/auditoria'
+import { estimarCustoUSD } from './ai/custo'
 
 export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'propor_editar_arquivo_codigo']
+
+// Nome fixo da empresa para fins de auditoria. Ainda nao existe conceito de multi-tenant no schema atual.
+const EMPRESA_PADRAO = 'Atlas One'
 
 export const TOOLS = [
   {
@@ -442,6 +446,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
   let msgs = sanitizarMensagens(messages)
   const maxPassos = usuarioRole === 'master' ? 20 : 5
   for (let i = 0; i < maxPassos; i++) {
+    const inicioChamada = Date.now()
     const respostaIA = await chamarProvider(configAgente.provider, {
       apiKey,
       model: configAgente.modelo,
@@ -450,8 +455,9 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
       messages: msgs,
       tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
     })
+    const duracaoMs = Date.now() - inicioChamada
     if (!respostaIA.ok) {
-      await registrarUsoIA({ agenteId: configAgente.id, usuarioId, usuarioNome, provider: configAgente.provider, modelo: configAgente.modelo, passos: i + 1, sucesso: false, erro: respostaIA.erro })
+      await registrarUsoIA({ agenteId: configAgente.id, agenteNome: configAgente.nome, usuarioId, usuarioNome, empresa: EMPRESA_PADRAO, setorId: setorIdPrincipal, provider: configAgente.provider, modelo: configAgente.modelo, passos: i + 1, sucesso: false, erro: respostaIA.erro, duracaoMs, fallbackPolicy: 'configured_provider_only' })
       return { done: true, text: 'Nao consegui falar com a IA agora (erro ' + (respostaIA.status || '?') + '): ' + (respostaIA.erro || ''), erro: true, messages: msgs, detalhe: respostaIA.erro }
     }
     const data = respostaIA.data
@@ -461,7 +467,10 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
 
     if (toolUses.length === 0) {
       const texto = blocks.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
-      await registrarUsoIA({ agenteId: configAgente.id, usuarioId, usuarioNome, provider: configAgente.provider, modelo: configAgente.modelo, passos: i + 1, sucesso: true })
+      const tokensEntrada = data.usage ? data.usage.input_tokens : null
+      const tokensSaida = data.usage ? data.usage.output_tokens : null
+      const custoEstimado = estimarCustoUSD(configAgente.provider, configAgente.modelo, tokensEntrada, tokensSaida)
+      await registrarUsoIA({ agenteId: configAgente.id, agenteNome: configAgente.nome, usuarioId, usuarioNome, empresa: EMPRESA_PADRAO, setorId: setorIdPrincipal, provider: configAgente.provider, modelo: configAgente.modelo, passos: i + 1, sucesso: true, tokensEntrada, tokensSaida, custoEstimado, duracaoMs, fallbackPolicy: 'configured_provider_only' })
       return { done: true, text: texto, messages: msgs }
     }
 
