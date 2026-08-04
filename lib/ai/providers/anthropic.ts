@@ -15,6 +15,7 @@ export interface ParametrosChamadaIA {
   system: string
   messages: any[]
   tools: any[]
+  temperatura?: number
 }
 
 export async function chamarAnthropic(params: ParametrosChamadaIA): Promise<RespostaProvider> {
@@ -31,6 +32,7 @@ export async function chamarAnthropic(params: ParametrosChamadaIA): Promise<Resp
       system: params.system,
       messages: params.messages,
       tools: params.tools,
+      ...(params.temperatura != null ? { temperature: params.temperatura } : {}),
     }),
   })
 
