@@ -59,6 +59,14 @@ export function agruparSetores(setores: Setor[]): Record<string, Setor[]> {
   return grupos
 }
 
+export function listarGruposComItens(setores: Setor[]): string[] {
+  const grupos = agruparSetores(setores)
+  const nomes = Object.keys(grupos).filter(g => grupos[g].length > 0)
+  const conhecidos = GRUPOS_ORDEM.filter(g => nomes.includes(g))
+  const novos = nomes.filter(g => !(GRUPOS_ORDEM as readonly string[]).includes(g)).sort((a, b) => a.localeCompare(b))
+  return [...conhecidos, ...novos]
+}
+
 // Edita so os campos de dados do setor (nome, grupo, ordem, descricao).
 // Nao mexe em "ativo" nem "rota": esses dois so fazem sentido quando a
 // funcionalidade real do setor ja foi programada e ligada.
