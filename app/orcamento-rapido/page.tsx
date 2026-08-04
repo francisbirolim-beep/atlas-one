@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip } from 'lucide-react'
 import Link from 'next/link'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
@@ -74,6 +74,7 @@ export default function OrcamentoRapido() {
   const [arquitetoContato, setArquitetoContato] = useState('')
   const [fotos, setFotos] = useState<File[]>([])
   const [fotosPreviews, setFotosPreviews] = useState<string[]>([])
+  const [arquivos, setArquivos] = useState<File[]>([])
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [salvoOffline, setSalvoOffline] = useState(false)
@@ -110,6 +111,15 @@ export default function OrcamentoRapido() {
   function removerFoto(idx: number) {
     setFotos(prev => prev.filter((_, i) => i !== idx))
     setFotosPreviews(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function adicionarArquivos(files: FileList | null) {
+    if (!files) return
+    setArquivos(prev => [...prev, ...Array.from(files)])
+  }
+
+  function removerArquivo(idx: number) {
+    setArquivos(prev => prev.filter((_, i) => i !== idx))
   }
 
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm) {
@@ -171,7 +181,7 @@ export default function OrcamentoRapido() {
     const dadosForm: DadosOrcamentoForm = {
       modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
-      arquitetoNome, arquitetoContato, fotos,
+      arquitetoNome, arquitetoContato, fotos, arquivos,
     }
 
     const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
@@ -213,6 +223,7 @@ export default function OrcamentoRapido() {
     setArquitetoContato('')
     setFotos([])
     setFotosPreviews([])
+    setArquivos([])
   }
 
   if (salvoOffline) {
@@ -424,6 +435,31 @@ export default function OrcamentoRapido() {
             placeholder="Telefone / WhatsApp de contato"
             className="w-full border border-slate-300 rounded-xl p-3 text-sm"
           />
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Arquivos (opcional)</h3>
+          <p className="text-xs text-slate-400">PDF, Word, planilha, DWG... qualquer arquivo que ajude no orçamento, além das fotos.</p>
+          {arquivos.length > 0 && (
+            <div className="space-y-2">
+              {arquivos.map((arquivo, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Paperclip size={14} className="text-slate-400 shrink-0" />
+                    <span className="text-sm text-slate-600 truncate">{arquivo.name}</span>
+                  </div>
+                  <button onClick={() => removerArquivo(i)} className="p-1 text-red-400 hover:text-red-600 shrink-0">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
+            <Paperclip size={14} />
+            Adicionar arquivo
+            <input type="file" multiple className="hidden" onChange={e => adicionarArquivos(e.target.files)} />
+          </label>
         </div>
 
         <div className="flex gap-2 bg-white rounded-xl p-1 border border-slate-200">
