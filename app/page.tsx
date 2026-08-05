@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat, Star } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat, Square } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
@@ -240,7 +240,7 @@ export default function Home() {
                     title={s.nome}
                     className="flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-full bg-brand-navyLight text-brand-navy hover:bg-brand-navy hover:text-white transition whitespace-nowrap"
                   >
-                    <Star size={11} fill="currentColor" />
+                    <Square size={11} fill="currentColor" />
                     {s.nome}
                   </Link>
                 )
