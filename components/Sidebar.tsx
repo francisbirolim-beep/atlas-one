@@ -3,10 +3,19 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LogOut, Menu, X, Star, ChevronUp, ChevronDown } from 'lucide-react'
+import { LogOut, Menu, X, Star, ChevronUp, ChevronDown, LayoutGrid } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
-import { Usuario } from '@/lib/tipos'
+import { Usuario, Setor, NivelPermissao } from '@/lib/tipos'
 import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU, guiasFavoritos, lerOrdem, ordenarPorPreferencia, moverGuia, EVENTO_ORDEM_MUDOU } from '@/lib/guias'
+import { listarSetores, listarPermissoesUsuario, nivelEfetivo, agruparSetores, listarGruposComItens } from '@/lib/setores'
+import { lerFavoritosSetores, alternarFavoritoSetor, EVENTO_FAVORITOS_SETORES_MUDOU } from '@/lib/favoritosSetores'
+
+// Mesma regra usada na pagina /setores e nos atalhos da Inicio: se o setor ja
+// tem funcionalidade programada (ativo + rota), vai direto pra ela; senao cai
+// numa pagina de detalhe generica do setor.
+function hrefDoSetor(s: Setor) {
+  return s.ativo && s.rota ? s.rota : `/setor/${s.id}`
+}
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -15,24 +24,49 @@ export default function Sidebar() {
   const [ocultos, setOcultos] = useState<string[]>([])
   const [ordem, setOrdem] = useState<string[]>([])
   const [abrirMais, setAbrirMais] = useState(false)
+  const [setores, setSetores] = useState<Setor[]>([])
+  const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
+  const [favoritosSetores, setFavoritosSetores] = useState<string[]>([])
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
     setOcultos(lerOcultos())
     setOrdem(lerOrdem())
+    setFavoritosSetores(lerFavoritosSetores())
     function sync() {
       setOcultos(lerOcultos())
     }
     function syncOrdem() {
       setOrdem(lerOrdem())
     }
+    function syncFavoritosSetores() {
+      setFavoritosSetores(lerFavoritosSetores())
+    }
     window.addEventListener(EVENTO_OCULTOS_MUDOU, sync)
     window.addEventListener(EVENTO_ORDEM_MUDOU, syncOrdem)
+    window.addEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, syncFavoritosSetores)
     return () => {
       window.removeEventListener(EVENTO_OCULTOS_MUDOU, sync)
       window.removeEventListener(EVENTO_ORDEM_MUDOU, syncOrdem)
+      window.removeEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, syncFavoritosSetores)
     }
   }, [])
+
+  // Alem dos guias fixos de sempre, o menu lateral agora tambem lista todos os
+  // setores cadastrados (respeitando a permissao de cada usuario), do mesmo
+  // jeito que a pagina /setores. Isso e so um acrescimo: nenhum item fixo foi
+  // removido, entao ninguem perde acesso a nada que ja usava por aqui.
+  useEffect(() => {
+    if (!usuario) return
+    const usuarioLogado = usuario
+    async function carregar() {
+      const lista = await listarSetores()
+      const mapa = usuarioLogado.role === 'master' ? {} : await listarPermissoesUsuario(usuarioLogado.id)
+      setPermissoes(mapa)
+      setSetores(lista)
+    }
+    carregar()
+  }, [usuario])
 
   async function sair() {
     await logout()
@@ -43,6 +77,16 @@ export default function Sidebar() {
   const favoritos = guiasFavoritos(ocultos, isMaster)
   const resto = GUIAS.filter((g) => !g.masterOnly || isMaster).filter((g) => ocultos.includes(g.href))
   const restoOrdenado = ordenarPorPreferencia(resto, ordem)
+
+  const setoresVisiveis = usuario
+    ? setores.filter((s) => nivelEfetivo(usuario, s.id, permissoes) !== 'oculto')
+    : []
+  const setoresFavoritados = setoresVisiveis.filter((s) => favoritosSetores.includes(s.id))
+  const setoresRestantes = setoresVisiveis.filter((s) => !favoritosSetores.includes(s.id))
+  const gruposRestantes = listarGruposComItens(setoresRestantes)
+  const setoresRestantesPorGrupo = agruparSetores(setoresRestantes)
+
+  const totalResto = restoOrdenado.length + setoresRestantes.length
 
   function mover(href: string, direcao: 'cima' | 'baixo') {
     moverGuia(restoOrdenado, href, direcao)
@@ -58,6 +102,16 @@ export default function Sidebar() {
     favoritar(href)
   }
 
+  function favoritarSetor(id: string) {
+    setFavoritosSetores(alternarFavoritoSetor(id))
+  }
+
+  function removerFavoritoSetor(e: React.MouseEvent, id: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    favoritarSetor(id)
+  }
+
   return (
     <>
       <nav
@@ -67,7 +121,7 @@ export default function Sidebar() {
         <div className="hidden lg:flex lg:flex-col lg:px-3">
           <span className="mb-3 px-1 text-base font-bold tracking-tight text-brand-navy">Atlas One</span>
 
-          {favoritos.length > 0 && (
+          {(favoritos.length > 0 || setoresFavoritados.length > 0) && (
             <div className="mb-4 space-y-0.5 px-1">
               {favoritos.map((g) => {
                 const Icon = g.icon
@@ -94,11 +148,36 @@ export default function Sidebar() {
                   </div>
                 )
               })}
+              {setoresFavoritados.map((s) => {
+                const href = hrefDoSetor(s)
+                const ativo = pathname === href
+                return (
+                  <div key={s.id} className="group relative flex items-center">
+                    <Link
+                      href={href}
+                      title={s.nome}
+                      className={`flex flex-1 items-center gap-2 truncate rounded-lg px-2 py-1.5 text-xs transition
+                                  ${ativo ? 'bg-brand-navy text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      <LayoutGrid size={15} className="flex-shrink-0" />
+                      <span className="truncate">{s.nome}</span>
+                    </Link>
+                    <button
+                      onClick={(e) => removerFavoritoSetor(e, s.id)}
+                      title="Remover dos favoritos"
+                      className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full text-white opacity-0 transition hover:bg-red-500 group-hover:opacity-100
+                                  ${ativo ? 'bg-white/30' : 'bg-slate-400'}`}
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
 
-        {resto.length > 0 && (
+        {totalResto > 0 && (
           <div className="hidden lg:block lg:flex-1 lg:overflow-y-auto lg:px-3">
             <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Mais</p>
             <div className="space-y-0.5">
@@ -142,6 +221,36 @@ export default function Sidebar() {
                 )
               })}
             </div>
+
+            {gruposRestantes.map((grupo) => (
+              <div key={grupo} className="mt-3">
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">{grupo}</p>
+                <div className="space-y-0.5">
+                  {(setoresRestantesPorGrupo[grupo] || []).map((s) => {
+                    const href = hrefDoSetor(s)
+                    const ativo = pathname === href
+                    return (
+                      <div key={s.id} className="group flex items-center">
+                        <Link
+                          href={href}
+                          className={`flex-1 truncate rounded-lg px-2 py-1.5 text-xs transition
+                                      ${ativo ? 'bg-slate-100 font-medium text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
+                        >
+                          {s.nome}
+                        </Link>
+                        <button
+                          onClick={() => favoritarSetor(s.id)}
+                          title="Colocar no guia rápido"
+                          className="p-1 text-slate-300 opacity-0 hover:text-amber-400 group-hover:opacity-100"
+                        >
+                          <Star size={12} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -181,7 +290,32 @@ export default function Sidebar() {
           )
         })}
 
-        {resto.length > 0 && (
+        {setoresFavoritados.map((s) => {
+          const href = hrefDoSetor(s)
+          const ativo = pathname === href
+          return (
+            <div key={s.id} className="group relative lg:hidden">
+              <Link
+                href={href}
+                title={s.nome}
+                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition
+                            ${ativo ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              >
+                <LayoutGrid size={20} />
+                <span className="max-w-full truncate px-0.5 text-[10px] leading-none">{s.nome}</span>
+              </Link>
+              <button
+                onClick={(e) => removerFavoritoSetor(e, s.id)}
+                title="Remover dos favoritos"
+                className="absolute right-1 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white active:bg-red-500"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          )
+        })}
+
+        {totalResto > 0 && (
           <button
             onClick={() => setAbrirMais(true)}
             title="Mais"
@@ -244,6 +378,31 @@ export default function Sidebar() {
                 </div>
               ))}
             </div>
+
+            {gruposRestantes.map((grupo) => (
+              <div key={grupo} className="mt-4">
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{grupo}</p>
+                <div className="space-y-1">
+                  {(setoresRestantesPorGrupo[grupo] || []).map((s) => {
+                    const href = hrefDoSetor(s)
+                    return (
+                      <div key={s.id} className="flex items-center">
+                        <Link
+                          href={href}
+                          onClick={() => setAbrirMais(false)}
+                          className="flex-1 rounded-lg px-2 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                        >
+                          {s.nome}
+                        </Link>
+                        <button onClick={() => favoritarSetor(s.id)} className="p-2 text-slate-300 hover:text-amber-400">
+                          <Star size={14} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
