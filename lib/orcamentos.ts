@@ -10,6 +10,7 @@ import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, T
 
 export interface ItemOrcamentoForm {
   id: string
+  ambiente?: string
   tipo: TipoEsquadria | ''
   tipoOutroTexto: string
   folhas: string
@@ -84,6 +85,7 @@ export async function criarOrcamentoNoServidor(
         const ae = parseFloat(it.alturaEsquerda.replace(',', '.'))
         itensSalvos.push({
           id: it.id,
+          ambiente: it.ambiente?.trim() || null,
           tipo_esquadria: it.tipo as TipoEsquadria,
           tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
           folhas: it.folhas || null,
@@ -103,6 +105,7 @@ export async function criarOrcamentoNoServidor(
       } else {
         itensSalvos.push({
           id: it.id,
+          ambiente: it.ambiente?.trim() || null,
           tipo_esquadria: it.tipo as TipoEsquadria,
           tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
           folhas: it.folhas || null,

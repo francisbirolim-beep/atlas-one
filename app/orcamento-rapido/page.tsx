@@ -32,6 +32,7 @@ type ModoEntrada = 'formulario' | 'texto_livre'
 
 interface ItemForm {
   id: string
+  ambiente: string
   tipo: TipoEsquadria | ''
   tipoOutroTexto: string
   folhas: string
@@ -52,7 +53,7 @@ interface ItemForm {
 
 function novoItem(): ItemForm {
   return {
-    id: uuidv4(), tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '',
+    id: uuidv4(), ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '',
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
   }
 }
@@ -61,6 +62,7 @@ export default function OrcamentoRapido() {
   const [modo, setModo] = useState<ModoEntrada>('texto_livre')
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [textosLivres, setTextosLivres] = useState<string[]>([''])
+  const [ambientesLivres, setAmbientesLivres] = useState<string[]>([''])
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -97,8 +99,15 @@ export default function OrcamentoRapido() {
     setTextosLivres(prev => prev.map((t, i) => (i === idx ? valor : t)))
   }
 
+  function atualizarAmbienteLivre(idx: number, valor: string) {
+    setAmbientesLivres(prev => prev.map((a, i) => (i === idx ? valor : a)))
+  }
+
   function removerTexto(idx: number) {
-    if (textosLivres.length > 1) setTextosLivres(prev => prev.filter((_, i) => i !== idx))
+    if (textosLivres.length > 1) {
+      setTextosLivres(prev => prev.filter((_, i) => i !== idx))
+      setAmbientesLivres(prev => prev.filter((_, i) => i !== idx))
+    }
   }
 
   function adicionarFotos(files: FileList | null) {
@@ -178,8 +187,13 @@ export default function OrcamentoRapido() {
     setErro('')
     setSalvando(true)
 
+    const textosLivresComAmbiente = textosLivres.map((t, i) => {
+      const ambiente = (ambientesLivres[i] || '').trim()
+      return ambiente ? `Ambiente: ${ambiente}\n${t}` : t
+    })
+
     const dadosForm: DadosOrcamentoForm = {
-      modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
+      modo, itens, textosLivres: textosLivresComAmbiente, clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
@@ -211,6 +225,7 @@ export default function OrcamentoRapido() {
     setErro('')
     setItens([novoItem()])
     setTextosLivres([''])
+    setAmbientesLivres([''])
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
@@ -523,6 +538,13 @@ export default function OrcamentoRapido() {
                     </button>
                   )}
                 </div>
+                <input
+                  type="text"
+                  value={ambientesLivres[idx] || ''}
+                  onChange={e => atualizarAmbienteLivre(idx, e.target.value)}
+                  placeholder="Ambiente (ex: Sala, Quarto 1, Cozinha...)"
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                />
                 <textarea
                   value={texto}
                   onChange={e => atualizarTexto(idx, e.target.value)}
@@ -537,7 +559,7 @@ export default function OrcamentoRapido() {
             </p>
 
             <button
-              onClick={() => setTextosLivres([...textosLivres, ''])}
+              onClick={() => { setTextosLivres([...textosLivres, '']); setAmbientesLivres([...ambientesLivres, '']) }}
               className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-navy hover:text-brand-navy transition text-sm font-medium"
             >
               <Plus size={16} /> Adicionar outra esquadria
@@ -577,6 +599,17 @@ export default function OrcamentoRapido() {
                       <Trash2 size={16} />
                     </button>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label>
+                  <input
+                    type="text"
+                    value={item.ambiente}
+                    onChange={e => atualizarItem(item.id, 'ambiente', e.target.value)}
+                    placeholder="Ex: Sala, Quarto 1, Cozinha, Banheiro social..."
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                  />
                 </div>
 
                 <div>
