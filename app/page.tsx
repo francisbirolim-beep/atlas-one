@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat, Square } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
-import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento } from '@/lib/tipos'
+import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento, Setor } from '@/lib/tipos'
 import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId, criarTarefaRecorrente } from '@/lib/tarefas'
 import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
+import { listarSetores, listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
+import { lerFavoritosSetores, EVENTO_FAVORITOS_SETORES_MUDOU } from '@/lib/favoritosSetores'
+import { Guia, lerOcultos, guiasFavoritos, EVENTO_OCULTOS_MUDOU } from '@/lib/guias'
 import {
   listarEventosDoUsuario,
   criarEvento,
@@ -34,6 +37,8 @@ export default function Home() {
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
   const [carregandoPainel, setCarregandoPainel] = useState(true)
+  const [setoresFavoritos, setSetoresFavoritos] = useState<Setor[]>([])
+  const [guiasFavoritas, setGuiasFavoritas] = useState<Guia[]>([])
   const [mesVisto, setMesVisto] = useState(() => { const d = new Date(); d.setDate(1); return d })
   const [diaSelecionado, setDiaSelecionado] = useState<Date | null>(null)
   const [novaTarefaTexto, setNovaTarefaTexto] = useState('')
@@ -56,6 +61,25 @@ export default function Home() {
     })
   }, [])
 
+  useEffect(() => {
+    if (!usuario) return
+    const usuarioLogado = usuario
+    carregarSetoresFavoritos(usuarioLogado)
+    atualizarGuiasFavoritas(usuarioLogado)
+    function sync() {
+      carregarSetoresFavoritos(usuarioLogado)
+    }
+    function syncGuias() {
+      atualizarGuiasFavoritas(usuarioLogado)
+    }
+    window.addEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, sync)
+    window.addEventListener(EVENTO_OCULTOS_MUDOU, syncGuias)
+    return () => {
+      window.removeEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, sync)
+      window.removeEventListener(EVENTO_OCULTOS_MUDOU, syncGuias)
+    }
+  }, [usuario])
+
   async function carregarPainel(usuarioId: string) {
     setCarregandoPainel(true)
     const [tfs, cols, evs] = await Promise.all([
@@ -67,6 +91,26 @@ export default function Home() {
     setColunas(cols)
     setEventos(evs)
     setCarregandoPainel(false)
+  }
+
+  // Setores marcados com estrela (na pagina /setores ou no menu lateral) aparecem como atalhos
+  // rapidos aqui no cabecalho da tela Inicio.
+  async function carregarSetoresFavoritos(u: Usuario) {
+    const favIds = lerFavoritosSetores()
+    if (favIds.length === 0) {
+      setSetoresFavoritos([])
+      return
+    }
+    const lista = await listarSetores()
+    const permissoes = u.role === 'master' ? {} : await listarPermissoesUsuario(u.id)
+    const favoritados = lista.filter((s) => favIds.includes(s.id) && nivelEfetivo(u, s.id, permissoes) !== 'oculto')
+    setSetoresFavoritos(favoritados)
+  }
+
+  // Guias fixos marcados com estrela (guia rapido, no menu lateral) tambem
+  // aparecem aqui, junto com os setores favoritados, num unico grupo de atalhos.
+  function atualizarGuiasFavoritas(u: Usuario) {
+    setGuiasFavoritas(guiasFavoritos(lerOcultos(), u.role === 'master'))
   }
 
   const tarefasAbertas = tarefas
@@ -193,14 +237,48 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <Image src="/logo.png" alt="Esquadrifácio" width={140} height={40} className="h-9 w-auto object-contain" />
             <div>
               <h1 className="text-lg font-bold text-brand-navy">Atlas One</h1>
               <p className="text-xs text-slate-400">Esquadrifácio</p>
             </div>
           </div>
-          {usuario && <span className="text-sm text-slate-500">Olá, {usuario.nome}</span>}
+
+          {(guiasFavoritas.length > 0 || setoresFavoritos.length > 0) && (
+            <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 flex-1 justify-center">
+              {guiasFavoritas.map((g) => {
+                const Icon = g.icon
+                return (
+                  <Link
+                    key={g.href}
+                    href={g.href}
+                    title={g.label}
+                    className="flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-full bg-brand-navyLight text-brand-navy hover:bg-brand-navy hover:text-white transition whitespace-nowrap"
+                  >
+                    <Icon size={11} />
+                    {g.label}
+                  </Link>
+                )
+              })}
+              {setoresFavoritos.map((s) => {
+                const href = s.ativo && s.rota ? s.rota : `/setor/${s.id}`
+                return (
+                  <Link
+                    key={s.id}
+                    href={href}
+                    title={s.nome}
+                    className="flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-full bg-brand-navyLight text-brand-navy hover:bg-brand-navy hover:text-white transition whitespace-nowrap"
+                  >
+                    <Square size={11} fill="currentColor" />
+                    {s.nome}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+
+          {usuario && <span className="text-sm text-slate-500 flex-shrink-0">Olá, {usuario.nome}</span>}
         </div>
       </header>
 
@@ -350,7 +428,7 @@ export default function Home() {
                     {tarefasDoDia(diaSelecionado).map((t) => (
                       <div key={t.id} className="text-xs text-slate-600 flex items-center gap-1.5">
                         <Clock size={12} className="text-brand-teal flex-shrink-0" />
-                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} � {t.titulo}
+                        {t.data_hora && new Date(t.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · {t.titulo}
                         {(t.recorrencia_tipo || t.regra_origem_id) && <Repeat size={10} className="text-slate-300" />}
                       </div>
                     ))}
@@ -415,7 +493,7 @@ export default function Home() {
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-slate-700">
-                Novo evento � {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                Novo evento · {diaSelecionado.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
               </h3>
               <button onClick={() => setMostrarNovoEvento(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
