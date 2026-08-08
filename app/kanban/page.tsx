@@ -127,6 +127,7 @@ function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9.5)
 
+    if (item.ambiente) { doc.text(`Ambiente: ${item.ambiente}`, margem + 4, y); linhaNova(5) }
     if (item.folhas) { doc.text(`Folhas: ${item.folhas}`, margem + 4, y); linhaNova(5) }
 
     if (card.tipo_medida === 'final' && (item.largura_baixo_mm || item.largura_meio_mm || item.largura_cima_mm)) {
@@ -1021,6 +1022,13 @@ export default function Kanban() {
                             <Trash2 size={13} />
                           </button>
                         </div>
+                        <input
+                          type="text"
+                          value={item.ambiente || ''}
+                          onChange={e => atualizarItemEdit(item.id, 'ambiente', e.target.value || null)}
+                          placeholder="Ambiente (ex: Sala, Quarto 1, Cozinha...)"
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                        />
                         <select
                           value={item.tipo_esquadria}
                           onChange={e => atualizarItemEdit(item.id, 'tipo_esquadria', e.target.value as TipoEsquadria)}
