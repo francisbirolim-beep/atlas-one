@@ -54,10 +54,6 @@ export interface Cliente {
   cpf_cnpj?: string
   data_nascimento?: string
   endereco?: string
-  bairro?: string
-  cep?: string
-  email?: string
-  telefone?: string
   origem: OrigemCliente
   responsavel?: string
   observacoes?: string
@@ -80,6 +76,10 @@ export type Contramarco = 'com' | 'sem'
 
 export interface ItemEsquadria {
   id: string
+  // Ambiente/cômodo onde essa esquadria vai ser instalada (ex: Sala, Quarto 1,
+  // Cozinha, Banheiro social...). Ajuda quem elabora o orçamento a saber onde
+  // fica cada item, sem depender só da ordem ou da descrição livre.
+  ambiente?: string | null
   tipo_esquadria: TipoEsquadria
   tipo_outro_texto?: string | null
   folhas?: string | null
@@ -379,69 +379,4 @@ export interface AutomacaoAssistencia {
   titulo_tarefa: string
   ativo: boolean
   created_at?: string
-}
-
-// Medição final (dentro da Produção): quadro próprio com cliente/endereço
-// puxados do orçamento vendido, lista de tipologias a medir e as medidas
-// reais tiradas na obra.
-
-export type TipoValorCampoExtra = 'numero' | 'texto'
-
-// Campo extra configurável pelo master por tipo de esquadria (ex: janela
-// precisa de altura de peitoril, porta não).
-export interface TipologiaCampoExtra {
-  id: string
-  tipo_esquadria: string
-  chave: string
-  nome: string
-  tipo_valor: TipoValorCampoExtra
-  ordem: number
-  created_at?: string
-}
-
-export interface MedicaoColuna {
-  id: string
-  nome: string
-  ordem: number
-  created_at?: string
-}
-
-export interface MedicaoItem {
-  id: string
-  medicao_id: string
-  tipo_esquadria: string
-  tipo_outro_texto?: string | null
-  descricao?: string | null
-  quantidade: number
-  ordem: number
-  largura_baixo_mm?: number | null
-  largura_meio_mm?: number | null
-  largura_cima_mm?: number | null
-  altura_direita_mm?: number | null
-  altura_meio_mm?: number | null
-  altura_esquerda_mm?: number | null
-  foto_larguras_url?: string | null
-  foto_alturas_url?: string | null
-  campos_extras: Record<string, string | number>
-  medido: boolean
-  medido_em?: string | null
-  medido_por_id?: string | null
-  medido_por_nome?: string | null
-}
-
-export interface MedicaoFinal {
-  id: string
-  created_at: string
-  orcamento_id?: string | null
-  cliente_id?: string | null
-  cliente_nome: string
-  cliente_whatsapp?: string | null
-  endereco?: string | null
-  bairro?: string | null
-  cidade?: string | null
-  cep?: string | null
-  coluna_id?: string | null
-  coluna_atualizada_em?: string | null
-  criado_por_id?: string | null
-  criado_por_nome?: string | null
 }
