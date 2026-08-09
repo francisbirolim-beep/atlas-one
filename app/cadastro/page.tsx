@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Image as ImageIcon, Truck } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Truck } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -10,9 +10,7 @@ import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agrupa
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia, lerDadosEmpresa, salvarDadosEmpresa } from '@/lib/configGeral'
-import { listarProdutos, criarProduto, atualizarProduto, alternarAtivoProduto, excluirProduto, CATEGORIAS_PRODUTO, labelCategoriaProduto } from '@/lib/produtos'
-import { uploadFotoProduto } from '@/lib/upload'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, Produto, CategoriaProduto, DadosEmpresa } from '@/lib/tipos'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, DadosEmpresa } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -72,24 +70,6 @@ export default function Cadastro() {
   const [salvandoCorAssistencia, setSalvandoCorAssistencia] = useState(false)
   const [msgCorAssistencia, setMsgCorAssistencia] = useState('')
 
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [novoProdutoAberto, setNovoProdutoAberto] = useState(false)
-  const [nomeProduto, setNomeProduto] = useState('')
-  const [categoriaProduto, setCategoriaProduto] = useState<CategoriaProduto>('porta_janela_padrao')
-  const [precoProduto, setPrecoProduto] = useState('')
-  const [unidadeProduto, setUnidadeProduto] = useState('unidade')
-  const [larguraProduto, setLarguraProduto] = useState('')
-  const [alturaProduto, setAlturaProduto] = useState('')
-  const [descricaoProduto, setDescricaoProduto] = useState('')
-  const [fotoProdutoNovo, setFotoProdutoNovo] = useState<File | null>(null)
-  const [salvandoProduto, setSalvandoProduto] = useState(false)
-  const [erroProduto, setErroProduto] = useState('')
-  const [sucessoProduto, setSucessoProduto] = useState('')
-  const [editandoProdutoId, setEditandoProdutoId] = useState<string | null>(null)
-  const [produtoEditForm, setProdutoEditForm] = useState<Record<string, { nome: string; categoria: CategoriaProduto; preco: string; unidade: string; largura_mm: string; altura_mm: string; descricao: string }>>({})
-  const [fotoEditFile, setFotoEditFile] = useState<Record<string, File | null>>({})
-  const [salvandoEdicaoProduto, setSalvandoEdicaoProduto] = useState<string | null>(null)
-
   const [empresaNome, setEmpresaNome] = useState('')
   const [empresaCnpj, setEmpresaCnpj] = useState('')
   const [empresaIe, setEmpresaIe] = useState('')
@@ -114,20 +94,18 @@ export default function Cadastro() {
     setMeuId(me?.id || null)
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia, listaProdutos, dadosEmpresa] = await Promise.all([
+      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia, dadosEmpresa] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
         listarSetores(),
         listarMetas(mesMetaAtual),
         listarBackups(),
         lerCorAssistencia(),
-        listarProdutos(),
         lerDadosEmpresa(),
       ])
       setBackups(listaBackups)
       setCorAssistenciaEdit(corAssistencia)
       setSetores(listaSetores)
-      setProdutos(listaProdutos)
       if (dadosEmpresa) {
         setEmpresaNome(dadosEmpresa.nome || '')
         setEmpresaCnpj(dadosEmpresa.cnpj || '')
@@ -438,122 +416,6 @@ export default function Cadastro() {
     setMsgCorAssistencia(ok ? 'Cor salva.' : 'Erro ao salvar a cor.')
   }
 
-  async function cadastrarProduto(e: React.FormEvent) {
-    e.preventDefault()
-    setErroProduto('')
-    setSucessoProduto('')
-    if (!nomeProduto.trim()) {
-      setErroProduto('Preencha o nome do produto')
-      return
-    }
-    const preco = parseFloat(precoProduto.replace(',', '.'))
-    if (isNaN(preco) || preco < 0) {
-      setErroProduto('Preço inválido')
-      return
-    }
-    setSalvandoProduto(true)
-    const me = await usuarioAtual()
-    let fotoUrl: string | null = null
-    if (fotoProdutoNovo) {
-      fotoUrl = await uploadFotoProduto(fotoProdutoNovo)
-    }
-    const { error } = await criarProduto({
-      nome: nomeProduto.trim(),
-      categoria: categoriaProduto,
-      preco,
-      unidade: unidadeProduto.trim() || 'unidade',
-      largura_mm: larguraProduto.trim() ? parseInt(larguraProduto) : null,
-      altura_mm: alturaProduto.trim() ? parseInt(alturaProduto) : null,
-      descricao: descricaoProduto.trim() || null,
-      foto_url: fotoUrl,
-      criado_por_id: me?.id || null,
-      criado_por_nome: me?.nome || null,
-    })
-    setSalvandoProduto(false)
-    if (error) {
-      setErroProduto('Erro ao cadastrar produto')
-      return
-    }
-    setSucessoProduto(`Produto ${nomeProduto} cadastrado com sucesso.`)
-    setNomeProduto('')
-    setCategoriaProduto('porta_janela_padrao')
-    setPrecoProduto('')
-    setUnidadeProduto('unidade')
-    setLarguraProduto('')
-    setAlturaProduto('')
-    setDescricaoProduto('')
-    setFotoProdutoNovo(null)
-    setProdutos(await listarProdutos())
-  }
-
-  function iniciarEdicaoProduto(p: Produto) {
-    setEditandoProdutoId(p.id)
-    setProdutoEditForm(prev => ({
-      ...prev,
-      [p.id]: {
-        nome: p.nome,
-        categoria: p.categoria,
-        preco: String(p.preco),
-        unidade: p.unidade,
-        largura_mm: p.largura_mm != null ? String(p.largura_mm) : '',
-        altura_mm: p.altura_mm != null ? String(p.altura_mm) : '',
-        descricao: p.descricao || '',
-      },
-    }))
-  }
-
-  function cancelarEdicaoProduto() {
-    setEditandoProdutoId(null)
-  }
-
-  function mudarCampoEdicaoProduto(id: string, campo: string, valor: string) {
-    setProdutoEditForm(prev => ({
-      ...prev,
-      [id]: { ...prev[id], [campo]: valor } as any,
-    }))
-  }
-
-  async function salvarEdicaoProduto(id: string) {
-    const dados = produtoEditForm[id]
-    if (!dados) return
-    if (!dados.nome.trim()) return
-    const preco = parseFloat(dados.preco.replace(',', '.'))
-    if (isNaN(preco) || preco < 0) return
-    setSalvandoEdicaoProduto(id)
-    let fotoUrl: string | undefined
-    const arquivo = fotoEditFile[id]
-    if (arquivo) {
-      const url = await uploadFotoProduto(arquivo)
-      if (url) fotoUrl = url
-    }
-    await atualizarProduto(id, {
-      nome: dados.nome.trim(),
-      categoria: dados.categoria,
-      preco,
-      unidade: dados.unidade.trim() || 'unidade',
-      largura_mm: dados.largura_mm.trim() ? parseInt(dados.largura_mm) : null,
-      altura_mm: dados.altura_mm.trim() ? parseInt(dados.altura_mm) : null,
-      descricao: dados.descricao.trim() || null,
-      ...(fotoUrl ? { foto_url: fotoUrl } : {}),
-    })
-    setProdutos(await listarProdutos())
-    setFotoEditFile(prev => ({ ...prev, [id]: null }))
-    setSalvandoEdicaoProduto(null)
-    setEditandoProdutoId(null)
-  }
-
-  async function alternarAtivoProdutoAcao(p: Produto) {
-    await alternarAtivoProduto(p.id, !p.ativo)
-    setProdutos(await listarProdutos())
-  }
-
-  async function excluirProdutoComConfirmacao(p: Produto) {
-    const confirmar = window.confirm(`Excluir o produto "${p.nome}"? Essa ação não pode ser desfeita.`)
-    if (!confirmar) return
-    await excluirProduto(p.id)
-    setProdutos(await listarProdutos())
-  }
-
   async function salvarDadosEmpresaAcao() {
     setSalvandoEmpresa(true)
     setMsgEmpresa('')
@@ -612,10 +474,10 @@ export default function Cadastro() {
               <ChevronDown size={16} className="-rotate-90 text-slate-300" />
             </button>
 
-            <button onClick={() => setAbaAtiva('produtos')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <Link href="/cadastro/produtos" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
               <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Package size={18} className="text-brand-navy" /> Produtos</span>
               <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-            </button>
+            </Link>
 
             <Link href="/cadastro/fornecedores" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
               <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Truck size={18} className="text-brand-navy" /> Fornecedores</span>
@@ -886,266 +748,6 @@ export default function Cadastro() {
               </div>
             </section>
 
-          </div>
-        )}
-
-        {abaAtiva === 'produtos' && (
-          <div>
-            <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
-              <ArrowLeft size={16} /> Cadastro
-            </button>
-            <section className="bg-white rounded-2xl border border-slate-200 p-6">
-              <div className="mb-8">
-                {!novoProdutoAberto ? (
-                  <button
-                    onClick={() => setNovoProdutoAberto(true)}
-                    className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
-                  >
-                    <Plus size={16} /> Cadastrar produto novo
-                  </button>
-                ) : (
-                  <div className="border border-slate-200 rounded-xl p-4">
-                    <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
-                      <Package size={16} /> Cadastrar produto novo
-                    </h3>
-                    <form onSubmit={cadastrarProduto} className="space-y-3">
-                      <input
-                        type="text"
-                        value={nomeProduto}
-                        onChange={e => setNomeProduto(e.target.value)}
-                        placeholder="Nome do produto"
-                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                      />
-                      <select
-                        value={categoriaProduto}
-                        onChange={e => setCategoriaProduto(e.target.value as CategoriaProduto)}
-                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                      >
-                        {CATEGORIAS_PRODUTO.map(c => (
-                          <option key={c.valor} value={c.valor}>{c.label}</option>
-                        ))}
-                      </select>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={precoProduto}
-                          onChange={e => setPrecoProduto(e.target.value)}
-                          placeholder="Preço (R$)"
-                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                        />
-                        <input
-                          type="text"
-                          value={unidadeProduto}
-                          onChange={e => setUnidadeProduto(e.target.value)}
-                          placeholder="Unidade (ex: unidade, metro, kg)"
-                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={larguraProduto}
-                          onChange={e => setLarguraProduto(e.target.value)}
-                          placeholder="Largura (mm) — opcional"
-                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                        />
-                        <input
-                          type="text"
-                          value={alturaProduto}
-                          onChange={e => setAlturaProduto(e.target.value)}
-                          placeholder="Altura (mm) — opcional"
-                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                        />
-                      </div>
-                      <textarea
-                        value={descricaoProduto}
-                        onChange={e => setDescricaoProduto(e.target.value)}
-                        placeholder="Descrição — opcional"
-                        rows={2}
-                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                      />
-                      <div>
-                        <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
-                          <ImageIcon size={13} /> Foto do produto — opcional
-                        </label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={e => setFotoProdutoNovo(e.target.files?.[0] || null)}
-                          className="w-full border border-slate-300 rounded-xl p-2.5 text-xs"
-                        />
-                      </div>
-
-                      {erroProduto && <p className="text-red-500 text-sm">{erroProduto}</p>}
-                      {sucessoProduto && <p className="text-brand-teal text-sm">{sucessoProduto}</p>}
-
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={salvandoProduto}
-                          className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                        >
-                          {salvandoProduto ? 'Cadastrando...' : 'Cadastrar produto'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNovoProdutoAberto(false)}
-                          className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                )}
-              </div>
-
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
-                <Package size={16} /> Produtos cadastrados
-              </h2>
-              {produtos.length === 0 ? (
-                <p className="text-sm text-slate-400">Nenhum produto cadastrado ainda.</p>
-              ) : (
-                <div className="space-y-2">
-                  {produtos.map(p => (
-                    <div key={p.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {p.foto_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.foto_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-slate-200" />
-                          ) : (
-                            <span className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                              <ImageIcon size={14} className="text-slate-300" />
-                            </span>
-                          )}
-                          <div className="min-w-0">
-                            <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.nome}</p>
-                            <p className="text-slate-400 text-xs">
-                              {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
-                              {(p.largura_mm || p.altura_mm) ? ` · ${p.largura_mm || '?'} x ${p.altura_mm || '?'} mm` : ''}
-                            </p>
-                            {p.descricao && <p className="text-slate-400 text-xs">{p.descricao}</p>}
-                          </div>
-                        </div>
-                        <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${p.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
-                          {p.ativo ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </div>
-
-                      {editandoProdutoId === p.id ? (
-                        <div className="border border-slate-100 rounded-lg p-3 space-y-2">
-                          <input
-                            type="text"
-                            value={produtoEditForm[p.id]?.nome ?? ''}
-                            onChange={e => mudarCampoEdicaoProduto(p.id, 'nome', e.target.value)}
-                            placeholder="Nome"
-                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          />
-                          <select
-                            value={produtoEditForm[p.id]?.categoria ?? 'outro'}
-                            onChange={e => mudarCampoEdicaoProduto(p.id, 'categoria', e.target.value)}
-                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          >
-                            {CATEGORIAS_PRODUTO.map(c => (
-                              <option key={c.valor} value={c.valor}>{c.label}</option>
-                            ))}
-                          </select>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={produtoEditForm[p.id]?.preco ?? ''}
-                              onChange={e => mudarCampoEdicaoProduto(p.id, 'preco', e.target.value)}
-                              placeholder="Preço (R$)"
-                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                            />
-                            <input
-                              type="text"
-                              value={produtoEditForm[p.id]?.unidade ?? ''}
-                              onChange={e => mudarCampoEdicaoProduto(p.id, 'unidade', e.target.value)}
-                              placeholder="Unidade"
-                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={produtoEditForm[p.id]?.largura_mm ?? ''}
-                              onChange={e => mudarCampoEdicaoProduto(p.id, 'largura_mm', e.target.value)}
-                              placeholder="Largura (mm)"
-                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                            />
-                            <input
-                              type="text"
-                              value={produtoEditForm[p.id]?.altura_mm ?? ''}
-                              onChange={e => mudarCampoEdicaoProduto(p.id, 'altura_mm', e.target.value)}
-                              placeholder="Altura (mm)"
-                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                            />
-                          </div>
-                          <textarea
-                            value={produtoEditForm[p.id]?.descricao ?? ''}
-                            onChange={e => mudarCampoEdicaoProduto(p.id, 'descricao', e.target.value)}
-                            placeholder="Descrição"
-                            rows={2}
-                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          />
-                          <div>
-                            <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
-                              <ImageIcon size={13} /> Trocar foto — opcional
-                            </label>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={e => setFotoEditFile(prev => ({ ...prev, [p.id]: e.target.files?.[0] || null }))}
-                              className="w-full border border-slate-200 rounded-lg p-2 text-xs"
-                            />
-                          </div>
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => salvarEdicaoProduto(p.id)}
-                              disabled={salvandoEdicaoProduto === p.id}
-                              className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                            >
-                              {salvandoEdicaoProduto === p.id ? 'Salvando...' : 'Salvar'}
-                            </button>
-                            <button
-                              onClick={cancelarEdicaoProduto}
-                              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => iniciarEdicaoProduto(p)}
-                            className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                          >
-                            <Pencil size={13} />
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => alternarAtivoProdutoAcao(p)}
-                            className="text-xs text-slate-500 hover:underline"
-                          >
-                            {p.ativo ? 'Desativar' : 'Ativar'}
-                          </button>
-                          <button
-                            onClick={() => excluirProdutoComConfirmacao(p)}
-                            className="text-xs text-red-500 hover:underline"
-                          >
-                            Excluir
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
           </div>
         )}
 
