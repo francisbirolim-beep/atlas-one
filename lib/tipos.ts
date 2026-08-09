@@ -1,23 +1,22 @@
 export type TipoEsquadria =
       | 'porta_correr' | 'porta_pivotante' | 'porta_abrir'
-  | 'janela_correr' | 'janela_maximiar' | 'janela_basculante'
-  | 'vitro' | 'fachada' | 'box' | 'outro'
+| 'janela_correr' | 'janela_maximiar' | 'janela_basculante'
+| 'vitro' | 'fachada' | 'box' | 'outro'
 
 export type Acabamento =
       | 'natural' | 'branco' | 'preto' | 'cinza' | 'madeirado'
-  | 'pintura_eletrostatica' | 'outro'
+| 'pintura_eletrostatica' | 'outro'
 
 export type StatusOrcamento =
       | 'rascunho' | 'enviado' | 'aprovado' | 'recusado' | 'convertido'
 
 export type OrigemCliente =
       | 'indicacao' | 'arquiteto' | 'engenheiro' | 'construtora'
-  | 'instagram' | 'facebook' | 'google' | 'whatsapp'
-  | 'cliente_antigo' | 'passou_na_frente' | 'outros'
+| 'instagram' | 'facebook' | 'google' | 'whatsapp'
+| 'cliente_antigo' | 'passou_na_frente' | 'outros'
 
 export type RoleUsuario = 'master' | 'funcionario'
 
-// Temperatura do lead/orçamento: classificação padrão de mercado (quente/morno/frio)
 export type TemperaturaLead = 'quente' | 'morno' | 'frio'
 
 export interface Usuario {
@@ -74,10 +73,10 @@ export interface KanbanColuna {
       sla_amarelo_cor?: string | null
       sla_vermelho_cor?: string | null
       // Marca se, ao entrar nessa coluna, o card representa um orçamento vendido
-  // (usado pelo módulo de Medição Final pra saber quais colunas contam como
-  // "vendido", sem depender do campo orcamentos.status que na prática fica
-  // desatualizado em relação à posição real no Kanban).
-  gera_medicao_final?: boolean
+// (usado pelo módulo de Medição Final pra saber quais colunas contam como
+// "vendido", sem depender do campo orcamentos.status que na prática fica
+// desatualizado em relação à posição real no Kanban).
+gera_medicao_final?: boolean
       created_at?: string
 }
 
@@ -86,9 +85,9 @@ export type Contramarco = 'com' | 'sem'
 export interface ItemEsquadria {
       id: string
       // Ambiente/cômodo onde essa esquadria vai ser instalada (ex: Sala, Quarto 1,
-  // Cozinha, Banheiro social...). Ajuda quem elabora o orçamento a saber onde
-  // fica cada item, sem depender só da ordem ou da descrição livre.
-  ambiente?: string | null
+// Cozinha, Banheiro social...). Ajuda quem elabora o orçamento a saber onde
+// fica cada item, sem depender só da ordem ou da descrição livre.
+ambiente?: string | null
       tipo_esquadria: TipoEsquadria
       tipo_outro_texto?: string | null
       folhas?: string | null
@@ -97,27 +96,27 @@ export interface ItemEsquadria {
       quantidade: number
       foto_url?: string | null
       // Fase 7: a esquadria pode ter varias fotos gerais (nao so uma). foto_url
-  // continua preenchida (com a primeira) por compatibilidade com telas que
-  // ainda mostram so uma foto por item; foto_urls tem a lista completa.
-  foto_urls?: string[] | null
+// continua preenchida (com a primeira) por compatibilidade com telas que
+// ainda mostram so uma foto por item; foto_urls tem a lista completa.
+foto_urls?: string[] | null
       descricao?: string
       cor?: string | null
       // Medida final: 3 larguras (baixo/meio/cima) e 3 alturas (direita/meio/esquerda)
-  largura_baixo_mm?: number | null
+largura_baixo_mm?: number | null
       largura_meio_mm?: number | null
       largura_cima_mm?: number | null
       altura_direita_mm?: number | null
       altura_meio_mm?: number | null
       altura_esquerda_mm?: number | null
       // Fase 6: alternativa a digitar as medidas — foto da trena com as 3
-  // larguras / 3 alturas (mesmo padrão já usado na Medição Final).
-  foto_larguras_url?: string | null
+// larguras / 3 alturas (mesmo padrão já usado na Medição Final).
+foto_larguras_url?: string | null
       foto_alturas_url?: string | null
       // Fase 8: a esquadria pode vir de um Produto já cadastrado (Cadastro >
-  // Produtos) em vez de digitada na mão — nome/medidas/preço puxam do
-  // produto na hora de selecionar. Snapshot do preço na hora (não muda mais
-  // se o cadastro do produto for alterado depois — mesmo padrão do ItemBalcao).
-  produto_id?: string | null
+// Produtos) em vez de digitada na mão — nome/medidas/preço puxam do
+// produto na hora de selecionar. Snapshot do preco na hora (não muda mais
+// se o cadastro do produto for alterado depois — mesmo padrão do ItemBalcao).
+produto_id?: string | null
       preco_unit?: number | null
       preco_total?: number | null
 }
@@ -157,22 +156,13 @@ export interface OrcamentoRapido {
       tipo_medida?: 'comum' | 'final' | null
       temperatura?: TemperaturaLead | null
       motivo_perda?: string | null
-      // Card espelho de um chamado de assistencia (aparece na 1a coluna so pra
-  // avisar o time; some sozinho quando o chamado sai da 1a coluna do kanban
-  // de assistencia).
-  eh_assistencia?: boolean
+      eh_assistencia?: boolean
       assistencia_id?: string | null
-      // Orçamento Balcão: numero sequencial exibido no PDF, modo de entrada
-  // (formulario = Detalhado, texto_livre = Orçamento Rápido antigo,
-  // balcao = venda de produtos do catálogo), itens vendidos e condições
-  // (forma de pagamento / prazo de entrega) que entram no PDF.
-  numero?: number | null
+      numero?: number | null
       modo_entrada?: 'formulario' | 'texto_livre' | 'balcao' | null
       itens_balcao?: ItemBalcao[] | null
       condicoes?: string | null
 }
-
-// CRM: tarefas, interações/negociações e metas comerciais
 
 export type TipoInteracao = 'ligacao' | 'whatsapp' | 'visita' | 'proposta' | 'negociacao' | 'nota' | 'outro'
 
@@ -319,11 +309,15 @@ export interface SetorKanbanItem {
       coluna_id: string
       criado_por_id?: string | null
       criado_por_nome?: string | null
+      // Fase J: quando o card foi criado automaticamente a partir de um orçamento
+// vendido (automação de setor), guarda o id do orçamento de origem — permite
+// rastrear de onde veio o card, sem duplicar dados do orçamento aqui.
+orcamento_id?: string | null
 }
 
 export type GrupoSetor =
       | 'Comercial' | 'Técnico' | 'Operações' | 'Administrativo'
-  | 'Relacionamento' | 'Conhecimento' | 'Sistema'
+| 'Relacionamento' | 'Conhecimento' | 'Sistema'
 
 export type NivelPermissao = 'oculto' | 'consulta' | 'edicao'
 
@@ -413,14 +407,24 @@ export interface AutomacaoAssistencia {
       created_at?: string
 }
 
-// Medição final (dentro da Produção): quadro próprio com cliente/endereço
-// puxados do orçamento vendido, lista de tipologias a medir e as medidas
-// reais tiradas na obra.
+// Fase J: automação "fan-out" — quando um orçamento entra na coluna
+// (coluna_id, geralmente "Vendido"), cria um card automaticamente no
+// quadro do setor (setor_id) escolhido. Vários setores podem estar
+// configurados pra mesma coluna (várias linhas), sem precisar de código
+// novo pra cada setor. Regra de segurança: só o setor "financeiro" recebe
+// o card com valores do orçamento — a montagem do card (feita em
+// lib/automacoesSetor.ts) decide isso pelo setor_id, não por essa tabela.
+export interface AutomacaoSetor {
+      id: string
+      nome?: string | null
+      coluna_id: string
+      setor_id: string
+      ativo: boolean
+      created_at?: string
+}
 
 export type TipoValorCampoExtra = 'numero' | 'texto'
 
-// Campo extra configurável pelo master por tipo de esquadria (ex: janela
-// precisa de altura de peitoril, porta não).
 export interface TipologiaCampoExtra {
       id: string
       tipo_esquadria: string
@@ -478,8 +482,6 @@ export interface MedicaoFinal {
       criado_por_nome?: string | null
 }
 
-// Catálogo de produtos (Cadastro > Produtos): itens com preço fixo, usados
-// no Orçamento Balcão (perfil, PU, acessórios, portas/janelas padrão, etc.).
 export type CategoriaProduto = 'porta_janela_padrao' | 'perfil' | 'pu' | 'acessorio' | 'outro'
 
 export interface Produto {
@@ -497,11 +499,7 @@ export interface Produto {
       ativo: boolean
       criado_por_id?: string | null
       criado_por_nome?: string | null
-      // Fase 9b: custo/margem, classificação e impostos — tudo opcional. A
-  // margem é calculada em cima do custo (preco = custo * (1 + margem/100));
-  // qualquer um dos dois (preço ou margem) pode ser editado direto na tela,
-  // o outro recalcula sozinho.
-  custo?: number | null
+      custo?: number | null
       margem_percentual?: number | null
       grupo?: string | null
       peso_kg?: number | null
@@ -514,9 +512,6 @@ export interface Produto {
       cofins_percentual?: number | null
 }
 
-// Orçamento Balcão: item vendido dentro de um orçamento (snapshot do produto
-// na hora da venda — nome/preço não mudam mais se o cadastro do produto for
-// alterado depois).
 export interface ItemBalcao {
       produto_id: string
       nome: string
@@ -529,8 +524,6 @@ export interface ItemBalcao {
       preco_total: number
 }
 
-// Dados da empresa (Configurações > Dados da Empresa): usados no cabeçalho
-// do PDF do Orçamento Balcão.
 export interface DadosEmpresa {
       nome: string
       cnpj?: string
@@ -544,9 +537,6 @@ export interface DadosEmpresa {
       condicoesPadrao?: string
 }
 
-// Fase 9a: Cadastro de Fornecedores (Cadastro > Fornecedores). Usado pra
-// vincular quem vendeu cada produto no histórico de preços, e futuramente
-// pra casar o emitente da NF-e importada com um fornecedor já cadastrado.
 export interface Fornecedor {
       id: string
       created_at: string
