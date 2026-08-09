@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LogOut, Menu, X, Star, ChevronUp, ChevronDown, LayoutGrid } from 'lucide-react'
+import { LogOut, Menu, X, Star, ChevronUp, ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import { Usuario, Setor, NivelPermissao } from '@/lib/tipos'
 import { GUIAS, lerOcultos, alternarOculto, EVENTO_OCULTOS_MUDOU, guiasFavoritos, lerOrdem, ordenarPorPreferencia, moverGuia, EVENTO_ORDEM_MUDOU } from '@/lib/guias'
@@ -17,6 +17,29 @@ function hrefDoSetor(s: Setor) {
   return s.ativo && s.rota ? s.rota : `/setor/${s.id}`
 }
 
+// Cada categoria do menu (Mais, Comercial, Tecnico, Sistema...) pode ser
+// recolhida ou expandida clicando no titulo. A preferencia fica salva no
+// navegador para lembrar o que a pessoa deixou aberto/fechado da ultima vez.
+const CHAVE_CATEGORIAS_FECHADAS = 'atlas_sidebar_categorias_fechadas'
+
+function lerCategoriasFechadas(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const bruto = window.localStorage.getItem(CHAVE_CATEGORIAS_FECHADAS)
+    if (!bruto) return []
+    const lista = JSON.parse(bruto)
+    return Array.isArray(lista) ? lista : []
+  } catch {
+    return []
+  }
+}
+
+function salvarCategoriasFechadas(lista: string[]) {
+  try {
+    window.localStorage.setItem(CHAVE_CATEGORIAS_FECHADAS, JSON.stringify(lista))
+  } catch {}
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -27,12 +50,14 @@ export default function Sidebar() {
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
   const [favoritosSetores, setFavoritosSetores] = useState<string[]>([])
+  const [categoriasFechadas, setCategoriasFechadas] = useState<string[]>([])
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
     setOcultos(lerOcultos())
     setOrdem(lerOrdem())
     setFavoritosSetores(lerFavoritosSetores())
+    setCategoriasFechadas(lerCategoriasFechadas())
     function sync() {
       setOcultos(lerOcultos())
     }
@@ -112,13 +137,43 @@ export default function Sidebar() {
     favoritarSetor(id)
   }
 
+  function categoriaAberta(nome: string) {
+    return !categoriasFechadas.includes(nome)
+  }
+
+  function alternarCategoria(nome: string) {
+    setCategoriasFechadas((atual) => {
+      const novo = atual.includes(nome) ? atual.filter((c) => c !== nome) : [...atual, nome]
+      salvarCategoriasFechadas(novo)
+      return novo
+    })
+  }
+
+  // Titulo clicavel de cada categoria do menu ("Mais", "Comercial", "Tecnico"...).
+  // Clicar expande ou contrai a lista de links logo abaixo dele.
+  function TituloCategoria({ nome, tamanho = 'sm' }: { nome: string; tamanho?: 'sm' | 'md' }) {
+    const aberta = categoriaAberta(nome)
+    return (
+      <button
+        type="button"
+        onClick={() => alternarCategoria(nome)}
+        aria-expanded={aberta}
+        className={`mb-1 flex w-full items-center justify-between rounded-lg px-1 text-slate-400 transition hover:text-slate-600
+                    ${tamanho === 'sm' ? 'py-1 text-[10px]' : 'py-2 text-xs'} font-semibold uppercase tracking-wide`}
+      >
+        <span>{nome}</span>
+        <ChevronRight size={tamanho === 'sm' ? 12 : 14} className={`flex-shrink-0 transition-transform ${aberta ? 'rotate-90' : ''}`} />
+      </button>
+    )
+  }
+
   return (
     <>
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-slate-200 bg-white px-2 py-1.5
-                   lg:static lg:h-screen lg:w-56 lg:flex-col lg:items-stretch lg:justify-start lg:gap-0 lg:border-r lg:border-t-0 lg:py-5"
+                   md:static md:h-screen md:w-56 md:flex-col md:items-stretch md:justify-start md:gap-0 md:border-r md:border-t-0 md:py-5"
       >
-        <div className="hidden lg:flex lg:flex-col lg:px-3">
+        <div className="hidden md:flex md:flex-col md:px-3">
           <span className="mb-3 px-1 text-base font-bold tracking-tight text-brand-navy">Atlas One</span>
 
           {(favoritos.length > 0 || setoresFavoritados.length > 0) && (
@@ -178,83 +233,87 @@ export default function Sidebar() {
         </div>
 
         {totalResto > 0 && (
-          <div className="hidden lg:block lg:flex-1 lg:overflow-y-auto lg:px-3">
-            <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Mais</p>
-            <div className="space-y-0.5">
-              {restoOrdenado.map((g, i) => {
-                const ativo = pathname === g.href
-                return (
-                  <div key={g.href} className="group flex items-center">
-                    <Link
-                      href={g.href}
-                      className={`flex-1 truncate rounded-lg px-2 py-1.5 text-xs transition
-                                  ${ativo ? 'bg-slate-100 font-medium text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
-                    >
-                      {g.label}
-                    </Link>
-                    {i > 0 && (
-                      <button
-                        onClick={() => mover(g.href, 'cima')}
-                        title="Mover para cima"
-                        className="p-1 text-slate-300 opacity-0 hover:text-brand-navy group-hover:opacity-100"
+          <div className="hidden md:block md:flex-1 md:overflow-y-auto md:px-3">
+            <TituloCategoria nome="Mais" />
+            {categoriaAberta('Mais') && restoOrdenado.length > 0 && (
+              <div className="mb-1 space-y-0.5">
+                {restoOrdenado.map((g, i) => {
+                  const ativo = pathname === g.href
+                  return (
+                    <div key={g.href} className="group flex items-center">
+                      <Link
+                        href={g.href}
+                        className={`flex-1 truncate rounded-lg px-2 py-1.5 text-xs transition
+                                    ${ativo ? 'bg-slate-100 font-medium text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
                       >
-                        <ChevronUp size={12} />
-                      </button>
-                    )}
-                    {i < restoOrdenado.length - 1 && (
+                        {g.label}
+                      </Link>
+                      {i > 0 && (
+                        <button
+                          onClick={() => mover(g.href, 'cima')}
+                          title="Mover para cima"
+                          className="p-1 text-slate-300 opacity-0 hover:text-brand-navy group-hover:opacity-100"
+                        >
+                          <ChevronUp size={12} />
+                        </button>
+                      )}
+                      {i < restoOrdenado.length - 1 && (
+                        <button
+                          onClick={() => mover(g.href, 'baixo')}
+                          title="Mover para baixo"
+                          className="p-1 text-slate-300 opacity-0 hover:text-brand-navy group-hover:opacity-100"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                      )}
                       <button
-                        onClick={() => mover(g.href, 'baixo')}
-                        title="Mover para baixo"
-                        className="p-1 text-slate-300 opacity-0 hover:text-brand-navy group-hover:opacity-100"
+                        onClick={() => favoritar(g.href)}
+                        title="Colocar no guia rápido"
+                        className="p-1 text-slate-300 opacity-0 hover:text-amber-400 group-hover:opacity-100"
                       >
-                        <ChevronDown size={12} />
+                        <Star size={12} />
                       </button>
-                    )}
-                    <button
-                      onClick={() => favoritar(g.href)}
-                      title="Colocar no guia rápido"
-                      className="p-1 text-slate-300 opacity-0 hover:text-amber-400 group-hover:opacity-100"
-                    >
-                      <Star size={12} />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             {gruposRestantes.map((grupo) => (
               <div key={grupo} className="mt-3">
-                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">{grupo}</p>
-                <div className="space-y-0.5">
-                  {(setoresRestantesPorGrupo[grupo] || []).map((s) => {
-                    const href = hrefDoSetor(s)
-                    const ativo = pathname === href
-                    return (
-                      <div key={s.id} className="group flex items-center">
-                        <Link
-                          href={href}
-                          className={`flex-1 truncate rounded-lg px-2 py-1.5 text-xs transition
-                                      ${ativo ? 'bg-slate-100 font-medium text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
-                        >
-                          {s.nome}
-                        </Link>
-                        <button
-                          onClick={() => favoritarSetor(s.id)}
-                          title="Colocar no guia rápido"
-                          className="p-1 text-slate-300 opacity-0 hover:text-amber-400 group-hover:opacity-100"
-                        >
-                          <Star size={12} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
+                <TituloCategoria nome={grupo} />
+                {categoriaAberta(grupo) && (
+                  <div className="space-y-0.5">
+                    {(setoresRestantesPorGrupo[grupo] || []).map((s) => {
+                      const href = hrefDoSetor(s)
+                      const ativo = pathname === href
+                      return (
+                        <div key={s.id} className="group flex items-center">
+                          <Link
+                            href={href}
+                            className={`flex-1 truncate rounded-lg px-2 py-1.5 text-xs transition
+                                        ${ativo ? 'bg-slate-100 font-medium text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
+                          >
+                            {s.nome}
+                          </Link>
+                          <button
+                            onClick={() => favoritarSetor(s.id)}
+                            title="Colocar no guia rápido"
+                            className="p-1 text-slate-300 opacity-0 hover:text-amber-400 group-hover:opacity-100"
+                          >
+                            <Star size={12} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
 
-        <div className="hidden lg:mt-auto lg:block lg:px-2 lg:pt-4">
+        <div className="hidden md:mt-auto md:block md:px-2 md:pt-4">
           <button
             onClick={sair}
             title="Sair"
@@ -269,7 +328,7 @@ export default function Sidebar() {
           const Icon = g.icon
           const ativo = pathname === g.href
           return (
-            <div key={g.href} className="group relative lg:hidden">
+            <div key={g.href} className="group relative md:hidden">
               <Link
                 href={g.href}
                 title={g.label}
@@ -294,7 +353,7 @@ export default function Sidebar() {
           const href = hrefDoSetor(s)
           const ativo = pathname === href
           return (
-            <div key={s.id} className="group relative lg:hidden">
+            <div key={s.id} className="group relative md:hidden">
               <Link
                 href={href}
                 title={s.nome}
@@ -319,7 +378,7 @@ export default function Sidebar() {
           <button
             onClick={() => setAbrirMais(true)}
             title="Mais"
-            className="flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 lg:hidden"
+            className="flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 md:hidden"
           >
             <Menu size={20} />
             <span className="text-[10px] leading-none">Mais</span>
@@ -329,7 +388,7 @@ export default function Sidebar() {
         <button
           onClick={sair}
           title="Sair"
-          className="flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-red-500 lg:hidden"
+          className="flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-red-500 md:hidden"
         >
           <LogOut size={20} />
           <span className="text-[10px] leading-none">Sair</span>
@@ -337,9 +396,9 @@ export default function Sidebar() {
       </nav>
 
       {abrirMais && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40 lg:hidden" onClick={() => setAbrirMais(false)}>
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 md:hidden" onClick={() => setAbrirMais(false)}>
           <div
-            className="max-h-[70vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-8"
+            className="max-h-[75vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -348,59 +407,69 @@ export default function Sidebar() {
                 <X size={18} />
               </button>
             </div>
-            <div className="space-y-1">
-              {restoOrdenado.map((g, i) => (
-                <div key={g.href} className="flex items-center">
-                  <Link
-                    href={g.href}
-                    onClick={() => setAbrirMais(false)}
-                    className="flex-1 rounded-lg px-2 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                  >
-                    {g.label}
-                  </Link>
-                  <button
-                    onClick={() => mover(g.href, 'cima')}
-                    disabled={i === 0}
-                    className="p-2 text-slate-300 disabled:opacity-30"
-                  >
-                    <ChevronUp size={14} />
-                  </button>
-                  <button
-                    onClick={() => mover(g.href, 'baixo')}
-                    disabled={i === restoOrdenado.length - 1}
-                    className="p-2 text-slate-300 disabled:opacity-30"
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                  <button onClick={() => favoritar(g.href)} className="p-2 text-slate-300 hover:text-amber-400">
-                    <Star size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
 
-            {gruposRestantes.map((grupo) => (
-              <div key={grupo} className="mt-4">
-                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{grupo}</p>
-                <div className="space-y-1">
-                  {(setoresRestantesPorGrupo[grupo] || []).map((s) => {
-                    const href = hrefDoSetor(s)
-                    return (
-                      <div key={s.id} className="flex items-center">
+            {restoOrdenado.length > 0 && (
+              <div className="mb-2">
+                <TituloCategoria nome="Mais" tamanho="md" />
+                {categoriaAberta('Mais') && (
+                  <div className="space-y-1">
+                    {restoOrdenado.map((g, i) => (
+                      <div key={g.href} className="flex items-center">
                         <Link
-                          href={href}
+                          href={g.href}
                           onClick={() => setAbrirMais(false)}
                           className="flex-1 rounded-lg px-2 py-2 text-sm text-slate-600 hover:bg-slate-50"
                         >
-                          {s.nome}
+                          {g.label}
                         </Link>
-                        <button onClick={() => favoritarSetor(s.id)} className="p-2 text-slate-300 hover:text-amber-400">
+                        <button
+                          onClick={() => mover(g.href, 'cima')}
+                          disabled={i === 0}
+                          className="p-2 text-slate-300 disabled:opacity-30"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          onClick={() => mover(g.href, 'baixo')}
+                          disabled={i === restoOrdenado.length - 1}
+                          className="p-2 text-slate-300 disabled:opacity-30"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                        <button onClick={() => favoritar(g.href)} className="p-2 text-slate-300 hover:text-amber-400">
                           <Star size={14} />
                         </button>
                       </div>
-                    )
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {gruposRestantes.map((grupo) => (
+              <div key={grupo} className="mt-4">
+                <TituloCategoria nome={grupo} tamanho="md" />
+                {categoriaAberta(grupo) && (
+                  <div className="space-y-1">
+                    {(setoresRestantesPorGrupo[grupo] || []).map((s) => {
+                      const href = hrefDoSetor(s)
+                      return (
+                        <div key={s.id} className="flex items-center">
+                          <Link
+                            href={href}
+                            onClick={() => setAbrirMais(false)}
+                            className="flex-1 rounded-lg px-2 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                          >
+                            {s.nome}
+                          </Link>
+                          <button onClick={() => favoritarSetor(s.id)} className="p-2 text-slate-300 hover:text-amber-400">
+                            <Star size={14} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>

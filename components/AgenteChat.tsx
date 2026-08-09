@@ -188,14 +188,14 @@ export default function AgenteChat() {
     <>
       <button
         onClick={() => setAberto((v) => !v)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#182444] text-white shadow-xl hover:opacity-90"
+        className="fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#182444] text-white shadow-xl hover:opacity-90 md:bottom-6 md:right-6"
         title="Agente IA"
       >
         {aberto ? <X size={24} /> : <Sparkles size={24} />}
       </button>
 
       {aberto && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[520px] max-h-[75vh] w-[360px] max-w-[90vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
+        <div className="fixed bottom-36 right-4 z-50 flex h-[520px] max-h-[65vh] w-[360px] max-w-[90vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 md:bottom-24 md:right-6 md:max-h-[75vh]">
           <div className="flex items-center gap-2 border-b border-slate-100 bg-[#182444] px-4 py-3 text-white">
             <Sparkles size={18} />
             <div>

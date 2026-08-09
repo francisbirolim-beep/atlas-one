@@ -49,9 +49,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (!autenticado) return null
 
   return (
-    <div className="lg:flex lg:min-h-screen">
+    <div className="md:flex md:min-h-screen">
       <Sidebar />
-      <div className="pb-20 lg:flex-1 lg:overflow-y-auto lg:pb-0">{children}</div>
+      <div className="pb-20 md:flex-1 md:overflow-y-auto md:pb-0">{children}</div>
     </div>
   )
 }
