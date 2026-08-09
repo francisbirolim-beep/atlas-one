@@ -449,3 +449,24 @@ export interface MedicaoFinal {
   criado_por_id?: string | null
   criado_por_nome?: string | null
 }
+
+// Catálogo de produtos (Cadastro > Produtos): itens com preço fixo, usados
+// mais pra frente no Orçamento Balcão (perfil, PU, acessórios, portas/janelas
+// padrão, etc.).
+export type CategoriaProduto = 'porta_janela_padrao' | 'perfil' | 'pu' | 'acessorio' | 'outro'
+
+export interface Produto {
+  id: string
+  created_at: string
+  updated_at?: string
+  nome: string
+  categoria: CategoriaProduto
+  preco: number
+  unidade: string
+  largura_mm?: number | null
+  altura_mm?: number | null
+  descricao?: string | null
+  ativo: boolean
+  criado_por_id?: string | null
+  criado_por_nome?: string | null
+}
