@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard } from 'lucide-react'
 import Link from 'next/link'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
@@ -47,12 +47,21 @@ interface ItemForm {
   alturaDireita: string
   alturaMeio: string
   alturaEsquerda: string
+  // Fase 6: alternativa a digitar as 3 larguras / 3 alturas — anexar uma
+  // foto da trena com as medidas (mesmo padrão já usado na Medição Final).
+  modoLargura: 'digitar' | 'foto'
+  modoAltura: 'digitar' | 'foto'
+  fotoLargura?: File
+  fotoLarguraPreview?: string
+  fotoAltura?: File
+  fotoAlturaPreview?: string
 }
 
 function novoItem(): ItemForm {
   return {
     id: uuidv4(), ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '',
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
+    modoLargura: 'digitar', modoAltura: 'digitar',
   }
 }
 
@@ -84,6 +93,16 @@ export default function OrcamentoRapido() {
   function definirFoto(id: string, file: File | undefined) {
     if (!file) return
     setItens(itens.map(it => (it.id === id ? { ...it, foto: file, fotoPreview: URL.createObjectURL(file) } : it)))
+  }
+
+  function definirFotoLargura(id: string, file: File | undefined) {
+    if (!file) return
+    setItens(itens.map(it => (it.id === id ? { ...it, fotoLargura: file, fotoLarguraPreview: URL.createObjectURL(file) } : it)))
+  }
+
+  function definirFotoAltura(id: string, file: File | undefined) {
+    if (!file) return
+    setItens(itens.map(it => (it.id === id ? { ...it, fotoAltura: file, fotoAlturaPreview: URL.createObjectURL(file) } : it)))
   }
 
   function removerItem(id: string) {
@@ -143,10 +162,29 @@ export default function OrcamentoRapido() {
         return
       }
       if (tipoMedida === 'final') {
-        const medidas = [it.larguraBaixo, it.larguraMeio, it.larguraCima, it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
-        if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
-          setErro('Preencha as 3 larguras e as 3 alturas de todas as esquadrias (mínimo 100mm)')
-          return
+        if (it.modoLargura === 'foto') {
+          if (!it.fotoLargura) {
+            setErro('Anexe a foto das larguras de todas as esquadrias, ou troque para digitar')
+            return
+          }
+        } else {
+          const medidasL = [it.larguraBaixo, it.larguraMeio, it.larguraCima]
+          if (medidasL.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
+            setErro('Preencha as 3 larguras de todas as esquadrias (mínimo 100mm)')
+            return
+          }
+        }
+        if (it.modoAltura === 'foto') {
+          if (!it.fotoAltura) {
+            setErro('Anexe a foto das alturas de todas as esquadrias, ou troque para digitar')
+            return
+          }
+        } else {
+          const medidasA = [it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
+          if (medidasA.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
+            setErro('Preencha as 3 alturas de todas as esquadrias (mínimo 100mm)')
+            return
+          }
         }
       } else {
         const l = parseFloat(it.largura.replace(',', '.'))
@@ -538,58 +576,136 @@ export default function OrcamentoRapido() {
 
               {tipoMedida === 'final' ? (
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Larguras (mm) — baixo, meio, cima</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number"
-                        value={item.larguraBaixo}
-                        onChange={e => atualizarItem(item.id, 'larguraBaixo', e.target.value)}
-                        placeholder="Baixo"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                      <input
-                        type="number"
-                        value={item.larguraMeio}
-                        onChange={e => atualizarItem(item.id, 'larguraMeio', e.target.value)}
-                        placeholder="Meio"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                      <input
-                        type="number"
-                        value={item.larguraCima}
-                        onChange={e => atualizarItem(item.id, 'larguraCima', e.target.value)}
-                        placeholder="Cima"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-slate-500">Larguras (mm) — baixo, meio, cima</label>
+                      <div className="flex rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => atualizarItem(item.id, 'modoLargura', 'digitar')}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs ${item.modoLargura !== 'foto' ? 'bg-brand-navy text-white' : 'text-slate-500'}`}
+                        >
+                          <Keyboard size={12} /> Digitar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => atualizarItem(item.id, 'modoLargura', 'foto')}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs ${item.modoLargura === 'foto' ? 'bg-brand-navy text-white' : 'text-slate-500'}`}
+                        >
+                          <Camera size={12} /> Foto
+                        </button>
+                      </div>
                     </div>
+                    {item.modoLargura !== 'foto' ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="number"
+                          value={item.larguraBaixo}
+                          onChange={e => atualizarItem(item.id, 'larguraBaixo', e.target.value)}
+                          placeholder="Baixo"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.larguraMeio}
+                          onChange={e => atualizarItem(item.id, 'larguraMeio', e.target.value)}
+                          placeholder="Meio"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.larguraCima}
+                          onChange={e => atualizarItem(item.id, 'larguraCima', e.target.value)}
+                          placeholder="Cima"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer ${item.fotoLarguraPreview ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
+                          <Camera size={16} />
+                          {item.fotoLarguraPreview ? 'Foto anexada (trocar)' : 'Foto da trena com as 3 larguras'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={e => definirFotoLargura(item.id, e.target.files?.[0])}
+                          />
+                        </label>
+                        {item.fotoLarguraPreview && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.fotoLarguraPreview} alt="" className="w-20 h-20 object-cover rounded-lg mt-2" />
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Alturas (mm) — direita, meio, esquerda</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number"
-                        value={item.alturaDireita}
-                        onChange={e => atualizarItem(item.id, 'alturaDireita', e.target.value)}
-                        placeholder="Direita"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                      <input
-                        type="number"
-                        value={item.alturaMeio}
-                        onChange={e => atualizarItem(item.id, 'alturaMeio', e.target.value)}
-                        placeholder="Meio"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                      <input
-                        type="number"
-                        value={item.alturaEsquerda}
-                        onChange={e => atualizarItem(item.id, 'alturaEsquerda', e.target.value)}
-                        placeholder="Esquerda"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-slate-500">Alturas (mm) — direita, meio, esquerda</label>
+                      <div className="flex rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => atualizarItem(item.id, 'modoAltura', 'digitar')}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs ${item.modoAltura !== 'foto' ? 'bg-brand-navy text-white' : 'text-slate-500'}`}
+                        >
+                          <Keyboard size={12} /> Digitar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => atualizarItem(item.id, 'modoAltura', 'foto')}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs ${item.modoAltura === 'foto' ? 'bg-brand-navy text-white' : 'text-slate-500'}`}
+                        >
+                          <Camera size={12} /> Foto
+                        </button>
+                      </div>
                     </div>
+                    {item.modoAltura !== 'foto' ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="number"
+                          value={item.alturaDireita}
+                          onChange={e => atualizarItem(item.id, 'alturaDireita', e.target.value)}
+                          placeholder="Direita"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.alturaMeio}
+                          onChange={e => atualizarItem(item.id, 'alturaMeio', e.target.value)}
+                          placeholder="Meio"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          value={item.alturaEsquerda}
+                          onChange={e => atualizarItem(item.id, 'alturaEsquerda', e.target.value)}
+                          placeholder="Esquerda"
+                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer ${item.fotoAlturaPreview ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
+                          <Camera size={16} />
+                          {item.fotoAlturaPreview ? 'Foto anexada (trocar)' : 'Foto da trena com as 3 alturas'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={e => definirFotoAltura(item.id, e.target.files?.[0])}
+                          />
+                        </label>
+                        {item.fotoAlturaPreview && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.fotoAlturaPreview} alt="" className="w-20 h-20 object-cover rounded-lg mt-2" />
+                        )}
+                      </div>
+                    )}
                   </div>
+
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
                     <input

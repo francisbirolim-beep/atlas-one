@@ -100,6 +100,10 @@ export interface ItemEsquadria {
   altura_direita_mm?: number | null
   altura_meio_mm?: number | null
   altura_esquerda_mm?: number | null
+  // Fase 6: alternativa a digitar as medidas — foto da trena com as 3
+  // larguras / 3 alturas (mesmo padrão já usado na Medição Final).
+  foto_larguras_url?: string | null
+  foto_alturas_url?: string | null
 }
 
 export interface OrcamentoRapido {

@@ -26,6 +26,13 @@ export interface ItemOrcamentoForm {
   alturaDireita: string
   alturaMeio: string
   alturaEsquerda: string
+  // Fase 6: em vez de digitar as 3 larguras / 3 alturas (medida final), da
+  // pra anexar uma foto da trena com as medidas — mesmo padrao ja usado na
+  // Medicao Final.
+  modoLargura?: 'digitar' | 'foto'
+  modoAltura?: 'digitar' | 'foto'
+  fotoLargura?: File | null
+  fotoAltura?: File | null
 }
 
 export interface DadosOrcamentoForm {
@@ -77,12 +84,16 @@ export async function criarOrcamentoNoServidor(
   for (const it of itens) {
     const foto_url = it.foto ? await uploadFoto(it.foto) : null
     if (tipoMedida === 'final') {
-      const lb = parseFloat(it.larguraBaixo.replace(',', '.'))
-      const lm = parseFloat(it.larguraMeio.replace(',', '.'))
-      const lc = parseFloat(it.larguraCima.replace(',', '.'))
-      const ad = parseFloat(it.alturaDireita.replace(',', '.'))
-      const am = parseFloat(it.alturaMeio.replace(',', '.'))
-      const ae = parseFloat(it.alturaEsquerda.replace(',', '.'))
+      const usaFotoLargura = it.modoLargura === 'foto'
+      const usaFotoAltura = it.modoAltura === 'foto'
+      const lb = usaFotoLargura ? NaN : parseFloat(it.larguraBaixo.replace(',', '.'))
+      const lm = usaFotoLargura ? NaN : parseFloat(it.larguraMeio.replace(',', '.'))
+      const lc = usaFotoLargura ? NaN : parseFloat(it.larguraCima.replace(',', '.'))
+      const ad = usaFotoAltura ? NaN : parseFloat(it.alturaDireita.replace(',', '.'))
+      const am = usaFotoAltura ? NaN : parseFloat(it.alturaMeio.replace(',', '.'))
+      const ae = usaFotoAltura ? NaN : parseFloat(it.alturaEsquerda.replace(',', '.'))
+      const foto_larguras_url = usaFotoLargura && it.fotoLargura ? await uploadFoto(it.fotoLargura) : null
+      const foto_alturas_url = usaFotoAltura && it.fotoAltura ? await uploadFoto(it.fotoAltura) : null
       itensSalvos.push({
         id: it.id,
         ambiente: it.ambiente?.trim() || null,
@@ -97,6 +108,8 @@ export async function criarOrcamentoNoServidor(
         altura_direita_mm: ad,
         altura_meio_mm: am,
         altura_esquerda_mm: ae,
+        foto_larguras_url,
+        foto_alturas_url,
         quantidade: parseInt(it.quantidade) || 1,
         foto_url,
         descricao: it.descricao || undefined,
