@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard } from 'lucide-react'
 import Link from 'next/link'
-import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead } from '@/lib/tipos'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead, Produto } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { salvarPendente } from '@/lib/offlineFila'
+import { listarProdutos } from '@/lib/produtos'
 import { v4 as uuidv4 } from 'uuid'
 
 const tipos: { value: TipoEsquadria; label: string }[] = [
@@ -56,6 +57,12 @@ interface ItemForm {
   fotoLarguraPreview?: string
   fotoAltura?: File
   fotoAlturaPreview?: string
+  // Fase 8: em vez de digitar tipo/medidas na mão, dá pra escolher um
+  // produto já cadastrado (Cadastro > Produtos) — preenche tipo, medidas e
+  // preço automaticamente.
+  modoOrigem: 'manual' | 'produto'
+  produtoId: string | null
+  precoUnit: number | null
 }
 
 function novoItem(): ItemForm {
@@ -64,6 +71,7 @@ function novoItem(): ItemForm {
     fotos: [], fotosPreviews: [],
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
     modoLargura: 'digitar', modoAltura: 'digitar',
+    modoOrigem: 'manual', produtoId: null, precoUnit: null,
   }
 }
 
@@ -83,6 +91,7 @@ export default function OrcamentoRapido() {
   const [fotos, setFotos] = useState<File[]>([])
   const [fotosPreviews, setFotosPreviews] = useState<string[]>([])
   const [arquivos, setArquivos] = useState<File[]>([])
+  const [produtos, setProdutos] = useState<Produto[]>([])
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [salvoOffline, setSalvoOffline] = useState(false)
@@ -90,8 +99,33 @@ export default function OrcamentoRapido() {
   // Visualização em tela cheia de uma foto (clicando em qualquer miniatura).
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
 
+  useEffect(() => {
+    listarProdutos(true).then(setProdutos)
+  }, [])
+
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
     setItens(itens.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
+  }
+
+  function selecionarProduto(id: string, produtoId: string) {
+    const p = produtos.find(pr => pr.id === produtoId)
+    setItens(itens.map(it => {
+      if (it.id !== id) return it
+      if (!p) return { ...it, produtoId: null, precoUnit: null }
+      return {
+        ...it,
+        produtoId: p.id,
+        precoUnit: p.preco,
+        tipo: 'outro',
+        tipoOutroTexto: p.nome,
+        largura: p.largura_mm ? String(p.largura_mm) : it.largura,
+        altura: p.altura_mm ? String(p.altura_mm) : it.altura,
+      }
+    }))
+  }
+
+  function voltarParaManual(id: string) {
+    setItens(itens.map(it => (it.id === id ? { ...it, modoOrigem: 'manual', produtoId: null, precoUnit: null } : it)))
   }
 
   function adicionarFotoItem(id: string, files: FileList | null) {
@@ -178,6 +212,10 @@ export default function OrcamentoRapido() {
       return
     }
     for (const it of itens) {
+      if (it.modoOrigem === 'produto' && !it.produtoId) {
+        setErro('Selecione um produto cadastrado, ou troque para digitar manualmente')
+        return
+      }
       if (!it.tipo) {
         setErro('Selecione o tipo de cada esquadria')
         return
@@ -559,30 +597,75 @@ export default function OrcamentoRapido() {
               </div>
 
               <div>
-                <label className="block text-xs text-slate-500 mb-2">Tipo de esquadria *</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {tipos.map(t => (
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs text-slate-500">Tipo de esquadria *</label>
+                  <div className="flex rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
                     <button
-                      key={t.value}
-                      onClick={() => atualizarItem(item.id, 'tipo', t.value)}
-                      className={`p-2.5 rounded-lg text-xs border transition ${
-                        item.tipo === t.value
-                          ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
-                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                      }`}
+                      type="button"
+                      onClick={() => voltarParaManual(item.id)}
+                      className={`px-2 py-1 text-xs ${item.modoOrigem !== 'produto' ? 'bg-brand-navy text-white' : 'text-slate-500'}`}
                     >
-                      {t.label}
+                      Digitar
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => atualizarItem(item.id, 'modoOrigem', 'produto')}
+                      className={`px-2 py-1 text-xs ${item.modoOrigem === 'produto' ? 'bg-brand-navy text-white' : 'text-slate-500'}`}
+                    >
+                      Produto cadastrado
+                    </button>
+                  </div>
                 </div>
-                {item.tipo === 'outro' && (
-                  <input
-                    type="text"
-                    value={item.tipoOutroTexto}
-                    onChange={e => atualizarItem(item.id, 'tipoOutroTexto', e.target.value)}
-                    placeholder="Qual é o tipo de esquadria?"
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-2"
-                  />
+                {item.modoOrigem === 'produto' ? (
+                  <div className="space-y-2">
+                    <select
+                      value={item.produtoId || ''}
+                      onChange={e => selecionarProduto(item.id, e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    >
+                      <option value="">Selecione um produto...</option>
+                      {produtos.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome} — R$ {p.preco.toFixed(2)}{p.unidade ? `/${p.unidade}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {item.produtoId && item.precoUnit != null && (
+                      <p className="text-xs text-brand-teal">
+                        Preço: R$ {item.precoUnit.toFixed(2)} — tipo, largura e altura já foram preenchidos (pode ajustar embaixo se precisar)
+                      </p>
+                    )}
+                    {produtos.length === 0 && (
+                      <p className="text-xs text-slate-400">Nenhum produto ativo cadastrado ainda (Cadastro &gt; Produtos).</p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {tipos.map(t => (
+                        <button
+                          key={t.value}
+                          onClick={() => atualizarItem(item.id, 'tipo', t.value)}
+                          className={`p-2.5 rounded-lg text-xs border transition ${
+                            item.tipo === t.value
+                              ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                              : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    {item.tipo === 'outro' && (
+                      <input
+                        type="text"
+                        value={item.tipoOutroTexto}
+                        onChange={e => atualizarItem(item.id, 'tipoOutroTexto', e.target.value)}
+                        placeholder="Qual é o tipo de esquadria?"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-2"
+                      />
+                    )}
+                  </>
                 )}
               </div>
 
