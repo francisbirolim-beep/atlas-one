@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Image as ImageIcon } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Image as ImageIcon, Truck } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -605,443 +605,321 @@ export default function Cadastro() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-      {abaAtiva === null && (
-        <div className="space-y-2">
-          <button onClick={() => setAbaAtiva('usuarios')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
-            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Users size={18} className="text-brand-navy" /> Usuários</span>
-            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-          </button>
+        {abaAtiva === null && (
+          <div className="space-y-2">
+            <button onClick={() => setAbaAtiva('usuarios')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Users size={18} className="text-brand-navy" /> Usuários</span>
+              <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+            </button>
 
-          <button onClick={() => setAbaAtiva('produtos')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
-            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Package size={18} className="text-brand-navy" /> Produtos</span>
-            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-          </button>
+            <button onClick={() => setAbaAtiva('produtos')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Package size={18} className="text-brand-navy" /> Produtos</span>
+              <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+            </button>
 
-          <button onClick={() => setAbaAtiva('empresa')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
-            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Building2 size={18} className="text-brand-navy" /> Dados da Empresa</span>
-            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-          </button>
+            <Link href="/cadastro/fornecedores" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Truck size={18} className="text-brand-navy" /> Fornecedores</span>
+              <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+            </Link>
 
-          <div className="w-full bg-white rounded-2xl border border-slate-200 p-4 opacity-60">
-            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Briefcase size={18} className="text-slate-400" /> Colaboradores</span>
-            <p className="text-xs text-slate-400 mt-1 ml-9">Em construção - peça pra gente desenvolver quando precisar.</p>
+            <button onClick={() => setAbaAtiva('empresa')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Building2 size={18} className="text-brand-navy" /> Dados da Empresa</span>
+              <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+            </button>
+
+            <div className="w-full bg-white rounded-2xl border border-slate-200 p-4 opacity-60">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Briefcase size={18} className="text-slate-400" /> Colaboradores</span>
+              <p className="text-xs text-slate-400 mt-1 ml-9">Em construção - peça pra gente desenvolver quando precisar.</p>
+            </div>
+
+            <div className="w-full bg-white rounded-2xl border border-slate-200 p-4 opacity-60">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><UserPlus size={18} className="text-slate-400" /> Vendedores</span>
+              <p className="text-xs text-slate-400 mt-1 ml-9">Em construção - peça pra gente desenvolver quando precisar.</p>
+            </div>
           </div>
+        )}
 
-          <div className="w-full bg-white rounded-2xl border border-slate-200 p-4 opacity-60">
-            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><UserPlus size={18} className="text-slate-400" /> Vendedores</span>
-            <p className="text-xs text-slate-400 mt-1 ml-9">Em construção - peça pra gente desenvolver quando precisar.</p>
-          </div>
-        </div>
-      )}
-
-      {abaAtiva === 'usuarios' && (
-        <div>
-        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
-          <ArrowLeft size={16} /> Cadastro
-        </button>
-<section className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="mb-8">
-            {!novoUsuarioAberto ? (
-              <button
-                onClick={() => setNovoUsuarioAberto(true)}
-                className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
-              >
-                <Plus size={16} /> Cadastrar usuário novo
-              </button>
-            ) : (
-              <div className="border border-slate-200 rounded-xl p-4">
-                <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
-                  <UserPlus size={16} /> Cadastrar usuário novo
-                </h3>
-                <form onSubmit={cadastrarUsuario} className="space-y-3">
-                  <input
-                    type="text"
-                    value={nome}
-                    onChange={e => setNome(e.target.value)}
-                    placeholder="Nome do funcionário"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={senha}
-                    onChange={e => setSenha(e.target.value)}
-                    placeholder="Senha (mínimo 6 caracteres)"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={confirmarSenha}
-                    onChange={e => setConfirmarSenha(e.target.value)}
-                    placeholder="Confirmar senha"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="E-mail de acesso — opcional"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={whatsappNovo}
-                    onChange={e => setWhatsappNovo(e.target.value)}
-                    placeholder="WhatsApp (ex: 11999998888) — opcional"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <select
-                    value={role}
-                    onChange={e => setRole(e.target.value as 'funcionario' | 'master')}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+        {abaAtiva === 'usuarios' && (
+          <div>
+            <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+              <ArrowLeft size={16} /> Cadastro
+            </button>
+            <section className="bg-white rounded-2xl border border-slate-200 p-6">
+              <div className="mb-8">
+                {!novoUsuarioAberto ? (
+                  <button
+                    onClick={() => setNovoUsuarioAberto(true)}
+                    className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
                   >
-                    <option value="funcionario">Funcionário</option>
-                    <option value="master">Master (acesso total)</option>
-                  </select>
-
-                  {erroUsuario && <p className="text-red-500 text-sm">{erroUsuario}</p>}
-                  {sucessoUsuario && <p className="text-brand-teal text-sm">{sucessoUsuario}</p>}
-
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={salvandoUsuario}
-                      className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                    >
-                      {salvandoUsuario ? 'Cadastrando...' : 'Cadastrar usuário'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNovoUsuarioAberto(false)}
-                      className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
-            <Users size={16} /> Usuários cadastrados
-          </h2>
-          <div className="space-y-2 mb-6">
-            {usuarios.map(u => (
-              <div key={u.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="text-slate-800 font-medium">{u.nome}</p>
-                    <p className="text-slate-400 text-xs">{u.email}</p>
-                    {u.whatsapp && <p className="text-slate-400 text-xs">{u.whatsapp}</p>}
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-600'}`}>
-                    {u.role === 'master' ? 'Master' : 'Funcionário'}
-                  </span>
-                </div>
-
-                {editandoUsuarioId === u.id ? (
-                  <div className="border border-slate-100 rounded-lg p-3 space-y-2">
-                    <input
-                      type="text"
-                      value={usuarioEditForm[u.id]?.nome ?? ''}
-                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'nome', e.target.value)}
-                      placeholder="Nome"
-                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                    <input
-                      type="email"
-                      value={usuarioEditForm[u.id]?.email ?? ''}
-                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'email', e.target.value)}
-                      placeholder="E-mail de acesso"
-                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                    <input
-                      type="text"
-                      value={usuarioEditForm[u.id]?.novaSenha ?? ''}
-                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'novaSenha', e.target.value)}
-                      placeholder="Nova senha — deixe em branco para não alterar"
-                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                    <input
-                      type="text"
-                      value={usuarioEditForm[u.id]?.confirmarNovaSenha ?? ''}
-                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'confirmarNovaSenha', e.target.value)}
-                      placeholder="Confirmar nova senha"
-                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                    <input
-                      type="text"
-                      value={usuarioEditForm[u.id]?.whatsapp ?? ''}
-                      onChange={e => mudarCampoEdicaoUsuario(u.id, 'whatsapp', e.target.value)}
-                      placeholder="WhatsApp (ex: 11999998888)"
-                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                    />
-                    {u.id === meuId ? (
-                      <p className="text-xs text-slate-400">Tipo de acesso: Master (você não pode alterar o seu próprio nível)</p>
-                    ) : (
+                    <Plus size={16} /> Cadastrar usuário novo
+                  </button>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl p-4">
+                    <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                      <UserPlus size={16} /> Cadastrar usuário novo
+                    </h3>
+                    <form onSubmit={cadastrarUsuario} className="space-y-3">
+                      <input
+                        type="text"
+                        value={nome}
+                        onChange={e => setNome(e.target.value)}
+                        placeholder="Nome do funcionário"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={senha}
+                        onChange={e => setSenha(e.target.value)}
+                        placeholder="Senha (mínimo 6 caracteres)"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={confirmarSenha}
+                        onChange={e => setConfirmarSenha(e.target.value)}
+                        placeholder="Confirmar senha"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="E-mail de acesso — opcional"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={whatsappNovo}
+                        onChange={e => setWhatsappNovo(e.target.value)}
+                        placeholder="WhatsApp (ex: 11999998888) — opcional"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                      />
                       <select
-                        value={usuarioEditForm[u.id]?.role ?? 'funcionario'}
-                        onChange={e => mudarCampoEdicaoUsuario(u.id, 'role', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        value={role}
+                        onChange={e => setRole(e.target.value as 'funcionario' | 'master')}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       >
                         <option value="funcionario">Funcionário</option>
                         <option value="master">Master (acesso total)</option>
                       </select>
+
+                      {erroUsuario && <p className="text-red-500 text-sm">{erroUsuario}</p>}
+                      {sucessoUsuario && <p className="text-brand-teal text-sm">{sucessoUsuario}</p>}
+
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={salvandoUsuario}
+                          className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                        >
+                          {salvandoUsuario ? 'Cadastrando...' : 'Cadastrar usuário'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNovoUsuarioAberto(false)}
+                          className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+              </div>
+
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
+                <Users size={16} /> Usuários cadastrados
+              </h2>
+              <div className="space-y-2 mb-6">
+                {usuarios.map(u => (
+                  <div key={u.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="text-slate-800 font-medium">{u.nome}</p>
+                        <p className="text-slate-400 text-xs">{u.email}</p>
+                        {u.whatsapp && <p className="text-slate-400 text-xs">{u.whatsapp}</p>}
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full ${u.role === 'master' ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-600'}`}>
+                        {u.role === 'master' ? 'Master' : 'Funcionário'}
+                      </span>
+                    </div>
+
+                    {editandoUsuarioId === u.id ? (
+                      <div className="border border-slate-100 rounded-lg p-3 space-y-2">
+                        <input
+                          type="text"
+                          value={usuarioEditForm[u.id]?.nome ?? ''}
+                          onChange={e => mudarCampoEdicaoUsuario(u.id, 'nome', e.target.value)}
+                          placeholder="Nome"
+                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="email"
+                          value={usuarioEditForm[u.id]?.email ?? ''}
+                          onChange={e => mudarCampoEdicaoUsuario(u.id, 'email', e.target.value)}
+                          placeholder="E-mail de acesso"
+                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={usuarioEditForm[u.id]?.novaSenha ?? ''}
+                          onChange={e => mudarCampoEdicaoUsuario(u.id, 'novaSenha', e.target.value)}
+                          placeholder="Nova senha — deixe em branco para não alterar"
+                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={usuarioEditForm[u.id]?.confirmarNovaSenha ?? ''}
+                          onChange={e => mudarCampoEdicaoUsuario(u.id, 'confirmarNovaSenha', e.target.value)}
+                          placeholder="Confirmar nova senha"
+                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={usuarioEditForm[u.id]?.whatsapp ?? ''}
+                          onChange={e => mudarCampoEdicaoUsuario(u.id, 'whatsapp', e.target.value)}
+                          placeholder="WhatsApp (ex: 11999998888)"
+                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        />
+                        {u.id === meuId ? (
+                          <p className="text-xs text-slate-400">Tipo de acesso: Master (você não pode alterar o seu próprio nível)</p>
+                        ) : (
+                          <select
+                            value={usuarioEditForm[u.id]?.role ?? 'funcionario'}
+                            onChange={e => mudarCampoEdicaoUsuario(u.id, 'role', e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          >
+                            <option value="funcionario">Funcionário</option>
+                            <option value="master">Master (acesso total)</option>
+                          </select>
+                        )}
+
+                        {erroEdicaoUsuario && <p className="text-red-500 text-xs">{erroEdicaoUsuario}</p>}
+                        {sucessoEdicaoUsuario && <p className="text-brand-teal text-xs">{sucessoEdicaoUsuario}</p>}
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => salvarEdicaoUsuario(u.id)}
+                            disabled={salvandoEdicaoUsuario === u.id}
+                            className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                          >
+                            {salvandoEdicaoUsuario === u.id ? 'Salvando...' : 'Salvar'}
+                          </button>
+                          <button
+                            onClick={cancelarEdicaoUsuario}
+                            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => iniciarEdicaoUsuario(u)}
+                        className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
+                      >
+                        <Pencil size={13} />
+                        Editar
+                      </button>
                     )}
 
-                    {erroEdicaoUsuario && <p className="text-red-500 text-xs">{erroEdicaoUsuario}</p>}
-                    {sucessoEdicaoUsuario && <p className="text-brand-teal text-xs">{sucessoEdicaoUsuario}</p>}
+                    {u.role !== 'master' && (
+                      <div>
+                        <button
+                          onClick={() => alternarPermissoes(u.id)}
+                          className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
+                        >
+                          <LayoutGrid size={13} />
+                          Permissões por setor
+                          {permissoesExpandido === u.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => salvarEdicaoUsuario(u.id)}
-                        disabled={salvandoEdicaoUsuario === u.id}
-                        className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                      >
-                        {salvandoEdicaoUsuario === u.id ? 'Salvando...' : 'Salvar'}
-                      </button>
-                      <button
-                        onClick={cancelarEdicaoUsuario}
-                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => iniciarEdicaoUsuario(u)}
-                    className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                  >
-                    <Pencil size={13} />
-                    Editar
-                  </button>
-                )}
-
-                {u.role !== 'master' && (
-                  <div>
-                    <button
-                      onClick={() => alternarPermissoes(u.id)}
-                      className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                    >
-                      <LayoutGrid size={13} />
-                      Permissões por setor
-                      {permissoesExpandido === u.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                    </button>
-
-                    {permissoesExpandido === u.id && (
-                      <div className="mt-2 border border-slate-100 rounded-lg p-3 space-y-4">
-                        {permissoesCarregando === u.id ? (
-                          <p className="text-xs text-slate-400">Carregando permissões...</p>
-                        ) : (
-                          <>
-                            {GRUPOS_ORDEM.map(grupo => {
-                              const itens = agruparSetores(setores)[grupo] || []
-                              if (itens.length === 0) return null
-                              return (
-                                <div key={grupo}>
-                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{grupo}</p>
-                                  <div className="space-y-1.5">
-                                    {itens.map(setor => {
-                                      const nivelAtual = permissoesPorUsuario[u.id]?.[setor.id] || 'oculto'
-                                      return (
-                                        <div key={setor.id} className="flex items-center justify-between gap-2">
-                                          <span className="text-xs text-slate-600 flex-1">{setor.nome}</span>
-                                          <select
-                                            value={nivelAtual}
-                                            onChange={e => mudarNivel(u.id, setor.id, e.target.value as NivelPermissao)}
-                                            className="border border-slate-200 rounded-lg px-2 py-1 text-xs"
-                                          >
-                                            <option value="oculto">{nivelLabel.oculto}</option>
-                                            <option value="consulta">{nivelLabel.consulta}</option>
-                                            <option value="edicao">{nivelLabel.edicao}</option>
-                                          </select>
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                            <button
-                              onClick={() => salvarPermissoes(u.id)}
-                              disabled={salvandoPermissoes === u.id}
-                              className="w-full py-2 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                            >
-                              {salvandoPermissoes === u.id ? 'Salvando...' : 'Salvar permissões'}
-                            </button>
-                          </>
+                        {permissoesExpandido === u.id && (
+                          <div className="mt-2 border border-slate-100 rounded-lg p-3 space-y-4">
+                            {permissoesCarregando === u.id ? (
+                              <p className="text-xs text-slate-400">Carregando permissões...</p>
+                            ) : (
+                              <>
+                                {GRUPOS_ORDEM.map(grupo => {
+                                  const itens = agruparSetores(setores)[grupo] || []
+                                  if (itens.length === 0) return null
+                                  return (
+                                    <div key={grupo}>
+                                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{grupo}</p>
+                                      <div className="space-y-1.5">
+                                        {itens.map(setor => {
+                                          const nivelAtual = permissoesPorUsuario[u.id]?.[setor.id] || 'oculto'
+                                          return (
+                                            <div key={setor.id} className="flex items-center justify-between gap-2">
+                                              <span className="text-xs text-slate-600 flex-1">{setor.nome}</span>
+                                              <select
+                                                value={nivelAtual}
+                                                onChange={e => mudarNivel(u.id, setor.id, e.target.value as NivelPermissao)}
+                                                className="border border-slate-200 rounded-lg px-2 py-1 text-xs"
+                                              >
+                                                <option value="oculto">{nivelLabel.oculto}</option>
+                                                <option value="consulta">{nivelLabel.consulta}</option>
+                                                <option value="edicao">{nivelLabel.edicao}</option>
+                                              </select>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                                <button
+                                  onClick={() => salvarPermissoes(u.id)}
+                                  disabled={salvandoPermissoes === u.id}
+                                  className="w-full py-2 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                                >
+                                  {salvandoPermissoes === u.id ? 'Salvando...' : 'Salvar permissões'}
+                                </button>
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            </section>
+
           </div>
-        </section>
+        )}
 
-
-        </div>
-      )}
-
-      {abaAtiva === 'produtos' && (
-        <div>
-        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
-          <ArrowLeft size={16} /> Cadastro
-        </button>
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="mb-8">
-            {!novoProdutoAberto ? (
-              <button
-                onClick={() => setNovoProdutoAberto(true)}
-                className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
-              >
-                <Plus size={16} /> Cadastrar produto novo
-              </button>
-            ) : (
-              <div className="border border-slate-200 rounded-xl p-4">
-                <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
-                  <Package size={16} /> Cadastrar produto novo
-                </h3>
-                <form onSubmit={cadastrarProduto} className="space-y-3">
-                  <input
-                    type="text"
-                    value={nomeProduto}
-                    onChange={e => setNomeProduto(e.target.value)}
-                    placeholder="Nome do produto"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <select
-                    value={categoriaProduto}
-                    onChange={e => setCategoriaProduto(e.target.value as CategoriaProduto)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+        {abaAtiva === 'produtos' && (
+          <div>
+            <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+              <ArrowLeft size={16} /> Cadastro
+            </button>
+            <section className="bg-white rounded-2xl border border-slate-200 p-6">
+              <div className="mb-8">
+                {!novoProdutoAberto ? (
+                  <button
+                    onClick={() => setNovoProdutoAberto(true)}
+                    className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
                   >
-                    {CATEGORIAS_PRODUTO.map(c => (
-                      <option key={c.valor} value={c.valor}>{c.label}</option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={precoProduto}
-                      onChange={e => setPrecoProduto(e.target.value)}
-                      placeholder="Preço (R$)"
-                      className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={unidadeProduto}
-                      onChange={e => setUnidadeProduto(e.target.value)}
-                      placeholder="Unidade (ex: unidade, metro, kg)"
-                      className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={larguraProduto}
-                      onChange={e => setLarguraProduto(e.target.value)}
-                      placeholder="Largura (mm) — opcional"
-                      className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={alturaProduto}
-                      onChange={e => setAlturaProduto(e.target.value)}
-                      placeholder="Altura (mm) — opcional"
-                      className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                  </div>
-                  <textarea
-                    value={descricaoProduto}
-                    onChange={e => setDescricaoProduto(e.target.value)}
-                    placeholder="Descrição — opcional"
-                    rows={2}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <div>
-                    <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
-                      <ImageIcon size={13} /> Foto do produto — opcional
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={e => setFotoProdutoNovo(e.target.files?.[0] || null)}
-                      className="w-full border border-slate-300 rounded-xl p-2.5 text-xs"
-                    />
-                  </div>
-
-                  {erroProduto && <p className="text-red-500 text-sm">{erroProduto}</p>}
-                  {sucessoProduto && <p className="text-brand-teal text-sm">{sucessoProduto}</p>}
-
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={salvandoProduto}
-                      className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                    >
-                      {salvandoProduto ? 'Cadastrando...' : 'Cadastrar produto'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNovoProdutoAberto(false)}
-                      className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
-            <Package size={16} /> Produtos cadastrados
-          </h2>
-          {produtos.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhum produto cadastrado ainda.</p>
-          ) : (
-            <div className="space-y-2">
-              {produtos.map(p => (
-                <div key={p.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {p.foto_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.foto_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-slate-200" />
-                      ) : (
-                        <span className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                          <ImageIcon size={14} className="text-slate-300" />
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.nome}</p>
-                        <p className="text-slate-400 text-xs">
-                          {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
-                          {(p.largura_mm || p.altura_mm) ? ` · ${p.largura_mm || '?'} x ${p.altura_mm || '?'} mm` : ''}
-                        </p>
-                        {p.descricao && <p className="text-slate-400 text-xs">{p.descricao}</p>}
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${p.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
-                      {p.ativo ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </div>
-
-                  {editandoProdutoId === p.id ? (
-                    <div className="border border-slate-100 rounded-lg p-3 space-y-2">
+                    <Plus size={16} /> Cadastrar produto novo
+                  </button>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl p-4">
+                    <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+                      <Package size={16} /> Cadastrar produto novo
+                    </h3>
+                    <form onSubmit={cadastrarProduto} className="space-y-3">
                       <input
                         type="text"
-                        value={produtoEditForm[p.id]?.nome ?? ''}
-                        onChange={e => mudarCampoEdicaoProduto(p.id, 'nome', e.target.value)}
-                        placeholder="Nome"
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        value={nomeProduto}
+                        onChange={e => setNomeProduto(e.target.value)}
+                        placeholder="Nome do produto"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       />
                       <select
-                        value={produtoEditForm[p.id]?.categoria ?? 'outro'}
-                        onChange={e => mudarCampoEdicaoProduto(p.id, 'categoria', e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        value={categoriaProduto}
+                        onChange={e => setCategoriaProduto(e.target.value as CategoriaProduto)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       >
                         {CATEGORIAS_PRODUTO.map(c => (
                           <option key={c.valor} value={c.valor}>{c.label}</option>
@@ -1050,206 +928,332 @@ export default function Cadastro() {
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          value={produtoEditForm[p.id]?.preco ?? ''}
-                          onChange={e => mudarCampoEdicaoProduto(p.id, 'preco', e.target.value)}
+                          value={precoProduto}
+                          onChange={e => setPrecoProduto(e.target.value)}
                           placeholder="Preço (R$)"
-                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
                         />
                         <input
                           type="text"
-                          value={produtoEditForm[p.id]?.unidade ?? ''}
-                          onChange={e => mudarCampoEdicaoProduto(p.id, 'unidade', e.target.value)}
-                          placeholder="Unidade"
-                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          value={unidadeProduto}
+                          onChange={e => setUnidadeProduto(e.target.value)}
+                          placeholder="Unidade (ex: unidade, metro, kg)"
+                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
                         />
                       </div>
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          value={produtoEditForm[p.id]?.largura_mm ?? ''}
-                          onChange={e => mudarCampoEdicaoProduto(p.id, 'largura_mm', e.target.value)}
-                          placeholder="Largura (mm)"
-                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          value={larguraProduto}
+                          onChange={e => setLarguraProduto(e.target.value)}
+                          placeholder="Largura (mm) — opcional"
+                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
                         />
                         <input
                           type="text"
-                          value={produtoEditForm[p.id]?.altura_mm ?? ''}
-                          onChange={e => mudarCampoEdicaoProduto(p.id, 'altura_mm', e.target.value)}
-                          placeholder="Altura (mm)"
-                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          value={alturaProduto}
+                          onChange={e => setAlturaProduto(e.target.value)}
+                          placeholder="Altura (mm) — opcional"
+                          className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
                         />
                       </div>
                       <textarea
-                        value={produtoEditForm[p.id]?.descricao ?? ''}
-                        onChange={e => mudarCampoEdicaoProduto(p.id, 'descricao', e.target.value)}
-                        placeholder="Descrição"
+                        value={descricaoProduto}
+                        onChange={e => setDescricaoProduto(e.target.value)}
+                        placeholder="Descrição — opcional"
                         rows={2}
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                       />
                       <div>
                         <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
-                          <ImageIcon size={13} /> Trocar foto — opcional
+                          <ImageIcon size={13} /> Foto do produto — opcional
                         </label>
                         <input
                           type="file"
                           accept="image/*"
-                          onChange={e => setFotoEditFile(prev => ({ ...prev, [p.id]: e.target.files?.[0] || null }))}
-                          className="w-full border border-slate-200 rounded-lg p-2 text-xs"
+                          onChange={e => setFotoProdutoNovo(e.target.files?.[0] || null)}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 text-xs"
                         />
                       </div>
 
+                      {erroProduto && <p className="text-red-500 text-sm">{erroProduto}</p>}
+                      {sucessoProduto && <p className="text-brand-teal text-sm">{sucessoProduto}</p>}
+
                       <div className="flex gap-2">
                         <button
-                          onClick={() => salvarEdicaoProduto(p.id)}
-                          disabled={salvandoEdicaoProduto === p.id}
-                          className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                          type="submit"
+                          disabled={salvandoProduto}
+                          className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
                         >
-                          {salvandoEdicaoProduto === p.id ? 'Salvando...' : 'Salvar'}
+                          {salvandoProduto ? 'Cadastrando...' : 'Cadastrar produto'}
                         </button>
                         <button
-                          onClick={cancelarEdicaoProduto}
-                          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
+                          type="button"
+                          onClick={() => setNovoProdutoAberto(false)}
+                          className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
                         >
                           Cancelar
                         </button>
                       </div>
+                    </form>
+                  </div>
+                )}
+              </div>
+
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
+                <Package size={16} /> Produtos cadastrados
+              </h2>
+              {produtos.length === 0 ? (
+                <p className="text-sm text-slate-400">Nenhum produto cadastrado ainda.</p>
+              ) : (
+                <div className="space-y-2">
+                  {produtos.map(p => (
+                    <div key={p.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {p.foto_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.foto_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-slate-200" />
+                          ) : (
+                            <span className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <ImageIcon size={14} className="text-slate-300" />
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.nome}</p>
+                            <p className="text-slate-400 text-xs">
+                              {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
+                              {(p.largura_mm || p.altura_mm) ? ` · ${p.largura_mm || '?'} x ${p.altura_mm || '?'} mm` : ''}
+                            </p>
+                            {p.descricao && <p className="text-slate-400 text-xs">{p.descricao}</p>}
+                          </div>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${p.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
+                          {p.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+
+                      {editandoProdutoId === p.id ? (
+                        <div className="border border-slate-100 rounded-lg p-3 space-y-2">
+                          <input
+                            type="text"
+                            value={produtoEditForm[p.id]?.nome ?? ''}
+                            onChange={e => mudarCampoEdicaoProduto(p.id, 'nome', e.target.value)}
+                            placeholder="Nome"
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          />
+                          <select
+                            value={produtoEditForm[p.id]?.categoria ?? 'outro'}
+                            onChange={e => mudarCampoEdicaoProduto(p.id, 'categoria', e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          >
+                            {CATEGORIAS_PRODUTO.map(c => (
+                              <option key={c.valor} value={c.valor}>{c.label}</option>
+                            ))}
+                          </select>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={produtoEditForm[p.id]?.preco ?? ''}
+                              onChange={e => mudarCampoEdicaoProduto(p.id, 'preco', e.target.value)}
+                              placeholder="Preço (R$)"
+                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                            />
+                            <input
+                              type="text"
+                              value={produtoEditForm[p.id]?.unidade ?? ''}
+                              onChange={e => mudarCampoEdicaoProduto(p.id, 'unidade', e.target.value)}
+                              placeholder="Unidade"
+                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={produtoEditForm[p.id]?.largura_mm ?? ''}
+                              onChange={e => mudarCampoEdicaoProduto(p.id, 'largura_mm', e.target.value)}
+                              placeholder="Largura (mm)"
+                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                            />
+                            <input
+                              type="text"
+                              value={produtoEditForm[p.id]?.altura_mm ?? ''}
+                              onChange={e => mudarCampoEdicaoProduto(p.id, 'altura_mm', e.target.value)}
+                              placeholder="Altura (mm)"
+                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                            />
+                          </div>
+                          <textarea
+                            value={produtoEditForm[p.id]?.descricao ?? ''}
+                            onChange={e => mudarCampoEdicaoProduto(p.id, 'descricao', e.target.value)}
+                            placeholder="Descrição"
+                            rows={2}
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                          />
+                          <div>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+                              <ImageIcon size={13} /> Trocar foto — opcional
+                            </label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={e => setFotoEditFile(prev => ({ ...prev, [p.id]: e.target.files?.[0] || null }))}
+                              className="w-full border border-slate-200 rounded-lg p-2 text-xs"
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => salvarEdicaoProduto(p.id)}
+                              disabled={salvandoEdicaoProduto === p.id}
+                              className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                            >
+                              {salvandoEdicaoProduto === p.id ? 'Salvando...' : 'Salvar'}
+                            </button>
+                            <button
+                              onClick={cancelarEdicaoProduto}
+                              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => iniciarEdicaoProduto(p)}
+                            className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
+                          >
+                            <Pencil size={13} />
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => alternarAtivoProdutoAcao(p)}
+                            className="text-xs text-slate-500 hover:underline"
+                          >
+                            {p.ativo ? 'Desativar' : 'Ativar'}
+                          </button>
+                          <button
+                            onClick={() => excluirProdutoComConfirmacao(p)}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => iniciarEdicaoProduto(p)}
-                        className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                      >
-                        <Pencil size={13} />
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => alternarAtivoProdutoAcao(p)}
-                        className="text-xs text-slate-500 hover:underline"
-                      >
-                        {p.ativo ? 'Desativar' : 'Ativar'}
-                      </button>
-                      <button
-                        onClick={() => excluirProdutoComConfirmacao(p)}
-                        className="text-xs text-red-500 hover:underline"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-        </div>
-      )}
-
-      {abaAtiva === 'empresa' && (
-        <div>
-        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
-          <ArrowLeft size={16} /> Cadastro
-        </button>
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
-            <Building2 size={16} /> Dados da Empresa
-          </h2>
-          <p className="text-xs text-slate-400 mb-4">Usados no cabeçalho do PDF do Orçamento Balcão.</p>
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={empresaNome}
-              onChange={e => setEmpresaNome(e.target.value)}
-              placeholder="Razão social / nome da empresa"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={empresaCnpj}
-                onChange={e => setEmpresaCnpj(e.target.value)}
-                placeholder="CNPJ"
-                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-              />
-              <input
-                type="text"
-                value={empresaIe}
-                onChange={e => setEmpresaIe(e.target.value)}
-                placeholder="Inscrição Estadual"
-                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-              />
-            </div>
-            <input
-              type="text"
-              value={empresaEndereco}
-              onChange={e => setEmpresaEndereco(e.target.value)}
-              placeholder="Endereço"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={empresaCidadeUf}
-                onChange={e => setEmpresaCidadeUf(e.target.value)}
-                placeholder="Cidade / UF"
-                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-              />
-              <input
-                type="text"
-                value={empresaCep}
-                onChange={e => setEmpresaCep(e.target.value)}
-                placeholder="CEP"
-                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={empresaTel}
-                onChange={e => setEmpresaTel(e.target.value)}
-                placeholder="Telefone"
-                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-              />
-              <input
-                type="text"
-                value={empresaTel2}
-                onChange={e => setEmpresaTel2(e.target.value)}
-                placeholder="Telefone 2 — opcional"
-                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-              />
-            </div>
-            <input
-              type="email"
-              value={empresaEmail}
-              onChange={e => setEmpresaEmail(e.target.value)}
-              placeholder="E-mail"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Condições padrão (forma de pagamento, prazo de entrega, validade...)</label>
-              <textarea
-                value={empresaCondicoes}
-                onChange={e => setEmpresaCondicoes(e.target.value)}
-                placeholder="Ex: 70% no fechamento e 30% na instalação. Orçamento válido por 15 dias. Prazo de entrega: 25 dias após a medição final."
-                rows={3}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              />
-              <p className="text-xs text-slate-400 mt-1">Esse texto já vem preenchido em cada Orçamento Balcão novo, mas pode ser editado por orçamento.</p>
-            </div>
-
-            {msgEmpresa && <p className="text-brand-teal text-sm">{msgEmpresa}</p>}
-
-            <button
-              onClick={salvarDadosEmpresaAcao}
-              disabled={salvandoEmpresa}
-              className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-            >
-              {salvandoEmpresa ? 'Salvando...' : 'Salvar dados da empresa'}
-            </button>
+              )}
+            </section>
           </div>
-        </section>
-        </div>
-      )}
+        )}
+
+        {abaAtiva === 'empresa' && (
+          <div>
+            <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+              <ArrowLeft size={16} /> Cadastro
+            </button>
+            <section className="bg-white rounded-2xl border border-slate-200 p-6">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+                <Building2 size={16} /> Dados da Empresa
+              </h2>
+              <p className="text-xs text-slate-400 mb-4">Usados no cabeçalho do PDF do Orçamento Balcão.</p>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={empresaNome}
+                  onChange={e => setEmpresaNome(e.target.value)}
+                  placeholder="Razão social / nome da empresa"
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={empresaCnpj}
+                    onChange={e => setEmpresaCnpj(e.target.value)}
+                    placeholder="CNPJ"
+                    className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={empresaIe}
+                    onChange={e => setEmpresaIe(e.target.value)}
+                    placeholder="Inscrição Estadual"
+                    className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={empresaEndereco}
+                  onChange={e => setEmpresaEndereco(e.target.value)}
+                  placeholder="Endereço"
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={empresaCidadeUf}
+                    onChange={e => setEmpresaCidadeUf(e.target.value)}
+                    placeholder="Cidade / UF"
+                    className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={empresaCep}
+                    onChange={e => setEmpresaCep(e.target.value)}
+                    placeholder="CEP"
+                    className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={empresaTel}
+                    onChange={e => setEmpresaTel(e.target.value)}
+                    placeholder="Telefone"
+                    className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={empresaTel2}
+                    onChange={e => setEmpresaTel2(e.target.value)}
+                    placeholder="Telefone 2 — opcional"
+                    className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                </div>
+                <input
+                  type="email"
+                  value={empresaEmail}
+                  onChange={e => setEmpresaEmail(e.target.value)}
+                  placeholder="E-mail"
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                />
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Condições padrão (forma de pagamento, prazo de entrega, validade...)</label>
+                  <textarea
+                    value={empresaCondicoes}
+                    onChange={e => setEmpresaCondicoes(e.target.value)}
+                    placeholder="Ex: 70% no fechamento e 30% na instalação. Orçamento válido por 15 dias. Prazo de entrega: 25 dias após a medição final."
+                    rows={3}
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Esse texto já vem preenchido em cada Orçamento Balcão novo, mas pode ser editado por orçamento.</p>
+                </div>
+
+                {msgEmpresa && <p className="text-brand-teal text-sm">{msgEmpresa}</p>}
+
+                <button
+                  onClick={salvarDadosEmpresaAcao}
+                  disabled={salvandoEmpresa}
+                  className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                >
+                  {salvandoEmpresa ? 'Salvando...' : 'Salvar dados da empresa'}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
 
       </main>
     </div>

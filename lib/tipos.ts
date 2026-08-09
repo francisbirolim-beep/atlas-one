@@ -523,3 +523,23 @@ export interface DadosEmpresa {
   email?: string
   condicoesPadrao?: string
 }
+
+// Fase 9a: Cadastro de Fornecedores (Cadastro > Fornecedores). Usado pra
+// vincular quem vendeu cada produto no histórico de preços, e futuramente
+// pra casar o emitente da NF-e importada com um fornecedor já cadastrado.
+export interface Fornecedor {
+  id: string
+  created_at: string
+  updated_at?: string
+  nome: string
+  cnpj_cpf?: string | null
+  contato?: string | null
+  telefone?: string | null
+  email?: string | null
+  endereco?: string | null
+  cidade?: string | null
+  observacoes?: string | null
+  ativo: boolean
+  criado_por_id?: string | null
+  criado_por_nome?: string | null
+}
