@@ -56,7 +56,7 @@ export default function SincronizadorOffline() {
   if (pendentes === 0 && !mensagemSucesso) return null
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
+    <div className="fixed bottom-20 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 md:bottom-4">
       {mensagemSucesso ? (
         <div className="bg-brand-teal text-white rounded-xl px-4 py-3 shadow-lg flex items-center gap-2 text-sm">
           <CheckCircle2 size={18} />
