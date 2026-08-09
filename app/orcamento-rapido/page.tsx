@@ -28,8 +28,6 @@ const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'outro', label: 'Outra cor' },
 ]
 
-type ModoEntrada = 'formulario' | 'texto_livre'
-
 interface ItemForm {
   id: string
   ambiente: string
@@ -59,10 +57,7 @@ function novoItem(): ItemForm {
 }
 
 export default function OrcamentoRapido() {
-  const [modo, setModo] = useState<ModoEntrada>('texto_livre')
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
-  const [textosLivres, setTextosLivres] = useState<string[]>([''])
-  const [ambientesLivres, setAmbientesLivres] = useState<string[]>([''])
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -93,21 +88,6 @@ export default function OrcamentoRapido() {
 
   function removerItem(id: string) {
     if (itens.length > 1) setItens(itens.filter(it => it.id !== id))
-  }
-
-  function atualizarTexto(idx: number, valor: string) {
-    setTextosLivres(prev => prev.map((t, i) => (i === idx ? valor : t)))
-  }
-
-  function atualizarAmbienteLivre(idx: number, valor: string) {
-    setAmbientesLivres(prev => prev.map((a, i) => (i === idx ? valor : a)))
-  }
-
-  function removerTexto(idx: number) {
-    if (textosLivres.length > 1) {
-      setTextosLivres(prev => prev.filter((_, i) => i !== idx))
-      setAmbientesLivres(prev => prev.filter((_, i) => i !== idx))
-    }
   }
 
   function adicionarFotos(files: FileList | null) {
@@ -149,51 +129,40 @@ export default function OrcamentoRapido() {
     if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
     if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual é a cor'); return }
     if (!contramarco) { setErro('Selecione com ou sem contramarco'); return }
-
-    if (modo === 'formulario') {
-      if (!tipoMedida) {
-        setErro('Selecione se é medida final ou orçamento comum')
+    if (!tipoMedida) {
+      setErro('Selecione se é medida final ou orçamento comum')
+      return
+    }
+    for (const it of itens) {
+      if (!it.tipo) {
+        setErro('Selecione o tipo de cada esquadria')
         return
       }
-      for (const it of itens) {
-        if (!it.tipo) {
-          setErro('Selecione o tipo de cada esquadria')
+      if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) {
+        setErro('Escreva qual é o tipo de esquadria')
+        return
+      }
+      if (tipoMedida === 'final') {
+        const medidas = [it.larguraBaixo, it.larguraMeio, it.larguraCima, it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
+        if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
+          setErro('Preencha as 3 larguras e as 3 alturas de todas as esquadrias (mínimo 100mm)')
           return
         }
-        if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) {
-          setErro('Escreva qual é o tipo de esquadria')
+      } else {
+        const l = parseFloat(it.largura.replace(',', '.'))
+        const a = parseFloat(it.altura.replace(',', '.'))
+        if (!l || !a || l < 100 || a < 100) {
+          setErro('Preencha as medidas de todas as esquadrias (mínimo 100mm x 100mm)')
           return
-        }
-        if (tipoMedida === 'final') {
-          const medidas = [it.larguraBaixo, it.larguraMeio, it.larguraCima, it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
-          if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) {
-            setErro('Preencha as 3 larguras e as 3 alturas de todas as esquadrias (mínimo 100mm)')
-            return
-          }
-        } else {
-          const l = parseFloat(it.largura.replace(',', '.'))
-          const a = parseFloat(it.altura.replace(',', '.'))
-          if (!l || !a || l < 100 || a < 100) {
-            setErro('Preencha as medidas de todas as esquadrias (mínimo 100mm x 100mm)')
-            return
-          }
         }
       }
-    } else if (!textosLivres.some(t => t.trim())) {
-      setErro('Descreva o que o cliente precisa')
-      return
     }
 
     setErro('')
     setSalvando(true)
 
-    const textosLivresComAmbiente = textosLivres.map((t, i) => {
-      const ambiente = (ambientesLivres[i] || '').trim()
-      return ambiente ? `Ambiente: ${ambiente}\n${t}` : t
-    })
-
     const dadosForm: DadosOrcamentoForm = {
-      modo, itens, textosLivres: textosLivresComAmbiente, clienteNome, clienteWhatsapp, cidade, origem,
+      itens, clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
@@ -224,8 +193,6 @@ export default function OrcamentoRapido() {
     setSalvoOffline(false)
     setErro('')
     setItens([novoItem()])
-    setTextosLivres([''])
-    setAmbientesLivres([''])
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
@@ -286,13 +253,13 @@ export default function OrcamentoRapido() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition">
+          <Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg transition">
             <ArrowLeft size={20} />
           </Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Orçamento</h1>
+            <h1 className="text-lg font-bold text-slate-800">Orçamento Detalhado</h1>
             <p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p>
           </div>
         </div>
@@ -477,339 +444,254 @@ export default function OrcamentoRapido() {
           </label>
         </div>
 
-        <div className="flex gap-2 bg-white rounded-xl p-1 border border-slate-200">
-          <button
-            onClick={() => setModo('texto_livre')}
-            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
-              modo === 'texto_livre' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Rápido (descrever em texto)
-          </button>
-          <button
-            onClick={() => setModo('formulario')}
-            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition ${
-              modo === 'formulario' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Detalhado (formulário completo)
-          </button>
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <label className="block text-sm font-medium text-slate-700 mb-3">Esse orçamento já é medida final ou é um orçamento comum? *</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setTipoMedida('comum')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                tipoMedida === 'comum'
+                  ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              Orçamento comum
+            </button>
+            <button
+              onClick={() => setTipoMedida('final')}
+              className={`p-3 rounded-xl text-sm border transition ${
+                tipoMedida === 'final'
+                  ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                  : 'border-slate-200 hover:border-slate-300 text-slate-600'
+              }`}
+            >
+              Medida final
+            </button>
+          </div>
         </div>
 
-        {modo === 'formulario' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <label className="block text-sm font-medium text-slate-700 mb-3">Esse orçamento já é medida final ou é um orçamento comum? *</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setTipoMedida('comum')}
-                className={`p-3 rounded-xl text-sm border transition ${
-                  tipoMedida === 'comum'
-                    ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
-                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                }`}
-              >
-                Orçamento comum
-              </button>
-              <button
-                onClick={() => setTipoMedida('final')}
-                className={`p-3 rounded-xl text-sm border transition ${
-                  tipoMedida === 'final'
-                    ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
-                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                }`}
-              >
-                Medida final
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>
 
-        {modo === 'texto_livre' ? (
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-slate-700">Descreva o que precisa</h3>
+          {itens.map((item, idx) => (
+            <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>
+                {itens.length > 1 && (
+                  <button onClick={() => removerItem(item.id)} className="p-1 text-red-400 hover:text-red-600">
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
 
-            {textosLivres.map((texto, idx) => (
-              <div key={idx} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>
-                  {textosLivres.length > 1 && (
-                    <button onClick={() => removerTexto(idx)} className="p-1 text-red-400 hover:text-red-600">
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label>
                 <input
                   type="text"
-                  value={ambientesLivres[idx] || ''}
-                  onChange={e => atualizarAmbienteLivre(idx, e.target.value)}
-                  placeholder="Ambiente (ex: Sala, Quarto 1, Cozinha...)"
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                />
-                <textarea
-                  value={texto}
-                  onChange={e => atualizarTexto(idx, e.target.value)}
-                  placeholder="Ex: Porta de correr 2 folhas com 1,80m de largura por 2,10m de altura..."
-                  className="w-full h-28 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-navy"
+                  value={item.ambiente}
+                  onChange={e => atualizarItem(item.id, 'ambiente', e.target.value)}
+                  placeholder="Ex: Sala, Quarto 1, Cozinha, Banheiro social..."
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
                 />
               </div>
-            ))}
 
-            <p className="text-xs text-slate-400">
-              Pode colar o mesmo texto que manda no WhatsApp. Se forem esquadrias diferentes, adicione um bloco pra cada uma.
-            </p>
-
-            <button
-              onClick={() => { setTextosLivres([...textosLivres, '']); setAmbientesLivres([...ambientesLivres, '']) }}
-              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-navy hover:text-brand-navy transition text-sm font-medium"
-            >
-              <Plus size={16} /> Adicionar outra esquadria
-            </button>
-
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
-              <h3 className="text-sm font-medium text-slate-700">Fotos (opcional)</h3>
-              <div className="flex flex-wrap gap-3">
-                {fotosPreviews.map((url, i) => (
-                  <div key={i} className="relative w-20 h-20">
-                    <a href={url} target="_blank" rel="noreferrer">
-                      <img src={url} alt="Foto" className="w-20 h-20 object-cover rounded-lg" />
-                    </a>
-                    <button onClick={() => removerFoto(i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full">
-                      <X size={12} />
+              <div>
+                <label className="block text-xs text-slate-500 mb-2">Tipo de esquadria *</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {tipos.map(t => (
+                    <button
+                      key={t.value}
+                      onClick={() => atualizarItem(item.id, 'tipo', t.value)}
+                      className={`p-2.5 rounded-lg text-xs border transition ${
+                        item.tipo === t.value
+                          ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      {t.label}
                     </button>
-                  </div>
-                ))}
-                <label className="flex flex-col items-center justify-center gap-1 w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
-                  <Camera size={18} />
-                  Adicionar
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={e => adicionarFotos(e.target.files)} />
-                </label>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>
-
-            {itens.map((item, idx) => (
-              <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>
-                  {itens.length > 1 && (
-                    <button onClick={() => removerItem(item.id)} className="p-1 text-red-400 hover:text-red-600">
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  ))}
                 </div>
-
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label>
+                {item.tipo === 'outro' && (
                   <input
                     type="text"
-                    value={item.ambiente}
-                    onChange={e => atualizarItem(item.id, 'ambiente', e.target.value)}
-                    placeholder="Ex: Sala, Quarto 1, Cozinha, Banheiro social..."
+                    value={item.tipoOutroTexto}
+                    onChange={e => atualizarItem(item.id, 'tipoOutroTexto', e.target.value)}
+                    placeholder="Qual é o tipo de esquadria?"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-2"
+                  />
+                )}
+              </div>
+
+              {item.tipo && (
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional)</label>
+                  <input
+                    type="text"
+                    value={item.folhas}
+                    onChange={e => atualizarItem(item.id, 'folhas', e.target.value)}
+                    placeholder="Ex: 2 ou 2 fixas + 1 móvel"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
                   />
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-xs text-slate-500 mb-2">Tipo de esquadria *</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {tipos.map(t => (
-                      <button
-                        key={t.value}
-                        onClick={() => atualizarItem(item.id, 'tipo', t.value)}
-                        className={`p-2.5 rounded-lg text-xs border transition ${
-                          item.tipo === t.value
-                            ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
-                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                  {item.tipo === 'outro' && (
-                    <input
-                      type="text"
-                      value={item.tipoOutroTexto}
-                      onChange={e => atualizarItem(item.id, 'tipoOutroTexto', e.target.value)}
-                      placeholder="Qual é o tipo de esquadria?"
-                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-2"
-                    />
-                  )}
-                </div>
-
-                {item.tipo && (
+              {tipoMedida === 'final' ? (
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional)</label>
+                    <label className="block text-xs text-slate-500 mb-1">Larguras (mm) — baixo, meio, cima</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="number"
+                        value={item.larguraBaixo}
+                        onChange={e => atualizarItem(item.id, 'larguraBaixo', e.target.value)}
+                        placeholder="Baixo"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                      <input
+                        type="number"
+                        value={item.larguraMeio}
+                        onChange={e => atualizarItem(item.id, 'larguraMeio', e.target.value)}
+                        placeholder="Meio"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                      <input
+                        type="number"
+                        value={item.larguraCima}
+                        onChange={e => atualizarItem(item.id, 'larguraCima', e.target.value)}
+                        placeholder="Cima"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Alturas (mm) — direita, meio, esquerda</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="number"
+                        value={item.alturaDireita}
+                        onChange={e => atualizarItem(item.id, 'alturaDireita', e.target.value)}
+                        placeholder="Direita"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                      <input
+                        type="number"
+                        value={item.alturaMeio}
+                        onChange={e => atualizarItem(item.id, 'alturaMeio', e.target.value)}
+                        placeholder="Meio"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                      <input
+                        type="number"
+                        value={item.alturaEsquerda}
+                        onChange={e => atualizarItem(item.id, 'alturaEsquerda', e.target.value)}
+                        placeholder="Esquerda"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
                     <input
-                      type="text"
-                      value={item.folhas}
-                      onChange={e => atualizarItem(item.id, 'folhas', e.target.value)}
-                      placeholder="Ex: 2 ou 2 fixas + 1 móvel"
+                      type="number"
+                      value={item.quantidade}
+                      onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
+                      min="1"
                       className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
                     />
                   </div>
-                )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Largura (mm)</label>
+                    <input
+                      type="number"
+                      value={item.largura}
+                      onChange={e => atualizarItem(item.id, 'largura', e.target.value)}
+                      placeholder="1800"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Altura (mm)</label>
+                    <input
+                      type="number"
+                      value={item.altura}
+                      onChange={e => atualizarItem(item.id, 'altura', e.target.value)}
+                      placeholder="2100"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
+                    <input
+                      type="number"
+                      value={item.quantidade}
+                      onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
+                      min="1"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
 
-                {tipoMedida === 'final' ? (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Larguras (mm) — baixo, meio, cima</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="number"
-                          value={item.larguraBaixo}
-                          onChange={e => atualizarItem(item.id, 'larguraBaixo', e.target.value)}
-                          placeholder="Baixo"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                        <input
-                          type="number"
-                          value={item.larguraMeio}
-                          onChange={e => atualizarItem(item.id, 'larguraMeio', e.target.value)}
-                          placeholder="Meio"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                        <input
-                          type="number"
-                          value={item.larguraCima}
-                          onChange={e => atualizarItem(item.id, 'larguraCima', e.target.value)}
-                          placeholder="Cima"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Alturas (mm) — direita, meio, esquerda</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="number"
-                          value={item.alturaDireita}
-                          onChange={e => atualizarItem(item.id, 'alturaDireita', e.target.value)}
-                          placeholder="Direita"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                        <input
-                          type="number"
-                          value={item.alturaMeio}
-                          onChange={e => atualizarItem(item.id, 'alturaMeio', e.target.value)}
-                          placeholder="Meio"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                        <input
-                          type="number"
-                          value={item.alturaEsquerda}
-                          onChange={e => atualizarItem(item.id, 'alturaEsquerda', e.target.value)}
-                          placeholder="Esquerda"
-                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
-                      <input
-                        type="number"
-                        value={item.quantidade}
-                        onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
-                        min="1"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                    </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-2">Foto (opcional)</label>
+                {item.fotoPreview ? (
+                  <div className="relative w-24 h-24">
+                    <img src={item.fotoPreview} alt="Foto" className="w-24 h-24 object-cover rounded-lg" />
+                    <button
+                      onClick={() => atualizarItem(item.id, 'foto', undefined)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Largura (mm)</label>
-                      <input
-                        type="number"
-                        value={item.largura}
-                        onChange={e => atualizarItem(item.id, 'largura', e.target.value)}
-                        placeholder="1800"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Altura (mm)</label>
-                      <input
-                        type="number"
-                        value={item.altura}
-                        onChange={e => atualizarItem(item.id, 'altura', e.target.value)}
-                        placeholder="2100"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Quantidade</label>
-                      <input
-                        type="number"
-                        value={item.quantidade}
-                        onChange={e => atualizarItem(item.id, 'quantidade', e.target.value)}
-                        min="1"
-                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                      />
-                    </div>
-                  </div>
+                  <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
+                    <Camera size={14} />
+                    Adicionar foto
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => definirFoto(item.id, e.target.files?.[0])}
+                    />
+                  </label>
                 )}
-
-                <div>
-                  <label className="block text-xs text-slate-500 mb-2">Foto (opcional)</label>
-                  {item.fotoPreview ? (
-                    <div className="relative w-24 h-24">
-                      <img src={item.fotoPreview} alt="Foto" className="w-24 h-24 object-cover rounded-lg" />
-                      <button
-                        onClick={() => atualizarItem(item.id, 'foto', undefined)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
-                      <Camera size={14} />
-                      Adicionar foto
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={e => definirFoto(item.id, e.target.files?.[0])}
-                      />
-                    </label>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label>
-                  <input
-                    type="text"
-                    value={item.cor}
-                    onChange={e => atualizarItem(item.id, 'cor', e.target.value)}
-                    placeholder="Só preencha se for diferente da cor geral da obra"
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label>
-                  <textarea
-                    value={item.descricao}
-                    onChange={e => atualizarItem(item.id, 'descricao', e.target.value)}
-                    placeholder="Alguma observação da obra pro orçamentista saber..."
-                    className="w-full h-16 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
-                  />
-                </div>
               </div>
-            ))}
 
-            <button
-              onClick={() => setItens([...itens, novoItem()])}
-              className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-navy hover:text-brand-navy transition text-sm font-medium"
-            >
-              <Plus size={16} /> Adicionar outra esquadria
-            </button>
-          </div>
-        )}
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label>
+                <input
+                  type="text"
+                  value={item.cor}
+                  onChange={e => atualizarItem(item.id, 'cor', e.target.value)}
+                  placeholder="Só preencha se for diferente da cor geral da obra"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label>
+                <textarea
+                  value={item.descricao}
+                  onChange={e => atualizarItem(item.id, 'descricao', e.target.value)}
+                  placeholder="Alguma observação da obra pro orçamentista saber..."
+                  className="w-full h-16 border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                />
+              </div>
+            </div>
+          ))}
+
+          <button
+            onClick={() => setItens([...itens, novoItem()])}
+            className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-brand-navy hover:text-brand-navy transition text-sm font-medium"
+          >
+            <Plus size={16} /> Adicionar outra esquadria
+          </button>
+        </div>
 
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
 
