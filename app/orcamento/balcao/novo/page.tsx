@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Minus, Trash2, Search } from 'lucide-react'
-import { listarProdutos, CATEGORIAS_PRODUTO, labelCategoriaProduto } from '@/lib/produtos'
+import { listarProdutos, CATEGORIAS_PRODUTO } from '@/lib/produtos'
 import { lerDadosEmpresa } from '@/lib/configGeral'
 import { criarOrcamentoBalcao } from '@/lib/orcamentoBalcao'
 import { gerarPdfOrcamentoBalcao } from '@/lib/pdfOrcamentoBalcao'
@@ -195,11 +195,11 @@ export default function NovoOrcamentoBalcao() {
             </button>
             {CATEGORIAS_PRODUTO.map(cat => (
               <button
-                key={cat}
-                onClick={() => setCategoria(cat)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${categoria === cat ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}
+                key={cat.valor}
+                onClick={() => setCategoria(cat.valor)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${categoria === cat.valor ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}
               >
-                {labelCategoriaProduto(cat)}
+                {cat.label}
               </button>
             ))}
           </div>
