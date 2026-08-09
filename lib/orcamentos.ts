@@ -19,7 +19,8 @@ export interface ItemOrcamentoForm {
   quantidade: string
   descricao: string
   cor: string
-  foto?: File | null
+  // Fotos gerais da esquadria (varias, nao so uma).
+  fotos: File[]
   larguraBaixo: string
   larguraMeio: string
   larguraCima: string
@@ -82,7 +83,12 @@ export async function criarOrcamentoNoServidor(
     if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
   for (const it of itens) {
-    const foto_url = it.foto ? await uploadFoto(it.foto) : null
+    // Fotos gerais da esquadria (agora podem ser varias).
+    const itemFotoUrls: string[] = []
+    for (const f of it.fotos) { const url = await uploadFoto(f); if (url) itemFotoUrls.push(url) }
+    const foto_url = itemFotoUrls[0] || null
+    const foto_urls = itemFotoUrls.length ? itemFotoUrls : null
+
     if (tipoMedida === 'final') {
       const usaFotoLargura = it.modoLargura === 'foto'
       const usaFotoAltura = it.modoAltura === 'foto'
@@ -112,6 +118,7 @@ export async function criarOrcamentoNoServidor(
         foto_alturas_url,
         quantidade: parseInt(it.quantidade) || 1,
         foto_url,
+        foto_urls,
         descricao: it.descricao || undefined,
         cor: it.cor || null,
       })
@@ -126,6 +133,7 @@ export async function criarOrcamentoNoServidor(
         altura_mm: parseFloat(it.altura),
         quantidade: parseInt(it.quantidade) || 1,
         foto_url,
+        foto_urls,
         descricao: it.descricao || undefined,
         cor: it.cor || null,
       })

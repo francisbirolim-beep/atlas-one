@@ -39,8 +39,9 @@ interface ItemForm {
   quantidade: string
   descricao: string
   cor: string
-  foto?: File
-  fotoPreview?: string
+  // Fotos gerais da esquadria (agora várias, não só uma).
+  fotos: File[]
+  fotosPreviews: string[]
   larguraBaixo: string
   larguraMeio: string
   larguraCima: string
@@ -60,6 +61,7 @@ interface ItemForm {
 function novoItem(): ItemForm {
   return {
     id: uuidv4(), ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '',
+    fotos: [], fotosPreviews: [],
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
     modoLargura: 'digitar', modoAltura: 'digitar',
   }
@@ -85,14 +87,29 @@ export default function OrcamentoRapido() {
   const [salvo, setSalvo] = useState(false)
   const [salvoOffline, setSalvoOffline] = useState(false)
   const [erro, setErro] = useState('')
+  // Visualização em tela cheia de uma foto (clicando em qualquer miniatura).
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
     setItens(itens.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
   }
 
-  function definirFoto(id: string, file: File | undefined) {
-    if (!file) return
-    setItens(itens.map(it => (it.id === id ? { ...it, foto: file, fotoPreview: URL.createObjectURL(file) } : it)))
+  function adicionarFotoItem(id: string, files: FileList | null) {
+    if (!files || files.length === 0) return
+    const novos = Array.from(files)
+    setItens(itens.map(it => (
+      it.id === id
+        ? { ...it, fotos: [...it.fotos, ...novos], fotosPreviews: [...it.fotosPreviews, ...novos.map(f => URL.createObjectURL(f))] }
+        : it
+    )))
+  }
+
+  function removerFotoItem(id: string, idx: number) {
+    setItens(itens.map(it => (
+      it.id === id
+        ? { ...it, fotos: it.fotos.filter((_, i) => i !== idx), fotosPreviews: it.fotosPreviews.filter((_, i) => i !== idx) }
+        : it
+    )))
   }
 
   function definirFotoLargura(id: string, file: File | undefined) {
@@ -100,9 +117,17 @@ export default function OrcamentoRapido() {
     setItens(itens.map(it => (it.id === id ? { ...it, fotoLargura: file, fotoLarguraPreview: URL.createObjectURL(file) } : it)))
   }
 
+  function removerFotoLargura(id: string) {
+    setItens(itens.map(it => (it.id === id ? { ...it, fotoLargura: undefined, fotoLarguraPreview: undefined } : it)))
+  }
+
   function definirFotoAltura(id: string, file: File | undefined) {
     if (!file) return
     setItens(itens.map(it => (it.id === id ? { ...it, fotoAltura: file, fotoAlturaPreview: URL.createObjectURL(file) } : it)))
+  }
+
+  function removerFotoAltura(id: string) {
+    setItens(itens.map(it => (it.id === id ? { ...it, fotoAltura: undefined, fotoAlturaPreview: undefined } : it)))
   }
 
   function removerItem(id: string) {
@@ -297,7 +322,7 @@ export default function OrcamentoRapido() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Orçamento Detalhado</h1>
+            <h1 className="text-lg font-bold text-slate-800">Orçamento</h1>
             <p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p>
           </div>
         </div>
@@ -622,20 +647,34 @@ export default function OrcamentoRapido() {
                       </div>
                     ) : (
                       <div>
-                        <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer ${item.fotoLarguraPreview ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
-                          <Camera size={16} />
-                          {item.fotoLarguraPreview ? 'Foto anexada (trocar)' : 'Foto da trena com as 3 larguras'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            onChange={e => definirFotoLargura(item.id, e.target.files?.[0])}
-                          />
-                        </label>
-                        {item.fotoLarguraPreview && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.fotoLarguraPreview} alt="" className="w-20 h-20 object-cover rounded-lg mt-2" />
+                        {item.fotoLarguraPreview ? (
+                          <div className="relative w-24 h-24">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.fotoLarguraPreview}
+                              alt=""
+                              onClick={() => setFotoAmpliada(item.fotoLarguraPreview!)}
+                              className="w-24 h-24 object-cover rounded-lg cursor-pointer"
+                            />
+                            <button
+                              onClick={() => removerFotoLargura(item.id)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer border-slate-300 text-slate-500">
+                            <Camera size={16} />
+                            Foto da trena com as 3 larguras
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={e => definirFotoLargura(item.id, e.target.files?.[0])}
+                            />
+                          </label>
                         )}
                       </div>
                     )}
@@ -687,20 +726,34 @@ export default function OrcamentoRapido() {
                       </div>
                     ) : (
                       <div>
-                        <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer ${item.fotoAlturaPreview ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
-                          <Camera size={16} />
-                          {item.fotoAlturaPreview ? 'Foto anexada (trocar)' : 'Foto da trena com as 3 alturas'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            onChange={e => definirFotoAltura(item.id, e.target.files?.[0])}
-                          />
-                        </label>
-                        {item.fotoAlturaPreview && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.fotoAlturaPreview} alt="" className="w-20 h-20 object-cover rounded-lg mt-2" />
+                        {item.fotoAlturaPreview ? (
+                          <div className="relative w-24 h-24">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.fotoAlturaPreview}
+                              alt=""
+                              onClick={() => setFotoAmpliada(item.fotoAlturaPreview!)}
+                              className="w-24 h-24 object-cover rounded-lg cursor-pointer"
+                            />
+                            <button
+                              onClick={() => removerFotoAltura(item.id)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer border-slate-300 text-slate-500">
+                            <Camera size={16} />
+                            Foto da trena com as 3 alturas
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={e => definirFotoAltura(item.id, e.target.files?.[0])}
+                            />
+                          </label>
                         )}
                       </div>
                     )}
@@ -753,29 +806,37 @@ export default function OrcamentoRapido() {
               )}
 
               <div>
-                <label className="block text-xs text-slate-500 mb-2">Foto (opcional)</label>
-                {item.fotoPreview ? (
-                  <div className="relative w-24 h-24">
-                    <img src={item.fotoPreview} alt="Foto" className="w-24 h-24 object-cover rounded-lg" />
-                    <button
-                      onClick={() => atualizarItem(item.id, 'foto', undefined)}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
-                    <Camera size={14} />
-                    Adicionar foto
+                <label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label>
+                <div className="flex flex-wrap gap-2">
+                  {item.fotosPreviews.map((src, i) => (
+                    <div key={i} className="relative w-24 h-24">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={src}
+                        alt="Foto"
+                        onClick={() => setFotoAmpliada(src)}
+                        className="w-24 h-24 object-cover rounded-lg cursor-pointer"
+                      />
+                      <button
+                        onClick={() => removerFotoItem(item.id, i)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy text-center">
+                    <Camera size={16} />
+                    Adicionar
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       className="hidden"
-                      onChange={e => definirFoto(item.id, e.target.files?.[0])}
+                      onChange={e => { adicionarFotoItem(item.id, e.target.files); e.target.value = '' }}
                     />
                   </label>
-                )}
+                </div>
               </div>
 
               <div>
@@ -820,6 +881,27 @@ export default function OrcamentoRapido() {
           {salvando ? 'Enviando...' : 'Enviar pedido'}
         </button>
       </main>
+
+      {fotoAmpliada && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setFotoAmpliada(null)}
+        >
+          <button
+            onClick={() => setFotoAmpliada(null)}
+            className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-2"
+          >
+            <X size={20} />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={fotoAmpliada}
+            alt="Foto ampliada"
+            onClick={e => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg"
+          />
+        </div>
+      )}
     </div>
   )
 }

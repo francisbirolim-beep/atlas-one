@@ -91,6 +91,10 @@ export interface ItemEsquadria {
   altura_mm: number
   quantidade: number
   foto_url?: string | null
+  // Fase 7: a esquadria pode ter varias fotos gerais (nao so uma). foto_url
+  // continua preenchida (com a primeira) por compatibilidade com telas que
+  // ainda mostram so uma foto por item; foto_urls tem a lista completa.
+  foto_urls?: string[] | null
   descricao?: string
   cor?: string | null
   // Medida final: 3 larguras (baixo/meio/cima) e 3 alturas (direita/meio/esquerda)
