@@ -492,6 +492,21 @@ export interface Produto {
   ativo: boolean
   criado_por_id?: string | null
   criado_por_nome?: string | null
+  // Fase 9b: custo/margem, classificação e impostos — tudo opcional. A
+  // margem é calculada em cima do custo (preco = custo * (1 + margem/100));
+  // qualquer um dos dois (preço ou margem) pode ser editado direto na tela,
+  // o outro recalcula sozinho.
+  custo?: number | null
+  margem_percentual?: number | null
+  grupo?: string | null
+  peso_kg?: number | null
+  marca?: string | null
+  fornecedor_id?: string | null
+  ncm?: string | null
+  icms_percentual?: number | null
+  ipi_percentual?: number | null
+  pis_percentual?: number | null
+  cofins_percentual?: number | null
 }
 
 // Orçamento Balcão: item vendido dentro de um orçamento (snapshot do produto
