@@ -108,6 +108,13 @@ export interface ItemEsquadria {
   // larguras / 3 alturas (mesmo padrão já usado na Medição Final).
   foto_larguras_url?: string | null
   foto_alturas_url?: string | null
+  // Fase 8: a esquadria pode vir de um Produto já cadastrado (Cadastro >
+  // Produtos) em vez de digitada na mão — nome/medidas/preço puxam do
+  // produto na hora de selecionar. Snapshot do preço na hora (não muda mais
+  // se o cadastro do produto for alterado depois — mesmo padrão do ItemBalcao).
+  produto_id?: string | null
+  preco_unit?: number | null
+  preco_total?: number | null
 }
 
 export interface OrcamentoRapido {

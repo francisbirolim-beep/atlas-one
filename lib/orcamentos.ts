@@ -34,6 +34,12 @@ export interface ItemOrcamentoForm {
   modoAltura?: 'digitar' | 'foto'
   fotoLargura?: File | null
   fotoAltura?: File | null
+  // Fase 8: em vez de digitar tipo/medidas na mao, da pra escolher um
+  // produto ja cadastrado (Cadastro > Produtos) — preenche tipo, medidas e
+  // preco automaticamente.
+  modoOrigem?: 'manual' | 'produto'
+  produtoId?: string | null
+  precoUnit?: number | null
 }
 
 export interface DadosOrcamentoForm {
@@ -89,6 +95,13 @@ export async function criarOrcamentoNoServidor(
     const foto_url = itemFotoUrls[0] || null
     const foto_urls = itemFotoUrls.length ? itemFotoUrls : null
 
+    // Fase 8: se a esquadria veio de um produto cadastrado, guarda o snapshot
+    // do preco (nao muda mais se o cadastro do produto for alterado depois).
+    const produto_id = it.modoOrigem === 'produto' ? (it.produtoId || null) : null
+    const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
+    const quantidadeNum = parseInt(it.quantidade) || 1
+    const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
+
     if (tipoMedida === 'final') {
       const usaFotoLargura = it.modoLargura === 'foto'
       const usaFotoAltura = it.modoAltura === 'foto'
@@ -116,11 +129,14 @@ export async function criarOrcamentoNoServidor(
         altura_esquerda_mm: ae,
         foto_larguras_url,
         foto_alturas_url,
-        quantidade: parseInt(it.quantidade) || 1,
+        quantidade: quantidadeNum,
         foto_url,
         foto_urls,
         descricao: it.descricao || undefined,
         cor: it.cor || null,
+        produto_id,
+        preco_unit,
+        preco_total,
       })
     } else {
       itensSalvos.push({
@@ -131,11 +147,14 @@ export async function criarOrcamentoNoServidor(
         folhas: it.folhas || null,
         largura_mm: parseFloat(it.largura),
         altura_mm: parseFloat(it.altura),
-        quantidade: parseInt(it.quantidade) || 1,
+        quantidade: quantidadeNum,
         foto_url,
         foto_urls,
         descricao: it.descricao || undefined,
         cor: it.cor || null,
+        produto_id,
+        preco_unit,
+        preco_total,
       })
     }
   }
