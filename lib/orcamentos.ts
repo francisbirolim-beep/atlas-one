@@ -29,9 +29,7 @@ export interface ItemOrcamentoForm {
 }
 
 export interface DadosOrcamentoForm {
-  modo: 'formulario' | 'texto_livre'
   itens: ItemOrcamentoForm[]
-  textosLivres: string[]
   clienteNome: string
   clienteWhatsapp: string
   cidade: string
@@ -50,11 +48,14 @@ export interface DadosOrcamentoForm {
 // Faz de fato a gravacao no Supabase (cliente, upload de fotos, orcamento e
 // historico). Usada tanto pelo formulario (quando ha internet na hora) quanto
 // pelo sincronizador da fila offline (quando a internet volta depois).
+//
+// Obs: o modo "texto livre" (Orcamento Rapido antigo) foi removido na Fase 5 —
+// esse formulario so grava no modo "formulario" (Orcamento Detalhado) daqui pra frente.
 export async function criarOrcamentoNoServidor(
   dados: DadosOrcamentoForm
 ): Promise<{ ok: boolean; error?: string }> {
   const {
-    modo, itens, textosLivres, clienteNome, clienteWhatsapp, cidade, origem,
+    itens, clienteNome, clienteWhatsapp, cidade, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
@@ -73,50 +74,48 @@ export async function criarOrcamentoNoServidor(
     const url = await uploadArquivo(arquivo)
     if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
-  if (modo === 'formulario') {
-    for (const it of itens) {
-      const foto_url = it.foto ? await uploadFoto(it.foto) : null
-      if (tipoMedida === 'final') {
-        const lb = parseFloat(it.larguraBaixo.replace(',', '.'))
-        const lm = parseFloat(it.larguraMeio.replace(',', '.'))
-        const lc = parseFloat(it.larguraCima.replace(',', '.'))
-        const ad = parseFloat(it.alturaDireita.replace(',', '.'))
-        const am = parseFloat(it.alturaMeio.replace(',', '.'))
-        const ae = parseFloat(it.alturaEsquerda.replace(',', '.'))
-        itensSalvos.push({
-          id: it.id,
-          ambiente: it.ambiente?.trim() || null,
-          tipo_esquadria: it.tipo as TipoEsquadria,
-          tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-          folhas: it.folhas || null,
-          largura_mm: lm,
-          altura_mm: am,
-          largura_baixo_mm: lb,
-          largura_meio_mm: lm,
-          largura_cima_mm: lc,
-          altura_direita_mm: ad,
-          altura_meio_mm: am,
-          altura_esquerda_mm: ae,
-          quantidade: parseInt(it.quantidade) || 1,
-          foto_url,
-          descricao: it.descricao || undefined,
-          cor: it.cor || null,
-        })
-      } else {
-        itensSalvos.push({
-          id: it.id,
-          ambiente: it.ambiente?.trim() || null,
-          tipo_esquadria: it.tipo as TipoEsquadria,
-          tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-          folhas: it.folhas || null,
-          largura_mm: parseFloat(it.largura),
-          altura_mm: parseFloat(it.altura),
-          quantidade: parseInt(it.quantidade) || 1,
-          foto_url,
-          descricao: it.descricao || undefined,
-          cor: it.cor || null,
-        })
-      }
+  for (const it of itens) {
+    const foto_url = it.foto ? await uploadFoto(it.foto) : null
+    if (tipoMedida === 'final') {
+      const lb = parseFloat(it.larguraBaixo.replace(',', '.'))
+      const lm = parseFloat(it.larguraMeio.replace(',', '.'))
+      const lc = parseFloat(it.larguraCima.replace(',', '.'))
+      const ad = parseFloat(it.alturaDireita.replace(',', '.'))
+      const am = parseFloat(it.alturaMeio.replace(',', '.'))
+      const ae = parseFloat(it.alturaEsquerda.replace(',', '.'))
+      itensSalvos.push({
+        id: it.id,
+        ambiente: it.ambiente?.trim() || null,
+        tipo_esquadria: it.tipo as TipoEsquadria,
+        tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
+        folhas: it.folhas || null,
+        largura_mm: lm,
+        altura_mm: am,
+        largura_baixo_mm: lb,
+        largura_meio_mm: lm,
+        largura_cima_mm: lc,
+        altura_direita_mm: ad,
+        altura_meio_mm: am,
+        altura_esquerda_mm: ae,
+        quantidade: parseInt(it.quantidade) || 1,
+        foto_url,
+        descricao: it.descricao || undefined,
+        cor: it.cor || null,
+      })
+    } else {
+      itensSalvos.push({
+        id: it.id,
+        ambiente: it.ambiente?.trim() || null,
+        tipo_esquadria: it.tipo as TipoEsquadria,
+        tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
+        folhas: it.folhas || null,
+        largura_mm: parseFloat(it.largura),
+        altura_mm: parseFloat(it.altura),
+        quantidade: parseInt(it.quantidade) || 1,
+        foto_url,
+        descricao: it.descricao || undefined,
+        cor: it.cor || null,
+      })
     }
   }
 
@@ -141,11 +140,11 @@ export async function criarOrcamentoNoServidor(
     itens: itensSalvos,
     fotos_urls: fotosUrls,
     anexos: anexosSalvos,
-    tipo_medida: modo === 'formulario' ? tipoMedida : null,
-    descricao_livre: modo === 'texto_livre' ? textosLivres.filter(t => t.trim()).join('\n\n') : null,
+    tipo_medida: tipoMedida,
+    descricao_livre: null,
     valor_estimado: null,
     status: 'rascunho',
-    modo_entrada: modo,
+    modo_entrada: 'formulario',
     coluna_id: colunaId,
     coluna_atualizada_em: new Date().toISOString(),
     arquiteto_nome: arquitetoNome || null,
