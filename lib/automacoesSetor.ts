@@ -111,7 +111,7 @@ function montarDescricaoFinanceira(orc: OrcamentoParaAutomacao): string {
     })
   if (orc.valor_estimado) valorTotal += orc.valor_estimado
   linhas.push('')
-  linhas.push(`Valor total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
+  linhas.push(`Valor total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
   if (orc.condicoes) linhas.push(`Condições: ${orc.condicoes}`)
   return linhas.join('\n')
 }
