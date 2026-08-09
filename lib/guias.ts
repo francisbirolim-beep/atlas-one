@@ -12,7 +12,7 @@ export const GUIAS: Guia[] = [
   { href: '/', label: 'Início', icon: Home, grupo: 'Geral' },
   { href: '/tarefas', label: 'Tarefas', icon: ListTodo, grupo: 'Geral' },
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
-  { href: '/orcamento-rapido', label: 'Orçamento Rápido', icon: FileText, grupo: 'Comercial' },
+  { href: '/orcamento', label: 'Orçamento', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3, grupo: 'Comercial' },
   { href: '/historico', label: 'Histórico', icon: History, grupo: 'Comercial' },
   { href: '/setores', label: 'Setores', icon: LayoutGrid, grupo: 'Sistema' },
