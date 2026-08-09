@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft, FileText, ShoppingBag } from 'lucide-react'
 
 export default function NovoOrcamento() {
   return (
@@ -34,9 +34,18 @@ export default function NovoOrcamento() {
           </span>
         </Link>
 
-        {/* Orçamento Balcão (produtos com preço fixo: perfil, PU, acessórios,
-            portas/janelas padrão) entra aqui como uma segunda opção numa
-            próxima etapa, quando o catálogo de produtos estiver pronto pra uso. */}
+        <Link
+          href="/orcamento/balcao/novo"
+          className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-5 hover:border-brand-navy transition"
+        >
+          <span className="p-2.5 rounded-xl bg-brand-navyLight text-brand-navy flex-shrink-0">
+            <ShoppingBag size={20} />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-800">Orçamento Balcão</span>
+            <span className="block text-xs text-slate-500">Produtos do catálogo com preço fixo (perfil, PU, acessórios, portas/janelas padrão)</span>
+          </span>
+        </Link>
       </main>
     </div>
   )

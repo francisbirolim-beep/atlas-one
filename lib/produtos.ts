@@ -28,6 +28,7 @@ export async function criarProduto(dados: {
   largura_mm?: number | null
   altura_mm?: number | null
   descricao?: string | null
+  foto_url?: string | null
   criado_por_id?: string | null
   criado_por_nome?: string | null
 }) {
@@ -44,6 +45,7 @@ export async function atualizarProduto(
     largura_mm: number | null
     altura_mm: number | null
     descricao: string | null
+    foto_url: string | null
     ativo: boolean
   }>
 ) {

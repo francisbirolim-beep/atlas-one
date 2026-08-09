@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Image as ImageIcon } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -9,9 +9,10 @@ import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/k
 import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, atualizarSetor, criarSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
-import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
+import { lerCorAssistencia, salvarCorAssistencia, lerDadosEmpresa, salvarDadosEmpresa } from '@/lib/configGeral'
 import { listarProdutos, criarProduto, atualizarProduto, alternarAtivoProduto, excluirProduto, CATEGORIAS_PRODUTO, labelCategoriaProduto } from '@/lib/produtos'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, Produto, CategoriaProduto } from '@/lib/tipos'
+import { uploadFotoProduto } from '@/lib/upload'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, Produto, CategoriaProduto, DadosEmpresa } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -80,12 +81,27 @@ export default function Cadastro() {
   const [larguraProduto, setLarguraProduto] = useState('')
   const [alturaProduto, setAlturaProduto] = useState('')
   const [descricaoProduto, setDescricaoProduto] = useState('')
+  const [fotoProdutoNovo, setFotoProdutoNovo] = useState<File | null>(null)
   const [salvandoProduto, setSalvandoProduto] = useState(false)
   const [erroProduto, setErroProduto] = useState('')
   const [sucessoProduto, setSucessoProduto] = useState('')
   const [editandoProdutoId, setEditandoProdutoId] = useState<string | null>(null)
   const [produtoEditForm, setProdutoEditForm] = useState<Record<string, { nome: string; categoria: CategoriaProduto; preco: string; unidade: string; largura_mm: string; altura_mm: string; descricao: string }>>({})
+  const [fotoEditFile, setFotoEditFile] = useState<Record<string, File | null>>({})
   const [salvandoEdicaoProduto, setSalvandoEdicaoProduto] = useState<string | null>(null)
+
+  const [empresaNome, setEmpresaNome] = useState('')
+  const [empresaCnpj, setEmpresaCnpj] = useState('')
+  const [empresaIe, setEmpresaIe] = useState('')
+  const [empresaEndereco, setEmpresaEndereco] = useState('')
+  const [empresaCidadeUf, setEmpresaCidadeUf] = useState('')
+  const [empresaCep, setEmpresaCep] = useState('')
+  const [empresaTel, setEmpresaTel] = useState('')
+  const [empresaTel2, setEmpresaTel2] = useState('')
+  const [empresaEmail, setEmpresaEmail] = useState('')
+  const [empresaCondicoes, setEmpresaCondicoes] = useState('')
+  const [salvandoEmpresa, setSalvandoEmpresa] = useState(false)
+  const [msgEmpresa, setMsgEmpresa] = useState('')
 
   useEffect(() => {
     carregar()
@@ -98,7 +114,7 @@ export default function Cadastro() {
     setMeuId(me?.id || null)
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia, listaProdutos] = await Promise.all([
+      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia, listaProdutos, dadosEmpresa] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
         listarSetores(),
@@ -106,11 +122,24 @@ export default function Cadastro() {
         listarBackups(),
         lerCorAssistencia(),
         listarProdutos(),
+        lerDadosEmpresa(),
       ])
       setBackups(listaBackups)
       setCorAssistenciaEdit(corAssistencia)
       setSetores(listaSetores)
       setProdutos(listaProdutos)
+      if (dadosEmpresa) {
+        setEmpresaNome(dadosEmpresa.nome || '')
+        setEmpresaCnpj(dadosEmpresa.cnpj || '')
+        setEmpresaIe(dadosEmpresa.ie || '')
+        setEmpresaEndereco(dadosEmpresa.endereco || '')
+        setEmpresaCidadeUf(dadosEmpresa.cidadeUf || '')
+        setEmpresaCep(dadosEmpresa.cep || '')
+        setEmpresaTel(dadosEmpresa.tel || '')
+        setEmpresaTel2(dadosEmpresa.tel2 || '')
+        setEmpresaEmail(dadosEmpresa.email || '')
+        setEmpresaCondicoes(dadosEmpresa.condicoesPadrao || '')
+      }
       const setoresIniciais: Record<string, { nome: string; grupo: string; ordem: string; descricao: string }> = {}
       listaSetores.forEach(s => {
         setoresIniciais[s.id] = { nome: s.nome, grupo: s.grupo, ordem: String(s.ordem), descricao: s.descricao || '' }
@@ -424,6 +453,10 @@ export default function Cadastro() {
     }
     setSalvandoProduto(true)
     const me = await usuarioAtual()
+    let fotoUrl: string | null = null
+    if (fotoProdutoNovo) {
+      fotoUrl = await uploadFotoProduto(fotoProdutoNovo)
+    }
     const { error } = await criarProduto({
       nome: nomeProduto.trim(),
       categoria: categoriaProduto,
@@ -432,6 +465,7 @@ export default function Cadastro() {
       largura_mm: larguraProduto.trim() ? parseInt(larguraProduto) : null,
       altura_mm: alturaProduto.trim() ? parseInt(alturaProduto) : null,
       descricao: descricaoProduto.trim() || null,
+      foto_url: fotoUrl,
       criado_por_id: me?.id || null,
       criado_por_nome: me?.nome || null,
     })
@@ -448,6 +482,7 @@ export default function Cadastro() {
     setLarguraProduto('')
     setAlturaProduto('')
     setDescricaoProduto('')
+    setFotoProdutoNovo(null)
     setProdutos(await listarProdutos())
   }
 
@@ -485,6 +520,12 @@ export default function Cadastro() {
     const preco = parseFloat(dados.preco.replace(',', '.'))
     if (isNaN(preco) || preco < 0) return
     setSalvandoEdicaoProduto(id)
+    let fotoUrl: string | undefined
+    const arquivo = fotoEditFile[id]
+    if (arquivo) {
+      const url = await uploadFotoProduto(arquivo)
+      if (url) fotoUrl = url
+    }
     await atualizarProduto(id, {
       nome: dados.nome.trim(),
       categoria: dados.categoria,
@@ -493,8 +534,10 @@ export default function Cadastro() {
       largura_mm: dados.largura_mm.trim() ? parseInt(dados.largura_mm) : null,
       altura_mm: dados.altura_mm.trim() ? parseInt(dados.altura_mm) : null,
       descricao: dados.descricao.trim() || null,
+      ...(fotoUrl ? { foto_url: fotoUrl } : {}),
     })
     setProdutos(await listarProdutos())
+    setFotoEditFile(prev => ({ ...prev, [id]: null }))
     setSalvandoEdicaoProduto(null)
     setEditandoProdutoId(null)
   }
@@ -509,6 +552,26 @@ export default function Cadastro() {
     if (!confirmar) return
     await excluirProduto(p.id)
     setProdutos(await listarProdutos())
+  }
+
+  async function salvarDadosEmpresaAcao() {
+    setSalvandoEmpresa(true)
+    setMsgEmpresa('')
+    const dados: DadosEmpresa = {
+      nome: empresaNome.trim(),
+      cnpj: empresaCnpj.trim() || undefined,
+      ie: empresaIe.trim() || undefined,
+      endereco: empresaEndereco.trim() || undefined,
+      cidadeUf: empresaCidadeUf.trim() || undefined,
+      cep: empresaCep.trim() || undefined,
+      tel: empresaTel.trim() || undefined,
+      tel2: empresaTel2.trim() || undefined,
+      email: empresaEmail.trim() || undefined,
+      condicoesPadrao: empresaCondicoes.trim() || undefined,
+    }
+    const ok = await salvarDadosEmpresa(dados)
+    setSalvandoEmpresa(false)
+    setMsgEmpresa(ok ? 'Dados da empresa salvos com sucesso.' : 'Erro ao salvar os dados da empresa.')
   }
 
   if (carregando) {
@@ -536,7 +599,7 @@ export default function Cadastro() {
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Cadastro</h1>
-            <p className="text-sm text-slate-500">Usuários, produtos e colaboradores</p>
+            <p className="text-sm text-slate-500">Usuários, produtos, empresa e colaboradores</p>
           </div>
         </div>
       </header>
@@ -551,6 +614,11 @@ export default function Cadastro() {
 
           <button onClick={() => setAbaAtiva('produtos')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
             <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Package size={18} className="text-brand-navy" /> Produtos</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <button onClick={() => setAbaAtiva('empresa')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Building2 size={18} className="text-brand-navy" /> Dados da Empresa</span>
             <ChevronDown size={16} className="-rotate-90 text-slate-300" />
           </button>
 
@@ -892,6 +960,17 @@ export default function Cadastro() {
                     rows={2}
                     className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                   />
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+                      <ImageIcon size={13} /> Foto do produto — opcional
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => setFotoProdutoNovo(e.target.files?.[0] || null)}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 text-xs"
+                    />
+                  </div>
 
                   {erroProduto && <p className="text-red-500 text-sm">{erroProduto}</p>}
                   {sucessoProduto && <p className="text-brand-teal text-sm">{sucessoProduto}</p>}
@@ -927,15 +1006,25 @@ export default function Cadastro() {
               {produtos.map(p => (
                 <div key={p.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className={`font-medium ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.nome}</p>
-                      <p className="text-slate-400 text-xs">
-                        {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
-                        {(p.largura_mm || p.altura_mm) ? ` · ${p.largura_mm || '?'} x ${p.altura_mm || '?'} mm` : ''}
-                      </p>
-                      {p.descricao && <p className="text-slate-400 text-xs">{p.descricao}</p>}
+                    <div className="flex items-center gap-2 min-w-0">
+                      {p.foto_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.foto_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-slate-200" />
+                      ) : (
+                        <span className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <ImageIcon size={14} className="text-slate-300" />
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.nome}</p>
+                        <p className="text-slate-400 text-xs">
+                          {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
+                          {(p.largura_mm || p.altura_mm) ? ` · ${p.largura_mm || '?'} x ${p.altura_mm || '?'} mm` : ''}
+                        </p>
+                        {p.descricao && <p className="text-slate-400 text-xs">{p.descricao}</p>}
+                      </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${p.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
+                    <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${p.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
                       {p.ativo ? 'Ativo' : 'Inativo'}
                     </span>
                   </div>
@@ -997,6 +1086,17 @@ export default function Cadastro() {
                         rows={2}
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
                       />
+                      <div>
+                        <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+                          <ImageIcon size={13} /> Trocar foto — opcional
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={e => setFotoEditFile(prev => ({ ...prev, [p.id]: e.target.files?.[0] || null }))}
+                          className="w-full border border-slate-200 rounded-lg p-2 text-xs"
+                        />
+                      </div>
 
                       <div className="flex gap-2">
                         <button
@@ -1045,6 +1145,111 @@ export default function Cadastro() {
         </div>
       )}
 
+      {abaAtiva === 'empresa' && (
+        <div>
+        <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <ArrowLeft size={16} /> Cadastro
+        </button>
+        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+            <Building2 size={16} /> Dados da Empresa
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">Usados no cabeçalho do PDF do Orçamento Balcão.</p>
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={empresaNome}
+              onChange={e => setEmpresaNome(e.target.value)}
+              placeholder="Razão social / nome da empresa"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={empresaCnpj}
+                onChange={e => setEmpresaCnpj(e.target.value)}
+                placeholder="CNPJ"
+                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+              />
+              <input
+                type="text"
+                value={empresaIe}
+                onChange={e => setEmpresaIe(e.target.value)}
+                placeholder="Inscrição Estadual"
+                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+              />
+            </div>
+            <input
+              type="text"
+              value={empresaEndereco}
+              onChange={e => setEmpresaEndereco(e.target.value)}
+              placeholder="Endereço"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={empresaCidadeUf}
+                onChange={e => setEmpresaCidadeUf(e.target.value)}
+                placeholder="Cidade / UF"
+                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+              />
+              <input
+                type="text"
+                value={empresaCep}
+                onChange={e => setEmpresaCep(e.target.value)}
+                placeholder="CEP"
+                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+              />
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={empresaTel}
+                onChange={e => setEmpresaTel(e.target.value)}
+                placeholder="Telefone"
+                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+              />
+              <input
+                type="text"
+                value={empresaTel2}
+                onChange={e => setEmpresaTel2(e.target.value)}
+                placeholder="Telefone 2 — opcional"
+                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
+              />
+            </div>
+            <input
+              type="email"
+              value={empresaEmail}
+              onChange={e => setEmpresaEmail(e.target.value)}
+              placeholder="E-mail"
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+            />
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Condições padrão (forma de pagamento, prazo de entrega, validade...)</label>
+              <textarea
+                value={empresaCondicoes}
+                onChange={e => setEmpresaCondicoes(e.target.value)}
+                placeholder="Ex: 70% no fechamento e 30% na instalação. Orçamento válido por 15 dias. Prazo de entrega: 25 dias após a medição final."
+                rows={3}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+              />
+              <p className="text-xs text-slate-400 mt-1">Esse texto já vem preenchido em cada Orçamento Balcão novo, mas pode ser editado por orçamento.</p>
+            </div>
+
+            {msgEmpresa && <p className="text-brand-teal text-sm">{msgEmpresa}</p>}
+
+            <button
+              onClick={salvarDadosEmpresaAcao}
+              disabled={salvandoEmpresa}
+              className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+            >
+              {salvandoEmpresa ? 'Salvando...' : 'Salvar dados da empresa'}
+            </button>
+          </div>
+        </section>
+        </div>
+      )}
 
       </main>
     </div>
