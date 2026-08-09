@@ -17,15 +17,16 @@ function hrefDoSetor(s: Setor) {
   return s.ativo && s.rota ? s.rota : `/setor/${s.id}`
 }
 
-// Cada categoria do menu (Mais, Comercial, Tecnico, Sistema...) pode ser
-// recolhida ou expandida clicando no titulo. A preferencia fica salva no
-// navegador para lembrar o que a pessoa deixou aberto/fechado da ultima vez.
-const CHAVE_CATEGORIAS_FECHADAS = 'atlas_sidebar_categorias_fechadas'
+// Cada categoria do menu (Mais, Comercial, Tecnico, Sistema...) comeca
+// fechada. Clicar no titulo abre so aquela categoria; clicar de novo fecha.
+// A preferencia fica salva no navegador para lembrar o que a pessoa deixou
+// aberto da ultima vez.
+const CHAVE_CATEGORIAS_ABERTAS = 'atlas_sidebar_categorias_abertas'
 
-function lerCategoriasFechadas(): string[] {
+function lerCategoriasAbertas(): string[] {
   if (typeof window === 'undefined') return []
   try {
-    const bruto = window.localStorage.getItem(CHAVE_CATEGORIAS_FECHADAS)
+    const bruto = window.localStorage.getItem(CHAVE_CATEGORIAS_ABERTAS)
     if (!bruto) return []
     const lista = JSON.parse(bruto)
     return Array.isArray(lista) ? lista : []
@@ -34,9 +35,9 @@ function lerCategoriasFechadas(): string[] {
   }
 }
 
-function salvarCategoriasFechadas(lista: string[]) {
+function salvarCategoriasAbertas(lista: string[]) {
   try {
-    window.localStorage.setItem(CHAVE_CATEGORIAS_FECHADAS, JSON.stringify(lista))
+    window.localStorage.setItem(CHAVE_CATEGORIAS_ABERTAS, JSON.stringify(lista))
   } catch {}
 }
 
@@ -50,14 +51,14 @@ export default function Sidebar() {
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
   const [favoritosSetores, setFavoritosSetores] = useState<string[]>([])
-  const [categoriasFechadas, setCategoriasFechadas] = useState<string[]>([])
+  const [categoriasAbertas, setCategoriasAbertas] = useState<string[]>([])
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
     setOcultos(lerOcultos())
     setOrdem(lerOrdem())
     setFavoritosSetores(lerFavoritosSetores())
-    setCategoriasFechadas(lerCategoriasFechadas())
+    setCategoriasAbertas(lerCategoriasAbertas())
     function sync() {
       setOcultos(lerOcultos())
     }
@@ -138,13 +139,13 @@ export default function Sidebar() {
   }
 
   function categoriaAberta(nome: string) {
-    return !categoriasFechadas.includes(nome)
+    return categoriasAbertas.includes(nome)
   }
 
   function alternarCategoria(nome: string) {
-    setCategoriasFechadas((atual) => {
+    setCategoriasAbertas((atual) => {
       const novo = atual.includes(nome) ? atual.filter((c) => c !== nome) : [...atual, nome]
-      salvarCategoriasFechadas(novo)
+      salvarCategoriasAbertas(novo)
       return novo
     })
   }
