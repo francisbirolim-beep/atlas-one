@@ -142,6 +142,14 @@ export interface OrcamentoRapido {
   // de assistencia).
   eh_assistencia?: boolean
   assistencia_id?: string | null
+  // Orçamento Balcão: numero sequencial exibido no PDF, modo de entrada
+  // (formulario = Detalhado, texto_livre = Orçamento Rápido antigo,
+  // balcao = venda de produtos do catálogo), itens vendidos e condições
+  // (forma de pagamento / prazo de entrega) que entram no PDF.
+  numero?: number | null
+  modo_entrada?: 'formulario' | 'texto_livre' | 'balcao' | null
+  itens_balcao?: ItemBalcao[] | null
+  condicoes?: string | null
 }
 
 // CRM: tarefas, interações/negociações e metas comerciais
@@ -451,8 +459,7 @@ export interface MedicaoFinal {
 }
 
 // Catálogo de produtos (Cadastro > Produtos): itens com preço fixo, usados
-// mais pra frente no Orçamento Balcão (perfil, PU, acessórios, portas/janelas
-// padrão, etc.).
+// no Orçamento Balcão (perfil, PU, acessórios, portas/janelas padrão, etc.).
 export type CategoriaProduto = 'porta_janela_padrao' | 'perfil' | 'pu' | 'acessorio' | 'outro'
 
 export interface Produto {
@@ -466,7 +473,38 @@ export interface Produto {
   largura_mm?: number | null
   altura_mm?: number | null
   descricao?: string | null
+  foto_url?: string | null
   ativo: boolean
   criado_por_id?: string | null
   criado_por_nome?: string | null
+}
+
+// Orçamento Balcão: item vendido dentro de um orçamento (snapshot do produto
+// na hora da venda — nome/preço não mudam mais se o cadastro do produto for
+// alterado depois).
+export interface ItemBalcao {
+  produto_id: string
+  nome: string
+  categoria: CategoriaProduto
+  descricao?: string | null
+  foto_url?: string | null
+  unidade: string
+  quantidade: number
+  preco_unit: number
+  preco_total: number
+}
+
+// Dados da empresa (Configurações > Dados da Empresa): usados no cabeçalho
+// do PDF do Orçamento Balcão.
+export interface DadosEmpresa {
+  nome: string
+  cnpj?: string
+  ie?: string
+  endereco?: string
+  cidadeUf?: string
+  cep?: string
+  tel?: string
+  tel2?: string
+  email?: string
+  condicoesPadrao?: string
 }
