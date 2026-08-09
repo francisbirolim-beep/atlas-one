@@ -31,6 +31,17 @@ export async function criarProduto(dados: {
   foto_url?: string | null
   criado_por_id?: string | null
   criado_por_nome?: string | null
+  custo?: number | null
+  margem_percentual?: number | null
+  grupo?: string | null
+  peso_kg?: number | null
+  marca?: string | null
+  fornecedor_id?: string | null
+  ncm?: string | null
+  icms_percentual?: number | null
+  ipi_percentual?: number | null
+  pis_percentual?: number | null
+  cofins_percentual?: number | null
 }) {
   return supabase.from('produtos').insert({ ...dados, ativo: true })
 }
@@ -47,6 +58,17 @@ export async function atualizarProduto(
     descricao: string | null
     foto_url: string | null
     ativo: boolean
+    custo: number | null
+    margem_percentual: number | null
+    grupo: string | null
+    peso_kg: number | null
+    marca: string | null
+    fornecedor_id: string | null
+    ncm: string | null
+    icms_percentual: number | null
+    ipi_percentual: number | null
+    pis_percentual: number | null
+    cofins_percentual: number | null
   }>
 ) {
   return supabase.from('produtos').update({ ...dados, updated_at: new Date().toISOString() }).eq('id', id)
