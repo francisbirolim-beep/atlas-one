@@ -1,12 +1,86 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Search } from 'lucide-react'
+import { ArrowLeft, Search, X } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { OrcamentoRapido } from '@/lib/tipos'
 
-// Busca de orcamentos por nome do cliente, data, numero do orcamento e
-// cidade. A funcionalidade completa entra numa proxima etapa; por enquanto
-// esta tela so existe pra o link "Pesquisar orcamento" ja funcionar.
+const statusLabel: Record<string, string> = {
+  rascunho: 'Rascunho',
+  enviado: 'Enviado',
+  aprovado: 'Aprovado',
+  recusado: 'Recusado',
+  convertido: 'Convertido',
+}
+
+const statusCor: Record<string, string> = {
+  rascunho: 'bg-slate-100 text-slate-600',
+  enviado: 'bg-brand-navyLight text-brand-navyDark',
+  aprovado: 'bg-brand-tealLight text-brand-tealDark',
+  recusado: 'bg-red-50 text-red-600',
+  convertido: 'bg-green-50 text-green-700',
+}
+
+const modoEntradaLabel: Record<string, string> = {
+  formulario: 'Detalhado',
+  texto_livre: 'Rápido (texto livre)',
+  balcao: 'Balcão',
+}
+
 export default function PesquisarOrcamento() {
+  const [orcamentos, setOrcamentos] = useState<OrcamentoRapido[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [busca, setBusca] = useState('')
+  const [numero, setNumero] = useState('')
+  const [dataDe, setDataDe] = useState('')
+  const [dataAte, setDataAte] = useState('')
+  const [selecionado, setSelecionado] = useState<OrcamentoRapido | null>(null)
+
+  useEffect(() => {
+    carregar()
+  }, [])
+
+  async function carregar() {
+    setCarregando(true)
+    const { data } = await supabase
+      .from('orcamentos')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(300)
+    if (data) setOrcamentos(data as OrcamentoRapido[])
+    setCarregando(false)
+  }
+
+  const filtrados = orcamentos.filter(o => {
+    if (busca) {
+      const alvo = busca.toLowerCase()
+      const bate = o.cliente_nome.toLowerCase().includes(alvo) || (o.cidade || '').toLowerCase().includes(alvo)
+      if (!bate) return false
+    }
+    if (numero.trim()) {
+      if (String(o.numero || '') !== numero.trim()) return false
+    }
+    if (dataDe) {
+      if (new Date(o.created_at) < new Date(dataDe)) return false
+    }
+    if (dataAte) {
+      const fim = new Date(dataAte)
+      fim.setHours(23, 59, 59, 999)
+      if (new Date(o.created_at) > fim) return false
+    }
+    return true
+  })
+
+  function limparFiltros() {
+    setBusca('')
+    setNumero('')
+    setDataDe('')
+    setDataAte('')
+  }
+
+  const temFiltro = !!(busca || numero || dataDe || dataAte)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
@@ -18,22 +92,195 @@ export default function PesquisarOrcamento() {
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">Pesquisar orçamento</h1>
-            <p className="text-sm text-slate-500">Por nome do cliente, data, número do orçamento ou cidade</p>
+            <p className="text-sm text-slate-500">Por nome do cliente, cidade, número ou data</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-          <Search size={28} className="mx-auto text-slate-300 mb-3" />
-          <p className="text-sm text-slate-500">
-            A busca de orçamentos está em construção. Por enquanto, você pode encontrar orçamentos pelo{' '}
-            <Link href="/kanban" className="text-brand-navy hover:underline">Painel de Orçamentos</Link>
-            {' '}ou pela página do{' '}
-            <Link href="/clientes" className="text-brand-navy hover:underline">cliente</Link>.
-          </p>
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por nome do cliente ou cidade..."
+              className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm bg-white"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={numero}
+              onChange={e => setNumero(e.target.value.replace(/\D/g, ''))}
+              placeholder="Nº do orçamento"
+              className="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
+            />
+            <input
+              type="date"
+              value={dataDe}
+              onChange={e => setDataDe(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
+            />
+            <input
+              type="date"
+              value={dataAte}
+              onChange={e => setDataAte(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
+            />
+          </div>
+          {temFiltro && (
+            <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
+              <X size={12} /> Limpar filtros
+            </button>
+          )}
         </div>
+
+        {carregando ? (
+          <div className="text-center py-12 text-slate-400">Carregando...</div>
+        ) : filtrados.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            {orcamentos.length === 0 ? 'Nenhum orçamento encontrado ainda.' : 'Nenhum orçamento encontrado com esses filtros.'}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-slate-400">
+              {filtrados.length} orçamento{filtrados.length === 1 ? '' : 's'} encontrado{filtrados.length === 1 ? '' : 's'}
+            </p>
+            {filtrados.map(o => (
+              <button
+                key={o.id}
+                onClick={() => setSelecionado(o)}
+                className="w-full text-left bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm hover:border-brand-navy transition"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-800 truncate">
+                      {o.numero ? `#${o.numero} · ` : ''}{o.cliente_nome}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                      {o.cidade && <span>{o.cidade}</span>}
+                      <span>{new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
+                      <span>{modoEntradaLabel[o.modo_entrada || 'formulario'] || 'Detalhado'}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {o.valor_estimado != null && (
+                      <span className="text-sm font-semibold text-slate-700">
+                        R$ {o.valor_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    )}
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${statusCor[o.status] || 'bg-slate-100 text-slate-600'}`}>
+                      {statusLabel[o.status] || o.status}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </main>
+
+      {selecionado && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          onClick={() => setSelecionado(null)}
+        >
+          <div
+            className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-800">
+                  {selecionado.numero ? `Orçamento #${selecionado.numero}` : 'Orçamento'}
+                </h2>
+                <p className="text-xs text-slate-500">{new Date(selecionado.created_at).toLocaleString('pt-BR')}</p>
+              </div>
+              <button onClick={() => setSelecionado(null)} className="p-2 hover:bg-slate-100 rounded-lg transition">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Cliente</p>
+                <p className="text-sm text-slate-800 font-medium">{selecionado.cliente_nome}</p>
+                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                  {selecionado.cliente_whatsapp && <span>{selecionado.cliente_whatsapp}</span>}
+                  {selecionado.cidade && <span>{selecionado.cidade}</span>}
+                </div>
+                {selecionado.cliente_id && (
+                  <Link
+                    href={`/clientes/${selecionado.cliente_id}`}
+                    className="text-xs text-brand-navy hover:underline mt-1 inline-block"
+                  >
+                    Ver ficha do cliente
+                  </Link>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${statusCor[selecionado.status] || 'bg-slate-100 text-slate-600'}`}>
+                  {statusLabel[selecionado.status] || selecionado.status}
+                </span>
+                <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                  {modoEntradaLabel[selecionado.modo_entrada || 'formulario'] || 'Detalhado'}
+                </span>
+              </div>
+
+              {selecionado.modo_entrada === 'balcao' && selecionado.itens_balcao && selecionado.itens_balcao.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-2">Itens</p>
+                  <div className="space-y-1.5">
+                    {selecionado.itens_balcao.map((it, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm border-b border-slate-100 pb-1.5">
+                        <span className="text-slate-700">{it.nome} × {it.quantidade}</span>
+                        <span className="text-slate-600">
+                          R$ {it.preco_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {selecionado.condicoes && (
+                    <p className="text-xs text-slate-500 mt-2 whitespace-pre-wrap">{selecionado.condicoes}</p>
+                  )}
+                </div>
+              )}
+
+              {selecionado.modo_entrada !== 'balcao' && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Esquadria</p>
+                  <p className="text-sm text-slate-700">
+                    {selecionado.tipo_esquadria} · {selecionado.largura_mm}×{selecionado.altura_mm}mm × {selecionado.quantidade}
+                  </p>
+                  {selecionado.descricao_livre && (
+                    <p className="text-xs text-slate-500 mt-2 whitespace-pre-wrap">{selecionado.descricao_livre}</p>
+                  )}
+                </div>
+              )}
+
+              {selecionado.valor_estimado != null && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Valor estimado</p>
+                  <p className="text-base font-bold text-brand-navy">
+                    R$ {selecionado.valor_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              )}
+
+              <Link
+                href="/kanban"
+                className="block text-center py-2.5 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-brand-navyDark transition"
+              >
+                Ver no Painel de Orçamentos
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
