@@ -382,11 +382,12 @@ export async function criarCampoExtra(
     tipoEsquadria: string | null,
     chave: string,
     nome: string,
-    tipoValor: TipoValorCampoExtra
+    tipoValor: TipoValorCampoExtra,
+    obrigatorio: boolean
   ): Promise<TipologiaCampoExtra | null> {
     const { data, error } = await supabase
       .from('tipologia_campos_extras')
-      .insert({ tipo_esquadria: tipoEsquadria, chave, nome, tipo_valor: tipoValor })
+      .insert({ tipo_esquadria: tipoEsquadria, chave, nome, tipo_valor: tipoValor, obrigatorio })
       .select()
       .single()
 
@@ -400,11 +401,12 @@ export async function criarCampoExtra(
 export async function editarCampoExtra(
     id: string,
     nome: string,
-    tipoValor: TipoValorCampoExtra
+    tipoValor: TipoValorCampoExtra,
+    obrigatorio: boolean
   ): Promise<boolean> {
     const { error } = await supabase
       .from('tipologia_campos_extras')
-      .update({ nome, tipo_valor: tipoValor })
+      .update({ nome, tipo_valor: tipoValor, obrigatorio })
       .eq('id', id)
     return !error
 }

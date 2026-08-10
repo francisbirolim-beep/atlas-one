@@ -162,7 +162,7 @@ export default function MedicaoFinalQuadro() {
   async function adicionarCampoExtra() {
     if (!novaChave.trim() || !novoNomeCampo.trim()) return
     const chaveSlug = novaChave.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_')
-    const campo = await criarCampoExtra(novoTipo, chaveSlug, novoNomeCampo.trim(), novoTipoValor)
+    const campo = await criarCampoExtra(novoTipo, chaveSlug, novoNomeCampo.trim(), novoTipoValor, false)
     if (campo) {
       setCamposExtras(prev => [...prev, campo])
       setNovaChave('')
