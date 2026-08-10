@@ -359,7 +359,8 @@ export async function listarCamposExtras(tipoEsquadria: string): Promise<Tipolog
     const { data, error } = await supabase
       .from('tipologia_campos_extras')
       .select('*')
-      .eq('tipo_esquadria', tipoEsquadria)
+      .or(`tipo_esquadria.is.null,tipo_esquadria.eq.${tipoEsquadria}`)
+      .order('tipo_esquadria', { ascending: true, nullsFirst: true })
       .order('ordem', { ascending: true })
 
   if (error || !data) return []
@@ -370,7 +371,7 @@ export async function listarTodosCamposExtras(): Promise<TipologiaCampoExtra[]> 
     const { data, error } = await supabase
       .from('tipologia_campos_extras')
       .select('*')
-      .order('tipo_esquadria', { ascending: true })
+      .order('tipo_esquadria', { ascending: true, nullsFirst: true })
       .order('ordem', { ascending: true })
 
   if (error || !data) return []
@@ -378,7 +379,7 @@ export async function listarTodosCamposExtras(): Promise<TipologiaCampoExtra[]> 
 }
 
 export async function criarCampoExtra(
-    tipoEsquadria: string,
+    tipoEsquadria: string | null,
     chave: string,
     nome: string,
     tipoValor: TipoValorCampoExtra
@@ -394,6 +395,18 @@ export async function criarCampoExtra(
         return null
   }
     return data as TipologiaCampoExtra
+}
+
+export async function editarCampoExtra(
+    id: string,
+    nome: string,
+    tipoValor: TipoValorCampoExtra
+  ): Promise<boolean> {
+    const { error } = await supabase
+      .from('tipologia_campos_extras')
+      .update({ nome, tipo_valor: tipoValor })
+      .eq('id', id)
+    return !error
 }
 
 export async function excluirCampoExtra(id: string): Promise<boolean> {
