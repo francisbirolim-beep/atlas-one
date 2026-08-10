@@ -427,7 +427,7 @@ export type TipoValorCampoExtra = 'numero' | 'texto'
 
 export interface TipologiaCampoExtra {
       id: string
-      tipo_esquadria: string
+      tipo_esquadria: string | null
       chave: string
       nome: string
       tipo_valor: TipoValorCampoExtra
