@@ -431,6 +431,7 @@ export interface TipologiaCampoExtra {
       chave: string
       nome: string
       tipo_valor: TipoValorCampoExtra
+      obrigatorio: boolean
       ordem: number
       created_at?: string
 }
