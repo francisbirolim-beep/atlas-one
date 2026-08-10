@@ -246,6 +246,13 @@ export default function DetalheMedicaoFinal() {
 
   async function salvarMedicaoAtual() {
     if (!itemMedindo) return
+
+    const faltando = camposExtrasItem.filter(c => c.obrigatorio && (valoresExtras[c.chave] === undefined || valoresExtras[c.chave] === '' || valoresExtras[c.chave] === null))
+    if (faltando.length > 0) {
+      alert('Preencha os campos obrigatórios do checklist: ' + faltando.map(c => c.nome).join(', '))
+      return
+    }
+
     setSalvandoMedida(true)
 
     const dados: DadosMedidaItem = {
@@ -613,7 +620,7 @@ export default function DetalheMedicaoFinal() {
                 <label className="text-xs font-medium text-slate-600">Checklist da medição</label>
                 {camposExtrasItem.map(c => (
                   <div key={c.id}>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">{c.nome}</label>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">{c.nome}{c.obrigatorio && <span className="text-red-500"> *</span>}</label>
                     <input
                       type={c.tipo_valor === 'numero' ? 'number' : 'text'}
                       value={valoresExtras[c.chave] ?? ''}
