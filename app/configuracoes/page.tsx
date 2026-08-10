@@ -24,10 +24,8 @@ const nivelLabel: Record<NivelPermissao, string> = {
 
 export default function Configuracoes() {
   const [camposExtras, setCamposExtras] = useState<TipologiaCampoExtra[]>([])
-  const [novoCampoTipo, setNovoCampoTipo] = useState<TipoEsquadria | 'geral'>('geral')
-  const [novoCampoNome, setNovoCampoNome] = useState('')
-  const [novoCampoTipoValor, setNovoCampoTipoValor] = useState<TipoValorCampoExtra>('numero')
-  const [novoCampoObrigatorio, setNovoCampoObrigatorio] = useState(false)
+  const [grupoSelecionado, setGrupoSelecionado] = useState<TipoEsquadria | 'geral'>('geral')
+  const [formsPorGrupo, setFormsPorGrupo] = useState<Record<string, { nome: string; tipoValor: TipoValorCampoExtra; obrigatorio: boolean }>>({})
   const [salvandoCampoExtra, setSalvandoCampoExtra] = useState(false)
   const [editandoCampoId, setEditandoCampoId] = useState<string | null>(null)
   const [editNome, setEditNome] = useState('')
@@ -576,17 +574,26 @@ async function salvarSla(colunaId: string) {
   }
 
   async function adicionarCampoExtra() {
-    if (!novoCampoNome.trim()) return
+    const form = formsPorGrupo[grupoSelecionado] || { nome: '', tipoValor: 'numero' as TipoValorCampoExtra, obrigatorio: false }
+    if (!form.nome.trim()) return
     setSalvandoCampoExtra(true)
-    const tipoEsquadria = novoCampoTipo === 'geral' ? null : novoCampoTipo
-    const chave = slugChave(novoCampoNome) || ('campo_' + Date.now())
-    const campo = await criarCampoExtra(tipoEsquadria, chave, novoCampoNome.trim(), novoCampoTipoValor, novoCampoObrigatorio)
+    const tipoEsquadria = grupoSelecionado === 'geral' ? null : grupoSelecionado
+    const chave = slugChave(form.nome) || ('campo_' + Date.now())
+    const campo = await criarCampoExtra(tipoEsquadria, chave, form.nome.trim(), form.tipoValor, form.obrigatorio)
     if (campo) {
       setCamposExtras(prev => [...prev, campo])
-      setNovoCampoNome('')
-      setNovoCampoObrigatorio(false)
+      setFormsPorGrupo(prev => ({ ...prev, [grupoSelecionado]: { nome: '', tipoValor: form.tipoValor, obrigatorio: false } }))
+    } else {
+      alert('Não foi possível adicionar o campo. Tente novamente.')
     }
     setSalvandoCampoExtra(false)
+  }
+
+  function atualizarFormGrupo(grupo: string, patch: Partial<{ nome: string; tipoValor: TipoValorCampoExtra; obrigatorio: boolean }>) {
+    setFormsPorGrupo(prev => ({
+      ...prev,
+      [grupo]: { nome: '', tipoValor: 'numero' as TipoValorCampoExtra, obrigatorio: false, ...prev[grupo], ...patch }
+    }))
   }
 
   function iniciarEdicaoCampoExtra(c: TipologiaCampoExtra) {
@@ -602,6 +609,8 @@ async function salvarSla(colunaId: string) {
     if (ok) {
       setCamposExtras(prev => prev.map(c => c.id === id ? { ...c, nome: editNome.trim(), tipo_valor: editTipoValor, obrigatorio: editObrigatorio } : c))
       setEditandoCampoId(null)
+    } else {
+      alert('Não foi possível salvar a edição. Tente novamente.')
     }
   }
 
@@ -609,6 +618,7 @@ async function salvarSla(colunaId: string) {
     if (!window.confirm('Remover este campo do checklist?')) return
     const ok = await excluirCampoExtra(id)
     if (ok) setCamposExtras(prev => prev.filter(c => c.id !== id))
+    else alert('Não foi possível remover o campo. Tente novamente.')
   }
 
   const tiposEsquadriaOpcoes: { value: TipoEsquadria; label: string }[] = [
@@ -1368,53 +1378,78 @@ async function salvarSla(colunaId: string) {
             </p>
 
             {camposExtras.length === 0 && (
-              <p className="text-xs text-slate-400 mb-4">Nenhum campo cadastrado ainda. Adicione abaixo.</p>
+              <p className="text-xs text-slate-400 mb-4">Nenhum campo cadastrado ainda. Escolha uma tipologia abaixo (ou deixe em "Geral") e adicione o primeiro campo.</p>
             )}
 
-            <div className="space-y-4 mb-4">
-              {camposExtras.filter(c => !c.tipo_esquadria).length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-slate-700 mb-1">Geral (todas as tipologias)</p>
-                  <div className="space-y-1">
-                    {camposExtras.filter(c => !c.tipo_esquadria).map(renderCampoExtra)}
-                  </div>
-                </div>
-              )}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => setGrupoSelecionado('geral')}
+                className={`text-xs px-3 py-1.5 rounded-full border transition ${grupoSelecionado === 'geral' ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-slate-600 border-slate-300 hover:border-brand-navy'}`}
+              >
+                Geral{camposExtras.filter(c => !c.tipo_esquadria).length > 0 ? ` (${camposExtras.filter(c => !c.tipo_esquadria).length})` : ''}
+              </button>
               {tiposEsquadriaOpcoes.map(t => {
-                const doTipo = camposExtras.filter(c => c.tipo_esquadria === t.value)
-                if (doTipo.length === 0) return null
+                const n = camposExtras.filter(c => c.tipo_esquadria === t.value).length
                 return (
-                  <div key={t.value}>
-                    <p className="text-sm font-medium text-slate-700 mb-1">{t.label}</p>
-                    <div className="space-y-1">
-                      {doTipo.map(renderCampoExtra)}
-                    </div>
-                  </div>
+                  <button
+                    key={t.value}
+                    onClick={() => setGrupoSelecionado(t.value)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${grupoSelecionado === t.value ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-slate-600 border-slate-300 hover:border-brand-navy'}`}
+                  >
+                    {t.label}{n > 0 ? ` (${n})` : ''}
+                  </button>
                 )
               })}
             </div>
 
-            <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-              <p className="text-xs font-medium text-slate-600">Adicionar campo ao checklist</p>
-              <select value={novoCampoTipo} onChange={e => setNovoCampoTipo(e.target.value as TipoEsquadria | 'geral')} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                <option value="geral">Geral (todas as tipologias)</option>
-                {tiposEsquadriaOpcoes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <input value={novoCampoNome} onChange={e => setNovoCampoNome(e.target.value)} placeholder="O que precisa medir/observar? (ex: Altura do peitoril)" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-              <select value={novoCampoTipoValor} onChange={e => setNovoCampoTipoValor(e.target.value as TipoValorCampoExtra)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                <option value="numero">Número</option>
-                <option value="texto">Texto</option>
-              </select>
-              <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                <input type="checkbox" checked={novoCampoObrigatorio} onChange={e => setNovoCampoObrigatorio(e.target.checked)} /> Campo obrigatório na obra
-              </label>
-              <button onClick={adicionarCampoExtra} disabled={!novoCampoNome.trim() || salvandoCampoExtra} className="flex items-center gap-1.5 text-sm text-white bg-brand-navy hover:bg-brand-navy/90 disabled:opacity-60 rounded-lg px-4 py-2">
-                <Plus size={14} /> {salvandoCampoExtra ? 'Adicionando...' : 'Adicionar campo'}
-              </button>
+            <div className="bg-slate-50 rounded-xl p-4 mb-2">
+              <p className="text-sm font-medium text-slate-700 mb-2">
+                {grupoSelecionado === 'geral' ? 'Geral (todas as tipologias)' : tiposEsquadriaOpcoes.find(t => t.value === grupoSelecionado)?.label}
+              </p>
+
+              {(grupoSelecionado === 'geral' ? camposExtras.filter(c => !c.tipo_esquadria) : camposExtras.filter(c => c.tipo_esquadria === grupoSelecionado)).length === 0 && (
+                <p className="text-xs text-slate-400 mb-3">Nenhum campo cadastrado ainda {grupoSelecionado === 'geral' ? 'no geral' : 'nessa tipologia'}. Adicione abaixo.</p>
+              )}
+
+              <div className="space-y-1 mb-3">
+                {(grupoSelecionado === 'geral' ? camposExtras.filter(c => !c.tipo_esquadria) : camposExtras.filter(c => c.tipo_esquadria === grupoSelecionado)).map(renderCampoExtra)}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                <input
+                  value={(formsPorGrupo[grupoSelecionado] || { nome: '' }).nome}
+                  onChange={e => atualizarFormGrupo(grupoSelecionado, { nome: e.target.value })}
+                  placeholder="O que precisa medir/observar? (ex: Largura baixo)"
+                  className="flex-1 min-w-[180px] border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                />
+                <select
+                  value={(formsPorGrupo[grupoSelecionado] || { tipoValor: 'numero' }).tipoValor}
+                  onChange={e => atualizarFormGrupo(grupoSelecionado, { tipoValor: e.target.value as TipoValorCampoExtra })}
+                  className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                >
+                  <option value="numero">Número</option>
+                  <option value="texto">Texto</option>
+                </select>
+                <label className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={(formsPorGrupo[grupoSelecionado] || { obrigatorio: false }).obrigatorio}
+                    onChange={e => atualizarFormGrupo(grupoSelecionado, { obrigatorio: e.target.checked })}
+                  /> Obrigatório
+                </label>
+                <button
+                  onClick={adicionarCampoExtra}
+                  disabled={!(formsPorGrupo[grupoSelecionado] || { nome: '' }).nome.trim() || salvandoCampoExtra}
+                  className="flex items-center gap-1 text-xs text-white bg-brand-navy hover:bg-brand-navy/90 disabled:opacity-60 rounded-lg px-3 py-1.5"
+                >
+                  <Plus size={12} /> {salvandoCampoExtra ? 'Adicionando...' : 'Adicionar campo'}
+                </button>
+              </div>
             </div>
           </section>
         </div>
       )}
+
 
       {abaAtiva === 'agentes-ia' && (
         <div>
