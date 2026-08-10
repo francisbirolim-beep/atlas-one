@@ -40,7 +40,7 @@ function labelItemTipo(item: MedicaoItem) {
   return labelTipo(item.tipo_esquadria)
 }
 
-function DesenhoEsquadria({ tipo }: { tipo: TipoEsquadria }) {
+function DesenhoEsquadria({ tipo }: { tipo: string }) {
   const box = (children: any) => (
     <svg viewBox="0 0 36 36" width="36" height="36" className="shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5">
       <rect x="2" y="2" width="32" height="32" rx="2" />
