@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot, Zap } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot, Zap, ListChecks, Pencil, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -13,7 +13,8 @@ import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agrupa
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia, AutomacaoSetor } from '@/lib/tipos'
+import { listarTodosCamposExtras, criarCampoExtra, editarCampoExtra, excluirCampoExtra } from '@/lib/medicaoFinal'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia, AutomacaoSetor, TipologiaCampoExtra, TipoValorCampoExtra, TipoEsquadria } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -22,6 +23,14 @@ const nivelLabel: Record<NivelPermissao, string> = {
 }
 
 export default function Configuracoes() {
+  const [camposExtras, setCamposExtras] = useState<TipologiaCampoExtra[]>([])
+  const [novoCampoTipo, setNovoCampoTipo] = useState<TipoEsquadria | 'geral'>('geral')
+  const [novoCampoNome, setNovoCampoNome] = useState('')
+  const [novoCampoTipoValor, setNovoCampoTipoValor] = useState<TipoValorCampoExtra>('numero')
+  const [salvandoCampoExtra, setSalvandoCampoExtra] = useState(false)
+  const [editandoCampoId, setEditandoCampoId] = useState<string | null>(null)
+  const [editNome, setEditNome] = useState('')
+  const [editTipoValor, setEditTipoValor] = useState<TipoValorCampoExtra>('numero')
   const [automacoesSetor, setAutomacoesSetor] = useState<AutomacaoSetor[]>([])
   const [novaAutomSetorColuna, setNovaAutomSetorColuna] = useState('')
   const [novaAutomSetorSetor, setNovaAutomSetorSetor] = useState('')
@@ -112,6 +121,10 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
 
   useEffect(() => {
     if (abaAtiva === 'automacoes-setor') listarAutomacoesSetor().then(setAutomacoesSetor)
+  }, [abaAtiva])
+
+  useEffect(() => {
+    if (abaAtiva === 'checklist-medicao') listarTodosCamposExtras().then(setCamposExtras)
   }, [abaAtiva])
 
   async function carregarAgentesIA() {
@@ -550,6 +563,88 @@ async function salvarSla(colunaId: string) {
     }
   }
 
+  function slugChave(nome: string): string {
+    return nome
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+  }
+
+  async function adicionarCampoExtra() {
+    if (!novoCampoNome.trim()) return
+    setSalvandoCampoExtra(true)
+    const tipoEsquadria = novoCampoTipo === 'geral' ? null : novoCampoTipo
+    const chave = slugChave(novoCampoNome) || ('campo_' + Date.now())
+    const campo = await criarCampoExtra(tipoEsquadria, chave, novoCampoNome.trim(), novoCampoTipoValor)
+    if (campo) {
+      setCamposExtras(prev => [...prev, campo])
+      setNovoCampoNome('')
+    }
+    setSalvandoCampoExtra(false)
+  }
+
+  function iniciarEdicaoCampoExtra(c: TipologiaCampoExtra) {
+    setEditandoCampoId(c.id)
+    setEditNome(c.nome)
+    setEditTipoValor(c.tipo_valor)
+  }
+
+  async function salvarEdicaoCampoExtra(id: string) {
+    if (!editNome.trim()) return
+    const ok = await editarCampoExtra(id, editNome.trim(), editTipoValor)
+    if (ok) {
+      setCamposExtras(prev => prev.map(c => c.id === id ? { ...c, nome: editNome.trim(), tipo_valor: editTipoValor } : c))
+      setEditandoCampoId(null)
+    }
+  }
+
+  async function removerCampoExtraChecklist(id: string) {
+    if (!window.confirm('Remover este campo do checklist?')) return
+    const ok = await excluirCampoExtra(id)
+    if (ok) setCamposExtras(prev => prev.filter(c => c.id !== id))
+  }
+
+  const tiposEsquadriaOpcoes: { value: TipoEsquadria; label: string }[] = [
+    { value: 'porta_correr', label: 'Porta de Correr' },
+    { value: 'porta_pivotante', label: 'Porta Pivotante' },
+    { value: 'porta_abrir', label: 'Porta de Abrir' },
+    { value: 'janela_correr', label: 'Janela de Correr' },
+    { value: 'janela_maximiar', label: 'Janela Maxim-Ar' },
+    { value: 'janela_basculante', label: 'Janela Basculante' },
+    { value: 'vitro', label: 'Vitrô' },
+    { value: 'fachada', label: 'Fachada' },
+    { value: 'box', label: 'Box' },
+    { value: 'outro', label: 'Outro' },
+  ]
+
+  function renderCampoExtra(c: TipologiaCampoExtra) {
+    if (editandoCampoId === c.id) {
+      return (
+        <div key={c.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5">
+          <input value={editNome} onChange={e => setEditNome(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-xs" />
+          <select value={editTipoValor} onChange={e => setEditTipoValor(e.target.value as TipoValorCampoExtra)} className="border border-slate-300 rounded-lg px-2 py-1 text-xs">
+            <option value="numero">Número</option>
+            <option value="texto">Texto</option>
+          </select>
+          <button onClick={() => salvarEdicaoCampoExtra(c.id)} className="text-brand-navy hover:underline text-xs">Salvar</button>
+          <button onClick={() => setEditandoCampoId(null)} className="text-slate-400 hover:underline text-xs">Cancelar</button>
+        </div>
+      )
+    }
+    return (
+      <div key={c.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5">
+        <span className="text-sm text-slate-600">{c.nome} <span className="text-slate-400">({c.tipo_valor === 'numero' ? 'número' : 'texto'})</span></span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => iniciarEdicaoCampoExtra(c)} className="text-slate-300 hover:text-brand-navy"><Pencil size={13} /></button>
+          <button onClick={() => removerCampoExtraChecklist(c.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
@@ -598,6 +693,11 @@ async function salvarSla(colunaId: string) {
 
           <button onClick={() => setAbaAtiva('agentes-ia')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
             <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Bot size={18} className="text-brand-navy" /> Agentes de IA (Atlas AI Core)</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <button onClick={() => setAbaAtiva('checklist-medicao')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><ListChecks size={18} className="text-brand-navy" /> Checklist de Medição Final</span>
             <ChevronDown size={16} className="-rotate-90 text-slate-300" />
           </button>
         </div>
@@ -1243,6 +1343,65 @@ async function salvarSla(colunaId: string) {
             <button onClick={criarAutomacaoSetorNova} disabled={salvandoAutomSetor} className="mt-3 px-4 py-2 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50">
               {salvandoAutomSetor ? 'Criando...' : '+ Criar automação'}
             </button>
+          </section>
+        </div>
+      )}
+
+      {abaAtiva === 'checklist-medicao' && (
+        <div>
+          <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+            <ArrowLeft size={16} /> Configurações
+          </button>
+          <section className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+              <ListChecks size={16} /> Checklist de Medição Final
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Defina o que precisa ser coletado na obra durante a medição final. Campos "Geral" valem para qualquer tipologia; você também pode personalizar campos só para uma tipologia específica (ex: porta de giro, janela, porta integrada com motor).
+            </p>
+
+            {camposExtras.length === 0 && (
+              <p className="text-xs text-slate-400 mb-4">Nenhum campo cadastrado ainda. Adicione abaixo.</p>
+            )}
+
+            <div className="space-y-4 mb-4">
+              {camposExtras.filter(c => !c.tipo_esquadria).length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-slate-700 mb-1">Geral (todas as tipologias)</p>
+                  <div className="space-y-1">
+                    {camposExtras.filter(c => !c.tipo_esquadria).map(renderCampoExtra)}
+                  </div>
+                </div>
+              )}
+              {tiposEsquadriaOpcoes.map(t => {
+                const doTipo = camposExtras.filter(c => c.tipo_esquadria === t.value)
+                if (doTipo.length === 0) return null
+                return (
+                  <div key={t.value}>
+                    <p className="text-sm font-medium text-slate-700 mb-1">{t.label}</p>
+                    <div className="space-y-1">
+                      {doTipo.map(renderCampoExtra)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+              <p className="text-xs font-medium text-slate-600">Adicionar campo ao checklist</p>
+              <select value={novoCampoTipo} onChange={e => setNovoCampoTipo(e.target.value as TipoEsquadria | 'geral')} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                <option value="geral">Geral (todas as tipologias)</option>
+                {tiposEsquadriaOpcoes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <input value={novoCampoNome} onChange={e => setNovoCampoNome(e.target.value)} placeholder="O que precisa medir/observar? (ex: Altura do peitoril)" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <select value={novoCampoTipoValor} onChange={e => setNovoCampoTipoValor(e.target.value as TipoValorCampoExtra)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                <option value="numero">Número</option>
+                <option value="texto">Texto</option>
+              </select>
+              <button onClick={adicionarCampoExtra} disabled={!novoCampoNome.trim() || salvandoCampoExtra} className="flex items-center gap-1.5 text-sm text-white bg-brand-navy hover:bg-brand-navy/90 disabled:opacity-60 rounded-lg px-4 py-2">
+                <Plus size={14} /> {salvandoCampoExtra ? 'Adicionando...' : 'Adicionar campo'}
+              </button>
+            </div>
           </section>
         </div>
       )}

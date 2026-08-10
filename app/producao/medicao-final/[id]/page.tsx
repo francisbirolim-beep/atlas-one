@@ -610,7 +610,7 @@ export default function DetalheMedicaoFinal() {
             {/* Campos extras da tipologia */}
             {camposExtrasItem.length > 0 && (
               <div className="space-y-2 border-t border-slate-100 pt-3">
-                <label className="text-xs font-medium text-slate-600">Campos específicos dessa tipologia</label>
+                <label className="text-xs font-medium text-slate-600">Checklist da medição</label>
                 {camposExtrasItem.map(c => (
                   <div key={c.id}>
                     <label className="block text-[10px] text-slate-400 mb-0.5">{c.nome}</label>
