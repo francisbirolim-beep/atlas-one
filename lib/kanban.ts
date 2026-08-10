@@ -70,7 +70,7 @@ const { error } = await supabase.from('kanban_colunas').delete().eq('id', id)
   return !error
 }
 
-export async function moverCard(orcamentoId: string, colunaId: string): Promise<boolean> {
+export async function moverCard(orcamentoId: string, colunaId: string, decisoesAutomacaoSetor?: Record<string, 'substituir' | 'duplicar'>): Promise<boolean> {
   const { data, error } = await supabase
   .from('orcamentos')
   .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
@@ -83,7 +83,7 @@ if (!error) {
     cliente_nome: data?.cliente_nome || null,
     criado_por_id: data?.criado_por_id || null,
   }).catch(() => {})
-  executarAutomacoesSetor(colunaId, orcamentoId).catch(() => {})
+  executarAutomacoesSetor(colunaId, orcamentoId, decisoesAutomacaoSetor).catch(() => {})
 }
 
 return !error
