@@ -1,18 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunas, atualizarSlaColuna, atualizarCoresColuna } from '@/lib/kanban'
 import { listarAutomacoesOrcamento, criarAutomacaoOrcamento, alternarAtivoAutomacao, excluirAutomacaoOrcamento } from '@/lib/automacoes'
 import { listarAutomacoesAssistencia, criarAutomacaoAssistencia, alternarAtivoAutomacaoAssistencia, excluirAutomacaoAssistencia } from '@/lib/automacoesAssistencia'
+import { listarAutomacoesSetor, criarAutomacaoSetor, alternarAtivoAutomacaoSetor, excluirAutomacaoSetor } from '@/lib/automacoesSetor'
 import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agruparSetores, GRUPOS_ORDEM, listarGruposComItens, atualizarSetor, criarSetor, excluirSetor } from '@/lib/setores'
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia } from '@/lib/tipos'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia, AutomacaoSetor } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -21,6 +22,12 @@ const nivelLabel: Record<NivelPermissao, string> = {
 }
 
 export default function Configuracoes() {
+  const [automacoesSetor, setAutomacoesSetor] = useState<AutomacaoSetor[]>([])
+  const [novaAutomSetorColuna, setNovaAutomSetorColuna] = useState('')
+  const [novaAutomSetorSetor, setNovaAutomSetorSetor] = useState('')
+  const [novaAutomSetorNome, setNovaAutomSetorNome] = useState('')
+  const [salvandoAutomSetor, setSalvandoAutomSetor] = useState(false)
+  const [erroAutomSetor, setErroAutomSetor] = useState('')
   const [abaAtiva, setAbaAtiva] = useState<string | null>(null)
   const [setorAberto, setSetorAberto] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
@@ -101,6 +108,10 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
 
   useEffect(() => {
     if (abaAtiva === 'agentes-ia') carregarAgentesIA()
+  }, [abaAtiva])
+
+  useEffect(() => {
+    if (abaAtiva === 'automacoes-setor') listarAutomacoesSetor().then(setAutomacoesSetor)
   }, [abaAtiva])
 
   async function carregarAgentesIA() {
@@ -510,6 +521,35 @@ async function salvarSla(colunaId: string) {
     }
   }
 
+  async function criarAutomacaoSetorNova() {
+    setErroAutomSetor('')
+    if (!novaAutomSetorColuna || !novaAutomSetorSetor) {
+      setErroAutomSetor('Escolha a coluna e o setor de destino')
+      return
+    }
+    setSalvandoAutomSetor(true)
+    await criarAutomacaoSetor(novaAutomSetorColuna, novaAutomSetorSetor, novaAutomSetorNome || undefined)
+    setAutomacoesSetor(await listarAutomacoesSetor())
+    setSalvandoAutomSetor(false)
+    setNovaAutomSetorColuna('')
+    setNovaAutomSetorSetor('')
+    setNovaAutomSetorNome('')
+  }
+
+  async function alternarAutomacaoSetorAtiva(id: string, ativo: boolean) {
+    const ok = await alternarAtivoAutomacaoSetor(id, ativo)
+    if (ok) {
+      setAutomacoesSetor(prev => prev.map(a => (a.id === id ? { ...a, ativo } : a)))
+    }
+  }
+
+  async function removerAutomacaoSetor(id: string) {
+    const ok = await excluirAutomacaoSetor(id)
+    if (ok) {
+      setAutomacoesSetor(prev => prev.filter(a => a.id !== id))
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
@@ -543,6 +583,11 @@ async function salvarSla(colunaId: string) {
 
           <button onClick={() => setAbaAtiva('setores')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
             <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Building2 size={18} className="text-brand-navy" /> Setores</span>
+            <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+          </button>
+
+          <button onClick={() => setAbaAtiva('automacoes-setor')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+            <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Zap size={18} className="text-brand-navy" /> Automações entre setores</span>
             <ChevronDown size={16} className="-rotate-90 text-slate-300" />
           </button>
 
@@ -1145,6 +1190,60 @@ async function salvarSla(colunaId: string) {
             })}
           </div>
         </section>
+        </div>
+      )}
+
+      {abaAtiva === 'automacoes-setor' && (
+        <div>
+          <button onClick={() => setAbaAtiva(null)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+            <ArrowLeft size={16} /> Configurações
+          </button>
+          <section className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+              <Zap size={16} /> Automações entre setores (Kanban Comercial)
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Quando um card entrar na coluna escolhida do Kanban Comercial, cria automaticamente um card no quadro do setor escolhido.
+            </p>
+            {automacoesSetor.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {automacoesSetor.map(a => {
+                  const coluna = colunas.find(c => c.id === a.coluna_id)
+                  const setorDestino = setores.find(s => s.id === a.setor_id)
+                  return (
+                    <div key={a.id} className="flex items-center justify-between gap-2 border border-slate-100 rounded-lg px-3 py-2">
+                      <span className="text-xs text-slate-600">{coluna?.nome || '?'} → {setorDestino?.nome || '?'}</span>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => alternarAutomacaoSetorAtiva(a.id, !a.ativo)} className={`text-xs px-2 py-1 rounded-full ${a.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-400'}`}>
+                          {a.ativo ? 'Ativo' : 'Inativo'}
+                        </button>
+                        <button onClick={() => removerAutomacaoSetor(a.id)} className="text-xs text-red-500 hover:underline">Excluir</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <div className="grid sm:grid-cols-3 gap-3">
+              <select value={novaAutomSetorColuna} onChange={e => setNovaAutomSetorColuna(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm">
+                <option value="">Coluna do Kanban Comercial</option>
+                {colunas.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+              <select value={novaAutomSetorSetor} onChange={e => setNovaAutomSetorSetor(e.target.value)} className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm">
+                <option value="">Setor de destino</option>
+                {setores.map(s => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
+                ))}
+              </select>
+              <input type="text" value={novaAutomSetorNome} onChange={e => setNovaAutomSetorNome(e.target.value)} placeholder="Nome (opcional)" className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm" />
+            </div>
+            {erroAutomSetor && <p className="text-red-500 text-xs mt-2">{erroAutomSetor}</p>}
+            <button onClick={criarAutomacaoSetorNova} disabled={salvandoAutomSetor} className="mt-3 px-4 py-2 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50">
+              {salvandoAutomSetor ? 'Criando...' : '+ Criar automação'}
+            </button>
+          </section>
         </div>
       )}
 
