@@ -590,10 +590,10 @@ async function salvarSla(colunaId: string) {
   }
 
   function atualizarFormGrupo(grupo: string, patch: Partial<{ nome: string; tipoValor: TipoValorCampoExtra; obrigatorio: boolean }>) {
-    setFormsPorGrupo(prev => ({
-      ...prev,
-      [grupo]: { nome: '', tipoValor: 'numero' as TipoValorCampoExtra, obrigatorio: false, ...prev[grupo], ...patch }
-    }))
+    setFormsPorGrupo(prev => {
+      var atual = prev[grupo] || { nome: '', tipoValor: 'numero' as TipoValorCampoExtra, obrigatorio: false }
+      return { ...prev, [grupo]: { ...atual, ...patch } }
+    })
   }
 
   function iniciarEdicaoCampoExtra(c: TipologiaCampoExtra) {
