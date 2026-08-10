@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo } from '@/lib/tipos'
 import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard, excluirOrcamento } from '@/lib/kanban'
 import { executarAutomacoesColuna } from '@/lib/automacoes'
+import { verificarDuplicatasAutomacaoSetor } from '@/lib/automacoesSetor'
 import { usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
@@ -292,7 +293,16 @@ const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]
 const colunaNova = colunas.find(c => c.id === colunaId)
 const agoraIso = new Date().toISOString()
 setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: agoraIso } : c)))
-await moverCard(cardId, colunaId)
+let decisoesAutomacao: Record<string, 'substituir' | 'duplicar'> | undefined
+  const duplicatasSetor = await verificarDuplicatasAutomacaoSetor(colunaId, cardId)
+  if (duplicatasSetor.length > 0) {
+    decisoesAutomacao = {}
+    for (const d of duplicatasSetor) {
+      const substituir = window.confirm(`Já existe um card deste orçamento no setor "${d.setorNome}".\n\nOK = substituir o card existente\nCancelar = criar um novo card`)
+      decisoesAutomacao[d.setorId] = substituir ? 'substituir' : 'duplicar'
+    }
+  }
+  await moverCard(cardId, colunaId, decisoesAutomacao)
 if (colunaAnterior?.id !== colunaNova?.id) {
 registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || '—'} → ${colunaNova?.nome || '—'}`)
 }
