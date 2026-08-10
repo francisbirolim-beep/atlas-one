@@ -40,6 +40,24 @@ function labelItemTipo(item: MedicaoItem) {
   return labelTipo(item.tipo_esquadria)
 }
 
+function DesenhoEsquadria({ tipo }: { tipo: TipoEsquadria }) {
+  const box = (children: any) => (
+    <svg viewBox="0 0 36 36" width="36" height="36" className="shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="2" width="32" height="32" rx="2" />
+      {children}
+    </svg>
+  )
+  if (tipo === 'janela_maximiar') return box(<path d="M5 10 L18 20 L31 10" />)
+  if (tipo === 'janela_basculante') return box(<path d="M5 26 L18 16 L31 26" />)
+  if (tipo === 'janela_correr') return box(<><line x1="18" y1="2" x2="18" y2="34" /><path d="M9 18 L4 18 M4 18 L7 15 M4 18 L7 21" /><path d="M27 18 L32 18 M32 18 L29 15 M32 18 L29 21" /></>)
+  if (tipo === 'porta_correr') return box(<><line x1="18" y1="2" x2="18" y2="34" /><rect x="5" y="6" width="11" height="24" /></>)
+  if (tipo === 'porta_pivotante' || tipo === 'porta_abrir') return box(<><line x1="5" y1="2" x2="5" y2="34" /><path d="M5 2 L31 30" strokeDasharray="2 2" /></>)
+  if (tipo === 'vitro') return box(<><line x1="3" y1="10" x2="33" y2="10" /><line x1="3" y1="18" x2="33" y2="18" /><line x1="3" y1="26" x2="33" y2="26" /></>)
+  if (tipo === 'fachada') return box(<><line x1="18" y1="2" x2="18" y2="34" /><line x1="2" y1="18" x2="34" y2="18" /></>)
+  if (tipo === 'box') return box(<><line x1="18" y1="2" x2="18" y2="34" /><path d="M22 6 L30 10 L30 26 L22 30" /></>)
+  return box(<text x="18" y="23" textAnchor="middle" fontSize="14" stroke="none" fill="currentColor">?</text>)
+}
+
 function diferenca(a: string, b: string, c: string): number | null {
   const na = parseFloat(a), nb = parseFloat(b), nc = parseFloat(c)
   if (Number.isNaN(na) || Number.isNaN(nb) || Number.isNaN(nc)) return null
@@ -292,6 +310,7 @@ export default function DetalheMedicaoFinal() {
               className={`bg-white rounded-2xl border p-4 ${item.medido ? 'border-brand-teal/40' : 'border-slate-200'}`}
             >
               <div className="flex items-start justify-between gap-3">
+                <DesenhoEsquadria tipo={item.tipo_esquadria} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-sm text-slate-800">{labelItemTipo(item)}</p>
