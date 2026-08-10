@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Ruler, Plus, Pencil, Trash2, X, Save, Check, Keyboard, Camera,
-  AlertTriangle, RotateCcw, Loader2, MapPin,
+  AlertTriangle, RotateCcw, Loader2, MapPin, FileText,
 } from 'lucide-react'
 import {
   MedicaoFinal, MedicaoItem, TipologiaCampoExtra, Usuario, TipoEsquadria,
@@ -15,7 +15,7 @@ import {
   removerItemMedicao, listarCamposExtras, lerLimiteAlertaDiferenca,
   salvarMedidaItem as salvarMedidaItemApi, reabrirItemMedicao, DadosMedidaItem,
 } from '@/lib/medicaoFinal'
-import { usuarioAtual } from '@/lib/auth'
+import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { uploadFoto } from '@/lib/upload'
 
 const tipos: { value: TipoEsquadria; label: string }[] = [
@@ -73,6 +73,8 @@ export default function DetalheMedicaoFinal() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [limiteAlerta, setLimiteAlerta] = useState(100)
   const [carregando, setCarregando] = useState(true)
+  const [importandoPdf, setImportandoPdf] = useState(false)
+  const [erroImportarPdf, setErroImportarPdf] = useState('')
 
   const master = usuario?.role === 'master'
 
@@ -119,6 +121,33 @@ export default function DetalheMedicaoFinal() {
     setItens(its)
     setLimiteAlerta(limite)
     setCarregando(false)
+  }
+
+  async function importarItensDoPdf() {
+    if (!medicao?.orcamento_id) {
+      setErroImportarPdf('Este card nao tem um orcamento vinculado.')
+      return
+    }
+    setImportandoPdf(true)
+    setErroImportarPdf('')
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch('/api/importar-itens-orcamento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+        body: JSON.stringify({ orcamentoId: medicao.orcamento_id }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) {
+        setErroImportarPdf(json?.error || 'Nao foi possivel ler o PDF do orcamento.')
+      } else {
+        await carregar()
+      }
+    } catch (e) {
+      setErroImportarPdf('Erro ao importar itens do PDF.')
+    } finally {
+      setImportandoPdf(false)
+    }
   }
 
   // ---------- Adicionar/editar/remover tipologia (master) ----------
@@ -300,8 +329,19 @@ export default function DetalheMedicaoFinal() {
         )}
 
         {itens.length === 0 ? (
-          <div className="text-center py-10 text-slate-400 text-sm bg-white rounded-2xl border border-slate-200">
-            Nenhuma tipologia na lista ainda.
+          <div className="text-center py-10 px-4 text-slate-400 text-sm bg-white rounded-2xl border border-slate-200 space-y-3">
+            <p>Nenhuma tipologia na lista ainda.</p>
+            {master && (
+              <button
+                onClick={importarItensDoPdf}
+                disabled={importandoPdf}
+                className="inline-flex items-center gap-1.5 text-sm text-white bg-brand-navy hover:bg-brand-navy/90 disabled:opacity-60 rounded-full px-4 py-2"
+              >
+                {importandoPdf ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                {importandoPdf ? 'Lendo PDF...' : 'Ler PDF e gerar itens'}
+              </button>
+            )}
+            {erroImportarPdf && <p className="text-red-500 text-xs">{erroImportarPdf}</p>}
           </div>
         ) : (
           itens.map(item => (

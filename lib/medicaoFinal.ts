@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { tokenAtual } from './auth'
 import {
     MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra,
     Usuario, ItemEsquadria,
@@ -144,7 +145,7 @@ export async function criarMedicaoDoOrcamento(
   ): Promise<MedicaoFinal | null> {
     const { data: orcamento, error: erroOrcamento } = await supabase
       .from('orcamentos')
-      .select('id, cliente_id, cliente_nome, cliente_whatsapp, cidade, itens')
+      .select('id, cliente_id, cliente_nome, cliente_whatsapp, cidade, itens, anexos')
       .eq('id', orcamentoId)
       .single()
 
@@ -197,7 +198,12 @@ export async function criarMedicaoDoOrcamento(
         return null
   }
 
-  const itensOrcamento = (orcamento.itens as ItemEsquadria[] | null) || []
+  let itensOrcamento = (orcamento.itens as ItemEsquadria[] | null) || []
+
+      if (itensOrcamento.length === 0) {
+            itensOrcamento = await importarItensDoPdfDoOrcamento(orcamentoId)
+      }
+
       if (itensOrcamento.length > 0) {
             const linhas = itensOrcamento.map((it, idx) => ({
                     medicao_id: medicao.id,
@@ -212,6 +218,23 @@ export async function criarMedicaoDoOrcamento(
       }
 
   return medicao as MedicaoFinal
+}
+
+async function importarItensDoPdfDoOrcamento(orcamentoId: string): Promise<ItemEsquadria[]> {
+  try {
+    const token = await tokenAtual()
+    const resp = await fetch('/api/importar-itens-orcamento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+      body: JSON.stringify({ orcamentoId }),
+    })
+    if (!resp.ok) return []
+    const json = await resp.json()
+    return (json.itens as ItemEsquadria[]) || []
+  } catch (e) {
+    console.error('Erro ao importar itens do PDF automaticamente:', e)
+    return []
+  }
 }
 
 export async function moverMedicao(id: string, novaColunaId: string): Promise<boolean> {
