@@ -141,7 +141,7 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
 
 export async function editarItemSetor(
   id: string,
-  campos: { titulo?: string; descricao?: string | null }
+  campos: { titulo?: string; descricao?: string | null; coluna_id?: string }
   ): Promise<boolean> {
   const { error } = await supabase
   .from('setor_kanban_itens')
