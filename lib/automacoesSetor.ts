@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
-import { AutomacaoSetor, ItemEsquadria, ItemBalcao } from './tipos'
-import { listarColunasSetor, criarItemSetor } from './setorKanban'
+import { AutomacaoSetor, ItemEsquadria, ItemBalcao, SetorKanbanItem } from './tipos'
+import { listarColunasSetor, criarItemSetor, editarItemSetor } from './setorKanban'
 
 export async function listarAutomacoesSetor(): Promise<AutomacaoSetor[]> {
   const { data, error } = await supabase
@@ -116,7 +116,66 @@ function montarDescricaoFinanceira(orc: OrcamentoParaAutomacao): string {
   return linhas.join('\n')
 }
 
-export async function executarAutomacoesSetor(colunaId: string, orcamentoId: string): Promise<void> {
+async function buscarItemSetorPorOrcamento(setorId: string, orcamentoId: string): Promise<SetorKanbanItem | null> {
+  const { data: colunas } = await supabase
+  .from('setor_kanban_colunas')
+  .select('id')
+  .eq('setor_id', setorId)
+
+if (!colunas || colunas.length === 0) return null
+
+const colunaIds = colunas.map((c: { id: string }) => c.id)
+
+const { data, error } = await supabase
+  .from('setor_kanban_itens')
+  .select('*')
+  .in('coluna_id', colunaIds)
+  .eq('orcamento_id', orcamentoId)
+  .limit(1)
+  .maybeSingle()
+
+if (error || !data) return null
+  return data as SetorKanbanItem
+}
+
+// Chamada pela tela do Kanban Comercial antes de mover o card, pra saber se
+// algum dos setores automatizados pra essa coluna ja tem um card desse
+// orcamento (por exemplo: o card foi tirado de Vendido e voltou). Se achar,
+// a tela pergunta ao usuario se quer substituir o card existente ou criar um novo.
+export async function verificarDuplicatasAutomacaoSetor(
+  colunaId: string,
+  orcamentoId: string
+  ): Promise<{ setorId: string; setorNome: string }[]> {
+  const { data: automacoes, error } = await supabase
+  .from('automacoes_setor')
+  .select('*')
+  .eq('coluna_id', colunaId)
+  .eq('ativo', true)
+
+if (error || !automacoes || automacoes.length === 0) return []
+
+  const encontrados: { setorId: string; setorNome: string }[] = []
+
+    for (const automacao of automacoes as AutomacaoSetor[]) {
+      const existente = await buscarItemSetorPorOrcamento(automacao.setor_id, orcamentoId)
+      if (existente) {
+        const { data: setor } = await supabase
+        .from('setores')
+        .select('nome')
+        .eq('id', automacao.setor_id)
+        .maybeSingle()
+        encontrados.push({ setorId: automacao.setor_id, setorNome: setor?.nome || automacao.setor_id })
+      }
+    }
+
+return encontrados
+}
+
+export async function executarAutomacoesSetor(
+  colunaId: string,
+  orcamentoId: string,
+  decisoes?: Record<string, 'substituir' | 'duplicar'>
+  ): Promise<void> {
   try {
     const { data: automacoes, error } = await supabase
     .from('automacoes_setor')
@@ -143,14 +202,25 @@ export async function executarAutomacoesSetor(colunaId: string, orcamentoId: str
     const orcTipado = orcamento as OrcamentoParaAutomacao
     const descricao = ehFinanceiro ? montarDescricaoFinanceira(orcTipado) : montarDescricaoTecnica(orcTipado)
 
-    await criarItemSetor(
-      colunaDestino.id,
-      orcTipado.cliente_nome,
-      descricao,
-      undefined,
-      'Automação',
-      orcamentoId
-      )
+    const existente = await buscarItemSetorPorOrcamento(automacao.setor_id, orcamentoId)
+    const decisao = decisoes?.[automacao.setor_id] || 'substituir'
+
+    if (existente && decisao === 'substituir') {
+      await editarItemSetor(existente.id, {
+        titulo: orcTipado.cliente_nome,
+        descricao,
+        coluna_id: colunaDestino.id,
+      })
+    } else {
+      await criarItemSetor(
+        colunaDestino.id,
+        orcTipado.cliente_nome,
+        descricao,
+        undefined,
+        'Automação',
+        orcamentoId
+        )
+    }
   }
   } catch (e) {
     console.error('Erro ao executar automacoes de setor:', e)
