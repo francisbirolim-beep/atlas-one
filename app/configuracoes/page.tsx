@@ -27,10 +27,12 @@ export default function Configuracoes() {
   const [novoCampoTipo, setNovoCampoTipo] = useState<TipoEsquadria | 'geral'>('geral')
   const [novoCampoNome, setNovoCampoNome] = useState('')
   const [novoCampoTipoValor, setNovoCampoTipoValor] = useState<TipoValorCampoExtra>('numero')
+  const [novoCampoObrigatorio, setNovoCampoObrigatorio] = useState(false)
   const [salvandoCampoExtra, setSalvandoCampoExtra] = useState(false)
   const [editandoCampoId, setEditandoCampoId] = useState<string | null>(null)
   const [editNome, setEditNome] = useState('')
   const [editTipoValor, setEditTipoValor] = useState<TipoValorCampoExtra>('numero')
+  const [editObrigatorio, setEditObrigatorio] = useState(false)
   const [automacoesSetor, setAutomacoesSetor] = useState<AutomacaoSetor[]>([])
   const [novaAutomSetorColuna, setNovaAutomSetorColuna] = useState('')
   const [novaAutomSetorSetor, setNovaAutomSetorSetor] = useState('')
@@ -578,10 +580,11 @@ async function salvarSla(colunaId: string) {
     setSalvandoCampoExtra(true)
     const tipoEsquadria = novoCampoTipo === 'geral' ? null : novoCampoTipo
     const chave = slugChave(novoCampoNome) || ('campo_' + Date.now())
-    const campo = await criarCampoExtra(tipoEsquadria, chave, novoCampoNome.trim(), novoCampoTipoValor)
+    const campo = await criarCampoExtra(tipoEsquadria, chave, novoCampoNome.trim(), novoCampoTipoValor, novoCampoObrigatorio)
     if (campo) {
       setCamposExtras(prev => [...prev, campo])
       setNovoCampoNome('')
+      setNovoCampoObrigatorio(false)
     }
     setSalvandoCampoExtra(false)
   }
@@ -590,13 +593,14 @@ async function salvarSla(colunaId: string) {
     setEditandoCampoId(c.id)
     setEditNome(c.nome)
     setEditTipoValor(c.tipo_valor)
+    setEditObrigatorio(c.obrigatorio)
   }
 
   async function salvarEdicaoCampoExtra(id: string) {
     if (!editNome.trim()) return
-    const ok = await editarCampoExtra(id, editNome.trim(), editTipoValor)
+    const ok = await editarCampoExtra(id, editNome.trim(), editTipoValor, editObrigatorio)
     if (ok) {
-      setCamposExtras(prev => prev.map(c => c.id === id ? { ...c, nome: editNome.trim(), tipo_valor: editTipoValor } : c))
+      setCamposExtras(prev => prev.map(c => c.id === id ? { ...c, nome: editNome.trim(), tipo_valor: editTipoValor, obrigatorio: editObrigatorio } : c))
       setEditandoCampoId(null)
     }
   }
@@ -629,6 +633,9 @@ async function salvarSla(colunaId: string) {
             <option value="numero">Número</option>
             <option value="texto">Texto</option>
           </select>
+          <label className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
+            <input type="checkbox" checked={editObrigatorio} onChange={e => setEditObrigatorio(e.target.checked)} /> Obrigatório
+          </label>
           <button onClick={() => salvarEdicaoCampoExtra(c.id)} className="text-brand-navy hover:underline text-xs">Salvar</button>
           <button onClick={() => setEditandoCampoId(null)} className="text-slate-400 hover:underline text-xs">Cancelar</button>
         </div>
@@ -636,7 +643,7 @@ async function salvarSla(colunaId: string) {
     }
     return (
       <div key={c.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5">
-        <span className="text-sm text-slate-600">{c.nome} <span className="text-slate-400">({c.tipo_valor === 'numero' ? 'número' : 'texto'})</span></span>
+        <span className="text-sm text-slate-600">{c.nome} <span className="text-slate-400">({c.tipo_valor === 'numero' ? 'número' : 'texto'})</span>{c.obrigatorio && <span className="ml-1 text-[10px] text-red-500 font-medium">Obrigatório</span>}</span>
         <div className="flex items-center gap-2">
           <button onClick={() => iniciarEdicaoCampoExtra(c)} className="text-slate-300 hover:text-brand-navy"><Pencil size={13} /></button>
           <button onClick={() => removerCampoExtraChecklist(c.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
@@ -1398,6 +1405,9 @@ async function salvarSla(colunaId: string) {
                 <option value="numero">Número</option>
                 <option value="texto">Texto</option>
               </select>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input type="checkbox" checked={novoCampoObrigatorio} onChange={e => setNovoCampoObrigatorio(e.target.checked)} /> Campo obrigatório na obra
+              </label>
               <button onClick={adicionarCampoExtra} disabled={!novoCampoNome.trim() || salvandoCampoExtra} className="flex items-center gap-1.5 text-sm text-white bg-brand-navy hover:bg-brand-navy/90 disabled:opacity-60 rounded-lg px-4 py-2">
                 <Plus size={14} /> {salvandoCampoExtra ? 'Adicionando...' : 'Adicionar campo'}
               </button>
