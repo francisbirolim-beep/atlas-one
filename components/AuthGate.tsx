@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import Sidebar from '@/components/Sidebar'
+import AppShell from '@/components/system/AppShell'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
@@ -40,7 +40,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-400">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400">
         Carregando...
       </div>
     )
@@ -48,10 +48,5 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!autenticado) return null
 
-  return (
-    <div className="md:flex md:min-h-screen">
-      <Sidebar />
-      <div className="pb-20 md:flex-1 md:overflow-y-auto md:pb-0">{children}</div>
-    </div>
-  )
+  return <AppShell>{children}</AppShell>
 }
