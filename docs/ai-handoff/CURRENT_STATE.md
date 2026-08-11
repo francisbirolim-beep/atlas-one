@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, `main` apos PR #66 e migration `20260811183500_engenharia_modulo_v1.sql` aplicada.
+Verificado em: 2026-08-11, `main` apos PR #69 e migration `20260811192000_engenharia_conferencia_tecnica_v1.sql` aplicada.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -16,6 +16,8 @@ Verificado em: 2026-08-11, `main` apos PR #66 e migration `20260811183500_engenh
 - PR #64: Medicao Final aprovada cria/atualiza de forma atomica e idempotente a entrada correspondente na Engenharia; migration `20260811181300_engenharia_entrada_automatica.sql` aplicada e validada.
 - PR #66: modulo proprio de Engenharia v1 em `/engenharia`, com KPIs, quatro etapas tecnicas, drag-and-drop conforme permissao e detalhe das pecas com as 6 medidas finais.
 - Migration `20260811183500_engenharia_modulo_v1.sql` aplicada e validada; setor Engenharia aponta para `/engenharia` e usa as etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao.
+- PR #69: conferencia tecnica persistente por peca, com status Pendente/Conferida/Pendencia, observacao, responsavel e progresso por obra.
+- Migration `20260811192000_engenharia_conferencia_tecnica_v1.sql` aplicada e validada; banco bloqueia movimentacao para `Liberado para producao` enquanto houver peca sem conferencia concluida.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.
@@ -30,18 +32,20 @@ Verificado em: 2026-08-11, `main` apos PR #66 e migration `20260811183500_engenh
 ## ENGENHARIA — ESTADO REAL
 - Fase 1 concluida: Medicao Final aprovada entra automaticamente na Engenharia.
 - Fase 2 concluida: rota `/engenharia` propria, fluxo Recebidas -> Conferencia tecnica -> Em desenvolvimento -> Liberado para producao.
+- Fase 3 concluida: conferencia tecnica persistente por peca, responsavel/observacao/status e bloqueio de liberacao incompleta.
 - Fonte unica de cards continua sendo `setor_kanban_itens`; nao existe duplicacao paralela de obras.
 - Detalhe da obra mostra cliente, local, Medicao Final aprovada e as 6 medidas finais por peca.
 - Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
 
 ## PROXIMA FASE RECOMENDADA
-Engenharia Fase 3:
-- conferencia tecnica persistente por peca;
-- responsavel tecnico;
-- observacoes e pendencias tecnicas;
-- estado de revisao por peca;
-- bloquear liberacao para Producao enquanto houver peca nao conferida ou pendencia aberta;
-- registrar quem liberou e quando.
+Engenharia Fase 4 — liberacao real para Producao:
+- registrar quem liberou a obra e quando;
+- ao entrar em `Liberado para producao`, criar/atualizar de forma idempotente a entrada correspondente no fluxo de Producao;
+- preservar vinculo com orcamento/medicao/Engenharia;
+- impedir duplicidade;
+- manter retorno seguro para Engenharia se houver revisao tecnica.
+
+Depois disso, iniciar a base de receitas/MEE por tipologia.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
 - Confirmacao de Venda Fase 1.
