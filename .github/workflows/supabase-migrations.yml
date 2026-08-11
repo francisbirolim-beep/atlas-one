@@ -112,7 +112,7 @@ jobs:
           supabase migration list --db-url "$SUPABASE_DB_URL"
 
       - name: Dry-run pending migrations
-        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply') }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
         shell: bash
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
 
