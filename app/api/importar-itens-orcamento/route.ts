@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     if (!token) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
+
     const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token)
     if (userErr || !userData?.user) {
       return NextResponse.json({ error: 'Sessao invalida' }, { status: 401 })
@@ -20,6 +21,9 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const orcamentoId = body?.orcamentoId
+    const persistirOrcamento = body?.persistirOrcamento !== false
+    const substituirMedicao = body?.substituirMedicao === true
+
     if (!orcamentoId) {
       return NextResponse.json({ error: 'orcamentoId e obrigatorio' }, { status: 400 })
     }
@@ -35,9 +39,12 @@ export async function POST(req: NextRequest) {
     }
 
     const anexos: Anexo[] = orcamento.anexos || []
-    const anexoPdf = anexos.find(
-      (a) => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().endsWith('.pdf')
-    )
+    const anexoPdf = anexos.find((a) => {
+      const nome = (a.nome || '').toLowerCase()
+      const url = (a.url || '').toLowerCase().split('?')[0].split('#')[0]
+      return nome.endsWith('.pdf') || url.endsWith('.pdf')
+    })
+
     if (!anexoPdf) {
       return NextResponse.json({ error: 'Nenhum PDF encontrado nos anexos deste orcamento.' }, { status: 400 })
     }
@@ -46,6 +53,7 @@ export async function POST(req: NextRequest) {
     if (!resposta.ok) {
       return NextResponse.json({ error: 'Nao foi possivel baixar o PDF anexado.' }, { status: 502 })
     }
+
     const arrayBuffer = await resposta.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
@@ -72,13 +80,15 @@ export async function POST(req: NextRequest) {
       descricao: it.descricao,
     }))
 
-    const { error: erroUpdate } = await supabaseAdmin
-      .from('orcamentos')
-      .update({ itens: itensCompletos })
-      .eq('id', orcamentoId)
+    if (persistirOrcamento) {
+      const { error: erroUpdate } = await supabaseAdmin
+        .from('orcamentos')
+        .update({ itens: itensCompletos })
+        .eq('id', orcamentoId)
 
-    if (erroUpdate) {
-      return NextResponse.json({ error: 'Erro ao salvar itens no orcamento.' }, { status: 500 })
+      if (erroUpdate) {
+        return NextResponse.json({ error: 'Erro ao salvar itens no orcamento.' }, { status: 500 })
+      }
     }
 
     const { data: medicao } = await supabaseAdmin
@@ -88,21 +98,38 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (medicao) {
-      const { count } = await supabaseAdmin
-        .from('medicao_itens')
-        .select('id', { count: 'exact', head: true })
-        .eq('medicao_id', medicao.id)
+      const linhas = itensCompletos.map((it, idx) => ({
+        medicao_id: medicao.id,
+        tipo_esquadria: it.tipo_esquadria,
+        tipo_outro_texto: it.tipo_outro_texto || null,
+        descricao: it.descricao || 'Item ' + (idx + 1),
+        quantidade: it.quantidade || 1,
+        ordem: idx,
+      }))
 
-      if (!count) {
-        const linhas = itensCompletos.map((it, idx) => ({
-          medicao_id: medicao.id,
-          tipo_esquadria: it.tipo_esquadria,
-          tipo_outro_texto: it.tipo_outro_texto || null,
-          descricao: it.descricao || "Item " + (idx + 1),
-          quantidade: it.quantidade || 1,
-          ordem: idx,
-        }))
-        await supabaseAdmin.from('medicao_itens').insert(linhas)
+      if (substituirMedicao) {
+        const { error: erroDelete } = await supabaseAdmin
+          .from('medicao_itens')
+          .delete()
+          .eq('medicao_id', medicao.id)
+
+        if (erroDelete) {
+          return NextResponse.json({ error: 'Erro ao preparar itens da medicao.' }, { status: 500 })
+        }
+
+        const { error: erroInsert } = await supabaseAdmin.from('medicao_itens').insert(linhas)
+        if (erroInsert) {
+          return NextResponse.json({ error: 'Erro ao sincronizar itens da medicao.' }, { status: 500 })
+        }
+      } else {
+        const { count } = await supabaseAdmin
+          .from('medicao_itens')
+          .select('id', { count: 'exact', head: true })
+          .eq('medicao_id', medicao.id)
+
+        if (!count) {
+          await supabaseAdmin.from('medicao_itens').insert(linhas)
+        }
       }
     }
 

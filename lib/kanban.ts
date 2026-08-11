@@ -3,6 +3,7 @@ import { KanbanColuna } from './tipos'
 import { executarAutomacoesColuna } from './automacoes'
 import { executarAutomacoesSetor } from './automacoesSetor'
 import { criarMedicaoDoOrcamento } from './medicaoFinal'
+import { tokenAtual } from './auth'
 
 export async function listarColunas(): Promise<KanbanColuna[]> {
   const { data, error } = await supabase
@@ -122,6 +123,36 @@ async function criarMedicaoFinalSeNecessario(colunaId: string, orcamentoId: stri
   const medicao = await criarMedicaoDoOrcamento(orcamentoId, null)
   if (!medicao) {
     console.error('Nao foi possivel criar a medicao final automaticamente para o orcamento:', orcamentoId)
+    return
+  }
+
+  await sincronizarMedicaoFinalComPdf(orcamentoId)
+}
+
+async function sincronizarMedicaoFinalComPdf(orcamentoId: string): Promise<void> {
+  try {
+    const token = await tokenAtual()
+    if (!token) return
+
+    const resposta = await fetch('/api/importar-itens-orcamento', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token,
+      },
+      body: JSON.stringify({
+        orcamentoId,
+        persistirOrcamento: false,
+        substituirMedicao: true,
+      }),
+    })
+
+    if (!resposta.ok) {
+      const erro = await resposta.json().catch(() => null)
+      console.warn('PDF nao sincronizado na medicao final:', erro?.error || resposta.status)
+    }
+  } catch (erro) {
+    console.error('Erro ao sincronizar PDF na medicao final:', erro)
   }
 }
 
