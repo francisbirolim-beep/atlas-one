@@ -16,31 +16,32 @@ Session Pooler IPv4, audit/dry-run em PR, historico local/remoto reconciliado e 
 ## Build Validation — GitHub Actions
 Workflow de `npm install` + `npm run build` criado para validar compilacao/TypeScript quando a Vercel esta bloqueada por cota diaria.
 
-## Redesign profissional
+## Redesign profissional mergeado
 - PR #57: Home executiva + Topbar + KPIs/workspace.
 - PR #58: Sidebar desktop escura em padrao ERP.
 - PR #59: Kanban Comercial profissional.
 - PR #60: Central e Pesquisa de Orcamentos profissionais.
 - PR #61: Medicao Final profissional, mantendo toda a logica V2.
+- PR #62: Producao profissional, mantendo drag-and-drop e CRUD existentes.
 
-## Producao profissional — branch atual
-Branch `feat/atlas-professional-producao-v1`:
-- escopo visual `atlas-producao-professional` no AppShell;
-- nova folha `app/atlas-producao-professional.css`;
-- cabecalho legado ocultado dentro do AppShell;
-- toolbar, colunas, cards e modais refinados;
-- responsividade/mobile melhorados;
-- drag-and-drop, criacao/renomeacao/exclusao de colunas e CRUD de cards preservados.
+## Base profissional de setores — branch atual
+Branch `feat/atlas-professional-setores-base-v1`:
+- estiliza `app/setor/[slug]/page.tsx`, usado pelos setores sem rota propria;
+- cria `app/atlas-setor-professional.css`;
+- preserva permissoes `oculto/consulta/edicao`, drag-and-drop, CRUD e redirecionamento de setores ativos;
+- melhora imediatamente a apresentacao da Engenharia quando ela usa o setor generico.
+
+Importante: isso NAO significa que o MEE/Engenharia especializado foi implementado. O repositorio ainda nao possui uma rota funcional propria para esse modulo.
 
 ## Pontos funcionais ainda pendentes
+- Modulo especializado de Engenharia/MEE e liberacao persistente apos Medicao Final aprovada.
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
 - Parser/importacao PDF W.Vetro ainda precisa de fluxo estruturado e conferivel.
 - Regras condicionais/foto obrigatoria do checklist V2 ainda pendentes.
-- Liberacao persistente para Engenharia apos aprovacao ainda pendente.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
 
 ## Proximas evolucoes recomendadas
-1. validar e mergear Producao profissional;
-2. aplicar Design System em Engenharia;
-3. continuar padronizacao dos demais modulos;
+1. validar e mergear a base profissional dos setores;
+2. decidir/implementar a fundacao funcional real de Engenharia/MEE em tarefa separada;
+3. continuar padronizacao dos demais modulos existentes;
 4. retomar validacoes e evolucoes funcionais pendentes.
