@@ -42,14 +42,16 @@ Ja existe na main:
 Em implementacao na branch feat/atlas-shell-definitivo-v2:
 - Topbar refinada com busca global central, botao + Novo, IA Atlas, notificacoes e perfil;
 - base global de tipografia/foco/selection coerente com o Design System;
-- nenhuma regra de negocio ou migration alterada.
+- AppShell identifica as rotas de Medicao Final para permitir tratamento visual especifico sem alterar a logica operacional;
+- quadro `/producao/medicao-final` recebeu visual ERP por camada de Design System: remove cabecalho/gradiente legado dentro da casca nova, amplia area util, compacta colunas, suaviza cards, melhora scroll horizontal e responsividade;
+- nenhuma regra de negocio, migration, drag-and-drop, permissao ou automacao foi alterada.
 
-Proxima aplicacao visual recomendada: quadro e detalhe da Medicao Final, preservando toda a logica existente e usando componentes reutilizaveis do Design System.
+Proxima aplicacao visual recomendada: detalhe `/producao/medicao-final/[id]` com abordagem mobile-first, preservando medidas, checklist, fotos e regras existentes.
 
 ## PARCIAL
 - Conversao de PDF W.Vetro em Orçamento Atlas estruturado: parser existe, mas ainda falha em alguns PDFs reais. A Confirmacao de Venda foi desenhada para bloquear o processo ate existir uma lista de itens confiavel.
 - Modelo conceitual futuro Venda/Obra: decidido, mas ainda nao existe uma tabela `vendas`/`obras`. Na Fase 1 a confirmacao usa o proprio orcamento selecionado como referencia.
-- Padronizacao visual: Home/App Shell ja evoluiram, mas varias telas operacionais antigas ainda usam cabecalhos, gradientes e cards proprios.
+- Padronizacao visual: Home/App Shell e quadro de Medicao Final evoluiram, mas varias telas operacionais antigas ainda usam cabecalhos, gradientes e cards proprios.
 
 ## NAO IMPLEMENTADO
 - Entidade persistente `vendas` ou `obras` para separar cliente/orcamento/venda fechada.
