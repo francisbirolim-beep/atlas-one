@@ -15,6 +15,7 @@ export const GUIAS: Guia[] = [
   { href: '/orcamento', label: 'Orçamento', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3, grupo: 'Comercial' },
   { href: '/historico', label: 'Histórico', icon: History, grupo: 'Comercial' },
+  { href: '/relatorios', label: 'Relatórios', icon: BarChart3, grupo: 'Sistema' },
   { href: '/setores', label: 'Setores', icon: LayoutGrid, grupo: 'Sistema' },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3, grupo: 'Sistema' },
   { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true, grupo: 'Sistema' },
