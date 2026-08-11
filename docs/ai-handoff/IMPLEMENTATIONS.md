@@ -6,7 +6,7 @@ Lista resumida das implementacoes relevantes. Para estado real usar CURRENT_STAT
 Cadastro de clientes, produtos e fornecedores; Kanban de orcamentos; Orcamento Rapido e Balcao. Status: em uso.
 
 ## Medicao Final legado
-Fluxo por tipologia com 3 larguras, 3 alturas, fotos, campos extras configuraveis e medir/reabrir item. Status: em uso e preservado por compatibilidade.
+Fluxo por tipologia com 3 larguras, 3 alturas, fotos, campos extras configuraveis e medir/reabrir item. Status: preservado por compatibilidade.
 
 ## Tipologias dinamicas
 Tabela e CRUD de tipologias dinamicas. Status: mergeado. Limitacao conhecida: categoria dinamica ainda nao esta totalmente conectada a `lib/calculos.ts`.
@@ -17,59 +17,81 @@ Foi removida a criacao operacional automatica apenas pelo drag-and-drop em `Vend
 ## App Shell e Home executiva
 AppShell, Topbar, componentes de sistema, Home com indicadores, alertas, acoes rapidas e agenda. Status: mergeado.
 
-## Medicao Final V2 — base visual e progresso
-Detalhe mobile-first, resumo operacional por quantidade de pecas, identificacao de medidores e separacao explicita de unidades nao medidas. Itens agrupados ja medidos nao sao reinterpretados automaticamente. Status: mergeado.
-
 ## Infraestrutura Supabase / migrations — 2026-08-11
-Problema encontrado: o GitHub Actions nao conseguia usar a conexao direta por ausencia de IPv6 e o pooler automatico apresentava falha de autenticacao.
-
-Solucao definitiva:
 - Session Pooler IPv4 usado explicitamente por `--db-url`;
 - workflow audita historico e executa dry-run em PR;
-- migrations remotas antigas foram recuperadas com `supabase migration fetch` e versionadas em `supabase/migrations/`;
-- historico local/remoto reconciliado sem usar `migration repair --reverted`;
+- migrations remotas antigas recuperadas com `supabase migration fetch` e versionadas;
+- historico local/remoto reconciliado sem `migration repair --reverted`;
 - PR #52 mergeado.
 
 ## Migration V20 — Medicao Final V2 — 2026-08-11
-`20260811110000_medicao_final_v2.sql` foi aplicada no Supabase e validada. O dry-run posterior retornou banco atualizado.
-
-A V20 adiciona:
-- status operacional/responsavel/aprovacao/versionamento em `medicoes_finais`;
-- `medicao_pendencias`;
-- `medicao_fotos`;
-- `medicao_respostas`;
-- evolucao de `tipologia_campos_extras` com secao/opcoes/regras;
-- `medicao_acessos_externos` com RLS sem policy permissiva;
-- `medicao_revisoes`.
+`20260811110000_medicao_final_v2.sql` aplicada no Supabase e validada. Adicionou status operacional, responsavel, pendencias, fotos, respostas, regras de campos, acessos externos e revisoes.
 
 ## Medicao Final V2 operacional — PR #54
-Implementado e mergeado:
+Mergeado:
 - responsavel no nivel da medicao;
 - fluxo aguardando/liberado/em medicao/com pendencia/concluido/aprovado;
 - liberar, iniciar, concluir e aprovar;
 - criar/resolver pendencias;
-- bloqueio de conclusao com unidades agrupadas, pecas nao medidas ou pendencias abertas.
+- bloqueios de conclusao.
 
 ## Checklist e fotos V2 — PR #55
-Branch `feat/medicao-final-v2-checklist`.
+Mergeado apos build valido no GitHub Actions:
+- respostas em `medicao_respostas`;
+- sincronizacao com `medicao_itens.campos_extras`;
+- checklist por peca/tipologia/secao;
+- numero/texto/foto/opcoes configuradas;
+- progresso de obrigatorios;
+- fotos categorizadas em `medicao_fotos`;
+- integracao sem reescrever a tela legada.
 
-Implementado no codigo:
-- persistencia normalizada de respostas em `medicao_respostas`;
-- sincronizacao de compatibilidade com `medicao_itens.campos_extras`;
-- painel de checklist por peca/tipologia e por secao;
-- campos numero/texto/foto;
-- opcoes configuradas renderizadas como selecao rapida;
-- progresso dos campos obrigatorios por peca;
-- fotos categorizadas por peca em `medicao_fotos`;
-- galeria e remocao de fotos;
-- integracao via AppShell sem reescrever a tela legada.
+## Link externo seguro da Medicao Final — PR #56
+Mergeado:
+- token aleatorio forte armazenado somente como SHA-256;
+- validade e revogacao;
+- primeiro/ultimo acesso;
+- pagina publica mobile sem AppShell;
+- iniciar medicao, salvar 3 larguras + 3 alturas, checklist e fotos;
+- conclusao envia para revisao interna;
+- escrita externa bloqueada apos conclusao;
+- geracao/revogacao interna respeita permissoes; Master tem edicao total.
 
-Status de validacao: PR #55 aberto. O deploy da Vercel foi bloqueado por `build-rate-limit`, antes da compilacao. Nao mergear ate obter um build Vercel valido.
+## Build Validation — GitHub Actions
+Criado workflow de validacao Next.js para executar instalacao de dependencias e `npm run build`. Foi necessario porque a Vercel passou a bloquear novos builds por limite diario da conta gratuita. O workflow valida compilacao, TypeScript e geracao/coleta de rotas sem usar segredos reais.
+
+## Redesign profissional — PR #57
+Mergeado:
+- Home executiva;
+- Topbar corporativa;
+- workspace visual consistente;
+- KPIs em padrao de ERP.
+
+## Sidebar profissional — PR #58
+Mergeado:
+- navegacao desktop escura em padrao ERP;
+- estilização isolada em `atlas-professional.css`;
+- logica de favoritos, ordenacao, categorias, setores, permissoes e menu mobile preservada.
+
+## Kanban Comercial profissional — PR #59
+Mergeado:
+- cabecalho legado ocultado dentro do AppShell;
+- filtros agrupados;
+- colunas/cards refinados;
+- modais e responsividade modernizados;
+- drag-and-drop e automacoes preservados.
+
+## Orcamentos profissionais — branch atual
+Branch `feat/atlas-professional-orcamentos-v1`:
+- `/orcamento` redesenhado como Central de Orcamentos;
+- atalhos para detalhado, rapido, pesquisa e pipeline;
+- `/orcamento/pesquisar` recebe camada visual profissional;
+- nenhuma regra de calculo/preco foi alterada.
 
 ## Proximas evolucoes recomendadas
-1. obter build valido e mergear PR #55;
-2. validar o checklist V2 em uma medicao real;
-3. definir e implementar motor simples de regras condicionais/foto obrigatoria do checklist;
-4. criar link externo seguro por Route Handler server-side usando token-hash;
-5. criar liberacao persistente para Engenharia apos aprovacao;
-6. continuar Fase 2 da Confirmacao de Venda: PDF W.Vetro -> Orçamento Atlas estruturado e conferivel.
+1. validar e mergear a camada profissional de Orcamentos;
+2. aplicar o Design System na Medicao Final sem reescrever regras;
+3. aplicar em Producao e Engenharia;
+4. validar funcionalmente Confirmacao de Venda Fase 1;
+5. definir motor simples de regras condicionais/foto obrigatoria do checklist;
+6. criar liberacao persistente para Engenharia apos aprovacao;
+7. continuar Fase 2 PDF W.Vetro -> Orcamento Atlas estruturado e conferivel.
