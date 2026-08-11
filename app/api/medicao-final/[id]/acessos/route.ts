@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { gerarTokenAcessoMedicao, hashTokenAcessoMedicao } from '@/lib/medicaoAcessoExternoServer'
 
@@ -52,6 +51,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .maybeSingle()
 
   if (!medicao) return NextResponse.json({ error: 'Medicao nao encontrada.' }, { status: 404 })
+  if (!['liberado', 'em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
+    return NextResponse.json({ error: 'Libere a Medicao Final antes de gerar um link externo.' }, { status: 409 })
+  }
 
   const token = gerarTokenAcessoMedicao()
   const tokenHash = hashTokenAcessoMedicao(token)
@@ -75,10 +77,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Nao foi possivel gerar o link externo.' }, { status: 500 })
   }
 
-  const baseUrl = req.nextUrl.origin
   return NextResponse.json({
     acesso: data,
-    url: `${baseUrl}/medicao-final/acesso/${token}`,
+    url: `${req.nextUrl.origin}/medicao-final/acesso/${token}`,
   })
 }
 
