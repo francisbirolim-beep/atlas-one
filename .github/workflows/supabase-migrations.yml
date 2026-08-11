@@ -43,22 +43,63 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo "Missing SUPABASE_ACCESS_TOKEN"; exit 1; }
-          test -n "${SUPABASE_DB_PASSWORD:-}" || { echo "Missing SUPABASE_DB_PASSWORD"; exit 1; }
-          test -n "${SUPABASE_PROJECT_ID:-}" || { echo "Missing SUPABASE_PROJECT_ID"; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo "ERRO: SUPABASE_ACCESS_TOKEN ausente"; exit 1; }
+          test -n "${SUPABASE_DB_PASSWORD:-}" || { echo "ERRO: SUPABASE_DB_PASSWORD ausente"; exit 1; }
+          test -n "${SUPABASE_PROJECT_ID:-}" || { echo "ERRO: SUPABASE_PROJECT_ID ausente"; exit 1; }
+          if ! [[ "$SUPABASE_PROJECT_ID" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "ERRO: SUPABASE_PROJECT_ID nao tem o formato esperado de project ref (20 caracteres alfanumericos)."
+            exit 1
+          fi
+          echo "Secrets presentes e Project ID com formato valido."
 
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
+      - name: Show Supabase CLI version
+        shell: bash
+        run: supabase --version
+
+      - name: Validate access token
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Validando autenticacao do SUPABASE_ACCESS_TOKEN..."
+          if ! supabase projects list --output json > /tmp/supabase-projects.json; then
+            echo "ERRO: o SUPABASE_ACCESS_TOKEN nao autenticou na Supabase CLI. Gere/atualize o token e tente novamente."
+            exit 1
+          fi
+          echo "Token autenticado com sucesso."
+
+      - name: Validate target project visibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! jq -e --arg ref "$SUPABASE_PROJECT_ID" 'any(.[]; (.id // .ref // .project_ref) == $ref)' /tmp/supabase-projects.json >/dev/null; then
+            echo "ERRO: o projeto configurado em SUPABASE_PROJECT_ID nao esta visivel para o token informado."
+            echo "Confira se o token pertence a mesma conta/organizacao do projeto Atlas One e se o Project ID foi atualizado no secret."
+            exit 1
+          fi
+          echo "Projeto alvo encontrado na conta autenticada."
+
       - name: Link production project
         shell: bash
-        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+        run: |
+          set -euo pipefail
+          echo "Conectando a CLI ao projeto configurado..."
+          if ! supabase link --project-ref "$SUPABASE_PROJECT_ID"; then
+            echo "ERRO: falha no supabase link. Como token e Project ID ja foram validados, a causa mais provavel e SUPABASE_DB_PASSWORD incorreta/desatualizada ou indisponibilidade de conexao com o banco."
+            exit 1
+          fi
+          echo "Projeto vinculado com sucesso."
 
       - name: Audit migration history
         shell: bash
-        run: supabase migration list
+        run: |
+          set -euo pipefail
+          echo "Lendo historico remoto de migrations..."
+          supabase migration list
 
       - name: Dry-run pending migrations
         if: ${{ inputs.mode == 'dry-run' || inputs.mode == 'apply' }}
