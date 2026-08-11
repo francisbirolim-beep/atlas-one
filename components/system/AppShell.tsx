@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import AppTopbar from '@/components/system/AppTopbar'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
+import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -21,6 +22,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           }`}
         >
           {ehHome && <HomeManagementOverview />}
+          {ehHome && <HomeOperationalAttention />}
           {children}
         </main>
       </div>
