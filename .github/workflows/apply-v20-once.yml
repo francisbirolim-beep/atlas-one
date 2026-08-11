@@ -1,0 +1,93 @@
+name: Apply V20 Medicao Final Once
+
+on:
+  push:
+    branches:
+      - ops/apply-v20-medicao-final
+    paths:
+      - '.github/workflows/apply-v20-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-v20-production-once
+  cancel-in-progress: false
+
+jobs:
+  apply-v20:
+    name: Validate and apply V20
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate exact migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo "Missing SUPABASE_ACCESS_TOKEN"; exit 1; }
+          test -n "${SUPABASE_DB_PASSWORD:-}" || { echo "Missing SUPABASE_DB_PASSWORD"; exit 1; }
+          test -n "${SUPABASE_PROJECT_ID:-}" || { echo "Missing SUPABASE_PROJECT_ID"; exit 1; }
+          test -f supabase/migrations/20260811110000_medicao_final_v2.sql || { echo "V20 migration file not found"; exit 1; }
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Build IPv4 session pooler URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_URL=$(python - <<'PY'
+          import os
+          import urllib.parse
+          project = os.environ['SUPABASE_PROJECT_ID']
+          password = urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{project}:{password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+
+      - name: Preflight migration history
+        shell: bash
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+
+      - name: Dry-run and assert only V20 is pending
+        shell: bash
+        run: |
+          set -euo pipefail
+          output=$(supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1)
+          printf '%s\n' "$output"
+          echo "$output" | grep -q '20260811110000_medicao_final_v2.sql' || { echo "Expected V20 was not pending; apply aborted."; exit 1; }
+          count=$(echo "$output" | grep -E '^ • [0-9].*\.sql$' | wc -l | tr -d ' ')
+          if [ "$count" != "1" ]; then
+            echo "Expected exactly one pending migration, found $count; apply aborted."
+            exit 1
+          fi
+
+      - name: Apply V20
+        shell: bash
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
+
+      - name: Verify migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          output=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>&1)
+          printf '%s\n' "$output"
+          echo "$output" | grep -E '20260811110000[[:space:]]*\|[[:space:]]*20260811110000' >/dev/null || {
+            echo "V20 was not confirmed as applied remotely."
+            exit 1
+          }
+
+      - name: Verify no pending migrations
+        shell: bash
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
