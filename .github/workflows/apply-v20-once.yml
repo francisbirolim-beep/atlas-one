@@ -1,9 +1,9 @@
 name: Apply V20 Medicao Final Once
 
 on:
-  push:
+  pull_request:
     branches:
-      - ops/apply-v20-medicao-final
+      - main
     paths:
       - '.github/workflows/apply-v20-once.yml'
 
