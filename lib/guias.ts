@@ -1,4 +1,4 @@
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, ListTodo, UserPlus, Home, FileText } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, ListTodo, UserPlus, Home, FileText, ListChecks } from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -18,6 +18,7 @@ export const GUIAS: Guia[] = [
   { href: '/setores', label: 'Setores', icon: LayoutGrid, grupo: 'Sistema' },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3, grupo: 'Sistema' },
   { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true, grupo: 'Sistema' },
+  { href: '/configuracoes/campos', label: 'Campos e Formulários', icon: ListChecks, masterOnly: true, grupo: 'Sistema' },
   { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true, grupo: 'Sistema' },
 ]
 
