@@ -149,6 +149,8 @@ create table if not exists medicao_acessos_externos (
 
 -- Nunca salvar o token bruto no banco. Gerar token criptograficamente seguro no
 -- servidor e persistir somente hash. O token bruto existe apenas no link entregue.
+-- Esta tabela NAO recebe policy permissiva. Toda criacao, validacao, revogacao e
+-- consulta de convite deve ocorrer em Route Handler server-side usando service role.
 
 create index if not exists idx_medicao_acessos_externos_medicao
   on medicao_acessos_externos(medicao_id);
@@ -173,12 +175,13 @@ create index if not exists idx_medicao_revisoes_medicao
   on medicao_revisoes(medicao_id);
 
 -- ---------------------------------------------------------------------------
--- 7. Politicas permissivas coerentes com o estagio atual do Atlas
+-- 7. Politicas coerentes com o estagio atual do Atlas
 -- ---------------------------------------------------------------------------
 -- O Atlas ainda usa auth propria e o projeto registra que RLS nao e a camada de
--- autorizacao efetiva hoje. Para nao quebrar o acesso direto via Supabase client,
--- as novas tabelas seguem o padrao permissivo atual. Reforco de seguranca deve ser
--- uma iniciativa deliberada e abrangente, nao uma mudanca incidental neste modulo.
+-- autorizacao efetiva hoje. As tabelas operacionais seguem o padrao permissivo
+-- existente para nao quebrar o client direto. A tabela de tokens externos e a
+-- excecao deliberada: RLS fica habilitado SEM policy de client e deve ser acessada
+-- somente pelo servidor com service role.
 
 alter table medicao_pendencias enable row level security;
 alter table medicao_fotos enable row level security;
@@ -203,13 +206,6 @@ end $$;
 do $$
 begin
   create policy "acesso total medicao_respostas" on medicao_respostas
-    for all using (true) with check (true);
-exception when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  create policy "acesso total medicao_acessos_externos" on medicao_acessos_externos
     for all using (true) with check (true);
 exception when duplicate_object then null;
 end $$;
