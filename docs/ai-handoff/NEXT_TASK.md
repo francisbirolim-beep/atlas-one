@@ -35,25 +35,27 @@ Criar a tela `PDF W.Vetro -> Orçamento Atlas` dentro da Confirmacao de Venda:
 ## Trilha visual — Atlas One Definitivo
 A identidade escolhida e: ERP industrial moderno + SaaS + operacao + engenharia.
 
-A Home e o App Shell ja foram modernizados. A branch `feat/atlas-shell-definitivo-v2` refina a Topbar e a base global sem alterar regras de negocio.
+A Home e o App Shell ja foram modernizados. A branch `feat/atlas-shell-definitivo-v2` aplica essa identidade tambem na Medicao Final.
 
-### Proxima tarefa visual recomendada
-Aplicar o Design System ao modulo de Medicao Final em duas etapas pequenas:
+### Implementado na Medicao Final V2 nesta branch
+- quadro `/producao/medicao-final` com visual ERP e melhor responsividade;
+- detalhe `/producao/medicao-final/[id]` otimizado para celular;
+- progresso operacional por quantidade real de pecas;
+- identificacao dos medidores a partir dos itens ja concluidos;
+- alerta quando uma linha ainda representa varias unidades;
+- acao explicita para separar unidades NAO medidas em pecas individuais, preservando itens ja medidos para revisao humana;
+- nenhuma migration ou alteracao automatica destrutiva foi adicionada.
 
-1. `/producao/medicao-final`
-   - remover cabecalho/gradiente antigo que duplica o App Shell;
-   - usar PageHeader/SystemCard/SectionHeader ou componentes equivalentes;
-   - transformar o quadro em Kanban operacional mais compacto e legivel;
-   - destacar progresso por obra, quantidade de pecas, pendencias e proxima acao;
-   - manter drag-and-drop, exclusao Master, configuracao de colunas e criacao de medicao sem mudanca funcional.
+### Proxima tarefa da Medicao Final V2
+Evoluir o modelo funcional de forma pequena e versionada:
+1. definir/persistir responsavel da Medicao Final no nivel da obra, e nao apenas por item;
+2. criar estrutura de pendencias por peca;
+3. ampliar checklist dinamico com respostas Sim / Nao / Nao se aplica e regras condicionais;
+4. fotos categorizadas por peca;
+5. fluxo `aguardando -> liberado -> iniciado -> concluido -> revisao -> aprovado -> engenharia`;
+6. depois disso, criar acesso externo por token seguro e escopo somente da medicao.
 
-2. `/producao/medicao-final/[id]`
-   - mobile-first;
-   - cabecalho com cliente/obra/progresso;
-   - lista de pecas com status;
-   - abas Medidas / Checklist / Fotos / Observacoes;
-   - botoes grandes e campos numericos adequados para uso em obra;
-   - preservar regras atuais de medicao e checklist.
+IMPORTANTE: essas proximas etapas exigem schema persistente novo. Criar migrations versionadas no repositorio; nao repetir a divida tecnica das migrations v16-v19.
 
 ## Evolucao de arquitetura depois da Fase 2
 Criar entidade persistente `vendas` ou `obras`, separando:
@@ -64,4 +66,4 @@ Criar entidade persistente `vendas` ou `obras`, separando:
 - Nunca commitar direto em main; sempre branch -> PR -> Vercel -> merge manual.
 - Migrations v16-v19 seguem desalinhadas; nao reaplicar no banco atual.
 - Nao voltar a criar processos operacionais diretamente no drag-and-drop de Vendido.
-- Na trilha visual, nao alterar regras de negocio incidentalmente.
+- Nao reinterpretar automaticamente dados de medicao ja concluidos.
