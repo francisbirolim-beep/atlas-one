@@ -80,17 +80,28 @@ Mergeado:
 - modais e responsividade modernizados;
 - drag-and-drop e automacoes preservados.
 
-## Orcamentos profissionais — branch atual
-Branch `feat/atlas-professional-orcamentos-v1`:
+## Central de Orcamentos profissional — PR #60
+Mergeado:
 - `/orcamento` redesenhado como Central de Orcamentos;
 - atalhos para detalhado, rapido, pesquisa e pipeline;
-- `/orcamento/pesquisar` recebe camada visual profissional;
-- nenhuma regra de calculo/preco foi alterada.
+- `/orcamento/pesquisar` integrado ao Professional Shell;
+- nenhuma formula, regra de preco ou persistencia alterada.
+
+## Medicao Final profissional — PR #61
+Branch `feat/atlas-professional-medicao-final-v1`; Build Validation passou.
+
+Implementado:
+- painéis V2 agrupados em `atlas-medicao-tools`;
+- folha visual isolada `app/atlas-medicao-professional.css`;
+- hierarquia visual refinada para progresso/status, acesso externo e checklist;
+- melhor adaptacao desktop/mobile;
+- tela legada abaixo dos painéis aproximada visualmente do novo Design System;
+- nenhuma regra V2 alterada.
 
 ## Proximas evolucoes recomendadas
-1. validar e mergear a camada profissional de Orcamentos;
-2. aplicar o Design System na Medicao Final sem reescrever regras;
-3. aplicar em Producao e Engenharia;
+1. mergear PR #61 apos revisao final;
+2. aplicar Design System em Producao;
+3. aplicar Design System em Engenharia;
 4. validar funcionalmente Confirmacao de Venda Fase 1;
 5. definir motor simples de regras condicionais/foto obrigatoria do checklist;
 6. criar liberacao persistente para Engenharia apos aprovacao;
