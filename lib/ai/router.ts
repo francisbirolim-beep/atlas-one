@@ -7,13 +7,14 @@ export function registrarAIProvider(provider: AIProvider) {
 }
 
 export function listarAIProvidersRegistrados(): AIProviderId[] {
-  return [...providers.keys()]
+  return Array.from(providers.keys())
 }
 
 export async function executarComAI(request: AIRequest): Promise<AIResponse> {
+  const registrados = Array.from(providers.keys())
   const ordem: AIProviderId[] = request.provedorPreferido
-    ? [request.provedorPreferido, ...[...providers.keys()].filter(id => id !== request.provedorPreferido)]
-    : [...providers.keys()]
+    ? [request.provedorPreferido, ...registrados.filter(id => id !== request.provedorPreferido)]
+    : registrados
 
   if (ordem.length === 0) {
     throw new Error('Nenhum provedor de IA foi configurado no Atlas.')
