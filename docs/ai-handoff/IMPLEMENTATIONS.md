@@ -29,28 +29,32 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - Medicao Final aprovada cria ou atualiza de forma atomica/idempotente a entrada correspondente na Engenharia.
 - Card leva cliente, local e as 6 medidas finais por peca.
 - Usa `orcamento_id` para evitar duplicidade.
-- Migration `20260811181300_engenharia_entrada_automatica.sql` aplicada e validada no Supabase.
 
 ## Engenharia Fase 2 — PR #66
 - rota dedicada `/engenharia`;
 - `setor_kanban_itens` permanece como fonte unica de cards;
 - KPIs e etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao;
-- drag-and-drop respeitando permissoes;
-- detalhe da obra com Medicao Final aprovada e as 6 medidas finais de cada peca;
-- migration `20260811183500_engenharia_modulo_v1.sql` ativa a rota e padroniza as quatro etapas;
-- migration aplicada e validada no Supabase.
+- detalhe da obra com Medicao Final aprovada e as 6 medidas finais por peca.
 
 ## Engenharia Fase 3 — PR #69
 - conferencia tecnica persistente por peca;
 - status Pendente, Conferida e Pendencia;
 - observacao e responsavel pela conferencia;
-- progresso da conferencia por obra na interface;
-- bloqueio visual e de banco para impedir liberacao incompleta para Producao;
-- migration `20260811192000_engenharia_conferencia_tecnica_v1.sql` aplicada e validada no Supabase.
+- progresso da conferencia por obra;
+- bloqueio visual e de banco para impedir liberacao incompleta.
+
+## Engenharia Fase 4 — PR #73
+- liberacao operacional real de Engenharia para Producao;
+- ao mover para `Liberado para producao`, RPC transacional revalida a conferencia tecnica;
+- registra quem liberou e quando no card da Engenharia;
+- cria ou atualiza de forma idempotente o card correspondente em `producao_itens` usando `orcamento_id`;
+- preserva titulo/descricao derivados da Medicao Final e evita duplicidade;
+- serializa liberacoes concorrentes do mesmo orcamento;
+- migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
 ## Pontos funcionais ainda pendentes
-- Engenharia Fase 4: registrar liberacao e criar/atualizar entrada real na Producao de forma idempotente.
-- MEE/calculos automaticos, receitas de tipologias, perfis/acessorios e lista de corte.
+- Engenharia Fase 5: base de receitas tecnicas por tipologia.
+- MEE/calculos automaticos, perfis/acessorios, lista de materiais, lista de corte e otimizacao.
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
 - Parser/importacao PDF W.Vetro ainda precisa de fluxo estruturado e conferivel.
 - Regras condicionais/foto obrigatoria do checklist V2 ainda pendentes.
