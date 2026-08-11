@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, `main` apos PR #64 e branch atual `feat/engenharia-modulo-v1`.
+Verificado em: 2026-08-11, `main` apos PR #66 e migration `20260811183500_engenharia_modulo_v1.sql` aplicada.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -14,6 +14,8 @@ Verificado em: 2026-08-11, `main` apos PR #64 e branch atual `feat/engenharia-mo
 - Medicao Final V2 operacional (PRs #54, #55 e #56), incluindo checklist/fotos e link externo seguro.
 - PR #63: base profissional para setores genericos.
 - PR #64: Medicao Final aprovada cria/atualiza de forma atomica e idempotente a entrada correspondente na Engenharia; migration `20260811181300_engenharia_entrada_automatica.sql` aplicada e validada.
+- PR #66: modulo proprio de Engenharia v1 em `/engenharia`, com KPIs, quatro etapas tecnicas, drag-and-drop conforme permissao e detalhe das pecas com as 6 medidas finais.
+- Migration `20260811183500_engenharia_modulo_v1.sql` aplicada e validada; setor Engenharia aponta para `/engenharia` e usa as etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.
@@ -23,26 +25,23 @@ Verificado em: 2026-08-11, `main` apos PR #64 e branch atual `feat/engenharia-mo
 - PR #61 — Medicao Final profissional.
 - PR #62 — Kanban de Producao profissional.
 - PR #63 — base profissional dos setores genericos.
+- PR #66 — Engenharia com rota propria e linguagem visual do Atlas.
 
-## ENGENHARIA — EM IMPLEMENTACAO NESTE BRANCH
-Branch: `feat/engenharia-modulo-v1`.
+## ENGENHARIA — ESTADO REAL
+- Fase 1 concluida: Medicao Final aprovada entra automaticamente na Engenharia.
+- Fase 2 concluida: rota `/engenharia` propria, fluxo Recebidas -> Conferencia tecnica -> Em desenvolvimento -> Liberado para producao.
+- Fonte unica de cards continua sendo `setor_kanban_itens`; nao existe duplicacao paralela de obras.
+- Detalhe da obra mostra cliente, local, Medicao Final aprovada e as 6 medidas finais por peca.
+- Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
 
-Escopo implementado:
-- rota dedicada `/engenharia`;
-- reutiliza `setor_kanban_itens` como fonte unica de cards, sem duplicar dados;
-- KPIs operacionais;
-- quatro etapas tecnicas: Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao;
-- drag-and-drop respeitando permissoes `oculto/consulta/edicao`;
-- detalhe de cada obra com cliente, local, Medicao Final aprovada e pecas com as 6 medidas finais;
-- acesso de retorno para a Medicao Final original;
-- migration ativa a rota `/engenharia` no cadastro do setor e padroniza as quatro etapas.
-
-## FORA DO ESCOPO DESTA FASE
-- MEE/calculo tecnico automatico.
-- Receitas de tipologias, perfis, acessorios e reforcos.
-- Lista de corte e otimizacao de barras.
-- Geracao automatica de materiais.
-- Entidade persistente `vendas`/`obras` ainda nao existe.
+## PROXIMA FASE RECOMENDADA
+Engenharia Fase 3:
+- conferencia tecnica persistente por peca;
+- responsavel tecnico;
+- observacoes e pendencias tecnicas;
+- estado de revisao por peca;
+- bloquear liberacao para Producao enquanto houver peca nao conferida ou pendencia aberta;
+- registrar quem liberou e quando.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
 - Confirmacao de Venda Fase 1.
@@ -51,6 +50,7 @@ Escopo implementado:
 - CRM existe no codigo; uso real nao confirmado nesta sessao.
 
 ## PARCIAL / DIVIDA TECNICA
+- Entidade persistente `vendas`/`obras` ainda nao existe.
 - Regras condicionais completas do checklist V2 e `exigir_foto_quando` ainda pendentes.
 - Conversao PDF W.Vetro -> Orcamento Atlas estruturado e conferivel ainda precisa de tela de revisao.
 - Design System ainda nao foi aplicado em todas as telas antigas.
