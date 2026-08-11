@@ -267,3 +267,82 @@
     width: min(84vw, 292px) !important;
   }
 }
+
+/* Orçamentos — hub e consulta no mesmo padrão visual do shell profissional. */
+.atlas-orcamentos-professional > div {
+  min-height: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.atlas-orcamentos-professional > div > header {
+  display: none !important;
+}
+
+.atlas-orcamentos-professional > div > main {
+  width: 100%;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+  padding: 1rem 1rem 2rem !important;
+}
+
+.atlas-orcamentos-professional > div > main > div:first-child {
+  border-color: #e2e8f0 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.035);
+}
+
+.atlas-orcamentos-professional input,
+.atlas-orcamentos-professional select {
+  min-height: 40px;
+  border-color: #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #f8fafc !important;
+  outline: none;
+}
+
+.atlas-orcamentos-professional input:focus,
+.atlas-orcamentos-professional select:focus {
+  border-color: #94a3b8 !important;
+  background: #ffffff !important;
+}
+
+.atlas-orcamentos-professional > div > main > div[class*="space-y-2"] > button {
+  border-width: 1px !important;
+  border-color: #e2e8f0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.025);
+}
+
+.atlas-orcamentos-professional > div > main > div[class*="space-y-2"] > button:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 0.06) !important;
+  transform: translateY(-1px);
+}
+
+.atlas-orcamentos-professional [class*="bg-black/40"] {
+  background: rgb(15 23 42 / 0.55) !important;
+  backdrop-filter: blur(4px);
+}
+
+.atlas-orcamentos-professional [class*="fixed inset-0"] > div {
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.2);
+}
+
+@media (min-width: 768px) {
+  .atlas-orcamentos-professional > div > main {
+    padding: 1.5rem 1.5rem 2.75rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .atlas-orcamentos-professional > div > main {
+    padding: 0.8rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-orcamentos-professional > div > main > div:first-child {
+    padding: 0.75rem !important;
+  }
+}
