@@ -22,7 +22,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
-      <Sidebar />
+      <div className="atlas-sidebar-shell contents md:block">
+        <Sidebar />
+      </div>
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
         <main
