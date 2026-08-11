@@ -1,0 +1,161 @@
+/* Setores genéricos — base profissional para Engenharia e áreas ainda sem rota própria. */
+
+.atlas-setor-professional > div {
+  min-height: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.atlas-setor-professional > div > header {
+  display: none !important;
+}
+
+.atlas-setor-professional > div > main {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 1rem 1rem 2rem !important;
+}
+
+.atlas-setor-professional > div > main > div:first-child {
+  margin-bottom: 1rem !important;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.atlas-setor-professional > div > main > div:first-child > p {
+  color: #64748b !important;
+  font-size: 12px !important;
+  font-weight: 600;
+}
+
+.atlas-setor-professional > div > main > div:first-child > button {
+  min-height: 36px;
+  border: 1px solid #d1fae5;
+  border-radius: 9px;
+  padding: 0 0.75rem;
+  background: #ecfdf5;
+  color: #047857 !important;
+  font-size: 12px !important;
+  font-weight: 700;
+  text-decoration: none !important;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] {
+  gap: 12px !important;
+  padding-bottom: 1.25rem !important;
+  scroll-snap-type: x proximity;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div {
+  width: 294px !important;
+  padding: 10px !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px !important;
+  background: #f1f5f9 !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  scroll-snap-align: start;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div > div:first-child {
+  min-height: 38px;
+  margin-bottom: 8px !important;
+  padding: 0 4px;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div > div:first-child span:first-child {
+  color: #334155 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div > div:nth-child(2) > div {
+  border-width: 1px !important;
+  border-color: #e2e8f0 !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.035);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div > div:nth-child(2) > div:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 22px rgb(15 23 42 / 0.08) !important;
+  transform: translateY(-1px);
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div > button:last-child {
+  min-height: 36px;
+  border: 1px dashed transparent;
+  border-radius: 9px !important;
+  color: #64748b !important;
+}
+
+.atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div > button:last-child:hover {
+  border-color: #cbd5e1;
+  background: #fff !important;
+  color: #047857 !important;
+}
+
+.atlas-setor-professional [class*="bg-black/40"] {
+  background: rgb(15 23 42 / 0.55) !important;
+  backdrop-filter: blur(4px);
+}
+
+.atlas-setor-professional [class*="fixed inset-0"] > div {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.2);
+}
+
+.atlas-setor-professional [class*="fixed inset-0"] input,
+.atlas-setor-professional [class*="fixed inset-0"] textarea {
+  min-height: 40px;
+  border-color: #dbe3ed !important;
+  border-radius: 10px !important;
+  background: #f8fafc !important;
+}
+
+.atlas-setor-professional [class*="fixed inset-0"] button[class*="bg-brand-navy"] {
+  background: #059669 !important;
+}
+
+.atlas-setor-professional > div > main[class*="flex-col"] {
+  margin-top: 1.5rem !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+@media (min-width: 768px) {
+  .atlas-setor-professional > div > main {
+    padding: 1.25rem 1.5rem 2.5rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .atlas-setor-professional > div > main {
+    padding: 0.8rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-setor-professional > div > main > div[class*="overflow-x-auto"] > div {
+    width: min(84vw, 294px) !important;
+  }
+
+  .atlas-setor-professional [class*="fixed inset-0"] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .atlas-setor-professional [class*="fixed inset-0"] > div {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 18px 18px 0 0 !important;
+    padding: 1rem !important;
+  }
+}
