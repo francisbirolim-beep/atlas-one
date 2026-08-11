@@ -10,6 +10,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [autenticado, setAutenticado] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
+  const rotaPublica = pathname === '/login' || pathname.startsWith('/medicao-final/acesso/')
 
   useEffect(() => {
     let ativo = true
@@ -18,14 +19,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (!ativo) return
       setAutenticado(!!session)
       setChecking(false)
-      if (!session && pathname !== '/login') {
+      if (!session && !rotaPublica) {
         router.replace('/login')
       }
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAutenticado(!!session)
-      if (!session && pathname !== '/login') {
+      if (!session && !rotaPublica) {
         router.replace('/login')
       }
     })
@@ -34,9 +35,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       ativo = false
       listener.subscription.unsubscribe()
     }
-  }, [pathname, router])
+  }, [rotaPublica, router])
 
-  if (pathname === '/login') return <>{children}</>
+  if (rotaPublica) return <>{children}</>
 
   if (checking) {
     return (
