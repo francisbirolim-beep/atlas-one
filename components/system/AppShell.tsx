@@ -48,9 +48,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </div>
             </section>
           )}
-          {medicaoFinalId && <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />}
-          {medicaoFinalId && <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />}
-          {medicaoFinalId && <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />}
+          {medicaoFinalId && (
+            <div className="atlas-medicao-tools">
+              <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
+              <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
+              <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
+            </div>
+          )}
           <div
             className={
               ehMedicaoFinal
