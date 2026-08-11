@@ -101,6 +101,7 @@ export default function DetalheMedicaoFinal() {
   const [fotoAlturasUrl, setFotoAlturasUrl] = useState<string | null>(null)
   const [enviandoFotoLargura, setEnviandoFotoLargura] = useState(false)
   const [enviandoFotoAltura, setEnviandoFotoAltura] = useState(false)
+  const [enviandoCampoExtraChave, setEnviandoCampoExtraChave] = useState<string | null>(null)
   const [camposExtrasItem, setCamposExtrasItem] = useState<TipologiaCampoExtra[]>([])
   const [valoresExtras, setValoresExtras] = useState<Record<string, string | number>>({})
   const [salvandoMedida, setSalvandoMedida] = useState(false)
@@ -237,6 +238,13 @@ export default function DetalheMedicaoFinal() {
     const url = await uploadFoto(file)
     if (url) setFotoAlturasUrl(url)
     setEnviandoFotoAltura(false)
+  }
+
+  async function enviarFotoCampoExtra(chave: string, file: File) {
+    setEnviandoCampoExtraChave(chave)
+    const url = await uploadFoto(file)
+    if (url) setValoresExtras(prev => ({ ...prev, [chave]: url }))
+    setEnviandoCampoExtraChave(null)
   }
 
   const diffLargura = modoLargura === 'digitar' ? diferenca(larguraBaixo, larguraMeio, larguraCima) : null
@@ -621,17 +629,33 @@ export default function DetalheMedicaoFinal() {
                 {camposExtrasItem.map(c => (
                   <div key={c.id}>
                     <label className="block text-[10px] text-slate-400 mb-0.5">{c.nome}{c.obrigatorio && <span className="text-red-500"> *</span>}</label>
-                    <input
-                      type={c.tipo_valor === 'numero' ? 'number' : 'text'}
-                      value={valoresExtras[c.chave] ?? ''}
-                      onChange={e => {
-                        const v = c.tipo_valor === 'numero'
-                          ? (e.target.value === '' ? '' : parseFloat(e.target.value))
-                          : e.target.value
-                        setValoresExtras(prev => ({ ...prev, [c.chave]: v as string | number }))
-                      }}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                    />
+                    {c.tipo_valor === 'foto' ? (
+                      <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm cursor-pointer ${valoresExtras[c.chave] ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
+                        {enviandoCampoExtraChave === c.chave ? (
+                          <><Loader2 size={16} className="animate-spin" /> Enviando...</>
+                        ) : valoresExtras[c.chave] ? (
+                          <><Check size={16} /> Foto enviada (trocar)</>
+                        ) : (
+                          <><Camera size={16} /> Tirar/enviar foto</>
+                        )}
+                        <input
+                          type="file" accept="image/*" capture="environment" className="hidden"
+                          onChange={e => e.target.files?.[0] && enviarFotoCampoExtra(c.chave, e.target.files[0])}
+                        />
+                      </label>
+                    ) : (
+                      <input
+                        type={c.tipo_valor === 'numero' ? 'number' : 'text'}
+                        value={valoresExtras[c.chave] ?? ''}
+                        onChange={e => {
+                          const v = c.tipo_valor === 'numero'
+                            ? (e.target.value === '' ? '' : parseFloat(e.target.value))
+                            : e.target.value
+                          setValoresExtras(prev => ({ ...prev, [c.chave]: v as string | number }))
+                        }}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                    )}
                   </div>
                 ))}
               </div>

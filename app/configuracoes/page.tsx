@@ -642,6 +642,7 @@ async function salvarSla(colunaId: string) {
           <select value={editTipoValor} onChange={e => setEditTipoValor(e.target.value as TipoValorCampoExtra)} className="border border-slate-300 rounded-lg px-2 py-1 text-xs">
             <option value="numero">Número</option>
             <option value="texto">Texto</option>
+            <option value="foto">Foto</option>
           </select>
           <label className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
             <input type="checkbox" checked={editObrigatorio} onChange={e => setEditObrigatorio(e.target.checked)} /> Obrigatório
@@ -653,7 +654,7 @@ async function salvarSla(colunaId: string) {
     }
     return (
       <div key={c.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5">
-        <span className="text-sm text-slate-600">{c.nome} <span className="text-slate-400">({c.tipo_valor === 'numero' ? 'número' : 'texto'})</span>{c.obrigatorio && <span className="ml-1 text-[10px] text-red-500 font-medium">Obrigatório</span>}</span>
+        <span className="text-sm text-slate-600">{c.nome} <span className="text-slate-400">({c.tipo_valor === 'numero' ? 'número' : c.tipo_valor === 'foto' ? 'foto' : 'texto'})</span>{c.obrigatorio && <span className="ml-1 text-[10px] text-red-500 font-medium">Obrigatório</span>}</span>
         <div className="flex items-center gap-2">
           <button onClick={() => iniciarEdicaoCampoExtra(c)} className="text-slate-300 hover:text-brand-navy"><Pencil size={13} /></button>
           <button onClick={() => removerCampoExtraChecklist(c.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={13} /></button>
@@ -1429,6 +1430,7 @@ async function salvarSla(colunaId: string) {
                 >
                   <option value="numero">Número</option>
                   <option value="texto">Texto</option>
+                  <option value="foto">Foto</option>
                 </select>
                 <label className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
                   <input
