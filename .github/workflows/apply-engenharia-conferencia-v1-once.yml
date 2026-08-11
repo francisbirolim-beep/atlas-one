@@ -1,0 +1,67 @@
+name: Apply Engenharia Conferencia V1 Once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/apply-engenharia-conferencia-v1-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Build IPv4 session pooler URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_URL=$(python - <<'PY'
+          import os
+          import urllib.parse
+          project = os.environ['SUPABASE_PROJECT_ID']
+          password = urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{project}:{password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+
+      - name: Guard exact pending migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/dryrun.txt
+          grep -q '20260811192000' /tmp/dryrun.txt || { echo 'ERRO: migration alvo nao esta pendente'; exit 1; }
+          if grep -Eo '[0-9]{14}_[^ ]+\.sql' /tmp/dryrun.txt | grep -v '^20260811192000_' | grep -q .; then
+            echo 'ERRO: existe outra migration pendente alem da migration alvo'
+            exit 1
+          fi
+
+      - name: Apply exact pending migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --db-url "$SUPABASE_DB_URL"
+
+      - name: Verify migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration list --db-url "$SUPABASE_DB_URL" | tee /tmp/list.txt
+          grep -q '20260811192000' /tmp/list.txt || { echo 'ERRO: migration aplicada nao aparece no historico remoto'; exit 1; }
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/post.txt
+          grep -qi 'Remote database is up to date' /tmp/post.txt || { echo 'ERRO: banco ainda possui migration pendente'; exit 1; }
