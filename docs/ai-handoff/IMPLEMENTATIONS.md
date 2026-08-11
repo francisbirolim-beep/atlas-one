@@ -51,18 +51,33 @@ Implementado e mergeado em main:
 - alertas operacionais e acoes rapidas;
 - agenda e produtividade na Home.
 
-## Atlas One Definitivo — Shell visual v2 (branch feat/atlas-shell-definitivo-v2)
-Objetivo: aproximar a interface real da direcao visual escolhida para o Atlas One (ERP industrial moderno + SaaS + operacao + engenharia).
+## Atlas One Definitivo + Medicao Final V2 (PR #49 / branch feat/atlas-shell-definitivo-v2)
+Objetivo: aproximar a interface real da direcao visual escolhida para o Atlas One e iniciar a evolucao funcional da Medicao Final sem quebrar o fluxo existente.
 
-Implementado nesta etapa:
-- Topbar com busca global em destaque;
-- botao `+ Novo` ligado ao Orcamento Rapido;
-- entrada visual para `IA Atlas`;
-- notificacoes e perfil reorganizados;
+Implementado:
+- Topbar com busca global em destaque, `+ Novo`, IA Atlas, notificacoes e perfil;
 - base global de tipografia, foco e selecao;
-- nenhuma mudanca de regra de negocio ou banco.
+- quadro de Medicao Final com visual ERP e melhor responsividade;
+- detalhe da Medicao Final otimizado para celular e uso em obra;
+- modais de medicao em formato bottom sheet no mobile;
+- resumo operacional com progresso por quantidade real de pecas;
+- medidores identificados a partir dos itens concluidos;
+- deteccao de linhas antigas com `quantidade > 1`;
+- acao manual e segura para separar somente unidades ainda nao medidas;
+- itens agrupados ja medidos nao sao reinterpretados e contam conservadoramente como uma peca ate revisao.
 
-Status: branch aberta para PR/preview. Proxima aplicacao visual recomendada: Medicao Final.
+Schema futuro versionado:
+- criado `supabase-migration-v20-medicao-final-v2.sql`;
+- a V20 prepara responsavel/status, pendencias, fotos categorizadas, respostas de checklist, regras condicionais, acesso externo por token-hash e versionamento;
+- a tabela de tokens externos foi desenhada para acesso server-side/service role, sem policy permissiva de client;
+- a V20 NAO foi aplicada no banco nesta implementacao.
+
+Status: branch/PR em validacao pela Vercel. Funcionalidades que dependem da V20 ainda NAO estao implementadas nem disponiveis em producao.
 
 ## Proxima evolucao funcional
-Fase 2: converter PDF W.Vetro em um `Orçamento Atlas` estruturado, editavel e conferivel. O PDF original fica como origem; futuramente o PDF do Atlas passa a ser a saida oficial gerada dos dados estruturados.
+- aplicar e validar a V20 no banco antes de codigo que dependa dela;
+- implementar responsavel/status operacional e pendencias da Medicao Final;
+- evoluir checklist e fotos por peca;
+- implementar aprovacao e liberacao para Engenharia;
+- somente depois criar link externo seguro via Route Handler server-side;
+- em paralelo, Fase 2 da Confirmacao de Venda: PDF W.Vetro -> Orçamento Atlas estruturado, editavel e conferivel.
