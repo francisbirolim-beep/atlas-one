@@ -111,6 +111,23 @@ jobs:
           echo "Lendo historico remoto de migrations via Session Pooler IPv4..."
           supabase migration list --db-url "$SUPABASE_DB_URL"
 
+      - name: Fetch remote migration files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Buscando migrations remotas para reconciliar o workspace..."
+          supabase migration fetch --db-url "$SUPABASE_DB_URL"
+          echo "Migrations disponiveis no workspace:"
+          find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort
+
+      - name: Upload reconciled migrations artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-reconciled-migrations
+          path: supabase/migrations/*.sql
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Dry-run pending migrations
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
         shell: bash
