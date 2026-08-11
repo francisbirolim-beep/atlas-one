@@ -1,9 +1,10 @@
 import jsPDF from 'jspdf'
 import { DadosEmpresa, ItemBalcao } from './tipos'
+import { formatarMoeda } from './formatacao'
 
 export interface DadosPdfBalcao {
   numero: number | null
-  emissao: string // data já formatada, ex: 08/08/2026
+  emissao: string
   vendedorNome: string
   clienteNome: string
   clienteTelefone?: string | null
@@ -21,10 +22,6 @@ export interface OpcoesPdfBalcao {
   mostrarPrecoUnitario: boolean
 }
 
-// Converte uma URL de imagem pública (Supabase Storage) em dataURL base64,
-// pra poder desenhar no PDF com jsPDF (addImage exige base64, não aceita URL
-// remota direto). Se der erro (foto não existe mais, CORS etc.), retorna null
-// e o PDF segue sem a foto daquele item.
 async function urlParaDataUrl(url: string): Promise<string | null> {
   try {
     const resp = await fetch(url)
@@ -40,10 +37,6 @@ async function urlParaDataUrl(url: string): Promise<string | null> {
   }
 }
 
-function formatarMoeda(valor: number): string {
-  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
 const MARGEM = 14
 const LARGURA_PAGINA = 210
 const ALTURA_PAGINA = 297
@@ -56,8 +49,6 @@ export async function gerarPdfOrcamentoBalcao(
 ): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
-  // Pré-carrega as fotos dos itens (se a opção estiver ligada) antes de
-  // desenhar, já que addImage precisa de dataURL síncrono.
   const fotosDataUrl: Record<number, string | null> = {}
   if (opcoes.mostrarFoto) {
     await Promise.all(
@@ -81,7 +72,6 @@ export async function gerarPdfOrcamentoBalcao(
     }
   }
 
-  // ---- Cabeçalho: empresa (esquerda) + orçamento (direita) ----
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
   doc.text(empresa.nome || 'Empresa', MARGEM, y)
@@ -115,7 +105,6 @@ export async function gerarPdfOrcamentoBalcao(
   linha(y)
   y += 6
 
-  // ---- Dados do cliente ----
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.text('CLIENTE:', MARGEM, y)
@@ -134,11 +123,10 @@ export async function gerarPdfOrcamentoBalcao(
   linha(y)
   y += 6
 
-  // ---- Tabela de itens ----
   const colFoto = opcoes.mostrarFoto ? 20 : 0
   const colQtde = 14
-  const colUnit = opcoes.mostrarPrecoUnitario ? 26 : 0
-  const colTotal = 26
+  const colUnit = opcoes.mostrarPrecoUnitario ? 30 : 0
+  const colTotal = 30
   const colProduto = LARGURA_UTIL - colFoto - colQtde - colUnit - colTotal
 
   function cabecalhoTabela() {
@@ -156,15 +144,12 @@ export async function gerarPdfOrcamentoBalcao(
   }
 
   cabecalhoTabela()
-
   doc.setFont('helvetica', 'normal')
+
   for (let i = 0; i < dados.itens.length; i++) {
     const item = dados.itens[i]
     const alturaFoto = opcoes.mostrarFoto ? 16 : 0
-    const descLinhas = doc.splitTextToSize(
-      `${item.nome}${item.descricao ? ' — ' + item.descricao : ''}`,
-      colProduto - 2
-    )
+    const descLinhas = doc.splitTextToSize(`${item.nome}${item.descricao ? ' — ' + item.descricao : ''}`, colProduto - 2)
     const alturaTexto = Math.max(descLinhas.length * 3.6, 6)
     const alturaLinha = Math.max(alturaFoto, alturaTexto) + 3
 
@@ -183,6 +168,7 @@ export async function gerarPdfOrcamentoBalcao(
       }
       x += colFoto
     }
+
     doc.setFontSize(8)
     doc.text(descLinhas, x + 1, y + 4)
     x += colProduto
@@ -202,7 +188,6 @@ export async function gerarPdfOrcamentoBalcao(
 
   y += 4
 
-  // ---- Condições / observações ----
   if (dados.condicoes) {
     garantirEspaco(20)
     doc.setFont('helvetica', 'bold')
@@ -215,7 +200,6 @@ export async function gerarPdfOrcamentoBalcao(
     y += linhasCond.length * 4 + 4
   }
 
-  // ---- Total ----
   const valorTotal = dados.itens.reduce((soma, it) => soma + it.preco_total, 0)
   garantirEspaco(30)
   doc.setDrawColor(0)
@@ -225,10 +209,9 @@ export async function gerarPdfOrcamentoBalcao(
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
   doc.text('TOTAL:', MARGEM, y)
-  doc.text(`R$ ${formatarMoeda(valorTotal)}`, LARGURA_PAGINA - MARGEM, y, { align: 'right' })
+  doc.text(formatarMoeda(valorTotal), LARGURA_PAGINA - MARGEM, y, { align: 'right' })
   y += 14
 
-  // ---- Assinatura ----
   garantirEspaco(20)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
