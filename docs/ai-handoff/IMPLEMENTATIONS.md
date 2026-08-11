@@ -29,7 +29,7 @@ PR #31 ampliou o parser/importacao e sincronizacao do PDF. A leitura ainda falha
 ## Exclusao Master da Medicao Final
 PRs #32/#33: Master pode excluir Medicao Final e limpar cards derivados pelo mesmo `orcamento_id`, preservando o orcamento original e cliente.
 
-## Confirmacao de Venda — Fase 1 (branch feat/confirmacao-venda)
+## Confirmacao de Venda — Fase 1
 Objetivo: impedir que arrastar para `Vendido` gere processos incompletos.
 
 Implementado:
@@ -38,7 +38,31 @@ Implementado:
 - `lib/vendas.ts`: carrega cliente/orcamentos, valida e salva cadastro completo, bloqueia venda sem itens estruturados, cria/reutiliza Medicao Final e dispara automacoes somente no clique `Iniciar processo da venda`;
 - cliente com varios orcamentos pode escolher explicitamente qual proposta foi fechada.
 
-Status: IMPLEMENTADO NA BRANCH, AINDA NAO VALIDADO/NAO MERGEADO.
+Status: implementado; manter validacao funcional antes de considerar fluxo definitivo.
 
-## Proxima evolucao
+## App Shell e Home executiva (PRs #45 a #48)
+Objetivo: dar ao Atlas aparencia consistente de ERP e criar uma Home de gestao real.
+
+Implementado e mergeado em main:
+- AppShell compartilhado;
+- Topbar responsiva;
+- componentes reutilizaveis de sistema;
+- indicadores de gestao;
+- alertas operacionais e acoes rapidas;
+- agenda e produtividade na Home.
+
+## Atlas One Definitivo — Shell visual v2 (branch feat/atlas-shell-definitivo-v2)
+Objetivo: aproximar a interface real da direcao visual escolhida para o Atlas One (ERP industrial moderno + SaaS + operacao + engenharia).
+
+Implementado nesta etapa:
+- Topbar com busca global em destaque;
+- botao `+ Novo` ligado ao Orcamento Rapido;
+- entrada visual para `IA Atlas`;
+- notificacoes e perfil reorganizados;
+- base global de tipografia, foco e selecao;
+- nenhuma mudanca de regra de negocio ou banco.
+
+Status: branch aberta para PR/preview. Proxima aplicacao visual recomendada: Medicao Final.
+
+## Proxima evolucao funcional
 Fase 2: converter PDF W.Vetro em um `Orçamento Atlas` estruturado, editavel e conferivel. O PDF original fica como origem; futuramente o PDF do Atlas passa a ser a saida oficial gerada dos dados estruturados.
