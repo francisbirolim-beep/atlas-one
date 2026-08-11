@@ -89,16 +89,16 @@ jobs:
           fi
           echo "Projeto alvo encontrado na conta autenticada."
 
-      - name: Link production project
+      - name: Link production project using direct connection
         shell: bash
         run: |
           set -euo pipefail
-          echo "Conectando a CLI ao projeto configurado..."
-          if ! supabase link --project-ref "$SUPABASE_PROJECT_ID"; then
-            echo "ERRO: falha no supabase link. Como token e Project ID ja foram validados, a causa mais provavel e SUPABASE_DB_PASSWORD incorreta/desatualizada ou indisponibilidade de conexao com o banco."
+          echo "Conectando a CLI diretamente ao Postgres, sem pooler..."
+          if ! supabase link --project-ref "$SUPABASE_PROJECT_ID" --skip-pooler; then
+            echo "ERRO: falha no supabase link usando conexao direta. Verifique senha do banco, rede ou disponibilidade do endpoint direto."
             exit 1
           fi
-          echo "Projeto vinculado com sucesso."
+          echo "Projeto vinculado por conexao direta com sucesso."
 
       - name: Audit migration history
         shell: bash
