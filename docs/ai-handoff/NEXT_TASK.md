@@ -1,22 +1,21 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-A Engenharia Fase 2 foi concluida no PR #66 e a migration `20260811183500_engenharia_modulo_v1.sql` foi aplicada e validada no Supabase.
+A Engenharia Fase 3 foi concluida no PR #69 e a migration `20260811192000_engenharia_conferencia_tecnica_v1.sql` foi aplicada e validada no Supabase.
 
-## PROXIMA TAREFA — ENGENHARIA FASE 3
-Criar conferencia tecnica persistente por obra/peca, preparando o futuro MEE sem implementar formulas ainda.
+## PROXIMA TAREFA — ENGENHARIA FASE 4
+Transformar `Liberado para producao` em uma liberacao operacional real, sem duplicar obra/card.
 
 Escopo recomendado:
-1. estado de conferencia por peca;
-2. responsavel tecnico por obra;
-3. observacoes tecnicas por peca;
-4. pendencias/revisoes tecnicas;
-5. registrar quem conferiu e quando;
-6. bloquear a etapa `Liberado para producao` enquanto existir peca nao conferida ou pendencia aberta;
-7. registrar quem liberou a obra e quando;
-8. manter acesso direto à Medicao Final original.
+1. registrar quem liberou a obra e quando;
+2. ao entrar em `Liberado para producao`, criar ou atualizar de forma idempotente a entrada correspondente na Producao;
+3. preservar vinculo com orcamento, Medicao Final e card da Engenharia;
+4. impedir duplicidade na Producao;
+5. manter bloqueio caso a conferencia tecnica deixe de estar completa;
+6. permitir retorno controlado para Engenharia se houver revisao tecnica;
+7. manter acesso direto ao detalhe da Medicao Final e ao historico tecnico.
 
-## DEPOIS DA FASE 3
+## DEPOIS DA FASE 4
 - criar base de receitas por tipologia;
 - mapear perfis, acessorios, reforcos e vidros;
 - implementar calculos/MEE;
@@ -27,12 +26,13 @@ Escopo recomendado:
 - Medicao Final V2 PRs #54 a #56.
 - Redesign profissional PRs #57 a #63.
 - Engenharia Fase 1 PR #64, com entrada automatica apos aprovacao da Medicao Final.
-- Engenharia Fase 2 PR #66, com rota `/engenharia`, KPIs, quatro etapas e detalhe das pecas; migration aplicada.
+- Engenharia Fase 2 PR #66, com rota `/engenharia`, KPIs, quatro etapas e detalhe das pecas.
+- Engenharia Fase 3 PR #69, com conferencia tecnica persistente por peca e bloqueio de liberacao incompleta; migration aplicada.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
 - Migration: dry-run em PR antes de apply controlado.
-- Nao iniciar formulas de MEE antes de fechar a estrutura de conferencia tecnica da Fase 3.
+- Nao iniciar formulas de MEE antes de fechar a liberacao real Engenharia -> Producao.
 - Vercel pode continuar sujeita a cota diaria; Build Validation confirma o codigo, mas producao depende do deploy.
