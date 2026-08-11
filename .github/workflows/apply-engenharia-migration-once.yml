@@ -1,0 +1,66 @@
+name: Apply Engenharia Migration Once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/apply-engenharia-migration-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    if: ${{ github.head_ref == 'ops/apply-engenharia-migration-v1' }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Build IPv4 session pooler URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_URL=$(python - <<'PY'
+          import os
+          import urllib.parse
+          project = os.environ['SUPABASE_PROJECT_ID']
+          password = urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{project}:{password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+
+      - name: Guard exact pending migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1)
+          echo "$OUT"
+          echo "$OUT" | grep -q '20260811181300_engenharia_entrada_automatica.sql'
+          COUNT=$(echo "$OUT" | grep -Eo '[0-9]{14}_[A-Za-z0-9_-]+\.sql' | sort -u | wc -l | tr -d ' ')
+          test "$COUNT" = "1" || { echo "ERRO: ha mais de uma migration pendente; apply bloqueado."; exit 1; }
+
+      - name: Apply exact pending migration
+        shell: bash
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
+
+      - name: Verify migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration list --db-url "$SUPABASE_DB_URL" | tee /tmp/migrations.txt
+          grep -q '20260811181300' /tmp/migrations.txt
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/dryrun.txt
+          grep -q 'Remote database is up to date' /tmp/dryrun.txt
