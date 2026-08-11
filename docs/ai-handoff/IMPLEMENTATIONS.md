@@ -1,83 +1,75 @@
 # IMPLEMENTATIONS.md — Atlas One (cronologico, resumido)
 
-Lista resumida das implementacoes relevantes, da mais antiga para a mais recente. Para detalhes de arquitetura ver ARCHITECTURE.md; para o que esta funcionando de fato ver CURRENT_STATE.md.
+Lista resumida das implementacoes relevantes. Para estado real usar CURRENT_STATE.md; para proxima tarefa usar NEXT_TASK.md.
 
-## Cadastro base (clientes, produtos, fornecedores)
-Objetivo: cadastro completo de clientes (com endereco/contato), produtos e fornecedores. Status: concluido.
+## Cadastro base / Kanban / Orcamentos
+Cadastro de clientes, produtos e fornecedores; Kanban de orcamentos; Orcamento Rapido e Balcao. Status: em uso.
 
-## Kanban de orcamentos
-Objetivo: quadro kanban para acompanhar orcamentos por coluna, com historico e automacoes. Status: concluido e em uso.
+## Medicao Final legado
+Fluxo por tipologia com 3 larguras, 3 alturas, fotos, campos extras configuraveis e medir/reabrir item. Status: em uso e preservado por compatibilidade.
 
-## Medicao Final
-Objetivo: apos venda confirmada, permitir medir cada esquadria fisicamente, com quadro proprio e checklist por tipologia. Status: em uso e evoluindo.
-
-## Importacao de itens via PDF
-Objetivo: ler PDF de orcamento e gerar itens. Status: existe no codigo, mas a heuristica ainda nao cobre com confiabilidade todos os PDFs reais W.Vetro. Nao deve liberar processo sem conferencia.
-
-## Checklist de medicao
-Campos configuraveis por tipologia, obrigatorios, numero/texto/foto, marcacao medido/reabrir. Status: concluido.
-
-## Tipologias dinamicas (PR #28)
-Tabela `tipologias`, CRUD e telas dinamicas. Status: concluido e mergeado. Limitacao: categoria porta/janela ainda nao conectada a lib/calculos.ts.
-
-## Automacao Kanban -> Medicao Final
-PR #30 implementou criacao automatica ao entrar em coluna `gera_medicao_final=true`. Posteriormente essa decisao foi revista porque a operacao precisa validar cliente, proposta fechada e itens antes de criar qualquer processo.
-
-## Leitura de PDF na Medicao Final
-PR #31 ampliou o parser/importacao e sincronizacao do PDF. A leitura ainda falha em layouts reais especificos; a estrategia foi alterada para transformar o PDF em dados estruturados e conferiveis antes da operacao.
-
-## Exclusao Master da Medicao Final
-PRs #32/#33: Master pode excluir Medicao Final e limpar cards derivados pelo mesmo `orcamento_id`, preservando o orcamento original e cliente.
+## Tipologias dinamicas
+Tabela e CRUD de tipologias dinamicas. Status: mergeado. Limitacao conhecida: categoria dinamica ainda nao esta totalmente conectada a `lib/calculos.ts`.
 
 ## Confirmacao de Venda — Fase 1
-Objetivo: impedir que arrastar para `Vendido` gere processos incompletos.
+Foi removida a criacao operacional automatica apenas pelo drag-and-drop em `Vendido`. A tela `/vendas/confirmar` exige cadastro completo, escolha do orcamento fechado e itens estruturados antes de iniciar o processo. Status: implementado; validacao funcional completa ainda pendente.
 
-Implementado:
-- `lib/kanban.ts`: colunas com `gera_medicao_final=true` passam a abrir a Confirmacao de Venda e nao executam fan-out/Medicao automaticamente;
-- `app/vendas/confirmar/page.tsx`: nova tela em 4 etapas (cadastro, escolha do orcamento, conferencia dos itens, iniciar processo);
-- `lib/vendas.ts`: carrega cliente/orcamentos, valida e salva cadastro completo, bloqueia venda sem itens estruturados, cria/reutiliza Medicao Final e dispara automacoes somente no clique `Iniciar processo da venda`;
-- cliente com varios orcamentos pode escolher explicitamente qual proposta foi fechada.
+## App Shell e Home executiva
+AppShell, Topbar, componentes de sistema, Home com indicadores, alertas, acoes rapidas e agenda. Status: mergeado.
 
-Status: implementado; manter validacao funcional antes de considerar fluxo definitivo.
+## Medicao Final V2 — base visual e progresso
+Detalhe mobile-first, resumo operacional por quantidade de pecas, identificacao de medidores e separacao explicita de unidades nao medidas. Itens agrupados ja medidos nao sao reinterpretados automaticamente. Status: mergeado.
 
-## App Shell e Home executiva (PRs #45 a #48)
-Objetivo: dar ao Atlas aparencia consistente de ERP e criar uma Home de gestao real.
+## Infraestrutura Supabase / migrations — 2026-08-11
+Problema encontrado: o GitHub Actions nao conseguia usar a conexao direta por ausencia de IPv6 e o pooler automatico apresentava falha de autenticacao.
 
-Implementado e mergeado em main:
-- AppShell compartilhado;
-- Topbar responsiva;
-- componentes reutilizaveis de sistema;
-- indicadores de gestao;
-- alertas operacionais e acoes rapidas;
-- agenda e produtividade na Home.
+Solucao definitiva:
+- Session Pooler IPv4 usado explicitamente por `--db-url`;
+- workflow audita historico e executa dry-run em PR;
+- migrations remotas antigas foram recuperadas com `supabase migration fetch` e versionadas em `supabase/migrations/`;
+- historico local/remoto reconciliado sem usar `migration repair --reverted`;
+- PR #52 mergeado.
 
-## Atlas One Definitivo + Medicao Final V2 (PR #49 / branch feat/atlas-shell-definitivo-v2)
-Objetivo: aproximar a interface real da direcao visual escolhida para o Atlas One e iniciar a evolucao funcional da Medicao Final sem quebrar o fluxo existente.
+## Migration V20 — Medicao Final V2 — 2026-08-11
+`20260811110000_medicao_final_v2.sql` foi aplicada no Supabase e validada. O dry-run posterior retornou banco atualizado.
 
-Implementado:
-- Topbar com busca global em destaque, `+ Novo`, IA Atlas, notificacoes e perfil;
-- base global de tipografia, foco e selecao;
-- quadro de Medicao Final com visual ERP e melhor responsividade;
-- detalhe da Medicao Final otimizado para celular e uso em obra;
-- modais de medicao em formato bottom sheet no mobile;
-- resumo operacional com progresso por quantidade real de pecas;
-- medidores identificados a partir dos itens concluidos;
-- deteccao de linhas antigas com `quantidade > 1`;
-- acao manual e segura para separar somente unidades ainda nao medidas;
-- itens agrupados ja medidos nao sao reinterpretados e contam conservadoramente como uma peca ate revisao.
+A V20 adiciona:
+- status operacional/responsavel/aprovacao/versionamento em `medicoes_finais`;
+- `medicao_pendencias`;
+- `medicao_fotos`;
+- `medicao_respostas`;
+- evolucao de `tipologia_campos_extras` com secao/opcoes/regras;
+- `medicao_acessos_externos` com RLS sem policy permissiva;
+- `medicao_revisoes`.
 
-Schema futuro versionado:
-- criado `supabase-migration-v20-medicao-final-v2.sql`;
-- a V20 prepara responsavel/status, pendencias, fotos categorizadas, respostas de checklist, regras condicionais, acesso externo por token-hash e versionamento;
-- a tabela de tokens externos foi desenhada para acesso server-side/service role, sem policy permissiva de client;
-- a V20 NAO foi aplicada no banco nesta implementacao.
+## Medicao Final V2 operacional — PR #54
+Implementado e mergeado:
+- responsavel no nivel da medicao;
+- fluxo aguardando/liberado/em medicao/com pendencia/concluido/aprovado;
+- liberar, iniciar, concluir e aprovar;
+- criar/resolver pendencias;
+- bloqueio de conclusao com unidades agrupadas, pecas nao medidas ou pendencias abertas.
 
-Status: branch/PR em validacao pela Vercel. Funcionalidades que dependem da V20 ainda NAO estao implementadas nem disponiveis em producao.
+## Checklist e fotos V2 — PR #55
+Branch `feat/medicao-final-v2-checklist`.
 
-## Proxima evolucao funcional
-- aplicar e validar a V20 no banco antes de codigo que dependa dela;
-- implementar responsavel/status operacional e pendencias da Medicao Final;
-- evoluir checklist e fotos por peca;
-- implementar aprovacao e liberacao para Engenharia;
-- somente depois criar link externo seguro via Route Handler server-side;
-- em paralelo, Fase 2 da Confirmacao de Venda: PDF W.Vetro -> Orçamento Atlas estruturado, editavel e conferivel.
+Implementado no codigo:
+- persistencia normalizada de respostas em `medicao_respostas`;
+- sincronizacao de compatibilidade com `medicao_itens.campos_extras`;
+- painel de checklist por peca/tipologia e por secao;
+- campos numero/texto/foto;
+- opcoes configuradas renderizadas como selecao rapida;
+- progresso dos campos obrigatorios por peca;
+- fotos categorizadas por peca em `medicao_fotos`;
+- galeria e remocao de fotos;
+- integracao via AppShell sem reescrever a tela legada.
+
+Status de validacao: PR #55 aberto. O deploy da Vercel foi bloqueado por `build-rate-limit`, antes da compilacao. Nao mergear ate obter um build Vercel valido.
+
+## Proximas evolucoes recomendadas
+1. obter build valido e mergear PR #55;
+2. validar o checklist V2 em uma medicao real;
+3. definir e implementar motor simples de regras condicionais/foto obrigatoria do checklist;
+4. criar link externo seguro por Route Handler server-side usando token-hash;
+5. criar liberacao persistente para Engenharia apos aprovacao;
+6. continuar Fase 2 da Confirmacao de Venda: PDF W.Vetro -> Orçamento Atlas estruturado e conferivel.
