@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
-import { criarItemSetor, editarItemSetor, listarColunasSetor } from './setorKanban'
-import type { MedicaoItem, SetorKanbanItem, Usuario } from './tipos'
+import { criarItemSetor, editarItemSetor, listarColunasSetor, listarItensSetor, moverItemSetor } from './setorKanban'
+import type { MedicaoFinal, MedicaoItem, Setor, SetorKanbanColuna, SetorKanbanItem, Usuario } from './tipos'
 
 export type ResultadoEntradaEngenharia = {
   ok: boolean
@@ -17,6 +17,25 @@ type MedicaoParaEngenharia = {
   bairro: string | null
   cidade: string | null
   aprovado_em: string | null
+}
+
+export type ObraEngenharia = SetorKanbanItem & {
+  medicao: (MedicaoFinal & {
+    status_operacional?: string | null
+    aprovado_em?: string | null
+    aprovado_por_nome?: string | null
+  }) | null
+  totalPecas: number
+}
+
+export type DetalheObraEngenharia = {
+  card: SetorKanbanItem
+  medicao: (MedicaoFinal & {
+    status_operacional?: string | null
+    aprovado_em?: string | null
+    aprovado_por_nome?: string | null
+  }) | null
+  itens: MedicaoItem[]
 }
 
 function medida(valor: number | null | undefined): string {
@@ -51,10 +70,10 @@ function montarDescricao(medicao: MedicaoParaEngenharia, itens: MedicaoItem[]): 
   return linhas.join('\n').trim()
 }
 
-async function localizarSetorEngenharia(): Promise<{ id: string; nome: string } | null> {
+export async function localizarSetorEngenharia(): Promise<Setor | null> {
   const { data, error } = await supabase
     .from('setores')
-    .select('id, nome')
+    .select('*')
     .ilike('nome', '%engenharia%')
     .order('ordem', { ascending: true })
     .limit(1)
@@ -65,7 +84,7 @@ async function localizarSetorEngenharia(): Promise<{ id: string; nome: string } 
     return null
   }
 
-  return data || null
+  return (data as Setor) || null
 }
 
 async function buscarCardExistente(
@@ -164,4 +183,90 @@ export async function garantirEntradaEngenhariaDaMedicao(
   }
 
   return { ok: true, setorId: setor.id, itemId: criado.id }
+}
+
+export async function carregarQuadroEngenharia(setorId: string): Promise<{
+  colunas: SetorKanbanColuna[]
+  obras: ObraEngenharia[]
+}> {
+  const [colunas, cards] = await Promise.all([
+    listarColunasSetor(setorId),
+    listarItensSetor(setorId),
+  ])
+
+  const orcamentoIds = Array.from(new Set(cards.map(card => card.orcamento_id).filter((id): id is string => Boolean(id))))
+  const medicoesPorOrcamento = new Map<string, any>()
+
+  if (orcamentoIds.length > 0) {
+    const { data, error } = await supabase
+      .from('medicoes_finais')
+      .select('id, orcamento_id, cliente_id, cliente_nome, cliente_whatsapp, endereco, bairro, cidade, cep, created_at, status_operacional, aprovado_em, aprovado_por_nome')
+      .in('orcamento_id', orcamentoIds)
+      .eq('status_operacional', 'aprovado')
+      .order('aprovado_em', { ascending: false })
+
+    if (!error) {
+      ;(data || []).forEach((medicao: any) => {
+        if (medicao.orcamento_id && !medicoesPorOrcamento.has(medicao.orcamento_id)) {
+          medicoesPorOrcamento.set(medicao.orcamento_id, medicao)
+        }
+      })
+    }
+  }
+
+  const medicaoIds = Array.from(medicoesPorOrcamento.values()).map((medicao: any) => medicao.id)
+  const totalPorMedicao = new Map<string, number>()
+  if (medicaoIds.length > 0) {
+    const { data } = await supabase
+      .from('medicao_itens')
+      .select('medicao_id, quantidade')
+      .in('medicao_id', medicaoIds)
+
+    ;(data || []).forEach((item: any) => {
+      totalPorMedicao.set(item.medicao_id, (totalPorMedicao.get(item.medicao_id) || 0) + Math.max(1, item.quantidade || 1))
+    })
+  }
+
+  return {
+    colunas,
+    obras: cards.map(card => {
+      const medicao = card.orcamento_id ? medicoesPorOrcamento.get(card.orcamento_id) || null : null
+      return {
+        ...card,
+        medicao,
+        totalPecas: medicao ? totalPorMedicao.get(medicao.id) || 0 : 0,
+      }
+    }),
+  }
+}
+
+export async function moverObraEngenharia(cardId: string, colunaId: string): Promise<boolean> {
+  return moverItemSetor(cardId, colunaId)
+}
+
+export async function carregarDetalheObraEngenharia(card: SetorKanbanItem): Promise<DetalheObraEngenharia> {
+  let medicao: any = null
+  if (card.orcamento_id) {
+    const { data, error } = await supabase
+      .from('medicoes_finais')
+      .select('*')
+      .eq('orcamento_id', card.orcamento_id)
+      .eq('status_operacional', 'aprovado')
+      .order('aprovado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!error) medicao = data
+  }
+
+  let itens: MedicaoItem[] = []
+  if (medicao?.id) {
+    const { data, error } = await supabase
+      .from('medicao_itens')
+      .select('*')
+      .eq('medicao_id', medicao.id)
+      .order('ordem', { ascending: true })
+    if (!error && data) itens = data as MedicaoItem[]
+  }
+
+  return { card, medicao, itens }
 }
