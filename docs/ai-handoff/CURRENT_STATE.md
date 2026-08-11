@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, `main` apos PR #69 e migration `20260811192000_engenharia_conferencia_tecnica_v1.sql` aplicada.
+Verificado em: 2026-08-11, `main` apos PR #73 e migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -12,12 +12,11 @@ Verificado em: 2026-08-11, `main` apos PR #69 e migration `20260811192000_engenh
 - CI Supabase via Session Pooler IPv4 com audit/dry-run em PR.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
 - Medicao Final V2 operacional (PRs #54, #55 e #56), incluindo checklist/fotos e link externo seguro.
-- PR #63: base profissional para setores genericos.
-- PR #64: Medicao Final aprovada cria/atualiza de forma atomica e idempotente a entrada correspondente na Engenharia; migration `20260811181300_engenharia_entrada_automatica.sql` aplicada e validada.
-- PR #66: modulo proprio de Engenharia v1 em `/engenharia`, com KPIs, quatro etapas tecnicas, drag-and-drop conforme permissao e detalhe das pecas com as 6 medidas finais.
-- Migration `20260811183500_engenharia_modulo_v1.sql` aplicada e validada; setor Engenharia aponta para `/engenharia` e usa as etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao.
-- PR #69: conferencia tecnica persistente por peca, com status Pendente/Conferida/Pendencia, observacao, responsavel e progresso por obra.
-- Migration `20260811192000_engenharia_conferencia_tecnica_v1.sql` aplicada e validada; banco bloqueia movimentacao para `Liberado para producao` enquanto houver peca sem conferencia concluida.
+- PR #64: Medicao Final aprovada entra de forma atomica/idempotente na Engenharia.
+- PR #66: modulo proprio de Engenharia em `/engenharia`.
+- PR #69: conferencia tecnica persistente por peca e bloqueio de liberacao incompleta.
+- PR #73: liberacao real Engenharia -> Producao, com registro de quem liberou/quando e criacao/atualizacao idempotente do card em `producao_itens`.
+- Migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.
@@ -31,21 +30,22 @@ Verificado em: 2026-08-11, `main` apos PR #69 e migration `20260811192000_engenh
 
 ## ENGENHARIA — ESTADO REAL
 - Fase 1 concluida: Medicao Final aprovada entra automaticamente na Engenharia.
-- Fase 2 concluida: rota `/engenharia` propria, fluxo Recebidas -> Conferencia tecnica -> Em desenvolvimento -> Liberado para producao.
+- Fase 2 concluida: rota `/engenharia`, fluxo Recebidas -> Conferencia tecnica -> Em desenvolvimento -> Liberado para producao.
 - Fase 3 concluida: conferencia tecnica persistente por peca, responsavel/observacao/status e bloqueio de liberacao incompleta.
-- Fonte unica de cards continua sendo `setor_kanban_itens`; nao existe duplicacao paralela de obras.
-- Detalhe da obra mostra cliente, local, Medicao Final aprovada e as 6 medidas finais por peca.
+- Fase 4 concluida: ao liberar, o Atlas registra quem/quando e cria ou atualiza de forma idempotente a entrada correspondente na Producao usando `orcamento_id`.
+- A liberacao e transacional e revalida a conferencia tecnica antes de enviar para Producao.
+- Fonte unica dos cards da Engenharia continua sendo `setor_kanban_itens`.
 - Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
 
 ## PROXIMA FASE RECOMENDADA
-Engenharia Fase 4 — liberacao real para Producao:
-- registrar quem liberou a obra e quando;
-- ao entrar em `Liberado para producao`, criar/atualizar de forma idempotente a entrada correspondente no fluxo de Producao;
-- preservar vinculo com orcamento/medicao/Engenharia;
-- impedir duplicidade;
-- manter retorno seguro para Engenharia se houver revisao tecnica.
+Engenharia Fase 5 — base de receitas tecnicas por tipologia:
+- cadastrar receita tecnica por tipologia;
+- vincular perfis, acessorios, vidros, reforcos e regras de quantidade;
+- permitir revisao/versao da receita;
+- preparar formulas sem ainda automatizar todo o MEE;
+- manter rastreabilidade entre tipologia, receita e obra.
 
-Depois disso, iniciar a base de receitas/MEE por tipologia.
+Depois disso: calculos/MEE, lista de materiais, lista de corte e otimizacao de barras.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
 - Confirmacao de Venda Fase 1.
