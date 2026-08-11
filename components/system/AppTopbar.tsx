@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, Search } from 'lucide-react'
+import { Bell, Search, Sparkles } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
@@ -34,30 +34,39 @@ export default function AppTopbar() {
   }, [])
 
   const contexto = useMemo(() => {
+    if (pathname === '/') {
+      return { titulo: 'Painel de Gestão', grupo: 'Visão geral' }
+    }
+
     return TITULOS.find(item => pathname.startsWith(item.prefixo)) || {
       titulo: 'Atlas One',
-      grupo: 'Visão geral',
+      grupo: 'Sistema',
     }
   }, [pathname])
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-      <div className="flex h-16 items-center gap-4 px-4 md:px-6">
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-            {contexto.grupo}
+    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
+      <div className="flex h-16 items-center gap-3 px-3 sm:px-4 md:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-navy text-white md:hidden">
+            <Sparkles size={17} />
           </div>
-          <div className="truncate text-base font-semibold text-slate-900">{contexto.titulo}</div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:text-[11px]">
+              {contexto.grupo}
+            </div>
+            <div className="truncate text-sm font-semibold text-slate-900 sm:text-base">{contexto.titulo}</div>
+          </div>
         </div>
 
         <div className="hidden items-center gap-2 lg:flex">
           <button
             type="button"
-            className="flex h-9 min-w-56 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white"
+            className="flex h-9 min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white"
             title="Busca global — em breve"
           >
             <Search size={15} />
-            <span className="flex-1">Buscar no Atlas</span>
+            <span className="flex-1">Buscar cliente, obra ou orçamento</span>
             <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400">Ctrl K</kbd>
           </button>
           <button
@@ -69,8 +78,16 @@ export default function AppTopbar() {
           </button>
         </div>
 
-        <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-navy text-xs font-bold text-white">
+        <button
+          type="button"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 lg:hidden"
+          title="Busca global — em breve"
+        >
+          <Search size={16} />
+        </button>
+
+        <div className="flex items-center gap-2 border-l border-slate-200 pl-2 sm:pl-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-navy text-xs font-bold text-white shadow-sm">
             {iniciais(usuario?.nome)}
           </div>
           <div className="hidden min-w-0 sm:block">
