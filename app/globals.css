@@ -1,15 +1,235 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: #f8fafc;
+}
+
 body {
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: #d1fae5;
+  color: #064e3b;
+}
+
+:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
 input[type="number"] {
   -moz-appearance: textfield;
+}
+
+/*
+ * Atlas One Definitivo — Medição Final
+ *
+ * A tela de Medição Final é funcional e sensível à operação. Para preservar o
+ * drag-and-drop, permissões, modais e regras existentes, a primeira etapa do
+ * redesign é aplicada pela casca do sistema, sem reescrever a lógica da página.
+ */
+.atlas-medicao-final-board > div {
+  min-height: 0 !important;
+  background: #f8fafc !important;
+  background-image: none !important;
+}
+
+.atlas-medicao-final-board > div > header {
+  display: none;
+}
+
+.atlas-medicao-final-board > div > main {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 1.25rem 1rem 2rem !important;
+}
+
+.atlas-medicao-final-board > div > main > div:first-child {
+  margin-bottom: 1rem !important;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) {
+  gap: 0.75rem !important;
+  padding-bottom: 1rem;
+  scroll-snap-type: x proximity;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div {
+  width: 18rem !important;
+  padding: 0.75rem !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem !important;
+  background: #f1f5f9 !important;
+  scroll-snap-align: start;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:first-child {
+  min-height: 2.2rem;
+  margin-bottom: 0.55rem !important;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:nth-child(2) {
+  min-height: 7rem !important;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:nth-child(2) > div {
+  border-width: 1px !important;
+  border-color: #e2e8f0 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:nth-child(2) > div:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 0.07) !important;
+  transform: translateY(-1px);
+}
+
+.atlas-medicao-final-board input,
+.atlas-medicao-final-board select {
+  background: #ffffff;
+}
+
+.atlas-medicao-final-board [class*="bg-black/40"] {
+  backdrop-filter: blur(3px);
+}
+
+/* Detalhe da obra/peças: visual de aplicativo de campo. */
+.atlas-medicao-final-detail > div {
+  min-height: 0 !important;
+  background: #f8fafc !important;
+  background-image: none !important;
+}
+
+.atlas-medicao-final-detail > div > header {
+  border-color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+.atlas-medicao-final-detail > div > header > div {
+  max-width: 56rem !important;
+}
+
+.atlas-medicao-final-detail > div > main {
+  max-width: 56rem !important;
+  padding-top: 1rem !important;
+  padding-bottom: 2rem !important;
+}
+
+.atlas-medicao-final-detail > div > main > div[class*="bg-white"] {
+  border-radius: 0.9rem !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.atlas-medicao-final-detail button[class*="bg-brand-navy"] {
+  background: #059669 !important;
+}
+
+.atlas-medicao-final-detail button[class*="bg-brand-navy"]:hover {
+  background: #047857 !important;
+}
+
+.atlas-medicao-final-detail input,
+.atlas-medicao-final-detail select,
+.atlas-medicao-final-detail textarea {
+  min-height: 2.65rem;
+  border-color: #cbd5e1 !important;
+  background: #ffffff;
+}
+
+.atlas-medicao-final-detail [class*="bg-black/40"] {
+  background: rgb(15 23 42 / 0.48) !important;
+  backdrop-filter: blur(4px);
+}
+
+.atlas-medicao-final-detail [class*="border-dashed"] {
+  background: #f8fafc;
+}
+
+@media (min-width: 768px) {
+  .atlas-medicao-final-board > div > main {
+    padding: 1.5rem 1.5rem 2.5rem !important;
+  }
+
+  .atlas-medicao-final-board > div > main > div:nth-child(2) > div {
+    width: 19rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .atlas-medicao-final-board > div > main {
+    padding: 0.85rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-medicao-final-board > div > main > div:first-child {
+    align-items: flex-start !important;
+    gap: 0.75rem;
+  }
+
+  .atlas-medicao-final-board > div > main > div:nth-child(2) > div {
+    width: min(86vw, 19rem) !important;
+  }
+
+  .atlas-medicao-final-detail > div > header > div {
+    padding: 0.85rem 0.75rem !important;
+  }
+
+  .atlas-medicao-final-detail > div > main {
+    padding: 0.8rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-medicao-final-detail > div > main > div[class*="bg-white"] {
+    padding: 0.9rem !important;
+  }
+
+  /* Modais viram bottom sheets em campo, mantendo o mesmo conteúdo e regras. */
+  .atlas-medicao-final-detail [class*="fixed inset-0"] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .atlas-medicao-final-detail [class*="fixed inset-0"] > div {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92vh !important;
+    margin: 0 !important;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+    padding: 1rem !important;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .atlas-medicao-final-detail [class*="fixed inset-0"] input[type="number"] {
+    font-size: 1rem;
+  }
 }

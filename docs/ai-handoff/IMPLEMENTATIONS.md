@@ -29,7 +29,7 @@ PR #31 ampliou o parser/importacao e sincronizacao do PDF. A leitura ainda falha
 ## Exclusao Master da Medicao Final
 PRs #32/#33: Master pode excluir Medicao Final e limpar cards derivados pelo mesmo `orcamento_id`, preservando o orcamento original e cliente.
 
-## Confirmacao de Venda — Fase 1 (branch feat/confirmacao-venda)
+## Confirmacao de Venda — Fase 1
 Objetivo: impedir que arrastar para `Vendido` gere processos incompletos.
 
 Implementado:
@@ -38,7 +38,46 @@ Implementado:
 - `lib/vendas.ts`: carrega cliente/orcamentos, valida e salva cadastro completo, bloqueia venda sem itens estruturados, cria/reutiliza Medicao Final e dispara automacoes somente no clique `Iniciar processo da venda`;
 - cliente com varios orcamentos pode escolher explicitamente qual proposta foi fechada.
 
-Status: IMPLEMENTADO NA BRANCH, AINDA NAO VALIDADO/NAO MERGEADO.
+Status: implementado; manter validacao funcional antes de considerar fluxo definitivo.
 
-## Proxima evolucao
-Fase 2: converter PDF W.Vetro em um `Orçamento Atlas` estruturado, editavel e conferivel. O PDF original fica como origem; futuramente o PDF do Atlas passa a ser a saida oficial gerada dos dados estruturados.
+## App Shell e Home executiva (PRs #45 a #48)
+Objetivo: dar ao Atlas aparencia consistente de ERP e criar uma Home de gestao real.
+
+Implementado e mergeado em main:
+- AppShell compartilhado;
+- Topbar responsiva;
+- componentes reutilizaveis de sistema;
+- indicadores de gestao;
+- alertas operacionais e acoes rapidas;
+- agenda e produtividade na Home.
+
+## Atlas One Definitivo + Medicao Final V2 (PR #49 / branch feat/atlas-shell-definitivo-v2)
+Objetivo: aproximar a interface real da direcao visual escolhida para o Atlas One e iniciar a evolucao funcional da Medicao Final sem quebrar o fluxo existente.
+
+Implementado:
+- Topbar com busca global em destaque, `+ Novo`, IA Atlas, notificacoes e perfil;
+- base global de tipografia, foco e selecao;
+- quadro de Medicao Final com visual ERP e melhor responsividade;
+- detalhe da Medicao Final otimizado para celular e uso em obra;
+- modais de medicao em formato bottom sheet no mobile;
+- resumo operacional com progresso por quantidade real de pecas;
+- medidores identificados a partir dos itens concluidos;
+- deteccao de linhas antigas com `quantidade > 1`;
+- acao manual e segura para separar somente unidades ainda nao medidas;
+- itens agrupados ja medidos nao sao reinterpretados e contam conservadoramente como uma peca ate revisao.
+
+Schema futuro versionado:
+- criado `supabase-migration-v20-medicao-final-v2.sql`;
+- a V20 prepara responsavel/status, pendencias, fotos categorizadas, respostas de checklist, regras condicionais, acesso externo por token-hash e versionamento;
+- a tabela de tokens externos foi desenhada para acesso server-side/service role, sem policy permissiva de client;
+- a V20 NAO foi aplicada no banco nesta implementacao.
+
+Status: branch/PR em validacao pela Vercel. Funcionalidades que dependem da V20 ainda NAO estao implementadas nem disponiveis em producao.
+
+## Proxima evolucao funcional
+- aplicar e validar a V20 no banco antes de codigo que dependa dela;
+- implementar responsavel/status operacional e pendencias da Medicao Final;
+- evoluir checklist e fotos por peca;
+- implementar aprovacao e liberacao para Engenharia;
+- somente depois criar link externo seguro via Route Handler server-side;
+- em paralelo, Fase 2 da Confirmacao de Venda: PDF W.Vetro -> Orçamento Atlas estruturado, editavel e conferivel.

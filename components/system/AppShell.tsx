@@ -6,10 +6,16 @@ import Sidebar from '@/components/Sidebar'
 import AppTopbar from '@/components/system/AppTopbar'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
+import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const ehHome = pathname === '/'
+  const ehMedicaoFinal = pathname.startsWith('/producao/medicao-final')
+  const ehQuadroMedicaoFinal = pathname === '/producao/medicao-final'
+  const medicaoFinalId = ehMedicaoFinal && !ehQuadroMedicaoFinal
+    ? pathname.replace('/producao/medicao-final/', '').split('/')[0]
+    : ''
 
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
@@ -32,7 +38,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <p className="mt-1 text-sm text-slate-500">Tarefas, compromissos e atalhos do seu dia em um único lugar.</p>
             </section>
           )}
-          {children}
+          {medicaoFinalId && <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />}
+          <div
+            className={
+              ehMedicaoFinal
+                ? ehQuadroMedicaoFinal
+                  ? 'atlas-medicao-final atlas-medicao-final-board'
+                  : 'atlas-medicao-final atlas-medicao-final-detail'
+                : undefined
+            }
+          >
+            {children}
+          </div>
         </main>
       </div>
     </div>
