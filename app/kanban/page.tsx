@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo } from '@/lib/tipos'
+import { listarTipologias } from '@/lib/tipologias'
+import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo, Tipologia } from '@/lib/tipos'
 import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard, excluirOrcamento } from '@/lib/kanban'
 import { executarAutomacoesColuna } from '@/lib/automacoes'
 import { verificarDuplicatasAutomacaoSetor } from '@/lib/automacoesSetor'
@@ -17,18 +18,7 @@ import { lerCorAssistencia } from '@/lib/configGeral'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
 
-const tipoLabels: Record<string, string> = {
-porta_correr: 'Porta de Correr',
-porta_pivotante: 'Porta Pivotante',
-porta_abrir: 'Porta de Abrir',
-janela_correr: 'Janela de Correr',
-janela_maximiar: 'Janela Maximiar',
-janela_basculante: 'Janela Basculante',
-vitro: 'Vitrô',
-fachada: 'Fachada',
-box: 'Box de Banheiro',
-outro: 'Outro',
-}
+let tipoLabels: Record<string, string> = {}
 
 function novoItemEdit(): ItemEsquadria {
 return { id: uuidv4(), tipo_esquadria: 'porta_correr', largura_mm: 0, altura_mm: 0, quantidade: 1 }
@@ -193,11 +183,16 @@ const [busca, setBusca] = useState('')
 const [filtroData, setFiltroData] = useState('')
 const [filtroTemperatura, setFiltroTemperatura] = useState('')
 const [corAssistencia, setCorAssistencia] = useState('#8b5cf6')
+const [tiposVersao, setTiposVersao] = useState(0)
 
 useEffect(() => {
 carregar()
 usuarioAtual().then(setUsuario)
 lerCorAssistencia().then(setCorAssistencia)
+listarTipologias().then(list => {
+tipoLabels = Object.fromEntries(list.map(tp => [tp.chave, tp.label]))
+setTiposVersao(v => v + 1)
+})
 const t = setInterval(() => setAgora(Date.now()), 60000)
 return () => clearInterval(t)
 }, [])

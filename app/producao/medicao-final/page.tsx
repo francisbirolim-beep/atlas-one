@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Ruler, Settings, X, Trash2, Search } from 'lucide-react'
 import Link from 'next/link'
-import { MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra, Usuario, TipoEsquadria } from '@/lib/tipos'
+import { MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra, Usuario, TipoEsquadria, Tipologia } from '@/lib/tipos'
 import {
   listarColunasMedicao, criarColunaMedicao, renomearColunaMedicao, excluirColunaMedicao,
   listarMedicoes, moverMedicao, listarOrcamentosSemMedicao, criarMedicaoDoOrcamento,
@@ -13,22 +13,12 @@ import {
 } from '@/lib/medicaoFinal'
 import { usuarioAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { listarTipologias } from '@/lib/tipologias'
 
-const tipos: { value: TipoEsquadria; label: string }[] = [
-  { value: 'porta_correr', label: 'Porta de Correr' },
-  { value: 'porta_pivotante', label: 'Porta Pivotante' },
-  { value: 'porta_abrir', label: 'Porta de Abrir' },
-  { value: 'janela_correr', label: 'Janela de Correr' },
-  { value: 'janela_maximiar', label: 'Janela Maximiar' },
-  { value: 'janela_basculante', label: 'Janela Basculante' },
-  { value: 'vitro', label: 'Vitrô' },
-  { value: 'fachada', label: 'Fachada' },
-  { value: 'box', label: 'Box de Banheiro' },
-  { value: 'outro', label: 'Outro' },
-]
+let tiposCache: Tipologia[] = []
 
 function labelTipo(valor: string) {
-  return tipos.find(t => t.value === valor)?.label || valor
+  return tiposCache.find(t => t.chave === valor)?.label || valor
 }
 
 export default function MedicaoFinalQuadro() {
@@ -58,9 +48,12 @@ export default function MedicaoFinalQuadro() {
 
   const master = usuario?.role === 'master'
 
+  const [tipos, setTipos] = useState<Tipologia[]>([])
+
   useEffect(() => {
     carregar()
     usuarioAtual().then(setUsuario)
+    listarTipologias().then(list => { tiposCache = list; setTipos(list) })
   }, [])
 
   async function carregar() {
@@ -373,10 +366,10 @@ export default function MedicaoFinalQuadro() {
               </label>
 
               {tipos.map(t => {
-                const camposDoTipo = camposExtras.filter(c => c.tipo_esquadria === t.value)
+                const camposDoTipo = camposExtras.filter(c => c.tipo_esquadria === t.chave)
                 if (camposDoTipo.length === 0) return null
                 return (
-                  <div key={t.value} className="text-sm">
+                  <div key={t.chave} className="text-sm">
                     <p className="font-medium text-slate-700">{t.label}</p>
                     <div className="space-y-1 mt-1">
                       {camposDoTipo.map(c => (
@@ -400,7 +393,7 @@ export default function MedicaoFinalQuadro() {
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
                 >
                   {tipos.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                    <option key={t.chave} value={t.chave}>{t.label}</option>
                   ))}
                 </select>
                 <input

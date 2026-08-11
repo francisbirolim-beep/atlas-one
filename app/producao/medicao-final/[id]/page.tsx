@@ -8,7 +8,7 @@ import {
   AlertTriangle, RotateCcw, Loader2, MapPin, FileText,
 } from 'lucide-react'
 import {
-  MedicaoFinal, MedicaoItem, TipologiaCampoExtra, Usuario, TipoEsquadria,
+  MedicaoFinal, MedicaoItem, TipologiaCampoExtra, Usuario, TipoEsquadria, Tipologia,
 } from '@/lib/tipos'
 import {
   buscarMedicao, listarItensMedicao, adicionarItemMedicao, editarItemMedicao,
@@ -17,22 +17,12 @@ import {
 } from '@/lib/medicaoFinal'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { uploadFoto } from '@/lib/upload'
+import { listarTipologias } from '@/lib/tipologias'
 
-const tipos: { value: TipoEsquadria; label: string }[] = [
-  { value: 'porta_correr', label: 'Porta de Correr' },
-  { value: 'porta_pivotante', label: 'Porta Pivotante' },
-  { value: 'porta_abrir', label: 'Porta de Abrir' },
-  { value: 'janela_correr', label: 'Janela de Correr' },
-  { value: 'janela_maximiar', label: 'Janela Maximiar' },
-  { value: 'janela_basculante', label: 'Janela Basculante' },
-  { value: 'vitro', label: 'Vitrô' },
-  { value: 'fachada', label: 'Fachada' },
-  { value: 'box', label: 'Box de Banheiro' },
-  { value: 'outro', label: 'Outro' },
-]
+let tiposCache: Tipologia[] = []
 
 function labelTipo(valor: string) {
-  return tipos.find(t => t.value === valor)?.label || valor
+  return tiposCache.find(t => t.chave === valor)?.label || valor
 }
 
 function labelItemTipo(item: MedicaoItem) {
@@ -105,10 +95,12 @@ export default function DetalheMedicaoFinal() {
   const [camposExtrasItem, setCamposExtrasItem] = useState<TipologiaCampoExtra[]>([])
   const [valoresExtras, setValoresExtras] = useState<Record<string, string | number>>({})
   const [salvandoMedida, setSalvandoMedida] = useState(false)
+  const [tipos, setTipos] = useState<Tipologia[]>([])
 
   useEffect(() => {
     if (id) carregar()
     usuarioAtual().then(setUsuario)
+    listarTipologias().then(list => { tiposCache = list; setTipos(list) })
   }, [id])
 
   async function carregar() {
@@ -442,7 +434,7 @@ export default function DetalheMedicaoFinal() {
                 onChange={e => setFormTipo(e.target.value as TipoEsquadria)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               >
-                {tipos.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {tipos.map(t => <option key={t.chave} value={t.chave}>{t.label}</option>)}
               </select>
             </div>
 

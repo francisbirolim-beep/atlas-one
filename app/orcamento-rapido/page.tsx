@@ -3,24 +3,12 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard } from 'lucide-react'
 import Link from 'next/link'
-import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead, Produto } from '@/lib/tipos'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead, Produto, Tipologia } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { salvarPendente } from '@/lib/offlineFila'
 import { listarProdutos } from '@/lib/produtos'
+import { listarTipologias } from '@/lib/tipologias'
 import { v4 as uuidv4 } from 'uuid'
-
-const tipos: { value: TipoEsquadria; label: string }[] = [
-  { value: 'porta_correr', label: 'Porta de Correr' },
-  { value: 'porta_pivotante', label: 'Porta Pivotante' },
-  { value: 'porta_abrir', label: 'Porta de Abrir' },
-  { value: 'janela_correr', label: 'Janela de Correr' },
-  { value: 'janela_maximiar', label: 'Janela Maximiar' },
-  { value: 'janela_basculante', label: 'Janela Basculante' },
-  { value: 'vitro', label: 'Vitrô' },
-  { value: 'fachada', label: 'Fachada' },
-  { value: 'box', label: 'Box de Banheiro' },
-  { value: 'outro', label: 'Outro' },
-]
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
@@ -99,8 +87,11 @@ export default function OrcamentoRapido() {
   // Visualização em tela cheia de uma foto (clicando em qualquer miniatura).
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
 
+  const [tipos, setTipos] = useState<Tipologia[]>([])
+
   useEffect(() => {
     listarProdutos(true).then(setProdutos)
+    listarTipologias().then(setTipos)
   }, [])
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
@@ -644,10 +635,10 @@ export default function OrcamentoRapido() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {tipos.map(t => (
                         <button
-                          key={t.value}
-                          onClick={() => atualizarItem(item.id, 'tipo', t.value)}
+                          key={t.chave}
+                          onClick={() => atualizarItem(item.id, 'tipo', t.chave)}
                           className={`p-2.5 rounded-lg text-xs border transition ${
-                            item.tipo === t.value
+                            item.tipo === t.chave
                               ? 'border-brand-navy bg-brand-navyLight text-brand-navyDark font-medium'
                               : 'border-slate-200 hover:border-slate-300 text-slate-600'
                           }`}

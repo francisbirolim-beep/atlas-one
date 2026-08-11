@@ -1,7 +1,17 @@
-export type TipoEsquadria =
-      | 'porta_correr' | 'porta_pivotante' | 'porta_abrir'
-| 'janela_correr' | 'janela_maximiar' | 'janela_basculante'
-| 'vitro' | 'fachada' | 'box' | 'outro'
+// TipoEsquadria era um union fixo; agora e dinamico (tabela `tipologias`), mas mantido como alias
+// de string para nao quebrar comparacoes/atribuicoes existentes com os valores historicos abaixo:
+// 'porta_correr' | 'porta_pivotante' | 'porta_abrir' | 'janela_correr' | 'janela_maximiar'
+// | 'janela_basculante' | 'vitro' | 'fachada' | 'box' | 'outro' | (qualquer chave criada pelo usuario)
+export type TipoEsquadria = string
+
+export interface Tipologia {
+      id: string
+      chave: string
+      label: string
+      categoria: 'porta' | 'janela'
+      ordem: number
+      created_at?: string
+}
 
 export type Acabamento =
       | 'natural' | 'branco' | 'preto' | 'cinza' | 'madeirado'
