@@ -14,7 +14,8 @@ import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia } from '@/lib/configGeral'
 import { listarTodosCamposExtras, criarCampoExtra, editarCampoExtra, excluirCampoExtra } from '@/lib/medicaoFinal'
-import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia, AutomacaoSetor, TipologiaCampoExtra, TipoValorCampoExtra, TipoEsquadria } from '@/lib/tipos'
+import { listarTipologias, criarTipologia } from '@/lib/tipologias'
+import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, AutomacaoOrcamento, AutomacaoAssistencia, AutomacaoSetor, TipologiaCampoExtra, TipoValorCampoExtra, TipoEsquadria, Tipologia } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
   oculto: 'Oculto',
@@ -31,6 +32,11 @@ export default function Configuracoes() {
   const [editNome, setEditNome] = useState('')
   const [editTipoValor, setEditTipoValor] = useState<TipoValorCampoExtra>('numero')
   const [editObrigatorio, setEditObrigatorio] = useState(false)
+  const [tipologias, setTipologias] = useState<Tipologia[]>([])
+  const [mostrarFormTipologia, setMostrarFormTipologia] = useState(false)
+  const [novaTipologiaNome, setNovaTipologiaNome] = useState('')
+  const [novaTipologiaCategoria, setNovaTipologiaCategoria] = useState<'porta' | 'janela'>('janela')
+  const [salvandoTipologia, setSalvandoTipologia] = useState(false)
   const [automacoesSetor, setAutomacoesSetor] = useState<AutomacaoSetor[]>([])
   const [novaAutomSetorColuna, setNovaAutomSetorColuna] = useState('')
   const [novaAutomSetorSetor, setNovaAutomSetorSetor] = useState('')
@@ -124,7 +130,10 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   }, [abaAtiva])
 
   useEffect(() => {
-    if (abaAtiva === 'checklist-medicao') listarTodosCamposExtras().then(setCamposExtras)
+    if (abaAtiva === 'checklist-medicao') {
+      listarTodosCamposExtras().then(setCamposExtras)
+      listarTipologias().then(setTipologias)
+    }
   }, [abaAtiva])
 
   async function carregarAgentesIA() {
@@ -621,18 +630,21 @@ async function salvarSla(colunaId: string) {
     else alert('Não foi possível remover o campo. Tente novamente.')
   }
 
-  const tiposEsquadriaOpcoes: { value: TipoEsquadria; label: string }[] = [
-    { value: 'porta_correr', label: 'Porta de Correr' },
-    { value: 'porta_pivotante', label: 'Porta Pivotante' },
-    { value: 'porta_abrir', label: 'Porta de Abrir' },
-    { value: 'janela_correr', label: 'Janela de Correr' },
-    { value: 'janela_maximiar', label: 'Janela Maxim-Ar' },
-    { value: 'janela_basculante', label: 'Janela Basculante' },
-    { value: 'vitro', label: 'Vitrô' },
-    { value: 'fachada', label: 'Fachada' },
-    { value: 'box', label: 'Box' },
-    { value: 'outro', label: 'Outro' },
-  ]
+  async function adicionarTipologia() {
+    if (!novaTipologiaNome.trim()) return
+    setSalvandoTipologia(true)
+    const nova = await criarTipologia(novaTipologiaNome.trim(), novaTipologiaCategoria)
+    if (nova) {
+      setTipologias(prev => [...prev, nova])
+      setGrupoSelecionado(nova.chave)
+      setNovaTipologiaNome('')
+      setNovaTipologiaCategoria('janela')
+      setMostrarFormTipologia(false)
+    } else {
+      alert('Não foi possível criar a tipologia. Tente novamente.')
+    }
+    setSalvandoTipologia(false)
+  }
 
   function renderCampoExtra(c: TipologiaCampoExtra) {
     if (editandoCampoId === c.id) {
@@ -1389,23 +1401,56 @@ async function salvarSla(colunaId: string) {
               >
                 Geral{camposExtras.filter(c => !c.tipo_esquadria).length > 0 ? ` (${camposExtras.filter(c => !c.tipo_esquadria).length})` : ''}
               </button>
-              {tiposEsquadriaOpcoes.map(t => {
-                const n = camposExtras.filter(c => c.tipo_esquadria === t.value).length
+              {tipologias.map(t => {
+                const n = camposExtras.filter(c => c.tipo_esquadria === t.chave).length
                 return (
                   <button
-                    key={t.value}
-                    onClick={() => setGrupoSelecionado(t.value)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition ${grupoSelecionado === t.value ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-slate-600 border-slate-300 hover:border-brand-navy'}`}
+                    key={t.chave}
+                    onClick={() => setGrupoSelecionado(t.chave)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${grupoSelecionado === t.chave ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-slate-600 border-slate-300 hover:border-brand-navy'}`}
                   >
                     {t.label}{n > 0 ? ` (${n})` : ''}
                   </button>
                 )
               })}
+              <button
+                onClick={() => setMostrarFormTipologia(v => !v)}
+                className="text-xs px-3 py-1.5 rounded-full border border-dashed border-brand-navy text-brand-navy hover:bg-brand-navy/5 transition"
+              >
+                + Adicionar tipologia
+              </button>
             </div>
+
+            {mostrarFormTipologia && (
+              <div className="flex flex-wrap items-center gap-2 bg-slate-50 rounded-lg p-3 mb-4">
+                <input
+                  value={novaTipologiaNome}
+                  onChange={e => setNovaTipologiaNome(e.target.value)}
+                  placeholder="Nome da nova tipologia (ex: Porta de Enrolar)"
+                  className="flex-1 min-w-[200px] border border-slate-300 rounded-lg px-3 py-1.5 text-sm"
+                />
+                <select
+                  value={novaTipologiaCategoria}
+                  onChange={e => setNovaTipologiaCategoria(e.target.value as 'porta' | 'janela')}
+                  className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                  title="Usado no cálculo de área/perímetro do orçamento"
+                >
+                  <option value="janela">Calcula como janela</option>
+                  <option value="porta">Calcula como porta</option>
+                </select>
+                <button
+                  onClick={adicionarTipologia}
+                  disabled={!novaTipologiaNome.trim() || salvandoTipologia}
+                  className="text-xs text-white bg-brand-navy hover:bg-brand-navy/90 disabled:opacity-60 rounded-lg px-3 py-1.5"
+                >
+                  {salvandoTipologia ? 'Criando...' : 'Criar tipologia'}
+                </button>
+              </div>
+            )}
 
             <div className="bg-slate-50 rounded-xl p-4 mb-2">
               <p className="text-sm font-medium text-slate-700 mb-2">
-                {grupoSelecionado === 'geral' ? 'Geral (todas as tipologias)' : tiposEsquadriaOpcoes.find(t => t.value === grupoSelecionado)?.label}
+                {grupoSelecionado === 'geral' ? 'Geral (todas as tipologias)' : tipologias.find(t => t.chave === grupoSelecionado)?.label}
               </p>
 
               {(grupoSelecionado === 'geral' ? camposExtras.filter(c => !c.tipo_esquadria) : camposExtras.filter(c => c.tipo_esquadria === grupoSelecionado)).length === 0 && (
