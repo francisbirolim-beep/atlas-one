@@ -124,6 +124,59 @@ input[type="number"] {
   backdrop-filter: blur(3px);
 }
 
+/* Detalhe da obra/peças: visual de aplicativo de campo. */
+.atlas-medicao-final-detail > div {
+  min-height: 0 !important;
+  background: #f8fafc !important;
+  background-image: none !important;
+}
+
+.atlas-medicao-final-detail > div > header {
+  border-color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+.atlas-medicao-final-detail > div > header > div {
+  max-width: 56rem !important;
+}
+
+.atlas-medicao-final-detail > div > main {
+  max-width: 56rem !important;
+  padding-top: 1rem !important;
+  padding-bottom: 2rem !important;
+}
+
+.atlas-medicao-final-detail > div > main > div[class*="bg-white"] {
+  border-radius: 0.9rem !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.atlas-medicao-final-detail button[class*="bg-brand-navy"] {
+  background: #059669 !important;
+}
+
+.atlas-medicao-final-detail button[class*="bg-brand-navy"]:hover {
+  background: #047857 !important;
+}
+
+.atlas-medicao-final-detail input,
+.atlas-medicao-final-detail select,
+.atlas-medicao-final-detail textarea {
+  min-height: 2.65rem;
+  border-color: #cbd5e1 !important;
+  background: #ffffff;
+}
+
+.atlas-medicao-final-detail [class*="bg-black/40"] {
+  background: rgb(15 23 42 / 0.48) !important;
+  backdrop-filter: blur(4px);
+}
+
+.atlas-medicao-final-detail [class*="border-dashed"] {
+  background: #f8fafc;
+}
+
 @media (min-width: 768px) {
   .atlas-medicao-final-board > div > main {
     padding: 1.5rem 1.5rem 2.5rem !important;
@@ -146,5 +199,37 @@ input[type="number"] {
 
   .atlas-medicao-final-board > div > main > div:nth-child(2) > div {
     width: min(86vw, 19rem) !important;
+  }
+
+  .atlas-medicao-final-detail > div > header > div {
+    padding: 0.85rem 0.75rem !important;
+  }
+
+  .atlas-medicao-final-detail > div > main {
+    padding: 0.8rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-medicao-final-detail > div > main > div[class*="bg-white"] {
+    padding: 0.9rem !important;
+  }
+
+  /* Modais viram bottom sheets em campo, mantendo o mesmo conteúdo e regras. */
+  .atlas-medicao-final-detail [class*="fixed inset-0"] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .atlas-medicao-final-detail [class*="fixed inset-0"] > div {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92vh !important;
+    margin: 0 !important;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+    padding: 1rem !important;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .atlas-medicao-final-detail [class*="fixed inset-0"] input[type="number"] {
+    font-size: 1rem;
   }
 }
