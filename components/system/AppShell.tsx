@@ -14,6 +14,7 @@ import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAcces
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const ehHome = pathname === '/'
+  const ehKanbanComercial = pathname.startsWith('/kanban')
   const ehMedicaoFinal = pathname.startsWith('/producao/medicao-final')
   const ehQuadroMedicaoFinal = pathname === '/producao/medicao-final'
   const medicaoFinalId = ehMedicaoFinal && !ehQuadroMedicaoFinal
@@ -55,7 +56,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 ? ehQuadroMedicaoFinal
                   ? 'atlas-medicao-final atlas-medicao-final-board'
                   : 'atlas-medicao-final atlas-medicao-final-detail'
-                : undefined
+                : ehKanbanComercial
+                  ? 'atlas-kanban-commercial'
+                  : undefined
             }
           >
             {children}
