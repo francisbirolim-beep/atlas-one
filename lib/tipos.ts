@@ -423,7 +423,7 @@ export interface AutomacaoSetor {
       created_at?: string
 }
 
-export type TipoValorCampoExtra = 'numero' | 'texto'
+export type TipoValorCampoExtra = 'numero' | 'texto' | 'foto'
 
 export interface TipologiaCampoExtra {
       id: string
