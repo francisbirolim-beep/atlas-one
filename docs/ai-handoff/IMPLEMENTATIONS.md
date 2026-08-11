@@ -40,10 +40,18 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - migration `20260811183500_engenharia_modulo_v1.sql` ativa a rota e padroniza as quatro etapas;
 - migration aplicada e validada no Supabase.
 
+## Engenharia Fase 3 — PR #69
+- conferencia tecnica persistente por `medicao_item_id`;
+- status `pendente`, `conferida` e `pendencia`;
+- observacao, responsavel e horario da conferencia por peca;
+- progresso de conferencia exibido na Engenharia;
+- bloqueio visual e no banco da coluna `Liberado para producao` enquanto todas as pecas nao estiverem conferidas;
+- migration `20260811192000_engenharia_conferencia_tecnica_v1.sql`.
+
 ## Pontos funcionais ainda pendentes
-- Engenharia Fase 3: conferencia tecnica persistente por peca, responsavel, observacoes, pendencias e bloqueio/liberacao para Producao.
-- MEE/calculos automaticos, receitas de tipologias, perfis/acessorios e lista de corte.
-- Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
-- Parser/importacao PDF W.Vetro ainda precisa de fluxo estruturado e conferivel.
+- registrar responsavel tecnico no nivel da obra e auditoria de liberacao para Producao;
+- MEE/calculos automaticos, receitas de tipologias, perfis/acessorios/reforcos/vidros, lista de materiais e lista de corte;
+- entidade persistente `vendas`/`obras`;
+- Confirmacao de Venda Fase 1 precisa de validacao funcional completa;
+- Parser/importacao PDF W.Vetro ainda precisa de fluxo estruturado e conferivel;
 - Regras condicionais/foto obrigatoria do checklist V2 ainda pendentes.
-- Entidade persistente `vendas`/`obras` ainda nao existe.
