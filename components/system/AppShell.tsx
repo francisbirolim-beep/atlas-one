@@ -17,6 +17,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const ehKanbanComercial = pathname.startsWith('/kanban')
   const ehOrcamentos = pathname === '/orcamento' || pathname.startsWith('/orcamento/pesquisar')
   const ehProducao = pathname === '/producao'
+  const ehEngenharia = pathname.startsWith('/engenharia')
   const ehSetorGenerico = pathname.startsWith('/setor/')
   const ehMedicaoFinal = pathname.startsWith('/producao/medicao-final')
   const ehQuadroMedicaoFinal = pathname === '/producao/medicao-final'
@@ -69,9 +70,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     ? 'atlas-orcamentos-professional'
                     : ehProducao
                       ? 'atlas-producao-professional'
-                      : ehSetorGenerico
-                        ? 'atlas-setor-professional'
-                        : undefined
+                      : ehEngenharia
+                        ? 'atlas-engenharia-professional'
+                        : ehSetorGenerico
+                          ? 'atlas-setor-professional'
+                          : undefined
             }
           >
             {children}
