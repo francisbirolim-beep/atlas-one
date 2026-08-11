@@ -1,42 +1,43 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Branch: `feat/atlas-professional-producao-v1`.
+Branch: `feat/engenharia-modulo-v1`.
 
-Objetivo: concluir a sexta onda do redesign profissional sem alterar a logica do Kanban de Producao.
+Objetivo: concluir a Fase 2 funcional da Engenharia com rota dedicada e fluxo tecnico inicial, sem MEE ou lista de corte.
 
 Escopo implementado:
-1. AppShell identifica somente `/producao` com `atlas-producao-professional`;
-2. nova camada `app/atlas-producao-professional.css`;
-3. cabecalho legado ocultado no shell;
-4. toolbar, colunas, cards, modais e mobile refinados;
-5. drag-and-drop e CRUD existentes preservados.
+1. rota `/engenharia`;
+2. fonte unica de dados permanece no Kanban do setor;
+3. KPIs operacionais;
+4. etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao;
+5. drag-and-drop conforme permissoes;
+6. detalhe da obra com Medicao Final aprovada e 6 medidas finais por peca;
+7. migration ativa a rota do setor Engenharia e padroniza as etapas.
 
 ### Proxima acao obrigatoria
-1. abrir PR;
-2. aguardar Build Validation;
-3. corrigir no mesmo branch se houver erro;
-4. se passar, mergear na `main`;
-5. iniciar branch separada para Engenharia.
+1. integrar o PR apos Build Validation e dry-run verdes;
+2. aplicar a migration de rota/etapas no Supabase por fluxo operacional controlado;
+3. validar historico de migrations;
+4. em branch separada, iniciar a Fase 3 da Engenharia.
 
-## REDESIGN PROFISSIONAL JA NA MAIN
-- PR #57: Home/Topbar/KPIs;
-- PR #58: Sidebar ERP;
-- PR #59: Kanban Comercial;
-- PR #60: Central/Pesquisa de Orcamentos;
-- PR #61: Medicao Final.
+## FASE 3 RECOMENDADA
+Criar a estrutura tecnica por obra/peca para conferencia de Engenharia, preparando o futuro MEE:
+- estado de conferencia por peca;
+- observacoes tecnicas;
+- responsavel tecnico;
+- revisao/pendencia;
+- liberacao da obra para Producao somente apos conferencia concluida.
 
-## DEPOIS DA PRODUCAO
-1. Engenharia;
-2. demais modulos antigos;
-3. validacao funcional da Confirmacao de Venda;
-4. regras condicionais/foto obrigatoria da Medicao Final;
-5. liberacao persistente para Engenharia;
-6. PDF W.Vetro -> Orcamento Atlas estruturado e conferivel.
+Ainda nao implementar formulas de perfis, acessorios ou lista de corte nessa etapa.
+
+## JA NA MAIN
+- Redesign profissional PRs #57 a #63.
+- Medicao Final V2 PRs #54 a #56.
+- Entrada automatica Medicao Final aprovada -> Engenharia no PR #64, com migration aplicada.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
-- Vercel continua sujeita a cota diaria; `Build Validation` confirma o build do codigo, mas producao depende do deploy Vercel.
-- Nao alterar regras durante tarefas puramente visuais.
+- Migration: dry-run em PR antes de apply controlado.
+- Vercel pode continuar sujeita a cota diaria; Build Validation confirma o codigo, mas producao depende do deploy.
