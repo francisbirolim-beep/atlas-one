@@ -10,6 +10,7 @@ import {
   ResumoComercial,
   ResumoMedicao,
 } from '@/lib/relatorios'
+import { formatarMoeda, formatarNumero, formatarPercentual } from '@/lib/formatacao'
 
 const vazioComercial: ResumoComercial = {
   totalOrcamentos: 0,
@@ -27,10 +28,6 @@ const vazioMedicao: ResumoMedicao = {
   itensTotal: 0,
   itensMedidos: 0,
   percentualItensMedidos: 0,
-}
-
-function moeda(v: number) {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export default function RelatoriosPage() {
@@ -82,10 +79,10 @@ export default function RelatoriosPage() {
           <div>
             <div className="flex items-center gap-2 text-slate-500">
               <BarChart3 size={16} />
-              <span className="text-xs font-semibold uppercase tracking-wide">Gestao</span>
+              <span className="text-xs font-semibold uppercase tracking-wide">Gestão</span>
             </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Central de Relatorios</h1>
-            <p className="mt-1 text-sm text-slate-500">Indicadores comerciais e operacionais do Atlas em um unico lugar.</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Central de Relatórios</h1>
+            <p className="mt-1 text-sm text-slate-500">Indicadores comerciais e operacionais do Atlas em um único lugar.</p>
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
@@ -94,7 +91,7 @@ export default function RelatoriosPage() {
               <input type="date" value={inicio} onChange={e => setInicio(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <label className="text-xs text-slate-500">
-              <span className="mb-1 block">Ate</span>
+              <span className="mb-1 block">Até</span>
               <input type="date" value={fim} onChange={e => setFim(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
             </label>
             <button onClick={carregar} className="rounded-xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white">Aplicar filtro</button>
@@ -105,7 +102,7 @@ export default function RelatoriosPage() {
         </div>
 
         {carregando ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400">Carregando relatorios...</div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400">Carregando relatórios...</div>
         ) : (
           <>
             <section className="space-y-3">
@@ -114,34 +111,34 @@ export default function RelatoriosPage() {
                 <h2 className="text-base font-semibold text-slate-900">Comercial</h2>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Indicador titulo="Orcamentos" valor={String(comercial.totalOrcamentos)} />
-                <Indicador titulo="Valor orcado" valor={moeda(comercial.valorOrcado)} />
-                <Indicador titulo="Vendidos" valor={String(comercial.vendidos)} />
-                <Indicador titulo="Conversao" valor={`${comercial.taxaConversao}%`} destaque />
-                <Indicador titulo="Aprovados" valor={String(comercial.aprovados)} />
-                <Indicador titulo="Recusados" valor={String(comercial.recusados)} />
-                <Indicador titulo="Ticket medio vendido" valor={moeda(comercial.ticketMedio)} />
+                <Indicador titulo="Orçamentos" valor={formatarNumero(comercial.totalOrcamentos)} />
+                <Indicador titulo="Valor orçado" valor={formatarMoeda(comercial.valorOrcado)} />
+                <Indicador titulo="Vendidos" valor={formatarNumero(comercial.vendidos)} />
+                <Indicador titulo="Conversão" valor={formatarPercentual(comercial.taxaConversao, 1)} destaque />
+                <Indicador titulo="Aprovados" valor={formatarNumero(comercial.aprovados)} />
+                <Indicador titulo="Recusados" valor={formatarNumero(comercial.recusados)} />
+                <Indicador titulo="Ticket médio vendido" valor={formatarMoeda(comercial.ticketMedio)} />
               </div>
             </section>
 
             <section className="space-y-3">
               <div className="flex items-center gap-2">
                 <Ruler size={18} className="text-brand-navy" />
-                <h2 className="text-base font-semibold text-slate-900">Medicao Final</h2>
+                <h2 className="text-base font-semibold text-slate-900">Medição Final</h2>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Indicador titulo="Medicoes criadas" valor={String(medicao.totalMedicoes)} />
-                <Indicador titulo="Medicoes com itens" valor={String(medicao.medicoesComItens)} />
-                <Indicador titulo="Itens para medir" valor={String(medicao.itensTotal)} />
-                <Indicador titulo="Itens medidos" valor={String(medicao.itensMedidos)} />
-                <Indicador titulo="Conclusao dos itens" valor={`${medicao.percentualItensMedidos}%`} destaque />
+                <Indicador titulo="Medições criadas" valor={formatarNumero(medicao.totalMedicoes)} />
+                <Indicador titulo="Medições com itens" valor={formatarNumero(medicao.medicoesComItens)} />
+                <Indicador titulo="Itens para medir" valor={formatarNumero(medicao.itensTotal)} />
+                <Indicador titulo="Itens medidos" valor={formatarNumero(medicao.itensMedidos)} />
+                <Indicador titulo="Conclusão dos itens" valor={formatarPercentual(medicao.percentualItensMedidos, 1)} destaque />
               </div>
             </section>
 
             <section className="grid gap-4 lg:grid-cols-3">
-              <ModuloFuturo icon={TrendingUp} titulo="Vendas / Obras" texto="Entrara automaticamente quando a nova entidade Venda/Obra estiver consolidada." />
-              <ModuloFuturo icon={WalletCards} titulo="Financeiro" texto="Recebimentos, saldo, inadimplencia, margem e fluxo de caixa serao adicionados nesta central." />
-              <ModuloFuturo icon={BarChart3} titulo="Producao e Instalacao" texto="Lead time, atrasos, produtividade, instalacoes e retrabalho farao parte do mesmo painel." />
+              <ModuloFuturo icon={TrendingUp} titulo="Vendas / Obras" texto="Entrará automaticamente quando a nova entidade Venda/Obra estiver consolidada." />
+              <ModuloFuturo icon={WalletCards} titulo="Financeiro" texto="Recebimentos, saldo, inadimplência, margem e fluxo de caixa serão adicionados nesta central." />
+              <ModuloFuturo icon={BarChart3} titulo="Produção e Instalação" texto="Lead time, atrasos, produtividade, instalações e retrabalho farão parte do mesmo painel." />
             </section>
           </>
         )}
