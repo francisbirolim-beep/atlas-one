@@ -9,6 +9,16 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 
+  const { data: medicao } = await supabaseAdmin
+    .from('medicoes_finais')
+    .select('status_operacional')
+    .eq('id', acesso.medicao_id)
+    .maybeSingle()
+
+  if (!medicao || !['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
+    return NextResponse.json({ error: 'A Medicao Final nao esta aberta para edicao externa.' }, { status: 409 })
+  }
+
   const form = await req.formData()
   const arquivo = form.get('file')
   const itemId = String(form.get('itemId') || '')
