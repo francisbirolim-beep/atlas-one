@@ -84,9 +84,9 @@ export async function moverCard(
   if (error) return false
 
   // Colunas marcadas como gera_medicao_final agora representam o inicio da
-  // CONFIRMACAO DE VENDA. Nenhuma automacao operacional deve nascer apenas
-  // porque o card foi arrastado para Vendido. O usuario precisa completar o
-  // cadastro, escolher o orcamento fechado e clicar em "Iniciar processo".
+  // CONFIRMACAO DE VENDA. Nenhuma automacao operacional nasce apenas porque
+  // o card entrou em Vendido. O usuario completa o cadastro, escolhe a
+  // proposta fechada e confirma explicitamente o inicio do processo.
   const { data: colunaDestino, error: erroColuna } = await supabase
     .from('kanban_colunas')
     .select('gera_medicao_final')
@@ -98,6 +98,9 @@ export async function moverCard(
   }
 
   if (colunaDestino?.gera_medicao_final) {
+    if (typeof window !== 'undefined') {
+      window.location.assign(`/vendas/confirmar?orcamento=${encodeURIComponent(orcamentoId)}`)
+    }
     return true
   }
 
