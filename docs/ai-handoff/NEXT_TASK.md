@@ -1,38 +1,54 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-A Engenharia Fase 2 foi concluida no PR #66 e a migration `20260811183500_engenharia_modulo_v1.sql` foi aplicada e validada no Supabase.
+Engenharia Fase 3 no PR #69.
 
-## PROXIMA TAREFA — ENGENHARIA FASE 3
-Criar conferencia tecnica persistente por obra/peca, preparando o futuro MEE sem implementar formulas ainda.
+Escopo implementado:
+1. conferencia tecnica persistente por peca;
+2. status `pendente`, `conferida` e `pendencia`;
+3. observacao tecnica por peca;
+4. responsavel e data de conferencia por peca;
+5. progresso de conferencia na tela da Engenharia;
+6. bloqueio visual da liberacao incompleta;
+7. trigger no banco impedindo mover para `Liberado para producao` enquanto todas as pecas nao estiverem conferidas.
 
-Escopo recomendado:
-1. estado de conferencia por peca;
-2. responsavel tecnico por obra;
-3. observacoes tecnicas por peca;
-4. pendencias/revisoes tecnicas;
-5. registrar quem conferiu e quando;
-6. bloquear a etapa `Liberado para producao` enquanto existir peca nao conferida ou pendencia aberta;
-7. registrar quem liberou a obra e quando;
-8. manter acesso direto à Medicao Final original.
+Migration: `20260811192000_engenharia_conferencia_tecnica_v1.sql`.
 
-## DEPOIS DA FASE 3
-- criar base de receitas por tipologia;
-- mapear perfis, acessorios, reforcos e vidros;
-- implementar calculos/MEE;
-- gerar lista de materiais e lista de corte;
-- otimizar barras e preparar liberacao automatizada para Producao.
+### Proxima acao obrigatoria
+1. validar o head final do PR #69 apos atualizacao dos handoffs;
+2. mergear somente com Build Validation e Supabase dry-run verdes;
+3. aplicar a migration por workflow operacional controlado;
+4. validar historico local/remoto;
+5. iniciar branch separada para a proxima camada.
+
+## PROXIMA CAMADA RECOMENDADA
+Antes do MEE, fechar a governanca da obra na Engenharia:
+- responsavel tecnico no nivel da obra;
+- registrar quem liberou a obra para Producao e quando;
+- historico de revisoes/retornos tecnicos;
+- acao explicita de liberar para Producao, em vez de depender somente do drag-and-drop;
+- preparar a futura entidade `obra` sem duplicar dados atuais.
+
+Depois disso iniciar a base de receitas por tipologia e o MEE.
+
+## DEPOIS
+- receitas por tipologia;
+- perfis, acessorios, reforcos e vidros;
+- calculos/MEE;
+- lista de materiais e lista de corte;
+- otimizacao de barras;
+- integracao automatizada com Producao.
 
 ## JA NA MAIN
 - Medicao Final V2 PRs #54 a #56.
 - Redesign profissional PRs #57 a #63.
-- Engenharia Fase 1 PR #64, com entrada automatica apos aprovacao da Medicao Final.
-- Engenharia Fase 2 PR #66, com rota `/engenharia`, KPIs, quatro etapas e detalhe das pecas; migration aplicada.
+- Engenharia Fase 1 PR #64.
+- Engenharia Fase 2 PR #66.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
 - Migration: dry-run em PR antes de apply controlado.
-- Nao iniciar formulas de MEE antes de fechar a estrutura de conferencia tecnica da Fase 3.
+- Nao iniciar formulas de MEE antes de fechar a governanca tecnica da obra.
 - Vercel pode continuar sujeita a cota diaria; Build Validation confirma o codigo, mas producao depende do deploy.
