@@ -48,6 +48,23 @@ export async function DELETE(
       return NextResponse.json({ error: 'Medicao Final nao encontrada.' }, { status: 404 })
     }
 
+    // Regra Master: preserva o orçamento original e remove os cards derivados
+    // que foram criados nos Kanbans de setor para o mesmo orçamento.
+    if (medicao.orcamento_id) {
+      const { error: deleteCardsError } = await supabaseAdmin
+        .from('setor_kanban_itens')
+        .delete()
+        .eq('orcamento_id', medicao.orcamento_id)
+
+      if (deleteCardsError) {
+        console.error('Erro ao excluir cards derivados do orçamento:', deleteCardsError)
+        return NextResponse.json(
+          { error: 'Nao foi possivel excluir os cards derivados da Medicao Final.' },
+          { status: 500 }
+        )
+      }
+    }
+
     const { error: deleteError } = await supabaseAdmin
       .from('medicoes_finais')
       .delete()
@@ -60,6 +77,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
+      preservado: 'orcamento',
       medicao: {
         id: medicao.id,
         cliente_nome: medicao.cliente_nome,
