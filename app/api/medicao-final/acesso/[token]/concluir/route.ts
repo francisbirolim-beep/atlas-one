@@ -10,6 +10,16 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 
+  const { data: medicao } = await supabaseAdmin
+    .from('medicoes_finais')
+    .select('status_operacional')
+    .eq('id', acesso.medicao_id)
+    .maybeSingle()
+
+  if (!medicao || !['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
+    return NextResponse.json({ error: 'A Medicao Final nao esta aberta para conclusao externa.' }, { status: 409 })
+  }
+
   const [itensResp, camposResp, respostasResp, pendenciasResp] = await Promise.all([
     supabaseAdmin.from('medicao_itens').select('id, tipo_esquadria, descricao, quantidade, medido, campos_extras').eq('medicao_id', acesso.medicao_id),
     supabaseAdmin.from('tipologia_campos_extras').select('tipo_esquadria, chave, nome, obrigatorio, ativo').eq('ativo', true).eq('obrigatorio', true),
