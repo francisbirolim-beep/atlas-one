@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { KanbanColuna } from './tipos'
 import { executarAutomacoesColuna } from './automacoes'
 import { executarAutomacoesSetor } from './automacoesSetor'
+import { criarMedicaoDoOrcamento } from './medicaoFinal'
 
 export async function listarColunas(): Promise<KanbanColuna[]> {
   const { data, error } = await supabase
@@ -84,9 +85,44 @@ if (!error) {
     criado_por_id: data?.criado_por_id || null,
   }).catch(() => {})
   executarAutomacoesSetor(colunaId, orcamentoId, decisoesAutomacaoSetor).catch(() => {})
+  criarMedicaoFinalSeNecessario(colunaId, orcamentoId).catch(() => {})
 }
 
 return !error
+}
+
+async function criarMedicaoFinalSeNecessario(colunaId: string, orcamentoId: string): Promise<void> {
+  const { data: coluna, error: erroColuna } = await supabase
+    .from('kanban_colunas')
+    .select('gera_medicao_final')
+    .eq('id', colunaId)
+    .maybeSingle()
+
+  if (erroColuna) {
+    console.error('Erro ao verificar gera_medicao_final da coluna:', erroColuna)
+    return
+  }
+
+  if (!coluna?.gera_medicao_final) return
+
+  const { data: medicaoExistente, error: erroMedicao } = await supabase
+    .from('medicoes_finais')
+    .select('id')
+    .eq('orcamento_id', orcamentoId)
+    .limit(1)
+    .maybeSingle()
+
+  if (erroMedicao) {
+    console.error('Erro ao verificar medicao final existente:', erroMedicao)
+    return
+  }
+
+  if (medicaoExistente) return
+
+  const medicao = await criarMedicaoDoOrcamento(orcamentoId, null)
+  if (!medicao) {
+    console.error('Nao foi possivel criar a medicao final automaticamente para o orcamento:', orcamentoId)
+  }
 }
 
 export async function atualizarSlaColuna(
