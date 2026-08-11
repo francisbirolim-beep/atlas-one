@@ -45,3 +45,106 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/*
+ * Atlas One Definitivo — Medição Final
+ *
+ * A tela de Medição Final é funcional e sensível à operação. Para preservar o
+ * drag-and-drop, permissões, modais e regras existentes, a primeira etapa do
+ * redesign é aplicada pela casca do sistema, sem reescrever a lógica da página.
+ */
+.atlas-medicao-final-board > div {
+  min-height: 0 !important;
+  background: #f8fafc !important;
+  background-image: none !important;
+}
+
+.atlas-medicao-final-board > div > header {
+  display: none;
+}
+
+.atlas-medicao-final-board > div > main {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 1.25rem 1rem 2rem !important;
+}
+
+.atlas-medicao-final-board > div > main > div:first-child {
+  margin-bottom: 1rem !important;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) {
+  gap: 0.75rem !important;
+  padding-bottom: 1rem;
+  scroll-snap-type: x proximity;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div {
+  width: 18rem !important;
+  padding: 0.75rem !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem !important;
+  background: #f1f5f9 !important;
+  scroll-snap-align: start;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:first-child {
+  min-height: 2.2rem;
+  margin-bottom: 0.55rem !important;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:nth-child(2) {
+  min-height: 7rem !important;
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:nth-child(2) > div {
+  border-width: 1px !important;
+  border-color: #e2e8f0 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.atlas-medicao-final-board > div > main > div:nth-child(2) > div > div:nth-child(2) > div:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 0.07) !important;
+  transform: translateY(-1px);
+}
+
+.atlas-medicao-final-board input,
+.atlas-medicao-final-board select {
+  background: #ffffff;
+}
+
+.atlas-medicao-final-board [class*="bg-black/40"] {
+  backdrop-filter: blur(3px);
+}
+
+@media (min-width: 768px) {
+  .atlas-medicao-final-board > div > main {
+    padding: 1.5rem 1.5rem 2.5rem !important;
+  }
+
+  .atlas-medicao-final-board > div > main > div:nth-child(2) > div {
+    width: 19rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .atlas-medicao-final-board > div > main {
+    padding: 0.85rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-medicao-final-board > div > main > div:first-child {
+    align-items: flex-start !important;
+    gap: 0.75rem;
+  }
+
+  .atlas-medicao-final-board > div > main > div:nth-child(2) > div {
+    width: min(86vw, 19rem) !important;
+  }
+}
