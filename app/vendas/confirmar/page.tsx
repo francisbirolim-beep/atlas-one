@@ -7,29 +7,29 @@ import { OrcamentoRapido, Usuario } from '@/lib/tipos'
 import { usuarioAtual } from '@/lib/auth'
 import {
   CadastroVenda,
-  cadastroVendaDoCliente,
   camposFaltantesCadastroVenda,
   carregarConfirmacaoVenda,
   iniciarProcessoVenda,
   salvarCadastroVenda,
 } from '@/lib/vendas'
-
-const labelsCampos: Record<keyof CadastroVenda, string> = {
-  nome: 'Nome completo / Razão social',
-  cpf_cnpj: 'CPF / CNPJ',
-  telefone: 'Telefone',
-  whatsapp: 'WhatsApp',
-  endereco: 'Endereço',
-  bairro: 'Bairro',
-  cidade: 'Cidade',
-  cep: 'CEP',
-  email: 'E-mail',
-}
+import {
+  CampoConfiguravel,
+  camposDoContexto,
+  listarCamposConfiguraveis,
+} from '@/lib/camposConfiguraveis'
 
 function tituloOrcamento(o: OrcamentoRapido) {
   const numero = o.numero ? `#${o.numero}` : o.id.slice(0, 8)
   const data = new Date(o.created_at).toLocaleDateString('pt-BR')
   return `Orçamento ${numero} — ${data}`
+}
+
+function tipoInput(campo: CampoConfiguravel) {
+  if (campo.tipo === 'data') return 'date'
+  if (campo.tipo === 'email') return 'email'
+  if (campo.tipo === 'numero' || campo.tipo === 'moeda') return 'number'
+  if (campo.tipo === 'telefone') return 'tel'
+  return 'text'
 }
 
 export default function ConfirmarVendaPage() {
@@ -40,6 +40,7 @@ export default function ConfirmarVendaPage() {
   const [selecionadoId, setSelecionadoId] = useState('')
   const [clienteId, setClienteId] = useState<string | undefined>()
   const [cadastro, setCadastro] = useState<CadastroVenda | null>(null)
+  const [camposConfigurados, setCamposConfigurados] = useState<CampoConfiguravel[]>([])
   const [carregando, setCarregando] = useState(true)
   const [salvandoCadastro, setSalvandoCadastro] = useState(false)
   const [iniciando, setIniciando] = useState(false)
@@ -56,16 +57,17 @@ export default function ConfirmarVendaPage() {
       return
     }
 
-    carregarConfirmacaoVenda(id).then(dados => {
+    Promise.all([carregarConfirmacaoVenda(id), listarCamposConfiguraveis()]).then(([dados, campos]) => {
       if (!dados) {
         setErro('Não foi possível carregar o orçamento.')
         setCarregando(false)
         return
       }
+      setCamposConfigurados(campos)
       setOrcamentos(dados.orcamentosCliente)
       setSelecionadoId(dados.orcamentoAtual.id)
       setClienteId(dados.cliente?.id || dados.orcamentoAtual.cliente_id)
-      setCadastro(cadastroVendaDoCliente(dados.cliente, dados.orcamentoAtual))
+      setCadastro(dados.dadosVenda)
       setCarregando(false)
     })
   }, [])
@@ -75,14 +77,19 @@ export default function ConfirmarVendaPage() {
     [orcamentos, selecionadoId]
   )
 
-  const faltantes = cadastro ? camposFaltantesCadastroVenda(cadastro) : []
+  const camposVenda = useMemo(
+    () => camposDoContexto(camposConfigurados, 'confirmacao_venda'),
+    [camposConfigurados]
+  )
+
+  const faltantes = cadastro ? camposFaltantesCadastroVenda(cadastro, camposConfigurados) : []
   const itens = selecionado?.itens || []
   const anexos = selecionado?.anexos || []
   const prontoCadastro = !!cadastro && faltantes.length === 0 && cadastroSalvo
   const prontoItens = itens.length > 0
 
-  function atualizarCampo(campo: keyof CadastroVenda, valor: string) {
-    setCadastro(prev => prev ? { ...prev, [campo]: valor } : prev)
+  function atualizarCampo(chave: string, valor: string) {
+    setCadastro(prev => prev ? { ...prev, [chave]: valor } : prev)
     setCadastroSalvo(false)
   }
 
@@ -90,7 +97,7 @@ export default function ConfirmarVendaPage() {
     if (!cadastro || !selecionado) return
     setErro('')
     setSalvandoCadastro(true)
-    const resultado = await salvarCadastroVenda(clienteId, selecionado.id, cadastro)
+    const resultado = await salvarCadastroVenda(clienteId, selecionado.id, cadastro, camposConfigurados)
     setSalvandoCadastro(false)
     if (!resultado.success) {
       setErro(resultado.error || 'Não foi possível salvar o cadastro.')
@@ -113,18 +120,54 @@ export default function ConfirmarVendaPage() {
     }
 
     setIniciando(true)
-    const resultado = await iniciarProcessoVenda(selecionado.id, usuario)
+    const resultado = await iniciarProcessoVenda(selecionado.id, usuario, camposConfigurados)
     setIniciando(false)
     if (!resultado.success) {
       setErro(resultado.error || 'Não foi possível iniciar o processo da venda.')
       return
     }
 
-    if (resultado.medicaoId) {
-      router.push(`/producao/medicao-final/${resultado.medicaoId}`)
-    } else {
-      router.push('/producao/medicao-final')
+    if (resultado.medicaoId) router.push(`/producao/medicao-final/${resultado.medicaoId}`)
+    else router.push('/producao/medicao-final')
+  }
+
+  function campoFormulario(campo: CampoConfiguravel) {
+    const valor = cadastro?.[campo.chave] || ''
+    const classe = 'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20'
+
+    if (campo.tipo === 'selecao') {
+      return (
+        <select value={valor} onChange={e => atualizarCampo(campo.chave, e.target.value)} className={classe}>
+          <option value="">Selecione...</option>
+          {(campo.opcoes || []).map(opcao => <option key={opcao} value={opcao}>{opcao}</option>)}
+        </select>
+      )
     }
+
+    if (campo.tipo === 'booleano') {
+      return (
+        <select value={valor} onChange={e => atualizarCampo(campo.chave, e.target.value)} className={classe}>
+          <option value="">Selecione...</option>
+          <option value="sim">Sim</option>
+          <option value="nao">Não</option>
+        </select>
+      )
+    }
+
+    if (campo.tipo === 'texto_longo') {
+      return <textarea value={valor} onChange={e => atualizarCampo(campo.chave, e.target.value)} className={`${classe} min-h-24`} placeholder={campo.placeholder} />
+    }
+
+    return (
+      <input
+        type={tipoInput(campo)}
+        value={valor}
+        onChange={e => atualizarCampo(campo.chave, e.target.value)}
+        className={classe}
+        placeholder={campo.placeholder}
+        step={campo.tipo === 'moeda' ? '0.01' : undefined}
+      />
+    )
   }
 
   if (carregando) {
@@ -157,45 +200,39 @@ export default function ConfirmarVendaPage() {
           <div className="flex items-center gap-2 mb-4">
             <UserRound size={18} className="text-brand-navy" />
             <div>
-              <h2 className="font-semibold text-slate-800">1. Cadastro completo do cliente</h2>
-              <p className="text-xs text-slate-500">Os campos marcados com * são obrigatórios para uma venda fechada.</p>
+              <h2 className="font-semibold text-slate-800">1. Cadastro e dados da venda</h2>
+              <p className="text-xs text-slate-500">Campos, ordem e obrigatoriedade obedecem às Configurações do Atlas.</p>
             </div>
           </div>
 
           {cadastro && (
             <div className="grid md:grid-cols-2 gap-3">
-              {(Object.keys(labelsCampos) as (keyof CadastroVenda)[]).map(campo => {
-                const obrigatorio = ['nome', 'cpf_cnpj', 'telefone', 'endereco', 'bairro', 'cidade', 'cep'].includes(campo)
-                return (
-                  <label key={campo} className={campo === 'endereco' ? 'md:col-span-2' : ''}>
-                    <span className="block text-xs font-medium text-slate-600 mb-1">
-                      {labelsCampos[campo]}{obrigatorio ? ' *' : ''}
-                    </span>
-                    <input
-                      value={cadastro[campo]}
-                      onChange={e => atualizarCampo(campo, e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20"
-                    />
-                  </label>
-                )
-              })}
+              {camposVenda.map(campo => (
+                <label key={campo.id} className={campo.tipo === 'texto_longo' ? 'md:col-span-2' : ''}>
+                  <span className="block text-xs font-medium text-slate-600 mb-1">
+                    {campo.label}{campo.obrigatorioEm.includes('confirmacao_venda') ? ' *' : ''}
+                  </span>
+                  {campoFormulario(campo)}
+                  {campo.ajuda && <span className="block mt-1 text-[11px] text-slate-400">{campo.ajuda}</span>}
+                </label>
+              ))}
             </div>
           )}
 
           <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
             <div className="text-xs text-slate-500">
               {faltantes.length > 0
-                ? `Faltando: ${faltantes.map(f => labelsCampos[f]).join(', ')}`
+                ? `Faltando: ${faltantes.map(f => f.label).join(', ')}`
                 : cadastroSalvo
-                  ? 'Cadastro completo e salvo.'
-                  : 'Cadastro completo. Clique em salvar para confirmar.'}
+                  ? 'Cadastro e dados da venda completos e salvos.'
+                  : 'Dados completos. Clique em salvar para confirmar.'}
             </div>
             <button
               onClick={salvarCadastro}
               disabled={!cadastro || faltantes.length > 0 || salvandoCadastro}
               className="px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-40"
             >
-              {salvandoCadastro ? 'Salvando...' : 'Salvar cadastro'}
+              {salvandoCadastro ? 'Salvando...' : 'Salvar dados da venda'}
             </button>
           </div>
         </section>
@@ -211,26 +248,12 @@ export default function ConfirmarVendaPage() {
 
           <div className="space-y-2">
             {orcamentos.map(o => (
-              <label
-                key={o.id}
-                className={`block rounded-xl border p-3 cursor-pointer ${selecionadoId === o.id ? 'border-brand-navy bg-brand-navyLight' : 'border-slate-200'}`}
-              >
+              <label key={o.id} className={`block rounded-xl border p-3 cursor-pointer ${selecionadoId === o.id ? 'border-brand-navy bg-brand-navyLight' : 'border-slate-200'}`}>
                 <div className="flex gap-3 items-start">
-                  <input
-                    type="radio"
-                    name="orcamento"
-                    checked={selecionadoId === o.id}
-                    onChange={() => {
-                      setSelecionadoId(o.id)
-                      setCadastroSalvo(false)
-                    }}
-                    className="mt-1"
-                  />
+                  <input type="radio" name="orcamento" checked={selecionadoId === o.id} onChange={() => { setSelecionadoId(o.id); setCadastroSalvo(false) }} className="mt-1" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-800">{tituloOrcamento(o)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Valor: R$ {(o.valor_estimado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {o.itens?.length || 0} item(ns) estruturado(s)
-                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">Valor: R$ {(o.valor_estimado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {o.itens?.length || 0} item(ns) estruturado(s)</p>
                   </div>
                 </div>
               </label>
@@ -255,18 +278,14 @@ export default function ConfirmarVendaPage() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 mb-2 flex items-center gap-1"><Paperclip size={13} /> Anexos</p>
                   <div className="flex flex-wrap gap-2">
-                    {anexos.map((a, i) => (
-                      <a key={`${a.url}-${i}`} href={a.url} target="_blank" rel="noreferrer" className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-brand-navy hover:bg-slate-200">
-                        {a.titulo || a.nome}
-                      </a>
-                    ))}
+                    {anexos.map((a, i) => <a key={`${a.url}-${i}`} href={a.url} target="_blank" rel="noreferrer" className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-brand-navy hover:bg-slate-200">{a.titulo || a.nome}</a>)}
                   </div>
                 </div>
               )}
 
               {itens.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  Este orçamento ainda não foi transformado em itens estruturados do Atlas. Na próxima etapa implementaremos a conversão do PDF W.Vetro para um Orçamento Atlas conferível. Até isso acontecer, o processo não será liberado sem peças.
+                  Este orçamento ainda não foi transformado em itens estruturados do Atlas. O processo não será liberado sem peças.
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-3">
@@ -275,9 +294,7 @@ export default function ConfirmarVendaPage() {
                       <p className="text-xs text-slate-400">Item {idx + 1}</p>
                       <p className="font-medium text-sm text-slate-800 mt-0.5">{item.ambiente || item.descricao || item.tipo_esquadria}</p>
                       <p className="text-xs text-slate-500 mt-1">{item.tipo_esquadria} · qtd {item.quantidade || 1}</p>
-                      {(item.largura_mm || item.altura_mm) ? (
-                        <p className="text-xs text-slate-500">{item.largura_mm || '-'} x {item.altura_mm || '-'} mm</p>
-                      ) : null}
+                      {(item.largura_mm || item.altura_mm) ? <p className="text-xs text-slate-500">{item.largura_mm || '-'} x {item.altura_mm || '-'} mm</p> : null}
                       {item.descricao && item.ambiente && <p className="text-xs text-slate-500 mt-1">{item.descricao}</p>}
                     </div>
                   ))}
@@ -292,11 +309,7 @@ export default function ConfirmarVendaPage() {
             <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} /> 4. Iniciar processo da venda</div>
             <p className="text-xs text-white/70 mt-1">Somente agora serão criadas Medição Final e automações dos setores.</p>
           </div>
-          <button
-            onClick={iniciar}
-            disabled={!prontoCadastro || !prontoItens || iniciando}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40"
-          >
+          <button onClick={iniciar} disabled={!prontoCadastro || !prontoItens || iniciando} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40">
             <Play size={16} /> {iniciando ? 'Iniciando...' : 'Iniciar processo da venda'}
           </button>
         </section>
