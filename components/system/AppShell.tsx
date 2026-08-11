@@ -8,6 +8,7 @@ import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
+import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -40,6 +41,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </section>
           )}
           {medicaoFinalId && <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />}
+          {medicaoFinalId && <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />}
           {medicaoFinalId && <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />}
           <div
             className={
