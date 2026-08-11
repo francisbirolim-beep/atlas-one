@@ -11,7 +11,7 @@ import {
   listarTodosCamposExtras, criarCampoExtra, excluirCampoExtra,
   lerLimiteAlertaDiferenca, salvarLimiteAlertaDiferenca,
 } from '@/lib/medicaoFinal'
-import { usuarioAtual } from '@/lib/auth'
+import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
 
@@ -29,6 +29,7 @@ export default function MedicaoFinalQuadro() {
   const [itensPorMedicao, setItensPorMedicao] = useState<Record<string, MedicaoItem[]>>({})
   const [carregando, setCarregando] = useState(true)
   const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
+  const [excluindoMedicaoId, setExcluindoMedicaoId] = useState<string | null>(null)
 
   const [modalNova, setModalNova] = useState(false)
   const [buscaOrcamento, setBuscaOrcamento] = useState('')
@@ -123,6 +124,45 @@ export default function MedicaoFinalQuadro() {
     if (ok) {
       setMedicoes(prev => prev.map(m => (m.coluna_id === col.id ? { ...m, coluna_id: destino.id } : m)))
       setColunas(outras)
+    }
+  }
+
+  async function apagarMedicao(medicao: MedicaoFinal) {
+    if (!master || excluindoMedicaoId) return
+
+    const confirmar = window.confirm(
+      `Excluir a Medição Final de "${medicao.cliente_nome}"?\n\n` +
+      'Os itens e medidas desta Medição Final também serão removidos. O orçamento e o cliente NÃO serão apagados.'
+    )
+    if (!confirmar) return
+
+    setExcluindoMedicaoId(medicao.id)
+    try {
+      const token = await tokenAtual()
+      if (!token) {
+        alert('Sua sessão expirou. Entre novamente para excluir a medição.')
+        return
+      }
+
+      const resp = await fetch(`/api/medicao-final/${medicao.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await resp.json().catch(() => ({}))
+
+      if (!resp.ok) {
+        alert(json.error || 'Não foi possível excluir a Medição Final.')
+        return
+      }
+
+      setMedicoes(prev => prev.filter(m => m.id !== medicao.id))
+      setItensPorMedicao(prev => {
+        const proximo = { ...prev }
+        delete proximo[medicao.id]
+        return proximo
+      })
+    } finally {
+      setExcluindoMedicaoId(null)
     }
   }
 
@@ -260,11 +300,27 @@ export default function MedicaoFinalQuadro() {
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData('text/plain', m.id)}
                         onClick={() => router.push(`/producao/medicao-final/${m.id}`)}
-                        className="rounded-xl border-2 border-slate-200 bg-white p-3 cursor-pointer hover:shadow-md transition"
+                        className="relative rounded-xl border-2 border-slate-200 bg-white p-3 cursor-pointer hover:shadow-md transition"
                       >
-                        <p className="font-medium text-sm text-slate-800">{m.cliente_nome}</p>
+                        {master && (
+                          <button
+                            type="button"
+                            title="Excluir Medição Final"
+                            aria-label={`Excluir Medição Final de ${m.cliente_nome}`}
+                            disabled={excluindoMedicaoId === m.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void apagarMedicao(m)
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="absolute right-2 top-2 p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-40"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                        <p className="font-medium text-sm text-slate-800 pr-7">{m.cliente_nome}</p>
                         {(m.endereco || m.cidade) && (
-                          <p className="text-xs text-slate-400 mt-0.5 truncate">
+                          <p className="text-xs text-slate-400 mt-0.5 truncate pr-7">
                             {[m.endereco, m.bairro, m.cidade].filter(Boolean).join(' - ')}
                           </p>
                         )}
