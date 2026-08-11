@@ -1,55 +1,42 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Branch: `feat/atlas-professional-medicao-final-v1`.
-PR: #61.
+Branch: `feat/atlas-professional-producao-v1`.
 
-Objetivo: concluir a quinta onda do redesign profissional sem alterar regras da Medicao Final V2.
+Objetivo: concluir a sexta onda do redesign profissional sem alterar a logica do Kanban de Producao.
 
 Escopo implementado:
-1. painéis de progresso/status, acesso externo e checklist agrupados em `atlas-medicao-tools`;
-2. nova camada `app/atlas-medicao-professional.css`;
-3. refinamento da tela de detalhe e responsividade;
-4. nenhuma regra, permissao, persistencia ou fluxo alterado.
-
-Validacao: Build Validation do GitHub Actions passou com sucesso.
+1. AppShell identifica somente `/producao` com `atlas-producao-professional`;
+2. nova camada `app/atlas-producao-professional.css`;
+3. cabecalho legado ocultado no shell;
+4. toolbar, colunas, cards, modais e mobile refinados;
+5. drag-and-drop e CRUD existentes preservados.
 
 ### Proxima acao obrigatoria
-1. revisar o diff final do PR #61;
-2. mergear na `main`;
-3. iniciar branch separada para o redesign profissional de Producao.
+1. abrir PR;
+2. aguardar Build Validation;
+3. corrigir no mesmo branch se houver erro;
+4. se passar, mergear na `main`;
+5. iniciar branch separada para Engenharia.
 
 ## REDESIGN PROFISSIONAL JA NA MAIN
-- PR #57: Home executiva + Topbar + KPIs/workspace;
-- PR #58: Sidebar desktop escura em padrao ERP;
-- PR #59: Kanban Comercial profissional;
-- PR #60: Central e Pesquisa de Orcamentos profissionais.
+- PR #57: Home/Topbar/KPIs;
+- PR #58: Sidebar ERP;
+- PR #59: Kanban Comercial;
+- PR #60: Central/Pesquisa de Orcamentos;
+- PR #61: Medicao Final.
 
-A regra continua sendo preservar logica existente e modernizar por camada visual sempre que possivel.
-
-## MEDICAO FINAL V2 JA NA MAIN
-- V20 aplicada e validada no Supabase;
-- responsavel/status/liberar/iniciar/concluir/aprovar;
-- pendencias e bloqueios;
-- checklist normalizado por peca/tipologia/secao;
-- fotos categorizadas;
-- compatibilidade com checklist legado;
-- link externo seguro com token-hash, expiracao/revogacao, medidas, checklist, fotos e conclusao para revisao interna.
-
-## PROXIMOS BLOCOS RECOMENDADOS
-Depois do PR #61:
-1. padronizar Producao;
-2. padronizar Engenharia;
-3. validar funcionalmente Confirmacao de Venda Fase 1;
-4. definir motor simples de regras condicionais e `exigir_foto_quando`;
-5. criar liberacao persistente para Engenharia apos aprovacao;
-6. Fase 2 PDF W.Vetro -> Orcamento Atlas estruturado e conferivel.
+## DEPOIS DA PRODUCAO
+1. Engenharia;
+2. demais modulos antigos;
+3. validacao funcional da Confirmacao de Venda;
+4. regras condicionais/foto obrigatoria da Medicao Final;
+5. liberacao persistente para Engenharia;
+6. PDF W.Vetro -> Orcamento Atlas estruturado e conferivel.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
-- A Vercel esta com cota diaria de builds; o workflow `Build Validation` do GitHub Actions valida `npm run build`, mas o deploy de producao continua dependendo da Vercel.
-- Nao reinterpretar automaticamente medicoes ja concluidas.
-- Nao usar `migration repair --reverted` no banco atual sem diagnostico explicito.
-- Nao alterar formulas/regras durante tarefas puramente visuais.
+- Vercel continua sujeita a cota diaria; `Build Validation` confirma o build do codigo, mas producao depende do deploy Vercel.
+- Nao alterar regras durante tarefas puramente visuais.
