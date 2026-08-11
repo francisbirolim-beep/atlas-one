@@ -6,7 +6,7 @@ Lista resumida das implementacoes relevantes. Para estado real usar CURRENT_STAT
 Cadastros, Kanban de orcamentos, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes. Status: em uso.
 
 ## Infraestrutura Supabase / migrations — 2026-08-11
-Session Pooler IPv4, audit/dry-run em PR, historico local/remoto reconciliado e V20 da Medicao Final aplicada/validada.
+Session Pooler IPv4, audit/dry-run em PR, historico local/remoto reconciliado e migrations operacionais controladas.
 
 ## Medicao Final V2 — PRs #54 a #56
 - #54: responsavel, status operacional, liberar/iniciar/concluir/aprovar, pendencias e bloqueios.
@@ -31,17 +31,17 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - Usa `orcamento_id` para evitar duplicidade.
 - Migration `20260811181300_engenharia_entrada_automatica.sql` aplicada e validada no Supabase.
 
-## Engenharia Fase 2 — PR #66 (branch atual)
-- cria rota dedicada `/engenharia`;
-- mantem `setor_kanban_itens` como fonte unica de cards;
-- exibe KPIs e as etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao;
-- drag-and-drop respeita permissoes;
-- detalhe da obra mostra Medicao Final aprovada e as 6 medidas finais de cada peca;
-- migration ativa a rota `/engenharia` no setor e padroniza as quatro etapas;
-- sem MEE, receitas, lista de corte ou otimizacao nesta fase.
+## Engenharia Fase 2 — PR #66
+- rota dedicada `/engenharia`;
+- `setor_kanban_itens` permanece como fonte unica de cards;
+- KPIs e etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao;
+- drag-and-drop respeitando permissoes;
+- detalhe da obra com Medicao Final aprovada e as 6 medidas finais de cada peca;
+- migration `20260811183500_engenharia_modulo_v1.sql` ativa a rota e padroniza as quatro etapas;
+- migration aplicada e validada no Supabase.
 
 ## Pontos funcionais ainda pendentes
-- Engenharia Fase 3: conferencia tecnica persistente por peca, responsavel, observacoes e bloqueio/liberacao para Producao.
+- Engenharia Fase 3: conferencia tecnica persistente por peca, responsavel, observacoes, pendencias e bloqueio/liberacao para Producao.
 - MEE/calculos automaticos, receitas de tipologias, perfis/acessorios e lista de corte.
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
 - Parser/importacao PDF W.Vetro ainda precisa de fluxo estruturado e conferivel.
