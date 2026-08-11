@@ -33,10 +33,15 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
 
   const itens = data as MedicaoItem[]
   const totalPecas = itens.reduce((total, item) => total + Math.max(1, item.quantidade || 1), 0)
+
+  // Regra conservadora: uma linha antiga com quantidade 3 e apenas um conjunto
+  // de medidas registrado representa, no maximo, 1 peca efetivamente conferida.
+  // As demais so entram como concluidas depois que forem separadas/revisadas.
   const pecasMedidas = itens.reduce(
-    (total, item) => total + (item.medido ? Math.max(1, item.quantidade || 1) : 0),
+    (total, item) => total + (item.medido ? 1 : 0),
     0,
   )
+
   const medidores = Array.from(
     new Set(itens.map(item => item.medido_por_nome).filter((nome): nome is string => Boolean(nome))),
   )
