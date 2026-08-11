@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, Search, FileText, Camera, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { formatarMoeda } from '@/lib/formatacao'
 
 interface OrcamentoResumo {
   id: string
@@ -149,7 +150,7 @@ export default function Historico() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <p className="font-bold text-slate-800">
-                      {o.valor_estimado != null ? `R$ ${o.valor_estimado.toFixed(2)}` : 'Aguardando orçamento'}
+                      {o.valor_estimado != null ? formatarMoeda(o.valor_estimado) : 'Aguardando orçamento'}
                     </p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[o.status]}`}>
                       {statusLabels[o.status]}
