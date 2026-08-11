@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, codigo real da `main` apos PRs #54 a #59 e branch atual de redesign de Orcamentos.
+Verificado em: 2026-08-11, codigo real da `main` apos PR #60 e branch atual `feat/atlas-professional-medicao-final-v1`.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -25,15 +25,19 @@ Verificado em: 2026-08-11, codigo real da `main` apos PRs #54 a #59 e branch atu
 - PR #57 — Professional Shell V1: Home executiva, Topbar corporativa, workspace e KPIs refinados.
 - PR #58 — Sidebar profissional: navegacao desktop escura em padrao ERP sem reescrever favoritos, categorias, setores e permissoes.
 - PR #59 — Kanban Comercial profissional: nova camada visual, filtros e cards refinados, preservando drag-and-drop e regras.
+- PR #60 — Central de Orcamentos profissional: novo hub `/orcamento` e camada visual profissional em `/orcamento/pesquisar`, sem alterar calculos nem persistencia.
 
 ## EM IMPLEMENTACAO NESTE BRANCH
-Branch: `feat/atlas-professional-orcamentos-v1`.
+Branch: `feat/atlas-professional-medicao-final-v1`.
 
 Escopo:
-- Hub `/orcamento` redesenhado como Central de Orcamentos;
-- acesso destacado para Novo Orcamento, Orcamento Rapido, Pesquisa e Pipeline Comercial;
-- `/orcamento/pesquisar` recebe a camada visual profissional do AppShell;
-- nenhuma formula, regra de preco ou persistencia de orcamento e alterada.
+- painéis V2 da Medicao Final agrupados em uma area operacional unica;
+- camada visual dedicada para progresso/status, link externo e checklist;
+- refinamento desktop/mobile do detalhe da Medicao Final;
+- nova folha `app/atlas-medicao-professional.css` isolada da logica de negocio;
+- nenhuma regra, permissao, persistencia ou fluxo V2 alterado.
+
+Validacao: Build Validation do PR #61 passou com sucesso.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
 - Confirmacao de Venda Fase 1:

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import './atlas-professional.css'
+import './atlas-medicao-professional.css'
 import AuthGate from '@/components/AuthGate'
 import SincronizadorOffline from '@/components/SincronizadorOffline'
 import AgenteChat from '@/components/AgenteChat'
