@@ -3,28 +3,42 @@
 Lista resumida das implementacoes relevantes, da mais antiga para a mais recente. Para detalhes de arquitetura ver ARCHITECTURE.md; para o que esta funcionando de fato ver CURRENT_STATE.md.
 
 ## Cadastro base (clientes, produtos, fornecedores)
-Objetivo: cadastro completo de clientes (com endereco/contato), produtos (com fornecedor, precos) e fornecedores. Status: concluido. Arquivos: app/clientes/*, app/cadastro/*, lib/clientes.ts, lib/produtos.ts, lib/fornecedores.ts, migrations v12/v14/v15.
+Objetivo: cadastro completo de clientes (com endereco/contato), produtos e fornecedores. Status: concluido.
 
 ## Kanban de orcamentos
-Objetivo: quadro kanban para acompanhar orcamentos por coluna (Fazer orcamento -> Orcamento feito -> Enviado -> Vendido), com automacoes de setor (fan-out) e automacoes de tarefa. Status: concluido e em uso. Arquivos: app/kanban/page.tsx, lib/kanban.ts, lib/automacoes.ts, lib/automacoesSetor.ts.
+Objetivo: quadro kanban para acompanhar orcamentos por coluna, com historico e automacoes. Status: concluido e em uso.
 
-## Medicao Final (fase inicial)
-Objetivo: apos orcamento vendido, permitir medir cada esquadria fisicamente, com colunas proprias, checklist de campos extra por tipologia. Status: concluido. Arquivos: app/producao/medicao-final/*, lib/medicaoFinal.ts, migration v13.
+## Medicao Final
+Objetivo: apos venda confirmada, permitir medir cada esquadria fisicamente, com quadro proprio e checklist por tipologia. Status: em uso e evoluindo.
 
 ## Importacao de itens via PDF
-Objetivo: ler PDF de orcamento e gerar itens de medicao automaticamente. Status: concluido. Arquivos: lib/pdfOrcamentoImport.ts, app/api/importar-itens-orcamento/route.ts.
+Objetivo: ler PDF de orcamento e gerar itens. Status: existe no codigo, mas a heuristica ainda nao cobre com confiabilidade todos os PDFs reais W.Vetro. Nao deve liberar processo sem conferencia.
 
-## Checklist de medicao: campo obrigatorio
-Objetivo: permitir marcar campos do checklist como obrigatorios, bloqueando salvar sem preencher. Status: concluido e mergeado. Arquivos: lib/tipos.ts, lib/medicaoFinal.ts, app/configuracoes/page.tsx, app/producao/medicao-final/[id]/page.tsx. Migration: coluna obrigatorio em tipologia_campos_extras.
-
-## Redesign do checklist em Configuracoes
-Objetivo: corrigir bug de UX onde o usuario nao conseguia adicionar campos ao checklist (formulario unico + erros nao mostrados). Trocado por selecao de tipologia via chips + formulario dedicado por grupo. Status: concluido e mergeado.
-
-## Campo tipo "foto" no checklist + fluxo de finalizar medicao
-Objetivo: permitir campos do tipo foto (upload/camera) no checklist, e um fluxo de "medido" com checkmark e opcao de reabrir para editar. Descoberta durante a implementacao: o fluxo de "finalizar + checkmark" ja existia (medido/medido_em/medido_por em medicao_itens) — so faltava mesmo o tipo foto. Status: concluido e mergeado. Arquivos: lib/tipos.ts (TipoValorCampoExtra inclui 'foto'), lib/upload.ts (uploadFoto), app/producao/medicao-final/[id]/page.tsx, app/configuracoes/page.tsx.
+## Checklist de medicao
+Campos configuraveis por tipologia, obrigatorios, numero/texto/foto, marcacao medido/reabrir. Status: concluido.
 
 ## Tipologias dinamicas (PR #28)
-Objetivo: permitir criar novas tipologias (alem das 10 fixas) direto na tela de Configuracoes, funcionando em todo o sistema (kanban, orcamento, medicao). Status: concluido e mergeado em main. Principais mudancas: tabela tipologias (migration aplicada direto no banco, nao commitada como .sql — ver DECISIONS.md), lib/tipologias.ts (CRUD), TipoEsquadria virou string dinamica (lib/tipos.ts), botao "Adicionar tipologia" em Configuracoes, e as 5 telas que tinham array fixo de tipos passaram a buscar de listarTipologias(): app/kanban/page.tsx, app/orcamento-rapido/page.tsx, app/producao/medicao-final/page.tsx, app/producao/medicao-final/[id]/page.tsx, app/configuracoes/page.tsx. Limitacao conhecida: campo categoria (porta/janela) da tipologia nova nao esta conectado a lib/calculos.ts ainda (ver DECISIONS.md).
+Tabela `tipologias`, CRUD e telas dinamicas. Status: concluido e mergeado. Limitacao: categoria porta/janela ainda nao conectada a lib/calculos.ts.
 
-## Automacao Vendido -> Medicao Final (EM ABERTO)
-Objetivo: quando um card entra numa coluna com gera_medicao_final=true, criar automaticamente o registro em medicoes_finais (hoje e manual). Status: NAO IMPLEMENTADO. Plano definido, nao commitado — ver NEXT_TASK.md para detalhes tecnicos e proximo passo.
+## Automacao Kanban -> Medicao Final
+PR #30 implementou criacao automatica ao entrar em coluna `gera_medicao_final=true`. Posteriormente essa decisao foi revista porque a operacao precisa validar cliente, proposta fechada e itens antes de criar qualquer processo.
+
+## Leitura de PDF na Medicao Final
+PR #31 ampliou o parser/importacao e sincronizacao do PDF. A leitura ainda falha em layouts reais especificos; a estrategia foi alterada para transformar o PDF em dados estruturados e conferiveis antes da operacao.
+
+## Exclusao Master da Medicao Final
+PRs #32/#33: Master pode excluir Medicao Final e limpar cards derivados pelo mesmo `orcamento_id`, preservando o orcamento original e cliente.
+
+## Confirmacao de Venda — Fase 1 (branch feat/confirmacao-venda)
+Objetivo: impedir que arrastar para `Vendido` gere processos incompletos.
+
+Implementado:
+- `lib/kanban.ts`: colunas com `gera_medicao_final=true` passam a abrir a Confirmacao de Venda e nao executam fan-out/Medicao automaticamente;
+- `app/vendas/confirmar/page.tsx`: nova tela em 4 etapas (cadastro, escolha do orcamento, conferencia dos itens, iniciar processo);
+- `lib/vendas.ts`: carrega cliente/orcamentos, valida e salva cadastro completo, bloqueia venda sem itens estruturados, cria/reutiliza Medicao Final e dispara automacoes somente no clique `Iniciar processo da venda`;
+- cliente com varios orcamentos pode escolher explicitamente qual proposta foi fechada.
+
+Status: IMPLEMENTADO NA BRANCH, AINDA NAO VALIDADO/NAO MERGEADO.
+
+## Proxima evolucao
+Fase 2: converter PDF W.Vetro em um `Orçamento Atlas` estruturado, editavel e conferivel. O PDF original fica como origem; futuramente o PDF do Atlas passa a ser a saida oficial gerada dos dados estruturados.
