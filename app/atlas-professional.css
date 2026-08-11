@@ -127,3 +127,143 @@
     display: contents;
   }
 }
+
+/* Kanban Comercial — modernização visual sem tocar no drag-and-drop. */
+.atlas-kanban-commercial > div {
+  min-height: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.atlas-kanban-commercial > div > header {
+  display: none !important;
+}
+
+.atlas-kanban-commercial > div > main {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 1rem 1rem 2rem !important;
+}
+
+.atlas-kanban-commercial > div > main > div:first-child {
+  margin-bottom: 1rem !important;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.atlas-kanban-commercial > div > main > div:first-child input,
+.atlas-kanban-commercial > div > main > div:first-child select {
+  min-height: 40px;
+  border-color: #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+.atlas-kanban-commercial > div > main > div:first-child input:focus,
+.atlas-kanban-commercial > div > main > div:first-child select:focus {
+  border-color: #94a3b8 !important;
+  background: #ffffff !important;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) {
+  gap: 12px !important;
+  padding-bottom: 1.25rem !important;
+  scroll-snap-type: x proximity;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div {
+  width: 292px !important;
+  padding: 10px !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px !important;
+  background: #f1f5f9 !important;
+  scroll-snap-align: start;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:first-child {
+  min-height: 38px;
+  margin-bottom: 8px !important;
+  padding: 0 4px;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:first-child h3 {
+  color: #334155 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:first-child span {
+  min-width: 22px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff !important;
+  color: #64748b !important;
+  font-weight: 700;
+  text-align: center;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:nth-child(2) {
+  min-height: 96px !important;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:nth-child(2) > div {
+  border-width: 1px !important;
+  border-radius: 11px !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.035);
+  transform: translateZ(0);
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:nth-child(2) > div:hover {
+  box-shadow: 0 8px 22px rgb(15 23 42 / 0.08) !important;
+  transform: translateY(-1px);
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > button {
+  width: 292px !important;
+  border-width: 1px !important;
+  border-color: #cbd5e1 !important;
+  border-radius: 14px !important;
+  background: rgb(255 255 255 / 0.6);
+  color: #64748b !important;
+}
+
+.atlas-kanban-commercial > div > main > div:nth-child(2) > button:hover {
+  border-color: #10b981 !important;
+  background: #ffffff;
+  color: #047857 !important;
+}
+
+.atlas-kanban-commercial [class*="bg-black/40"] {
+  background: rgb(15 23 42 / 0.55) !important;
+  backdrop-filter: blur(4px);
+}
+
+.atlas-kanban-commercial [class*="fixed inset-0"] > div {
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.2);
+}
+
+@media (min-width: 768px) {
+  .atlas-kanban-commercial > div > main {
+    padding: 1.25rem 1.5rem 2.5rem !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .atlas-kanban-commercial > div > main {
+    padding: 0.8rem 0.75rem 1.5rem !important;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child {
+    padding: 0.65rem;
+  }
+
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > div,
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > button {
+    width: min(84vw, 292px) !important;
+  }
+}
