@@ -27,6 +27,14 @@ Verificado em: 2026-08-11, direto no codigo da branch main e na branch feat/atla
   - mostra anexos e itens estruturados;
   - botao "Iniciar processo da venda" cria a Medicao Final e dispara automacoes somente depois da confirmacao;
   - se o orcamento nao possui itens estruturados no Atlas, o processo e bloqueado.
+- Medicao Final V2 na branch feat/atlas-shell-definitivo-v2:
+  - quadro com visual ERP aplicado sem reescrever drag-and-drop/regras existentes;
+  - detalhe mobile-first com modais em bottom sheet no celular;
+  - resumo operacional com progresso por quantidade real de pecas;
+  - identificacao de medidores pelos itens concluidos;
+  - deteccao de linhas antigas com quantidade > 1;
+  - acao explicita para separar apenas unidades ainda nao medidas em pecas individuais;
+  - itens agrupados ja medidos permanecem intactos e contam conservadoramente como uma peca ate revisao.
 - Modulo de IA/agente: existe mas nao auditado a fundo.
 - CRM: presente no codigo, uso real nao confirmado nesta sessao.
 
@@ -42,21 +50,33 @@ Ja existe na main:
 Em implementacao na branch feat/atlas-shell-definitivo-v2:
 - Topbar refinada com busca global central, botao + Novo, IA Atlas, notificacoes e perfil;
 - base global de tipografia/foco/selection coerente com o Design System;
-- AppShell identifica as rotas de Medicao Final para permitir tratamento visual especifico sem alterar a logica operacional;
-- quadro `/producao/medicao-final` recebeu visual ERP por camada de Design System: remove cabecalho/gradiente legado dentro da casca nova, amplia area util, compacta colunas, suaviza cards, melhora scroll horizontal e responsividade;
-- nenhuma regra de negocio, migration, drag-and-drop, permissao ou automacao foi alterada.
+- quadro e detalhe da Medicao Final integrados ao novo Design System;
+- nenhuma formula de engenharia ou regra de precificacao alterada.
 
-Proxima aplicacao visual recomendada: detalhe `/producao/medicao-final/[id]` com abordagem mobile-first, preservando medidas, checklist, fotos e regras existentes.
+## SCHEMA PROPOSTO, AINDA NAO APLICADO
+- `supabase-migration-v20-medicao-final-v2.sql` foi criado e versionado no repositorio.
+- A V20 e ADITIVA e prepara:
+  - status operacional e responsavel no nivel de `medicoes_finais`;
+  - pendencias por obra/peca;
+  - fotos categorizadas;
+  - respostas normalizadas de checklist;
+  - evolucao dos campos dinamicos com secoes, opcoes e regras condicionais;
+  - links externos com token armazenado somente como hash;
+  - revisoes/versionamento da Medicao Final.
+- A tabela `medicao_acessos_externos` foi deliberadamente desenhada com RLS habilitado SEM policy permissiva; acesso deve ocorrer apenas via Route Handler server-side/service role.
+- A V20 NAO foi aplicada no Supabase nesta sessao. Nao considerar nenhuma dessas colunas/tabelas disponivel em producao ainda.
 
 ## PARCIAL
 - Conversao de PDF W.Vetro em Orçamento Atlas estruturado: parser existe, mas ainda falha em alguns PDFs reais. A Confirmacao de Venda foi desenhada para bloquear o processo ate existir uma lista de itens confiavel.
 - Modelo conceitual futuro Venda/Obra: decidido, mas ainda nao existe uma tabela `vendas`/`obras`. Na Fase 1 a confirmacao usa o proprio orcamento selecionado como referencia.
-- Padronizacao visual: Home/App Shell e quadro de Medicao Final evoluiram, mas varias telas operacionais antigas ainda usam cabecalhos, gradientes e cards proprios.
+- Padronizacao visual: Home/App Shell e Medicao Final evoluiram, mas varias telas operacionais antigas ainda usam cabecalhos, gradientes e cards proprios.
 
 ## NAO IMPLEMENTADO
 - Entidade persistente `vendas` ou `obras` para separar cliente/orcamento/venda fechada.
 - Tela de conferencia/edicao da importacao PDF W.Vetro -> Orçamento Atlas antes de iniciar o processo.
 - Geracao completa do novo PDF de orçamento com identidade Atlas como saida oficial do orçamento estruturado.
+- Link externo funcional da Medicao Final (schema proposto, rota/token ainda nao implementados).
+- Pendencias/checklist V2/aprovacao persistentes (schema proposto, codigo ainda nao implementado).
 - Testes automatizados.
 - Design System aplicado de ponta a ponta em todas as telas.
 
