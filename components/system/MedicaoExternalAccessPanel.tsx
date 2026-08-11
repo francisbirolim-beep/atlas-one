@@ -18,6 +18,8 @@ type Acesso = {
 
 export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: string }) {
   const [acessos, setAcessos] = useState<Acesso[]>([])
+  const [podeEditar, setPodeEditar] = useState(false)
+  const [visivel, setVisivel] = useState(true)
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
   const [dias, setDias] = useState(7)
@@ -34,13 +36,20 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
       cache: 'no-store',
     })
     const json = await resp.json().catch(() => ({}))
-    if (resp.ok) setAcessos(json.acessos || [])
+    if (resp.ok) {
+      setAcessos(json.acessos || [])
+      setPodeEditar(json.podeEditar === true)
+      setVisivel(true)
+    } else if (resp.status === 403) {
+      setVisivel(false)
+    }
     setCarregando(false)
   }, [medicaoId])
 
   useEffect(() => { void carregar() }, [carregar])
 
   async function gerar() {
+    if (!podeEditar) return
     if (!nome.trim()) return setMensagem('Informe o nome de quem fara a medicao.')
     setGerando(true); setMensagem(''); setUrlNova('')
     const token = await tokenAtual()
@@ -69,6 +78,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
   }
 
   async function revogar(acessoId: string) {
+    if (!podeEditar) return
     if (!window.confirm('Revogar este link? A pessoa nao conseguira mais abrir a Medicao Final por ele.')) return
     const token = await tokenAtual()
     const resp = await fetch(`/api/medicao-final/${medicaoId}/acessos`, {
@@ -76,10 +86,13 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` },
       body: JSON.stringify({ acessoId }),
     })
-    if (!resp.ok) return setMensagem('Nao foi possivel revogar o link.')
+    const json = await resp.json().catch(() => ({}))
+    if (!resp.ok) return setMensagem(json.error || 'Nao foi possivel revogar o link.')
     setMensagem('Link revogado.')
     await carregar()
   }
+
+  if (!visivel) return null
 
   return (
     <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
@@ -93,16 +106,20 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
           <ShieldCheck size={20} className="shrink-0 text-emerald-600" />
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_180px_100px_auto]">
-          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome de quem vai medir" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="Telefone (opcional)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          <select value={dias} onChange={e => setDias(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-2 text-sm">
-            <option value={1}>1 dia</option><option value={3}>3 dias</option><option value={7}>7 dias</option><option value={15}>15 dias</option><option value={30}>30 dias</option>
-          </select>
-          <button onClick={() => void gerar()} disabled={gerando} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {gerando ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />} Gerar link
-          </button>
-        </div>
+        {podeEditar ? (
+          <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_180px_100px_auto]">
+            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome de quem vai medir" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="Telefone (opcional)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <select value={dias} onChange={e => setDias(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-2 text-sm">
+              <option value={1}>1 dia</option><option value={3}>3 dias</option><option value={7}>7 dias</option><option value={15}>15 dias</option><option value={30}>30 dias</option>
+            </select>
+            <button onClick={() => void gerar()} disabled={gerando} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              {gerando ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />} Gerar link
+            </button>
+          </div>
+        ) : (
+          <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Seu acesso a Medicao Final e somente consulta. Apenas usuarios com permissao de edicao podem gerar ou revogar links.</p>
+        )}
 
         {urlNova && (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
@@ -118,7 +135,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
           {carregando ? <p className="text-xs text-slate-400">Carregando...</p> : acessos.length === 0 ? <p className="text-xs text-slate-400">Nenhum link externo gerado para esta medicao.</p> : <div className="space-y-2">{acessos.map(acesso => {
             const expirado = acesso.expira_em ? new Date(acesso.expira_em).getTime() < Date.now() : false
             const ativo = !acesso.revogado_em && !expirado
-            return <div key={acesso.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><div><p className="text-sm font-medium text-slate-700">{acesso.nome_convidado || 'Medidor externo'}</p><p className="text-[11px] text-slate-400">{ativo ? `Valido ate ${acesso.expira_em ? new Date(acesso.expira_em).toLocaleString('pt-BR') : 'sem prazo'}` : acesso.revogado_em ? 'Revogado' : 'Expirado'}{acesso.ultimo_acesso_em ? ` · ultimo acesso ${new Date(acesso.ultimo_acesso_em).toLocaleString('pt-BR')}` : ' · ainda nao acessado'}</p></div>{ativo && <button onClick={() => void revogar(acesso.id)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"><Trash2 size={13} /> Revogar</button>}</div>
+            return <div key={acesso.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><div><p className="text-sm font-medium text-slate-700">{acesso.nome_convidado || 'Medidor externo'}</p><p className="text-[11px] text-slate-400">{ativo ? `Valido ate ${acesso.expira_em ? new Date(acesso.expira_em).toLocaleString('pt-BR') : 'sem prazo'}` : acesso.revogado_em ? 'Revogado' : 'Expirado'}{acesso.ultimo_acesso_em ? ` · ultimo acesso ${new Date(acesso.ultimo_acesso_em).toLocaleString('pt-BR')}` : ' · ainda nao acessado'}</p></div>{ativo && podeEditar && <button onClick={() => void revogar(acesso.id)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"><Trash2 size={13} /> Revogar</button>}</div>
           })}</div>}
         </div>
       </div>
