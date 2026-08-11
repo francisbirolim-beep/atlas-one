@@ -1,30 +1,42 @@
 # NEXT_TASK.md — Atlas One
 
-## Ultima tarefa concluida
-PR #28 "Tipologias dinamicas: nova tipologia funciona em todo o sistema" — mergeado em main. Substituiu listas fixas de tipologia (porta/janela) por busca dinamica na tabela tipologias em: app/kanban/page.tsx, app/orcamento-rapido/page.tsx, app/producao/medicao-final/page.tsx, app/producao/medicao-final/[id]/page.tsx, app/configuracoes/page.tsx. Incluiu botao "Adicionar tipologia" em Configuracoes.
+## Tarefa atual
+Validar a Fase 1 da nova Confirmacao de Venda.
 
-## Tarefa em andamento (INTERROMPIDA, sem commit)
-Objetivo: quando um card do Kanban de orcamentos e movido para uma coluna com gera_medicao_final=true (ex.: "Vendido"), criar automaticamente o card correspondente em Medicao Final — hoje isso e 100% manual (ver CURRENT_STATE.md).
+### Fluxo implementado na branch feat/confirmacao-venda
+1. Arrastar um orcamento para uma coluna com `gera_medicao_final=true`.
+2. O Atlas move o card, mas NAO cria Medicao Final nem cards de setor automaticamente.
+3. O navegador abre `/vendas/confirmar?orcamento=<id>`.
+4. A tela exige cadastro completo do cliente.
+5. Lista todos os orcamentos vinculados ao mesmo `cliente_id` para escolher qual foi fechado.
+6. Mostra anexos e itens estruturados do orcamento selecionado.
+7. Se nao houver itens estruturados, bloqueia o inicio do processo.
+8. Ao clicar `Iniciar processo da venda`, cria/reutiliza Medicao Final e executa automacoes de setor/tarefa.
 
-O que ficou decidido (plano, ainda nao commitado):
-- Editar lib/kanban.ts, funcao moverCard: apos o update de coluna_id, se nao houve erro, chamar (fire-and-forget, com .catch) uma nova funcao criarMedicaoSeNecessario(colunaId, orcamentoId).
-- Nova funcao criarMedicaoSeNecessario deve: 1) buscar kanban_colunas.gera_medicao_final da coluna destino; se false, retornar. 2) checar se ja existe medicoes_finais.orcamento_id = orcamentoId; se ja existe, retornar (evitar duplicata). 3) chamar criarMedicaoDoOrcamento(orcamentoId, null) de lib/medicaoFinal.ts (o parametro usuario aceita null).
-- Import necessario em lib/kanban.ts: import { criarMedicaoDoOrcamento } from './medicaoFinal'.
-- Essa edicao FOI REDIGIDA e testada como string (substituicoes de texto conferidas), mas NUNCA foi de fato aplicada/commitada no GitHub porque a sessao do navegador perdeu a autenticacao no meio do processo. Nao ha nenhum commit parcial — lib/kanban.ts em main esta como estava antes, sem essa mudanca.
+## Validacao obrigatoria
+- Build da Vercel deve passar.
+- Testar cliente com cadastro incompleto: processo precisa ficar bloqueado.
+- Salvar cadastro completo e confirmar persistencia no cadastro do cliente.
+- Testar cliente com mais de um orcamento e selecionar uma proposta diferente.
+- Testar orcamento sem itens estruturados: botao deve ficar bloqueado.
+- Testar orcamento com itens estruturados: deve criar Medicao Final apenas apos clicar em Iniciar processo.
+- Confirmar que arrastar para Vendido sozinho nao cria mais cards operacionais.
 
-## Proximo passo recomendado
-1. Reaplicar a edicao acima em lib/kanban.ts (branch nova, ex. feat/medicao-final-auto-vendido).
-2. Abrir PR, aguardar build da Vercel (checar "Ready to merge"), mergear.
-3. Validar no banco (nao precisa testar na UI): mover manualmente um orcamento de teste para a coluna Vendido via SQL (update orcamentos set coluna_id = '<id da coluna Vendido>' ...) NAO reflete a automacao, pois ela roda no client (lib/kanban.ts), nao via trigger de banco. A validacao real precisa ser feita arrastando um card de verdade no Kanban (app/kanban) e conferindo se apareceu um registro novo em medicoes_finais com esse orcamento_id.
-4. Depois de validar, atualizar CURRENT_STATE.md (mover esse item de "NAO IMPLEMENTADO" para "FUNCIONANDO") e IMPLEMENTATIONS.md.
+## Proxima fase recomendada — Fase 2
+Criar a tela `PDF W.Vetro -> Orçamento Atlas` dentro da Confirmacao de Venda:
+- detectar PDF anexado;
+- extrair itens;
+- montar uma copia estruturada conferivel dentro do Atlas;
+- permitir corrigir/adicionar/remover itens antes de confirmar;
+- nunca liberar processo com zero itens;
+- manter o PDF original como documento de origem;
+- futuramente gerar o PDF oficial do Atlas a partir desses dados estruturados.
 
-## Arquivos provavelmente envolvidos
-- lib/kanban.ts (edicao principal)
-- lib/medicaoFinal.ts (so leitura, criarMedicaoDoOrcamento ja existe e nao precisa mudar)
-- Nenhuma migration nova e necessaria (kanban_colunas.gera_medicao_final e medicoes_finais.orcamento_id ja existem).
+## Evolucao de arquitetura depois da Fase 2
+Criar entidade persistente `vendas` ou `obras`, separando:
+`cliente -> orcamentos -> venda/obra -> medicao final -> engenharia -> producao -> instalacao`.
 
-## Riscos e cuidados
-- criarMedicaoDoOrcamento faz varias queries (orcamento, cliente, itens) — se chamado toda vez que um card e movido (mesmo entre colunas que nao sao Vendido), isso seria caro. A checagem gera_medicao_final DEVE vir antes de qualquer outra query, para sair cedo na maioria dos casos.
-- Cuidado com duplicatas: um card pode ser movido para dentro e para fora de "Vendido" varias vezes (ex.: por engano). A checagem de medicoes_finais.orcamento_id existente evita recriar, mas nao cobre o caso de precisar re-vincular caso a medicao tenha sido excluida manualmente — isso e esperado (cria de novo).
-- O historico de tarefas (tabela historico) ja registra a troca de coluna separadamente (registrarHistorico em app/kanban/page.tsx) — nao precisa duplicar esse registro dentro de criarMedicaoSeNecessario.
-- Nao mexer em lib/calculos.ts nesta tarefa — e um problema separado, ja documentado em CURRENT_STATE.md (categoria porta/janela de tipologias novas nao esta conectada ao calculo).
+## Cuidados
+- Repositorio GitHub continua sendo a fonte da verdade.
+- Migrations v16-v19 seguem desalinhadas; nao reaplicar no banco atual.
+- Nao voltar a criar processos operacionais diretamente no drag-and-drop de Vendido.

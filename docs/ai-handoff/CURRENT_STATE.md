@@ -2,40 +2,43 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Nao assuma que algo esta implementado so porque aparece em documentacao. Antes de alterar codigo, verifique o estado real do repositorio (arquivos em lib/ e app/, tabelas no Supabase). Ao concluir uma implementacao relevante, atualize este arquivo, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, direto no codigo (branch main) e no banco (Supabase project urtqbvjpwnrfaayolymt).
+Verificado em: 2026-08-11, direto no codigo da branch feat/confirmacao-venda.
 
 ## FUNCIONANDO (validado em producao)
-- Login/autenticacao simples via lib/auth.ts (tabela usuarios, sem Supabase Auth nativo).
-- Kanban de orcamentos (app/kanban/page.tsx) com colunas dinamicas, drag-and-drop, historico.
+- Login/autenticacao e controle de usuario Master/funcionario.
+- Kanban de orcamentos com colunas dinamicas, drag-and-drop e historico.
 - Cadastro de clientes, fornecedores, produtos.
-- Orcamento rapido e orcamento balcao (criacao de itens/esquadrias).
-- Checklist de medicao final por tipologia (campos extras: numero/texto/foto, obrigatorio, com validacao ao salvar).
-- Medicao final: marcar item como medido (campo medido/medido_em/medido_por), reabrir para editar.
-- Tipologias dinamicas: tabela tipologias no banco, CRUD via lib/tipologias.ts, usado em kanban, orcamento-rapido, medicao-final (telas atualizadas na tarefa mais recente).
-- Automacoes de setor (fan-out): ao mover card de coluna, pode criar item em kanban de setor (lib/automacoesSetor.ts).
-- Automacoes de orcamento -> tarefas (lib/automacoes.ts / automacoes_orcamento).
-- Importacao de itens de orcamento via PDF (lib/pdfOrcamentoImport.ts + app/api/importar-itens-orcamento).
-- Modulo de IA/agente (lib/agente.ts, lib/ai/*, tabelas agentes_ia, agente_conversas, agente_mensagens, agente_memorias, ia_uso_log) — existe e tem rotas em app/api/agente/*, mas NAO foi auditado a fundo nesta verificacao. Tratar como IMPLEMENTADO MAS NAO VALIDADO ate confirmar uso real.
-- Backup/restore (lib/backup.ts, lib/backupServer.ts, app/api/backup, app/api/restaurar-backup).
+- Orcamento rapido e orcamento balcao.
+- Checklist de medicao final por tipologia (numero/texto/foto, obrigatorio).
+- Medicao final: medir/reabrir item.
+- Tipologias dinamicas (PR #28).
+- Automacoes de setor e tarefas.
+- Exclusao de Medicao Final pelo Master e limpeza de cards derivados por orcamento.
+- Importacao de itens via PDF existe no codigo, mas a leitura de PDFs reais W.Vetro ainda nao e confiavel para todos os layouts.
 
 ## IMPLEMENTADO MAS NAO VALIDADO
-- Categoria porta/janela na tabela tipologias (campo categoria) — existe e e preenchido ao criar tipologia nova, mas lib/calculos.ts (formula de area/perimetro) AINDA NAO LE esse campo. Tipologias novas caem na formula de janela por padrao. Risco real de calculo errado de orcamento para tipologias customizadas do tipo porta.
-- Modulo de IA/agente (ver acima).
-- CRM (app/crm/page.tsx, tabelas crm_interacoes, crm_metas, crm_tarefas) — presente no codigo, uso real nao confirmado nesta sessao.
+- Nova arquitetura de Confirmacao de Venda (branch feat/confirmacao-venda):
+  - entrar em coluna com gera_medicao_final=true deixa de criar Medicao Final/cards operacionais automaticamente;
+  - abre /vendas/confirmar?orcamento=<id>;
+  - exige cadastro completo do cliente;
+  - lista os orcamentos do mesmo cliente para escolher qual foi fechado;
+  - mostra anexos e itens estruturados;
+  - botao "Iniciar processo da venda" cria a Medicao Final e dispara automacoes somente depois da confirmacao;
+  - se o orcamento nao possui itens estruturados no Atlas, o processo e bloqueado.
+- Modulo de IA/agente: existe mas nao auditado a fundo.
+- CRM: presente no codigo, uso real nao confirmado nesta sessao.
 
 ## PARCIAL
-- Nenhuma pendencia parcial de codigo aberta no momento (a tarefa de tipologias dinamicas foi concluida e mergeada — PR #28).
-- Havia uma tarefa em andamento (nao commitada, nao mergeada) para criar automaticamente a Medicao Final quando um card entra numa coluna com gera_medicao_final=true. Ver NEXT_TASK.md — o trabalho FOI INTERROMPIDO antes de qualquer commit.
+- Conversao de PDF W.Vetro em Orçamento Atlas estruturado: parser existe, mas ainda falha em alguns PDFs reais. A nova Confirmacao de Venda foi desenhada para bloquear o processo ate existir uma lista de itens confiavel.
+- Modelo conceitual futuro Venda/Obra: decidido, mas ainda nao existe uma tabela `vendas`/`obras`. Na Fase 1 a confirmacao usa o proprio orcamento selecionado como referencia.
 
 ## NAO IMPLEMENTADO
-- Nenhum teste automatizado no repositorio (sem pasta __tests__, sem .test./.spec., sem framework de teste no package.json).
-- Sem script de lint ou typecheck no package.json (so ha dev/build/start).
-- Fase 9c (Historico de precos por produto) e Fase 9d (Importar XML de NF-e) — mencionadas em conversas anteriores como pendentes, nao ha evidencia de implementacao no codigo atual.
-- Criacao automatica de Medicao Final ao mover card para coluna "Vendido" (gera_medicao_final=true) — a coluna tem a flag no banco, mas NENHUM lugar do codigo le essa flag para disparar a criacao automatica. Hoje a criacao e 100% manual (botao "+ Nova" na tela /producao/medicao-final, que lista orcamentos "sem medicao" e cria sob demanda).
+- Entidade persistente `vendas` ou `obras` para separar cliente/orcamento/venda fechada.
+- Tela de conferencia/edicao da importacao PDF W.Vetro -> Orçamento Atlas antes de iniciar o processo.
+- Geracao completa do novo PDF de orçamento com identidade Atlas como saida oficial do orçamento estruturado.
+- Testes automatizados.
 
 ## PROBLEMAS CONHECIDOS
-- Migrations desalinhadas: os arquivos supabase-migration-v*.sql no repositorio vao ate v15. As migrations v16 a v19 (gera_medicao_final em kanban_colunas, coluna obrigatorio em tipologia_campos_extras, tipo_valor 'foto', tabela tipologias) foram aplicadas DIRETO no banco via ferramenta MCP do Supabase e NAO tem arquivo .sql correspondente commitado no repositorio. O schema real do banco esta OK, mas o historico de migrations em arquivo esta incompleto — cuidado ao tentar recriar o banco do zero a partir dos arquivos .sql do repo, vai faltar schema.
-- lib/historico.ts / app/historico/page.tsx: tipoLabels hardcoded com 3 de 10 tipologias (bug preexistente, nao critico, listado mas nao corrigido).
-- lib/automacoesSetor.ts (rotuloTipo): nomes hardcoded, mas com fallback — nao quebra, so mostra a chave crua para tipologias customizadas.
-- lib/pdfOrcamentoImport.ts: heuristica de deteccao de tipologia no PDF nao conhece tipologias customizadas, cai em 'outro' — aceitavel, nao critico.
-- Sessao do navegador conectado ao GitHub pode cair (precisou re-login durante esta sessao). Se um proximo agente usar automacao de navegador para editar/commitar, confirme que a sessao do GitHub esta ativa antes de tentar editar arquivos.
+- Migrations v16-v19 foram aplicadas diretamente no banco e nao possuem arquivos SQL versionados. NAO reaplicar automaticamente no banco atual.
+- lib/calculos.ts ainda nao usa categoria dinamica de tipologia para formulas porta/janela.
+- Parser de PDF e heuristico e nao deve ser tratado como fonte unica para liberar producao/medicao sem conferencia.
