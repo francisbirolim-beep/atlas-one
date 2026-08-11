@@ -18,11 +18,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <AppTopbar />
         <main
           className={`min-h-[calc(100vh-4rem)] bg-slate-50/80 pb-20 md:pb-0 ${
-            ehHome ? '[&>div>header]:hidden' : ''
+            ehHome
+              ? '[&>div>header]:hidden [&>div]:mx-auto [&>div]:max-w-7xl [&>div]:!min-h-0 [&>div]:px-4 [&>div]:pb-8 [&>div]:[background-image:none] md:[&>div]:px-6'
+              : ''
           }`}
         >
           {ehHome && <HomeManagementOverview />}
           {ehHome && <HomeOperationalAttention />}
+          {ehHome && (
+            <section className="mx-auto w-full max-w-7xl px-4 pt-7 md:px-6 md:pt-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Organização pessoal</p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-900">Agenda e produtividade</h2>
+              <p className="mt-1 text-sm text-slate-500">Tarefas, compromissos e atalhos do seu dia em um único lugar.</p>
+            </section>
+          )}
           {children}
         </main>
       </div>
