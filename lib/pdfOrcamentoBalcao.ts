@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { DadosEmpresa, ItemBalcao } from './tipos'
+import { formatarMoeda } from './formatacao'
 
 export interface DadosPdfBalcao {
   numero: number | null
@@ -38,10 +39,6 @@ async function urlParaDataUrl(url: string): Promise<string | null> {
   } catch {
     return null
   }
-}
-
-function formatarMoeda(valor: number): string {
-  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 const MARGEM = 14
@@ -225,7 +222,7 @@ export async function gerarPdfOrcamentoBalcao(
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
   doc.text('TOTAL:', MARGEM, y)
-  doc.text(`R$ ${formatarMoeda(valorTotal)}`, LARGURA_PAGINA - MARGEM, y, { align: 'right' })
+  doc.text(formatarMoeda(valorTotal), LARGURA_PAGINA - MARGEM, y, { align: 'right' })
   y += 14
 
   // ---- Assinatura ----
