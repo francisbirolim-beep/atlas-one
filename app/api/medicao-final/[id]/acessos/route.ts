@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { gerarTokenAcessoMedicao, hashTokenAcessoMedicao } from '@/lib/medicaoAcessoExternoServer'
 
-async function usuarioAutenticado(req: NextRequest) {
+type UsuarioAcesso = { id: string; nome: string; role: string }
+
+async function usuarioAutenticado(req: NextRequest): Promise<UsuarioAcesso | null> {
   const auth = req.headers.get('authorization') || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   if (!token) return null
@@ -16,12 +18,36 @@ async function usuarioAutenticado(req: NextRequest) {
     .eq('id', authData.user.id)
     .maybeSingle()
 
-  return data || null
+  return (data as UsuarioAcesso | null) || null
+}
+
+async function nivelAcessoMedicao(usuario: UsuarioAcesso): Promise<'oculto' | 'consulta' | 'edicao'> {
+  if (usuario.role === 'master') return 'edicao'
+
+  const { data: setor } = await supabaseAdmin
+    .from('setores')
+    .select('id')
+    .eq('rota', '/producao/medicao-final')
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (!setor) return 'oculto'
+
+  const { data: permissao } = await supabaseAdmin
+    .from('permissoes')
+    .select('nivel')
+    .eq('usuario_id', usuario.id)
+    .eq('setor_id', setor.id)
+    .maybeSingle()
+
+  return (permissao?.nivel as 'oculto' | 'consulta' | 'edicao' | undefined) || 'oculto'
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+  const nivel = await nivelAcessoMedicao(usuario)
+  if (nivel === 'oculto') return NextResponse.json({ error: 'Sem permissao para acessar a Medicao Final.' }, { status: 403 })
 
   const { data, error } = await supabaseAdmin
     .from('medicao_acessos_externos')
@@ -30,12 +56,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: 'Nao foi possivel listar os acessos.' }, { status: 500 })
-  return NextResponse.json({ acessos: data || [] })
+  return NextResponse.json({ acessos: data || [], podeEditar: nivel === 'edicao' })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+  if (await nivelAcessoMedicao(usuario) !== 'edicao') {
+    return NextResponse.json({ error: 'Voce nao tem permissao de edicao para gerar links de Medicao Final.' }, { status: 403 })
+  }
 
   const body = await req.json().catch(() => ({}))
   const nome = String(body?.nome || '').trim()
@@ -77,15 +106,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Nao foi possivel gerar o link externo.' }, { status: 500 })
   }
 
-  return NextResponse.json({
-    acesso: data,
-    url: `${req.nextUrl.origin}/medicao-final/acesso/${token}`,
-  })
+  return NextResponse.json({ acesso: data, url: `${req.nextUrl.origin}/medicao-final/acesso/${token}` })
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+  if (await nivelAcessoMedicao(usuario) !== 'edicao') {
+    return NextResponse.json({ error: 'Voce nao tem permissao de edicao para revogar links de Medicao Final.' }, { status: 403 })
+  }
 
   const body = await req.json().catch(() => ({}))
   const acessoId = String(body?.acessoId || '')
