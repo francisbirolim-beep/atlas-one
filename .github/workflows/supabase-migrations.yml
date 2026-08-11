@@ -89,28 +89,32 @@ jobs:
           fi
           echo "Projeto alvo encontrado na conta autenticada."
 
-      - name: Link production project using direct connection
+      - name: Build IPv4 session pooler URL
         shell: bash
         run: |
           set -euo pipefail
-          echo "Conectando a CLI diretamente ao Postgres, sem pooler..."
-          if ! supabase link --project-ref "$SUPABASE_PROJECT_ID" --skip-pooler; then
-            echo "ERRO: falha no supabase link usando conexao direta. Verifique senha do banco, rede ou disponibilidade do endpoint direto."
-            exit 1
-          fi
-          echo "Projeto vinculado por conexao direta com sucesso."
+          DB_URL=$(python - <<'PY'
+          import os
+          import urllib.parse
+          project = os.environ['SUPABASE_PROJECT_ID']
+          password = urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{project}:{password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+          echo "Session Pooler IPv4 configurado."
 
       - name: Audit migration history
         shell: bash
         run: |
           set -euo pipefail
-          echo "Lendo historico remoto de migrations..."
-          supabase migration list
+          echo "Lendo historico remoto de migrations via Session Pooler IPv4..."
+          supabase migration list --db-url "$SUPABASE_DB_URL"
 
       - name: Dry-run pending migrations
         if: ${{ github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply') }}
         shell: bash
-        run: supabase db push --linked --dry-run
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
 
       - name: Require explicit production confirmation
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' }}
@@ -127,4 +131,4 @@ jobs:
       - name: Apply pending migrations
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' }}
         shell: bash
-        run: supabase db push --linked
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
