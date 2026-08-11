@@ -1,6 +1,12 @@
 name: Supabase Database Control
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/supabase-migrations.yml'
+      - 'supabase/**'
   workflow_dispatch:
     inputs:
       mode:
@@ -22,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: supabase-production-migrations
+  group: supabase-database-control-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
@@ -102,12 +108,12 @@ jobs:
           supabase migration list
 
       - name: Dry-run pending migrations
-        if: ${{ inputs.mode == 'dry-run' || inputs.mode == 'apply' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply') }}
         shell: bash
         run: supabase db push --linked --dry-run
 
       - name: Require explicit production confirmation
-        if: ${{ inputs.mode == 'apply' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' }}
         shell: bash
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
@@ -119,6 +125,6 @@ jobs:
           fi
 
       - name: Apply pending migrations
-        if: ${{ inputs.mode == 'apply' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' }}
         shell: bash
         run: supabase db push --linked
