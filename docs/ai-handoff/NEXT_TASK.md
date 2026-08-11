@@ -1,43 +1,38 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Branch: `feat/engenharia-modulo-v1`.
+A Engenharia Fase 2 foi concluida no PR #66 e a migration `20260811183500_engenharia_modulo_v1.sql` foi aplicada e validada no Supabase.
 
-Objetivo: concluir a Fase 2 funcional da Engenharia com rota dedicada e fluxo tecnico inicial, sem MEE ou lista de corte.
+## PROXIMA TAREFA — ENGENHARIA FASE 3
+Criar conferencia tecnica persistente por obra/peca, preparando o futuro MEE sem implementar formulas ainda.
 
-Escopo implementado:
-1. rota `/engenharia`;
-2. fonte unica de dados permanece no Kanban do setor;
-3. KPIs operacionais;
-4. etapas Recebidas, Conferencia tecnica, Em desenvolvimento e Liberado para producao;
-5. drag-and-drop conforme permissoes;
-6. detalhe da obra com Medicao Final aprovada e 6 medidas finais por peca;
-7. migration ativa a rota do setor Engenharia e padroniza as etapas.
+Escopo recomendado:
+1. estado de conferencia por peca;
+2. responsavel tecnico por obra;
+3. observacoes tecnicas por peca;
+4. pendencias/revisoes tecnicas;
+5. registrar quem conferiu e quando;
+6. bloquear a etapa `Liberado para producao` enquanto existir peca nao conferida ou pendencia aberta;
+7. registrar quem liberou a obra e quando;
+8. manter acesso direto à Medicao Final original.
 
-### Proxima acao obrigatoria
-1. integrar o PR apos Build Validation e dry-run verdes;
-2. aplicar a migration de rota/etapas no Supabase por fluxo operacional controlado;
-3. validar historico de migrations;
-4. em branch separada, iniciar a Fase 3 da Engenharia.
-
-## FASE 3 RECOMENDADA
-Criar a estrutura tecnica por obra/peca para conferencia de Engenharia, preparando o futuro MEE:
-- estado de conferencia por peca;
-- observacoes tecnicas;
-- responsavel tecnico;
-- revisao/pendencia;
-- liberacao da obra para Producao somente apos conferencia concluida.
-
-Ainda nao implementar formulas de perfis, acessorios ou lista de corte nessa etapa.
+## DEPOIS DA FASE 3
+- criar base de receitas por tipologia;
+- mapear perfis, acessorios, reforcos e vidros;
+- implementar calculos/MEE;
+- gerar lista de materiais e lista de corte;
+- otimizar barras e preparar liberacao automatizada para Producao.
 
 ## JA NA MAIN
-- Redesign profissional PRs #57 a #63.
 - Medicao Final V2 PRs #54 a #56.
-- Entrada automatica Medicao Final aprovada -> Engenharia no PR #64, com migration aplicada.
+- Redesign profissional PRs #57 a #63.
+- Engenharia Fase 1 PR #64, com entrada automatica apos aprovacao da Medicao Final.
+- Engenharia Fase 2 PR #66, com rota `/engenharia`, KPIs, quatro etapas e detalhe das pecas; migration aplicada.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
 - Migration: dry-run em PR antes de apply controlado.
+- Nao iniciar formulas de MEE antes de fechar a estrutura de conferencia tecnica da Fase 3.
 - Vercel pode continuar sujeita a cota diaria; Build Validation confirma o codigo, mas producao depende do deploy.
