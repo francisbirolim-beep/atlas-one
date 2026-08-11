@@ -1,58 +1,55 @@
 # NEXT_TASK.md — Atlas One
 
-## BLOQUEIO IMEDIATO
-PR #55 — `feat/medicao-final-v2-checklist` esta implementado, mas NAO deve ser mergeado ainda.
+## TAREFA ATUAL
+Branch: `feat/atlas-professional-orcamentos-v1`.
 
-Motivo: a Vercel retornou `build-rate-limit` antes de compilar o projeto. Isso nao prova erro no codigo, mas tambem nao atende a regra do projeto de aguardar build valido antes do merge. O ambiente do agente nao tem acesso externo ao GitHub/NPM para executar um build local equivalente.
+Objetivo: concluir a quarta onda do redesign profissional sem alterar regras de negocio.
+
+Escopo ja implementado no branch:
+1. Hub `/orcamento` redesenhado como Central de Orcamentos;
+2. atalhos para Novo Orcamento, Orcamento Rapido, Pesquisa e Pipeline Comercial;
+3. `/orcamento/pesquisar` integrado visualmente ao Professional Shell;
+4. AppShell identifica o escopo de Orcamentos sem afetar `/orcamento/novo` nem o calculo existente;
+5. handoff atualizado para refletir PRs #55 a #59 e link externo ja mergeado.
 
 ### Proxima acao obrigatoria
-1. aguardar/liberar capacidade de build da Vercel;
-2. provocar novo deploy do PR #55;
-3. se o build falhar por codigo, corrigir no mesmo branch;
-4. se passar, revisar o PR e mergear na `main`;
-5. depois do merge, validar em uma Medicao Final real:
-   - selecionar pecas individualmente;
-   - responder campos numero/texto/opcoes;
-   - enviar campo do tipo foto;
-   - adicionar fotos categorizadas da peca;
-   - confirmar persistencia ao recarregar;
-   - confirmar que o formulario legado continua vendo `campos_extras` sincronizados.
+1. abrir PR deste branch;
+2. aguardar Build Validation do GitHub Actions;
+3. se houver erro de codigo, corrigir no mesmo branch;
+4. se passar, revisar diff e mergear na `main`;
+5. depois iniciar branch separada para a proxima tela do Design System.
 
-## ESTADO DA MEDICAO FINAL V2
-Ja esta na `main`:
+## REDESIGN PROFISSIONAL JA NA MAIN
+- PR #57: Home executiva + Topbar + KPIs/workspace;
+- PR #58: Sidebar desktop escura em padrao ERP;
+- PR #59: Kanban Comercial profissional.
+
+A regra continua sendo preservar logica existente e modernizar por camada visual sempre que possivel.
+
+## MEDICAO FINAL V2 JA NA MAIN
 - V20 aplicada e validada no Supabase;
-- migrations locais/remotas reconciliadas;
-- responsavel por medicao;
-- status operacional;
-- liberar/iniciar/concluir/aprovar;
-- pendencias e bloqueios de conclusao;
-- progresso por peca e separacao segura de unidades nao medidas.
+- responsavel/status/liberar/iniciar/concluir/aprovar;
+- pendencias e bloqueios;
+- checklist normalizado por peca/tipologia/secao;
+- fotos categorizadas;
+- compatibilidade com checklist legado;
+- link externo seguro com token-hash, expiracao/revogacao, medidas, checklist, fotos e conclusao para revisao interna.
 
-No PR #55:
-- respostas normalizadas em `medicao_respostas`;
-- checklist por peca/tipologia/secao;
-- opcoes configuradas;
-- fotos categorizadas por peca em `medicao_fotos`;
-- compatibilidade com checklist legado.
-
-## PROXIMO BLOCO DEPOIS DO PR #55
-Implementar em tarefa pequena e separada:
-1. regras condicionais do checklist (definir formato suportado antes de codificar);
-2. `exigir_foto_quando` com validacao antes de concluir/aprovar;
-3. somente depois link externo seguro da Medicao Final:
-   - Route Handler server-side;
-   - token aleatorio forte;
-   - armazenar apenas hash em `medicao_acessos_externos`;
-   - expiracao/revogacao;
-   - escopo apenas da medicao vinculada;
-   - nunca criar policy permissiva de client para a tabela de tokens.
-
-## TRILHA COMERCIAL EM PARALELO
-A Confirmacao de Venda Fase 1 ainda precisa de validacao funcional completa. Depois, criar a Fase 2 `PDF W.Vetro -> Orçamento Atlas` conferivel, permitindo revisar/corrigir itens antes de iniciar o processo.
+## PROXIMOS BLOCOS RECOMENDADOS
+Depois do redesign de Orcamentos:
+1. refinar visual da Medicao Final preservando a logica V2;
+2. padronizar Producao;
+3. padronizar Engenharia;
+4. validar funcionalmente Confirmacao de Venda Fase 1;
+5. definir motor simples de regras condicionais e `exigir_foto_quando`;
+6. criar liberacao persistente para Engenharia apos aprovacao;
+7. Fase 2 PDF W.Vetro -> Orcamento Atlas estruturado e conferivel.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
-- Branch -> PR -> build Vercel valido -> merge.
-- Nao commitar direto em `main`.
+- Nunca commitar direto na `main`.
+- Branch -> PR -> build valido -> merge.
+- A Vercel esta com cota diaria de builds; o workflow `Build Validation` do GitHub Actions valida `npm run build`, mas o deploy de producao continua dependendo da Vercel.
 - Nao reinterpretar automaticamente medicoes ja concluidas.
 - Nao usar `migration repair --reverted` no banco atual sem diagnostico explicito.
+- Nao alterar formulas de Orcamento durante tarefas puramente visuais.
