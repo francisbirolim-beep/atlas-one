@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bell, Plus, Search, Sparkles } from 'lucide-react'
+import { Bell, ChevronDown, Command, Plus, Search, Sparkles } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
@@ -13,9 +13,9 @@ const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
   { prefixo: '/orcamento', titulo: 'Orçamentos', grupo: 'Comercial' },
   { prefixo: '/clientes', titulo: 'Clientes', grupo: 'Comercial' },
   { prefixo: '/crm', titulo: 'CRM', grupo: 'Comercial' },
-  { prefixo: '/producao/medicao-final', titulo: 'Medição Final', grupo: 'Operação' },
-  { prefixo: '/producao', titulo: 'Produção', grupo: 'Operação' },
-  { prefixo: '/setores', titulo: 'Setores', grupo: 'Operação' },
+  { prefixo: '/producao/medicao-final', titulo: 'Medição Final', grupo: 'Operações' },
+  { prefixo: '/producao', titulo: 'Produção', grupo: 'Operações' },
+  { prefixo: '/setores', titulo: 'Setores', grupo: 'Operações' },
   { prefixo: '/financeiro', titulo: 'Financeiro', grupo: 'Financeiro' },
   { prefixo: '/configuracoes', titulo: 'Configurações', grupo: 'Administração' },
   { prefixo: '/historico', titulo: 'Histórico', grupo: 'Administração' },
@@ -35,47 +35,45 @@ export default function AppTopbar() {
   }, [])
 
   const contexto = useMemo(() => {
-    if (pathname === '/') {
-      return { titulo: 'Painel de Gestão', grupo: 'Visão geral' }
-    }
-
-    return TITULOS.find(item => pathname.startsWith(item.prefixo)) || {
-      titulo: 'Atlas One',
-      grupo: 'Sistema',
-    }
+    if (pathname === '/') return { titulo: 'Painel de Gestão', grupo: 'Visão geral' }
+    return TITULOS.find(item => pathname.startsWith(item.prefixo)) || { titulo: 'Atlas One', grupo: 'Sistema' }
   }, [pathname])
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl">
-      <div className="flex h-16 items-center gap-3 px-3 sm:px-4 md:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+    <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
+      <div className="flex h-[68px] items-center gap-3 px-3 sm:px-4 md:px-6 lg:px-7">
+        <div className="flex min-w-0 flex-1 items-center gap-3 xl:max-w-[340px]">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm md:hidden">
             <Sparkles size={17} />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:text-[11px]">
-              {contexto.grupo}
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">
+              <span>{contexto.grupo}</span>
+              <span className="h-1 w-1 rounded-full bg-emerald-500" />
+              <span className="normal-case tracking-normal text-slate-400">Atlas One</span>
             </div>
-            <div className="truncate text-sm font-semibold tracking-tight text-slate-950 sm:text-base">{contexto.titulo}</div>
+            <div className="mt-0.5 truncate text-[15px] font-semibold tracking-tight text-slate-950 sm:text-base">{contexto.titulo}</div>
           </div>
         </div>
 
         <div className="hidden min-w-0 flex-1 justify-center xl:flex">
           <button
             type="button"
-            className="flex h-9 w-full max-w-xl items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white hover:text-slate-500"
+            className="group flex h-10 w-full max-w-2xl items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 text-left text-sm text-slate-400 shadow-inner transition hover:border-slate-300 hover:bg-white"
             title="Busca global — em breve"
           >
-            <Search size={15} />
-            <span className="flex-1 truncate">Buscar cliente, obra, orçamento...</span>
-            <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">Ctrl K</kbd>
+            <Search size={16} className="text-slate-400 group-hover:text-slate-600" />
+            <span className="flex-1 truncate">Buscar cliente, obra, orçamento, medição...</span>
+            <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-400 shadow-sm">
+              <Command size={10} /> K
+            </span>
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center justify-end gap-2 xl:max-w-[430px]">
           <Link
             href="/orcamento-rapido"
-            className="hidden h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:inline-flex"
+            className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700 sm:inline-flex"
             title="Criar novo orçamento rápido"
           >
             <Plus size={16} />
@@ -84,39 +82,30 @@ export default function AppTopbar() {
 
           <button
             type="button"
-            className="hidden h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 lg:inline-flex"
+            className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 lg:inline-flex"
             title="IA Atlas — em breve"
           >
             <Sparkles size={15} className="text-emerald-600" />
             IA Atlas
           </button>
 
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 xl:hidden"
-            title="Busca global — em breve"
-          >
+          <button type="button" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 xl:hidden" title="Busca global — em breve">
             <Search size={16} />
           </button>
 
-          <button
-            type="button"
-            className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
-            title="Notificações — em breve"
-          >
+          <button type="button" className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50" title="Notificações — em breve">
             <Bell size={16} />
-            <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white bg-emerald-500" />
           </button>
 
-          <div className="ml-1 flex items-center gap-2 border-l border-slate-200 pl-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 text-xs font-bold text-white shadow-sm">
-              {iniciais(usuario?.nome)}
+          <button type="button" className="ml-1 flex h-11 items-center gap-2.5 rounded-xl border border-transparent px-1.5 transition hover:border-slate-200 hover:bg-slate-50">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-xs font-bold text-white shadow-sm">{iniciais(usuario?.nome)}</div>
+            <div className="hidden min-w-0 text-left sm:block">
+              <div className="max-w-32 truncate text-sm font-semibold text-slate-800">{usuario?.nome || 'Usuário'}</div>
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{usuario?.role || 'usuário'}</div>
             </div>
-            <div className="hidden min-w-0 sm:block">
-              <div className="max-w-36 truncate text-sm font-semibold text-slate-800">{usuario?.nome || 'Usuário'}</div>
-              <div className="text-[11px] capitalize text-slate-400">{usuario?.role || ''}</div>
-            </div>
-          </div>
+            <ChevronDown size={14} className="hidden text-slate-400 sm:block" />
+          </button>
         </div>
       </div>
     </header>
