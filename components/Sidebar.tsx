@@ -159,8 +159,8 @@ export default function Sidebar() {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-slate-200 bg-white px-2 py-1.5
-                   md:static md:h-screen md:w-56 md:flex-col md:items-stretch md:justify-start md:gap-0 md:border-r md:border-t-0 md:py-5"
+        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-start gap-1 overflow-x-auto border-t border-slate-200 bg-white px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]
+                   md:static md:h-screen md:w-56 md:flex-col md:items-stretch md:justify-start md:gap-0 md:overflow-visible md:border-r md:border-t-0 md:py-5"
       >
         <div className="hidden md:flex md:flex-col md:px-3">
           <span className="mb-3 px-1 text-base font-bold tracking-tight text-brand-navy">Atlas One</span>
