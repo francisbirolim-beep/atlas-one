@@ -40,6 +40,7 @@ export default function Home() {
   const [setoresFavoritos, setSetoresFavoritos] = useState<Setor[]>([])
   const [guiasFavoritas, setGuiasFavoritas] = useState<Guia[]>([])
   const [mesVisto, setMesVisto] = useState(() => { const d = new Date(); d.setDate(1); return d })
+  const [mostrarCalendario, setMostrarCalendario] = useState(false)
   const [diaSelecionado, setDiaSelecionado] = useState<Date | null>(null)
   const [novaTarefaTexto, setNovaTarefaTexto] = useState('')
   const [salvandoTarefa, setSalvandoTarefa] = useState(false)
@@ -232,6 +233,9 @@ export default function Home() {
   }
 
   const hoje = new Date()
+  const tarefasHojeResumo = tarefasAbertas.filter((t) => t.data_hora && mesmodia(new Date(t.data_hora), hoje))
+  const eventosHojeResumo = eventos.filter((e) => mesmodia(new Date(e.data_inicio), hoje))
+  const tarefasAtrasadasResumo = tarefasAbertas.filter(estaAtrasada)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -283,6 +287,24 @@ export default function Home() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-10">
+        <section className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+            <p className="text-[11px] text-slate-400">Pendencias</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{tarefasAtrasadasResumo.length}</p>
+            <p className="text-[11px] text-slate-400">tarefas atrasadas</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+            <p className="text-[11px] text-slate-400">Hoje</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{tarefasHojeResumo.length}</p>
+            <p className="text-[11px] text-slate-400">tarefas</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+            <p className="text-[11px] text-slate-400">Agenda</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{eventosHojeResumo.length}</p>
+            <p className="text-[11px] text-slate-400">compromissos hoje</p>
+          </div>
+        </section>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <section className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
@@ -352,6 +374,13 @@ export default function Home() {
           <section className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-slate-700">Calendário</h2>
+              <button
+                type="button"
+                onClick={() => setMostrarCalendario((v) => !v)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-brand-navy hover:bg-slate-50"
+              >
+                {mostrarCalendario ? 'Ocultar' : 'Abrir calendário'}
+              </button>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setMesVisto((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
@@ -371,6 +400,7 @@ export default function Home() {
               </div>
             </div>
 
+            {mostrarCalendario && (<>
             <div className="grid grid-cols-7 gap-1 text-center mb-1">
               {DIAS_SEMANA.map((d, i) => (
                 <span key={i} className="text-[10px] text-slate-400 font-medium">
@@ -484,6 +514,7 @@ export default function Home() {
                 )}
               </div>
             )}
+            </>)}
           </section>
         </div>
       </main>
