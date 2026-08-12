@@ -41,20 +41,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          supabase migration list --db-url "$SUPABASE_DB_URL" | tee /tmp/list.txt
-          if grep -q '20260812000000' /tmp/list.txt; then
-            echo 'already_applied=true' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo 'already_applied=false' >> "$GITHUB_OUTPUT"
           supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/dryrun.txt
-          grep -q '20260812000000' /tmp/dryrun.txt || { echo 'ERRO: migration alvo nao esta pendente'; exit 1; }
-          if grep -Eo '[0-9]{14}_[^ ]+\.sql' /tmp/dryrun.txt | grep -v '^20260812000000_' | grep -q .; then
-            echo 'ERRO: existe outra migration pendente alem da migration alvo'
+          if grep -q '20260812000000_engenharia_receitas_tipologia_v1.sql' /tmp/dryrun.txt; then
+            if grep -Eo '[0-9]{14}_[^ ]+\.sql' /tmp/dryrun.txt | grep -v '^20260812000000_' | grep -q .; then
+              echo 'ERRO: existe outra migration pendente alem da migration alvo'
+              exit 1
+            fi
+            echo 'should_apply=true' >> "$GITHUB_OUTPUT"
+          elif grep -qi 'Remote database is up to date' /tmp/dryrun.txt; then
+            echo 'should_apply=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ERRO: estado da migration alvo nao pôde ser determinado com segurança'
             exit 1
           fi
       - name: Apply exact pending migration
-        if: steps.inspect.outputs.already_applied != 'true'
+        if: steps.inspect.outputs.should_apply == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -64,6 +65,6 @@ jobs:
         run: |
           set -euo pipefail
           supabase migration list --db-url "$SUPABASE_DB_URL" | tee /tmp/list-final.txt
-          grep -q '20260812000000' /tmp/list-final.txt || { echo 'ERRO: migration alvo nao aparece no historico remoto'; exit 1; }
+          grep -E '20260812000000.*20260812000000' /tmp/list-final.txt >/dev/null || { echo 'ERRO: migration alvo nao aparece como aplicada no historico remoto'; exit 1; }
           supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/post.txt
           grep -qi 'Remote database is up to date' /tmp/post.txt || { echo 'ERRO: banco ainda possui migration pendente'; exit 1; }
