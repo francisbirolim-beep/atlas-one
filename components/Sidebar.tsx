@@ -122,20 +122,8 @@ export default function Sidebar() {
     setOcultos(alternarOculto(href))
   }
 
-  function removerFavorito(e: React.MouseEvent, href: string) {
-    e.preventDefault()
-    e.stopPropagation()
-    favoritar(href)
-  }
-
   function favoritarSetor(id: string) {
     setFavoritosSetores(alternarFavoritoSetor(id))
-  }
-
-  function removerFavoritoSetor(e: React.MouseEvent, id: string) {
-    e.preventDefault()
-    e.stopPropagation()
-    favoritarSetor(id)
   }
 
   function categoriaAberta(nome: string) {
@@ -171,8 +159,8 @@ export default function Sidebar() {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-slate-200 bg-white px-2 py-1.5
-                   md:static md:h-screen md:w-56 md:flex-col md:items-stretch md:justify-start md:gap-0 md:border-r md:border-t-0 md:py-5"
+        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-start gap-1 overflow-x-auto border-t border-slate-200 bg-white px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]
+                   md:static md:h-screen md:w-56 md:flex-col md:items-stretch md:justify-start md:gap-0 md:overflow-visible md:border-r md:border-t-0 md:py-5"
       >
         <div className="hidden md:flex md:flex-col md:px-3">
           <span className="mb-3 px-1 text-base font-bold tracking-tight text-brand-navy">Atlas One</span>
@@ -193,14 +181,6 @@ export default function Sidebar() {
                       <Icon size={15} className="flex-shrink-0" />
                       <span className="truncate">{g.label}</span>
                     </Link>
-                    <button
-                      onClick={(e) => removerFavorito(e, g.href)}
-                      title="Remover dos favoritos"
-                      className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full text-white opacity-0 transition hover:bg-red-500 group-hover:opacity-100
-                                  ${ativo ? 'bg-white/30' : 'bg-slate-400'}`}
-                    >
-                      <X size={10} />
-                    </button>
                   </div>
                 )
               })}
@@ -218,14 +198,6 @@ export default function Sidebar() {
                       <LayoutGrid size={15} className="flex-shrink-0" />
                       <span className="truncate">{s.nome}</span>
                     </Link>
-                    <button
-                      onClick={(e) => removerFavoritoSetor(e, s.id)}
-                      title="Remover dos favoritos"
-                      className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full text-white opacity-0 transition hover:bg-red-500 group-hover:opacity-100
-                                  ${ativo ? 'bg-white/30' : 'bg-slate-400'}`}
-                    >
-                      <X size={10} />
-                    </button>
                   </div>
                 )
               })}
@@ -333,19 +305,12 @@ export default function Sidebar() {
               <Link
                 href={g.href}
                 title={g.label}
-                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition
+                className={`flex h-14 w-16 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-xl transition
                             ${ativo ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-100'}`}
               >
                 <Icon size={20} />
                 <span className="text-[10px] leading-none">{g.label}</span>
               </Link>
-              <button
-                onClick={(e) => removerFavorito(e, g.href)}
-                title="Remover dos favoritos"
-                className="absolute right-1 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white active:bg-red-500"
-              >
-                <X size={10} />
-              </button>
             </div>
           )
         })}
@@ -358,19 +323,12 @@ export default function Sidebar() {
               <Link
                 href={href}
                 title={s.nome}
-                className={`flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl transition
+                className={`flex h-14 w-16 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-xl transition
                             ${ativo ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-100'}`}
               >
                 <LayoutGrid size={20} />
                 <span className="max-w-full truncate px-0.5 text-[10px] leading-none">{s.nome}</span>
               </Link>
-              <button
-                onClick={(e) => removerFavoritoSetor(e, s.id)}
-                title="Remover dos favoritos"
-                className="absolute right-1 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white active:bg-red-500"
-              >
-                <X size={10} />
-              </button>
             </div>
           )
         })}
@@ -379,7 +337,7 @@ export default function Sidebar() {
           <button
             onClick={() => setAbrirMais(true)}
             title="Mais"
-            className="flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 md:hidden"
+            className="flex h-14 w-16 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 md:hidden"
           >
             <Menu size={20} />
             <span className="text-[10px] leading-none">Mais</span>
@@ -389,7 +347,7 @@ export default function Sidebar() {
         <button
           onClick={sair}
           title="Sair"
-          className="flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-red-500 md:hidden"
+          className="flex h-14 w-16 flex-shrink-0 flex-col items-center justify-center gap-1 rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-red-500 md:hidden"
         >
           <LogOut size={20} />
           <span className="text-[10px] leading-none">Sair</span>
