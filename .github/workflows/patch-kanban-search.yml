@@ -1,0 +1,53 @@
+name: Patch Kanban Search
+
+on:
+  push:
+    branches:
+      - fix/kanban-busca-normalizada-v1
+    paths:
+      - '.github/workflows/patch-kanban-search.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: fix/kanban-busca-normalizada-v1
+
+      - name: Aplicar busca sem acentos
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('app/kanban/page.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          anchor = "import { lerCorAssistencia } from '@/lib/configGeral'\n"
+          if "import { bateBusca } from '@/lib/texto'" not in text:
+              text = text.replace(anchor, anchor + "import { bateBusca } from '@/lib/texto'\n")
+
+          old = """if (busca.trim()) {\nconst alvo = busca.trim().toLowerCase()\nconst bate =\n(c.cliente_nome || '').toLowerCase().includes(alvo) ||\n(c.cidade || '').toLowerCase().includes(alvo) ||\n(c.arquiteto_nome || '').toLowerCase().includes(alvo) ||\n(c.criado_por_nome || '').toLowerCase().includes(alvo) ||\n(c.cliente_whatsapp || '').toLowerCase().includes(alvo) ||\n(tipoLabels[c.tipo_esquadria] || c.tipo_esquadria || '').toLowerCase().includes(alvo)\nif (!bate) return false\n}\n"""
+          new = """if (busca.trim()) {\nconst bate = bateBusca(\n  busca,\n  c.cliente_nome,\n  c.cidade,\n  c.arquiteto_nome,\n  c.criado_por_nome,\n  c.cliente_whatsapp,\n  tipoLabels[c.tipo_esquadria] || c.tipo_esquadria || ''\n)\nif (!bate) return false\n}\n"""
+
+          if old not in text:
+              raise SystemExit('Bloco esperado da busca do Kanban nao foi encontrado; patch abortado sem alterar arquivo.')
+
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Commit da correcao
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "atlas-one-bot"
+          git config user.email "actions@github.com"
+          git add app/kanban/page.tsx
+          if git diff --cached --quiet; then
+            echo "Nenhuma mudanca necessaria."
+            exit 0
+          fi
+          git commit -m "fix: busca do kanban ignora acentos"
+          git push origin HEAD:fix/kanban-busca-normalizada-v1
