@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { textoMaiusculo, textoMaiusculoOuNull } from '@/lib/texto'
 import { OrigemCliente } from '@/lib/tipos'
 import {
   CampoConfiguravel,
@@ -119,19 +120,19 @@ export default function NovoCliente() {
     const { data, error } = await supabase
       .from('clientes')
       .insert({
-        nome: nome.trim(),
-        apelido: apelido.trim() || null,
+        nome: textoMaiusculo(nome),
+        apelido: textoMaiusculoOuNull(apelido),
         whatsapp: whatsapp.trim() || null,
         telefone: telefone.trim() || null,
-        email: email.trim() || null,
-        cidade: cidade.trim() || null,
+        email: email.trim().toLowerCase() || null,
+        cidade: textoMaiusculoOuNull(cidade),
         cpf_cnpj: cpfCnpj.trim() || null,
-        endereco: endereco.trim() || null,
-        bairro: bairro.trim() || null,
+        endereco: textoMaiusculoOuNull(endereco),
+        bairro: textoMaiusculoOuNull(bairro),
         cep: cep.trim() || null,
         data_nascimento: dataNascimento || null,
         origem,
-        observacoes: observacoes.trim() || null,
+        observacoes: textoMaiusculoOuNull(observacoes),
       })
       .select('id')
       .single()
@@ -147,6 +148,7 @@ export default function NovoCliente() {
   }
 
   const estrela = (chave: string) => (obrigatorio(chave) ? ' *' : '')
+  const classeTexto = 'uppercase'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -160,11 +162,7 @@ export default function NovoCliente() {
             <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
             <h1 className="text-lg font-bold text-slate-800">Novo cliente</h1>
           </div>
-          <Link
-            href="/configuracoes/campos"
-            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
-            title="Configurar campos e obrigatoriedade"
-          >
+          <Link href="/configuracoes/campos" className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800" title="Configurar campos e obrigatoriedade">
             <Settings2 size={14} /> Configurar campos
           </Link>
         </div>
@@ -175,122 +173,54 @@ export default function NovoCliente() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('nome', 'Nome completo')}{estrela('nome')}</label>
-              <input
-                value={nome}
-                onChange={e => setNome(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder={placeholder('nome', 'Nome completo')}
-              />
+              <input value={nome} onChange={e => setNome(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('nome', 'Nome completo')} />
             </div>
             {visivel('apelido') && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('apelido', 'Apelido / nome conhecido')}{estrela('apelido')}</label>
-                <input
-                  value={apelido}
-                  onChange={e => setApelido(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  placeholder={placeholder('apelido', 'Ex.: Zé da Fazenda')}
-                />
+                <input value={apelido} onChange={e => setApelido(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('apelido', 'Ex.: Zé da Fazenda')} />
               </div>
             )}
           </div>
 
           {(visivel('whatsapp') || visivel('telefone')) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visivel('whatsapp') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('whatsapp', 'WhatsApp')}{estrela('whatsapp')}</label>
-                  <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('whatsapp', '(11) 99999-9999')} />
-                </div>
-              )}
-              {visivel('telefone') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('telefone', 'Telefone fixo')}{estrela('telefone')}</label>
-                  <input value={telefone} onChange={e => setTelefone(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('telefone', '(11) 3333-3333')} />
-                </div>
-              )}
+              {visivel('whatsapp') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('whatsapp', 'WhatsApp')}{estrela('whatsapp')}</label><input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('whatsapp', '(11) 99999-9999')} /></div>}
+              {visivel('telefone') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('telefone', 'Telefone fixo')}{estrela('telefone')}</label><input value={telefone} onChange={e => setTelefone(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('telefone', '(11) 3333-3333')} /></div>}
             </div>
           )}
 
           {(visivel('email') || visivel('data_nascimento')) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visivel('email') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('email', 'E-mail')}{estrela('email')}</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('email', 'cliente@email.com')} />
-                </div>
-              )}
-              {visivel('data_nascimento') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('data_nascimento', 'Data de nascimento')}{estrela('data_nascimento')}</label>
-                  <input type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-                </div>
-              )}
+              {visivel('email') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('email', 'E-mail')}{estrela('email')}</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('email', 'cliente@email.com')} /></div>}
+              {visivel('data_nascimento') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('data_nascimento', 'Data de nascimento')}{estrela('data_nascimento')}</label><input type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" /></div>}
             </div>
           )}
 
           {(visivel('cidade') || visivel('cpf_cnpj')) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visivel('cidade') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cidade', 'Cidade')}{estrela('cidade')}</label>
-                  <input value={cidade} onChange={e => setCidade(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('cidade', 'Cidade da obra')} />
-                </div>
-              )}
-              {visivel('cpf_cnpj') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cpf_cnpj', 'CPF ou CNPJ')}{estrela('cpf_cnpj')}</label>
-                  <input value={cpfCnpj} onChange={e => setCpfCnpj(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-                </div>
-              )}
+              {visivel('cidade') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cidade', 'Cidade')}{estrela('cidade')}</label><input value={cidade} onChange={e => setCidade(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('cidade', 'Cidade da obra')} /></div>}
+              {visivel('cpf_cnpj') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cpf_cnpj', 'CPF ou CNPJ')}{estrela('cpf_cnpj')}</label><input value={cpfCnpj} onChange={e => setCpfCnpj(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" /></div>}
             </div>
           )}
 
-          {visivel('origem') && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('origem', 'Origem')}{estrela('origem')}</label>
-              <select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">
-                {origens.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-          )}
+          {visivel('origem') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('origem', 'Origem')}{estrela('origem')}</label><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">{origens.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>}
 
-          {visivel('endereco') && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('endereco', 'Endereço da obra')}{estrela('endereco')}</label>
-              <input value={endereco} onChange={e => setEndereco(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('endereco', 'Rua, número')} />
-            </div>
-          )}
+          {visivel('endereco') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('endereco', 'Endereço da obra')}{estrela('endereco')}</label><input value={endereco} onChange={e => setEndereco(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('endereco', 'Rua, número')} /></div>}
 
           {(visivel('bairro') || visivel('cep')) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visivel('bairro') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('bairro', 'Bairro')}{estrela('bairro')}</label>
-                  <input value={bairro} onChange={e => setBairro(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-                </div>
-              )}
-              {visivel('cep') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cep', 'CEP')}{estrela('cep')}</label>
-                  <input value={cep} onChange={e => setCep(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('cep', '00000-000')} />
-                </div>
-              )}
+              {visivel('bairro') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('bairro', 'Bairro')}{estrela('bairro')}</label><input value={bairro} onChange={e => setBairro(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} /></div>}
+              {visivel('cep') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cep', 'CEP')}{estrela('cep')}</label><input value={cep} onChange={e => setCep(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('cep', '00000-000')} /></div>}
             </div>
           )}
 
-          {visivel('observacoes') && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('observacoes', 'Observações')}{estrela('observacoes')}</label>
-              <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} className="w-full h-20 border border-slate-300 rounded-xl p-3 text-sm resize-none" />
-            </div>
-          )}
+          {visivel('observacoes') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('observacoes', 'Observações')}{estrela('observacoes')}</label><textarea value={observacoes} onChange={e => setObservacoes(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full h-20 border border-slate-300 rounded-xl p-3 text-sm resize-none ${classeTexto}`} /></div>}
 
           {erro && <p className="text-red-500 text-sm">{erro}</p>}
 
           <button onClick={salvar} disabled={salvando} className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2">
-            <CheckCircle size={16} />
-            {salvando ? 'Salvando...' : 'Salvar cliente'}
+            <CheckCircle size={16} /> {salvando ? 'Salvando...' : 'Salvar cliente'}
           </button>
         </div>
       </main>
