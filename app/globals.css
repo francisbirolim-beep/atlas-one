@@ -232,4 +232,57 @@ input[type="number"] {
   .atlas-medicao-final-detail [class*="fixed inset-0"] input[type="number"] {
     font-size: 1rem;
   }
+
+  /*
+   * Navegação mobile: o favorito é somente um atalho de abertura.
+   * A remoção continua disponível nos pontos de gerenciamento, mas nunca fica
+   * sobre a área de toque da barra inferior, evitando exclusões acidentais.
+   */
+  nav.fixed.bottom-0.left-0.right-0 button[title="Remover dos favoritos"] {
+    display: none !important;
+  }
+
+  nav.fixed.bottom-0.left-0.right-0 {
+    justify-content: flex-start !important;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    padding: 0.45rem 0.5rem max(0.45rem, env(safe-area-inset-bottom)) !important;
+    box-shadow: 0 -8px 24px rgb(15 23 42 / 0.06);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  nav.fixed.bottom-0.left-0.right-0::-webkit-scrollbar {
+    display: none;
+  }
+
+  nav.fixed.bottom-0.left-0.right-0 > * {
+    flex: 0 0 4.35rem;
+    scroll-snap-align: center;
+  }
+
+  nav.fixed.bottom-0.left-0.right-0 a,
+  nav.fixed.bottom-0.left-0.right-0 > button {
+    min-width: 4.35rem;
+    width: 4.35rem !important;
+    min-height: 3.75rem;
+    height: 3.75rem !important;
+    border-radius: 0.9rem !important;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  nav.fixed.bottom-0.left-0.right-0 a:active,
+  nav.fixed.bottom-0.left-0.right-0 > button:active {
+    transform: scale(0.96);
+  }
+
+  nav.fixed.bottom-0.left-0.right-0 span {
+    max-width: 4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
