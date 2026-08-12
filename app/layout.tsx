@@ -7,6 +7,7 @@ import './atlas-setor-professional.css'
 import './atlas-engenharia-professional.css'
 import AuthGate from '@/components/AuthGate'
 import SincronizadorOffline from '@/components/SincronizadorOffline'
+import UppercaseInputProvider from '@/components/system/UppercaseInputProvider'
 
 export const metadata: Metadata = {
   title: 'Atlas One - Esquadrifácio',
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body>
-        <AuthGate>{children}</AuthGate>
+        <UppercaseInputProvider>
+          <AuthGate>{children}</AuthGate>
+        </UppercaseInputProvider>
         <SincronizadorOffline />
         <script
           dangerouslySetInnerHTML={{
