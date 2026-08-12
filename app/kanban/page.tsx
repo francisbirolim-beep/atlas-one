@@ -15,6 +15,7 @@ import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
 import { corTextoParaFundo } from '@/lib/cor'
 import { lerCorAssistencia } from '@/lib/configGeral'
+import { bateBusca } from '@/lib/texto'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
 
@@ -223,14 +224,15 @@ setCarregando(false)
 
 function passaFiltro(c: OrcamentoRapido): boolean {
 if (busca.trim()) {
-const alvo = busca.trim().toLowerCase()
-const bate =
-(c.cliente_nome || '').toLowerCase().includes(alvo) ||
-(c.cidade || '').toLowerCase().includes(alvo) ||
-(c.arquiteto_nome || '').toLowerCase().includes(alvo) ||
-(c.criado_por_nome || '').toLowerCase().includes(alvo) ||
-(c.cliente_whatsapp || '').toLowerCase().includes(alvo) ||
-(tipoLabels[c.tipo_esquadria] || c.tipo_esquadria || '').toLowerCase().includes(alvo)
+const bate = bateBusca(
+  busca,
+  c.cliente_nome,
+  c.cidade,
+  c.arquiteto_nome,
+  c.criado_por_nome,
+  c.cliente_whatsapp,
+  tipoLabels[c.tipo_esquadria] || c.tipo_esquadria || ''
+)
 if (!bate) return false
 }
 if (filtroData) {
