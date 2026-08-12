@@ -45,16 +45,24 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 
 ## Engenharia Fase 4 — PR #73
 - liberacao operacional real de Engenharia para Producao;
-- ao mover para `Liberado para producao`, RPC transacional revalida a conferencia tecnica;
-- registra quem liberou e quando no card da Engenharia;
-- cria ou atualiza de forma idempotente o card correspondente em `producao_itens` usando `orcamento_id`;
-- preserva titulo/descricao derivados da Medicao Final e evita duplicidade;
-- serializa liberacoes concorrentes do mesmo orcamento;
-- migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
+- RPC transacional revalida a conferencia tecnica;
+- registra quem liberou e quando;
+- cria ou atualiza card em `producao_itens` usando `orcamento_id` e evitando duplicidade;
+- migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada.
+
+## Engenharia Fase 5 — PR #76
+- base persistente de receitas tecnicas ligada às tipologias existentes;
+- tabela `engenharia_receitas` com versao, ativo e uma receita ativa por tipologia;
+- tabela `engenharia_receita_componentes` com tipos perfil, acessorio, vidro, reforco e outro;
+- vinculo opcional de componente ao cadastro `produtos`;
+- quantidade base, unidade, observacao e ordem;
+- campos `formula_quantidade` e `formula_corte` preparados para MEE futuro, sem execucao automatica nesta fase;
+- tela `/engenharia/receitas` para criar receita e cadastrar componentes;
+- migration `20260812000000_engenharia_receitas_tipologia_v1.sql` aplicada e validada no Supabase.
 
 ## Pontos funcionais ainda pendentes
-- Engenharia Fase 5: base de receitas tecnicas por tipologia.
-- MEE/calculos automaticos, perfis/acessorios, lista de materiais, lista de corte e otimizacao.
+- Engenharia Fase 6: motor de calculo/MEE v1 em modo de simulacao e preview.
+- Lista de materiais persistente, lista de corte e otimizacao de barras.
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
 - Parser/importacao PDF W.Vetro ainda precisa de fluxo estruturado e conferivel.
 - Regras condicionais/foto obrigatoria do checklist V2 ainda pendentes.
