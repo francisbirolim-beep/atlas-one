@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, FileText, Play, UserRound, AlertTriangle, Paperclip } from 'lucide-react'
 import { OrcamentoRapido, Usuario } from '@/lib/tipos'
-import { usuarioAtual } from '@/lib/auth'
+import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import {
   CadastroVenda,
   camposFaltantesCadastroVenda,
@@ -44,6 +44,7 @@ export default function ConfirmarVendaPage() {
   const [carregando, setCarregando] = useState(true)
   const [salvandoCadastro, setSalvandoCadastro] = useState(false)
   const [iniciando, setIniciando] = useState(false)
+  const [importandoItens, setImportandoItens] = useState(false)
   const [cadastroSalvo, setCadastroSalvo] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -129,6 +130,43 @@ export default function ConfirmarVendaPage() {
 
     if (resultado.medicaoId) router.push(`/producao/medicao-final/${resultado.medicaoId}`)
     else router.push('/producao/medicao-final')
+  }
+
+  async function importarItensDoPdf() {
+    if (!selecionado) return
+    setErro('')
+    setImportandoItens(true)
+    try {
+      const token = await tokenAtual()
+      if (!token) {
+        setErro('Sua sessão expirou. Entre novamente no Atlas para importar os itens.')
+        return
+      }
+
+      const resp = await fetch('/api/importar-itens-orcamento', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orcamentoId: selecionado.id, persistirOrcamento: true }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) {
+        setErro(json?.error || 'Não foi possível importar os itens do PDF.')
+        return
+      }
+
+      const novosItens = Array.isArray(json?.itens) ? json.itens : []
+      setOrcamentos(prev => prev.map(o => o.id === selecionado.id ? { ...o, itens: novosItens } : o))
+      if (novosItens.length === 0) {
+        setErro('O PDF foi lido, mas nenhum item foi identificado. Cadastre os itens manualmente.')
+      }
+    } catch {
+      setErro('Erro ao importar os itens do PDF. Tente novamente.')
+    } finally {
+      setImportandoItens(false)
+    }
   }
 
   function campoFormulario(campo: CampoConfiguravel) {
@@ -284,8 +322,28 @@ export default function ConfirmarVendaPage() {
               )}
 
               {itens.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  Este orçamento ainda não foi transformado em itens estruturados do Atlas. O processo não será liberado sem peças.
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-medium">Este orçamento possui anexos, mas ainda não tem itens estruturados no Atlas.</p>
+                  <p className="mt-1 text-xs text-amber-800">Importe os itens do PDF ou abra o orçamento para cadastrar as peças manualmente. Assim que houver itens, o botão de iniciar o processo será liberado.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {anexos.some(a => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().split('?')[0].endsWith('.pdf')) && (
+                      <button
+                        type="button"
+                        onClick={importarItensDoPdf}
+                        disabled={importandoItens}
+                        className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        {importandoItens ? 'Importando itens...' : 'Importar itens do PDF'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/kanban?orcamento=${selecionado.id}`)}
+                      className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                    >
+                      Cadastrar itens manualmente
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-3">
