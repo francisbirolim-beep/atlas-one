@@ -41,7 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/dryrun.txt
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1 | tee /tmp/dryrun.txt
           if grep -q '20260812000000_engenharia_receitas_tipologia_v1.sql' /tmp/dryrun.txt; then
             if grep -Eo '[0-9]{14}_[^ ]+\.sql' /tmp/dryrun.txt | grep -v '^20260812000000_' | grep -q .; then
               echo 'ERRO: existe outra migration pendente alem da migration alvo'
@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          supabase migration list --db-url "$SUPABASE_DB_URL" | tee /tmp/list-final.txt
+          supabase migration list --db-url "$SUPABASE_DB_URL" 2>&1 | tee /tmp/list-final.txt
           grep -E '20260812000000.*20260812000000' /tmp/list-final.txt >/dev/null || { echo 'ERRO: migration alvo nao aparece como aplicada no historico remoto'; exit 1; }
-          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee /tmp/post.txt
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1 | tee /tmp/post.txt
           grep -qi 'Remote database is up to date' /tmp/post.txt || { echo 'ERRO: banco ainda possui migration pendente'; exit 1; }
