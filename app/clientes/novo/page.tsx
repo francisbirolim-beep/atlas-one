@@ -24,6 +24,7 @@ const origens: { value: OrigemCliente; label: string }[] = [
 export default function NovoCliente() {
   const router = useRouter()
   const [nome, setNome] = useState('')
+  const [apelido, setApelido] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [telefone, setTelefone] = useState('')
   const [email, setEmail] = useState('')
@@ -57,7 +58,8 @@ export default function NovoCliente() {
     const { data, error } = await supabase
       .from('clientes')
       .insert({
-        nome,
+        nome: nome.trim(),
+        apelido: apelido.trim() || null,
         whatsapp: whatsapp || null,
         telefone: telefone || null,
         email: email || null,
@@ -98,14 +100,25 @@ export default function NovoCliente() {
 
       <main className="max-w-2xl mx-auto px-4 py-8">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo *</label>
-            <input
-              value={nome}
-              onChange={e => setNome(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              placeholder="Nome completo"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo *</label>
+              <input
+                value={nome}
+                onChange={e => setNome(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                placeholder="Nome completo"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Apelido / nome conhecido</label>
+              <input
+                value={apelido}
+                onChange={e => setApelido(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                placeholder="Ex.: Zé da Fazenda"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
