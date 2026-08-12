@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Cliente } from '@/lib/tipos'
 
+type ClienteComApelido = Cliente & { apelido?: string | null }
+
 const origemLabels: Record<string, string> = {
   indicacao: 'Indicação',
   arquiteto: 'Arquiteto',
@@ -20,8 +22,20 @@ const origemLabels: Record<string, string> = {
   outros: 'Outros',
 }
 
+function normalizar(valor?: string | null) {
+  return (valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function soNumeros(valor?: string | null) {
+  return (valor || '').replace(/\D/g, '')
+}
+
 export default function Clientes() {
-  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [clientes, setClientes] = useState<ClienteComApelido[]>([])
   const [busca, setBusca] = useState('')
   const [carregando, setCarregando] = useState(true)
 
@@ -37,18 +51,39 @@ export default function Clientes() {
       .order('created_at', { ascending: false })
       .limit(200)
 
-    if (data) setClientes(data as Cliente[])
+    if (data) setClientes(data as ClienteComApelido[])
     setCarregando(false)
   }
 
   const filtrados = clientes.filter(c => {
-    if (!busca) return true
-    const alvo = busca.toLowerCase()
-    return (
-      c.nome.toLowerCase().includes(alvo) ||
-      (c.whatsapp || '').includes(alvo) ||
-      (c.cidade || '').toLowerCase().includes(alvo)
-    )
+    if (!busca.trim()) return true
+
+    const alvoTexto = normalizar(busca)
+    const alvoNumeros = soNumeros(busca)
+
+    const camposTexto = [
+      c.nome,
+      c.apelido,
+      c.cidade,
+      c.bairro,
+      c.endereco,
+      c.email,
+      c.observacoes,
+    ]
+
+    const achouTexto = camposTexto.some(valor => normalizar(valor).includes(alvoTexto))
+    if (achouTexto) return true
+
+    if (!alvoNumeros) return false
+
+    const camposNumericos = [
+      c.whatsapp,
+      c.telefone,
+      c.cpf_cnpj,
+      c.cep,
+    ]
+
+    return camposNumericos.some(valor => soNumeros(valor).includes(alvoNumeros))
   })
 
   return (
@@ -83,7 +118,7 @@ export default function Clientes() {
             type="text"
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por nome, WhatsApp ou cidade..."
+            placeholder="Buscar por nome, apelido, CPF/CNPJ, telefone, cidade, bairro, CEP, endereço ou e-mail..."
             className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm bg-white"
           />
         </div>
@@ -104,10 +139,17 @@ export default function Clientes() {
                 href={`/clientes/${c.id}`}
                 className="block bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm hover:border-brand-navy transition"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-800">{c.nome}</p>
-                    <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-slate-800">{c.nome}</p>
+                      {c.apelido && (
+                        <span className="rounded-full bg-brand-navyLight px-2 py-0.5 text-xs font-medium text-brand-navy">
+                          {c.apelido}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 mt-1">
                       {c.whatsapp && (
                         <span className="flex items-center gap-1">
                           <Phone size={12} /> {c.whatsapp}
@@ -118,9 +160,11 @@ export default function Clientes() {
                           <MapPin size={12} /> {c.cidade}
                         </span>
                       )}
+                      {c.bairro && <span>{c.bairro}</span>}
+                      {c.cep && <span>CEP {c.cep}</span>}
                     </div>
                   </div>
-                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">
+                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full flex-shrink-0">
                     {origemLabels[c.origem] || c.origem}
                   </span>
                 </div>
