@@ -1,11 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowLeft, CheckCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, CheckCircle, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { OrigemCliente } from '@/lib/tipos'
+import {
+  CampoConfiguravel,
+  campoNoContexto,
+  campoObrigatorio,
+  camposDoContexto,
+  listarCamposConfiguraveis,
+} from '@/lib/camposConfiguraveis'
 
 const origens: { value: OrigemCliente; label: string }[] = [
   { value: 'indicacao', label: 'Indicação' },
@@ -23,6 +30,8 @@ const origens: { value: OrigemCliente; label: string }[] = [
 
 export default function NovoCliente() {
   const router = useRouter()
+  const [campos, setCampos] = useState<CampoConfiguravel[]>([])
+  const [configCarregada, setConfigCarregada] = useState(false)
   const [nome, setNome] = useState('')
   const [apelido, setApelido] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
@@ -39,19 +48,71 @@ export default function NovoCliente() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
 
+  useEffect(() => {
+    listarCamposConfiguraveis().then((lista) => {
+      setCampos(lista)
+      setConfigCarregada(true)
+    })
+  }, [])
+
+  function visivel(chave: string) {
+    if (chave === 'nome') return true
+    if (!configCarregada) return true
+    return !!campoNoContexto(campos, chave, 'cliente')
+  }
+
+  function obrigatorio(chave: string) {
+    if (chave === 'nome') return true
+    if (!configCarregada) return chave === 'cpf_cnpj' || chave === 'endereco'
+    return campoObrigatorio(campos, chave, 'cliente')
+  }
+
+  function rotulo(chave: string, fallback: string) {
+    return campoNoContexto(campos, chave, 'cliente')?.label || fallback
+  }
+
+  function placeholder(chave: string, fallback = '') {
+    return campoNoContexto(campos, chave, 'cliente')?.placeholder || fallback
+  }
+
   async function salvar() {
+    const valores: Record<string, string> = {
+      nome,
+      apelido,
+      whatsapp,
+      telefone,
+      email,
+      cidade,
+      cpf_cnpj: cpfCnpj,
+      endereco,
+      bairro,
+      cep,
+      data_nascimento: dataNascimento,
+      origem,
+      observacoes,
+    }
+
+    const obrigatorios = configCarregada
+      ? camposDoContexto(campos, 'cliente', true)
+      : [
+          { chave: 'nome', label: 'Nome completo' },
+          { chave: 'cpf_cnpj', label: 'CPF ou CNPJ' },
+          { chave: 'endereco', label: 'Endereço da obra' },
+        ]
+
+    for (const campo of obrigatorios) {
+      const valor = valores[campo.chave]
+      if (valor !== undefined && !String(valor).trim()) {
+        setErro(`Informe: ${campo.label}`)
+        return
+      }
+    }
+
     if (!nome.trim()) {
-      setErro('Informe o nome completo do cliente')
+      setErro('Informe: Nome completo')
       return
     }
-    if (!cpfCnpj.trim()) {
-      setErro('Informe o CPF ou CNPJ do cliente')
-      return
-    }
-    if (!endereco.trim()) {
-      setErro('Informe o endereço da obra')
-      return
-    }
+
     setErro('')
     setSalvando(true)
 
@@ -60,17 +121,17 @@ export default function NovoCliente() {
       .insert({
         nome: nome.trim(),
         apelido: apelido.trim() || null,
-        whatsapp: whatsapp || null,
-        telefone: telefone || null,
-        email: email || null,
-        cidade: cidade || null,
-        cpf_cnpj: cpfCnpj,
-        endereco,
-        bairro: bairro || null,
-        cep: cep || null,
+        whatsapp: whatsapp.trim() || null,
+        telefone: telefone.trim() || null,
+        email: email.trim() || null,
+        cidade: cidade.trim() || null,
+        cpf_cnpj: cpfCnpj.trim() || null,
+        endereco: endereco.trim() || null,
+        bairro: bairro.trim() || null,
+        cep: cep.trim() || null,
         data_nascimento: dataNascimento || null,
         origem,
-        observacoes: observacoes || null,
+        observacoes: observacoes.trim() || null,
       })
       .select('id')
       .single()
@@ -85,16 +146,27 @@ export default function NovoCliente() {
     router.push(`/clientes/${data.id}`)
   }
 
+  const estrela = (chave: string) => (obrigatorio(chave) ? ' *' : '')
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href="/clientes" className="p-2 hover:bg-slate-100 rounded-lg transition">
-            <ArrowLeft size={20} />
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/clientes" className="p-2 hover:bg-slate-100 rounded-lg transition">
+              <ArrowLeft size={20} />
+            </Link>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
+            <h1 className="text-lg font-bold text-slate-800">Novo cliente</h1>
+          </div>
+          <Link
+            href="/configuracoes/campos"
+            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
+            title="Configurar campos e obrigatoriedade"
+          >
+            <Settings2 size={14} /> Configurar campos
           </Link>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
-          <h1 className="text-lg font-bold text-slate-800">Novo cliente</h1>
         </div>
       </header>
 
@@ -102,147 +174,121 @@ export default function NovoCliente() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nome completo *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('nome', 'Nome completo')}{estrela('nome')}</label>
               <input
                 value={nome}
                 onChange={e => setNome(e.target.value)}
                 className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="Nome completo"
+                placeholder={placeholder('nome', 'Nome completo')}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Apelido / nome conhecido</label>
-              <input
-                value={apelido}
-                onChange={e => setApelido(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="Ex.: Zé da Fazenda"
-              />
-            </div>
+            {visivel('apelido') && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('apelido', 'Apelido / nome conhecido')}{estrela('apelido')}</label>
+                <input
+                  value={apelido}
+                  onChange={e => setApelido(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  placeholder={placeholder('apelido', 'Ex.: Zé da Fazenda')}
+                />
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">WhatsApp</label>
-              <input
-                value={whatsapp}
-                onChange={e => setWhatsapp(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="(11) 99999-9999"
-              />
+          {(visivel('whatsapp') || visivel('telefone')) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {visivel('whatsapp') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('whatsapp', 'WhatsApp')}{estrela('whatsapp')}</label>
+                  <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('whatsapp', '(11) 99999-9999')} />
+                </div>
+              )}
+              {visivel('telefone') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('telefone', 'Telefone fixo')}{estrela('telefone')}</label>
+                  <input value={telefone} onChange={e => setTelefone(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('telefone', '(11) 3333-3333')} />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Telefone fixo</label>
-              <input
-                value={telefone}
-                onChange={e => setTelefone(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="(11) 3333-3333"
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="cliente@email.com"
-              />
+          {(visivel('email') || visivel('data_nascimento')) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {visivel('email') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('email', 'E-mail')}{estrela('email')}</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('email', 'cliente@email.com')} />
+                </div>
+              )}
+              {visivel('data_nascimento') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('data_nascimento', 'Data de nascimento')}{estrela('data_nascimento')}</label>
+                  <input type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data de nascimento</label>
-              <input
-                type="date"
-                value={dataNascimento}
-                onChange={e => setDataNascimento(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
-              <input
-                value={cidade}
-                onChange={e => setCidade(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="Cidade da obra"
-              />
+          {(visivel('cidade') || visivel('cpf_cnpj')) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {visivel('cidade') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cidade', 'Cidade')}{estrela('cidade')}</label>
+                  <input value={cidade} onChange={e => setCidade(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('cidade', 'Cidade da obra')} />
+                </div>
+              )}
+              {visivel('cpf_cnpj') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cpf_cnpj', 'CPF ou CNPJ')}{estrela('cpf_cnpj')}</label>
+                  <input value={cpfCnpj} onChange={e => setCpfCnpj(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
+                </div>
+              )}
             </div>
+          )}
+
+          {visivel('origem') && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">CPF ou CNPJ *</label>
-              <input
-                value={cpfCnpj}
-                onChange={e => setCpfCnpj(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('origem', 'Origem')}{estrela('origem')}</label>
+              <select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">
+                {origens.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
-          </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Origem</label>
-            <select
-              value={origem}
-              onChange={e => setOrigem(e.target.value as OrigemCliente)}
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            >
-              {origens.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Endereço da obra *</label>
-            <input
-              value={endereco}
-              onChange={e => setEndereco(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              placeholder="Rua, número"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          {visivel('endereco') && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Bairro</label>
-              <input
-                value={bairro}
-                onChange={e => setBairro(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('endereco', 'Endereço da obra')}{estrela('endereco')}</label>
+              <input value={endereco} onChange={e => setEndereco(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('endereco', 'Rua, número')} />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">CEP</label>
-              <input
-                value={cep}
-                onChange={e => setCep(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                placeholder="00000-000"
-              />
-            </div>
-          </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-            <textarea
-              value={observacoes}
-              onChange={e => setObservacoes(e.target.value)}
-              className="w-full h-20 border border-slate-300 rounded-xl p-3 text-sm resize-none"
-            />
-          </div>
+          {(visivel('bairro') || visivel('cep')) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {visivel('bairro') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('bairro', 'Bairro')}{estrela('bairro')}</label>
+                  <input value={bairro} onChange={e => setBairro(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
+                </div>
+              )}
+              {visivel('cep') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cep', 'CEP')}{estrela('cep')}</label>
+                  <input value={cep} onChange={e => setCep(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('cep', '00000-000')} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {visivel('observacoes') && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('observacoes', 'Observações')}{estrela('observacoes')}</label>
+              <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} className="w-full h-20 border border-slate-300 rounded-xl p-3 text-sm resize-none" />
+            </div>
+          )}
 
           {erro && <p className="text-red-500 text-sm">{erro}</p>}
 
-          <button
-            onClick={salvar}
-            disabled={salvando}
-            className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"
-          >
+          <button onClick={salvar} disabled={salvando} className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2">
             <CheckCircle size={16} />
             {salvando ? 'Salvando...' : 'Salvar cliente'}
           </button>
