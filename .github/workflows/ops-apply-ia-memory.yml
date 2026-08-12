@@ -1,0 +1,59 @@
+name: Ops Apply IA Memory V1
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  apply:
+    if: github.head_ref == 'ops/apply-ia-memoria-comercial-v1'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Validate secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN:-}"
+          test -n "${SUPABASE_DB_PASSWORD:-}"
+          test -n "${SUPABASE_PROJECT_ID:-}"
+      - name: Build DB URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_URL=$(python - <<'PY'
+          import os, urllib.parse
+          p=os.environ['SUPABASE_PROJECT_ID']
+          pw=urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{p}:{pw}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+      - name: Guard and apply only expected migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1 | tee /tmp/dryrun.txt
+          if grep -q "Remote database is up to date" /tmp/dryrun.txt; then
+            echo "Migration already applied; nothing to do."
+          else
+            grep -q "20260812010000_ia_memoria_comercial_v1.sql" /tmp/dryrun.txt || { echo "Expected migration not pending"; exit 1; }
+            COUNT=$(grep -cE '^ *• .*\.sql$' /tmp/dryrun.txt || true)
+            test "$COUNT" -eq 1 || { echo "Refusing: expected exactly one pending migration, found $COUNT"; exit 1; }
+            supabase db push --db-url "$SUPABASE_DB_URL"
+          fi
+      - name: Verify remote history
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration list --db-url "$SUPABASE_DB_URL" 2>&1 | tee /tmp/list.txt
+          grep -E '20260812010000.*20260812010000' /tmp/list.txt
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run 2>&1 | tee /tmp/final.txt
+          grep -q "Remote database is up to date" /tmp/final.txt
