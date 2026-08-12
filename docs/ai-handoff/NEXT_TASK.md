@@ -1,26 +1,25 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-A Engenharia Fase 4 foi concluida no PR #73 e a migration `20260811200000_engenharia_liberacao_producao_v1.sql` foi aplicada e validada no Supabase.
+A Engenharia Fase 5 foi concluida no PR #76 e a migration `20260812000000_engenharia_receitas_tipologia_v1.sql` foi aplicada e validada no Supabase.
 
-## PROXIMA TAREFA — ENGENHARIA FASE 5
-Criar a base de receitas tecnicas por tipologia, preparando o MEE sem implementar todo o calculo automatico de uma vez.
+## PROXIMA TAREFA — ENGENHARIA FASE 6
+Criar o motor de calculo/MEE v1 em modo de simulacao, usando as receitas tecnicas sem ainda gravar automaticamente materiais ou cortes em Producao/Estoque.
 
 Escopo recomendado:
-1. cadastro de receita tecnica por tipologia;
-2. vincular perfis, acessorios, vidros e reforcos;
-3. definir unidades e regras de quantidade por item de receita;
-4. permitir versao/ativacao da receita;
-5. manter historico e rastreabilidade da receita usada em cada obra;
-6. preparar campos para formulas dependentes de largura, altura, quantidade e configuracao da esquadria;
-7. criar uma tela de revisao da receita antes de gerar materiais automaticamente.
+1. definir sintaxe segura para `formula_quantidade` e `formula_corte`;
+2. expor variaveis controladas: largura, altura, quantidade e medidas finais relevantes;
+3. avaliar a receita de uma peca usando a versao ativa da tipologia;
+4. gerar preview de componentes, quantidades e cortes;
+5. mostrar erros de formula de forma legivel, sem executar codigo arbitrario;
+6. registrar no resultado qual receita/versao foi usada;
+7. permitir revisao tecnica antes de persistir qualquer lista de materiais.
 
-## DEPOIS DA FASE 5
-- implementar calculos/MEE por tipologia;
-- gerar lista de materiais;
+## DEPOIS DA FASE 6
+- persistir lista de materiais calculada por obra;
 - gerar lista de corte;
 - otimizar barras;
-- integrar liberacao tecnica calculada com Producao/Estoque.
+- integrar materiais com Estoque e liberacao tecnica com Producao.
 
 ## JA NA MAIN
 - Medicao Final V2 PRs #54 a #56.
@@ -28,12 +27,14 @@ Escopo recomendado:
 - Engenharia Fase 1 PR #64: entrada automatica apos aprovacao da Medicao Final.
 - Engenharia Fase 2 PR #66: rota `/engenharia`, KPIs, quatro etapas e detalhe das pecas.
 - Engenharia Fase 3 PR #69: conferencia tecnica persistente e bloqueio de liberacao incompleta.
-- Engenharia Fase 4 PR #73: liberacao transacional para Producao, registro de quem/quando e card de Producao idempotente; migration aplicada.
+- Engenharia Fase 4 PR #73: liberacao transacional para Producao e card idempotente.
+- Engenharia Fase 5 PR #76: receitas tecnicas por tipologia, componentes e campos de formulas; migration aplicada.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
 - Migration: dry-run em PR antes de apply controlado.
-- Nao automatizar lista de corte antes de fechar o modelo de receitas e versoes.
+- O motor de formulas nao pode usar `eval`, `Function` ou executar JavaScript arbitrario.
+- Nao persistir materiais/cortes automaticamente antes de existir tela de revisao do preview.
 - Vercel pode continuar sujeita a cota diaria; Build Validation confirma o codigo, mas producao depende do deploy.
