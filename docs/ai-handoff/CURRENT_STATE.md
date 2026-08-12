@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, `main` apos PR #73 e migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada.
+Verificado em: 2026-08-11, `main` apos PR #76 e migration `20260812000000_engenharia_receitas_tipologia_v1.sql` aplicada e validada.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -16,7 +16,8 @@ Verificado em: 2026-08-11, `main` apos PR #73 e migration `20260811200000_engenh
 - PR #66: modulo proprio de Engenharia em `/engenharia`.
 - PR #69: conferencia tecnica persistente por peca e bloqueio de liberacao incompleta.
 - PR #73: liberacao real Engenharia -> Producao, com registro de quem liberou/quando e criacao/atualizacao idempotente do card em `producao_itens`.
-- Migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
+- PR #76: base de receitas tecnicas por tipologia em `/engenharia/receitas`, com componentes tecnicos e vinculo opcional ao cadastro `produtos`.
+- Migration `20260812000000_engenharia_receitas_tipologia_v1.sql` aplicada e validada no Supabase.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.
@@ -32,20 +33,21 @@ Verificado em: 2026-08-11, `main` apos PR #73 e migration `20260811200000_engenh
 - Fase 1 concluida: Medicao Final aprovada entra automaticamente na Engenharia.
 - Fase 2 concluida: rota `/engenharia`, fluxo Recebidas -> Conferencia tecnica -> Em desenvolvimento -> Liberado para producao.
 - Fase 3 concluida: conferencia tecnica persistente por peca, responsavel/observacao/status e bloqueio de liberacao incompleta.
-- Fase 4 concluida: ao liberar, o Atlas registra quem/quando e cria ou atualiza de forma idempotente a entrada correspondente na Producao usando `orcamento_id`.
-- A liberacao e transacional e revalida a conferencia tecnica antes de enviar para Producao.
-- Fonte unica dos cards da Engenharia continua sendo `setor_kanban_itens`.
-- Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
+- Fase 4 concluida: liberacao transacional para Producao, com registro de quem/quando e card idempotente em `producao_itens`.
+- Fase 5 concluida: receitas tecnicas persistentes ligadas a `tipologias`, com versao, receita ativa e componentes classificados como perfil, acessorio, vidro, reforco ou outro.
+- Componentes podem apontar para `produtos` quando houver cadastro tecnico; componentes manuais continuam permitidos.
+- Campos `formula_quantidade` e `formula_corte` existem, mas ainda nao sao executados automaticamente.
+- Ainda nao existe MEE automatico, lista de materiais calculada, lista de corte ou otimizacao de barras.
 
 ## PROXIMA FASE RECOMENDADA
-Engenharia Fase 5 — base de receitas tecnicas por tipologia:
-- cadastrar receita tecnica por tipologia;
-- vincular perfis, acessorios, vidros, reforcos e regras de quantidade;
-- permitir revisao/versao da receita;
-- preparar formulas sem ainda automatizar todo o MEE;
-- manter rastreabilidade entre tipologia, receita e obra.
-
-Depois disso: calculos/MEE, lista de materiais, lista de corte e otimizacao de barras.
+Engenharia Fase 6 — motor de calculo/MEE v1 em modo de simulacao:
+- definir sintaxe segura para formulas de quantidade e corte;
+- usar largura/altura/quantidade da Medicao Final como variaveis;
+- calcular uma peca por vez sem gravar automaticamente em Producao/Estoque;
+- mostrar preview da lista de materiais e cortes;
+- registrar erros de formula de forma legivel;
+- preservar a versao da receita usada no calculo;
+- somente depois liberar geracao persistente de materiais/cortes.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
 - Confirmacao de Venda Fase 1.
