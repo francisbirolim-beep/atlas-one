@@ -19,7 +19,6 @@ export interface ItemOrcamentoForm {
   quantidade: string
   descricao: string
   cor: string
-  // Fotos gerais da esquadria (varias, nao so uma).
   fotos: File[]
   larguraBaixo: string
   larguraMeio: string
@@ -27,16 +26,10 @@ export interface ItemOrcamentoForm {
   alturaDireita: string
   alturaMeio: string
   alturaEsquerda: string
-  // Fase 6: em vez de digitar as 3 larguras / 3 alturas (medida final), da
-  // pra anexar uma foto da trena com as medidas — mesmo padrao ja usado na
-  // Medicao Final.
   modoLargura?: 'digitar' | 'foto'
   modoAltura?: 'digitar' | 'foto'
   fotoLargura?: File | null
   fotoAltura?: File | null
-  // Fase 8: em vez de digitar tipo/medidas na mao, da pra escolher um
-  // produto ja cadastrado (Cadastro > Produtos) — preenche tipo, medidas e
-  // preco automaticamente.
   modoOrigem?: 'manual' | 'produto'
   produtoId?: string | null
   precoUnit?: number | null
@@ -59,15 +52,9 @@ export interface DadosOrcamentoForm {
   arquivos: File[]
 }
 
-// Faz de fato a gravacao no Supabase (cliente, upload de fotos, orcamento e
-// historico). Usada tanto pelo formulario (quando ha internet na hora) quanto
-// pelo sincronizador da fila offline (quando a internet volta depois).
-//
-// Obs: o modo "texto livre" (Orcamento Rapido antigo) foi removido na Fase 5 —
-// esse formulario so grava no modo "formulario" (Orcamento Detalhado) daqui pra frente.
 export async function criarOrcamentoNoServidor(
   dados: DadosOrcamentoForm
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; id?: string; error?: string }> {
   const {
     itens, clienteNome, clienteWhatsapp, cidade, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
@@ -89,14 +76,11 @@ export async function criarOrcamentoNoServidor(
     if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
   for (const it of itens) {
-    // Fotos gerais da esquadria (agora podem ser varias).
     const itemFotoUrls: string[] = []
     for (const f of it.fotos) { const url = await uploadFoto(f); if (url) itemFotoUrls.push(url) }
     const foto_url = itemFotoUrls[0] || null
     const foto_urls = itemFotoUrls.length ? itemFotoUrls : null
 
-    // Fase 8: se a esquadria veio de um produto cadastrado, guarda o snapshot
-    // do preco (nao muda mais se o cadastro do produto for alterado depois).
     const produto_id = it.modoOrigem === 'produto' ? (it.produtoId || null) : null
     const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
     const quantidadeNum = parseInt(it.quantidade) || 1
@@ -199,5 +183,5 @@ export async function criarOrcamentoNoServidor(
   if (colunaId) { executarAutomacoesColuna(colunaId, { cliente_nome: clienteNome, criado_por_id: usuario?.id || null }).catch(() => {}) }
 
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
-  return { ok: true }
+  return { ok: true, id: novoId }
 }
