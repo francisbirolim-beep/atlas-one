@@ -1,4 +1,4 @@
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, ListTodo, UserPlus, Home, FileText, ListChecks, WandSparkles } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, ListTodo, UserPlus, Home, FileText, ListChecks, WandSparkles, Layers3 } from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -22,6 +22,7 @@ export const GUIAS: Guia[] = [
   { href: '/configuracoes', label: 'Configurações', icon: Settings, masterOnly: true, grupo: 'Sistema' },
   { href: '/configuracoes/campos', label: 'Campos e Formulários', icon: ListChecks, masterOnly: true, grupo: 'Sistema' },
   { href: '/cadastro', label: 'Cadastro', icon: UserPlus, masterOnly: true, grupo: 'Sistema' },
+  { href: '/cadastro/linhas', label: 'Linhas Técnicas', icon: Layers3, masterOnly: true, grupo: 'Sistema' },
 ]
 
 // Ordem em que os grupos aparecem no menu lateral, ao estilo dos setores do sistema.
