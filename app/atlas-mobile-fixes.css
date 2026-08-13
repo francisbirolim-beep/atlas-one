@@ -1,0 +1,75 @@
+/* Ajustes de viewport mobile do Atlas.
+ * Mantém rolagem horizontal somente dentro de componentes que precisam dela,
+ * evitando que a página inteira fique deslocada no Safari/iPhone.
+ */
+
+@media (max-width: 767px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .atlas-kanban-commercial,
+  .atlas-kanban-commercial > div,
+  .atlas-kanban-commercial > div > main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  /* Filtros: busca em uma linha e filtros menores abaixo. */
+  .atlas-kanban-commercial > div > main > div:first-child {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.55rem !important;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child > div:first-child {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child > input[type='date'],
+  .atlas-kanban-commercial > div > main > div:first-child > select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child > button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  /* O quadro rola por dentro, sem empurrar header, filtros e barra inferior. */
+  .atlas-kanban-commercial > div > main > div:nth-child(2) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0.75rem !important;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-left: 0;
+  }
+
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > div,
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > button {
+    flex: 0 0 min(82vw, 292px) !important;
+    width: min(82vw, 292px) !important;
+    max-width: min(82vw, 292px) !important;
+  }
+
+  /* Impede textos longos de alargarem cards/colunas. */
+  .atlas-kanban-commercial > div > main > div:nth-child(2) * {
+    min-width: 0;
+  }
+}
