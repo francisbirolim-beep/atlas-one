@@ -15,6 +15,21 @@ function itemImportadoValido(it: Partial<ItemEsquadria>) {
   return !!ambiente && !!descricao && !descricaoGenerica && largura > 0 && altura > 0
 }
 
+function normalizarTecnico(valor: string) {
+  return (valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/^L\.\s*/, '')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim()
+}
+
+function extrairLinhaDaDescricao(descricao?: string) {
+  const match = (descricao || '').match(/(?:^|\|)\s*LINHA\s*:\s*([^|]+)/i)
+  return match?.[1]?.trim() || null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || ''
@@ -68,17 +83,48 @@ export async function POST(req: NextRequest) {
       }, { status: 422 })
     }
 
-    const itensCompletos: ItemEsquadria[] = itensParciais.map(it => ({
-      id: uuidv4(),
-      ambiente: it.ambiente,
-      tipo_esquadria: it.tipo_esquadria || 'outro',
-      tipo_outro_texto: it.tipo_outro_texto,
-      largura_mm: Number(it.largura_mm),
-      altura_mm: Number(it.altura_mm),
-      quantidade: it.quantidade || 1,
-      descricao: it.descricao,
-      cor: it.cor,
-    }))
+    // Cadastro técnico criado no Atlas. Se por algum motivo a tabela ainda não
+    // estiver disponível, a importação continua funcionando sem a associação.
+    const { data: linhasCadastradas } = await supabaseAdmin
+      .from('linhas_tecnicas')
+      .select('id, chave, nome, apelidos')
+      .eq('ativo', true)
+
+    const linhas = (linhasCadastradas || []) as Array<{ id: string; chave: string; nome: string; apelidos?: string[] | null }>
+    let linhasAssociadas = 0
+
+    const itensCompletos: ItemEsquadria[] = itensParciais.map(it => {
+      const linhaOrigem = extrairLinhaDaDescricao(it.descricao)
+      const chaveOrigem = normalizarTecnico(linhaOrigem || '')
+      const linhaTecnica = chaveOrigem
+        ? linhas.find(linha => {
+            const nomes = [linha.nome, linha.chave, ...(linha.apelidos || [])].map(normalizarTecnico)
+            return nomes.includes(chaveOrigem)
+          })
+        : undefined
+
+      if (linhaTecnica) linhasAssociadas += 1
+
+      const itemComLinha: any = {
+        id: uuidv4(),
+        ambiente: it.ambiente,
+        tipo_esquadria: it.tipo_esquadria || 'outro',
+        tipo_outro_texto: it.tipo_outro_texto,
+        largura_mm: Number(it.largura_mm),
+        altura_mm: Number(it.altura_mm),
+        quantidade: it.quantidade || 1,
+        descricao: it.descricao,
+        cor: it.cor,
+      }
+
+      if (linhaOrigem) itemComLinha.linha_origem = linhaOrigem.toUpperCase()
+      if (linhaTecnica) {
+        itemComLinha.linha_tecnica_id = linhaTecnica.id
+        itemComLinha.linha_tecnica_nome = linhaTecnica.nome
+      }
+
+      return itemComLinha as ItemEsquadria
+    })
 
     if (persistirOrcamento) {
       const { error: erroUpdate } = await supabaseAdmin.from('orcamentos').update({ itens: itensCompletos }).eq('id', orcamentoId)
@@ -92,7 +138,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (medicao) {
-      const linhas = itensCompletos.map((it, idx) => ({
+      const linhasMedicao = itensCompletos.map((it, idx) => ({
         medicao_id: medicao.id,
         tipo_esquadria: it.tipo_esquadria,
         tipo_outro_texto: it.tipo_outro_texto || null,
@@ -104,15 +150,20 @@ export async function POST(req: NextRequest) {
       if (substituirMedicao) {
         const { error: erroDelete } = await supabaseAdmin.from('medicao_itens').delete().eq('medicao_id', medicao.id)
         if (erroDelete) return NextResponse.json({ error: 'Erro ao preparar itens da medicao.' }, { status: 500 })
-        const { error: erroInsert } = await supabaseAdmin.from('medicao_itens').insert(linhas)
+        const { error: erroInsert } = await supabaseAdmin.from('medicao_itens').insert(linhasMedicao)
         if (erroInsert) return NextResponse.json({ error: 'Erro ao sincronizar itens da medicao.' }, { status: 500 })
       } else {
         const { count } = await supabaseAdmin.from('medicao_itens').select('id', { count: 'exact', head: true }).eq('medicao_id', medicao.id)
-        if (!count) await supabaseAdmin.from('medicao_itens').insert(linhas)
+        if (!count) await supabaseAdmin.from('medicao_itens').insert(linhasMedicao)
       }
     }
 
-    return NextResponse.json({ itens: itensCompletos, origem: /w\.vetro/i.test(texto) ? 'wvetro' : 'pdf' })
+    return NextResponse.json({
+      itens: itensCompletos,
+      origem: /w\.vetro/i.test(texto) ? 'wvetro' : 'pdf',
+      linhas_associadas: linhasAssociadas,
+      linhas_identificadas: itensParciais.map(it => extrairLinhaDaDescricao(it.descricao)).filter(Boolean),
+    })
   } catch (e: any) {
     console.error('Erro ao importar itens do PDF:', e)
     return NextResponse.json({ error: 'Erro interno ao processar o PDF.' }, { status: 500 })
