@@ -8,11 +8,16 @@ export function parseItensDoTextoPdf(textoBruto: string): Partial<ItemEsquadria>
     .map(l => l.replace(/\s+/g, ' ').trim())
     .filter(Boolean)
 
-  // O pdf-parse do W.Vetro devolve os valores antes dos respectivos rótulos.
-  // Ex.: AMBIENTE, COR ACESSÓRIO, COR VIDRO, COR ESQUADRIA, DESCRIÇÃO,
-  // MEDIDAS, Nº ITEM, TIPO, LINHA e só depois os rótulos *LOCAL/AMBIENTE etc.
-  // Por isso este parser específico deve rodar antes dos fallbacks genéricos.
-  if (linhas.some(l => /w\.vetro/i.test(l)) && linhas.some(l => /^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i.test(l))) {
+  // O PDF do W Vetro pode variar a forma como a marca aparece no texto extraído
+  // (w.vetro, wvetro, www.wvetro.com.br ou até sem a marca). Por isso a detecção
+  // deve se apoiar na estrutura dos campos, que é estável no documento.
+  const pareceWVetro =
+    linhas.some(l => /^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i.test(l)) &&
+    linhas.some(l => /^\*COR\s+ESQUADRIA\s*:/i.test(l)) &&
+    linhas.some(l => /^\*LINHA\s*:/i.test(l)) &&
+    linhas.some(l => /^L\.\s+/i.test(l))
+
+  if (pareceWVetro) {
     const wvetro = parseItensWVetro(linhas)
     if (wvetro.length > 0) return wvetro
   }
@@ -36,44 +41,52 @@ export function parseItensDoTextoPdf(textoBruto: string): Partial<ItemEsquadria>
 }
 
 function parseItensWVetro(linhas: string[]): Partial<ItemEsquadria>[] {
-  const marcadores = linhas
-    .map((linha, i) => /^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i.test(linha) ? i : -1)
+  // Cada item do W Vetro termina com o valor da linha (ex.: L. SUPREMA)
+  // imediatamente antes dos rótulos impressos. Usar esse valor como âncora
+  // é mais robusto do que depender do texto da marca do sistema.
+  const linhasValores = linhas
+    .map((linha, i) => /^L\.\s+/i.test(linha) ? i : -1)
     .filter(i => i >= 0)
 
   const itens: Partial<ItemEsquadria>[] = []
   let fimAnterior = -1
 
-  for (let pos = 0; pos < marcadores.length; pos++) {
-    const idxLocal = marcadores[pos]
-    if (idxLocal === undefined) continue
-    const idxLinhaRotulo = acharAFrente(linhas, idxLocal, /^\*LINHA\s*:/i, 12)
-    if (idxLinhaRotulo < 0) continue
+  for (const idxLinhaValor of linhasValores) {
+    const idxLocal = acharAFrente(linhas, idxLinhaValor, /^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i, 4)
+    const idxLinhaRotulo = idxLocal >= 0 ? acharAFrente(linhas, idxLocal, /^\*LINHA\s*:/i, 12) : -1
+    if (idxLocal < 0 || idxLinhaRotulo < 0) continue
 
-    const inicio = fimAnterior >= 0 ? fimAnterior + 1 : Math.max(0, idxLocal - 24)
+    const inicio = fimAnterior >= 0 ? fimAnterior + 1 : Math.max(0, idxLinhaValor - 24)
     const valores = linhas.slice(inicio, idxLocal)
     fimAnterior = idxLinhaRotulo
 
-    const idxLinhaValor = acharUltimo(valores, /^L\.\s+/i)
-    const idxTipoValor = idxLinhaValor > 0 ? acharUltimoAte(valores, idxLinhaValor - 1, /^[A-Z]{1,4}$/i) : -1
-    const idxItemValor = idxTipoValor > 0 ? acharUltimoAte(valores, idxTipoValor - 1, /^\d{1,3}$/) : -1
-    const idxMedidas = idxItemValor > 0 ? acharUltimoAte(valores, idxItemValor - 1, /^\d+(?:[.,]\d+)?\s+\d+(?:[.,]\d+)?\s+\d+(?:[.,]\d+)?(?:\s+.*)?$/) : -1
+    const linhaRelativa = valores.length - 1
+    if (linhaRelativa < 0 || !/^L\.\s+/i.test(valores[linhaRelativa] || '')) continue
 
-    if (idxLinhaValor < 0 || idxTipoValor < 0 || idxItemValor < 0 || idxMedidas < 0) continue
+    const idxTipoValor = acharUltimoAte(valores, linhaRelativa - 1, /^[A-Z]{1,4}$/i)
+    const idxItemValor = idxTipoValor > 0 ? acharUltimoAte(valores, idxTipoValor - 1, /^\d{1,3}$/) : -1
+    const idxMedidas = idxItemValor > 0
+      ? acharUltimoAte(valores, idxItemValor - 1, /^\d+(?:[.,]\d+)?\s+\d+(?:[.,]\d+)?\s+\d+(?:[.,]\d+)?(?:\s+.*)?$/)
+      : -1
+
+    if (idxTipoValor < 0 || idxItemValor < 0 || idxMedidas < 0) continue
 
     const descStart = acharInicioDescricao(valores, idxMedidas)
     if (descStart < 0) continue
 
+    // Ordem real extraída do PDF:
+    // AMBIENTE, COR ESQUADRIA, COR VIDRO, COR ACESSÓRIO, DESCRIÇÃO...
     const ambienteIdx = descStart - 4
-    const acessorioIdx = descStart - 3
+    const corIdx = descStart - 3
     const vidroIdx = descStart - 2
-    const corIdx = descStart - 1
+    const acessorioIdx = descStart - 1
     if (ambienteIdx < 0) continue
 
     const ambiente = valores[ambienteIdx]
-    const corAcessorio = valores[acessorioIdx]
-    const vidro = valores[vidroIdx]
     const corEsquadria = valores[corIdx]
-    const linhaValor = valores[idxLinhaValor]
+    const vidro = valores[vidroIdx]
+    const corAcessorio = valores[acessorioIdx]
+    const linhaValor = valores[linhaRelativa]
     const tipoCodigo = valores[idxTipoValor]
     const medidasValor = valores[idxMedidas]
     if (!ambiente || !linhaValor || !medidasValor) continue
@@ -122,10 +135,6 @@ function acharAFrente(linhas: string[], inicio: number, rx: RegExp, limite: numb
   return -1
 }
 
-function acharUltimo(linhas: string[], rx: RegExp) {
-  return acharUltimoAte(linhas, linhas.length - 1, rx)
-}
-
 function acharUltimoAte(linhas: string[], fim: number, rx: RegExp) {
   for (let i = fim; i >= 0; i--) {
     const linha = linhas[i]
@@ -136,7 +145,7 @@ function acharUltimoAte(linhas: string[], fim: number, rx: RegExp) {
 
 function acharInicioDescricao(valores: string[], idxMedidas: number) {
   const rxProduto = /(PORTA|JANELA|MAXIM|PORTINHOLA|FACHADA|PAINEL|REVESTIMENTO|VITR|BOX|GUARDA|LAMBRI)/i
-  for (let i = idxMedidas - 1; i >= Math.max(0, idxMedidas - 8); i--) {
+  for (let i = idxMedidas - 1; i >= Math.max(0, idxMedidas - 10); i--) {
     const valor = valores[i]
     if (valor && rxProduto.test(valor)) return i
   }
