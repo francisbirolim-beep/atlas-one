@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import './atlas-professional.css'
+import './atlas-mobile-fixes.css'
 import './atlas-medicao-professional.css'
 import './atlas-producao-professional.css'
 import './atlas-setor-professional.css'
