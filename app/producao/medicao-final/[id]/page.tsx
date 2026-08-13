@@ -16,7 +16,8 @@ import {
   salvarMedidaItem as salvarMedidaItemApi, reabrirItemMedicao, DadosMedidaItem,
 } from '@/lib/medicaoFinal'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
-import { uploadFoto } from '@/lib/upload'
+import { uploadFotoMedicao } from '@/lib/upload'
+import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medicaoFoto'
 import { listarTipologias } from '@/lib/tipologias'
 
 let tiposCache: Tipologia[] = []
@@ -96,6 +97,8 @@ export default function DetalheMedicaoFinal() {
   const [valoresExtras, setValoresExtras] = useState<Record<string, string | number>>({})
   const [salvandoMedida, setSalvandoMedida] = useState(false)
   const [tipos, setTipos] = useState<Tipologia[]>([])
+  const [statusLargura, setStatusLargura] = useState('')
+  const [statusAltura, setStatusAltura] = useState('')
 
   useEffect(() => {
     if (id) carregar()
@@ -211,32 +214,124 @@ export default function DetalheMedicaoFinal() {
     setFotoLargurasUrl(item.foto_larguras_url || null)
     setFotoAlturasUrl(item.foto_alturas_url || null)
     setValoresExtras(item.campos_extras || {})
+    setStatusLargura('')
+    setStatusAltura('')
     setCamposExtrasItem(await listarCamposExtras(item.tipo_esquadria))
   }
 
   function fecharModalMedicao() {
     setItemMedindo(null)
+    setStatusLargura('')
+    setStatusAltura('')
+  }
+
+  async function analisarTrena(url: string, eixo: 'largura' | 'altura') {
+    const setStatus = eixo === 'largura' ? setStatusLargura : setStatusAltura
+    setStatus('Foto salva. Lendo a trena com a IA...')
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch('/api/medicao-final/ler-trena', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+        body: JSON.stringify({ imageUrl: url, eixo }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setStatus(json?.error || 'Foto salva. Não foi possível ler a trena automaticamente.')
+        return
+      }
+
+      const medidas = Array.isArray(json?.medidas_mm) ? json.medidas_mm.map(Number).filter((v: number) => Number.isFinite(v) && v > 0) : []
+      if (medidas.length === 0) {
+        setStatus('Foto salva. A IA não encontrou uma medida legível; preencha manualmente.')
+        return
+      }
+
+      if (eixo === 'largura') {
+        if (medidas[0] != null) setLarguraBaixo(String(medidas[0]))
+        if (medidas[1] != null) setLarguraMeio(String(medidas[1]))
+        if (medidas[2] != null) setLarguraCima(String(medidas[2]))
+        setModoLargura('digitar')
+      } else {
+        if (medidas[0] != null) setAlturaDireita(String(medidas[0]))
+        if (medidas[1] != null) setAlturaMeio(String(medidas[1]))
+        if (medidas[2] != null) setAlturaEsquerda(String(medidas[2]))
+        setModoAltura('digitar')
+      }
+
+      const confianca = Math.round((Number(json?.confianca) || 0) * 100)
+      setStatus(`Medida(s) sugerida(s) pela IA${confianca ? ` (${confianca}% de confiança)` : ''}. Confira antes de salvar.`)
+    } catch (e) {
+      console.error('Erro ao analisar foto da trena:', e)
+      setStatus('Foto salva. A leitura automática falhou; você pode preencher manualmente.')
+    }
   }
 
   async function enviarFotoLargura(file: File) {
+    if (!itemMedindo) return
     setEnviandoFotoLargura(true)
-    const url = await uploadFoto(file)
-    if (url) setFotoLargurasUrl(url)
-    setEnviandoFotoLargura(false)
+    setStatusLargura('Enviando e salvando foto...')
+    try {
+      const url = await uploadFotoMedicao(file)
+      if (!url) {
+        setStatusLargura('Não foi possível enviar a foto. Tente novamente.')
+        return
+      }
+      setFotoLargurasUrl(url)
+      const salvo = await salvarFotoMedicaoItem(itemMedindo.id, 'larguras', url)
+      if (!salvo) {
+        setStatusLargura('A foto foi enviada, mas não foi vinculada ao item. Tente novamente.')
+        return
+      }
+      setItemMedindo(prev => prev ? { ...prev, foto_larguras_url: url } : prev)
+      setItens(prev => prev.map(i => i.id === itemMedindo.id ? { ...i, foto_larguras_url: url } : i))
+      await analisarTrena(url, 'largura')
+    } finally {
+      setEnviandoFotoLargura(false)
+    }
   }
 
   async function enviarFotoAltura(file: File) {
+    if (!itemMedindo) return
     setEnviandoFotoAltura(true)
-    const url = await uploadFoto(file)
-    if (url) setFotoAlturasUrl(url)
-    setEnviandoFotoAltura(false)
+    setStatusAltura('Enviando e salvando foto...')
+    try {
+      const url = await uploadFotoMedicao(file)
+      if (!url) {
+        setStatusAltura('Não foi possível enviar a foto. Tente novamente.')
+        return
+      }
+      setFotoAlturasUrl(url)
+      const salvo = await salvarFotoMedicaoItem(itemMedindo.id, 'alturas', url)
+      if (!salvo) {
+        setStatusAltura('A foto foi enviada, mas não foi vinculada ao item. Tente novamente.')
+        return
+      }
+      setItemMedindo(prev => prev ? { ...prev, foto_alturas_url: url } : prev)
+      setItens(prev => prev.map(i => i.id === itemMedindo.id ? { ...i, foto_alturas_url: url } : i))
+      await analisarTrena(url, 'altura')
+    } finally {
+      setEnviandoFotoAltura(false)
+    }
   }
 
   async function enviarFotoCampoExtra(chave: string, file: File) {
+    if (!itemMedindo) return
     setEnviandoCampoExtraChave(chave)
-    const url = await uploadFoto(file)
-    if (url) setValoresExtras(prev => ({ ...prev, [chave]: url }))
-    setEnviandoCampoExtraChave(null)
+    try {
+      const url = await uploadFotoMedicao(file)
+      if (!url) {
+        alert('Não foi possível enviar a foto do checklist. Tente novamente.')
+        return
+      }
+      const novosValores = { ...valoresExtras, [chave]: url }
+      setValoresExtras(novosValores)
+      const salvo = await salvarFotoCampoExtraMedicao(itemMedindo.id, novosValores)
+      if (!salvo) alert('A foto foi enviada, mas não foi vinculada ao checklist. Tente novamente.')
+      else setItens(prev => prev.map(i => i.id === itemMedindo.id ? { ...i, campos_extras: novosValores } : i))
+    } finally {
+      setEnviandoCampoExtraChave(null)
+    }
   }
 
   const diffLargura = modoLargura === 'digitar' ? diferenca(larguraBaixo, larguraMeio, larguraCima) : null
@@ -256,14 +351,14 @@ export default function DetalheMedicaoFinal() {
     setSalvandoMedida(true)
 
     const dados: DadosMedidaItem = {
-      largura_baixo_mm: modoLargura === 'digitar' ? (parseFloat(larguraBaixo) || null) : null,
-      largura_meio_mm: modoLargura === 'digitar' ? (parseFloat(larguraMeio) || null) : null,
-      largura_cima_mm: modoLargura === 'digitar' ? (parseFloat(larguraCima) || null) : null,
-      altura_direita_mm: modoAltura === 'digitar' ? (parseFloat(alturaDireita) || null) : null,
-      altura_meio_mm: modoAltura === 'digitar' ? (parseFloat(alturaMeio) || null) : null,
-      altura_esquerda_mm: modoAltura === 'digitar' ? (parseFloat(alturaEsquerda) || null) : null,
-      foto_larguras_url: modoLargura === 'foto' ? fotoLargurasUrl : null,
-      foto_alturas_url: modoAltura === 'foto' ? fotoAlturasUrl : null,
+      largura_baixo_mm: parseFloat(larguraBaixo) || null,
+      largura_meio_mm: parseFloat(larguraMeio) || null,
+      largura_cima_mm: parseFloat(larguraCima) || null,
+      altura_direita_mm: parseFloat(alturaDireita) || null,
+      altura_meio_mm: parseFloat(alturaMeio) || null,
+      altura_esquerda_mm: parseFloat(alturaEsquerda) || null,
+      foto_larguras_url: fotoLargurasUrl,
+      foto_alturas_url: fotoAlturasUrl,
       campos_extras: valoresExtras,
     }
 
@@ -530,12 +625,12 @@ export default function DetalheMedicaoFinal() {
                   </div>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-2">
                   <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer ${fotoLargurasUrl ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
                     {enviandoFotoLargura ? (
                       <><Loader2 size={16} className="animate-spin" /> Enviando...</>
                     ) : fotoLargurasUrl ? (
-                      <><Check size={16} /> Foto enviada (trocar)</>
+                      <><Check size={16} /> Foto salva (trocar)</>
                     ) : (
                       <><Camera size={16} /> Foto da trena com as 3 larguras</>
                     )}
@@ -544,8 +639,11 @@ export default function DetalheMedicaoFinal() {
                       onChange={e => e.target.files?.[0] && enviarFotoLargura(e.target.files[0])}
                     />
                   </label>
+                  {fotoLargurasUrl && <a href={fotoLargurasUrl} target="_blank" rel="noreferrer" className="block text-center text-[11px] text-brand-navy hover:underline">Abrir foto salva</a>}
                 </div>
               )}
+
+              {statusLargura && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">{statusLargura}</p>}
 
               {alertaLargura && (
                 <p className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
@@ -590,12 +688,12 @@ export default function DetalheMedicaoFinal() {
                   </div>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-2">
                   <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer ${fotoAlturasUrl ? 'border-brand-teal text-brand-teal' : 'border-slate-300 text-slate-500'}`}>
                     {enviandoFotoAltura ? (
                       <><Loader2 size={16} className="animate-spin" /> Enviando...</>
                     ) : fotoAlturasUrl ? (
-                      <><Check size={16} /> Foto enviada (trocar)</>
+                      <><Check size={16} /> Foto salva (trocar)</>
                     ) : (
                       <><Camera size={16} /> Foto da trena com as 3 alturas</>
                     )}
@@ -604,8 +702,11 @@ export default function DetalheMedicaoFinal() {
                       onChange={e => e.target.files?.[0] && enviarFotoAltura(e.target.files[0])}
                     />
                   </label>
+                  {fotoAlturasUrl && <a href={fotoAlturasUrl} target="_blank" rel="noreferrer" className="block text-center text-[11px] text-brand-navy hover:underline">Abrir foto salva</a>}
                 </div>
               )}
+
+              {statusAltura && <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">{statusAltura}</p>}
 
               {alertaAltura && (
                 <p className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
@@ -626,7 +727,7 @@ export default function DetalheMedicaoFinal() {
                         {enviandoCampoExtraChave === c.chave ? (
                           <><Loader2 size={16} className="animate-spin" /> Enviando...</>
                         ) : valoresExtras[c.chave] ? (
-                          <><Check size={16} /> Foto enviada (trocar)</>
+                          <><Check size={16} /> Foto salva (trocar)</>
                         ) : (
                           <><Camera size={16} /> Tirar/enviar foto</>
                         )}
