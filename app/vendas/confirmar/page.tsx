@@ -32,6 +32,17 @@ function tipoInput(campo: CampoConfiguravel) {
   return 'text'
 }
 
+function itemEstruturadoValido(item: any) {
+  const ambiente = String(item?.ambiente || '').trim()
+  const descricao = String(item?.descricao || '').trim()
+  const tipoOutro = String(item?.tipo_outro_texto || '').trim()
+  const largura = Number(item?.largura_mm || 0)
+  const altura = Number(item?.altura_mm || 0)
+  const nomeGenerico = [ambiente, descricao, tipoOutro].some(valor => /^item\s+\d+$/i.test(valor))
+  const somenteOutro = String(item?.tipo_esquadria || '').toLowerCase() === 'outro' && !descricao && !tipoOutro
+  return !nomeGenerico && !somenteOutro && largura > 0 && altura > 0 && !!(ambiente || descricao || tipoOutro)
+}
+
 export default function ConfirmarVendaPage() {
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -67,8 +78,10 @@ export default function ConfirmarVendaPage() {
       setCamposConfigurados(campos)
       setOrcamentos(dados.orcamentosCliente)
       setSelecionadoId(dados.orcamentoAtual.id)
-      setClienteId(dados.cliente?.id || dados.orcamentoAtual.cliente_id)
+      const idCliente = dados.cliente?.id || dados.orcamentoAtual.cliente_id
+      setClienteId(idCliente)
       setCadastro(dados.dadosVenda)
+      setCadastroSalvo(!!idCliente)
       setCarregando(false)
     })
   }, [])
@@ -86,8 +99,10 @@ export default function ConfirmarVendaPage() {
   const faltantes = cadastro ? camposFaltantesCadastroVenda(cadastro, camposConfigurados) : []
   const itens = selecionado?.itens || []
   const anexos = selecionado?.anexos || []
+  const itensInvalidos = itens.filter(item => !itemEstruturadoValido(item))
+  const temPdf = anexos.some(a => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().split('?')[0].endsWith('.pdf'))
   const prontoCadastro = !!cadastro && faltantes.length === 0 && cadastroSalvo
-  const prontoItens = itens.length > 0
+  const prontoItens = itens.length > 0 && itensInvalidos.length === 0
 
   function atualizarCampo(chave: string, valor: string) {
     setCadastro(prev => prev ? { ...prev, [chave]: valor } : prev)
@@ -116,7 +131,7 @@ export default function ConfirmarVendaPage() {
       return
     }
     if (!prontoItens) {
-      setErro('O orçamento escolhido ainda não possui itens estruturados no Atlas.')
+      setErro('O orçamento escolhido possui itens incompletos ou genéricos. Reimporte o PDF antes de iniciar o processo.')
       return
     }
 
@@ -291,7 +306,7 @@ export default function ConfirmarVendaPage() {
                   <input type="radio" name="orcamento" checked={selecionadoId === o.id} onChange={() => { setSelecionadoId(o.id); setCadastroSalvo(false) }} className="mt-1" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-800">{tituloOrcamento(o)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Valor: R$ {(o.valor_estimado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {o.itens?.length || 0} item(ns) estruturado(s)</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Valor: R$ {(o.valor_estimado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {o.itens?.length || 0} item(ns) cadastrado(s)</p>
                   </div>
                 </div>
               </label>
@@ -306,7 +321,7 @@ export default function ConfirmarVendaPage() {
               <p className="text-xs text-slate-500">Esses dados serão a base da Medição Final e dos demais setores.</p>
             </div>
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${prontoItens ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-              {prontoItens ? `${itens.length} item(ns) prontos` : 'Itens ainda não estruturados'}
+              {prontoItens ? `${itens.length} item(ns) prontos` : itens.length > 0 ? `${itensInvalidos.length} item(ns) precisam revisão` : 'Itens ainda não estruturados'}
             </div>
           </div>
 
@@ -321,19 +336,27 @@ export default function ConfirmarVendaPage() {
                 </div>
               )}
 
-              {itens.length === 0 ? (
+              {!prontoItens ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                  <p className="font-medium">Este orçamento possui anexos, mas ainda não tem itens estruturados no Atlas.</p>
-                  <p className="mt-1 text-xs text-amber-800">Importe os itens do PDF ou abra o orçamento para cadastrar as peças manualmente. Assim que houver itens, o botão de iniciar o processo será liberado.</p>
+                  <p className="font-medium">
+                    {itens.length > 0
+                      ? 'Os itens existentes são antigos, genéricos ou estão sem medidas suficientes.'
+                      : 'Este orçamento possui anexos, mas ainda não tem itens estruturados no Atlas.'}
+                  </p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    {itens.length > 0
+                      ? 'Reimporte o PDF para substituir Item 1 / Outro pelos dados reais do orçamento W Vetro.'
+                      : 'Importe os itens do PDF ou abra o orçamento para cadastrar as peças manualmente.'}
+                  </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {anexos.some(a => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().split('?')[0].endsWith('.pdf')) && (
+                    {temPdf && (
                       <button
                         type="button"
                         onClick={importarItensDoPdf}
                         disabled={importandoItens}
                         className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                       >
-                        {importandoItens ? 'Importando itens...' : 'Importar itens do PDF'}
+                        {importandoItens ? 'Importando itens...' : itens.length > 0 ? 'Reimportar itens do PDF' : 'Importar itens do PDF'}
                       </button>
                     )}
                     <button
