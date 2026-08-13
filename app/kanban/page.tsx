@@ -663,9 +663,9 @@ return (
 </div>
 </header>
 
-<main className="max-w-7xl mx-auto px-4 py-6">
-<div className="flex flex-wrap items-center gap-2 mb-4">
-<div className="relative flex-1 min-w-[220px]">
+<main className="max-w-7xl mx-auto px-3 py-4 sm:px-4 sm:py-6">
+<div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 mb-4">
+<div className="relative w-full flex-1 min-w-0 sm:min-w-[220px]">
 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
 <input
 type="text"
@@ -679,7 +679,7 @@ className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-w
 type="date"
 value={filtroData}
 onChange={e => setFiltroData(e.target.value)}
-className="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
+className="w-full sm:w-auto border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
 />
 <select
 value={filtroTemperatura}
@@ -701,7 +701,7 @@ Limpar filtros
 )}
 </div>
 
-<div className="flex gap-4 overflow-x-auto pb-4">
+<div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-4 sm:mx-0 sm:gap-4 sm:px-0">
 {colunas.map((col, index) => {
 const cardsColuna = cardsDaColuna(col.id, index)
 return (
@@ -710,7 +710,7 @@ key={col.id}
 onDragOver={e => { e.preventDefault(); setColunaArrastando(col.id) }}
 onDragLeave={() => setColunaArrastando(null)}
 onDrop={e => handleDrop(e, col.id)}
-className={`flex-shrink-0 w-72 bg-slate-100 rounded-2xl p-3 transition ${
+className={`flex-shrink-0 w-[86vw] max-w-72 snap-start bg-slate-100 rounded-2xl p-3 transition ${
 colunaArrastando === col.id ? 'ring-2 ring-brand-navy bg-brand-navyLight' : ''
 }`}
 >
@@ -822,7 +822,7 @@ R$ {card.valor_estimado.toFixed(2)}
 
 <button
 onClick={novaColuna}
-className="flex-shrink-0 w-72 h-12 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-brand-navy hover:text-brand-navy transition"
+className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-brand-navy hover:text-brand-navy transition"
 >
 <Plus size={16} /> Nova coluna
 </button>
@@ -830,8 +830,8 @@ className="flex-shrink-0 w-72 h-12 flex items-center justify-center gap-2 rounde
 </main>
 
 {cardSelecionado && editando && (
-<div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-<div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+<div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+<div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
 <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
 <h3 className="font-bold text-slate-800">Editar orçamento</h3>
 <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
@@ -911,7 +911,7 @@ className="w-full border border-slate-300 rounded-xl p-3 text-sm"
 />
 </div>
 
-<div className="grid grid-cols-2 gap-3">
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 <div>
 <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Phone size={12} /> WhatsApp</label>
 <input
@@ -934,7 +934,7 @@ className="w-full border border-slate-300 rounded-xl p-3 text-sm"
 
 <div>
 <label className="block text-xs text-slate-500 mb-1">Cor / Acabamento</label>
-<div className="grid grid-cols-4 gap-2">
+<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
 {([
 { value: 'preto', label: 'Preto' },
 { value: 'branco', label: 'Branco' },
