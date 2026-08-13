@@ -6,27 +6,29 @@ import { Anexo, ItemEsquadria } from '@/lib/tipos'
 
 export const runtime = 'nodejs'
 
+function itemImportadoValido(it: Partial<ItemEsquadria>) {
+  const descricao = (it.descricao || '').trim()
+  const ambiente = (it.ambiente || '').trim()
+  const largura = Number(it.largura_mm || 0)
+  const altura = Number(it.altura_mm || 0)
+  const descricaoGenerica = /^item\s+\d+$/i.test(descricao) || /^item\s+\d+$/i.test(it.tipo_outro_texto || '')
+  return !!ambiente && !!descricao && !descricaoGenerica && largura > 0 && altura > 0
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || ''
     const token = authHeader.replace('Bearer ', '').trim()
-    if (!token) {
-      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
-    }
+    if (!token) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
 
     const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token)
-    if (userErr || !userData?.user) {
-      return NextResponse.json({ error: 'Sessao invalida' }, { status: 401 })
-    }
+    if (userErr || !userData?.user) return NextResponse.json({ error: 'Sessao invalida' }, { status: 401 })
 
     const body = await req.json()
     const orcamentoId = body?.orcamentoId
     const persistirOrcamento = body?.persistirOrcamento !== false
     const substituirMedicao = body?.substituirMedicao === true
-
-    if (!orcamentoId) {
-      return NextResponse.json({ error: 'orcamentoId e obrigatorio' }, { status: 400 })
-    }
+    if (!orcamentoId) return NextResponse.json({ error: 'orcamentoId e obrigatorio' }, { status: 400 })
 
     const { data: orcamento, error: erroOrcamento } = await supabaseAdmin
       .from('orcamentos')
@@ -34,61 +36,53 @@ export async function POST(req: NextRequest) {
       .eq('id', orcamentoId)
       .maybeSingle()
 
-    if (erroOrcamento || !orcamento) {
-      return NextResponse.json({ error: 'Orcamento nao encontrado' }, { status: 404 })
-    }
+    if (erroOrcamento || !orcamento) return NextResponse.json({ error: 'Orcamento nao encontrado' }, { status: 404 })
 
     const anexos: Anexo[] = orcamento.anexos || []
-    const anexoPdf = anexos.find((a) => {
+    const anexoPdf = anexos.find(a => {
       const nome = (a.nome || '').toLowerCase()
       const url = (a.url || '').toLowerCase().split('?')[0].split('#')[0]
       return nome.endsWith('.pdf') || url.endsWith('.pdf')
     })
-
-    if (!anexoPdf) {
-      return NextResponse.json({ error: 'Nenhum PDF encontrado nos anexos deste orcamento.' }, { status: 400 })
-    }
+    if (!anexoPdf) return NextResponse.json({ error: 'Nenhum PDF encontrado nos anexos deste orcamento.' }, { status: 400 })
 
     const resposta = await fetch(anexoPdf.url)
-    if (!resposta.ok) {
-      return NextResponse.json({ error: 'Nao foi possivel baixar o PDF anexado.' }, { status: 502 })
-    }
+    if (!resposta.ok) return NextResponse.json({ error: 'Nao foi possivel baixar o PDF anexado.' }, { status: 502 })
 
-    const arrayBuffer = await resposta.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-
+    const buffer = Buffer.from(await resposta.arrayBuffer())
     const pdfParse = (await import('pdf-parse')).default
     const dadosPdf = await pdfParse(buffer)
     const texto = dadosPdf.text || ''
 
     const itensParciais = parseItensDoTextoPdf(texto)
     if (itensParciais.length === 0) {
-      return NextResponse.json(
-        { error: 'Nao foi possivel identificar itens no PDF. Verifique o layout do anexo.' },
-        { status: 422 }
-      )
+      return NextResponse.json({ error: 'Nao foi possivel identificar itens no PDF. Verifique o layout do anexo.' }, { status: 422 })
     }
 
-    const itensCompletos: ItemEsquadria[] = itensParciais.map((it) => ({
+    const invalidos = itensParciais.filter(it => !itemImportadoValido(it))
+    if (invalidos.length > 0) {
+      return NextResponse.json({
+        error: `O PDF foi lido, mas ${invalidos.length} de ${itensParciais.length} item(ns) ficaram incompletos. A importacao foi cancelada para nao criar pecas genericas.`,
+        itens_identificados: itensParciais.length,
+        itens_incompletos: invalidos.length,
+      }, { status: 422 })
+    }
+
+    const itensCompletos: ItemEsquadria[] = itensParciais.map(it => ({
       id: uuidv4(),
       ambiente: it.ambiente,
       tipo_esquadria: it.tipo_esquadria || 'outro',
       tipo_outro_texto: it.tipo_outro_texto,
-      largura_mm: it.largura_mm || 0,
-      altura_mm: it.altura_mm || 0,
+      largura_mm: Number(it.largura_mm),
+      altura_mm: Number(it.altura_mm),
       quantidade: it.quantidade || 1,
       descricao: it.descricao,
+      cor: it.cor,
     }))
 
     if (persistirOrcamento) {
-      const { error: erroUpdate } = await supabaseAdmin
-        .from('orcamentos')
-        .update({ itens: itensCompletos })
-        .eq('id', orcamentoId)
-
-      if (erroUpdate) {
-        return NextResponse.json({ error: 'Erro ao salvar itens no orcamento.' }, { status: 500 })
-      }
+      const { error: erroUpdate } = await supabaseAdmin.from('orcamentos').update({ itens: itensCompletos }).eq('id', orcamentoId)
+      if (erroUpdate) return NextResponse.json({ error: 'Erro ao salvar itens no orcamento.' }, { status: 500 })
     }
 
     const { data: medicao } = await supabaseAdmin
@@ -108,32 +102,17 @@ export async function POST(req: NextRequest) {
       }))
 
       if (substituirMedicao) {
-        const { error: erroDelete } = await supabaseAdmin
-          .from('medicao_itens')
-          .delete()
-          .eq('medicao_id', medicao.id)
-
-        if (erroDelete) {
-          return NextResponse.json({ error: 'Erro ao preparar itens da medicao.' }, { status: 500 })
-        }
-
+        const { error: erroDelete } = await supabaseAdmin.from('medicao_itens').delete().eq('medicao_id', medicao.id)
+        if (erroDelete) return NextResponse.json({ error: 'Erro ao preparar itens da medicao.' }, { status: 500 })
         const { error: erroInsert } = await supabaseAdmin.from('medicao_itens').insert(linhas)
-        if (erroInsert) {
-          return NextResponse.json({ error: 'Erro ao sincronizar itens da medicao.' }, { status: 500 })
-        }
+        if (erroInsert) return NextResponse.json({ error: 'Erro ao sincronizar itens da medicao.' }, { status: 500 })
       } else {
-        const { count } = await supabaseAdmin
-          .from('medicao_itens')
-          .select('id', { count: 'exact', head: true })
-          .eq('medicao_id', medicao.id)
-
-        if (!count) {
-          await supabaseAdmin.from('medicao_itens').insert(linhas)
-        }
+        const { count } = await supabaseAdmin.from('medicao_itens').select('id', { count: 'exact', head: true }).eq('medicao_id', medicao.id)
+        if (!count) await supabaseAdmin.from('medicao_itens').insert(linhas)
       }
     }
 
-    return NextResponse.json({ itens: itensCompletos })
+    return NextResponse.json({ itens: itensCompletos, origem: /w\.vetro/i.test(texto) ? 'wvetro' : 'pdf' })
   } catch (e: any) {
     console.error('Erro ao importar itens do PDF:', e)
     return NextResponse.json({ error: 'Erro interno ao processar o PDF.' }, { status: 500 })
