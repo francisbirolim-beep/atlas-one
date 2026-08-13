@@ -24,7 +24,9 @@ export function parseItensDoTextoPdf(textoBruto: string): Partial<ItemEsquadria>
   const itens: Partial<ItemEsquadria>[] = []
   for (let i = 0; i < blocos.length; i++) {
     try {
-      const item = interpretarBlocoItem(blocos[i], i)
+      const bloco = blocos[i]
+      if (!bloco) continue
+      const item = interpretarBlocoItem(bloco, i)
       if (item) itens.push(item)
     } catch (e) {
       console.error('Erro ao interpretar item do PDF (bloco ignorado):', e)
@@ -43,6 +45,7 @@ function parseItensWVetro(linhas: string[]): Partial<ItemEsquadria>[] {
 
   for (let pos = 0; pos < marcadores.length; pos++) {
     const idxLocal = marcadores[pos]
+    if (idxLocal === undefined) continue
     const idxLinhaRotulo = acharAFrente(linhas, idxLocal, /^\*LINHA\s*:/i, 12)
     if (idxLinhaRotulo < 0) continue
 
@@ -70,15 +73,20 @@ function parseItensWVetro(linhas: string[]): Partial<ItemEsquadria>[] {
     const corAcessorio = valores[acessorioIdx]
     const vidro = valores[vidroIdx]
     const corEsquadria = valores[corIdx]
-    const descricaoProduto = valores.slice(descStart, idxMedidas).join(' ')
-    const linha = valores[idxLinhaValor].replace(/^L\.\s*/i, '').trim()
+    const linhaValor = valores[idxLinhaValor]
     const tipoCodigo = valores[idxTipoValor]
-    const numeros = valores[idxMedidas].match(/\d+(?:[.,]\d+)?/g) || []
-    if (numeros.length < 3) continue
+    const medidasValor = valores[idxMedidas]
+    if (!ambiente || !linhaValor || !medidasValor) continue
 
-    const quantidade = parseInt(numeros[0].replace(/\D/g, ''), 10) || 1
-    const largura_mm = numeroMedida(numeros[1])
-    const altura_mm = numeroMedida(numeros[2])
+    const descricaoProduto = valores.slice(descStart, idxMedidas).join(' ')
+    const linha = linhaValor.replace(/^L\.\s*/i, '').trim()
+    const numeros = medidasValor.match(/\d+(?:[.,]\d+)?/g) || []
+    const [quantidadeTexto, larguraTexto, alturaTexto] = numeros
+    if (!quantidadeTexto || !larguraTexto || !alturaTexto) continue
+
+    const quantidade = parseInt(quantidadeTexto.replace(/\D/g, ''), 10) || 1
+    const largura_mm = numeroMedida(larguraTexto)
+    const altura_mm = numeroMedida(alturaTexto)
     if (!largura_mm || !altura_mm) continue
 
     const descricao = [
@@ -107,7 +115,10 @@ function parseItensWVetro(linhas: string[]): Partial<ItemEsquadria>[] {
 }
 
 function acharAFrente(linhas: string[], inicio: number, rx: RegExp, limite: number) {
-  for (let i = inicio; i < Math.min(linhas.length, inicio + limite); i++) if (rx.test(linhas[i])) return i
+  for (let i = inicio; i < Math.min(linhas.length, inicio + limite); i++) {
+    const linha = linhas[i]
+    if (linha && rx.test(linha)) return i
+  }
   return -1
 }
 
@@ -116,14 +127,18 @@ function acharUltimo(linhas: string[], rx: RegExp) {
 }
 
 function acharUltimoAte(linhas: string[], fim: number, rx: RegExp) {
-  for (let i = fim; i >= 0; i--) if (rx.test(linhas[i])) return i
+  for (let i = fim; i >= 0; i--) {
+    const linha = linhas[i]
+    if (linha && rx.test(linha)) return i
+  }
   return -1
 }
 
 function acharInicioDescricao(valores: string[], idxMedidas: number) {
   const rxProduto = /(PORTA|JANELA|MAXIM|PORTINHOLA|FACHADA|PAINEL|REVESTIMENTO|VITR|BOX|GUARDA|LAMBRI)/i
   for (let i = idxMedidas - 1; i >= Math.max(0, idxMedidas - 8); i--) {
-    if (rxProduto.test(valores[i])) return i
+    const valor = valores[i]
+    if (valor && rxProduto.test(valor)) return i
   }
   return -1
 }
@@ -131,9 +146,11 @@ function acharInicioDescricao(valores: string[], idxMedidas: number) {
 function localizarBlocosPorTipoItem(linhas: string[]): string[][] {
   const inicios: number[] = []
   for (let i = 0; i < linhas.length; i++) {
-    if (!/^TIPO\s*:/i.test(linhas[i])) continue
+    const linha = linhas[i]
+    if (!linha || !/^TIPO\s*:/i.test(linha)) continue
     for (let j = i + 1; j < Math.min(i + 8, linhas.length); j++) {
-      if (/^ITEM(?:\s+\d+)?$/i.test(linhas[j])) { inicios.push(i); break }
+      const proxima = linhas[j]
+      if (proxima && /^ITEM(?:\s+\d+)?$/i.test(proxima)) { inicios.push(i); break }
     }
   }
   return criarBlocos(linhas, inicios)
@@ -141,22 +158,28 @@ function localizarBlocosPorTipoItem(linhas: string[]): string[][] {
 
 function localizarBlocosPorAmbiente(linhas: string[]): string[][] {
   const ambientes: number[] = []
-  for (let i = 0; i < linhas.length; i++) if (/^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i.test(linhas[i])) ambientes.push(i)
+  for (let i = 0; i < linhas.length; i++) {
+    const linha = linhas[i]
+    if (linha && /^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i.test(linha)) ambientes.push(i)
+  }
   return ambientes.map((idx, pos) => {
     const inicio = Math.max(0, idx - 12)
-    const proximo = pos + 1 < ambientes.length ? ambientes[pos + 1] : linhas.length
+    const proximo = pos + 1 < ambientes.length ? (ambientes[pos + 1] ?? linhas.length) : linhas.length
     return linhas.slice(inicio, proximo)
   })
 }
 
 function localizarBlocosPorItemNumerado(linhas: string[]): string[][] {
   const inicios: number[] = []
-  for (let i = 0; i < linhas.length; i++) if (/^ITEM\s+\d+$/i.test(linhas[i])) inicios.push(i)
+  for (let i = 0; i < linhas.length; i++) {
+    const linha = linhas[i]
+    if (linha && /^ITEM\s+\d+$/i.test(linha)) inicios.push(i)
+  }
   return criarBlocos(linhas, inicios)
 }
 
 function criarBlocos(linhas: string[], inicios: number[]): string[][] {
-  return inicios.map((inicio, idx) => linhas.slice(inicio, idx + 1 < inicios.length ? inicios[idx + 1] : linhas.length))
+  return inicios.map((inicio, idx) => linhas.slice(inicio, idx + 1 < inicios.length ? (inicios[idx + 1] ?? linhas.length) : linhas.length))
 }
 
 function interpretarBlocoItem(bloco: string[], indice: number): Partial<ItemEsquadria> | null {
@@ -195,17 +218,22 @@ function extrairQuantidadeEMedidas(bloco: string[]): { quantidade: number; largu
   const idxQtde = bloco.findIndex(l => /^QTDE\.?\s+/i.test(l) || /^QTDE\.$/i.test(l))
   if (idxQtde !== -1) {
     for (let i = idxQtde + 1; i < Math.min(idxQtde + 5, bloco.length); i++) {
-      const numeros = bloco[i].match(/\d+(?:[.,]\d+)?/g)
-      if (!numeros || numeros.length < 3) continue
-      const quantidade = parseInt(numeros[0].replace(/\D/g, ''), 10) || 1
-      const largura_mm = numeroMedida(numeros[1])
-      const altura_mm = numeroMedida(numeros[2])
+      const linha = bloco[i]
+      if (!linha) continue
+      const numeros = linha.match(/\d+(?:[.,]\d+)?/g)
+      if (!numeros) continue
+      const [quantidadeTexto, larguraTexto, alturaTexto] = numeros
+      if (!quantidadeTexto || !larguraTexto || !alturaTexto) continue
+      const quantidade = parseInt(quantidadeTexto.replace(/\D/g, ''), 10) || 1
+      const largura_mm = numeroMedida(larguraTexto)
+      const altura_mm = numeroMedida(alturaTexto)
       if (largura_mm && altura_mm) return { quantidade, largura_mm, altura_mm }
     }
   }
   const texto = bloco.join(' ')
   const m = texto.match(/(\d{2,5}(?:[.,]\d{3})?)\s*[xX×]\s*(\d{2,5}(?:[.,]\d{3})?)\s*(?:mm)?/i)
-  return m ? { quantidade: 1, largura_mm: numeroMedida(m[1]), altura_mm: numeroMedida(m[2]) } : { quantidade: 1 }
+  if (!m?.[1] || !m?.[2]) return { quantidade: 1 }
+  return { quantidade: 1, largura_mm: numeroMedida(m[1]), altura_mm: numeroMedida(m[2]) }
 }
 
 function numeroMedida(valor: string): number | undefined {
@@ -217,8 +245,9 @@ function numeroMedida(valor: string): number | undefined {
 
 function extrairAmbienteFormatoAtlas(bloco: string[]): string | undefined {
   const idx = bloco.findIndex(l => /^AMBIENTE\s+MEDIDAS\s+COR\s+VIDRO/i.test(l))
-  if (idx === -1 || !bloco[idx + 1]) return undefined
+  if (idx === -1) return undefined
   const linha = bloco[idx + 1]
+  if (!linha) return undefined
   const pos = linha.search(/\d{2,5}(?:[.,]\d{3})?\s*[xX×]/)
   return pos > 0 ? linha.slice(0, pos).trim() || undefined : undefined
 }
