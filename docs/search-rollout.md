@@ -1,0 +1,1 @@
+Padrao de busca: sem acentos, sem diferenca de caixa e com filtragem enquanto digita.
