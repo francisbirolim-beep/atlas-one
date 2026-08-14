@@ -52,6 +52,14 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - serializa liberacoes concorrentes do mesmo orcamento;
 - migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
+## Kanban — fotos coletadas em campo — 2026-08-13
+- a primeira coluna continua exigindo `Iniciar orçamento` antes da edicao;
+- cada esquadria passa a exibir todas as fotos vinculadas ao item antes dos campos de medidas;
+- a galeria consolida `foto_urls`, `foto_url`, `foto_larguras_url` e `foto_alturas_url` sem duplicar URLs;
+- o comando de foto passa a ser `Adicionar fotos`, aceitando multiplos arquivos e preservando as imagens anteriores;
+- clicar em uma miniatura abre a imagem em tamanho maior;
+- leitura automatica da trena continua fora deste ajuste.
+
 ## Pontos funcionais ainda pendentes
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
 - MEE/calculos automaticos, perfis/acessorios, lista de materiais, lista de corte e otimizacao.

@@ -2,11 +2,13 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-11, `main` apos PR #73 e migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada.
+Verificado em: 2026-08-13, `main` apos PR #104; branch atual adiciona galeria de fotos por esquadria no Kanban.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
 - Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
+- No primeiro estagio do Kanban, qualquer pedido exige `Iniciar orçamento`; pedidos ja iniciados mostram `Retornar orçamento`.
+- Fotos do pedido sao preservadas ao abrir o Kanban, consolidando referencias em `foto_url`, `foto_urls`, `foto_larguras_url` e `foto_alturas_url`.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - CI Supabase via Session Pooler IPv4 com audit/dry-run em PR.
@@ -17,6 +19,13 @@ Verificado em: 2026-08-11, `main` apos PR #73 e migration `20260811200000_engenh
 - PR #69: conferencia tecnica persistente por peca e bloqueio de liberacao incompleta.
 - PR #73: liberacao real Engenharia -> Producao, com registro de quem liberou/quando e criacao/atualizacao idempotente do card em `producao_itens`.
 - Migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
+
+## AJUSTE EM VALIDACAO NESTA BRANCH
+- Galeria `Fotos coletadas em campo` dentro de cada esquadria, antes dos campos de medidas.
+- Exibe todas as URLs disponiveis do item, sem duplicacao.
+- `Adicionar fotos` aceita multiplos arquivos e acrescenta as novas imagens sem apagar as anteriores.
+- Clique na miniatura abre a foto maior.
+- Nao inclui leitura automatica de trena nesta etapa.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.

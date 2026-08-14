@@ -3,6 +3,19 @@
 ## TAREFA ATUAL
 A Engenharia Fase 4 foi concluida no PR #73 e a migration `20260811200000_engenharia_liberacao_producao_v1.sql` foi aplicada e validada no Supabase.
 
+Em paralelo, o Kanban comercial recebeu a restauracao do fluxo `Iniciar orçamento` no PR #104. A branch atual `fix/kanban-galeria-fotos-campo-v2` organiza as fotos coletadas em campo por esquadria.
+
+## VALIDAR ANTES DE ENCERRAR O AJUSTE DO KANBAN
+1. Criar um pedido com duas ou mais fotos na mesma esquadria.
+2. Abrir o card em `Fazer orçamento` e clicar em `Iniciar orçamento`.
+3. Confirmar que a secao `Fotos coletadas em campo` aparece antes das medidas.
+4. Confirmar que todas as fotos do item aparecem em miniaturas.
+5. Clicar em uma miniatura e confirmar abertura maior.
+6. Usar `Adicionar fotos` com um ou mais arquivos.
+7. Salvar, fechar e reabrir o card.
+8. Confirmar que fotos antigas e novas continuam presentes.
+9. Nao incluir leitura automatica da trena nesta validacao.
+
 ## PROXIMA TAREFA — ENGENHARIA FASE 5
 Criar a base de receitas tecnicas por tipologia, preparando o MEE sem implementar todo o calculo automatico de uma vez.
 
@@ -29,6 +42,7 @@ Escopo recomendado:
 - Engenharia Fase 2 PR #66: rota `/engenharia`, KPIs, quatro etapas e detalhe das pecas.
 - Engenharia Fase 3 PR #69: conferencia tecnica persistente e bloqueio de liberacao incompleta.
 - Engenharia Fase 4 PR #73: liberacao transacional para Producao, registro de quem/quando e card de Producao idempotente; migration aplicada.
+- Kanban PR #104: primeira coluna volta a exigir `Iniciar orçamento` e preserva referencias de foto do pedido.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
