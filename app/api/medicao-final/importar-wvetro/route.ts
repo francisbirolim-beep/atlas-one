@@ -90,8 +90,13 @@ export async function POST(req: NextRequest) {
 
     const clienteNome = String(formData.get('cliente_nome') || resumo.cliente_nome || '').trim()
     const cidade = String(formData.get('cidade') || resumo.cidade || '').trim()
-    const criadoPorId = String(formData.get('criado_por_id') || '').trim() || null
-    const criadoPorNome = String(formData.get('criado_por_nome') || '').trim() || null
+    const { data: usuarioAtlas } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome')
+      .eq('id', user.id)
+      .maybeSingle()
+    const criadoPorId = user.id
+    const criadoPorNome = usuarioAtlas?.nome || user.email || null
 
     if (!clienteNome) {
       return NextResponse.json({ error: 'Confirme o nome do cliente antes de criar a Medição Final.' }, { status: 422 })
