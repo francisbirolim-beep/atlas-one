@@ -58,19 +58,38 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - exibe confirmacao formatada em BRL e mantem o campo editavel para conferencia;
 - PDF real de referencia: `FRANCIS TESTE-977.pdf` -> `R$ 2.716,84`.
 
+## Kanban — moeda BRL e reenvio individual de anexos — PR #111 — 2026-08-13
+- corrige card e PDF Atlas para `R$ 2.716,84` em vez de `R$ 2716.84`;
+- campo de valor passa a aceitar digitacao apenas numerica com mascara de moeda brasileira;
+- valores de itens no PDF tambem usam formatacao BRL;
+- cada anexo pode ser enviado/reententado individualmente pelo WhatsApp do vendedor.
+
+## Medicao Final — importar orçamento W.Vetro — PR #112 — 2026-08-14
+- adiciona `Importar orçamento W.Vetro` dentro do modal `Nova medição`, preservando o fluxo existente de selecionar um orçamento vendido do Atlas;
+- cria parser dedicado `lib/wvetroPdf.ts` para numero do orçamento, cliente, cidade/UF, total e itens com dados tecnicos disponiveis no PDF;
+- cria rota autenticada server-side `POST /api/medicao-final/importar-wvetro` com duas etapas: `preview` e `confirmar`;
+- a pre-visualizacao deixa conferir/corrigir cliente e cidade antes de gravar;
+- ambiente vazio no W.Vetro e permitido e fica explicitamente sinalizado;
+- ao confirmar, preserva o PDF original, cria um orçamento de apoio e a Medicao Final com todos os itens reconhecidos;
+- largura/altura do orçamento sao apenas referencia; as 3 larguras e 3 alturas de Medicao Final permanecem vazias para medicao real em obra;
+- bloqueia duplicacao quando o numero do orçamento W.Vetro e reconhecido;
+- PDF limitado a 15 MB e operacoes intermediarias possuem limpeza de rollback quando possivel;
+- Build Validation run #82 passou antes da atualizacao de documentacao; validar novamente o head final da PR antes do merge;
+- ainda exige teste funcional real com `FRANCIS TESTE-977.pdf`.
+
+## W.Vetro API — levantamento de integracao — 2026-08-14
+- foram mapeados endpoints publicos para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
+- decisao de arquitetura: futura integracao deve ser server-side e Atlas continua sendo a fonte da verdade;
+- preferir API/JSON estruturado para dados W.Vetro quando estiver autenticada e validada, mantendo PDF como documento original/fallback;
+- ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
+
 ## Pontos funcionais ainda pendentes
-- Formatar o valor no PDF Atlas em padrao brasileiro.
-- Adicionar botao `Enviar ao vendedor` / `Reenviar` em cada anexo.
+- Validar PR #112 em producao com PDF W.Vetro real e confirmar que dimensoes do orçamento nao viram medidas finais.
 - Criar `Configurações -> Orçamento` para dados e textos configuraveis do documento.
 - Gerar `Orçamento Atlas` profissional e depois evoluir para espelho do PDF W.Vetro, com leitura estruturada + revisao.
+- Criar conector W.Vetro API somente leitura, depois de obter credenciais/teste e exemplos de resposta.
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
 - MEE/calculos automaticos, perfis/acessorios, lista de materiais, lista de corte e otimizacao.
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
 - Regras condicionais/foto obrigatoria do checklist V2 ainda pendentes.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
-
-## Kanban — moeda BRL e reenvio individual de anexos — 2026-08-13
-- corrige card e PDF Atlas para `R$ 2.716,84` em vez de `R$ 2716.84`;
-- campo de valor passa a aceitar digitacao apenas numerica com mascara de moeda brasileira;
-- valores de itens no PDF tambem usam formatacao BRL;
-- cada anexo pode ser enviado/reententado individualmente pelo WhatsApp do vendedor.
