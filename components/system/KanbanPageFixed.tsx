@@ -18,6 +18,7 @@ import { lerCorAssistencia } from '@/lib/configGeral'
 import { bateBusca } from '@/lib/texto'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
+import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 
 let tipoLabels: Record<string, string> = {}
 
@@ -1158,6 +1159,12 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 )}
 <p className="text-[10px] text-slate-400">Largura e altura ficam identificadas pela foto original de cada medicao. Clique para abrir maior.</p>
 </div>
+{editando.tipo_medida === 'final' && (item.foto_larguras_url || item.foto_alturas_url) && (
+<LeituraTrenaIA
+item={item}
+onAtualizar={(campo, valor) => atualizarItemEdit(item.id, campo, valor)}
+/>
+)}
 {editando.tipo_medida === 'final' ? (
 <div className="space-y-2">
 <div>
