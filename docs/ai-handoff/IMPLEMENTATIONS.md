@@ -87,7 +87,7 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - layouts que realmente trazem largura/altura mantem o comportamento anterior: dimensoes apenas como referencia;
 - merge em `main`: `44ce91c5281ec0686ed8db3d1732634cc722498a`.
 
-## Medicao Final — identificacao, telefone do responsavel e dados manuais da empresa — branch fix/medicao-link-telefone-responsavel — 2026-08-14
+## Medicao Final — identificacao, telefone do responsavel e dados manuais da empresa — PR #114 — 2026-08-14
 - nova faixa `Identificação da Medição Final` mostra `Cliente`, `Nome da obra` e `Orçamento` no topo da tela detalhada;
 - nova rota autenticada `GET /api/medicao-final/[id]/identificacao` busca o cliente e o orçamento vinculado;
 - quando a origem e W.Vetro, o numero externo do marcador `Importado do W.Vetro | Orçamento N` tem prioridade sobre o serial interno do Atlas;
@@ -96,7 +96,16 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - nome externo ou usuario sem WhatsApp continua permitindo telefone manual;
 - o nome do medidor oferece sugestoes dos usuarios cadastrados;
 - `lerDadosEmpresa()` passa a ignorar registro legado/seedado sem marcador de configuracao manual;
-- `salvarDadosEmpresa()` grava `configuradoManualmente: true`, garantindo que apenas informacoes efetivamente salvas pelo usuario sejam carregadas nas telas que usam essa configuracao.
+- `salvarDadosEmpresa()` grava `configuradoManualmente: true`, garantindo que apenas informacoes efetivamente salvas pelo usuario sejam carregadas nas telas que usam essa configuracao;
+- merge em `main`: `5af697bc154720435b1281c05034888e7a84fba0`.
+
+## Medicao Final — corrigir Cliente/Cidade no preview W.Vetro — branch fix/wvetro-cliente-cidade-preview — 2026-08-14
+- teste real do `FELIPE ALVES SANTANA-861.pdf` mostrou o preview com Cliente `CELULARTEL. FIXO:` e Cidade `396 JOSE BONIFACIO - SP`;
+- o PDF tem o nome real logo apos `Cep Numero: 861`: `FELIPE ALVES SANTANA (11)94641-2756`;
+- o texto extraido tambem contem `CEP: 15202-396 JOSE BONIFACIO/SP -`, e o parser antigo tratava o hifen do CEP como separador de cidade;
+- `extrairCliente` passa a priorizar o nome imediatamente apos a linha do numero do orçamento e `nomePossivelCliente` rejeita rotulos de cabecalho como CELULAR/TEL/FIXO/CONTATO;
+- `extrairCidadeUf` passa a reconhecer primeiro `CEP + cidade/UF` e remover o CEP antes de usar fallbacks;
+- resultado esperado no preview 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, mantendo os 7 itens.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 - foram mapeados endpoints publicos para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
@@ -105,7 +114,8 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
 
 ## Pontos funcionais ainda pendentes
-- Validar em producao a faixa Cliente/Obra/Orçamento e o preenchimento automatico do telefone do responsavel.
+- Validar em producao o preview corrigido de `FELIPE ALVES SANTANA-861.pdf`: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
+- Validar a faixa Cliente/Obra/Orçamento e o preenchimento automatico do telefone do responsavel.
 - Confirmar que `Cadastro > Dados da Empresa` fica vazio ate o usuario salvar configuracao manual.
 - Continuar o teste da Medicao Final `861` e fazer regressao com `FRANCIS TESTE-977.pdf`.
 - Criar `Configurações -> Orçamento` para dados e textos configuraveis do documento.
