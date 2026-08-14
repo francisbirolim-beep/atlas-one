@@ -1,44 +1,55 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar a branch `fix/wvetro-cliente-rotulo-concatenado`, criada depois do teste real do preview do PDF `FELIPE ALVES SANTANA-861.pdf`.
+Validar a PR #119 / branch `feat/medicao-final-medidas-fixas`.
 
-A PR #117 ja esta em `main` e resolveu a exibicao do registro interno `CELULARTEL. FIXO:` no bloco `OU USAR ORÇAMENTO DO ATLAS` antes de selecionar um PDF.
+O teste real do PDF `FELIPE ALVES SANTANA-861.pdf` confirmou que a PR #118 corrigiu o cabecalho: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
 
-Depois disso, o usuario confirmou que ao selecionar o PDF 861 o preview ainda mostrou:
-- Cliente `CELULARTEL. FIXO:`;
-- Cidade `JOSE BONIFACIO - SP`;
-- 7 itens.
+O usuario pediu agora que toda peça da Medicao Final tenha um bloco fixo, independente das configuracoes de checklist, contendo:
+- 3 larguras: baixo, meio, cima;
+- 3 alturas: direita, meio, esquerda;
+- foto da trena da largura;
+- foto da trena da altura.
 
-O arquivo real confirma que o cliente correto e `FELIPE ALVES SANTANA`. O cabecalho contem `Cep Numero: 861`, depois `FELIPE ALVES SANTANA (11)94641-2756` e os rotulos `CLIENTE: TEL. FIXO: CELULAR`.
+Tambem foi definido que, quando a Medicao Final vier de um orçamento Atlas realmente marcado como `tipo_medida=final`, as medidas finais e fotos ja registradas no orçamento devem ser reaproveitadas automaticamente. Orçamento comum/referencia nunca deve preencher esses seis campos.
 
-Causa: o `pdf-parse` pode concatenar rotulos como `CELULARTEL. FIXO:`. A validacao anterior dependia de limite de palavra e podia aceitar essa linha falsa como nome. A branch atual rejeita linhas que tenham dois ou mais rotulos conhecidos concatenados, sem bloquear nomes reais apenas por comecarem com `TEL`.
+## IMPLEMENTADO NA PR #119
+1. `MedicaoChecklistV2Panel` ganhou secao fixa `Medidas finais da peça` antes do checklist configuravel.
+2. Fotos LARGURA/ALTURA possuem area propria, preview e troca.
+3. As seis medidas salvam diretamente em `medicao_itens`.
+4. A peça fica `medido=true` somente quando as seis medidas sao positivas.
+5. O seletor de peças exibe `Medidas completas` / `Medidas pendentes`.
+6. `herdarMedidasFinaisDoOrcamento()` reaproveita dados de orçamento `tipo_medida=final` sem inventar nem sobrescrever valores.
+7. A heranca e conservadora e so pareia automaticamente quando a quantidade de linhas da Medicao Final corresponde aos itens do orçamento.
+8. PDF W.Vetro e orçamento `tipo_medida=comum` continuam sem preencher as seis medidas finais automaticamente.
 
 ## VALIDAR ANTES DO MERGE
 1. Confirmar Build Validation verde no head final.
-2. Usar `FELIPE ALVES SANTANA-861.pdf`.
-3. Abrir `Medida Final` -> `Nova medição`.
-4. Antes de selecionar PDF, confirmar que `CELULARTEL. FIXO:` nao aparece em `OU USAR ORÇAMENTO DO ATLAS`.
-5. Selecionar o PDF 861.
-6. Confirmar no preview:
-   - Cliente `FELIPE ALVES SANTANA`;
-   - Cidade `JOSE BONIFACIO - SP`;
-   - `7 item(ns)`;
-   - nenhuma linha de rotulo `CELULAR`, `TEL. FIXO`, `CLIENTE`, etc. usada como nome.
-7. Conferir que os 7 itens continuam iguais ao teste anterior.
-8. Confirmar que a ausencia de largura/altura continua aparecendo como ausencia de medida, sem inventar dimensoes.
-9. Confirmar e criar a Medicao Final.
-10. Abrir a medicao criada e conferir Cliente/Obra/Orçamento.
-11. Fazer regressao com `FRANCIS TESTE-977.pdf`.
+2. Abrir uma Medicao Final criada pelo PDF `FELIPE ALVES SANTANA-861.pdf`.
+3. Confirmar que cada uma das 7 peças mostra sempre:
+   - foto LARGURA;
+   - foto ALTURA;
+   - Largura Baixo / Meio / Cima;
+   - Altura Direita / Meio / Esquerda.
+4. Confirmar que, no PDF 861, os seis campos iniciam vazios porque o documento nao fornece Medida Final.
+5. Digitar as seis medidas em uma peça e salvar.
+6. Reabrir/recarregar e confirmar persistencia dos seis valores.
+7. Confirmar que a peça muda para `Medidas completas` e passa a contar no progresso somente quando as seis medidas estiverem preenchidas.
+8. Apagar/deixar vazia uma das seis medidas, salvar e confirmar retorno para pendente.
+9. Tirar/subir foto da trena de largura e altura; confirmar preview e persistencia depois de recarregar.
+10. Testar troca das duas fotos.
+11. Criar/usar um orçamento Atlas com `tipo_medida=final` e medidas/fotos ja registradas; criar a Medicao Final e confirmar que o bloco abre ja preenchido com exatamente esses dados.
+12. Confirmar que um orçamento Atlas `tipo_medida=comum` nao herda medidas finais.
+13. Fazer regressao com `FRANCIS TESTE-977.pdf` e confirmar que dimensoes de referencia do PDF nao preenchem as seis medidas finais.
 
-## DEPOIS DESTA CORRECAO
-1. Continuar o teste de campo da Medicao Final 861.
-2. Validar faixa Cliente/Obra/Orçamento e telefone automatico do responsavel.
-3. Confirmar que `Cadastro > Dados da Empresa` fica vazio ate o usuario salvar configuracao manual.
-4. Criar a area `Configurações -> Orçamento` para dados da empresa, validade, pagamento, prazo, garantia, observacoes e rodape.
-5. Fazer todos os PDFs Atlas consumirem somente configuracoes salvas pelo usuario.
-6. Melhorar o layout profissional do PDF Atlas.
-7. Iniciar o conector W.Vetro API em modo SOMENTE LEITURA quando houver credencial/ambiente de teste e exemplos reais de responses.
+## DEPOIS DESTA VALIDACAO
+1. Continuar teste de campo completo da Medicao Final 861.
+2. Avaliar se a foto da trena dentro da Medicao Final tambem deve disparar automaticamente a leitura por IA, como ja acontece no Kanban.
+3. Validar faixa Cliente/Obra/Orçamento e telefone automatico do responsavel.
+4. Confirmar que `Cadastro > Dados da Empresa` fica vazio ate o usuario salvar configuracao manual.
+5. Criar `Configurações -> Orçamento` para validade, pagamento, prazo, garantia, observacoes, rodape e demais dados do PDF Atlas.
+6. Melhorar layout profissional do PDF Atlas.
+7. Iniciar conector W.Vetro API em modo SOMENTE LEITURA quando houver credencial/ambiente de teste e responses reais.
 
 ## PRIORIDADES DA FUTURA API W.VETRO
 - `Produtos/linhas`;
@@ -68,17 +79,19 @@ Preservar IDs/codigos W.Vetro e JSON bruto em futura camada de integracao; Atlas
 - PR #112: importacao de orçamento W.Vetro diretamente em `Nova medição`.
 - PR #113: importacao de W.Vetro sem largura/altura, sem inventar dimensoes.
 - PR #114: identificacao Cliente/Obra/Orçamento, telefone do responsavel e dados da empresa somente manuais.
-- PR #115: primeira correcao de Cliente e Cidade no preview do PDF 861.
-- PR #116: reaproveitamento/reparo de orçamento de apoio W.Vetro antigo sem Medicao Final.
+- PR #115: primeira correcao de Cliente/Cidade no preview do PDF 861.
+- PR #116: reaproveitamento/reparo de apoio W.Vetro antigo sem Medicao Final.
 - PR #117: ocultacao dos apoios W.Vetro do seletor de orcamentos Atlas.
+- PR #118: rejeicao de rotulos concatenados no Cliente; preview 861 validado corretamente.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`; branch -> PR -> build valido -> merge.
 - PDF W.Vetro original deve ser preservado.
-- Falta de largura/altura no PDF nao e motivo para descartar uma esquadria identificavel.
 - Nunca inventar dimensao ausente.
-- Medida do orçamento W.Vetro nunca deve preencher automaticamente as seis medidas finais da obra.
+- Medida comum/referencia de orçamento W.Vetro nunca preenche automaticamente as seis medidas finais.
+- Heranca automatica das seis medidas so ocorre para orçamento Atlas explicitamente `tipo_medida=final`.
+- Nao sobrescrever medida/foto ja salva na Medicao Final com dado herdado do orçamento.
 - Duplicidade W.Vetro so deve bloquear quando ja existir Medicao Final vinculada ao mesmo orçamento externo.
 - Orçamentos de apoio W.Vetro nao pertencem ao seletor `OU USAR ORÇAMENTO DO ATLAS`.
 - Rotulos de cabecalho concatenados nunca devem ser aceitos como nome de cliente.
