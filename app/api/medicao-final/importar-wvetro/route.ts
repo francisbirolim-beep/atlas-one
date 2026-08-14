@@ -85,7 +85,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (acao === 'preview') {
-      return NextResponse.json({ resumo })
+      const resumoPreview = {
+        ...resumo,
+        itens: resumo.itens.map(item => (
+          item.largura_mm > 0 && item.altura_mm > 0
+            ? item
+            : { ...item, largura_mm: '—', altura_mm: '—' }
+        )),
+      }
+      return NextResponse.json({ resumo: resumoPreview })
     }
 
     if (acao !== 'confirmar') {
