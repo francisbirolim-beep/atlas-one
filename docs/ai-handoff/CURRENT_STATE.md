@@ -2,20 +2,19 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #116 (`09514a5feb16a89d333e343732c3bcf873cba4c4`). A branch atual `fix/ocultar-apoio-wvetro-seletor-atlas` corrige a exibicao indevida de orcamentos internos de apoio W.Vetro no bloco `OU USAR ORÇAMENTO DO ATLAS`.
+Verificado em: 2026-08-14. `main` esta no merge da PR #117 (`7a16d4161174ab4ddd78151da9d99b6946364c14`). A branch atual `fix/wvetro-cliente-rotulo-concatenado` corrige o nome do cliente no preview W.Vetro quando o `pdf-parse` funde rotulos do cabecalho sem espacos.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
 - Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
-- No primeiro estagio do Kanban, qualquer pedido exige `Iniciar orçamento`; pedidos ja iniciados mostram `Retornar orçamento`.
-- Fotos do pedido sao preservadas ao abrir o Kanban.
 - PRs #105 a #108: fotos de campo, identificacao LARGURA/ALTURA, leitura por IA da trena/laser e correcao Baixo/Cima da largura.
 - PRs #109 a #111: anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual de anexos.
 - PR #112: `Nova medição` permite importar PDF W.Vetro, revisar e criar a Medicao Final preservando o PDF original.
 - PR #113: PDFs W.Vetro sem largura/altura deixam de ser rejeitados; nenhuma dimensao e inventada.
 - PR #114: faixa Cliente/Obra/Orçamento; telefone do responsavel pelo WhatsApp cadastrado; dados da empresa somente quando salvos manualmente.
-- PR #115: parser do preview W.Vetro prioriza o nome real do cliente e limpa o CEP da cidade; referencia `FELIPE ALVES SANTANA-861.pdf` -> Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`.
-- PR #116: se existir um orçamento de apoio W.Vetro antigo sem Medicao Final, a nova importacao pode reaproveita-lo e corrigi-lo; duplicidade so bloqueia quando ja existe Medicao Final vinculada.
+- PR #115: parser do preview W.Vetro passou a priorizar nome real do cliente e limpar CEP da cidade.
+- PR #116: orçamento de apoio W.Vetro antigo sem Medicao Final pode ser reaproveitado/reparado; duplicidade so bloqueia quando ja existe Medicao Final vinculada.
+- PR #117: registros internos de apoio W.Vetro deixam de aparecer em `OU USAR ORÇAMENTO DO ATLAS`, sem serem apagados do banco.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
@@ -24,27 +23,36 @@ Verificado em: 2026-08-14. `main` esta no merge da PR #116 (`09514a5feb16a89d333
 - Engenharia Fases 1 a 4 concluidas: entrada apos Medicao Final, conferencia tecnica e liberacao transacional para Producao.
 - Cadastro tecnico de linhas existe em `linhas_tecnicas`, com relacionamentos `linha_produtos` e `linha_tipologias`.
 
-## EM VALIDACAO — OCULTAR APOIOS W.VETRO DO SELETOR DE ORCAMENTOS ATLAS
-Novo teste visual em producao, mesmo depois da PR #116, mostrou que ao simplesmente abrir `Nova medição` o bloco `OU USAR ORÇAMENTO DO ATLAS` ainda exibe um card antigo com:
-- Cliente `CELULARTEL. FIXO:`;
-- Cidade `396 JOSE BONIFACIO - SP`.
+## EM VALIDACAO — CLIENTE W.VETRO COM ROTULOS CONCATENADOS
+Teste real em producao apos a PR #117 confirmou:
+- antes de selecionar PDF, o card interno `CELULARTEL. FIXO:` sumiu corretamente do seletor Atlas;
+- ao selecionar `FELIPE ALVES SANTANA-861.pdf`, o preview ainda exibiu Cliente `CELULARTEL. FIXO:`;
+- a Cidade ja ficou correta: `JOSE BONIFACIO - SP`;
+- os 7 itens continuam reconhecidos.
 
-A causa esta em `listarOrcamentosSemMedicao()` (`lib/medicaoFinal.ts`): esse seletor lista todos os orcamentos que estao em coluna de venda e ainda nao possuem Medicao Final, sem distinguir um orçamento comercial real do Atlas de um orçamento interno de apoio criado pela importacao W.Vetro.
+O texto real do PDF confirma a sequencia de cabecalho:
+- `Cep Numero: 861`;
+- `FELIPE ALVES SANTANA (11)94641-2756`;
+- depois os rotulos `CLIENTE: TEL. FIXO: CELULAR`.
 
-A branch `fix/ocultar-apoio-wvetro-seletor-atlas`:
-- inclui `descricao_livre` na consulta usada pelo seletor;
-- identifica como apoio W.Vetro qualquer registro cujo marcador comece por `Importado do W.Vetro |`;
-- remove esses registros apenas da lista `OU USAR ORÇAMENTO DO ATLAS`;
-- nao apaga nem altera o registro no banco;
-- o importador W.Vetro continua podendo localizar/reaproveitar o apoio antigo pelo marcador externo;
-- orcamentos comerciais reais do Atlas continuam aparecendo normalmente quando vendidos e sem Medicao Final.
+Causa identificada em `lib/wvetroPdf.ts`:
+- o `pdf-parse` pode fundir rotulos em uma linha como `CELULARTEL. FIXO:`;
+- a validacao anterior rejeitava `CELULAR` apenas quando havia limite de palavra depois do termo;
+- em `CELULARTEL...`, esse limite nao existe e a linha podia ser aceita como um nome plausivel antes de chegar ao nome real.
 
-Resultado esperado: abrir `Nova medição` e o card `CELULARTEL. FIXO:` nao aparecer mais, mesmo antes de selecionar qualquer PDF.
+A branch atual reforca `nomePossivelCliente()`:
+- normaliza acentos, pontuacao e espacos;
+- detecta quando dois ou mais rotulos conhecidos de cabecalho aparecem concatenados (`CELULAR` + `TELFIXO`, `CLIENTE` + `TELFIXO`, etc.);
+- rejeita essas linhas como nome de cliente;
+- preserva nomes reais que apenas comecam parecido com um rotulo, por exemplo `TELMA`, evitando um bloqueio generico por prefixo `TEL`;
+- nao altera cidade, itens, medidas, PDF original nem fluxo de confirmacao.
+
+Resultado esperado no PDF 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
 
 ## W.VETRO — REFERENCIA FUNCIONAL
 `FELIPE ALVES SANTANA-861.pdf`:
 - orçamento `861`;
-- cliente `FELIPE ALVES SANTANA`;
+- cliente esperado `FELIPE ALVES SANTANA`;
 - nome da obra `CASA`;
 - cidade `JOSE BONIFACIO / SP`;
 - 7 itens;
@@ -68,7 +76,7 @@ Resultado esperado: abrir `Nova medição` e o card `CELULARTEL. FIXO:` nao apar
 - Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- Filtro dos orcamentos internos de apoio W.Vetro no seletor `OU USAR ORÇAMENTO DO ATLAS` da branch atual.
+- Rejeicao de rotulos de cabecalho W.Vetro concatenados no campo Cliente da branch atual.
 - Confirmacao de Venda Fase 1.
 - Importacao generica de itens via PDF; layouts W.Vetro podem variar e precisam de validacao por amostras reais.
 - Modulo de IA/agente existe, mas nao foi auditado a fundo.
