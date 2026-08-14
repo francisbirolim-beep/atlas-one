@@ -9,9 +9,9 @@ Cadastros, Kanban de orcamentos, Orcamento Rapido/Balcao, tipologias dinamicas e
 Session Pooler IPv4, audit/dry-run em PR, historico local/remoto reconciliado e migrations operacionais controladas.
 
 ## Medicao Final V2 — PRs #54 a #56
-- #54: responsavel, status operacional, liberar/iniciar/concluir/aprovar, pendencias e bloqueios.
-- #55: checklist normalizado por peca/tipologia/secao, respostas e fotos categorizadas.
-- #56: link externo seguro com token-hash, expiracao/revogacao, medidas, checklist, fotos e conclusao para revisao.
+- responsavel, status operacional, liberar/iniciar/concluir/aprovar, pendencias e bloqueios;
+- checklist normalizado por peca/tipologia/secao, respostas e fotos categorizadas;
+- link externo seguro com token-hash, expiracao/revogacao, medidas, checklist, fotos e conclusao para revisao.
 
 ## Build Validation — GitHub Actions
 Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript independentemente da Vercel.
@@ -22,54 +22,48 @@ Home executiva, Sidebar, Kanban Comercial, Central/Pesquisa de Orcamentos, Medic
 ## Engenharia Fases 1 a 4 — PRs #64, #66, #69 e #73
 Entrada automatica apos Medicao Final aprovada, rota `/engenharia`, conferencia tecnica e liberacao transacional/idempotente para Producao.
 
-## Kanban — fotos e trena — PRs #104 a #108 — 2026-08-13
-- fotos de campo e identificacao LARGURA/ALTURA;
-- leitura por IA da trena/laser;
-- #108 corrige inversao Baixo/Cima da largura em teste real.
-
-## Kanban — W.Vetro, total e moeda — PRs #109 a #111 — 2026-08-13
-Anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual de anexos.
+## Kanban — fotos, trena e W.Vetro — PRs #104 a #111 — 2026-08-13
+Fotos de campo, leitura por IA da trena, correcao Baixo/Cima, anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual.
 
 ## Medicao Final — importacao W.Vetro — PRs #112 a #118 — 2026-08-14
-- #112: importar PDF W.Vetro em `Nova medição`, preview, preservacao do original e criacao da Medicao Final;
-- #113: aceita PDFs sem largura/altura sem inventar dimensoes;
-- #114: Cliente/Obra/Orçamento, telefone do responsavel e dados da empresa somente manuais;
-- #115: primeira correcao de Cliente/Cidade no PDF 861;
-- #116: reaproveita apoio W.Vetro antigo sem Medicao Final;
-- #117: apoios W.Vetro deixam de aparecer no seletor Atlas;
-- #118: rejeita rotulos concatenados como `CELULARTEL. FIXO:`; teste confirmou FELIPE ALVES SANTANA, JOSE BONIFACIO - SP e 7 itens.
+Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao do original, reparo de apoios antigos e correcoes do parser. Teste do PDF 861 confirmou FELIPE ALVES SANTANA, JOSE BONIFACIO - SP e 7 itens.
 
 ## Medicao Final — medidas fixas e fotos da trena — PR #119 — 2026-08-14
-- bloco fixo por peça com Largura Baixo/Meio/Cima e Altura Direita/Meio/Esquerda;
+- 3 larguras + 3 alturas fixas por peca;
 - foto da trena da LARGURA e ALTURA;
 - `medido=true` somente com as seis medidas positivas;
-- orçamento Atlas `tipo_medida=final` pode fornecer medidas/fotos ja existentes, sem inventar ou sobrescrever valores;
-- merge `f995a9377430e7f1344e00c6acf86799da44b2c2`.
+- heranca de medidas/fotos somente de orcamento Atlas `tipo_medida=final`.
 
-## Medicao Final — padroes SIM/NAO, observacao e vista interna — PR #120 — 2026-08-14
-- CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA sempre disponiveis com SIM/NAO;
-- valores persistidos em `medicao_itens.campos_extras`, preservando demais chaves;
-- campo OBSERVACAO por peça (`observacao_medicao`);
-- lembrete para medir pela vista interna do vao;
-- merge `6835a99b97ce8d890980540aaa75dd0b8f846e85`.
+## Medicao Final — padroes SIM/NAO e vista interna — PR #120 — 2026-08-14
+- CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA com SIM/NAO por peca;
+- observacao por peca;
+- lembrete para medir pela vista interna do vao.
 
-## Medicao Final — ordem sequencial por peça — branch fix/medicao-ordem-padroes-abaixo-medidas — 2026-08-14
-- teste no celular mostrou o bloco SIM/NAO como painel separado depois das fotos;
-- pedido: colocar esse bloco imediatamente abaixo das medidas da mesma peca;
-- `MedicaoPadroesFixosPanel` passou a receber `itemId`, sem barra própria/duplicada de peças;
-- dentro de `MedicaoChecklistV2Panel`, a ordem passa a ser medidas -> conferencias SIM/NAO -> observacao -> checklist configuravel -> fotos adicionais;
-- painel separado removido do `AppShell`;
-- aviso de vista interna foi isolado em `MedicaoVistaInternaAviso` para continuar aparecendo antes do inicio sem depender da posicao do bloco.
+## Medicao Final — ordem do fluxo por peca — PR #121 — 2026-08-14
+- tabela SIM/NAO movida para logo abaixo das medidas finais;
+- observacao logo depois;
+- remove barra/painel duplicado de pecas;
+- demais campos e fotos adicionais ficam na sequencia.
 
-## W.VETRO API — levantamento de integracao — 2026-08-14
+## Medicao Final — parcial, tempo e historico — branch `feat/medicao-parcial-historico-tempo` — 2026-08-14
+- novo painel de controle aparece depois que a Medicao Final e iniciada;
+- mostra cronometro de tempo ativo;
+- `Salvar medição parcial` pausa a contagem sem apagar medidas/fotos/checklist;
+- `Retomar medição` continua a mesma medicao e volta a contar o tempo;
+- cada peca e mostrada como `✅ FEITA` ou `EM ABERTO`;
+- historico registra inicio, medicao parcial e retomada com data/hora, usuario e quantidade feita/em aberto;
+- reutiliza `medicao_revisoes`, sem migration nova;
+- estado parcial e derivado do ultimo evento de historico para manter compatibilidade com o `status_operacional` atual.
+
+## W.Vetro API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
-- Validar no celular a nova ordem: medidas -> SIM/NAO -> observacao -> demais campos.
-- Confirmar que trocar de peca troca tambem os quatro SIM/NAO e a observacao sem vazamento entre itens.
-- Validar aviso de vista interna apos liberar uma medicao ainda nao iniciada.
-- Validar PR #119 em campo: seis medidas, fotos e heranca de orçamento `tipo_medida=final`.
-- Decidir/implementar os mesmos campos fixos no link externo se ele for usado como interface principal do medidor.
+- Validar em celular a medicao parcial: iniciar -> medir algumas pecas -> salvar parcial -> recarregar -> conferir feitas/em aberto -> retomar -> concluir restante.
+- Confirmar que o cronometro pausa e retoma corretamente e que o historico preserva data/hora.
+- Validar PR #121 visualmente e persistencia dos SIM/NAO/observacao.
+- Validar PR #119 em campo: seis medidas, fotos e heranca de `tipo_medida=final`.
+- Replicar parcial/campos fixos no link externo se ele for usado como interface principal do medidor.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
 - Criar conector W.Vetro API somente leitura depois de credenciais/testes reais.
 - Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
