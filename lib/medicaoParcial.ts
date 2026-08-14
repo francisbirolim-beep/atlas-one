@@ -70,43 +70,49 @@ async function registrarEvento(
     return false
   }
 
-  await supabase
-    .from('medicoes_finais')
-    .update({ versao })
-    .eq('id', medicaoId)
-
+  await supabase.from('medicoes_finais').update({ versao }).eq('id', medicaoId)
   return true
+}
+
+async function ultimoEventoParcial(medicaoId: string) {
+  const { data, error } = await supabase
+    .from('medicao_revisoes')
+    .select('motivo')
+    .eq('medicao_id', medicaoId)
+    .in('motivo', ['Medição parcial', 'Retomada da medição'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    console.error('Erro ao consultar último evento da medição:', error)
+    return null
+  }
+
+  return data?.[0]?.motivo || null
 }
 
 export async function salvarMedicaoParcial(
   medicaoId: string,
   usuario: Usuario | null,
 ): Promise<{ ok: boolean; mensagem?: string }> {
-  const { data: medicao, error } = await supabase
-    .from('medicoes_finais')
-    .select('status_operacional, iniciado_em')
-    .eq('id', medicaoId)
-    .maybeSingle()
+  const [{ data: medicao, error }, ultimo] = await Promise.all([
+    supabase
+      .from('medicoes_finais')
+      .select('status_operacional, iniciado_em')
+      .eq('id', medicaoId)
+      .maybeSingle(),
+    ultimoEventoParcial(medicaoId),
+  ])
 
   if (error || !medicao) return { ok: false, mensagem: 'Não foi possível carregar a medição.' }
   if (!medicao.iniciado_em) return { ok: false, mensagem: 'Inicie a medição antes de salvá-la como parcial.' }
   if (!['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
     return { ok: false, mensagem: 'A medição precisa estar em andamento para ser marcada como parcial.' }
   }
+  if (ultimo === 'Medição parcial') return { ok: false, mensagem: 'Esta medição já está salva como parcial.' }
 
   const registrado = await registrarEvento(medicaoId, 'parcial', usuario)
   if (!registrado) return { ok: false, mensagem: 'Não foi possível registrar o histórico da medição parcial.' }
-
-  const { error: erroStatus } = await supabase
-    .from('medicoes_finais')
-    .update({ status_operacional: 'medicao_parcial' })
-    .eq('id', medicaoId)
-
-  if (erroStatus) {
-    console.error('Erro ao marcar Medição Final como parcial:', erroStatus)
-    return { ok: false, mensagem: 'O histórico foi salvo, mas não foi possível atualizar o status.' }
-  }
-
   return { ok: true }
 }
 
@@ -114,37 +120,11 @@ export async function retomarMedicaoParcial(
   medicaoId: string,
   usuario: Usuario | null,
 ): Promise<{ ok: boolean; mensagem?: string }> {
-  const [{ data: medicao, error }, { count: pendencias }] = await Promise.all([
-    supabase
-      .from('medicoes_finais')
-      .select('status_operacional')
-      .eq('id', medicaoId)
-      .maybeSingle(),
-    supabase
-      .from('medicao_pendencias')
-      .select('id', { count: 'exact', head: true })
-      .eq('medicao_id', medicaoId)
-      .eq('status', 'aberta'),
-  ])
-
-  if (error || !medicao) return { ok: false, mensagem: 'Não foi possível carregar a medição.' }
-  if (medicao.status_operacional !== 'medicao_parcial') {
-    return { ok: false, mensagem: 'Esta medição não está marcada como parcial.' }
-  }
+  const ultimo = await ultimoEventoParcial(medicaoId)
+  if (ultimo !== 'Medição parcial') return { ok: false, mensagem: 'Esta medição não está pausada como parcial.' }
 
   const registrado = await registrarEvento(medicaoId, 'retomada', usuario)
   if (!registrado) return { ok: false, mensagem: 'Não foi possível registrar a retomada no histórico.' }
-
-  const { error: erroStatus } = await supabase
-    .from('medicoes_finais')
-    .update({ status_operacional: (pendencias || 0) > 0 ? 'com_pendencia' : 'em_medicao' })
-    .eq('id', medicaoId)
-
-  if (erroStatus) {
-    console.error('Erro ao retomar Medição Final:', erroStatus)
-    return { ok: false, mensagem: 'O histórico foi salvo, mas não foi possível retomar a medição.' }
-  }
-
   return { ok: true }
 }
 
@@ -180,7 +160,7 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
   const [{ data: medicao }, { data: revisoes, error }] = await Promise.all([
     supabase
       .from('medicoes_finais')
-      .select('status_operacional, iniciado_em, responsavel_nome')
+      .select('iniciado_em, responsavel_nome')
       .eq('id', medicaoId)
       .maybeSingle(),
     supabase
@@ -217,8 +197,11 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
     })
   }
 
+  const ultimo = eventos[eventos.length - 1]
+  const parcial = ultimo?.tipo === 'parcial'
+
   return {
-    parcial: medicao?.status_operacional === 'medicao_parcial',
+    parcial,
     eventos,
     tempoAtivoMs: calcularTempoAtivo(medicao?.iniciado_em || null, eventos),
   }
