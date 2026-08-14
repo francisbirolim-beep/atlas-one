@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Ruler, Settings, X, Trash2, Search } from 'lucide-react'
+import { ArrowLeft, Plus, Ruler, Settings, X, Trash2, Search, FileUp, Loader2, FileText, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra, Usuario, TipoEsquadria, Tipologia } from '@/lib/tipos'
 import {
@@ -15,10 +15,36 @@ import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
 
+interface PreviewWVetro {
+  parece_wvetro: boolean
+  numero_orcamento: string | null
+  cliente_nome: string | null
+  cidade: string | null
+  uf: string | null
+  valor_total: number | null
+  itens: Array<{
+    ambiente: string | null
+    tipo_esquadria: string
+    tipo_outro_texto: string | null
+    descricao: string
+    quantidade: number
+    largura_mm: number
+    altura_mm: number
+    cor: string | null
+    linha: string | null
+    vidro: string | null
+  }>
+}
+
 let tiposCache: Tipologia[] = []
 
 function labelTipo(valor: string) {
   return tiposCache.find(t => t.chave === valor)?.label || valor
+}
+
+function formatarMoeda(valor: number | null) {
+  if (valor == null || !Number.isFinite(valor)) return null
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export default function MedicaoFinalQuadro() {
@@ -37,6 +63,13 @@ export default function MedicaoFinalQuadro() {
     { id: string; cliente_nome: string; cidade: string | null; created_at: string }[]
   >([])
   const [criandoMedicao, setCriandoMedicao] = useState(false)
+  const [arquivoWVetro, setArquivoWVetro] = useState<File | null>(null)
+  const [previewWVetro, setPreviewWVetro] = useState<PreviewWVetro | null>(null)
+  const [clienteWVetro, setClienteWVetro] = useState('')
+  const [cidadeWVetro, setCidadeWVetro] = useState('')
+  const [lendoWVetro, setLendoWVetro] = useState(false)
+  const [criandoWVetro, setCriandoWVetro] = useState(false)
+  const [erroWVetro, setErroWVetro] = useState('')
 
   const [modalConfig, setModalConfig] = useState(false)
   const [camposExtras, setCamposExtras] = useState<TipologiaCampoExtra[]>([])
@@ -166,9 +199,20 @@ export default function MedicaoFinalQuadro() {
     }
   }
 
+  function limparImportacaoWVetro() {
+    setArquivoWVetro(null)
+    setPreviewWVetro(null)
+    setClienteWVetro('')
+    setCidadeWVetro('')
+    setErroWVetro('')
+    setLendoWVetro(false)
+    setCriandoWVetro(false)
+  }
+
   async function abrirModalNova() {
     setModalNova(true)
     setBuscaOrcamento('')
+    limparImportacaoWVetro()
     const lista = await listarOrcamentosSemMedicao()
     setOrcamentosDisponiveis(lista)
   }
@@ -182,6 +226,95 @@ export default function MedicaoFinalQuadro() {
       router.push(`/producao/medicao-final/${medicao.id}`)
     } else {
       alert('Erro ao criar a medição. Tenta de novo.')
+    }
+  }
+
+  async function analisarOrcamentoWVetro(file: File) {
+    setArquivoWVetro(file)
+    setPreviewWVetro(null)
+    setClienteWVetro('')
+    setCidadeWVetro('')
+    setErroWVetro('')
+    setLendoWVetro(true)
+
+    try {
+      const token = await tokenAtual()
+      if (!token) {
+        setErroWVetro('Sua sessão expirou. Entre novamente antes de importar o PDF.')
+        return
+      }
+
+      const form = new FormData()
+      form.append('acao', 'preview')
+      form.append('arquivo', file)
+
+      const resp = await fetch('/api/medicao-final/importar-wvetro', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setErroWVetro(json.error || 'Não foi possível ler o orçamento W.Vetro.')
+        return
+      }
+
+      const resumo = json.resumo as PreviewWVetro
+      setPreviewWVetro(resumo)
+      setClienteWVetro(resumo.cliente_nome || '')
+      setCidadeWVetro([resumo.cidade, resumo.uf].filter(Boolean).join(' - '))
+    } catch (e) {
+      console.error('Erro ao analisar orçamento W.Vetro:', e)
+      setErroWVetro('Erro ao enviar e analisar o PDF do W.Vetro.')
+    } finally {
+      setLendoWVetro(false)
+    }
+  }
+
+  async function confirmarOrcamentoWVetro() {
+    if (!arquivoWVetro || !previewWVetro || !clienteWVetro.trim()) return
+    setCriandoWVetro(true)
+    setErroWVetro('')
+
+    try {
+      const token = await tokenAtual()
+      if (!token) {
+        setErroWVetro('Sua sessão expirou. Entre novamente antes de criar a Medição Final.')
+        return
+      }
+
+      const form = new FormData()
+      form.append('acao', 'confirmar')
+      form.append('arquivo', arquivoWVetro)
+      form.append('cliente_nome', clienteWVetro.trim())
+      form.append('cidade', cidadeWVetro.trim())
+      if (usuario?.id) form.append('criado_por_id', usuario.id)
+      if (usuario?.nome) form.append('criado_por_nome', usuario.nome)
+
+      const resp = await fetch('/api/medicao-final/importar-wvetro', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      })
+      const json = await resp.json().catch(() => ({}))
+
+      if (!resp.ok) {
+        if (resp.status === 409 && json.medicao_id) {
+          setModalNova(false)
+          router.push(`/producao/medicao-final/${json.medicao_id}`)
+          return
+        }
+        setErroWVetro(json.error || 'Não foi possível criar a Medição Final a partir do W.Vetro.')
+        return
+      }
+
+      setModalNova(false)
+      router.push(`/producao/medicao-final/${json.medicao_id}`)
+    } catch (e) {
+      console.error('Erro ao confirmar orçamento W.Vetro:', e)
+      setErroWVetro('Erro ao criar a Medição Final importada do W.Vetro.')
+    } finally {
+      setCriandoWVetro(false)
     }
   }
 
@@ -341,16 +474,125 @@ export default function MedicaoFinalQuadro() {
 
       {modalNova && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-md space-y-3 max-h-[80vh] flex flex-col">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-2xl space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-700">Nova medição</h3>
+              <div>
+                <h3 className="font-semibold text-slate-700">Nova medição</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Importe um W.Vetro ou escolha uma venda que já está no Atlas.</p>
+              </div>
               <button onClick={() => setModalNova(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-slate-500">
-              Escolha o orçamento vendido. Vamos puxar o cliente, endereço e as tipologias automaticamente.
-            </p>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-white border border-emerald-200 p-2 text-emerald-700">
+                  <FileUp size={18} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-800">Importar orçamento W.Vetro</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    O Atlas lê o PDF, mostra o que encontrou e cria a Medição Final com as esquadrias automaticamente.
+                  </p>
+                </div>
+              </div>
+
+              <label className={`flex items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-3 text-sm font-medium transition ${lendoWVetro || criandoWVetro ? 'cursor-not-allowed border-slate-200 text-slate-400 bg-white/60' : 'cursor-pointer border-emerald-300 text-emerald-800 bg-white hover:border-emerald-500'}`}>
+                {lendoWVetro ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                {lendoWVetro ? 'Lendo orçamento...' : arquivoWVetro ? `Trocar PDF: ${arquivoWVetro.name}` : 'Selecionar PDF do W.Vetro'}
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  disabled={lendoWVetro || criandoWVetro}
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    e.currentTarget.value = ''
+                    if (file) void analisarOrcamentoWVetro(file)
+                  }}
+                />
+              </label>
+
+              {erroWVetro && (
+                <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                  {erroWVetro}
+                </div>
+              )}
+
+              {previewWVetro && (
+                <div className="rounded-xl bg-white border border-emerald-200 p-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                      <CheckCircle2 size={14} /> PDF lido
+                    </span>
+                    {previewWVetro.numero_orcamento && <span className="text-slate-500">Orçamento #{previewWVetro.numero_orcamento}</span>}
+                    {previewWVetro.valor_total != null && <span className="text-slate-500">Total {formatarMoeda(previewWVetro.valor_total)}</span>}
+                    <span className="text-slate-500">{previewWVetro.itens.length} item(ns)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-500 mb-1">Cliente</label>
+                      <input
+                        value={clienteWVetro}
+                        onChange={e => setClienteWVetro(e.target.value)}
+                        placeholder="Confirme o nome do cliente"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-500 mb-1">Cidade</label>
+                      <input
+                        value={cidadeWVetro}
+                        onChange={e => setCidadeWVetro(e.target.value)}
+                        placeholder="Cidade da obra"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
+                    {previewWVetro.itens.map((item, idx) => (
+                      <div key={`${item.descricao}-${idx}`} className="rounded-lg bg-slate-50 px-3 py-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-700 truncate">
+                              {idx + 1}. {item.ambiente || 'Ambiente não informado'} — {labelTipo(item.tipo_esquadria)}
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{item.descricao}</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-xs font-semibold text-slate-700">{item.largura_mm} × {item.altura_mm}</p>
+                            <p className="text-[10px] text-slate-400">qtd. {item.quantidade}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+                    As medidas do orçamento entram apenas como <strong>referência</strong>. As 3 larguras e 3 alturas da Medição Final continuam vazias para serem conferidas na obra.
+                  </div>
+
+                  <button
+                    onClick={confirmarOrcamentoWVetro}
+                    disabled={criandoWVetro || !clienteWVetro.trim()}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-700 text-white py-2.5 text-sm font-semibold hover:bg-emerald-800 transition disabled:opacity-50"
+                  >
+                    {criandoWVetro ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                    {criandoWVetro ? 'Criando Medição Final...' : 'Confirmar e criar Medição Final'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-px bg-slate-200 flex-1" />
+              <span className="text-[11px] uppercase tracking-wide text-slate-400">ou usar orçamento do Atlas</span>
+              <div className="h-px bg-slate-200 flex-1" />
+            </div>
+
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -358,12 +600,11 @@ export default function MedicaoFinalQuadro() {
                 onChange={e => setBuscaOrcamento(e.target.value)}
                 placeholder="Buscar pelo nome do cliente..."
                 className="w-full border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-sm"
-                autoFocus
               />
             </div>
-            <div className="overflow-y-auto space-y-1.5 flex-1">
+            <div className="overflow-y-auto space-y-1.5 flex-1 min-h-0">
               {orcamentosFiltrados.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">
+                <p className="text-sm text-slate-400 text-center py-4">
                   Nenhum orçamento aprovado/convertido sem medição encontrado.
                 </p>
               ) : (
@@ -371,7 +612,7 @@ export default function MedicaoFinalQuadro() {
                   <button
                     key={o.id}
                     onClick={() => criarDoOrcamento(o.id)}
-                    disabled={criandoMedicao}
+                    disabled={criandoMedicao || criandoWVetro}
                     className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-brand-navy hover:bg-brand-navyLight transition disabled:opacity-50"
                   >
                     <p className="text-sm font-medium text-slate-800">{o.cliente_nome}</p>
