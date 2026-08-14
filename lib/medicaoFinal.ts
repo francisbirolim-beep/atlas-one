@@ -108,6 +108,9 @@ export async function listarMedicoes(): Promise<MedicaoFinal[]> {
 // final criada, pra aparecer no seletor de "Nova medição". Usa a coluna do
 // Kanban como critério, não o campo orcamentos.status: na prática o status
 // não é mantido em sincronia com a posição do card no quadro.
+// Orçamentos de apoio criados pelo fluxo W.Vetro são internos e não pertencem
+// ao bloco "OU USAR ORÇAMENTO DO ATLAS"; eles continuam preservados no banco
+// e são tratados exclusivamente pelo importador W.Vetro.
 export async function listarOrcamentosSemMedicao(): Promise<
 { id: string; cliente_nome: string; cidade: string | null; created_at: string }[]
   > {
@@ -127,14 +130,17 @@ export async function listarOrcamentosSemMedicao(): Promise<
         const [{ data: orcamentos }, { data: medicoes }] = await Promise.all([
               supabase
                 .from('orcamentos')
-                .select('id, cliente_nome, cidade, created_at')
+                .select('id, cliente_nome, cidade, created_at, descricao_livre')
                 .in('coluna_id', idsColunasVendido)
                 .order('created_at', { ascending: false }),
               supabase.from('medicoes_finais').select('orcamento_id'),
             ])
 
   const jaTem = new Set((medicoes || []).map((m: any) => m.orcamento_id).filter(Boolean))
-    return (orcamentos || []).filter((o: any) => !jaTem.has(o.id))
+    return (orcamentos || []).filter((o: any) => {
+      const ehApoioWVetro = String(o.descricao_livre || '').startsWith('Importado do W.Vetro |')
+      return !jaTem.has(o.id) && !ehApoioWVetro
+    })
 }
 
 // Cria a medição a partir de um orçamento vendido: puxa cliente/endereço e

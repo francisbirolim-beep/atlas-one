@@ -2,24 +2,20 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #115 (`20aaa50845bf0a37da44db2394a155571669093a`). A branch atual `fix/wvetro-orcamento-apoio-antigo` corrige o reaproveitamento de um orçamento de apoio W.Vetro antigo que ficou sem Medicao Final.
+Verificado em: 2026-08-14. `main` esta no merge da PR #116 (`09514a5feb16a89d333e343732c3bcf873cba4c4`). A branch atual `fix/ocultar-apoio-wvetro-seletor-atlas` corrige a exibicao indevida de orcamentos internos de apoio W.Vetro no bloco `OU USAR ORÇAMENTO DO ATLAS`.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
 - Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
 - No primeiro estagio do Kanban, qualquer pedido exige `Iniciar orçamento`; pedidos ja iniciados mostram `Retornar orçamento`.
 - Fotos do pedido sao preservadas ao abrir o Kanban.
-- PR #105: cada esquadria exibe `Fotos coletadas em campo`, com multiplas fotos e `Adicionar fotos`.
-- PR #106: fotos de LARGURA e ALTURA ficam identificadas e separadas das fotos gerais.
-- PR #107: leitura por IA das fotos de trena/laser no Kanban.
-- PR #108: corrige a inversao Baixo/Cima da LARGURA observada em teste real.
-- PR #109: anexo W.Vetro recebe titulo padrao e fica liberado sem titulo manual.
-- PR #110: leitura automatica do valor total do PDF W.Vetro.
-- PR #111: moeda BRL correta e envio/reenvio individual de anexos.
+- PRs #105 a #108: fotos de campo, identificacao LARGURA/ALTURA, leitura por IA da trena/laser e correcao Baixo/Cima da largura.
+- PRs #109 a #111: anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual de anexos.
 - PR #112: `Nova medição` permite importar PDF W.Vetro, revisar e criar a Medicao Final preservando o PDF original.
 - PR #113: PDFs W.Vetro sem largura/altura deixam de ser rejeitados; nenhuma dimensao e inventada.
 - PR #114: faixa Cliente/Obra/Orçamento; telefone do responsavel pelo WhatsApp cadastrado; dados da empresa somente quando salvos manualmente.
 - PR #115: parser do preview W.Vetro prioriza o nome real do cliente e limpa o CEP da cidade; referencia `FELIPE ALVES SANTANA-861.pdf` -> Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`.
+- PR #116: se existir um orçamento de apoio W.Vetro antigo sem Medicao Final, a nova importacao pode reaproveita-lo e corrigi-lo; duplicidade so bloqueia quando ja existe Medicao Final vinculada.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
@@ -28,22 +24,22 @@ Verificado em: 2026-08-14. `main` esta no merge da PR #115 (`20aaa50845bf0a37da4
 - Engenharia Fases 1 a 4 concluidas: entrada apos Medicao Final, conferencia tecnica e liberacao transacional para Producao.
 - Cadastro tecnico de linhas existe em `linhas_tecnicas`, com relacionamentos `linha_produtos` e `linha_tipologias`.
 
-## EM VALIDACAO — ORCAMENTO DE APOIO W.VETRO ANTIGO SEM MEDICAO
-Novo teste visual apos a PR #115 mostrou, no bloco `OU USAR ORÇAMENTO DO ATLAS`, um card antigo com:
+## EM VALIDACAO — OCULTAR APOIOS W.VETRO DO SELETOR DE ORCAMENTOS ATLAS
+Novo teste visual em producao, mesmo depois da PR #116, mostrou que ao simplesmente abrir `Nova medição` o bloco `OU USAR ORÇAMENTO DO ATLAS` ainda exibe um card antigo com:
 - Cliente `CELULARTEL. FIXO:`;
 - Cidade `396 JOSE BONIFACIO - SP`.
 
-Esse card tem os mesmos valores incorretos produzidos pelo parser antigo do PDF 861. A funcao atual lista orcamentos vendidos sem Medicao Final, portanto um orçamento de apoio criado por uma importacao W.Vetro anterior pode reaparecer ali se ficou sem medicao.
+A causa esta em `listarOrcamentosSemMedicao()` (`lib/medicaoFinal.ts`): esse seletor lista todos os orcamentos que estao em coluna de venda e ainda nao possuem Medicao Final, sem distinguir um orçamento comercial real do Atlas de um orçamento interno de apoio criado pela importacao W.Vetro.
 
-A branch `fix/wvetro-orcamento-apoio-antigo` altera `POST /api/medicao-final/importar-wvetro`:
-- se o mesmo numero W.Vetro ja tiver uma Medicao Final, continua bloqueando duplicidade e retorna a medicao existente;
-- se existir somente o orçamento de apoio, sem Medicao Final, ele deixa de bloquear a importacao;
-- o registro antigo e reaproveitado e atualizado com Cliente/Cidade/itens lidos pelo parser atual;
-- o PDF W.Vetro original ja preservado e reutilizado quando disponivel, evitando upload duplicado;
-- depois cria a Medicao Final e seus itens normalmente;
-- em falha posterior, um orçamento antigo reaproveitado nao e apagado; apenas registros novos criados na operacao podem sofrer rollback.
+A branch `fix/ocultar-apoio-wvetro-seletor-atlas`:
+- inclui `descricao_livre` na consulta usada pelo seletor;
+- identifica como apoio W.Vetro qualquer registro cujo marcador comece por `Importado do W.Vetro |`;
+- remove esses registros apenas da lista `OU USAR ORÇAMENTO DO ATLAS`;
+- nao apaga nem altera o registro no banco;
+- o importador W.Vetro continua podendo localizar/reaproveitar o apoio antigo pelo marcador externo;
+- orcamentos comerciais reais do Atlas continuam aparecendo normalmente quando vendidos e sem Medicao Final.
 
-Resultado esperado no caso 861: selecionar novamente o PDF, confirmar Cliente `FELIPE ALVES SANTANA` / Cidade `JOSE BONIFACIO - SP`, criar a Medicao Final vinculada ao registro antigo e fazer o card incorreto deixar de aparecer como orçamento sem medicao.
+Resultado esperado: abrir `Nova medição` e o card `CELULARTEL. FIXO:` nao aparecer mais, mesmo antes de selecionar qualquer PDF.
 
 ## W.VETRO — REFERENCIA FUNCIONAL
 `FELIPE ALVES SANTANA-861.pdf`:
@@ -72,7 +68,7 @@ Resultado esperado no caso 861: selecionar novamente o PDF, confirmar Cliente `F
 - Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- Reaproveitamento/reparo de orçamento de apoio W.Vetro antigo sem medicao na branch atual.
+- Filtro dos orcamentos internos de apoio W.Vetro no seletor `OU USAR ORÇAMENTO DO ATLAS` da branch atual.
 - Confirmacao de Venda Fase 1.
 - Importacao generica de itens via PDF; layouts W.Vetro podem variar e precisam de validacao por amostras reais.
 - Modulo de IA/agente existe, mas nao foi auditado a fundo.
