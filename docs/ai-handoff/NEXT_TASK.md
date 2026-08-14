@@ -1,30 +1,35 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-No Kanban comercial, PRs #104 a #108 estabilizaram o fluxo de inicio do orcamento, preservacao/identificacao das fotos de campo e leitura automatica das medidas da trena.
+No Kanban comercial, PRs #104 a #109 estabilizaram o fluxo de inicio do orcamento, preservacao/identificacao das fotos, leitura automatica das medidas da trena e anexo original do W.Vetro.
 
-A branch atual `feat/anexo-wvetro-kanban` libera o anexo do PDF original do W.Vetro sem exigir digitacao manual de titulo.
+A branch atual `fix/pdf-valor-e-reenvio-anexos` implementa o preenchimento automatico do valor total a partir do PDF anexado.
 
 ## VALIDAR ANTES DE ENCERRAR ESTA ETAPA
 1. Abrir um card em `Fazer orçamento` e clicar em `Iniciar orçamento`/`Retornar orçamento`.
 2. Ir ate `Elaboração do orçamento` > `Anexos do orçamento`.
-3. Confirmar que o campo de titulo aparece preenchido automaticamente com `Orçamento W.Vetro (original)`.
-4. Confirmar que o botao `Anexar` esta liberado imediatamente.
-5. Selecionar o PDF gerado pelo W.Vetro e confirmar que ele aparece na lista de anexos.
-6. Finalizar/salvar, fechar e reabrir o card; confirmar que o anexo original continua disponivel.
-7. Confirmar que o fluxo das fotos, medidas e `Iniciar/Retornar orçamento` nao sofreu regressao.
+3. Anexar o PDF real `FRANCIS TESTE-977.pdf`.
+4. Confirmar que o anexo continua sendo salvo normalmente.
+5. Confirmar que `Valor total do orçamento` e preenchido automaticamente com o equivalente numerico de `R$ 2.716,84`.
+6. Confirmar que aparece aviso `Valor lido automaticamente do PDF: R$ 2.716,84`.
+7. Confirmar que o campo continua editavel manualmente.
+8. Confirmar que fotos, leitura da trena e `Iniciar/Retornar orçamento` nao sofreram regressao.
 
-## PROXIMA TAREFA — ESPELHO DO ORCAMENTO W.VETRO
-Depois de validar o upload original:
-1. identificar o anexo `Orçamento W.Vetro (original)` como fonte;
-2. extrair do PDF cliente, itens/esquadrias, ambientes, descricoes, quantidades, medidas, valores e condicoes comerciais;
-3. nunca assumir leitura perfeita: criar tela de revisao/confirmacao antes de gravar os dados estruturados;
-4. usar os dados revisados para gerar um `Orçamento Atlas` com identidade visual da Esquadrifacio e conteudo comercial equivalente ao W.Vetro;
-5. manter o PDF W.Vetro original armazenado para auditoria/comparacao;
-6. ao finalizar o orcamento, disponibilizar o PDF Atlas para envio ao vendedor;
-7. evitar duplicar o PDF Atlas a cada reabertura/finalizacao do mesmo orcamento.
+## PROXIMAS TAREFAS — ORCAMENTO ATLAS
+1. Corrigir a formatacao monetaria do PDF Atlas para padrao brasileiro (`R$ 2.716,84`).
+2. Adicionar `Enviar ao vendedor` / `Reenviar` em cada anexo para permitir novas tentativas sem depender da finalizacao unica.
+3. Criar `Configurações -> Orçamento` usando `configuracoes_gerais` para:
+   - nome da empresa, CNPJ, IE, endereco, cidade/UF, CEP, telefone e email;
+   - validade da proposta;
+   - condicoes de pagamento;
+   - prazo de entrega/instalacao;
+   - garantia;
+   - observacoes padrao e rodape.
+4. Fazer o PDF atual do Atlas consumir essas configuracoes.
+5. Melhorar o layout profissional do PDF mantendo o modelo atual como base.
+6. Depois evoluir para leitura estruturada do W.Vetro (itens, descricoes, valores e condicoes) com tela de revisao humana antes de gravar dados definitivos.
 
-## DEPOIS DO ESPELHO W.VETRO
+## DEPOIS DO ORCAMENTO ATLAS
 - Engenharia Fase 5: base de receitas tecnicas por tipologia;
 - implementar calculos/MEE por tipologia;
 - gerar lista de materiais e lista de corte;
@@ -40,12 +45,14 @@ Depois de validar o upload original:
 - Kanban #106: fotos de largura e altura separadas e identificadas.
 - Kanban #107: leitura automatica por IA das fotos da trena.
 - Kanban #108: correcao da inversao Baixo/Cima na LARGURA.
+- Kanban #109: anexo W.Vetro com titulo automatico e botao liberado.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`; branch -> PR -> build valido -> merge.
 - PDF W.Vetro original deve ser preservado, nao substituido pelo PDF Atlas.
-- Parser W.Vetro precisa de revisao humana antes de alimentar itens/valores definitivos.
+- Leitura automatica do total deve permanecer conferivel/editavel pelo colaborador.
+- Parser W.Vetro de itens precisa de revisao humana antes de alimentar dados definitivos.
 - Leitura por IA da trena e sugestao; o colaborador deve conferir as medidas antes de salvar.
 - Nao sobrescrever automaticamente medida manual ja preenchida.
 - Nao automatizar lista de corte antes de fechar o modelo de receitas e versoes.

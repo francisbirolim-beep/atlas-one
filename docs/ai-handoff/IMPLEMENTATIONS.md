@@ -44,14 +44,25 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - falha da IA nao remove a foto;
 - #108 corrige a inversao `Baixo`/`Cima` observada na LARGURA em teste real; ALTURA nao foi alterada.
 
-## Kanban — anexo original W.Vetro — branch `feat/anexo-wvetro-kanban` — 2026-08-13
+## Kanban — anexo original W.Vetro — PR #109 — 2026-08-13
 - o bloco de anexos ja tinha upload funcional via Supabase Storage, mas exigia titulo manual antes de habilitar o seletor de arquivo;
 - a rota `/kanban` passa a preencher automaticamente o titulo vazio com `Orçamento W.Vetro (original)`;
 - isso libera o botao `Anexar` sem digitacao manual e padroniza o anexo que sera usado como fonte do futuro espelho Atlas;
-- o PDF W.Vetro original continua preservado; leitura/espelhamento automatico ainda nao faz parte desta etapa.
+- o PDF W.Vetro original continua preservado.
+
+## Kanban — valor total automatico do PDF — PR #110 — 2026-08-13
+- nova rota autenticada `POST /api/orcamento/ler-total-pdf` recebe o PDF no momento da selecao;
+- usa `pdf-parse` e identifica o valor monetario proximo de `TOTAL`, com fallback para layouts fragmentados;
+- aceita `2.716,84`, `2716,84`, `2,716.84` e `2716.84`;
+- ao anexar o PDF, o campo `Valor total do orçamento` e preenchido automaticamente;
+- exibe confirmacao formatada em BRL e mantem o campo editavel para conferencia;
+- PDF real de referencia: `FRANCIS TESTE-977.pdf` -> `R$ 2.716,84`.
 
 ## Pontos funcionais ainda pendentes
-- Gerar `Orçamento Atlas` como espelho do PDF W.Vetro, com leitura estruturada + revisao antes de finalizar.
+- Formatar o valor no PDF Atlas em padrao brasileiro.
+- Adicionar botao `Enviar ao vendedor` / `Reenviar` em cada anexo.
+- Criar `Configurações -> Orçamento` para dados e textos configuraveis do documento.
+- Gerar `Orçamento Atlas` profissional e depois evoluir para espelho do PDF W.Vetro, com leitura estruturada + revisao.
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
 - MEE/calculos automaticos, perfis/acessorios, lista de materiais, lista de corte e otimizacao.
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.

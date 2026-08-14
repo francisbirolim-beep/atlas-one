@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-13, `main` apos PR #108; branch atual prepara o anexo original do W.Vetro no Kanban.
+Verificado em: 2026-08-13, `main` apos PR #109; branch atual adiciona leitura automatica do valor total do PDF do W.Vetro no Kanban.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -13,6 +13,7 @@ Verificado em: 2026-08-13, `main` apos PR #108; branch atual prepara o anexo ori
 - PR #106: `foto_larguras_url` aparece como `LARGURA`, `foto_alturas_url` como `ALTURA` e fotos gerais ficam em `Outras fotos` sem duplicacao.
 - PR #107: leitura por IA das fotos de LARGURA/ALTURA no Kanban, conversao para mm e preenchimento das seis medidas somente quando as tres leituras do eixo forem reconhecidas.
 - PR #108: corrige a inversao Baixo/Cima da LARGURA observada em teste real; exemplo validado `Baixo 1790 / Meio 1791 / Cima 1789`. ALTURA permanece sem alteracao.
+- PR #109: anexo do W.Vetro recebe titulo padrao `Orçamento W.Vetro (original)` e o botao `Anexar` fica liberado sem digitacao manual.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
@@ -20,20 +21,23 @@ Verificado em: 2026-08-13, `main` apos PR #108; branch atual prepara o anexo ori
 - A rota autenticada `/api/medicao-final/ler-trena` usa visao por IA para interpretar fotos do visor da trena/medidor laser.
 - Engenharia Fases 1 a 4 concluidas: entrada apos Medicao Final, conferencia tecnica e liberacao transacional para Producao.
 
-## EM VALIDACAO NESTA BRANCH — ANEXO W.VETRO
-- O bloco `Anexos do orçamento` ja usa `uploadArquivo` e persiste os anexos em `orcamentos.anexos` quando o orcamento e salvo/finalizado.
-- O bloqueio atual e de interface: o input de arquivo fica desabilitado enquanto `novoAnexoTitulo` estiver vazio.
-- Nesta branch, ao abrir o Kanban, o campo de titulo do anexo recebe automaticamente `Orçamento W.Vetro (original)` quando estiver vazio, liberando imediatamente o botao `Anexar` sem exigir digitacao manual.
-- O PDF original do W.Vetro continua sendo preservado como anexo; ainda nao existe leitura/espelhamento automatico desse PDF nesta etapa.
-- O titulo padronizado identifica qual anexo sera a fonte da proxima etapa: gerar um PDF Atlas espelho do W.Vetro para envio ao vendedor.
+## EM VALIDACAO NESTA BRANCH — TOTAL DO PDF W.VETRO
+- Nova rota autenticada `POST /api/orcamento/ler-total-pdf` recebe o PDF no momento da selecao e usa `pdf-parse` para extrair o texto.
+- O parser procura valor monetario proximo de `TOTAL` e tem fallback para layouts fragmentados do W.Vetro.
+- Reconhece moeda brasileira (`2.716,84`) e internacional (`2716.84`).
+- Ao anexar o PDF no Kanban, o campo `Valor total do orçamento` e preenchido automaticamente.
+- O colaborador recebe a confirmacao visual do valor lido, por exemplo `R$ 2.716,84`.
+- O campo permanece editavel como seguranca caso a leitura do PDF precise de correcao.
+- PDF real de referencia `FRANCIS TESTE-977.pdf`: total esperado `R$ 2.716,84`.
+- O PDF original do W.Vetro continua preservado como anexo.
 
-## PROXIMO PASSO VALIDADO PELO USUARIO
-1. Validar upload do PDF W.Vetro no Kanban sem precisar digitar titulo.
-2. Preservar o PDF original anexado.
-3. Criar fluxo de leitura estruturada do PDF W.Vetro.
-4. Montar uma tela de revisao dos itens lidos antes de gerar documento final.
-5. Gerar um `Orçamento Atlas` em PDF com o mesmo conteudo comercial do W.Vetro (espelho), usando identidade da Esquadrifacio.
-6. Na finalizacao, disponibilizar o PDF Atlas para o vendedor e manter o W.Vetro original como fonte/auditoria.
+## PROXIMOS AJUSTES VALIDADOS PELO USUARIO
+1. Validar em producao que o PDF `FRANCIS TESTE-977.pdf` preenche `R$ 2.716,84`.
+2. Formatar valores do PDF Atlas no padrao brasileiro (`R$ 2.716,84`).
+3. Adicionar botao `Enviar ao vendedor` / `Reenviar` em cada anexo, sem depender da finalizacao unica.
+4. Criar `Configurações -> Orçamento` para dados da empresa, validade, pagamento, prazo, garantia, observacoes e rodape.
+5. Evoluir o PDF Atlas profissional a partir do modelo atual e depois aproximar do espelho W.Vetro.
+6. Em etapa posterior, extrair itens/descricoes/condicoes do W.Vetro com revisao humana antes de gravar dados definitivos.
 
 ## ENGENHARIA — ESTADO REAL
 - Fase 1 concluida: Medicao Final aprovada entra automaticamente na Engenharia.
