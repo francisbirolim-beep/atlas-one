@@ -76,15 +76,27 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - PDF limitado a 15 MB e operacoes intermediarias possuem limpeza de rollback quando possivel;
 - PR mergeada em `main` no commit `56910395fd9f80e08ea8edf170cda45a3b0736c4`.
 
-## Medicao Final — W.Vetro sem medidas no PDF — branch fix/medicao-wvetro-sem-medidas — 2026-08-14
+## Medicao Final — W.Vetro sem medidas no PDF — PR #113 — 2026-08-14
 - teste real com `FELIPE ALVES SANTANA-861.pdf` revelou um layout W.Vetro que possui 7 esquadrias, ambientes, descricoes, quantidades, cores, vidros e linha, mas nao imprime largura/altura;
 - a regra anterior descartava esses itens por exigir duas dimensoes e retornava `nenhuma esquadria com largura e altura pôde ser lida`;
 - o parser por `LOCAL/AMBIENTE` passa a aceitar itens identificaveis mesmo sem dimensoes;
 - largura/altura ausentes ficam zeradas somente no snapshot de apoio legado, acompanhadas de `MEDIDAS NÃO INFORMADAS NO PDF`; zero nao representa tamanho real;
 - a Medicao Final grava `REFERÊNCIA ORÇAMENTO: medidas não informadas no PDF` e continua com as seis medidas finais vazias;
-- a pre-visualizacao mostra `Sem medida no PDF` em vez de `0 x 0`;
+- a pre-visualizacao mostra ausencia de medida sem tratar zero como tamanho;
 - o parser de cliente foi reforcado para PDFs cujo nome/celular aparecem antes do rotulo `CLIENTE`;
-- layouts que realmente trazem largura/altura mantem o comportamento anterior: dimensoes apenas como referencia.
+- layouts que realmente trazem largura/altura mantem o comportamento anterior: dimensoes apenas como referencia;
+- merge em `main`: `44ce91c5281ec0686ed8db3d1732634cc722498a`.
+
+## Medicao Final — identificacao, telefone do responsavel e dados manuais da empresa — branch fix/medicao-link-telefone-responsavel — 2026-08-14
+- nova faixa `Identificação da Medição Final` mostra `Cliente`, `Nome da obra` e `Orçamento` no topo da tela detalhada;
+- nova rota autenticada `GET /api/medicao-final/[id]/identificacao` busca o cliente e o orçamento vinculado;
+- quando a origem e W.Vetro, o numero externo do marcador `Importado do W.Vetro | Orçamento N` tem prioridade sobre o serial interno do Atlas;
+- quando o nome da obra ainda nao esta persistido, a rota tenta ler o PDF W.Vetro original preservado com `pdf-parse`; no orçamento `861`, a referencia esperada e `CASA`;
+- o bloco de link externo consulta o responsavel da Medicao Final e os usuarios cadastrados; se houver WhatsApp cadastrado, preenche o telefone automaticamente;
+- nome externo ou usuario sem WhatsApp continua permitindo telefone manual;
+- o nome do medidor oferece sugestoes dos usuarios cadastrados;
+- `lerDadosEmpresa()` passa a ignorar registro legado/seedado sem marcador de configuracao manual;
+- `salvarDadosEmpresa()` grava `configuradoManualmente: true`, garantindo que apenas informacoes efetivamente salvas pelo usuario sejam carregadas nas telas que usam essa configuracao.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 - foram mapeados endpoints publicos para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
@@ -93,9 +105,11 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
 
 ## Pontos funcionais ainda pendentes
-- Validar a correção de W.Vetro sem dimensoes em producao com `FELIPE ALVES SANTANA-861.pdf`.
-- Fazer regressao com `FRANCIS TESTE-977.pdf`, que possui dimensoes de referencia.
+- Validar em producao a faixa Cliente/Obra/Orçamento e o preenchimento automatico do telefone do responsavel.
+- Confirmar que `Cadastro > Dados da Empresa` fica vazio ate o usuario salvar configuracao manual.
+- Continuar o teste da Medicao Final `861` e fazer regressao com `FRANCIS TESTE-977.pdf`.
 - Criar `Configurações -> Orçamento` para dados e textos configuraveis do documento.
+- Fazer todos os PDFs Atlas consumirem somente configuracoes manuais, removendo textos de empresa hardcoded remanescentes.
 - Gerar `Orçamento Atlas` profissional e depois evoluir para espelho do PDF W.Vetro, com leitura estruturada + revisao.
 - Criar conector W.Vetro API somente leitura, depois de obter credenciais/teste e exemplos de resposta.
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
