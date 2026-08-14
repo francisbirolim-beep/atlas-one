@@ -53,12 +53,12 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
 ## Kanban — fotos coletadas em campo — 2026-08-13
-- a primeira coluna continua exigindo `Iniciar orçamento` antes da edicao;
-- cada esquadria passa a exibir todas as fotos vinculadas ao item antes dos campos de medidas;
-- a galeria consolida `foto_urls`, `foto_url`, `foto_larguras_url` e `foto_alturas_url` sem duplicar URLs;
-- o comando de foto passa a ser `Adicionar fotos`, aceitando multiplos arquivos e preservando as imagens anteriores;
-- clicar em uma miniatura abre a imagem em tamanho maior;
-- leitura automatica da trena continua fora deste ajuste.
+- PR #104 restaurou o fluxo `Iniciar orçamento` e preservou referencias de foto do pedido.
+- PR #105 criou a secao `Fotos coletadas em campo` antes das medidas, com multiplas miniaturas e `Adicionar fotos` sem apagar as anteriores.
+- Ajuste atual identifica `foto_larguras_url` como `LARGURA` e `foto_alturas_url` como `ALTURA`.
+- Fotos gerais ficam em `Outras fotos`, sem repetir URLs ja usadas como foto de largura/altura.
+- Clicar em uma miniatura abre a imagem em tamanho maior.
+- Leitura automatica da trena continua fora deste ajuste.
 
 ## Pontos funcionais ainda pendentes
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
