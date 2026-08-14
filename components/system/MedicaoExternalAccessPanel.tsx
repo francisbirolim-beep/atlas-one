@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Copy, ExternalLink, Link2, Loader2, ShieldCheck, Trash2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { carregarOperacaoMedicaoV2, listarUsuariosDisponiveisMedicao } from '@/lib/medicaoFinalV2'
+import type { Usuario } from '@/lib/tipos'
 
 type Acesso = {
   id: string
@@ -16,12 +18,29 @@ type Acesso = {
   created_at: string
 }
 
+type ResponsavelPadrao = {
+  id: string
+  nome: string
+  whatsapp: string | null
+}
+
+function normalizarNome(valor: string) {
+  return (valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
 export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: string }) {
   const [acessos, setAcessos] = useState<Acesso[]>([])
   const [podeEditar, setPodeEditar] = useState(false)
   const [visivel, setVisivel] = useState(true)
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [responsavelPadrao, setResponsavelPadrao] = useState<ResponsavelPadrao | null>(null)
   const [dias, setDias] = useState(7)
   const [gerando, setGerando] = useState(false)
   const [carregando, setCarregando] = useState(true)
@@ -30,12 +49,37 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
 
   const carregar = useCallback(async () => {
     const token = await tokenAtual()
-    if (!token) return
-    const resp = await fetch(`/api/medicao-final/${medicaoId}/acessos`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    })
+    if (!token) {
+      setCarregando(false)
+      return
+    }
+
+    const [resp, usuariosDisponiveis, operacao] = await Promise.all([
+      fetch(`/api/medicao-final/${medicaoId}/acessos`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      }),
+      listarUsuariosDisponiveisMedicao(),
+      carregarOperacaoMedicaoV2(medicaoId),
+    ])
+
     const json = await resp.json().catch(() => ({}))
+    setUsuarios(usuariosDisponiveis)
+
+    const responsavel = operacao?.responsavel_id
+      ? usuariosDisponiveis.find(u => u.id === operacao.responsavel_id) || null
+      : null
+
+    setResponsavelPadrao(
+      responsavel
+        ? {
+            id: responsavel.id,
+            nome: responsavel.nome,
+            whatsapp: responsavel.whatsapp || null,
+          }
+        : null,
+    )
+
     if (resp.ok) {
       setAcessos(json.acessos || [])
       setPodeEditar(json.podeEditar === true)
@@ -47,6 +91,18 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
   }, [medicaoId])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  useEffect(() => {
+    if (!responsavelPadrao) return
+    setNome(atual => atual.trim() ? atual : responsavelPadrao.nome)
+    setTelefone(atual => atual.trim() ? atual : (responsavelPadrao.whatsapp || ''))
+  }, [responsavelPadrao])
+
+  function alterarNome(valor: string) {
+    setNome(valor)
+    const cadastrado = usuarios.find(u => normalizarNome(u.nome) === normalizarNome(valor))
+    setTelefone(cadastrado?.whatsapp || '')
+  }
 
   async function gerar() {
     if (!podeEditar) return
@@ -108,8 +164,25 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
 
         {podeEditar ? (
           <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_180px_100px_auto]">
-            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome de quem vai medir" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="Telefone (opcional)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <div>
+              <input
+                list={`responsaveis-medicao-${medicaoId}`}
+                value={nome}
+                onChange={e => alterarNome(e.target.value)}
+                placeholder="Nome de quem vai medir"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <datalist id={`responsaveis-medicao-${medicaoId}`}>
+                {usuarios.map(u => <option key={u.id} value={u.nome} />)}
+              </datalist>
+            </div>
+            <input
+              value={telefone}
+              onChange={e => setTelefone(e.target.value)}
+              placeholder="Telefone (opcional)"
+              inputMode="tel"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
             <select value={dias} onChange={e => setDias(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-2 text-sm">
               <option value={1}>1 dia</option><option value={3}>3 dias</option><option value={7}>7 dias</option><option value={15}>15 dias</option><option value={30}>30 dias</option>
             </select>
@@ -119,6 +192,12 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
           </div>
         ) : (
           <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Seu acesso a Medicao Final e somente consulta. Apenas usuarios com permissao de edicao podem gerar ou revogar links.</p>
+        )}
+
+        {responsavelPadrao && podeEditar && (
+          <p className="mt-2 text-[11px] text-slate-400">
+            Responsável cadastrado: {responsavelPadrao.nome}{responsavelPadrao.whatsapp ? ' · telefone preenchido automaticamente' : ' · sem telefone cadastrado; informe manualmente se necessário'}.
+          </p>
         )}
 
         {urlNova && (
