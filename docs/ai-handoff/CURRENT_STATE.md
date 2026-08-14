@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-13, `main` apos PR #106; branch atual adiciona leitura automatica das fotos de trena no Kanban.
+Verificado em: 2026-08-13, `main` apos PR #107; branch atual corrige a inversao Baixo/Cima observada na leitura de LARGURA.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -11,6 +11,7 @@ Verificado em: 2026-08-13, `main` apos PR #106; branch atual adiciona leitura au
 - Fotos do pedido sao preservadas ao abrir o Kanban.
 - PR #105: cada esquadria exibe `Fotos coletadas em campo` antes das medidas, com multiplas fotos e `Adicionar fotos` sem apagar as anteriores.
 - PR #106: `foto_larguras_url` aparece como `LARGURA`, `foto_alturas_url` como `ALTURA` e fotos gerais ficam em `Outras fotos` sem duplicacao.
+- PR #107: leitura por IA das fotos de LARGURA/ALTURA no Kanban, conversao para mm, preenchimento das seis medidas somente quando as tres leituras do eixo forem reconhecidas e preservacao do preenchimento manual.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - CI Supabase via Session Pooler IPv4 com audit/dry-run em PR.
@@ -24,13 +25,10 @@ Verificado em: 2026-08-13, `main` apos PR #106; branch atual adiciona leitura au
 - Migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
 ## AJUSTE EM VALIDACAO NESTA BRANCH
-- O Kanban reutiliza `/api/medicao-final/ler-trena` nas fotos `LARGURA` e `ALTURA` do pedido.
-- Regra de LARGURA: os tres valores do visor, de cima para baixo, representam `Baixo -> Meio -> Cima`.
-- Regra de ALTURA: os tres valores do visor, de cima para baixo, representam `Direita -> Meio -> Esquerda`, sempre considerando a vista externa da tipologia.
-- Valores em metros/centimetros sao convertidos para milimetros; ex.: `1.700 m = 1700 mm`.
-- A IA deve preservar a ordem visual do visor; nao pode ordenar os numeros pelo valor.
-- Preenchimento automatico so ocorre quando as tres posicoes do eixo forem identificadas, evitando deslocar uma leitura para o campo errado.
-- Se qualquer campo daquele eixo ja tiver valor manual, a leitura automatica inicial nao sobrescreve o preenchimento existente.
+- Teste real do PR #107 mostrou que, na LARGURA, o valor pertencente a `Baixo` foi colocado em `Cima` e vice-versa.
+- Correcao desta branch: inverter somente o primeiro e o terceiro valor da LARGURA antes de preencher os campos; `Meio` permanece inalterado.
+- Exemplo validado no teste: resultado anterior `1789 / 1791 / 1790` deve virar `Baixo 1790 / Meio 1791 / Cima 1789`.
+- ALTURA nao e alterada nesta correcao; permanece `Direita -> Meio -> Esquerda` conforme o comportamento atual validado pelo usuario.
 - A foto permanece salva mesmo se a IA falhar ou estiver indisponivel.
 - O usuario recebe status/confianca da leitura e deve conferir os valores antes de salvar o orcamento.
 

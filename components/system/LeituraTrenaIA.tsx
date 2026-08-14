@@ -101,13 +101,21 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
         return
       }
 
-      CAMPOS[eixo].forEach((campo, index) => onAtualizar(campo, Math.round(medidas[index])))
+      // Regra validada em campo pela Esquadrifácio:
+      // na LARGURA, a leitura que vinha sendo atribuída a Baixo/Cima precisa ser invertida.
+      // Portanto, primeiro e terceiro valores trocam de posição; o Meio permanece igual.
+      // Na ALTURA, o mapeamento permanece Direita -> Meio -> Esquerda sem alteração.
+      const medidasParaCampos = eixo === 'largura'
+        ? [medidas[2], medidas[1], medidas[0]]
+        : medidas
+
+      CAMPOS[eixo].forEach((campo, index) => onAtualizar(campo, Math.round(medidasParaCampos[index])))
 
       const confianca = Math.round((Number(json?.confianca) || 0) * 100)
       const ordem = eixo === 'largura' ? 'Baixo · Meio · Cima' : 'Direita · Meio · Esquerda'
       atualizarEstado(eixo, {
         tipo: 'sucesso',
-        mensagem: `${eixo === 'largura' ? 'Largura' : 'Altura'} preenchida: ${medidas.map((v: number) => `${Math.round(v)} mm`).join(' · ')} (${ordem})${confianca ? ` — confiança ${confianca}%` : ''}. Confira os valores.`,
+        mensagem: `${eixo === 'largura' ? 'Largura' : 'Altura'} preenchida: ${medidasParaCampos.map((v: number) => `${Math.round(v)} mm`).join(' · ')} (${ordem})${confianca ? ` — confiança ${confianca}%` : ''}. Confira os valores.`,
       })
     } catch (e) {
       console.error(`Erro ao ler foto de ${eixo} no Kanban:`, e)

@@ -59,16 +59,15 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - Fotos gerais ficam em `Outras fotos`, sem repetir URLs ja usadas como foto de largura/altura.
 - Clicar em uma miniatura abre a imagem em tamanho maior.
 
-## Kanban — leitura automatica da trena — 2026-08-13
+## Kanban — leitura automatica da trena — PR #107 — 2026-08-13
 - reutiliza a rota autenticada `/api/medicao-final/ler-trena` e a configuracao de visao por IA existente;
-- LARGURA: valores do visor de cima para baixo = `Baixo`, `Meio`, `Cima`;
-- ALTURA: valores do visor de cima para baixo = `Direita`, `Meio`, `Esquerda`, considerando a vista externa da tipologia;
-- a IA preserva a ordem visual do visor e nao ordena os valores numericamente;
 - converte medidas exibidas em metros/centimetros para milimetros;
 - o Kanban so preenche automaticamente quando as 3 leituras daquele eixo forem reconhecidas;
 - nao sobrescreve automaticamente um eixo que ja tenha algum valor manual;
 - falha da IA nao remove a foto nem impede preenchimento manual;
-- mostra status e confianca e exige conferencia humana antes de salvar.
+- mostra status e confianca e exige conferencia humana antes de salvar;
+- validacao real apos o PR #107 identificou inversao entre `Baixo` e `Cima` somente na LARGURA;
+- correcao subsequente troca o primeiro e o terceiro valor antes de preencher LARGURA, mantendo `Meio` e mantendo ALTURA inalterados.
 
 ## Pontos funcionais ainda pendentes
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
