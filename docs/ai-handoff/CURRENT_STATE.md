@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #117 (`7a16d4161174ab4ddd78151da9d99b6946364c14`). A branch atual `fix/wvetro-cliente-rotulo-concatenado` corrige o nome do cliente no preview W.Vetro quando o `pdf-parse` funde rotulos do cabecalho sem espacos.
+Verificado em: 2026-08-14. `main` esta no merge da PR #118 (`08a44d9d24730074a36191558266f03efcb0f626`). A branch atual `feat/medicao-final-medidas-fixas` / PR #119 adiciona medidas principais e fotos da trena como bloco fixo de toda peça da Medicao Final.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -12,9 +12,10 @@ Verificado em: 2026-08-14. `main` esta no merge da PR #117 (`7a16d4161174ab4ddd7
 - PR #112: `Nova medição` permite importar PDF W.Vetro, revisar e criar a Medicao Final preservando o PDF original.
 - PR #113: PDFs W.Vetro sem largura/altura deixam de ser rejeitados; nenhuma dimensao e inventada.
 - PR #114: faixa Cliente/Obra/Orçamento; telefone do responsavel pelo WhatsApp cadastrado; dados da empresa somente quando salvos manualmente.
-- PR #115: parser do preview W.Vetro passou a priorizar nome real do cliente e limpar CEP da cidade.
-- PR #116: orçamento de apoio W.Vetro antigo sem Medicao Final pode ser reaproveitado/reparado; duplicidade so bloqueia quando ja existe Medicao Final vinculada.
-- PR #117: registros internos de apoio W.Vetro deixam de aparecer em `OU USAR ORÇAMENTO DO ATLAS`, sem serem apagados do banco.
+- PR #115: primeira correcao de Cliente/Cidade no preview W.Vetro.
+- PR #116: apoio W.Vetro antigo sem Medicao Final pode ser reaproveitado/reparado; duplicidade so bloqueia quando ja existe Medicao Final vinculada.
+- PR #117: registros internos de apoio W.Vetro deixam de aparecer em `OU USAR ORÇAMENTO DO ATLAS`, sem serem apagados.
+- PR #118: parser rejeita rotulos concatenados como `CELULARTEL. FIXO:`; teste real confirmou preview `FELIPE ALVES SANTANA`, `JOSE BONIFACIO - SP`, 7 itens.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
@@ -23,36 +24,41 @@ Verificado em: 2026-08-14. `main` esta no merge da PR #117 (`7a16d4161174ab4ddd7
 - Engenharia Fases 1 a 4 concluidas: entrada apos Medicao Final, conferencia tecnica e liberacao transacional para Producao.
 - Cadastro tecnico de linhas existe em `linhas_tecnicas`, com relacionamentos `linha_produtos` e `linha_tipologias`.
 
-## EM VALIDACAO — CLIENTE W.VETRO COM ROTULOS CONCATENADOS
-Teste real em producao apos a PR #117 confirmou:
-- antes de selecionar PDF, o card interno `CELULARTEL. FIXO:` sumiu corretamente do seletor Atlas;
-- ao selecionar `FELIPE ALVES SANTANA-861.pdf`, o preview ainda exibiu Cliente `CELULARTEL. FIXO:`;
-- a Cidade ja ficou correta: `JOSE BONIFACIO - SP`;
-- os 7 itens continuam reconhecidos.
+## EM VALIDACAO — PR #119 — MEDIDAS FIXAS E FOTOS DA TRENA
+Pedido validado pelo usuario: toda peça da Medicao Final deve exibir sempre, independentemente do checklist configuravel:
+- Largura Baixo;
+- Largura Meio;
+- Largura Cima;
+- Altura Direita;
+- Altura Meio;
+- Altura Esquerda;
+- foto da trena da LARGURA;
+- foto da trena da ALTURA.
 
-O texto real do PDF confirma a sequencia de cabecalho:
-- `Cep Numero: 861`;
-- `FELIPE ALVES SANTANA (11)94641-2756`;
-- depois os rotulos `CLIENTE: TEL. FIXO: CELULAR`.
+A branch atual implementa em `MedicaoChecklistV2Panel`:
+- secao fixa `Medidas finais da peça` antes do checklist configuravel;
+- duas areas visuais para foto LARGURA e ALTURA, com upload/troca;
+- seis inputs em duas linhas de tres, no mesmo padrao usado no Kanban;
+- botao `Salvar medidas`;
+- indicador `Medidas completas` / `Medidas pendentes` por peça;
+- `medido=true` somente quando as seis medidas possuem valores positivos;
+- se qualquer uma das seis ficar vazia/invalida, a peça permanece `medido=false`.
 
-Causa identificada em `lib/wvetroPdf.ts`:
-- o `pdf-parse` pode fundir rotulos em uma linha como `CELULARTEL. FIXO:`;
-- a validacao anterior rejeitava `CELULAR` apenas quando havia limite de palavra depois do termo;
-- em `CELULARTEL...`, esse limite nao existe e a linha podia ser aceita como um nome plausivel antes de chegar ao nome real.
+### Heranca de orçamento Atlas com Medida Final
+`herdarMedidasFinaisDoOrcamento()` reaproveita dados preexistentes somente quando o orçamento vinculado possui `tipo_medida = final`:
+- copia apenas medidas finais que realmente existam no item de origem;
+- copia `foto_larguras_url` e `foto_alturas_url` quando existirem;
+- nao sobrescreve medidas/fotos ja gravadas na Medicao Final;
+- nao usa `largura_mm`/`altura_mm` comuns como substituto das seis medidas;
+- nao herda de orçamento `tipo_medida = comum`;
+- so faz pareamento automatico quando a quantidade de linhas da medicao ainda corresponde à quantidade de itens do orçamento, evitando associacao errada apos separacao/reorganizacao de peças.
 
-A branch atual reforca `nomePossivelCliente()`:
-- normaliza acentos, pontuacao e espacos;
-- detecta quando dois ou mais rotulos conhecidos de cabecalho aparecem concatenados (`CELULAR` + `TELFIXO`, `CLIENTE` + `TELFIXO`, etc.);
-- rejeita essas linhas como nome de cliente;
-- preserva nomes reais que apenas comecam parecido com um rotulo, por exemplo `TELMA`, evitando um bloqueio generico por prefixo `TEL`;
-- nao altera cidade, itens, medidas, PDF original nem fluxo de confirmacao.
-
-Resultado esperado no PDF 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
+Isso tambem permite que uma Medicao Final ja criada anteriormente herde os dados ao abrir a tela, desde que ainda esteja no pareamento seguro acima.
 
 ## W.VETRO — REFERENCIA FUNCIONAL
 `FELIPE ALVES SANTANA-861.pdf`:
 - orçamento `861`;
-- cliente esperado `FELIPE ALVES SANTANA`;
+- cliente `FELIPE ALVES SANTANA`;
 - nome da obra `CASA`;
 - cidade `JOSE BONIFACIO / SP`;
 - 7 itens;
@@ -61,8 +67,10 @@ Resultado esperado no PDF 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONI
 - linha Suprema;
 - esse layout nao imprime largura/altura das esquadrias.
 
+Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do orçamento, nunca preenche automaticamente as seis medidas finais da obra sem uma fonte explicitamente marcada como Medida Final.
+
 ## W.VETRO API — OPORTUNIDADE MAPEADA, NAO IMPLEMENTADA
-- A documentacao publica `Wvetro Integrations v2` e os endpoints enviados pelo usuario foram avaliados como potencial fonte estruturada para Atlas.
+- Documentacao `Wvetro Integrations v2` e endpoints enviados pelo usuario foram avaliados.
 - Endpoints relevantes: linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, itens de NF, estoque, financeiro, lotes, producao de projeto e instalacoes.
 - Estrategia futura: preferir API W.Vetro -> JSON estruturado -> Atlas; manter PDF como fallback/documento original.
 - Credenciais W.Vetro nunca devem ficar no browser; futura integracao sera server-side.
@@ -76,7 +84,7 @@ Resultado esperado no PDF 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONI
 - Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- Rejeicao de rotulos de cabecalho W.Vetro concatenados no campo Cliente da branch atual.
+- PR #119: bloco fixo de 3 larguras + 3 alturas + duas fotos da trena e heranca de orçamento `tipo_medida=final`.
 - Confirmacao de Venda Fase 1.
 - Importacao generica de itens via PDF; layouts W.Vetro podem variar e precisam de validacao por amostras reais.
 - Modulo de IA/agente existe, mas nao foi auditado a fundo.

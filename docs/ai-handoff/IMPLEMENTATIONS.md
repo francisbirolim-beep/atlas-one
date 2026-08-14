@@ -36,10 +36,9 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - moeda BRL correta e envio/reenvio individual de anexos.
 
 ## Medicao Final — importar orçamento W.Vetro — PR #112 — 2026-08-14
-- adiciona `Importar orçamento W.Vetro` dentro do modal `Nova medição`;
+- `Nova medição` recebe PDF W.Vetro, mostra preview e cria Medicao Final;
 - parser dedicado `lib/wvetroPdf.ts`;
-- rota autenticada server-side com `preview` e `confirmar`;
-- preserva PDF original e cria orçamento de apoio + Medicao Final;
+- PDF original preservado;
 - medidas do orçamento entram somente como referencia;
 - bloqueio de duplicidade por numero W.Vetro;
 - merge `56910395fd9f80e08ea8edf170cda45a3b0736c4`.
@@ -47,44 +46,53 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 ## Medicao Final — W.Vetro sem medidas no PDF — PR #113 — 2026-08-14
 - `FELIPE ALVES SANTANA-861.pdf` possui 7 esquadrias mas nao imprime largura/altura;
 - itens identificaveis deixam de ser descartados apenas pela falta de dimensoes;
-- zero fica somente no snapshot legado e nunca representa medida real;
-- as seis medidas finais permanecem vazias;
+- nenhuma medida final e inventada;
 - merge `44ce91c5281ec0686ed8db3d1732634cc722498a`.
 
 ## Medicao Final — identificacao, telefone e dados manuais da empresa — PR #114 — 2026-08-14
 - faixa Cliente/Obra/Orçamento;
 - numero externo W.Vetro tem prioridade;
-- nome da obra pode ser lido do PDF original preservado;
-- telefone do responsavel e puxado do WhatsApp cadastrado com fallback manual;
+- nome da obra pode ser lido do PDF original;
+- telefone do responsavel usa WhatsApp cadastrado com fallback manual;
 - dados da empresa legados/seedados deixam de ser tratados como configuracao manual;
 - merge `5af697bc154720435b1281c05034888e7a84fba0`.
 
 ## Medicao Final — corrigir Cliente/Cidade no preview W.Vetro — PR #115 — 2026-08-14
-- teste do PDF 861 mostrou Cliente `CELULARTEL. FIXO:` e Cidade `396 JOSE BONIFACIO - SP`;
-- parser passa a priorizar o nome apos o numero do orçamento e limpar o CEP da cidade;
+- primeira correcao do parser do cabecalho do PDF 861;
+- cidade deixa de incluir trecho do CEP;
 - merge `20aaa50845bf0a37da44db2394a155571669093a`.
 
-## Medicao Final — reaproveitar orçamento de apoio W.Vetro antigo — PR #116 — 2026-08-14
-- permite reparar/reaproveitar apoio antigo sem Medicao Final;
+## Medicao Final — reaproveitar apoio W.Vetro antigo — PR #116 — 2026-08-14
+- permite reparar/reaproveitar orçamento interno sem Medicao Final;
 - duplicidade continua bloqueada quando ja existe Medicao Final;
 - PDF original preservado e reutilizado;
 - merge `09514a5feb16a89d333e343732c3bcf873cba4c4`.
 
 ## Medicao Final — ocultar apoios W.Vetro do seletor Atlas — PR #117 — 2026-08-14
-- `listarOrcamentosSemMedicao()` deixa de mostrar registros internos cujo `descricao_livre` comeca por `Importado do W.Vetro |`;
-- o filtro vale apenas para `OU USAR ORÇAMENTO DO ATLAS`;
-- o registro de apoio permanece no banco e continua acessivel ao importador W.Vetro;
+- registros `Importado do W.Vetro | ...` deixam de aparecer em `OU USAR ORÇAMENTO DO ATLAS`;
+- apoio continua preservado no banco;
 - orcamentos comerciais reais continuam elegiveis;
 - merge `7a16d4161174ab4ddd78151da9d99b6946364c14`.
 
-## Medicao Final — cliente W.Vetro com rotulos concatenados — branch fix/wvetro-cliente-rotulo-concatenado — 2026-08-14
-- teste apos a PR #117 confirmou que o card antigo sumiu antes da selecao do PDF, mas o preview do PDF 861 ainda retornou Cliente `CELULARTEL. FIXO:`;
-- o arquivo real contem `Cep Numero: 861`, seguido por `FELIPE ALVES SANTANA (11)94641-2756` e depois pelos rotulos `CLIENTE: TEL. FIXO: CELULAR`;
-- causa: `pdf-parse` pode concatenar esses rotulos como `CELULARTEL. FIXO:` e a validacao anterior dependia de limite de palavra apos `CELULAR`, permitindo a linha falsa passar;
-- `nomePossivelCliente()` agora compacta acentos/pontuacao/espacos e rejeita linhas com dois ou mais rotulos conhecidos concatenados;
-- a regra nao usa um simples `startsWith('TEL')`, evitando rejeitar nomes reais como `TELMA`;
-- cidade, 7 itens, medidas e fluxo de confirmacao nao foram alterados;
-- resultado esperado no PDF 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
+## Medicao Final — rejeitar rotulos concatenados como cliente — PR #118 — 2026-08-14
+- `pdf-parse` podia fundir `CLIENTE`, `CELULAR` e `TEL. FIXO` em textos como `CELULARTEL. FIXO:`;
+- parser passa a identificar combinacoes de rotulos concatenados e rejeita-las como nome;
+- preserva nomes reais parecidos, como `TELMA`;
+- teste real confirmou `FELIPE ALVES SANTANA`, `JOSE BONIFACIO - SP`, 7 itens;
+- merge `08a44d9d24730074a36191558266f03efcb0f626`.
+
+## Medicao Final — medidas fixas e fotos da trena — PR #119 — 2026-08-14
+- adiciona bloco fixo `Medidas finais da peça` no `MedicaoChecklistV2Panel`;
+- toda peça mostra sempre 3 larguras: baixo, meio e cima;
+- toda peça mostra sempre 3 alturas: direita, meio e esquerda;
+- adiciona foto da trena da LARGURA e foto da trena da ALTURA com upload/troca;
+- medidas principais ficam independentes do checklist configuravel por tipologia;
+- `medido=true` somente quando as seis medidas possuem valores positivos;
+- cards de peça mostram `Medidas completas` ou `Medidas pendentes`;
+- orçamento Atlas com `tipo_medida=final` pode fornecer automaticamente as seis medidas e fotos que ja existirem;
+- heranca nunca usa medida comum/referencia, nunca inventa valor ausente e nao sobrescreve dado ja salvo;
+- pareamento automatico de heranca e bloqueado quando a quantidade de linhas diverge do orçamento, evitando associacao errada apos separacao de peças;
+- branch `feat/medicao-final-medidas-fixas`, em validacao.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 - endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
@@ -93,10 +101,12 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
 
 ## Pontos funcionais ainda pendentes
-- Validar em producao o preview do PDF 861 apos a nova rejeicao de rotulos concatenados.
-- Confirmar Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP` e 7 itens.
-- Confirmar que `CELULARTEL. FIXO:` continua ausente do seletor Atlas antes da selecao do PDF.
-- Validar a faixa Cliente/Obra/Orçamento e o telefone automatico do responsavel.
+- Validar visualmente a PR #119 em uma Medicao Final real.
+- Confirmar que PDF W.Vetro 861 continua criando 7 peças com as seis medidas vazias.
+- Validar heranca usando um orçamento Atlas realmente marcado como `tipo_medida=final`, com 3 larguras, 3 alturas e fotos da trena ja preenchidas.
+- Validar upload/troca das duas fotos da trena na Medicao Final.
+- Validar que uma peça só entra como medida quando as seis medidas estão preenchidas.
+- Validar faixa Cliente/Obra/Orçamento e telefone automatico do responsavel.
 - Confirmar que Dados da Empresa fica vazio ate configuracao manual.
 - Fazer regressao com `FRANCIS TESTE-977.pdf`.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
