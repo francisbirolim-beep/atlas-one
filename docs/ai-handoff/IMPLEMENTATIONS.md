@@ -55,10 +55,20 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 ## Kanban — fotos coletadas em campo — 2026-08-13
 - PR #104 restaurou o fluxo `Iniciar orçamento` e preservou referencias de foto do pedido.
 - PR #105 criou a secao `Fotos coletadas em campo` antes das medidas, com multiplas miniaturas e `Adicionar fotos` sem apagar as anteriores.
-- Ajuste atual identifica `foto_larguras_url` como `LARGURA` e `foto_alturas_url` como `ALTURA`.
+- PR #106 identifica `foto_larguras_url` como `LARGURA` e `foto_alturas_url` como `ALTURA`.
 - Fotos gerais ficam em `Outras fotos`, sem repetir URLs ja usadas como foto de largura/altura.
 - Clicar em uma miniatura abre a imagem em tamanho maior.
-- Leitura automatica da trena continua fora deste ajuste.
+
+## Kanban — leitura automatica da trena — 2026-08-13
+- reutiliza a rota autenticada `/api/medicao-final/ler-trena` e a configuracao de visao por IA existente;
+- LARGURA: valores do visor de cima para baixo = `Baixo`, `Meio`, `Cima`;
+- ALTURA: valores do visor de cima para baixo = `Direita`, `Meio`, `Esquerda`, considerando a vista externa da tipologia;
+- a IA preserva a ordem visual do visor e nao ordena os valores numericamente;
+- converte medidas exibidas em metros/centimetros para milimetros;
+- o Kanban so preenche automaticamente quando as 3 leituras daquele eixo forem reconhecidas;
+- nao sobrescreve automaticamente um eixo que ja tenha algum valor manual;
+- falha da IA nao remove a foto nem impede preenchimento manual;
+- mostra status e confianca e exige conferencia humana antes de salvar.
 
 ## Pontos funcionais ainda pendentes
 - Engenharia Fase 5: base de receitas tecnicas por tipologia.
