@@ -1,0 +1,62 @@
+name: Patch Kanban Galeria Fotos
+
+on:
+  push:
+    branches:
+      - fix/kanban-galeria-fotos-campo-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/kanban-galeria-fotos-campo-v2
+          fetch-depth: 0
+      - name: Aplicar patch idempotente
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('components/system/KanbanPageFixed.tsx')
+          text = path.read_text()
+
+          helper_anchor = "function novoItemEdit(): ItemEsquadria {\nreturn { id: uuidv4(), tipo_esquadria: 'porta_correr', largura_mm: 0, altura_mm: 0, quantidade: 1 }\n}\n"
+          helper_new = helper_anchor + "\nfunction fotosDoItem(item: ItemEsquadria): string[] {\nconst fotos = [\n...(item.foto_urls || []),\nitem.foto_url,\nitem.foto_larguras_url,\nitem.foto_alturas_url,\n].filter(Boolean) as string[]\nreturn Array.from(new Set(fotos))\n}\n"
+          if 'function fotosDoItem(item: ItemEsquadria)' not in text:
+              if helper_anchor not in text:
+                  raise SystemExit('anchor helper não encontrado')
+              text = text.replace(helper_anchor, helper_new, 1)
+
+          old_upload = """async function trocarFotoItem(id: string, file: File | undefined) {\nif (!file) return\nconst url = await uploadFoto(file)\nif (url) atualizarItemEdit(id, 'foto_url', url)\n}\n"""
+          new_upload = """async function adicionarFotosItem(id: string, files: FileList | null) {\nconst arquivos = Array.from(files || [])\nif (arquivos.length === 0) return\nconst urls = (await Promise.all(arquivos.map(file => uploadFoto(file)))).filter(Boolean) as string[]\nif (urls.length === 0) return\nsetEditando(prev =>\nprev ? {\n...prev,\nitens: (prev.itens || []).map(it => {\nif (it.id !== id) return it\nconst todas = Array.from(new Set([...fotosDoItem(it), ...urls]))\nreturn { ...it, foto_url: it.foto_url || todas[0] || null, foto_urls: todas }\n}),\n} : prev\n)\n}\n"""
+          if 'async function adicionarFotosItem' not in text:
+              if old_upload not in text:
+                  raise SystemExit('anchor upload não encontrado')
+              text = text.replace(old_upload, new_upload, 1)
+
+          medidas_anchor = """<input\ntype=\"text\"\nvalue={item.folhas || ''}\nonChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}\nplaceholder=\"Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)\"\nclassName=\"w-full border border-slate-300 rounded-lg p-2 text-xs\"\n/>\n{editando.tipo_medida === 'final' ? (\n"""
+          galeria = """<input\ntype=\"text\"\nvalue={item.folhas || ''}\nonChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}\nplaceholder=\"Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)\"\nclassName=\"w-full border border-slate-300 rounded-lg p-2 text-xs\"\n/>\n<div className=\"rounded-xl border border-slate-200 bg-white p-3 space-y-2\">\n<div className=\"flex items-center justify-between gap-2\">\n<p className=\"text-[11px] font-medium text-slate-600 flex items-center gap-1.5\"><Camera size={12} /> Fotos coletadas em campo</p>\n<label className=\"flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy\">\n<Plus size={12} /> Adicionar fotos\n<input type=\"file\" accept=\"image/*\" multiple className=\"hidden\" onChange={e => adicionarFotosItem(item.id, e.target.files)} />\n</label>\n</div>\n{fotosDoItem(item).length > 0 ? (\n<div className=\"grid grid-cols-4 gap-2\">\n{fotosDoItem(item).map((url, fotoIndex) => (\n<a key={`${url}-${fotoIndex}`} href={url} target=\"_blank\" rel=\"noreferrer\" className=\"block\">\n<img src={url} alt={`Foto de campo ${fotoIndex + 1}`} className=\"w-full aspect-square object-cover rounded-lg border border-slate-200\" />\n</a>\n))}\n</div>\n) : (\n<p className=\"text-[11px] text-slate-400\">Nenhuma foto coletada para esta esquadria.</p>\n)}\n<p className=\"text-[10px] text-slate-400\">As fotos originais permanecem salvas. Clique em uma miniatura para abrir maior.</p>\n</div>\n{editando.tipo_medida === 'final' ? (\n"""
+          if 'Fotos coletadas em campo' not in text:
+              if medidas_anchor not in text:
+                  raise SystemExit('anchor medidas não encontrado')
+              text = text.replace(medidas_anchor, galeria, 1)
+
+          old_photo_block = """<div className=\"flex items-center gap-2\">\n{item.foto_url && <a href={item.foto_url} target=\"_blank\" rel=\"noreferrer\"><img src={item.foto_url} alt=\"\" className=\"w-12 h-12 object-cover rounded-lg\" /></a>}\n<label className=\"flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy\">\n<Camera size={12} /> Trocar foto\n<input type=\"file\" accept=\"image/*\" className=\"hidden\" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />\n</label>\n</div>\n"""
+          if old_photo_block in text:
+              text = text.replace(old_photo_block, '', 1)
+
+          path.write_text(text)
+          PY
+          if git diff --quiet; then
+            echo "Patch já aplicado; nada a commitar."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/system/KanbanPageFixed.tsx
+          git commit -m "fix: exibir todas as fotos coletadas por esquadria"
+          git push origin HEAD:fix/kanban-galeria-fotos-campo-v2
