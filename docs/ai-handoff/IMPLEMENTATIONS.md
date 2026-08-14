@@ -47,24 +47,29 @@ Anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio i
 - merge `f995a9377430e7f1344e00c6acf86799da44b2c2`.
 
 ## Medicao Final — padroes SIM/NAO, observacao e vista interna — PR #120 — 2026-08-14
-- adiciona `MedicaoPadroesFixosPanel` para todas as peças da tela interna;
 - CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA sempre disponiveis com SIM/NAO;
 - valores persistidos em `medicao_itens.campos_extras`, preservando demais chaves;
-- campo OBSERVACAO sempre disponivel no final de cada peça (`observacao_medicao`);
-- aviso permanente: medir pela vista interna do vao;
-- quando a medicao esta liberada e ainda nao iniciada, modal reforca a regra antes do inicio;
-- nao altera medidas finais, fotos da trena nem checklist configuravel;
-- branch `feat/medicao-padrao-sim-nao-observacao`, em validacao.
+- campo OBSERVACAO por peça (`observacao_medicao`);
+- lembrete para medir pela vista interna do vao;
+- merge `6835a99b97ce8d890980540aaa75dd0b8f846e85`.
 
-## W.Vetro API — levantamento de integracao — 2026-08-14
+## Medicao Final — ordem sequencial por peça — branch fix/medicao-ordem-padroes-abaixo-medidas — 2026-08-14
+- teste no celular mostrou o bloco SIM/NAO como painel separado depois das fotos;
+- pedido: colocar esse bloco imediatamente abaixo das medidas da mesma peca;
+- `MedicaoPadroesFixosPanel` passou a receber `itemId`, sem barra própria/duplicada de peças;
+- dentro de `MedicaoChecklistV2Panel`, a ordem passa a ser medidas -> conferencias SIM/NAO -> observacao -> checklist configuravel -> fotos adicionais;
+- painel separado removido do `AppShell`;
+- aviso de vista interna foi isolado em `MedicaoVistaInternaAviso` para continuar aparecendo antes do inicio sem depender da posicao do bloco.
+
+## W.VETRO API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
-- Validar visualmente PR #120: SIM/NAO, persistencia e observacao por peça.
-- Validar o modal de vista interna apos liberar uma medicao ainda nao iniciada.
+- Validar no celular a nova ordem: medidas -> SIM/NAO -> observacao -> demais campos.
+- Confirmar que trocar de peca troca tambem os quatro SIM/NAO e a observacao sem vazamento entre itens.
+- Validar aviso de vista interna apos liberar uma medicao ainda nao iniciada.
 - Validar PR #119 em campo: seis medidas, fotos e heranca de orçamento `tipo_medida=final`.
 - Decidir/implementar os mesmos campos fixos no link externo se ele for usado como interface principal do medidor.
-- Validar faixa Cliente/Obra/Orçamento e telefone automatico.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
 - Criar conector W.Vetro API somente leitura depois de credenciais/testes reais.
 - Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
