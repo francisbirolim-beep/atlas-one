@@ -1,19 +1,23 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Save, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2 } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { uploadFoto } from '@/lib/upload'
+import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
+import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import {
   adicionarFotoMedicaoV2,
   camposDoItemV2,
   carregarChecklistMedicaoV2,
+  herdarMedidasFinaisDoOrcamento,
   removerFotoMedicaoV2,
+  salvarMedidasFixasItemV2,
   salvarRespostaChecklistV2,
   valorRespostaItemV2,
   type CampoChecklistV2,
   type DadosChecklistMedicaoV2,
+  type MedidasFixasItemV2,
 } from '@/lib/medicaoChecklistV2'
 
 const VAZIO: DadosChecklistMedicaoV2 = { itens: [], campos: [], respostas: [], fotos: [] }
@@ -26,6 +30,26 @@ const CATEGORIAS_FOTO = [
   ['outra', 'Outra'],
 ] as const
 
+type MedidasFormulario = Record<keyof MedidasFixasItemV2, string>
+
+const MEDIDAS_VAZIAS: MedidasFormulario = {
+  largura_baixo_mm: '',
+  largura_meio_mm: '',
+  largura_cima_mm: '',
+  altura_direita_mm: '',
+  altura_meio_mm: '',
+  altura_esquerda_mm: '',
+}
+
+const CHAVES_MEDIDAS: (keyof MedidasFixasItemV2)[] = [
+  'largura_baixo_mm',
+  'largura_meio_mm',
+  'largura_cima_mm',
+  'altura_direita_mm',
+  'altura_meio_mm',
+  'altura_esquerda_mm',
+]
+
 function textoValor(valor: unknown) {
   if (valor === undefined || valor === null) return ''
   if (typeof valor === 'string' || typeof valor === 'number') return String(valor)
@@ -36,19 +60,39 @@ function campoRespondido(valor: unknown) {
   return !(valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0))
 }
 
+function numeroMedida(valor: string): number | null {
+  const numero = Number((valor || '').replace(',', '.'))
+  return Number.isFinite(numero) && numero > 0 ? numero : null
+}
+
+function itemTemMedidasFinais(item: MedicaoItem) {
+  return CHAVES_MEDIDAS.every(chave => {
+    const numero = Number(item[chave])
+    return Number.isFinite(numero) && numero > 0
+  })
+}
+
 export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: string }) {
   const [dados, setDados] = useState<DadosChecklistMedicaoV2>(VAZIO)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [itemId, setItemId] = useState('')
   const [aberto, setAberto] = useState(true)
   const [valores, setValores] = useState<Record<string, string>>({})
+  const [medidas, setMedidas] = useState<MedidasFormulario>(MEDIDAS_VAZIAS)
   const [salvando, setSalvando] = useState<string | null>(null)
+  const [salvandoMedidas, setSalvandoMedidas] = useState(false)
   const [enviandoFoto, setEnviandoFoto] = useState<string | null>(null)
   const [categoriaFoto, setCategoriaFoto] = useState('visao_geral')
   const [mensagem, setMensagem] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const herancaVerificada = useRef<string | null>(null)
 
   const carregar = useCallback(async () => {
+    if (herancaVerificada.current !== medicaoId) {
+      await herdarMedidasFinaisDoOrcamento(medicaoId)
+      herancaVerificada.current = medicaoId
+    }
+
     const novo = await carregarChecklistMedicaoV2(medicaoId)
     setDados(novo)
     setItemId(atual => atual && novo.itens.some(i => i.id === atual) ? atual : (novo.itens[0]?.id || ''))
@@ -65,6 +109,22 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
   const fotosItem = useMemo(() => dados.fotos.filter(f => f.item_id === itemId), [dados.fotos, itemId])
 
   useEffect(() => {
+    if (!item) {
+      setMedidas(MEDIDAS_VAZIAS)
+      return
+    }
+
+    setMedidas({
+      largura_baixo_mm: textoValor(item.largura_baixo_mm),
+      largura_meio_mm: textoValor(item.largura_meio_mm),
+      largura_cima_mm: textoValor(item.largura_cima_mm),
+      altura_direita_mm: textoValor(item.altura_direita_mm),
+      altura_meio_mm: textoValor(item.altura_meio_mm),
+      altura_esquerda_mm: textoValor(item.altura_esquerda_mm),
+    })
+  }, [item])
+
+  useEffect(() => {
     if (!item) return
     const proximos: Record<string, string> = {}
     for (const campo of campos) {
@@ -75,6 +135,59 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
 
   const obrigatorios = campos.filter(c => c.obrigatorio)
   const obrigatoriosRespondidos = obrigatorios.filter(c => campoRespondido(valorRespostaItemV2(item as MedicaoItem, c, dados.respostas))).length
+  const medidasCompletas = item ? itemTemMedidasFinais(item) : false
+
+  async function salvarMedidasFixas() {
+    if (!item || salvandoMedidas) return
+
+    setSalvandoMedidas(true)
+    setMensagem('')
+
+    const ok = await salvarMedidasFixasItemV2(item.id, {
+      largura_baixo_mm: numeroMedida(medidas.largura_baixo_mm),
+      largura_meio_mm: numeroMedida(medidas.largura_meio_mm),
+      largura_cima_mm: numeroMedida(medidas.largura_cima_mm),
+      altura_direita_mm: numeroMedida(medidas.altura_direita_mm),
+      altura_meio_mm: numeroMedida(medidas.altura_meio_mm),
+      altura_esquerda_mm: numeroMedida(medidas.altura_esquerda_mm),
+    }, usuario)
+
+    setSalvandoMedidas(false)
+
+    if (!ok) {
+      setMensagem('Não foi possível salvar as medidas finais desta peça.')
+      return
+    }
+
+    setMensagem('Medidas finais salvas.')
+    await carregar()
+  }
+
+  async function enviarFotoTrena(eixo: 'largura' | 'altura', file: File) {
+    if (!item) return
+
+    const chave = `medida:${eixo}`
+    setEnviandoFoto(chave)
+    setMensagem('')
+
+    const url = await uploadFotoMedicao(file)
+    if (!url) {
+      setEnviandoFoto(null)
+      setMensagem('Não foi possível enviar a foto da trena.')
+      return
+    }
+
+    const salvo = await salvarFotoMedicaoItem(item.id, eixo === 'largura' ? 'larguras' : 'alturas', url)
+    setEnviandoFoto(null)
+
+    if (!salvo) {
+      setMensagem('A foto foi enviada, mas não foi possível vinculá-la à peça.')
+      return
+    }
+
+    setMensagem(eixo === 'largura' ? 'Foto da largura registrada.' : 'Foto da altura registrada.')
+    await carregar()
+  }
 
   async function salvarCampo(campo: CampoChecklistV2, valorForcado?: string, fotoUrls: string[] = []) {
     if (!item) return
@@ -148,7 +261,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
         >
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Medição Final V2</p>
-            <h2 className="text-sm font-semibold text-slate-900">Checklist e fotos por peça</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Medidas, checklist e fotos por peça</h2>
           </div>
           {aberto ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
         </button>
@@ -160,6 +273,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                 const ativos = camposDoItemV2(dados.campos, peca)
                 const req = ativos.filter(c => c.obrigatorio)
                 const ok = req.filter(c => campoRespondido(valorRespostaItemV2(peca, c, dados.respostas))).length
+                const medidasOk = itemTemMedidasFinais(peca)
                 return (
                   <button
                     key={peca.id}
@@ -169,7 +283,10 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                   >
                     <span className="block font-semibold">Peça {indice + 1}</span>
                     <span className={`mt-0.5 block truncate ${peca.id === itemId ? 'text-slate-300' : 'text-slate-400'}`}>{peca.descricao || peca.tipo_esquadria}</span>
-                    {req.length > 0 && <span className={`mt-1 block ${ok === req.length ? 'text-emerald-400' : ''}`}>{ok}/{req.length} obrigatórios</span>}
+                    <span className={`mt-1 block ${medidasOk ? 'text-emerald-400' : peca.id === itemId ? 'text-amber-300' : 'text-amber-600'}`}>
+                      {medidasOk ? 'Medidas completas' : 'Medidas pendentes'}
+                    </span>
+                    {req.length > 0 && <span className={`mt-0.5 block ${ok === req.length ? 'text-emerald-400' : ''}`}>{ok}/{req.length} checklist obrigatório</span>}
                   </button>
                 )
               })}
@@ -180,11 +297,112 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{item.descricao || item.tipo_esquadria}</p>
-                    <p className="text-xs text-slate-500">{obrigatorios.length ? `${obrigatoriosRespondidos}/${obrigatorios.length} campos obrigatórios preenchidos` : 'Sem campos obrigatórios configurados'}</p>
+                    <p className="text-xs text-slate-500">
+                      {medidasCompletas ? 'Medidas finais completas' : 'Medidas finais pendentes'}
+                      {obrigatorios.length ? ` · ${obrigatoriosRespondidos}/${obrigatorios.length} campos de checklist obrigatórios` : ''}
+                    </p>
                   </div>
-                  {obrigatorios.length > 0 && obrigatoriosRespondidos === obrigatorios.length && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check size={14} /> Checklist obrigatório completo</span>
+                  {medidasCompletas && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check size={14} /> Medidas completas</span>
                   )}
+                </div>
+
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500"><Ruler size={14} /> Medidas finais da peça</p>
+                      <p className="mt-1 text-xs text-slate-500">Sempre registre 3 larguras, 3 alturas e as fotos da trena quando disponíveis.</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${medidasCompletas ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                      {medidasCompletas ? 'Completa' : 'Pendente'}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="cursor-pointer rounded-xl border border-blue-200 bg-blue-50/40 p-2 transition hover:border-blue-300">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">LARGURA</span>
+                        <span className="text-[10px] font-medium text-blue-700">Foto da trena</span>
+                      </div>
+                      {item.foto_larguras_url ? (
+                        <img src={item.foto_larguras_url} alt="Foto da trena da largura" className="h-36 w-full rounded-lg object-cover" />
+                      ) : (
+                        <div className="flex h-36 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-blue-200 bg-white text-xs text-blue-700">
+                          {enviandoFoto === 'medida:largura' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+                          <span>{enviandoFoto === 'medida:largura' ? 'Enviando...' : 'Adicionar foto da trena'}</span>
+                        </div>
+                      )}
+                      {item.foto_larguras_url && <p className="mt-1.5 text-center text-[10px] font-medium text-blue-700">Clique para trocar a foto</p>}
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFotoTrena('largura', e.target.files[0])} />
+                    </label>
+
+                    <label className="cursor-pointer rounded-xl border border-emerald-200 bg-emerald-50/40 p-2 transition hover:border-emerald-300">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">ALTURA</span>
+                        <span className="text-[10px] font-medium text-emerald-700">Foto da trena</span>
+                      </div>
+                      {item.foto_alturas_url ? (
+                        <img src={item.foto_alturas_url} alt="Foto da trena da altura" className="h-36 w-full rounded-lg object-cover" />
+                      ) : (
+                        <div className="flex h-36 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-emerald-200 bg-white text-xs text-emerald-700">
+                          {enviandoFoto === 'medida:altura' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+                          <span>{enviandoFoto === 'medida:altura' ? 'Enviando...' : 'Adicionar foto da trena'}</span>
+                        </div>
+                      )}
+                      {item.foto_alturas_url && <p className="mt-1.5 text-center text-[10px] font-medium text-emerald-700">Clique para trocar a foto</p>}
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFotoTrena('altura', e.target.files[0])} />
+                    </label>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-500">Larguras (mm) — baixo, meio, cima</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['largura_baixo_mm', 'largura_meio_mm', 'largura_cima_mm'] as const).map((chave, indice) => (
+                        <input
+                          key={chave}
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          step="1"
+                          placeholder={['Baixo', 'Meio', 'Cima'][indice]}
+                          value={medidas[chave]}
+                          onChange={e => setMedidas(prev => ({ ...prev, [chave]: e.target.value }))}
+                          className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-500">Alturas (mm) — direita, meio, esquerda</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['altura_direita_mm', 'altura_meio_mm', 'altura_esquerda_mm'] as const).map((chave, indice) => (
+                        <input
+                          key={chave}
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          step="1"
+                          placeholder={['Direita', 'Meio', 'Esquerda'][indice]}
+                          value={medidas[chave]}
+                          onChange={e => setMedidas(prev => ({ ...prev, [chave]: e.target.value }))}
+                          className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={salvandoMedidas}
+                      onClick={() => void salvarMedidasFixas()}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {salvandoMedidas ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                      Salvar medidas
+                    </button>
+                  </div>
                 </div>
 
                 {campos.length === 0 ? (
@@ -246,7 +464,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Fotos da peça</p>
-                      <p className="text-xs text-slate-500">Registre o contexto da instalação separado das fotos dos campos.</p>
+                      <p className="text-xs text-slate-500">Registre o contexto da instalação separado das fotos das medidas e dos campos.</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <select value={categoriaFoto} onChange={e => setCategoriaFoto(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-xs">
