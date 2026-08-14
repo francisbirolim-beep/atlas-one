@@ -8,6 +8,7 @@ import AppTopbar from '@/components/system/AppTopbar'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
+import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
@@ -55,6 +56,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           )}
           {medicaoFinalId && (
             <div className="atlas-medicao-tools">
+              <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
               <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
               <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
               <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
