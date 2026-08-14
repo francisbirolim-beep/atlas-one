@@ -61,29 +61,30 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 
 ## Medicao Final — corrigir Cliente/Cidade no preview W.Vetro — PR #115 — 2026-08-14
 - teste do PDF 861 mostrou Cliente `CELULARTEL. FIXO:` e Cidade `396 JOSE BONIFACIO - SP`;
-- parser passa a priorizar `FELIPE ALVES SANTANA` logo apos `Cep Numero: 861`;
-- rotulos CELULAR/TEL/FIXO/CONTATO deixam de ser aceitos como nome;
-- cidade passa a ser extraida depois de remover o CEP;
-- resultado esperado: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens;
+- parser passa a priorizar o nome apos o numero do orçamento e limpar o CEP da cidade;
 - merge `20aaa50845bf0a37da44db2394a155571669093a`.
 
 ## Medicao Final — reaproveitar orçamento de apoio W.Vetro antigo — PR #116 — 2026-08-14
-- novo print mostrou, em `OU USAR ORÇAMENTO DO ATLAS`, um card antigo com os mesmos dados incorretos do parser anterior: `CELULARTEL. FIXO:` / `396 JOSE BONIFACIO - SP`;
-- a rota de confirmacao anteriormente bloqueava qualquer marcador W.Vetro ja existente, mesmo se nao houvesse Medicao Final vinculada;
+- permite reparar/reaproveitar apoio antigo sem Medicao Final;
 - duplicidade continua bloqueada quando ja existe Medicao Final;
-- quando existe somente o orçamento de apoio antigo, ele e reaproveitado e atualizado com Cliente/Cidade/itens do parser atual;
-- o PDF original ja preservado e reutilizado quando existe;
-- depois a Medicao Final e criada sobre o mesmo `orcamento_id`;
-- rollback nao apaga um registro antigo reaproveitado em caso de falha posterior;
+- PDF original preservado e reutilizado;
 - merge `09514a5feb16a89d333e343732c3bcf873cba4c4`.
 
-## Medicao Final — ocultar apoios W.Vetro do seletor Atlas — branch fix/ocultar-apoio-wvetro-seletor-atlas — 2026-08-14
-- novo teste mostrou que o card antigo ainda aparecia ao abrir `Nova medição`, antes de qualquer nova importacao;
-- causa: `listarOrcamentosSemMedicao()` listava todo orçamento vendido sem Medicao Final, incluindo registros internos de apoio W.Vetro;
-- a consulta passa a trazer `descricao_livre` e filtra da lista qualquer registro cujo marcador comece por `Importado do W.Vetro |`;
-- o filtro afeta somente o bloco `OU USAR ORÇAMENTO DO ATLAS`;
-- o registro de apoio continua preservado no banco e continua acessivel ao importador W.Vetro para reaproveitamento/reparo;
-- orcamentos comerciais reais do Atlas permanecem elegiveis normalmente.
+## Medicao Final — ocultar apoios W.Vetro do seletor Atlas — PR #117 — 2026-08-14
+- `listarOrcamentosSemMedicao()` deixa de mostrar registros internos cujo `descricao_livre` comeca por `Importado do W.Vetro |`;
+- o filtro vale apenas para `OU USAR ORÇAMENTO DO ATLAS`;
+- o registro de apoio permanece no banco e continua acessivel ao importador W.Vetro;
+- orcamentos comerciais reais continuam elegiveis;
+- merge `7a16d4161174ab4ddd78151da9d99b6946364c14`.
+
+## Medicao Final — cliente W.Vetro com rotulos concatenados — branch fix/wvetro-cliente-rotulo-concatenado — 2026-08-14
+- teste apos a PR #117 confirmou que o card antigo sumiu antes da selecao do PDF, mas o preview do PDF 861 ainda retornou Cliente `CELULARTEL. FIXO:`;
+- o arquivo real contem `Cep Numero: 861`, seguido por `FELIPE ALVES SANTANA (11)94641-2756` e depois pelos rotulos `CLIENTE: TEL. FIXO: CELULAR`;
+- causa: `pdf-parse` pode concatenar esses rotulos como `CELULARTEL. FIXO:` e a validacao anterior dependia de limite de palavra apos `CELULAR`, permitindo a linha falsa passar;
+- `nomePossivelCliente()` agora compacta acentos/pontuacao/espacos e rejeita linhas com dois ou mais rotulos conhecidos concatenados;
+- a regra nao usa um simples `startsWith('TEL')`, evitando rejeitar nomes reais como `TELMA`;
+- cidade, 7 itens, medidas e fluxo de confirmacao nao foram alterados;
+- resultado esperado no PDF 861: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 - endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
@@ -92,9 +93,9 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
 
 ## Pontos funcionais ainda pendentes
-- Validar que `CELULARTEL. FIXO:` deixa de aparecer imediatamente no bloco `OU USAR ORÇAMENTO DO ATLAS` sem precisar importar o PDF primeiro.
-- Validar que orcamentos comerciais reais do Atlas continuam aparecendo nesse seletor.
-- Continuar teste do PDF 861 e confirmar reparo/reaproveitamento do apoio antigo quando o PDF for importado.
+- Validar em producao o preview do PDF 861 apos a nova rejeicao de rotulos concatenados.
+- Confirmar Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP` e 7 itens.
+- Confirmar que `CELULARTEL. FIXO:` continua ausente do seletor Atlas antes da selecao do PDF.
 - Validar a faixa Cliente/Obra/Orçamento e o telefone automatico do responsavel.
 - Confirmar que Dados da Empresa fica vazio ate configuracao manual.
 - Fazer regressao com `FRANCIS TESTE-977.pdf`.
