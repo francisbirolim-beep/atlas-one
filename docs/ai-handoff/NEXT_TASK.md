@@ -3,18 +3,19 @@
 ## TAREFA ATUAL
 A Engenharia Fase 4 foi concluida no PR #73 e a migration `20260811200000_engenharia_liberacao_producao_v1.sql` foi aplicada e validada no Supabase.
 
-Em paralelo, o Kanban comercial recebeu a restauracao do fluxo `Iniciar orçamento` no PR #104 e a galeria de fotos por esquadria no PR #105. A branch atual `fix/kanban-legenda-fotos-medida` identifica separadamente as fotos de largura e altura.
+No Kanban comercial, PR #104 restaurou `Iniciar orçamento`, PR #105 organizou as fotos por esquadria e PR #106 separou as fotos de `LARGURA` e `ALTURA`. A branch atual `feat/kanban-leitura-trena-ia` usa essas duas fotos para sugerir automaticamente as seis medidas.
 
-## VALIDAR ANTES DE ENCERRAR O AJUSTE DO KANBAN
-1. Criar/abrir um pedido de medida final com foto de largura e foto de altura.
+## VALIDAR ANTES DE ENCERRAR A LEITURA DE TRENA NO KANBAN
+1. Criar/abrir um pedido de medida final com foto de largura e foto de altura do medidor laser.
 2. Abrir o card em `Fazer orçamento` e clicar em `Iniciar orçamento`.
-3. Confirmar que a foto de `foto_larguras_url` aparece com a legenda `LARGURA`.
-4. Confirmar que a foto de `foto_alturas_url` aparece com a legenda `ALTURA`.
-5. Confirmar que fotos gerais aparecem separadamente em `Outras fotos`.
-6. Confirmar que URLs de largura/altura nao reaparecem em `Outras fotos`.
-7. Clicar nas fotos e confirmar abertura maior.
-8. Salvar, fechar e reabrir o card e confirmar persistencia.
-9. Nao incluir leitura automatica da trena nesta validacao.
+3. Confirmar que as fotos continuam visiveis como `LARGURA` e `ALTURA`.
+4. Confirmar que aparece o status de leitura por IA.
+5. Na foto `LARGURA`, conferir que os valores do visor de cima para baixo preencheram `Baixo -> Meio -> Cima`.
+6. Na foto `ALTURA`, conferir que os valores do visor de cima para baixo preencheram `Direita -> Meio -> Esquerda`, considerando vista externa.
+7. Confirmar conversao para milimetros; ex.: `1.700 m` deve resultar em `1700`.
+8. Se a IA nao reconhecer exatamente 3 valores de um eixo, confirmar que nenhum campo daquele eixo foi deslocado/preenchido parcialmente e que aparece aviso para conferencia manual.
+9. Alterar manualmente um valor, salvar, fechar e reabrir o card; confirmar persistencia.
+10. Confirmar que falha/indisponibilidade da IA nunca remove as fotos.
 
 ## PROXIMA TAREFA — ENGENHARIA FASE 5
 Criar a base de receitas tecnicas por tipologia, preparando o MEE sem implementar todo o calculo automatico de uma vez.
@@ -44,11 +45,14 @@ Escopo recomendado:
 - Engenharia Fase 4 PR #73: liberacao transacional para Producao, registro de quem/quando e card de Producao idempotente; migration aplicada.
 - Kanban PR #104: primeira coluna volta a exigir `Iniciar orçamento` e preserva referencias de foto do pedido.
 - Kanban PR #105: galeria de fotos coletadas em campo por esquadria.
+- Kanban PR #106: fotos de largura e altura separadas e identificadas.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`.
 - Branch -> PR -> build valido -> merge.
+- Leitura por IA e sugestao; o colaborador deve conferir as medidas antes de salvar.
+- Nao sobrescrever automaticamente medida manual ja preenchida.
 - Migration: dry-run em PR antes de apply controlado.
 - Nao automatizar lista de corte antes de fechar o modelo de receitas e versoes.
 - Vercel pode continuar sujeita a cota diaria; Build Validation confirma o codigo, mas producao depende do deploy.
