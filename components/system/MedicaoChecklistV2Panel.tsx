@@ -6,6 +6,7 @@ import { usuarioAtual } from '@/lib/auth'
 import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
+import MedicaoPadroesFixosPanel from '@/components/system/MedicaoPadroesFixosPanel'
 import {
   adicionarFotoMedicaoV2,
   camposDoItemV2,
@@ -404,6 +405,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                     </button>
                   </div>
                 </div>
+
+                <MedicaoPadroesFixosPanel itemId={item.id} />
 
                 {campos.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-400">Nenhum campo de checklist configurado para esta tipologia.</p>
