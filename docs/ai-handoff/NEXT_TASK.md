@@ -1,69 +1,63 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar a branch `fix/medicao-ordem-padroes-abaixo-medidas`.
+Validar a branch `feat/medicao-parcial-historico-tempo`.
 
-A PR #120 ja esta em `main` e adicionou por peça:
-- CONTRAMARCO — SIM / NAO;
-- ARREMATE — SIM / NAO;
-- CADEIRINHA — SIM / NAO;
-- CANTONEIRA — SIM / NAO;
-- OBSERVACAO;
-- lembrete para medir pela vista interna do vao.
+A `main` ja possui a PR #121 com o fluxo da peça na ordem:
+medidas/fotos da trena -> SIM/NAO -> observacao -> demais campos -> fotos adicionais.
 
-O teste no celular mostrou que esse bloco ficou como painel separado depois das fotos. O usuario pediu uma ordem unica e sequencial dentro da mesma peca.
+O usuario pediu agora controle real de visita parcial:
+- depois de iniciar, registrar data/hora e contar o tempo;
+- permitir medir apenas parte das pecas e salvar como Medicao Parcial;
+- marcar visualmente as feitas com check e manter as demais em aberto;
+- preservar tudo para uma segunda visita;
+- ao liberar o restante, retomar a mesma medicao;
+- manter historico de quando iniciou, quando ficou parcial e quando retomou.
 
 ## IMPLEMENTADO NA BRANCH ATUAL
-1. `MedicaoPadroesFixosPanel` agora recebe diretamente o `itemId` selecionado no `MedicaoChecklistV2Panel`.
-2. A barra duplicada `Peca 1 / Peca 2 / ...` foi removida desse bloco.
-3. O bloco fica imediatamente depois das seis medidas e fotos da trena.
-4. A observacao fica imediatamente depois de CONTRAMARCO / ARREMATE / CADEIRINHA / CANTONEIRA.
-5. Depois entram os campos configuraveis por tipologia e, por ultimo, fotos adicionais da peça.
-6. O painel separado foi removido do `AppShell`.
-7. O aviso antes do inicio foi preservado em `MedicaoVistaInternaAviso`, independente da posicao do bloco.
-
-## ORDEM ESPERADA NA TELA DE CADA PECA
-1. identificacao da peça;
-2. foto da trena LARGURA;
-3. foto da trena ALTURA;
-4. Largura Baixo / Meio / Cima;
-5. Altura Direita / Meio / Esquerda;
-6. Contramarco SIM/NAO;
-7. Arremate SIM/NAO;
-8. Cadeirinha SIM/NAO;
-9. Cantoneira SIM/NAO;
-10. Observacao da peça;
-11. demais informacoes/checklists configurados;
-12. fotos adicionais.
+1. `MedicaoParcialPanel` aparece quando existe `iniciado_em`.
+2. Cronometro conta somente tempo ativo.
+3. `Salvar medição parcial` registra snapshot e pausa o cronometro.
+4. `Retomar medição` registra nova entrada de historico e volta a contar.
+5. Pecas com `medido=true` aparecem como `✅ FEITA`; as outras como `EM ABERTO`.
+6. Medidas, fotos, checklist e observacoes ja salvos nao sao alterados ao pausar/retomar.
+7. Historico usa `medicao_revisoes` ja existente, com motivo `Medição parcial` / `Retomada da medição`, data/hora, usuario e contagem feita/em aberto.
+8. O inicio e sintetizado a partir de `medicoes_finais.iniciado_em`.
+9. Nao ha migration nova nesta etapa.
+10. Para compatibilidade com telas antigas, `status_operacional` nao ganhou novo valor; o estado parcial e derivado do ultimo evento do historico.
 
 ## VALIDAR ANTES DO MERGE
 1. Confirmar Build Validation verde.
-2. Abrir no celular a mesma Medicao Final usada no print.
-3. Confirmar que nao existe mais um painel separado `Padroes da medicao` depois das fotos.
-4. Na Peça 1, rolar logo abaixo das medidas e confirmar a tabela SIM/NAO.
-5. Confirmar que a observacao vem logo abaixo da tabela.
-6. Trocar para Peça 2 e confirmar que tabela/observacao acompanham a peca selecionada.
-7. Marcar respostas diferentes entre Peça 1 e Peça 2; voltar e confirmar persistencia individual.
-8. Confirmar que campos configuraveis aparecem depois da observacao.
-9. Confirmar que fotos adicionais continuam no final.
-10. Em medicao `liberado` sem `iniciado_em`, confirmar o aviso `Sempre fazer a medição pela vista interna do vão`.
-11. Fazer regressao das seis medidas e fotos da trena da PR #119.
+2. Abrir uma Medicao Final ainda nao iniciada e confirmar que o painel parcial nao aparece.
+3. Iniciar a medicao; confirmar que o painel aparece e o cronometro comeca.
+4. Medir 2 ou 3 pecas e salvar as seis medidas de cada uma.
+5. Confirmar que essas pecas aparecem com `✅ FEITA` e as demais com `EM ABERTO`.
+6. Clicar `Salvar medição parcial`.
+7. Confirmar banner de parcial e cronometro pausado.
+8. Recarregar a pagina; confirmar que estado parcial, pecas feitas e historico continuam iguais.
+9. Abrir `Histórico`; confirmar data/hora do inicio e da parcial, usuario e quantidade feita/em aberto.
+10. Clicar `Retomar medição`; confirmar nova entrada no historico e cronometro voltando a contar.
+11. Medir o restante; confirmar que os checks antigos permanecem e novos checks aparecem.
+12. Salvar parcial uma segunda vez e confirmar novo ciclo no historico.
+13. Retomar e concluir 100% da medicao normalmente.
+14. Fazer regressao dos campos SIM/NAO, observacao, fotos da trena e aviso de vista interna.
 
 ## DEPOIS DESTA VALIDACAO
-- Continuar adicionando os proximos campos da Medicao Final na mesma sequencia, conforme o usuario enviar.
-- Se o link externo for a interface principal do medidor, replicar a mesma ordem e os campos fixos em `/medicao-final/acesso/[token]`.
-- Continuar teste completo do PDF `FELIPE ALVES SANTANA-861.pdf`.
+- Se desejado, transformar Medicao Parcial em status operacional dedicado e refletir esse status tambem no quadro principal.
+- Replicar o mesmo controle no link externo `/medicao-final/acesso/[token]` se esse for o fluxo principal do medidor.
 - Avaliar leitura por IA das fotos da trena diretamente na Medicao Final V2.
+- Continuar adicionando os proximos campos de medicao na mesma sequencia solicitada pelo usuario.
 - Criar `Configurações -> Orçamento` e melhorar o PDF Atlas profissional.
 - Iniciar conector W.Vetro API somente leitura quando houver credencial/ambiente de teste.
 - Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
-- Nunca commitar direto na `main`; branch -> PR -> build valido -> merge.
-- Os quatro campos SIM/NAO e a observacao sao por peça, nao globais da obra.
-- Preservar chaves existentes em `campos_extras`.
+- Nunca commitar direto na `main`; branch -> PR -> Build Validation -> merge.
+- Salvar como parcial nunca pode apagar ou zerar pecas ja medidas.
+- Retomar deve continuar a mesma `medicao_id`; nunca recriar a Medicao Final.
+- O tempo parcial deve excluir intervalos entre pausa e retomada.
+- O historico deve ser append-only: novas pausas/retomadas criam novas revisoes.
 - PDF W.Vetro original deve ser preservado.
 - Nunca inventar dimensao ausente.
-- Medida comum/referencia W.Vetro nunca deve preencher automaticamente as seis medidas finais.
 - Credenciais W.Vetro nunca devem ficar no browser.

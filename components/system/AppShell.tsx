@@ -13,6 +13,7 @@ import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSumma
 import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
+import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -60,6 +61,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
               <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
+              <MedicaoParcialPanel medicaoId={medicaoFinalId} />
               <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
               <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
             </div>
