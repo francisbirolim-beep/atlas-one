@@ -2,19 +2,21 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-13, `main` apos PR #105; branch atual identifica separadamente fotos de largura e altura no Kanban.
+Verificado em: 2026-08-13, `main` apos PR #106; branch atual adiciona leitura automatica das fotos de trena no Kanban.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
 - Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
 - No primeiro estagio do Kanban, qualquer pedido exige `Iniciar orçamento`; pedidos ja iniciados mostram `Retornar orçamento`.
-- Fotos do pedido sao preservadas ao abrir o Kanban, consolidando referencias em `foto_url`, `foto_urls`, `foto_larguras_url` e `foto_alturas_url`.
-- PR #105: cada esquadria exibe a secao `Fotos coletadas em campo` antes das medidas, com suporte a multiplas fotos e `Adicionar fotos` sem apagar as anteriores.
+- Fotos do pedido sao preservadas ao abrir o Kanban.
+- PR #105: cada esquadria exibe `Fotos coletadas em campo` antes das medidas, com multiplas fotos e `Adicionar fotos` sem apagar as anteriores.
+- PR #106: `foto_larguras_url` aparece como `LARGURA`, `foto_alturas_url` como `ALTURA` e fotos gerais ficam em `Outras fotos` sem duplicacao.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - CI Supabase via Session Pooler IPv4 com audit/dry-run em PR.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
 - Medicao Final V2 operacional (PRs #54, #55 e #56), incluindo checklist/fotos e link externo seguro.
+- A rota autenticada `/api/medicao-final/ler-trena` usa visao por IA para interpretar fotos do visor da trena/medidor laser.
 - PR #64: Medicao Final aprovada entra de forma atomica/idempotente na Engenharia.
 - PR #66: modulo proprio de Engenharia em `/engenharia`.
 - PR #69: conferencia tecnica persistente por peca e bloqueio de liberacao incompleta.
@@ -22,12 +24,15 @@ Verificado em: 2026-08-13, `main` apos PR #105; branch atual identifica separada
 - Migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
 ## AJUSTE EM VALIDACAO NESTA BRANCH
-- Fotos de medida deixam de ser misturadas na galeria generica.
-- `foto_larguras_url` aparece em bloco identificado como `LARGURA`.
-- `foto_alturas_url` aparece em bloco identificado como `ALTURA`.
-- `foto_url`/`foto_urls` aparecem em `Outras fotos`, excluindo URLs ja usadas como largura/altura.
-- O fluxo `Iniciar orçamento` e os campos de medidas nao foram alterados.
-- Leitura automatica da trena continua fora desta etapa.
+- O Kanban reutiliza `/api/medicao-final/ler-trena` nas fotos `LARGURA` e `ALTURA` do pedido.
+- Regra de LARGURA: os tres valores do visor, de cima para baixo, representam `Baixo -> Meio -> Cima`.
+- Regra de ALTURA: os tres valores do visor, de cima para baixo, representam `Direita -> Meio -> Esquerda`, sempre considerando a vista externa da tipologia.
+- Valores em metros/centimetros sao convertidos para milimetros; ex.: `1.700 m = 1700 mm`.
+- A IA deve preservar a ordem visual do visor; nao pode ordenar os numeros pelo valor.
+- Preenchimento automatico so ocorre quando as tres posicoes do eixo forem identificadas, evitando deslocar uma leitura para o campo errado.
+- Se qualquer campo daquele eixo ja tiver valor manual, a leitura automatica inicial nao sobrescreve o preenchimento existente.
+- A foto permanece salva mesmo se a IA falhar ou estiver indisponivel.
+- O usuario recebe status/confianca da leitura e deve conferir os valores antes de salvar o orcamento.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.
