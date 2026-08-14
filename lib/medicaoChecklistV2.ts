@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { MedicaoItem, Usuario } from './tipos'
+import type { ItemEsquadria, MedicaoItem, Usuario } from './tipos'
 
 export type CampoChecklistV2 = {
   id: string
@@ -48,6 +48,160 @@ export type DadosChecklistMedicaoV2 = {
   campos: CampoChecklistV2[]
   respostas: RespostaChecklistV2[]
   fotos: FotoMedicaoV2[]
+}
+
+export type MedidasFixasItemV2 = {
+  largura_baixo_mm: number | null
+  largura_meio_mm: number | null
+  largura_cima_mm: number | null
+  altura_direita_mm: number | null
+  altura_meio_mm: number | null
+  altura_esquerda_mm: number | null
+}
+
+const CAMPOS_MEDIDA_FIXA = [
+  'largura_baixo_mm',
+  'largura_meio_mm',
+  'largura_cima_mm',
+  'altura_direita_mm',
+  'altura_meio_mm',
+  'altura_esquerda_mm',
+] as const
+
+function medidaPositiva(valor: unknown): valor is number {
+  const numero = Number(valor)
+  return Number.isFinite(numero) && numero > 0
+}
+
+function normalizarMedida(valor: number | null | undefined): number | null {
+  return medidaPositiva(valor) ? Number(valor) : null
+}
+
+/**
+ * Quando a Medição Final nasce de um orçamento do Atlas marcado explicitamente
+ * como `tipo_medida = final`, reaproveita as 3 larguras, 3 alturas e as duas
+ * fotos da trena já conferidas no orçamento.
+ *
+ * A herança é conservadora:
+ * - orçamento comum/referência nunca preenche medida final;
+ * - não inventa valores ausentes;
+ * - só faz o pareamento automático quando a quantidade de linhas continua
+ *   igual à do orçamento, evitando associar medidas erradas depois de uma
+ *   separação/reorganização de peças;
+ * - nunca sobrescreve uma medida/foto já registrada na Medição Final.
+ */
+export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise<boolean> {
+  const { data: medicao, error: erroMedicao } = await supabase
+    .from('medicoes_finais')
+    .select('orcamento_id')
+    .eq('id', medicaoId)
+    .maybeSingle()
+
+  if (erroMedicao || !medicao?.orcamento_id) return false
+
+  const { data: orcamento, error: erroOrcamento } = await supabase
+    .from('orcamentos')
+    .select('tipo_medida, itens')
+    .eq('id', medicao.orcamento_id)
+    .maybeSingle()
+
+  if (erroOrcamento || !orcamento || orcamento.tipo_medida !== 'final') return false
+
+  const itensOrigem = Array.isArray(orcamento.itens) ? (orcamento.itens as ItemEsquadria[]) : []
+  if (itensOrigem.length === 0) return false
+
+  const { data: itensDestino, error: erroItens } = await supabase
+    .from('medicao_itens')
+    .select('*')
+    .eq('medicao_id', medicaoId)
+    .order('ordem', { ascending: true })
+
+  if (erroItens || !itensDestino || itensDestino.length !== itensOrigem.length) return false
+
+  let alterou = false
+
+  for (let indice = 0; indice < itensDestino.length; indice++) {
+    const destino = itensDestino[indice] as MedicaoItem
+    const origem = itensOrigem[indice]
+    if (!origem) continue
+
+    const atualizacao: Record<string, unknown> = {}
+
+    for (const campo of CAMPOS_MEDIDA_FIXA) {
+      if (!medidaPositiva(destino[campo]) && medidaPositiva(origem[campo])) {
+        atualizacao[campo] = Number(origem[campo])
+      }
+    }
+
+    if (!destino.foto_larguras_url && origem.foto_larguras_url) {
+      atualizacao.foto_larguras_url = origem.foto_larguras_url
+    }
+    if (!destino.foto_alturas_url && origem.foto_alturas_url) {
+      atualizacao.foto_alturas_url = origem.foto_alturas_url
+    }
+
+    const medidasMescladas = CAMPOS_MEDIDA_FIXA.map(campo =>
+      atualizacao[campo] ?? destino[campo]
+    )
+    const medidasCompletas = medidasMescladas.every(medidaPositiva)
+
+    if (medidasCompletas && !destino.medido) {
+      atualizacao.medido = true
+      atualizacao.medido_em = destino.medido_em || new Date().toISOString()
+    }
+
+    if (Object.keys(atualizacao).length === 0) continue
+
+    const { error } = await supabase
+      .from('medicao_itens')
+      .update(atualizacao)
+      .eq('id', destino.id)
+
+    if (error) {
+      console.error('Erro ao herdar medidas finais do orçamento:', error)
+      continue
+    }
+
+    alterou = true
+  }
+
+  return alterou
+}
+
+export async function salvarMedidasFixasItemV2(
+  itemId: string,
+  medidas: MedidasFixasItemV2,
+  usuario: Usuario | null,
+): Promise<boolean> {
+  const normalizadas: MedidasFixasItemV2 = {
+    largura_baixo_mm: normalizarMedida(medidas.largura_baixo_mm),
+    largura_meio_mm: normalizarMedida(medidas.largura_meio_mm),
+    largura_cima_mm: normalizarMedida(medidas.largura_cima_mm),
+    altura_direita_mm: normalizarMedida(medidas.altura_direita_mm),
+    altura_meio_mm: normalizarMedida(medidas.altura_meio_mm),
+    altura_esquerda_mm: normalizarMedida(medidas.altura_esquerda_mm),
+  }
+
+  const completo = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(normalizadas[campo]))
+  const agora = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('medicao_itens')
+    .update({
+      ...normalizadas,
+      medido: completo,
+      medido_em: completo ? agora : null,
+      medido_por_id: completo ? usuario?.id || null : null,
+      medido_por_nome: completo ? usuario?.nome || null : null,
+    })
+    .eq('id', itemId)
+
+  if (error) {
+    console.error('Erro ao salvar medidas fixas da Medição Final:', error)
+    return false
+  }
+
+  return true
 }
 
 export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<DadosChecklistMedicaoV2> {
