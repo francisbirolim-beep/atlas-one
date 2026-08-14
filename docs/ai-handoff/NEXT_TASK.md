@@ -3,17 +3,17 @@
 ## TAREFA ATUAL
 A Engenharia Fase 4 foi concluida no PR #73 e a migration `20260811200000_engenharia_liberacao_producao_v1.sql` foi aplicada e validada no Supabase.
 
-Em paralelo, o Kanban comercial recebeu a restauracao do fluxo `Iniciar orçamento` no PR #104. A branch atual `fix/kanban-galeria-fotos-campo-v2` organiza as fotos coletadas em campo por esquadria.
+Em paralelo, o Kanban comercial recebeu a restauracao do fluxo `Iniciar orçamento` no PR #104 e a galeria de fotos por esquadria no PR #105. A branch atual `fix/kanban-legenda-fotos-medida` identifica separadamente as fotos de largura e altura.
 
 ## VALIDAR ANTES DE ENCERRAR O AJUSTE DO KANBAN
-1. Criar um pedido com duas ou mais fotos na mesma esquadria.
+1. Criar/abrir um pedido de medida final com foto de largura e foto de altura.
 2. Abrir o card em `Fazer orçamento` e clicar em `Iniciar orçamento`.
-3. Confirmar que a secao `Fotos coletadas em campo` aparece antes das medidas.
-4. Confirmar que todas as fotos do item aparecem em miniaturas.
-5. Clicar em uma miniatura e confirmar abertura maior.
-6. Usar `Adicionar fotos` com um ou mais arquivos.
-7. Salvar, fechar e reabrir o card.
-8. Confirmar que fotos antigas e novas continuam presentes.
+3. Confirmar que a foto de `foto_larguras_url` aparece com a legenda `LARGURA`.
+4. Confirmar que a foto de `foto_alturas_url` aparece com a legenda `ALTURA`.
+5. Confirmar que fotos gerais aparecem separadamente em `Outras fotos`.
+6. Confirmar que URLs de largura/altura nao reaparecem em `Outras fotos`.
+7. Clicar nas fotos e confirmar abertura maior.
+8. Salvar, fechar e reabrir o card e confirmar persistencia.
 9. Nao incluir leitura automatica da trena nesta validacao.
 
 ## PROXIMA TAREFA — ENGENHARIA FASE 5
@@ -43,6 +43,7 @@ Escopo recomendado:
 - Engenharia Fase 3 PR #69: conferencia tecnica persistente e bloqueio de liberacao incompleta.
 - Engenharia Fase 4 PR #73: liberacao transacional para Producao, registro de quem/quando e card de Producao idempotente; migration aplicada.
 - Kanban PR #104: primeira coluna volta a exigir `Iniciar orçamento` e preserva referencias de foto do pedido.
+- Kanban PR #105: galeria de fotos coletadas em campo por esquadria.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
