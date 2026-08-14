@@ -25,6 +25,16 @@ function novoItemEdit(): ItemEsquadria {
 return { id: uuidv4(), tipo_esquadria: 'porta_correr', largura_mm: 0, altura_mm: 0, quantidade: 1 }
 }
 
+function fotosDoItem(item: ItemEsquadria): string[] {
+const fotos = [
+...(item.foto_urls || []),
+item.foto_url,
+item.foto_larguras_url,
+item.foto_alturas_url,
+].filter(Boolean) as string[]
+return Array.from(new Set(fotos))
+}
+
 function formatarDuracao(inicioIso: string, fimIso: string): string {
 const ms = Math.max(0, new Date(fimIso).getTime() - new Date(inicioIso).getTime())
 const totalMin = Math.floor(ms / 60000)
@@ -404,10 +414,21 @@ function removerItemEdit(id: string) {
 setEditando(prev => (prev ? { ...prev, itens: (prev.itens || []).filter(it => it.id !== id) } : prev))
 }
 
-async function trocarFotoItem(id: string, file: File | undefined) {
-if (!file) return
-const url = await uploadFoto(file)
-if (url) atualizarItemEdit(id, 'foto_url', url)
+async function adicionarFotosItem(id: string, files: FileList | null) {
+const arquivos = Array.from(files || [])
+if (arquivos.length === 0) return
+const urls = (await Promise.all(arquivos.map(file => uploadFoto(file)))).filter(Boolean) as string[]
+if (urls.length === 0) return
+setEditando(prev =>
+prev ? {
+...prev,
+itens: (prev.itens || []).map(it => {
+if (it.id !== id) return it
+const todas = Array.from(new Set([...fotosDoItem(it), ...urls]))
+return { ...it, foto_url: it.foto_url || todas[0] || null, foto_urls: todas }
+}),
+} : prev
+)
 }
 
 async function iniciarOrcamento() {
@@ -1086,6 +1107,27 @@ onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
 placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
+<div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+<div className="flex items-center justify-between gap-2">
+<p className="text-[11px] font-medium text-slate-600 flex items-center gap-1.5"><Camera size={12} /> Fotos coletadas em campo</p>
+<label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
+<Plus size={12} /> Adicionar fotos
+<input type="file" accept="image/*" multiple className="hidden" onChange={e => adicionarFotosItem(item.id, e.target.files)} />
+</label>
+</div>
+{fotosDoItem(item).length > 0 ? (
+<div className="grid grid-cols-4 gap-2">
+{fotosDoItem(item).map((url, fotoIndex) => (
+<a key={`${url}-${fotoIndex}`} href={url} target="_blank" rel="noreferrer" className="block">
+<img src={url} alt={`Foto de campo ${fotoIndex + 1}`} className="w-full aspect-square object-cover rounded-lg border border-slate-200" />
+</a>
+))}
+</div>
+) : (
+<p className="text-[11px] text-slate-400">Nenhuma foto coletada para esta esquadria.</p>
+)}
+<p className="text-[10px] text-slate-400">As fotos originais permanecem salvas. Clique em uma miniatura para abrir maior.</p>
+</div>
 {editando.tipo_medida === 'final' ? (
 <div className="space-y-2">
 <div>
@@ -1173,13 +1215,6 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
 </div>
 )}
-<div className="flex items-center gap-2">
-{item.foto_url && <a href={item.foto_url} target="_blank" rel="noreferrer"><img src={item.foto_url} alt="" className="w-12 h-12 object-cover rounded-lg" /></a>}
-<label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy">
-<Camera size={12} /> Trocar foto
-<input type="file" accept="image/*" className="hidden" onChange={e => trocarFotoItem(item.id, e.target.files?.[0])} />
-</label>
-</div>
 {item.preco_unit != null && (
 <p className="text-[11px] text-brand-teal">
 Produto vinculado — R$ {item.preco_unit.toFixed(2)}{item.quantidade > 1 ? ` × ${item.quantidade} = R$ ${(item.preco_unit * item.quantidade).toFixed(2)}` : ''}
