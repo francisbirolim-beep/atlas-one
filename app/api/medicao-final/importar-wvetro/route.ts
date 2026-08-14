@@ -19,10 +19,14 @@ async function autenticar(req: NextRequest) {
 }
 
 function descricaoMedicao(item: ReturnType<typeof parseOrcamentoWVetroTexto>['itens'][number]) {
+  const referencia = item.largura_mm > 0 && item.altura_mm > 0
+    ? `REFERÊNCIA ORÇAMENTO: ${item.largura_mm} x ${item.altura_mm} mm`
+    : 'REFERÊNCIA ORÇAMENTO: medidas não informadas no PDF'
+
   return [
     item.ambiente ? `AMBIENTE: ${item.ambiente}` : 'AMBIENTE: não informado no orçamento',
     item.descricao,
-    `REFERÊNCIA ORÇAMENTO: ${item.largura_mm} x ${item.altura_mm} mm`,
+    referencia,
   ].filter(Boolean).join(' | ')
 }
 
@@ -76,7 +80,7 @@ export async function POST(req: NextRequest) {
     }
     if (resumo.itens.length === 0) {
       return NextResponse.json({
-        error: 'O W.Vetro foi reconhecido, mas nenhuma esquadria com largura e altura pôde ser lida. A importação foi bloqueada para não criar uma medição vazia.',
+        error: 'O W.Vetro foi reconhecido, mas nenhuma esquadria pôde ser identificada no documento. A importação foi bloqueada para não criar uma medição vazia.',
       }, { status: 422 })
     }
 
