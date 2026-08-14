@@ -77,7 +77,10 @@ function nomePossivelCliente(valor: string) {
 
   let candidato = valor.replace(/\s+/g, ' ').trim()
   if (!candidato || candidato.length < 2 || candidato.length > 120) return null
-  if (/^(CLIENTE|TEL|EMAIL|CNPJ|CPF|ENDERE[ÇC]O|CEP|IE\/RG|TEL2|FAX|DATA|TIPO|ITEM|OR[ÇC]AMENTO)\b/i.test(candidato)) return null
+
+  // O pdf-parse pode embaralhar os rótulos das colunas do cabeçalho, por exemplo
+  // "CLIENTE: CELULARTEL. FIXO:". Nunca tratar esses rótulos como nome.
+  if (/^(CLIENTE|TEL|TELEFONE|CELULAR|FIXO|EMAIL|CNPJ|CPF|ENDERE[ÇC]O|CEP|IE\/RG|TEL2|FAX|DATA|TIPO|ITEM|OR[ÇC]AMENTO|CONTATO|VENDEDOR|EMISS[ÃA]O|FATURADO|RESPONS[ÁA]VEL|NOME DA OBRA|DESCRITIVO|END ENTREGA)\b/i.test(candidato)) return null
   if (/WVETRO|W\.VETRO|SISTEMA PARA VIDRA/i.test(candidato)) return null
   if (/@/.test(candidato) || /\bCEP\s*:/i.test(candidato)) return null
   if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(candidato)) return null
@@ -93,19 +96,32 @@ function nomePossivelCliente(valor: string) {
 }
 
 function extrairCliente(linhas: string[]) {
+  // No layout comercial do W.Vetro testado em campo, o nome real vem logo
+  // depois de "Cep Numero: <orcamento>". Esta é a fonte mais estável desse cabeçalho.
+  const idxNumero = linhas.findIndex(l =>
+    /(?:CEP\s*)?N(?:U|Ú)MERO\s*:\s*\d+/i.test(l)
+    || /\bOR[ÇC]AMENTO\s*(?:N(?:U|Ú)MERO|N[º°.]?)?\s*[:#-]?\s*\d{2,}/i.test(l)
+  )
+  if (idxNumero >= 0) {
+    for (let i = idxNumero + 1; i < Math.min(linhas.length, idxNumero + 6); i++) {
+      const nome = nomePossivelCliente(linhas[i] || '')
+      if (nome) return nome
+    }
+  }
+
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i]
     if (!linha) continue
 
     const inline = linha.match(/^CLIENTE\s*:\s*(.+)$/i)
     if (inline?.[1]) {
-      const antesDeOutrosRotulos = inline[1].split(/\s+(?:TEL\.?\s*FIXO|CELULAR|EMAIL|CNPJ|CPF|ENDERE[ÇC]O)\s*:/i)[0] || ''
+      const antesDeOutrosRotulos = inline[1].split(/(?:^|\s+)(?:TEL\.?\s*FIXO|TELEFONE|CELULAR|EMAIL|CNPJ|CPF|ENDERE[ÇC]O)\s*:/i)[0] || ''
       const nomeInline = nomePossivelCliente(antesDeOutrosRotulos)
       if (nomeInline) return nomeInline
     }
 
     if (/^CLIENTE\s*:/i.test(linha)) {
-      for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+      for (let j = i - 1; j >= Math.max(0, i - 12); j--) {
         const nome = nomePossivelCliente(linhas[j] || '')
         if (nome) return nome
       }
@@ -116,11 +132,24 @@ function extrairCliente(linhas: string[]) {
 }
 
 function extrairCidadeUf(linhas: string[]) {
+  // Prefere CEP + cidade/UF. Assim o hífen interno do CEP (15202-396) nunca
+  // vira parte da cidade, que foi exatamente o erro observado no preview real.
+  for (const linha of linhas) {
+    const matchCep = linha.match(/\bCEP\s*:\s*\d{5}-?\d{3}\s+([A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ\s.'-]*?)\s*\/\s*([A-Z]{2})\b/i)
+    if (matchCep?.[1] && matchCep?.[2]) {
+      return {
+        cidade: matchCep[1].trim().replace(/^[-,\s]+|[-,\s]+$/g, ''),
+        uf: matchCep[2].toUpperCase(),
+      }
+    }
+  }
+
   for (const linha of linhas) {
     if (!/CEP\s*:/i.test(linha) && !/\/[A-Z]{2}\b/.test(linha)) continue
 
-    const match = linha.match(/-\s*([^\/-]{2,}?)\s*\/\s*([A-Z]{2})\s*-?/i)
-      || linha.match(/\b([A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ\s.'-]{2,})\s*\/\s*([A-Z]{2})\b/i)
+    const semCep = linha.replace(/\bCEP\s*:\s*\d{5}-?\d{3}\s*/i, '')
+    const match = semCep.match(/-\s*([^\/-]{2,}?)\s*\/\s*([A-Z]{2})\s*-?/i)
+      || semCep.match(/\b([A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ\s.'-]{2,})\s*\/\s*([A-Z]{2})\b/i)
     if (match?.[1] && match?.[2]) {
       return { cidade: match[1].trim().replace(/^[-,\s]+|[-,\s]+$/g, ''), uf: match[2].toUpperCase() }
     }
