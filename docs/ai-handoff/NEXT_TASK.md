@@ -1,44 +1,41 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar a branch `fix/medicao-wvetro-sem-medidas`, criada após teste real da PR #112 com `FELIPE ALVES SANTANA-861.pdf`.
+Validar a branch `fix/medicao-link-telefone-responsavel`, criada a partir dos primeiros testes reais da Medicao Final importada do W.Vetro.
 
-O PDF foi reconhecido como W.Vetro, mas o documento não imprime largura/altura das esquadrias. A versão anterior bloqueava a importação por exigir dimensões. A correção passa a aceitar itens identificáveis mesmo sem tamanho, sem inventar medidas.
+A PR #113 ja esta em `main` e permite importar `FELIPE ALVES SANTANA-861.pdf` com 7 itens mesmo sem largura/altura no documento. Os ajustes atuais sao de usabilidade/identificacao antes de continuar o teste de campo.
 
 ## VALIDAR ANTES DE ENCERRAR ESTA CORRECAO
-Usar `FELIPE ALVES SANTANA-861.pdf`.
+Usar a Medicao Final ja criada a partir do orçamento W.Vetro `861`.
 
-1. Abrir `Medida Final` / `/producao/medicao-final`.
-2. Clicar em `Nova medição`.
-3. Selecionar `FELIPE ALVES SANTANA-861.pdf`.
-4. Confirmar que NÃO aparece mais o erro `nenhuma esquadria com largura e altura pôde ser lida`.
-5. Confirmar a prévia ANTES de gravar:
-   - orçamento `861`;
-   - cliente `FELIPE ALVES SANTANA`;
-   - cidade `JOSE BONIFACIO - SP`;
-   - `7 item(ns)`;
-   - cada item sem dimensão deve mostrar `Sem medida no PDF`, nunca `0 x 0` como informação ao usuário.
-6. Conferir os 7 itens esperados:
-   - WC SUITE — maxim-ar com peitoril fixo — Suprema;
-   - WC — maxim-ar com peitoril fixo — Suprema;
-   - WC — maxim-ar 1 módulo — Suprema;
-   - QUARTO — porta de giro 1 folha — Suprema;
-   - SUITE — porta de correr 3 folhas — Suprema;
-   - QUARTO — janela de correr integrada 2 folhas — Suprema;
-   - QUARTO — janela de correr 2 folhas móveis — Suprema.
-7. Conferir cor/vidro quando reconhecidos pelo texto do PDF.
-8. Clicar em `Confirmar e criar Medição Final`.
-9. Confirmar que foram criados 7 itens.
-10. Abrir os itens e confirmar que aparece `REFERÊNCIA ORÇAMENTO: medidas não informadas no PDF`.
-11. Confirmar regra crítica: `Largura Baixo/Meio/Cima` e `Altura Direita/Meio/Esquerda` continuam vazias.
-12. Confirmar que o PDF original permanece anexado ao orçamento de apoio.
-13. Reimportar o orçamento `861` e confirmar bloqueio de duplicidade.
-14. Fazer um teste de regressão com um PDF W.Vetro que tenha dimensões (ex.: `FRANCIS TESTE-977.pdf`) e confirmar que as dimensões continuam aparecendo apenas como referência.
-15. Confirmar Build Validation verde no head final antes do merge.
+1. Abrir a Medicao Final detalhada.
+2. Confirmar a nova faixa de identificacao no topo:
+   - Cliente: `FELIPE ALVES SANTANA`;
+   - Nome da obra: `CASA`;
+   - Orçamento: `Nº 861`.
+3. Confirmar que o numero mostrado e o numero W.Vetro, nao apenas o serial interno do Atlas.
+4. No seletor `Responsável pela medição`, selecionar um usuario que tenha WhatsApp cadastrado.
+5. No bloco `Link externo da Medicao Final`, confirmar que:
+   - o nome do responsavel aparece automaticamente;
+   - o telefone/WhatsApp cadastrado aparece automaticamente;
+   - o telefone continua editavel.
+6. Selecionar/digitar uma pessoa sem telefone cadastrado e confirmar que o campo fica livre para preenchimento manual.
+7. Gerar um link externo e confirmar que nome e telefone gravados no acesso correspondem ao que estava no formulario.
+8. Abrir `Cadastro > Dados da Empresa` e confirmar que dados antigos/seedados nao aparecem como se tivessem sido configurados pelo usuario.
+9. Preencher e salvar um dado de empresa manualmente; recarregar e confirmar que somente o que foi salvo manualmente volta a aparecer.
+10. Confirmar Build Validation verde no head final antes do merge.
+
+## CONTINUAR TESTE DA IMPORTACAO W.VETRO
+Depois desses detalhes:
+1. Conferir os 7 itens da Medicao Final `861`.
+2. Confirmar que `Largura Baixo/Meio/Cima` e `Altura Direita/Meio/Esquerda` permanecem vazias ate a medicao real da obra.
+3. Confirmar que o PDF original W.Vetro continua preservado.
+4. Reimportar `861` e confirmar bloqueio de duplicidade.
+5. Fazer regressao com `FRANCIS TESTE-977.pdf`, que possui dimensoes de referencia.
 
 ## DEPOIS DESTA CORRECAO
-1. Criar `Configurações -> Orçamento` usando `configuracoes_gerais` para dados da empresa, validade, pagamento, prazo, garantia, observacoes e rodape.
-2. Fazer o PDF atual do Atlas consumir essas configuracoes.
+1. Criar a area dedicada `Configurações -> Orçamento` para dados da empresa, validade, pagamento, prazo, garantia, observacoes, rodape e futuras opcoes de layout.
+2. Fazer todos os PDFs Atlas consumirem somente configuracoes salvas pelo usuario, sem textos/empresa hardcoded.
 3. Melhorar o layout profissional do PDF Atlas.
 4. Iniciar o conector W.Vetro API em modo SOMENTE LEITURA quando houver credencial/ambiente de teste e exemplos reais de responses.
 5. Para a API W.Vetro, priorizar:
@@ -67,6 +64,7 @@ Usar `FELIPE ALVES SANTANA-861.pdf`.
 - Engenharia Fases 1 a 4: PRs #64, #66, #69 e #73.
 - Kanban #104 a #111: fluxo de orçamento, fotos, leitura da trena, anexo W.Vetro, total automático, moeda BRL e reenvio de anexos.
 - PR #112: importação de orçamento W.Vetro diretamente em `Nova medição`, com preview, preservação do PDF e criação da Medição Final.
+- PR #113: importacao de W.Vetro sem largura/altura, sem inventar dimensoes.
 
 ## CUIDADOS
 - GitHub e a única fonte da verdade.
@@ -75,7 +73,8 @@ Usar `FELIPE ALVES SANTANA-861.pdf`.
 - Falta de largura/altura no PDF NÃO é motivo para descartar uma esquadria identificável.
 - Nunca inventar dimensão ausente.
 - Medida do orçamento W.Vetro NUNCA deve preencher automaticamente as seis medidas finais da obra.
-- Importação W.Vetro deve passar por pré-visualização/revisão antes da gravação.
+- Nome da obra pode vir do PDF W.Vetro, mas nao deve ser confundido com endereco da obra.
+- Dados da empresa so devem ser considerados configurados quando o usuario os salvar manualmente.
 - Parser PDF continua sendo fallback; API estruturada deve ser preferida quando estiver disponível e validada.
 - Credenciais W.Vetro nunca devem ficar no browser.
 - Leitura por IA da trena é sugestão; o colaborador deve conferir antes de salvar.
