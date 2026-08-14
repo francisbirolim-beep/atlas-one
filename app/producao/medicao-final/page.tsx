@@ -247,7 +247,6 @@ export default function MedicaoFinalQuadro() {
       const form = new FormData()
       form.append('acao', 'preview')
       form.append('arquivo', file)
-
       const resp = await fetch('/api/medicao-final/importar-wvetro', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -497,7 +496,6 @@ export default function MedicaoFinalQuadro() {
                   </p>
                 </div>
               </div>
-
               <label className={`flex items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-3 text-sm font-medium transition ${lendoWVetro || criandoWVetro ? 'cursor-not-allowed border-slate-200 text-slate-400 bg-white/60' : 'cursor-pointer border-emerald-300 text-emerald-800 bg-white hover:border-emerald-500'}`}>
                 {lendoWVetro ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
                 {lendoWVetro ? 'Lendo orçamento...' : arquivoWVetro ? `Trocar PDF: ${arquivoWVetro.name}` : 'Selecionar PDF do W.Vetro'}
@@ -563,7 +561,11 @@ export default function MedicaoFinalQuadro() {
                             <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{item.descricao}</p>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <p className="text-xs font-semibold text-slate-700">{item.largura_mm} × {item.altura_mm}</p>
+                            <p className="text-xs font-semibold text-slate-700">
+                              {item.largura_mm > 0 && item.altura_mm > 0
+                                ? `${item.largura_mm} × ${item.altura_mm}`
+                                : 'Sem medida no PDF'}
+                            </p>
                             <p className="text-[10px] text-slate-400">qtd. {item.quantidade}</p>
                           </div>
                         </div>
@@ -572,7 +574,7 @@ export default function MedicaoFinalQuadro() {
                   </div>
 
                   <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
-                    As medidas do orçamento entram apenas como <strong>referência</strong>. As 3 larguras e 3 alturas da Medição Final continuam vazias para serem conferidas na obra.
+                    Quando o W.Vetro traz largura e altura, elas entram apenas como <strong>referência</strong>. Se o PDF não traz essas medidas, o Atlas cria os itens sem inventar tamanho. As 3 larguras e 3 alturas da Medição Final continuam vazias para conferência na obra.
                   </div>
 
                   <button
@@ -618,7 +620,7 @@ export default function MedicaoFinalQuadro() {
                     <p className="text-sm font-medium text-slate-800">{o.cliente_nome}</p>
                     {o.cidade && <p className="text-xs text-slate-400">{o.cidade}</p>}
                   </button>
-                ))
+                ))}
               )}
             </div>
           </div>
