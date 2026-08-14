@@ -56,3 +56,10 @@ A branch atual `fix/pdf-valor-e-reenvio-anexos` implementa o preenchimento autom
 - Leitura por IA da trena e sugestao; o colaborador deve conferir as medidas antes de salvar.
 - Nao sobrescrever automaticamente medida manual ja preenchida.
 - Nao automatizar lista de corte antes de fechar o modelo de receitas e versoes.
+
+## EM VALIDACAO — MOEDA E ANEXOS
+1. Confirmar no card `R$ 2.716,84`.
+2. Confirmar no campo de valor `R$ 2.716,84`.
+3. Gerar novo PDF Atlas e confirmar `Valor total: R$ 2.716,84`.
+4. Testar `Enviar`/`Reenviar` na frente de cada anexo.
+5. Depois seguir para `Configurações -> Orçamento` e evolucao do layout profissional.

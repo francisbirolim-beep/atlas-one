@@ -68,3 +68,9 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - Confirmacao de Venda Fase 1 precisa de validacao funcional completa.
 - Regras condicionais/foto obrigatoria do checklist V2 ainda pendentes.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
+
+## Kanban — moeda BRL e reenvio individual de anexos — 2026-08-13
+- corrige card e PDF Atlas para `R$ 2.716,84` em vez de `R$ 2716.84`;
+- campo de valor passa a aceitar digitacao apenas numerica com mascara de moeda brasileira;
+- valores de itens no PDF tambem usam formatacao BRL;
+- cada anexo pode ser enviado/reententado individualmente pelo WhatsApp do vendedor.
