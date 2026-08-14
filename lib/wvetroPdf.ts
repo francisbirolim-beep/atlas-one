@@ -78,6 +78,22 @@ function nomePossivelCliente(valor: string) {
   let candidato = valor.replace(/\s+/g, ' ').trim()
   if (!candidato || candidato.length < 2 || candidato.length > 120) return null
 
+  // O pdf-parse pode fundir os rótulos das colunas do cabeçalho sem espaços,
+  // como "CELULARTEL. FIXO:". Se houver dois ou mais rótulos conhecidos
+  // concatenados, a linha é cabeçalho e nunca pode virar nome de cliente.
+  const compacto = candidato
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+  const rotulosConcatenaveis = [
+    'CLIENTE', 'TELFIXO', 'TELEFONE', 'CELULAR', 'EMAIL', 'CNPJ', 'CPF',
+    'ENDERECO', 'CEP', 'IERG', 'TEL2', 'FAX', 'CONTATO', 'VENDEDOR',
+    'RESPONSAVEL', 'NOMEDAOBRA', 'ENDENTREGA',
+  ]
+  const qtdRotulos = rotulosConcatenaveis.filter(rotulo => compacto.includes(rotulo)).length
+  if (qtdRotulos >= 2) return null
+
   // O pdf-parse pode embaralhar os rótulos das colunas do cabeçalho, por exemplo
   // "CLIENTE: CELULARTEL. FIXO:". Nunca tratar esses rótulos como nome.
   if (/^(CLIENTE|TEL|TELEFONE|CELULAR|FIXO|EMAIL|CNPJ|CPF|ENDERE[ÇC]O|CEP|IE\/RG|TEL2|FAX|DATA|TIPO|ITEM|OR[ÇC]AMENTO|CONTATO|VENDEDOR|EMISS[ÃA]O|FATURADO|RESPONS[ÁA]VEL|NOME DA OBRA|DESCRITIVO|END ENTREGA)\b/i.test(candidato)) return null
