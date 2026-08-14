@@ -2,13 +2,14 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-13, `main` apos PR #104; branch atual adiciona galeria de fotos por esquadria no Kanban.
+Verificado em: 2026-08-13, `main` apos PR #105; branch atual identifica separadamente fotos de largura e altura no Kanban.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
 - Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
 - No primeiro estagio do Kanban, qualquer pedido exige `Iniciar orçamento`; pedidos ja iniciados mostram `Retornar orçamento`.
 - Fotos do pedido sao preservadas ao abrir o Kanban, consolidando referencias em `foto_url`, `foto_urls`, `foto_larguras_url` e `foto_alturas_url`.
+- PR #105: cada esquadria exibe a secao `Fotos coletadas em campo` antes das medidas, com suporte a multiplas fotos e `Adicionar fotos` sem apagar as anteriores.
 - App Shell responsivo com Sidebar + Topbar compartilhados.
 - Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
 - CI Supabase via Session Pooler IPv4 com audit/dry-run em PR.
@@ -21,11 +22,12 @@ Verificado em: 2026-08-13, `main` apos PR #104; branch atual adiciona galeria de
 - Migration `20260811200000_engenharia_liberacao_producao_v1.sql` aplicada e validada no Supabase.
 
 ## AJUSTE EM VALIDACAO NESTA BRANCH
-- Galeria `Fotos coletadas em campo` dentro de cada esquadria, antes dos campos de medidas.
-- Exibe todas as URLs disponiveis do item, sem duplicacao.
-- `Adicionar fotos` aceita multiplos arquivos e acrescenta as novas imagens sem apagar as anteriores.
-- Clique na miniatura abre a foto maior.
-- Nao inclui leitura automatica de trena nesta etapa.
+- Fotos de medida deixam de ser misturadas na galeria generica.
+- `foto_larguras_url` aparece em bloco identificado como `LARGURA`.
+- `foto_alturas_url` aparece em bloco identificado como `ALTURA`.
+- `foto_url`/`foto_urls` aparecem em `Outras fotos`, excluindo URLs ja usadas como largura/altura.
+- O fluxo `Iniciar orçamento` e os campos de medidas nao foram alterados.
+- Leitura automatica da trena continua fora desta etapa.
 
 ## REDESIGN PROFISSIONAL MERGEADO
 - PR #57 — Home executiva, Topbar, workspace e KPIs.
