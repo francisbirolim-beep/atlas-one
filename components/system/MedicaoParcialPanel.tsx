@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Circle, Clock3, History, Loader2, PauseCircle, PlayCircle } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
@@ -44,6 +44,7 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
   const [eventos, setEventos] = useState<EventoHistoricoMedicao[]>([])
   const [parcial, setParcial] = useState(false)
   const [tempoBase, setTempoBase] = useState(0)
+  const [carregadoEm, setCarregadoEm] = useState(Date.now())
   const [agora, setAgora] = useState(Date.now())
   const [carregando, setCarregando] = useState(true)
   const [processando, setProcessando] = useState(false)
@@ -61,10 +62,12 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
         .order('ordem', { ascending: true }),
     ])
 
+    const instante = Date.now()
     setEventos(estado.eventos)
     setParcial(estado.parcial)
     setTempoBase(estado.tempoAtivoMs)
-    setAgora(Date.now())
+    setCarregadoEm(instante)
+    setAgora(instante)
     setPecas((itensResp.data || []).map((item: any) => ({
       id: item.id,
       descricao: item.descricao || item.tipo_esquadria || 'Peça',
@@ -90,16 +93,7 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
     return () => window.clearInterval(timer)
   }, [carregar])
 
-  const ultimoEvento = eventos[eventos.length - 1]
-  const tempoExibido = useMemo(() => {
-    if (parcial || !ultimoEvento || ultimoEvento.tipo === 'parcial') return tempoBase
-    return tempoBase + Math.max(0, agora - Date.now())
-  }, [agora, parcial, tempoBase, ultimoEvento])
-
-  // O helper recalcula o tempo ativo no carregamento. Entre recargas, incrementamos
-  // apenas enquanto a medição está efetivamente em andamento.
-  const tempoComTick = parcial ? tempoBase : tempoBase + Math.max(0, agora - (agora - 1000))
-
+  const tempoExibido = parcial ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
   const feitas = pecas.filter(peca => peca.medido).length
   const abertas = pecas.reduce((total, peca) => total + (peca.medido ? Math.max(0, peca.quantidade - 1) : peca.quantidade), 0)
   const iniciada = eventos.some(evento => evento.tipo === 'inicio')
@@ -138,7 +132,7 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Controle da medição</p>
               <div className="mt-1 flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-900"><Clock3 size={16} /> {formatarDuracao(tempoBase)}</span>
+                <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-900"><Clock3 size={16} /> {formatarDuracao(tempoExibido)}</span>
                 <span className="text-xs text-emerald-700">✅ {feitas} feita(s)</span>
                 <span className="text-xs text-amber-700">○ {abertas} em aberto</span>
               </div>
