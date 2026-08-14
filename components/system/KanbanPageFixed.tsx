@@ -25,14 +25,15 @@ function novoItemEdit(): ItemEsquadria {
 return { id: uuidv4(), tipo_esquadria: 'porta_correr', largura_mm: 0, altura_mm: 0, quantidade: 1 }
 }
 
-function fotosDoItem(item: ItemEsquadria): string[] {
-const fotos = [
+function fotosGeraisDoItem(item: ItemEsquadria): string[] {
+const fotosMedida = new Set(
+[item.foto_larguras_url, item.foto_alturas_url].filter(Boolean) as string[]
+)
+const fotosGerais = [
 ...(item.foto_urls || []),
 item.foto_url,
-item.foto_larguras_url,
-item.foto_alturas_url,
 ].filter(Boolean) as string[]
-return Array.from(new Set(fotos))
+return Array.from(new Set(fotosGerais)).filter(url => !fotosMedida.has(url))
 }
 
 function formatarDuracao(inicioIso: string, fimIso: string): string {
@@ -424,8 +425,8 @@ prev ? {
 ...prev,
 itens: (prev.itens || []).map(it => {
 if (it.id !== id) return it
-const todas = Array.from(new Set([...fotosDoItem(it), ...urls]))
-return { ...it, foto_url: it.foto_url || todas[0] || null, foto_urls: todas }
+const todas = Array.from(new Set([...fotosGeraisDoItem(it), ...urls]))
+return { ...it, foto_url: todas[0] || it.foto_url || null, foto_urls: todas }
 }),
 } : prev
 )
@@ -1107,7 +1108,7 @@ onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
 placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
-<div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+<div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
 <div className="flex items-center justify-between gap-2">
 <p className="text-[11px] font-medium text-slate-600 flex items-center gap-1.5"><Camera size={12} /> Fotos coletadas em campo</p>
 <label className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 cursor-pointer hover:border-brand-navy hover:text-brand-navy">
@@ -1115,18 +1116,47 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 <input type="file" accept="image/*" multiple className="hidden" onChange={e => adicionarFotosItem(item.id, e.target.files)} />
 </label>
 </div>
-{fotosDoItem(item).length > 0 ? (
+
+{(item.foto_larguras_url || item.foto_alturas_url) && (
+<div className="grid grid-cols-2 gap-3">
+{item.foto_larguras_url && (
+<a href={item.foto_larguras_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-blue-200 bg-blue-50/40 p-2">
+<div className="flex items-center justify-between mb-1.5">
+<span className="text-[10px] font-bold tracking-wide text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">LARGURA</span>
+<span className="text-[9px] text-blue-500">Foto da medida</span>
+</div>
+<img src={item.foto_larguras_url} alt="Foto da largura" className="w-full h-24 object-cover rounded-lg border border-blue-200" />
+</a>
+)}
+{item.foto_alturas_url && (
+<a href={item.foto_alturas_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-emerald-200 bg-emerald-50/40 p-2">
+<div className="flex items-center justify-between mb-1.5">
+<span className="text-[10px] font-bold tracking-wide text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">ALTURA</span>
+<span className="text-[9px] text-emerald-500">Foto da medida</span>
+</div>
+<img src={item.foto_alturas_url} alt="Foto da altura" className="w-full h-24 object-cover rounded-lg border border-emerald-200" />
+</a>
+)}
+</div>
+)}
+
+{fotosGeraisDoItem(item).length > 0 && (
+<div>
+<p className="text-[10px] font-medium text-slate-500 mb-1.5">Outras fotos</p>
 <div className="grid grid-cols-4 gap-2">
-{fotosDoItem(item).map((url, fotoIndex) => (
+{fotosGeraisDoItem(item).map((url, fotoIndex) => (
 <a key={`${url}-${fotoIndex}`} href={url} target="_blank" rel="noreferrer" className="block">
-<img src={url} alt={`Foto de campo ${fotoIndex + 1}`} className="w-full aspect-square object-cover rounded-lg border border-slate-200" />
+<img src={url} alt={`Foto geral ${fotoIndex + 1}`} className="w-full aspect-square object-cover rounded-lg border border-slate-200" />
 </a>
 ))}
 </div>
-) : (
+</div>
+)}
+
+{!item.foto_larguras_url && !item.foto_alturas_url && fotosGeraisDoItem(item).length === 0 && (
 <p className="text-[11px] text-slate-400">Nenhuma foto coletada para esta esquadria.</p>
 )}
-<p className="text-[10px] text-slate-400">As fotos originais permanecem salvas. Clique em uma miniatura para abrir maior.</p>
+<p className="text-[10px] text-slate-400">Largura e altura ficam identificadas pela foto original de cada medicao. Clique para abrir maior.</p>
 </div>
 {editando.tipo_medida === 'final' ? (
 <div className="space-y-2">
