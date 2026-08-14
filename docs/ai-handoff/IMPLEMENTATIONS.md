@@ -74,8 +74,17 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - largura/altura do orçamento sao apenas referencia; as 3 larguras e 3 alturas de Medicao Final permanecem vazias para medicao real em obra;
 - bloqueia duplicacao quando o numero do orçamento W.Vetro e reconhecido;
 - PDF limitado a 15 MB e operacoes intermediarias possuem limpeza de rollback quando possivel;
-- Build Validation run #82 passou antes da atualizacao de documentacao; validar novamente o head final da PR antes do merge;
-- ainda exige teste funcional real com `FRANCIS TESTE-977.pdf`.
+- PR mergeada em `main` no commit `56910395fd9f80e08ea8edf170cda45a3b0736c4`.
+
+## Medicao Final — W.Vetro sem medidas no PDF — branch fix/medicao-wvetro-sem-medidas — 2026-08-14
+- teste real com `FELIPE ALVES SANTANA-861.pdf` revelou um layout W.Vetro que possui 7 esquadrias, ambientes, descricoes, quantidades, cores, vidros e linha, mas nao imprime largura/altura;
+- a regra anterior descartava esses itens por exigir duas dimensoes e retornava `nenhuma esquadria com largura e altura pôde ser lida`;
+- o parser por `LOCAL/AMBIENTE` passa a aceitar itens identificaveis mesmo sem dimensoes;
+- largura/altura ausentes ficam zeradas somente no snapshot de apoio legado, acompanhadas de `MEDIDAS NÃO INFORMADAS NO PDF`; zero nao representa tamanho real;
+- a Medicao Final grava `REFERÊNCIA ORÇAMENTO: medidas não informadas no PDF` e continua com as seis medidas finais vazias;
+- a pre-visualizacao mostra `Sem medida no PDF` em vez de `0 x 0`;
+- o parser de cliente foi reforcado para PDFs cujo nome/celular aparecem antes do rotulo `CLIENTE`;
+- layouts que realmente trazem largura/altura mantem o comportamento anterior: dimensoes apenas como referencia.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 - foram mapeados endpoints publicos para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
@@ -84,7 +93,8 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
 
 ## Pontos funcionais ainda pendentes
-- Validar PR #112 em producao com PDF W.Vetro real e confirmar que dimensoes do orçamento nao viram medidas finais.
+- Validar a correção de W.Vetro sem dimensoes em producao com `FELIPE ALVES SANTANA-861.pdf`.
+- Fazer regressao com `FRANCIS TESTE-977.pdf`, que possui dimensoes de referencia.
 - Criar `Configurações -> Orçamento` para dados e textos configuraveis do documento.
 - Gerar `Orçamento Atlas` profissional e depois evoluir para espelho do PDF W.Vetro, com leitura estruturada + revisao.
 - Criar conector W.Vetro API somente leitura, depois de obter credenciais/teste e exemplos de resposta.
