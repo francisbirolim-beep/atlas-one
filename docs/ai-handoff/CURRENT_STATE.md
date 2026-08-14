@@ -2,52 +2,54 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #120 (`6835a99b97ce8d890980540aaa75dd0b8f846e85`). A branch atual `fix/medicao-ordem-padroes-abaixo-medidas` reposiciona as conferencias fixas da Medicao Final para dentro do fluxo da mesma peca, imediatamente depois das medidas principais.
+Verificado em: 2026-08-14. `main` esta no merge da PR #121 (`be277ffe5636a18ca7973c04c60d7abba2eb50a5`). A branch atual `feat/medicao-parcial-historico-tempo` adiciona controle de tempo ativo, medicao parcial, historico de pausas/retomadas e identificacao visual das pecas feitas/em aberto.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
 - Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
 - PRs #105 a #108: fotos de campo, identificacao LARGURA/ALTURA, leitura por IA da trena/laser e correcao Baixo/Cima da largura.
 - PRs #109 a #111: anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual de anexos.
-- PR #112: `Nova medição` permite importar PDF W.Vetro, revisar e criar a Medicao Final preservando o PDF original.
-- PR #113: PDFs W.Vetro sem largura/altura deixam de ser rejeitados; nenhuma dimensao e inventada.
-- PR #114: faixa Cliente/Obra/Orçamento; telefone do responsavel pelo WhatsApp cadastrado; dados da empresa somente quando salvos manualmente.
-- PRs #115 a #118: correcao progressiva do parser W.Vetro; teste real do PDF 861 confirmou Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
-- PR #119: toda peça da Medicao Final mostra sempre 3 larguras, 3 alturas, foto da trena de LARGURA e foto da trena de ALTURA; `medido=true` somente quando as seis medidas sao positivas; heranca de medidas/fotos somente de orçamento Atlas `tipo_medida=final`, sem inventar nem sobrescrever valores.
-- PR #120: toda peça ganhou CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA com SIM/NAO, observacao por peca e lembrete para medir pela vista interna do vao.
+- PRs #112 a #118: importacao W.Vetro em Nova Medicao, suporte a PDF sem dimensoes e correcoes do parser; teste real do PDF 861 confirmou Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
+- PR #119: toda peca da Medicao Final mostra sempre 3 larguras, 3 alturas, foto da trena de LARGURA e ALTURA; `medido=true` somente quando as seis medidas sao positivas; heranca somente de orcamento Atlas `tipo_medida=final`.
+- PR #120: toda peca ganhou CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA com SIM/NAO, observacao por peca e lembrete para medir pela vista interna do vao.
+- PR #121: reorganiza o fluxo da peca no celular: medidas/fotos -> SIM/NAO -> observacao -> demais campos -> fotos adicionais, removendo o painel duplicado.
 - Medicao Final V2 operacional, com status, responsavel, pendencias, checklist/fotos e link externo seguro.
 - Engenharia Fases 1 a 4 concluidas.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
 
-## EM VALIDACAO — ORDEM DO FLUXO DA PECA
-Pedido do usuario apos teste em celular:
-- o bloco CONTRAMARCO / ARREMATE / CADEIRINHA / CANTONEIRA nao deve ficar como um painel separado depois das fotos;
-- ele deve aparecer imediatamente abaixo das 3 larguras + 3 alturas e fotos da trena da peca selecionada;
-- a observacao da peca deve continuar logo abaixo desse bloco;
-- depois disso entram os demais campos configuraveis e fotos adicionais que forem sendo criados.
+## EM VALIDACAO — MEDICAO PARCIAL / TEMPO / HISTORICO
+Pedido do usuario:
+- depois de iniciar, registrar data e contar o tempo gasto na medicao;
+- permitir salvar uma visita como Medicao Parcial quando nem todos os vaos puderem ser medidos;
+- preservar tudo que ja foi feito;
+- mostrar claramente cada peca como feita ou em aberto;
+- permitir voltar depois, retomar e medir apenas o restante;
+- manter historico das pausas e retomadas.
 
-Implementado na branch atual:
-- `MedicaoPadroesFixosPanel` agora recebe somente `itemId` e trabalha diretamente com a peca selecionada no `MedicaoChecklistV2Panel`;
-- remove a segunda barra duplicada de selecao `Peca 1 / Peca 2 / ...`;
-- o bloco e renderizado imediatamente depois de `Medidas finais da peça`;
-- a observacao permanece logo abaixo das quatro conferencias;
-- o checklist configuravel e as fotos gerais continuam depois desse bloco;
-- o painel separado foi removido do `AppShell`;
-- o lembrete modal da vista interna foi isolado em `MedicaoVistaInternaAviso`, portanto continua aparecendo quando a medicao esta liberada e ainda nao iniciada.
+Implementado na branch atual sem nova migration:
+- novo `MedicaoParcialPanel` aparece depois que a medicao possui `iniciado_em`;
+- cronometro mostra somente tempo ativo; ao salvar parcial, o tempo pausa; ao retomar, volta a contar;
+- resumo visual mostra `✅ feita` e `em aberto` por peca;
+- botao `Salvar medição parcial` preserva medidas, fotos, checklist e demais dados ja gravados;
+- botao `Retomar medição` continua a mesma Medicao Final sem recriar itens;
+- historico usa a tabela ja existente `medicao_revisoes`, registrando snapshots `Medição parcial` e `Retomada da medição` com data, usuario e quantidade feita/em aberto;
+- o inicio original continua vindo de `medicoes_finais.iniciado_em`;
+- nao foi criado novo status em `status_operacional` nesta etapa para evitar incompatibilidade com telas antigas; o estado parcial e derivado do ultimo evento do historico.
 
-Ordem esperada por peca:
+## ORDEM ATUAL POR PECA
 1. identificacao da peca;
-2. fotos da trena LARGURA / ALTURA;
-3. 3 larguras + 3 alturas;
-4. CONTRAMARCO / ARREMATE / CADEIRINHA / CANTONEIRA;
-5. OBSERVACAO;
-6. demais campos configuraveis;
-7. fotos adicionais da peca.
+2. foto da trena LARGURA / ALTURA;
+3. Largura Baixo / Meio / Cima;
+4. Altura Direita / Meio / Esquerda;
+5. Contramarco / Arremate / Cadeirinha / Cantoneira — SIM/NAO;
+6. observacao;
+7. demais campos configuraveis;
+8. fotos adicionais.
 
 ## W.VETRO — REFERENCIA FUNCIONAL
-`FELIPE ALVES SANTANA-861.pdf`: orçamento 861, cliente FELIPE ALVES SANTANA, obra CASA, JOSE BONIFACIO/SP, 7 itens. Esse layout nao imprime largura/altura das esquadrias.
+`FELIPE ALVES SANTANA-861.pdf`: orcamento 861, cliente FELIPE ALVES SANTANA, obra CASA, JOSE BONIFACIO/SP, 7 itens. Esse layout nao imprime largura/altura das esquadrias.
 
-Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do orçamento e nunca preenche automaticamente as seis medidas finais da obra sem uma fonte explicitamente marcada como Medida Final.
+Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do orcamento e nunca preenche automaticamente as seis medidas finais da obra sem uma fonte explicitamente marcada como Medida Final.
 
 ## W.VETRO API — OPORTUNIDADE MAPEADA, NAO IMPLEMENTADA
 - Endpoints avaliados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes.
@@ -55,19 +57,22 @@ Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do or
 - Ainda nao foi confirmado endpoint publico para receitas/BOM, formulas de corte, usinagens, lista/plano de corte ou otimizacao de barras.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- Nova ordem do fluxo por peca descrita acima.
-- PR #120: persistencia real dos quatro SIM/NAO e observacao ainda precisa de teste completo em campo.
-- PR #119 precisa validacao visual completa em campo.
+- Medicao parcial, tempo ativo e historico da branch atual.
+- PR #121 precisa validacao visual final em celular.
+- Persistencia real dos quatro SIM/NAO e observacao precisa continuar sendo testada em campo.
+- PR #119 precisa validacao completa das fotos da trena e heranca de `tipo_medida=final`.
 - Confirmacao de Venda Fase 1.
 
 ## PARCIAL / DIVIDA TECNICA
-- Campos fixos da PR #120 estao inicialmente na tela interna; acesso externo deve ser validado/estendido se usado como interface principal do medidor.
+- Estado parcial ainda e derivado do historico em `medicao_revisoes`; uma futura versao pode ganhar status/entidade de sessoes dedicado se necessario.
+- Campos fixos e controle parcial estao inicialmente na tela interna; acesso externo precisa ser estendido se for a interface principal do medidor.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
 - Regras condicionais completas do checklist V2 e `exigir_foto_quando` ainda pendentes.
-- O orçamento de apoio W.Vetro ainda usa `orcamentos`.
+- O orcamento de apoio W.Vetro ainda usa `orcamentos`.
 - Testes automatizados de regra de negocio ainda nao existem.
 
 ## SEGURANCA / MIGRATIONS
 - Acesso externo da Medicao Final e server-side, com token-hash, validade e revogacao.
 - Importacao W.Vetro e identificacao server-side exigem sessao Atlas valida.
+- Esta etapa de medicao parcial reutiliza `medicao_revisoes`; nao depende de migration nova.
 - Nao usar `migration repair --reverted` no banco atual sem diagnostico explicito.
