@@ -64,3 +64,10 @@ Verificado em: 2026-08-13, `main` apos PR #109; branch atual adiciona leitura au
 - Acesso externo da Medicao Final e server-side, com token-hash, validade e revogacao.
 - Geracao/revogacao respeita permissoes do Atlas; Master tem edicao total.
 - Nao usar `migration repair --reverted` no banco atual sem diagnostico explicito.
+
+## ATUALIZACAO — MOEDA BRL E REENVIO DE ANEXOS
+- Branch `fix/moeda-brl-reenvio-anexos`: corrige o uso de `.toFixed(2)` no card e no PDF Atlas; `2716.84` passa a ser exibido como `R$ 2.716,84`.
+- O campo `Valor total do orçamento` usa mascara monetaria: digitando `271684`, exibe `R$ 2.716,84`; o valor continua numerico no banco.
+- O PDF Atlas formata total e valores de itens no padrao brasileiro.
+- Cada anexo em andamento recebe `Enviar`; anexos finalizados recebem `Reenviar`, abrindo o WhatsApp do vendedor com o link daquele arquivo sem exigir nova finalizacao.
+- Fotos, leitura da trena, `Iniciar/Retornar orçamento` e parser do total W.Vetro nao foram alterados.

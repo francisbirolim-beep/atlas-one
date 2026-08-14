@@ -56,6 +56,11 @@ if (!digitos) return ''
 return digitos.startsWith('55') ? digitos : `55${digitos}`
 }
 
+function formatarMoedaBRL(valor: number | null | undefined): string {
+const numero = Number(valor || 0)
+return `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 const acabamentoLabelsPdf: Record<string, string> = {
 preto: 'Preto',
 branco: 'Branco',
@@ -152,7 +157,7 @@ linhaNova(5)
 
 if (item.preco_unit != null) {
 doc.text(
-`Produto cadastrado: preço unitário R$ ${item.preco_unit.toFixed(2)}${item.preco_total != null ? ` — total R$ ${item.preco_total.toFixed(2)}` : ''}`,
+`Produto cadastrado: preço unitário ${formatarMoedaBRL(item.preco_unit)}${item.preco_total != null ? ` — total ${formatarMoedaBRL(item.preco_total)}` : ''}`,
 margem + 4, y
 )
 linhaNova(5)
@@ -170,7 +175,7 @@ linhaNova(2)
 linhaNova(2)
 doc.setFontSize(12)
 doc.setFont('helvetica', 'bold')
-doc.text(`Valor total: R$ ${(card.valor_estimado ?? 0).toFixed(2)}`, margem, y)
+doc.text(`Valor total: ${formatarMoedaBRL(card.valor_estimado)}`, margem, y)
 
 return doc.output('blob')
 }
@@ -468,6 +473,18 @@ setNovoAnexoTitulo('')
 
 function removerAnexo(idx: number) {
 setEditando(prev => (prev ? { ...prev, anexos: (prev.anexos || []).filter((_, i) => i !== idx) } : prev))
+}
+
+function enviarAnexoVendedor(anexo: Anexo) {
+const numero = numeroWhatsApp(whatsappVendedor || vendedorInfo?.whatsapp || '')
+if (!numero) {
+alert('Informe ou cadastre o WhatsApp do vendedor antes de enviar o anexo.')
+return
+}
+const nomeCliente = editando?.cliente_nome || cardSelecionado?.cliente_nome || 'cliente'
+const mensagem = mensagemVendedor.trim() || `Olá! Segue o anexo do orçamento de ${nomeCliente}.`
+const texto = `${mensagem}\n\n${anexo.titulo}: ${anexo.url}`
+window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')
 }
 
 async function finalizarOrcamento() {
@@ -833,7 +850,7 @@ Assistência
 )}
 {!card.eh_assistencia && card.valor_estimado != null && (
 <p className="text-xs font-semibold mt-1" style={{ color: est ? est.texto : '#059669' }}>
-R$ {card.valor_estimado.toFixed(2)}
+{formatarMoedaBRL(card.valor_estimado)}
 </p>
 )}
 {!card.eh_assistencia && (card.orcamento_finalizado_em && card.orcamento_iniciado_em ? (
@@ -1307,9 +1324,14 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-1
 </p>
 )}
 {(editando.anexos || []).map((a, i) => (
-<a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1">
-<Paperclip size={12} /> {a.titulo} <span className="text-slate-400">({a.nome})</span>
+<div key={i} className="flex items-center gap-2">
+<a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex items-center gap-1 flex-1 min-w-0">
+<Paperclip size={12} className="flex-shrink-0" /> <span className="truncate">{a.titulo}</span> <span className="text-slate-400 truncate">({a.nome})</span>
 </a>
+<button onClick={() => enviarAnexoVendedor(a)} className="flex items-center gap-1 text-brand-navy hover:underline flex-shrink-0">
+<Phone size={12} /> Reenviar
+</button>
+</div>
 ))}
 </div>
 ) : (
@@ -1327,6 +1349,9 @@ Em andamento há {formatarDuracao(editando.orcamento_iniciado_em || '', new Date
 <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-navy hover:underline flex-shrink-0">
 ver
 </a>
+<button onClick={() => enviarAnexoVendedor(a)} className="flex items-center gap-1 text-brand-navy hover:underline flex-shrink-0">
+<Phone size={12} /> Enviar
+</button>
 <button onClick={() => removerAnexo(i)} className="text-red-400 hover:text-red-600 flex-shrink-0">
 <Trash2 size={12} />
 </button>
@@ -1363,11 +1388,13 @@ onChange={e => adicionarAnexo(e.target.files?.[0])}
 <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
 <input
 type="text"
-value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
-onChange={e =>
-atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
-}
-placeholder="Ex: 2500.00"
+value={editando.valor_estimado != null ? formatarMoedaBRL(editando.valor_estimado) : ''}
+onChange={e => {
+const digitos = e.target.value.replace(/\D/g, '')
+atualizarCampo('valor_estimado', digitos ? Number(digitos) / 100 : null)
+}}
+placeholder="R$ 0,00"
+inputMode="numeric"
 className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
 />
 </div>
