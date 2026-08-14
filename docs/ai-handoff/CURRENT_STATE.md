@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #118 (`08a44d9d24730074a36191558266f03efcb0f626`). A branch atual `feat/medicao-final-medidas-fixas` / PR #119 adiciona medidas principais e fotos da trena como bloco fixo de toda peça da Medicao Final.
+Verificado em: 2026-08-14. `main` esta no merge da PR #119 (`f995a9377430e7f1344e00c6acf86799da44b2c2`). A branch atual `feat/medicao-padrao-sim-nao-observacao` / PR #120 adiciona conferencias fixas SIM/NAO, observacao por peca e lembrete de vista interna do vao.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -12,48 +12,29 @@ Verificado em: 2026-08-14. `main` esta no merge da PR #118 (`08a44d9d24730074a36
 - PR #112: `Nova medição` permite importar PDF W.Vetro, revisar e criar a Medicao Final preservando o PDF original.
 - PR #113: PDFs W.Vetro sem largura/altura deixam de ser rejeitados; nenhuma dimensao e inventada.
 - PR #114: faixa Cliente/Obra/Orçamento; telefone do responsavel pelo WhatsApp cadastrado; dados da empresa somente quando salvos manualmente.
-- PR #115: primeira correcao de Cliente/Cidade no preview W.Vetro.
-- PR #116: apoio W.Vetro antigo sem Medicao Final pode ser reaproveitado/reparado; duplicidade so bloqueia quando ja existe Medicao Final vinculada.
-- PR #117: registros internos de apoio W.Vetro deixam de aparecer em `OU USAR ORÇAMENTO DO ATLAS`, sem serem apagados.
-- PR #118: parser rejeita rotulos concatenados como `CELULARTEL. FIXO:`; teste real confirmou preview `FELIPE ALVES SANTANA`, `JOSE BONIFACIO - SP`, 7 itens.
-- App Shell responsivo com Sidebar + Topbar compartilhados.
-- Infraestrutura canonica de migrations Supabase em `supabase/migrations/`.
+- PRs #115 a #118: correcao progressiva do parser W.Vetro; teste real do PDF 861 confirmou Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
+- PR #119: toda peça da Medicao Final mostra sempre 3 larguras, 3 alturas, foto da trena de LARGURA e foto da trena de ALTURA; `medido=true` somente quando as seis medidas sao positivas; heranca de medidas/fotos somente de orçamento Atlas `tipo_medida=final`, sem inventar nem sobrescrever valores.
+- Medicao Final V2 operacional, com status, responsavel, pendencias, checklist/fotos e link externo seguro.
+- Engenharia Fases 1 a 4 concluidas.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
-- Medicao Final V2 operacional (PRs #54, #55 e #56), incluindo checklist/fotos e link externo seguro.
-- A rota autenticada `/api/medicao-final/ler-trena` usa visao por IA para interpretar fotos do visor da trena/medidor laser.
-- Engenharia Fases 1 a 4 concluidas: entrada apos Medicao Final, conferencia tecnica e liberacao transacional para Producao.
-- Cadastro tecnico de linhas existe em `linhas_tecnicas`, com relacionamentos `linha_produtos` e `linha_tipologias`.
 
-## EM VALIDACAO — PR #119 — MEDIDAS FIXAS E FOTOS DA TRENA
-Pedido validado pelo usuario: toda peça da Medicao Final deve exibir sempre, independentemente do checklist configuravel:
-- Largura Baixo;
-- Largura Meio;
-- Largura Cima;
-- Altura Direita;
-- Altura Meio;
-- Altura Esquerda;
-- foto da trena da LARGURA;
-- foto da trena da ALTURA.
+## EM VALIDACAO — PR #120 — PADROES FIXOS DA MEDICAO
+Pedido do usuario: todas as pecas da Medicao Final devem ter sempre, independente do checklist configuravel:
+- CONTRAMARCO — SIM / NAO;
+- ARREMATE — SIM / NAO;
+- CADEIRINHA — SIM / NAO;
+- CANTONEIRA — SIM / NAO;
+- campo OBSERVACAO no final da peca.
 
-A branch atual implementa em `MedicaoChecklistV2Panel`:
-- secao fixa `Medidas finais da peça` antes do checklist configuravel;
-- duas areas visuais para foto LARGURA e ALTURA, com upload/troca;
-- seis inputs em duas linhas de tres, no mesmo padrao usado no Kanban;
-- botao `Salvar medidas`;
-- indicador `Medidas completas` / `Medidas pendentes` por peça;
-- `medido=true` somente quando as seis medidas possuem valores positivos;
-- se qualquer uma das seis ficar vazia/invalida, a peça permanece `medido=false`.
-
-### Heranca de orçamento Atlas com Medida Final
-`herdarMedidasFinaisDoOrcamento()` reaproveita dados preexistentes somente quando o orçamento vinculado possui `tipo_medida = final`:
-- copia apenas medidas finais que realmente existam no item de origem;
-- copia `foto_larguras_url` e `foto_alturas_url` quando existirem;
-- nao sobrescreve medidas/fotos ja gravadas na Medicao Final;
-- nao usa `largura_mm`/`altura_mm` comuns como substituto das seis medidas;
-- nao herda de orçamento `tipo_medida = comum`;
-- so faz pareamento automatico quando a quantidade de linhas da medicao ainda corresponde à quantidade de itens do orçamento, evitando associacao errada apos separacao/reorganizacao de peças.
-
-Isso tambem permite que uma Medicao Final ja criada anteriormente herde os dados ao abrir a tela, desde que ainda esteja no pareamento seguro acima.
+Implementado em `MedicaoPadroesFixosPanel`:
+- bloco separado e fixo por peca;
+- selecao rapida SIM/NAO com persistencia em `medicao_itens.campos_extras`;
+- chaves: `padrao_contramarco`, `padrao_arremate`, `padrao_cadeirinha`, `padrao_cantoneira`;
+- observacao persistida em `observacao_medicao` dentro de `campos_extras`;
+- preserva todos os outros valores ja existentes em `campos_extras`;
+- aviso permanente: `Sempre fazer a medição pela vista interna do vão`;
+- quando a medicao esta `liberado` e ainda sem `iniciado_em`, um modal reforca a vista interna antes do inicio;
+- nao altera as seis medidas finais, fotos da trena ou checklist configuravel.
 
 ## W.VETRO — REFERENCIA FUNCIONAL
 `FELIPE ALVES SANTANA-861.pdf`:
@@ -62,45 +43,30 @@ Isso tambem permite que uma Medicao Final ja criada anteriormente herde os dados
 - nome da obra `CASA`;
 - cidade `JOSE BONIFACIO / SP`;
 - 7 itens;
-- ambientes: `WC SUITE`, `WC`, `WC`, `QUARTO`, `SUITE`, `QUARTO`, `QUARTO`;
-- 3 maxim-ar, 1 porta de giro, 1 porta de correr, 1 janela de correr integrada e 1 janela de correr;
 - linha Suprema;
 - esse layout nao imprime largura/altura das esquadrias.
 
-Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do orçamento, nunca preenche automaticamente as seis medidas finais da obra sem uma fonte explicitamente marcada como Medida Final.
+Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do orçamento e nunca preenche automaticamente as seis medidas finais da obra sem uma fonte explicitamente marcada como Medida Final.
 
 ## W.VETRO API — OPORTUNIDADE MAPEADA, NAO IMPLEMENTADA
-- Documentacao `Wvetro Integrations v2` e endpoints enviados pelo usuario foram avaliados.
-- Endpoints relevantes: linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, itens de NF, estoque, financeiro, lotes, producao de projeto e instalacoes.
-- Estrategia futura: preferir API W.Vetro -> JSON estruturado -> Atlas; manter PDF como fallback/documento original.
-- Credenciais W.Vetro nunca devem ficar no browser; futura integracao sera server-side.
+- Endpoints avaliados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes.
+- Futura integracao deve ser server-side; Atlas continua fonte da verdade.
 - Ainda nao foi confirmado endpoint publico para receitas/BOM, formulas de corte, usinagens, lista/plano de corte ou otimizacao de barras.
 
-## ENGENHARIA — ESTADO REAL
-- Fase 1 concluida: Medicao Final aprovada entra automaticamente na Engenharia.
-- Fase 2 concluida: rota `/engenharia` e fluxo operacional.
-- Fase 3 concluida: conferencia tecnica persistente por peca e bloqueio de liberacao incompleta.
-- Fase 4 concluida: liberacao transacional/idempotente Engenharia -> Producao.
-- Ainda nao existe MEE/calculo tecnico automatico, receitas de tipologias, lista de corte ou otimizacao.
-
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- PR #119: bloco fixo de 3 larguras + 3 alturas + duas fotos da trena e heranca de orçamento `tipo_medida=final`.
+- PR #120: SIM/NAO dos quatro itens padrao, observacao por peca e modal de vista interna.
+- PR #119 precisa validacao visual completa em campo.
 - Confirmacao de Venda Fase 1.
-- Importacao generica de itens via PDF; layouts W.Vetro podem variar e precisam de validacao por amostras reais.
-- Modulo de IA/agente existe, mas nao foi auditado a fundo.
-- CRM existe no codigo; uso real nao confirmado nesta sessao.
+- Importacao generica por PDF continua dependente de validacao por layouts reais.
 
 ## PARCIAL / DIVIDA TECNICA
+- O novo bloco padrao da PR #120 esta inicialmente na tela interna da Medicao Final; acesso externo deve ser validado/estendido se o fluxo de campo usar o link externo como interface principal.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
 - Regras condicionais completas do checklist V2 e `exigir_foto_quando` ainda pendentes.
-- O orçamento de apoio da importacao W.Vetro ainda usa `orcamentos`; nao existe entidade propria de integracao W.Vetro.
-- Em PDFs W.Vetro sem medidas, o snapshot de apoio usa zero apenas por compatibilidade legada; isso nao representa medida real.
-- A futura integracao API deve preservar IDs/codigos W.Vetro e JSON bruto sem transformar W.Vetro na fonte da verdade do Atlas.
-- Design System ainda nao foi aplicado em todas as telas antigas.
+- O orçamento de apoio W.Vetro ainda usa `orcamentos`.
 - Testes automatizados de regra de negocio ainda nao existem.
 
 ## SEGURANCA / MIGRATIONS
 - Acesso externo da Medicao Final e server-side, com token-hash, validade e revogacao.
-- Geracao/revogacao respeita permissoes do Atlas; Master tem edicao total.
 - Importacao W.Vetro e identificacao server-side exigem sessao Atlas valida.
 - Nao usar `migration repair --reverted` no banco atual sem diagnostico explicito.
