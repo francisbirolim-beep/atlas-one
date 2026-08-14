@@ -72,16 +72,24 @@ function extrairNumeroOrcamento(linhas: string[]) {
   return null
 }
 
-function linhaPareceDadoCliente(valor: string) {
-  if (!valor || valor.length < 2 || valor.length > 90) return false
-  if (/^(CLIENTE|TEL|EMAIL|CNPJ|CPF|ENDERE[ÇC]O|CEP|IE\/RG|TEL2|FAX|DATA|TIPO|ITEM|OR[ÇC]AMENTO)\b/i.test(valor)) return false
-  if (/^\d+(?:[.,]\d+)?$/.test(valor)) return false
-  if (/^,?\s*S\/?N\s*$/i.test(valor)) return false
-  if (/\bCEP\s*:/i.test(valor)) return false
-  if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(valor)) return false
-  if (/^R?\$?\s*\d[\d.,]*$/.test(valor)) return false
-  if (/WVETRO|W\.VETRO|SISTEMA PARA VIDRA/i.test(valor)) return false
-  return /[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]{2,}/i.test(valor)
+function nomePossivelCliente(valor: string) {
+  if (!valor) return null
+
+  let candidato = valor.replace(/\s+/g, ' ').trim()
+  if (!candidato || candidato.length < 2 || candidato.length > 120) return null
+  if (/^(CLIENTE|TEL|EMAIL|CNPJ|CPF|ENDERE[ÇC]O|CEP|IE\/RG|TEL2|FAX|DATA|TIPO|ITEM|OR[ÇC]AMENTO)\b/i.test(candidato)) return null
+  if (/WVETRO|W\.VETRO|SISTEMA PARA VIDRA/i.test(candidato)) return null
+  if (/@/.test(candidato) || /\bCEP\s*:/i.test(candidato)) return null
+  if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(candidato)) return null
+
+  // Alguns PDFs colocam nome e celular na mesma linha, antes do rótulo CLIENTE.
+  candidato = candidato
+    .replace(/\s+\(?\d{2}\)?\s*\d{4,5}-?\d{4}.*$/i, '')
+    .trim()
+
+  if (!candidato || /\d/.test(candidato)) return null
+  if (!/[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]{2,}/i.test(candidato)) return null
+  return candidato
 }
 
 function extrairCliente(linhas: string[]) {
@@ -90,14 +98,16 @@ function extrairCliente(linhas: string[]) {
     if (!linha) continue
 
     const inline = linha.match(/^CLIENTE\s*:\s*(.+)$/i)
-    if (inline?.[1] && !/TEL\.?\s*FIXO|CELULAR/i.test(inline[1])) {
-      return inline[1].trim()
+    if (inline?.[1]) {
+      const antesDeOutrosRotulos = inline[1].split(/\s+(?:TEL\.?\s*FIXO|CELULAR|EMAIL|CNPJ|CPF|ENDERE[ÇC]O)\s*:/i)[0] || ''
+      const nomeInline = nomePossivelCliente(antesDeOutrosRotulos)
+      if (nomeInline) return nomeInline
     }
 
     if (/^CLIENTE\s*:/i.test(linha)) {
-      for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
-        const candidato = linhas[j] || ''
-        if (linhaPareceDadoCliente(candidato)) return candidato
+      for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+        const nome = nomePossivelCliente(linhas[j] || '')
+        if (nome) return nome
       }
     }
   }
@@ -165,6 +175,73 @@ function extrairQtdMedidas(bloco: string[]) {
   return null
 }
 
+function extrairQuantidadeSemMedidas(bloco: string[]) {
+  const idxCabecalho = bloco.findIndex(l => /\bQTDE\.?\b/i.test(l))
+  if (idxCabecalho < 0) return 1
+
+  for (let i = idxCabecalho + 1; i < Math.min(bloco.length, idxCabecalho + 7); i++) {
+    const linha = bloco[i] || ''
+    const codigoQuantidade = linha.match(/^[A-Z0-9.-]{1,10}\s+(\d{1,3})(?:\s|$)/i)
+    if (codigoQuantidade?.[1]) return Math.max(1, parseInt(codigoQuantidade[1], 10) || 1)
+    if (/^\d{1,3}$/.test(linha)) return Math.max(1, parseInt(linha, 10) || 1)
+  }
+
+  return 1
+}
+
+function extrairProdutoDoBloco(bloco: string[]) {
+  const rxProduto = /^(PORTA|JANELA|MAXIM|FACHADA|PAINEL|REVESTIMENTO|VITR|BOX|GUARDA|LAMBRI|PORTINHOLA)/i
+  const idxProduto = bloco.findIndex(l => rxProduto.test(l))
+  if (idxProduto < 0) return ''
+
+  const partes: string[] = []
+  for (let i = idxProduto; i < Math.min(bloco.length, idxProduto + 5); i++) {
+    let valor = bloco[i] || ''
+    if (!valor) continue
+    if (i > idxProduto && /(\*COR\s|\bQTDE\.?\b|\bVLR\.?\b|\bDT\.?\s*INSTALA|\bITEM\s*NRO\b|^TIPO\s*2\b|^OBSERVA[ÇC][ÕO]ES\b)/i.test(valor)) break
+    if (i > idxProduto && /^(PINTURA|INCOLOR|MINI[- ]?BOREAL|LAMINADO|TEMPERADO|REFLETIVO)/i.test(valor)) break
+    valor = valor.replace(/\s+ITEM\s*NRO\s*:\s*\d+.*$/i, '').trim()
+    if (valor) partes.push(valor)
+  }
+
+  return partes.join(' ').replace(/\s+/g, ' ').trim()
+}
+
+function extrairLinhaProduto(produto: string) {
+  const match = produto.match(/\|\s*([^|]+)/)
+  if (!match?.[1]) return ''
+  return match[1]
+    .replace(/\s+(?:COM|SEM)\b.*$/i, '')
+    .trim()
+}
+
+function extrairCorPerfil(bloco: string[]) {
+  // Prefere a pintura, pois alguns PDFs misturam visualmente a cor do acessório
+  // com o rótulo de cor do perfil durante a extração de texto.
+  for (const linha of bloco) {
+    const pintura = linha.match(/\bPINTURA\s+([A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ\s.-]{1,30}?)(?=\s+\*|$)/i)
+    if (pintura?.[0]) return pintura[0].trim()
+  }
+
+  for (const linha of bloco) {
+    const match = linha.match(/\*COR\s+(?:PERFIL|ESQUADRIA)\s*:\s*(.*?)(?=\s+\*COR\s|$)/i)
+    if (match?.[1]?.trim()) return match[1].trim()
+  }
+
+  return ''
+}
+
+function extrairVidroBloco(bloco: string[]) {
+  const rxVidro = /(?:MINI[- ]?BOREAL|BOREAL|INCOLOR|REFLETIVO|LAMINADO|TEMPERADO|VIDRO)[^|]*?\b\d{1,2}\s*MM\b[^|]*/i
+
+  for (const linha of bloco) {
+    const match = linha.match(rxVidro)
+    if (match?.[0]) return match[0].trim().replace(/^\*COR\s+VIDRO\s*:?[\s-]*/i, '')
+  }
+
+  return ''
+}
+
 function extrairItensPorRotulos(linhas: string[]): WVetroPdfItem[] {
   const locais = linhas
     .map((linha, index) => /^\*?LOCAL\s*\/\s*AMBIENTE\s*:/i.test(linha) ? index : -1)
@@ -176,30 +253,26 @@ function extrairItensPorRotulos(linhas: string[]): WVetroPdfItem[] {
     const idxLocal = locais[pos] ?? -1
     if (idxLocal < 0) continue
     const proximoLocal = pos + 1 < locais.length ? (locais[pos + 1] ?? linhas.length) : linhas.length
-    const fim = Math.min(proximoLocal, idxLocal + 28)
+    const fim = Math.min(proximoLocal, idxLocal + 36)
     const bloco = linhas.slice(idxLocal, fim)
-
-    const medidas = extrairQtdMedidas(bloco)
-    if (!medidas) continue
 
     const localLinha = linhas[idxLocal] || ''
     const ambienteInline = limparValorRotulo(localLinha, /^\*?LOCAL\s*\/\s*AMBIENTE\s*:\s*(.*)$/i)
+      .replace(/\s+ITEM\s*NRO\s*:\s*\d+.*$/i, '')
+      .trim()
     const ambiente = ambienteInline || candidatoAmbienteAntesDoRotulo(linhas, idxLocal)
 
-    const produto = bloco.find(l => /^(PORTA|JANELA|MAXIM|FACHADA|PAINEL|REVESTIMENTO|VITR|BOX|GUARDA|LAMBRI|PORTINHOLA)/i.test(l)) || ''
+    const produto = extrairProdutoDoBloco(bloco)
     if (!produto) continue
 
-    const linhaValor = bloco.find(l => /^L\.\s+/i.test(l)) || ''
-    const linha = linhaValor.replace(/^L\.\s*/i, '').trim()
-      || (produto.includes('|') ? produto.split('|').pop()?.trim() || '' : '')
+    const medidas = extrairQtdMedidas(bloco)
+    const quantidade = medidas?.quantidade || extrairQuantidadeSemMedidas(bloco)
+    const largura = medidas?.largura || 0
+    const altura = medidas?.altura || 0
 
-    const corPerfilLinha = bloco.find(l => /^\*COR\s+(?:PERFIL|ESQUADRIA)\s*:/i.test(l)) || ''
-    const corPerfil = limparValorRotulo(corPerfilLinha, /^\*COR\s+(?:PERFIL|ESQUADRIA)\s*:\s*(.*)$/i)
-
-    const vidro = bloco.find(l =>
-      /(?:TEMPERADO|LAMINADO|INCOLOR|REFLETIVO|BOREAL|MINIBOREL|VIDRO)/i.test(l)
-      && /\b\d{1,2}\s*MM\b/i.test(l)
-    ) || ''
+    const linha = extrairLinhaProduto(produto)
+    const corPerfil = extrairCorPerfil(bloco)
+    const vidro = extrairVidroBloco(bloco)
 
     const tipo = inferirTipoEsquadria(produto)
     const descricao = [
@@ -207,6 +280,7 @@ function extrairItensPorRotulos(linhas: string[]): WVetroPdfItem[] {
       linha ? `LINHA: ${linha}` : '',
       vidro ? `VIDRO: ${vidro}` : '',
       corPerfil ? `COR PERFIL: ${corPerfil}` : '',
+      largura > 0 && altura > 0 ? '' : 'MEDIDAS NÃO INFORMADAS NO PDF',
     ].filter(Boolean).join(' | ')
 
     itens.push({
@@ -214,9 +288,9 @@ function extrairItensPorRotulos(linhas: string[]): WVetroPdfItem[] {
       tipo_esquadria: tipo,
       tipo_outro_texto: tipo === 'outro' ? produto : null,
       descricao,
-      quantidade: medidas.quantidade,
-      largura_mm: medidas.largura,
-      altura_mm: medidas.altura,
+      quantidade,
+      largura_mm: largura,
+      altura_mm: altura,
       cor: corPerfil || null,
       linha: linha || null,
       vidro: vidro || null,
@@ -228,24 +302,29 @@ function extrairItensPorRotulos(linhas: string[]): WVetroPdfItem[] {
 
 function converterFallback(itens: Partial<ItemEsquadria>[]): WVetroPdfItem[] {
   return itens
-    .filter(it => {
+    .filter(it => !!(it.descricao || it.tipo_outro_texto || it.ambiente))
+    .map(it => {
+      const descricao = (it.descricao || it.tipo_outro_texto || it.ambiente || '').trim()
+      const matchLinha = descricao.match(/(?:^|\|)\s*LINHA\s*:\s*([^|]+)/i)
+        || descricao.match(/\|\s*(SUPREMA|GOLD|LINHA\s*\d+|ATLANTA|PELE\s+DE\s+VIDRO)\b/i)
+      const matchVidro = descricao.match(/(?:^|\|)\s*VIDRO\s*:\s*([^|]+)/i)
+        || descricao.match(/((?:MINI[- ]?BOREAL|BOREAL|INCOLOR|REFLETIVO|LAMINADO|TEMPERADO)[^|]*?\b\d{1,2}\s*MM\b[^|]*)/i)
+      const matchCor = descricao.match(/\bPINTURA\s+[A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ\s.-]*/i)
       const largura = Number(it.largura_mm || 0)
       const altura = Number(it.altura_mm || 0)
-      return !!(it.descricao || it.tipo_outro_texto) && largura > 0 && altura > 0
-    })
-    .map(it => {
-      const descricao = (it.descricao || it.tipo_outro_texto || '').trim()
-      const matchLinha = descricao.match(/(?:^|\|)\s*LINHA\s*:\s*([^|]+)/i)
-      const matchVidro = descricao.match(/(?:^|\|)\s*VIDRO\s*:\s*([^|]+)/i)
+      const descricaoFinal = largura > 0 && altura > 0
+        ? descricao
+        : [descricao, 'MEDIDAS NÃO INFORMADAS NO PDF'].filter(Boolean).join(' | ')
+
       return {
         ambiente: it.ambiente?.trim() || null,
         tipo_esquadria: it.tipo_esquadria || inferirTipoEsquadria(descricao),
         tipo_outro_texto: it.tipo_outro_texto || null,
-        descricao,
+        descricao: descricaoFinal,
         quantidade: Math.max(1, Number(it.quantidade || 1)),
-        largura_mm: Number(it.largura_mm),
-        altura_mm: Number(it.altura_mm),
-        cor: it.cor || null,
+        largura_mm: largura,
+        altura_mm: altura,
+        cor: it.cor || matchCor?.[0]?.trim() || null,
         linha: matchLinha?.[1]?.trim() || null,
         vidro: matchVidro?.[1]?.trim() || null,
       }

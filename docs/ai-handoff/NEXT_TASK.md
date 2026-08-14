@@ -1,39 +1,42 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar a PR #112 (`feat/medicao-final-importar-wvetro`), que permite criar uma Medicao Final diretamente pelo PDF de um orçamento W.Vetro no botao `Nova medição`.
+Validar a branch `fix/medicao-wvetro-sem-medidas`, criada após teste real da PR #112 com `FELIPE ALVES SANTANA-861.pdf`.
 
-A implementacao preserva o fluxo ja existente de selecionar um orçamento vendido do Atlas e adiciona, acima dele, a opcao `Importar orçamento W.Vetro` com leitura -> revisao -> confirmacao.
+O PDF foi reconhecido como W.Vetro, mas o documento não imprime largura/altura das esquadrias. A versão anterior bloqueava a importação por exigir dimensões. A correção passa a aceitar itens identificáveis mesmo sem tamanho, sem inventar medidas.
 
-## VALIDAR ANTES DE ENCERRAR A PR #112
-Usar preferencialmente o PDF real `FRANCIS TESTE-977.pdf`.
+## VALIDAR ANTES DE ENCERRAR ESTA CORRECAO
+Usar `FELIPE ALVES SANTANA-861.pdf`.
 
 1. Abrir `Medida Final` / `/producao/medicao-final`.
 2. Clicar em `Nova medição`.
-3. Confirmar que aparece o bloco `Importar orçamento W.Vetro` e, abaixo, continua existindo a busca de orcamentos vendidos do Atlas.
-4. Selecionar `FRANCIS TESTE-977.pdf`.
-5. Confirmar que a pre-visualizacao e exibida ANTES de gravar qualquer Medicao Final.
-6. No PDF de referencia, conferir os dados esperados quando o texto permitir:
-   - numero W.Vetro: `977`;
-   - cliente: `FRANCIS TESTE`;
-   - cidade: `JOSE BONIFACIO` / SP;
-   - total: `R$ 2.716,84`;
-   - pelo menos 1 item;
-   - porta de correr 3 folhas moveis / Suprema;
-   - quantidade 1;
-   - referencia de tamanho `1789 x 1962 mm`;
-   - perfil/cor `BRANCO` e vidro `INCOLOR 06MM - TEMPERADO` quando reconhecidos.
-7. Confirmar que ambiente vazio no PDF aparece como `Ambiente não informado`, sem bloquear a importacao.
-8. Alterar cliente/cidade na pre-visualizacao apenas para testar que os campos sao editaveis; depois restaurar os valores corretos antes de confirmar.
-9. Clicar em `Confirmar e criar Medição Final`.
-10. Confirmar que o Atlas abre a nova Medicao Final e cria os itens reconhecidos.
-11. Abrir o item e confirmar a regra critica: `1789 x 1962` aparece somente como referencia do orçamento; `Largura Baixo/Meio/Cima` e `Altura Direita/Meio/Esquerda` devem continuar vazias.
-12. Confirmar que o PDF W.Vetro original foi preservado no orçamento de apoio do Atlas.
-13. Tentar importar novamente o orçamento `977`: o sistema deve impedir duplicacao e, quando houver Medicao Final vinculada, abrir a existente.
-14. Fazer um teste rapido pelo fluxo antigo: `Nova medição` -> selecionar um orçamento vendido do Atlas e confirmar que continua funcionando.
-15. Confirmar que Build Validation do head final da PR esta verde antes do merge.
+3. Selecionar `FELIPE ALVES SANTANA-861.pdf`.
+4. Confirmar que NÃO aparece mais o erro `nenhuma esquadria com largura e altura pôde ser lida`.
+5. Confirmar a prévia ANTES de gravar:
+   - orçamento `861`;
+   - cliente `FELIPE ALVES SANTANA`;
+   - cidade `JOSE BONIFACIO - SP`;
+   - `7 item(ns)`;
+   - cada item sem dimensão deve mostrar `Sem medida no PDF`, nunca `0 x 0` como informação ao usuário.
+6. Conferir os 7 itens esperados:
+   - WC SUITE — maxim-ar com peitoril fixo — Suprema;
+   - WC — maxim-ar com peitoril fixo — Suprema;
+   - WC — maxim-ar 1 módulo — Suprema;
+   - QUARTO — porta de giro 1 folha — Suprema;
+   - SUITE — porta de correr 3 folhas — Suprema;
+   - QUARTO — janela de correr integrada 2 folhas — Suprema;
+   - QUARTO — janela de correr 2 folhas móveis — Suprema.
+7. Conferir cor/vidro quando reconhecidos pelo texto do PDF.
+8. Clicar em `Confirmar e criar Medição Final`.
+9. Confirmar que foram criados 7 itens.
+10. Abrir os itens e confirmar que aparece `REFERÊNCIA ORÇAMENTO: medidas não informadas no PDF`.
+11. Confirmar regra crítica: `Largura Baixo/Meio/Cima` e `Altura Direita/Meio/Esquerda` continuam vazias.
+12. Confirmar que o PDF original permanece anexado ao orçamento de apoio.
+13. Reimportar o orçamento `861` e confirmar bloqueio de duplicidade.
+14. Fazer um teste de regressão com um PDF W.Vetro que tenha dimensões (ex.: `FRANCIS TESTE-977.pdf`) e confirmar que as dimensões continuam aparecendo apenas como referência.
+15. Confirmar Build Validation verde no head final antes do merge.
 
-## DEPOIS DA PR #112
+## DEPOIS DESTA CORRECAO
 1. Criar `Configurações -> Orçamento` usando `configuracoes_gerais` para dados da empresa, validade, pagamento, prazo, garantia, observacoes e rodape.
 2. Fazer o PDF atual do Atlas consumir essas configuracoes.
 3. Melhorar o layout profissional do PDF Atlas.
@@ -49,7 +52,7 @@ Usar preferencialmente o PDF real `FRANCIS TESTE-977.pdf`.
    - estoque;
    - producao/lotes/producaoProjeto/instalacoes.
 6. Preservar IDs/codigos W.Vetro e JSON bruto em futura camada de integracao; Atlas continua sendo fonte da verdade.
-7. Perguntar/confirmar com W.Vetro se a API expoe tipologias, perfis, acessorios, receitas/BOM, formulas, usinagens, lista/plano de corte e otimizacao; nao assumir que esses dados estao acessiveis.
+7. Confirmar com W.Vetro se a API expoe tipologias, perfis, acessorios, receitas/BOM, formulas, usinagens, lista/plano de corte e otimizacao.
 
 ## DEPOIS DO ORCAMENTO / INTEGRACAO
 - Engenharia Fase 5: base de receitas tecnicas por tipologia;
@@ -62,23 +65,18 @@ Usar preferencialmente o PDF real `FRANCIS TESTE-977.pdf`.
 - Medicao Final V2 PRs #54 a #56.
 - Redesign profissional PRs #57 a #63.
 - Engenharia Fases 1 a 4: PRs #64, #66, #69 e #73.
-- Kanban #104: primeira coluna exige `Iniciar orçamento` e preserva fotos.
-- Kanban #105: galeria de fotos coletadas em campo.
-- Kanban #106: fotos de largura e altura separadas e identificadas.
-- Kanban #107: leitura automatica por IA das fotos da trena.
-- Kanban #108: correcao da inversao Baixo/Cima na LARGURA.
-- Kanban #109: anexo W.Vetro com titulo automatico e botao liberado.
-- Kanban #110: total do PDF W.Vetro lido automaticamente.
-- Kanban #111: moeda BRL e envio/reenvio individual de anexos.
+- Kanban #104 a #111: fluxo de orçamento, fotos, leitura da trena, anexo W.Vetro, total automático, moeda BRL e reenvio de anexos.
+- PR #112: importação de orçamento W.Vetro diretamente em `Nova medição`, com preview, preservação do PDF e criação da Medição Final.
 
 ## CUIDADOS
-- GitHub e a unica fonte da verdade.
-- Nunca commitar direto na `main`; branch -> PR -> build valido -> merge.
+- GitHub e a única fonte da verdade.
+- Nunca commitar direto na `main`; branch -> PR -> build válido -> merge.
 - PDF W.Vetro original deve ser preservado.
+- Falta de largura/altura no PDF NÃO é motivo para descartar uma esquadria identificável.
+- Nunca inventar dimensão ausente.
 - Medida do orçamento W.Vetro NUNCA deve preencher automaticamente as seis medidas finais da obra.
-- Importacao W.Vetro deve passar por pre-visualizacao/revisao antes da gravacao.
-- Ambiente vazio no orçamento nao pode eliminar uma esquadria valida; sinalizar falta e permitir conferencia em campo.
-- Parser PDF continua sendo fallback e pode variar entre layouts; API estruturada deve ser preferida quando estiver disponivel e validada.
+- Importação W.Vetro deve passar por pré-visualização/revisão antes da gravação.
+- Parser PDF continua sendo fallback; API estruturada deve ser preferida quando estiver disponível e validada.
 - Credenciais W.Vetro nunca devem ficar no browser.
-- Leitura por IA da trena e sugestao; o colaborador deve conferir antes de salvar.
-- Nao automatizar lista de corte antes de fechar o modelo de receitas e versoes.
+- Leitura por IA da trena é sugestão; o colaborador deve conferir antes de salvar.
+- Não automatizar lista de corte antes de fechar o modelo de receitas e versões.
