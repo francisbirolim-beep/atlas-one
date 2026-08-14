@@ -1,0 +1,163 @@
+name: Temporary agent patch - moeda BRL
+
+on:
+  push:
+    branches:
+      - fix/moeda-brl-reenvio-anexos
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/moeda-brl-reenvio-anexos
+          fetch-depth: 0
+
+      - name: Aplicar ajustes no Kanban
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('components/system/KanbanPageFixed.tsx')
+          s = path.read_text(encoding='utf-8')
+
+          def replace_once(old: str, new: str, label: str):
+              global s
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: esperado 1 trecho, encontrado {count}')
+              s = s.replace(old, new, 1)
+
+          replace_once(
+          """function numeroWhatsApp(raw: string): string {
+          const digitos = raw.replace(/\\D/g, '')
+          if (!digitos) return ''
+          return digitos.startsWith('55') ? digitos : `55${digitos}`
+          }
+          """,
+          """function numeroWhatsApp(raw: string): string {
+          const digitos = raw.replace(/\\D/g, '')
+          if (!digitos) return ''
+          return digitos.startsWith('55') ? digitos : `55${digitos}`
+          }
+
+          function formatarMoedaBRL(valor: number | null | undefined): string {
+          const numero = Number(valor || 0)
+          return `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          }
+          """,
+          'helper formatarMoedaBRL')
+
+          replace_once(
+          """`Produto cadastrado: preço unitário R$ ${item.preco_unit.toFixed(2)}${item.preco_total != null ? ` — total R$ ${item.preco_total.toFixed(2)}` : ''}`,
+          """,
+          """`Produto cadastrado: preço unitário ${formatarMoedaBRL(item.preco_unit)}${item.preco_total != null ? ` — total ${formatarMoedaBRL(item.preco_total)}` : ''}`,
+          """,
+          'precos dos itens no PDF')
+
+          replace_once(
+          """doc.text(`Valor total: R$ ${(card.valor_estimado ?? 0).toFixed(2)}`, margem, y)
+          """,
+          """doc.text(`Valor total: ${formatarMoedaBRL(card.valor_estimado)}`, margem, y)
+          """,
+          'total do PDF')
+
+          replace_once(
+          """R$ {card.valor_estimado.toFixed(2)}
+          """,
+          """{formatarMoedaBRL(card.valor_estimado)}
+          """,
+          'valor no card')
+
+          replace_once(
+          """value={editando.valor_estimado != null ? String(editando.valor_estimado) : ''}
+          onChange={e =>
+          atualizarCampo('valor_estimado', e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null)
+          }
+          placeholder=\"Ex: 2500.00\"
+          className=\"w-full border border-slate-300 rounded-lg p-2.5 text-sm\"
+          """,
+          """value={editando.valor_estimado != null ? formatarMoedaBRL(editando.valor_estimado) : ''}
+          onChange={e => {
+          const digitos = e.target.value.replace(/\\D/g, '')
+          atualizarCampo('valor_estimado', digitos ? Number(digitos) / 100 : null)
+          }}
+          placeholder=\"R$ 0,00\"
+          inputMode=\"numeric\"
+          className=\"w-full border border-slate-300 rounded-lg p-2.5 text-sm\"
+          """,
+          'mascara do campo valor')
+
+          replace_once(
+          """async function finalizarOrcamento() {
+          """,
+          """function enviarAnexoVendedor(anexo: Anexo) {
+          const numero = numeroWhatsApp(whatsappVendedor || vendedorInfo?.whatsapp || '')
+          if (!numero) {
+          alert('Informe ou cadastre o WhatsApp do vendedor antes de enviar o anexo.')
+          return
+          }
+          const nomeCliente = editando?.cliente_nome || cardSelecionado?.cliente_nome || 'cliente'
+          const mensagem = mensagemVendedor.trim() || `Olá! Segue o anexo do orçamento de ${nomeCliente}.`
+          const texto = `${mensagem}\\n\\n${anexo.titulo}: ${anexo.url}`
+          window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')
+          }
+
+          async function finalizarOrcamento() {
+          """,
+          'funcao de envio individual')
+
+          replace_once(
+          """{(editando.anexos || []).map((a, i) => (
+          <a key={i} href={a.url} target=\"_blank\" rel=\"noreferrer\" className=\"text-brand-navy hover:underline flex items-center gap-1\">
+          <Paperclip size={12} /> {a.titulo} <span className=\"text-slate-400\">({a.nome})</span>
+          </a>
+          ))}
+          """,
+          """{(editando.anexos || []).map((a, i) => (
+          <div key={i} className=\"flex items-center gap-2\">
+          <a href={a.url} target=\"_blank\" rel=\"noreferrer\" className=\"text-brand-navy hover:underline flex items-center gap-1 flex-1 min-w-0\">
+          <Paperclip size={12} className=\"flex-shrink-0\" /> <span className=\"truncate\">{a.titulo}</span> <span className=\"text-slate-400 truncate\">({a.nome})</span>
+          </a>
+          <button onClick={() => enviarAnexoVendedor(a)} className=\"flex items-center gap-1 text-brand-navy hover:underline flex-shrink-0\">
+          <Phone size={12} /> Reenviar
+          </button>
+          </div>
+          ))}
+          """,
+          'reenvio de anexos finalizados')
+
+          replace_once(
+          """<a href={a.url} target=\"_blank\" rel=\"noreferrer\" className=\"text-brand-navy hover:underline flex-shrink-0\">
+          ver
+          </a>
+          <button onClick={() => removerAnexo(i)} className=\"text-red-400 hover:text-red-600 flex-shrink-0\">
+          <Trash2 size={12} />
+          </button>
+          """,
+          """<a href={a.url} target=\"_blank\" rel=\"noreferrer\" className=\"text-brand-navy hover:underline flex-shrink-0\">
+          ver
+          </a>
+          <button onClick={() => enviarAnexoVendedor(a)} className=\"flex items-center gap-1 text-brand-navy hover:underline flex-shrink-0\">
+          <Phone size={12} /> Enviar
+          </button>
+          <button onClick={() => removerAnexo(i)} className=\"text-red-400 hover:text-red-600 flex-shrink-0\">
+          <Trash2 size={12} />
+          </button>
+          """,
+          'envio de anexos em andamento')
+
+          path.write_text(s, encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/system/KanbanPageFixed.tsx
+          git commit -m "fix: formatar moeda BRL e permitir reenvio de anexos"
+          git push origin HEAD:fix/moeda-brl-reenvio-anexos
