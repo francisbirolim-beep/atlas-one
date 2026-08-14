@@ -67,14 +67,23 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - resultado esperado: Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens;
 - merge `20aaa50845bf0a37da44db2394a155571669093a`.
 
-## Medicao Final — reaproveitar orçamento de apoio W.Vetro antigo — branch fix/wvetro-orcamento-apoio-antigo — 2026-08-14
+## Medicao Final — reaproveitar orçamento de apoio W.Vetro antigo — PR #116 — 2026-08-14
 - novo print mostrou, em `OU USAR ORÇAMENTO DO ATLAS`, um card antigo com os mesmos dados incorretos do parser anterior: `CELULARTEL. FIXO:` / `396 JOSE BONIFACIO - SP`;
 - a rota de confirmacao anteriormente bloqueava qualquer marcador W.Vetro ja existente, mesmo se nao houvesse Medicao Final vinculada;
-- agora a duplicidade continua bloqueada quando ja existe Medicao Final;
+- duplicidade continua bloqueada quando ja existe Medicao Final;
 - quando existe somente o orçamento de apoio antigo, ele e reaproveitado e atualizado com Cliente/Cidade/itens do parser atual;
-- o PDF original ja preservado e reutilizado quando existe, evitando novo upload desnecessario;
+- o PDF original ja preservado e reutilizado quando existe;
 - depois a Medicao Final e criada sobre o mesmo `orcamento_id`;
-- rollback nao apaga um registro antigo reaproveitado em caso de falha posterior.
+- rollback nao apaga um registro antigo reaproveitado em caso de falha posterior;
+- merge `09514a5feb16a89d333e343732c3bcf873cba4c4`.
+
+## Medicao Final — ocultar apoios W.Vetro do seletor Atlas — branch fix/ocultar-apoio-wvetro-seletor-atlas — 2026-08-14
+- novo teste mostrou que o card antigo ainda aparecia ao abrir `Nova medição`, antes de qualquer nova importacao;
+- causa: `listarOrcamentosSemMedicao()` listava todo orçamento vendido sem Medicao Final, incluindo registros internos de apoio W.Vetro;
+- a consulta passa a trazer `descricao_livre` e filtra da lista qualquer registro cujo marcador comece por `Importado do W.Vetro |`;
+- o filtro afeta somente o bloco `OU USAR ORÇAMENTO DO ATLAS`;
+- o registro de apoio continua preservado no banco e continua acessivel ao importador W.Vetro para reaproveitamento/reparo;
+- orcamentos comerciais reais do Atlas permanecem elegiveis normalmente.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 - endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes;
@@ -83,11 +92,12 @@ Workflow de `npm install` + `npm run build` para validar compilacao/TypeScript i
 - ainda nao foi confirmado acesso API a receitas/BOM, formulas, usinagens, lista/plano de corte ou otimizacao.
 
 ## Pontos funcionais ainda pendentes
-- Validar o reparo/reaproveitamento do orçamento de apoio antigo do PDF 861 e confirmar que o card incorreto deixa de aparecer depois da Medicao Final ser criada.
+- Validar que `CELULARTEL. FIXO:` deixa de aparecer imediatamente no bloco `OU USAR ORÇAMENTO DO ATLAS` sem precisar importar o PDF primeiro.
+- Validar que orcamentos comerciais reais do Atlas continuam aparecendo nesse seletor.
+- Continuar teste do PDF 861 e confirmar reparo/reaproveitamento do apoio antigo quando o PDF for importado.
 - Validar a faixa Cliente/Obra/Orçamento e o telefone automatico do responsavel.
 - Confirmar que Dados da Empresa fica vazio ate configuracao manual.
 - Fazer regressao com `FRANCIS TESTE-977.pdf`.
-- Avaliar ocultar permanentemente orcamentos de apoio W.Vetro do bloco `OU USAR ORÇAMENTO DO ATLAS`.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
 - Criar conector W.Vetro API somente leitura depois de obter credenciais/teste e responses reais.
 - Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
