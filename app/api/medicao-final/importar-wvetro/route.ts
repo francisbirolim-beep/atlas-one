@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { parseOrcamentoWVetroTexto } from '@/lib/wvetroPdf'
-import { ItemEsquadria } from '@/lib/tipos'
+import { Anexo, ItemEsquadria } from '@/lib/tipos'
 
 export const runtime = 'nodejs'
 
@@ -47,6 +47,15 @@ function itemOrcamento(item: ReturnType<typeof parseOrcamentoWVetroTexto>['itens
 async function removerArquivoStorage(path: string | null) {
   if (!path) return
   await supabaseAdmin.storage.from('fotos').remove([path]).catch(() => {})
+}
+
+function anexoOriginalWVetro(anexos: unknown): Anexo | null {
+  if (!Array.isArray(anexos)) return null
+  const encontrado = anexos.find((anexo: any) =>
+    typeof anexo?.url === 'string'
+    && (/w\.?vetro/i.test(String(anexo?.titulo || '')) || /w\.?vetro/i.test(String(anexo?.nome || '')))
+  )
+  return encontrado || null
 }
 
 export async function POST(req: NextRequest) {
@@ -118,10 +127,13 @@ export async function POST(req: NextRequest) {
       ? `Importado do W.Vetro | Orçamento ${resumo.numero_orcamento}`
       : `Importado do W.Vetro | Arquivo ${nomeArquivo}`
 
+    let orcamentoExistenteId: string | null = null
+    let anexosExistentes: Anexo[] = []
+
     if (resumo.numero_orcamento) {
       const { data: existente } = await supabaseAdmin
         .from('orcamentos')
-        .select('id')
+        .select('id, anexos')
         .eq('descricao_livre', marcador)
         .maybeSingle()
 
@@ -132,10 +144,18 @@ export async function POST(req: NextRequest) {
           .eq('orcamento_id', existente.id)
           .maybeSingle()
 
-        return NextResponse.json({
-          error: 'Este orçamento W.Vetro já foi importado para a Medição Final.',
-          medicao_id: medicaoExistente?.id || null,
-        }, { status: 409 })
+        if (medicaoExistente?.id) {
+          return NextResponse.json({
+            error: 'Este orçamento W.Vetro já foi importado para a Medição Final.',
+            medicao_id: medicaoExistente.id,
+          }, { status: 409 })
+        }
+
+        // Importações antigas podiam deixar um orçamento de apoio sem Medição Final
+        // quando a leitura do cabeçalho falhava. Nesse caso não tratamos como
+        // duplicidade: o mesmo registro é corrigido/reaproveitado abaixo.
+        orcamentoExistenteId = existente.id
+        anexosExistentes = Array.isArray(existente.anexos) ? (existente.anexos as Anexo[]) : []
       }
     }
 
@@ -159,25 +179,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'A Medição Final não possui uma coluna inicial configurada.' }, { status: 500 })
     }
 
-    const storagePath = `anexos/wvetro/${uuidv4()}.pdf`
-    const { error: erroUpload } = await supabaseAdmin.storage.from('fotos').upload(storagePath, buffer, {
-      contentType: 'application/pdf',
-      cacheControl: '3600',
-      upsert: false,
-    })
-    if (erroUpload) {
-      console.error('Erro ao salvar PDF W.Vetro:', erroUpload)
-      return NextResponse.json({ error: 'Não foi possível salvar o PDF original do W.Vetro.' }, { status: 500 })
+    let storagePath: string | null = null
+    let pdfUrl = anexoOriginalWVetro(anexosExistentes)?.url || ''
+
+    if (!pdfUrl) {
+      storagePath = `anexos/wvetro/${uuidv4()}.pdf`
+      const { error: erroUpload } = await supabaseAdmin.storage.from('fotos').upload(storagePath, buffer, {
+        contentType: 'application/pdf',
+        cacheControl: '3600',
+        upsert: false,
+      })
+      if (erroUpload) {
+        console.error('Erro ao salvar PDF W.Vetro:', erroUpload)
+        return NextResponse.json({ error: 'Não foi possível salvar o PDF original do W.Vetro.' }, { status: 500 })
+      }
+
+      const { data: publicUrlData } = supabaseAdmin.storage.from('fotos').getPublicUrl(storagePath)
+      pdfUrl = publicUrlData.publicUrl
     }
 
-    const { data: publicUrlData } = supabaseAdmin.storage.from('fotos').getPublicUrl(storagePath)
-    const pdfUrl = publicUrlData.publicUrl
     const itensOrcamento = resumo.itens.map(itemOrcamento)
     const primeiro = itensOrcamento[0]
-    const orcamentoId = uuidv4()
+    const orcamentoId = orcamentoExistenteId || uuidv4()
+    const anexosAtualizados = anexoOriginalWVetro(anexosExistentes)
+      ? anexosExistentes
+      : [...anexosExistentes, { titulo: 'Orçamento W.Vetro (original)', nome: nomeArquivo, url: pdfUrl }]
 
-    const { error: erroOrcamento } = await supabaseAdmin.from('orcamentos').insert({
-      id: orcamentoId,
+    const dadosOrcamento = {
       cliente_id: null,
       cliente_nome: clienteNome,
       cliente_whatsapp: null,
@@ -188,7 +216,7 @@ export async function POST(req: NextRequest) {
       altura_mm: primeiro?.altura_mm || null,
       quantidade: primeiro?.quantidade || 1,
       itens: itensOrcamento,
-      anexos: [{ titulo: 'Orçamento W.Vetro (original)', nome: nomeArquivo, url: pdfUrl }],
+      anexos: anexosAtualizados,
       tipo_medida: 'comum',
       descricao_livre: marcador,
       valor_estimado: resumo.valor_total,
@@ -198,12 +226,16 @@ export async function POST(req: NextRequest) {
       coluna_atualizada_em: new Date().toISOString(),
       criado_por_id: criadoPorId,
       criado_por_nome: criadoPorNome,
-    })
+    }
+
+    const { error: erroOrcamento } = orcamentoExistenteId
+      ? await supabaseAdmin.from('orcamentos').update(dadosOrcamento).eq('id', orcamentoId)
+      : await supabaseAdmin.from('orcamentos').insert({ id: orcamentoId, ...dadosOrcamento })
 
     if (erroOrcamento) {
-      console.error('Erro ao criar orçamento de apoio para importação W.Vetro:', erroOrcamento)
+      console.error('Erro ao criar/corrigir orçamento de apoio para importação W.Vetro:', erroOrcamento)
       await removerArquivoStorage(storagePath)
-      return NextResponse.json({ error: 'O PDF foi lido, mas não foi possível criar o orçamento de apoio no Atlas.' }, { status: 500 })
+      return NextResponse.json({ error: 'O PDF foi lido, mas não foi possível preparar o orçamento de apoio no Atlas.' }, { status: 500 })
     }
 
     const { data: medicao, error: erroMedicao } = await supabaseAdmin
@@ -227,7 +259,9 @@ export async function POST(req: NextRequest) {
 
     if (erroMedicao || !medicao?.id) {
       console.error('Erro ao criar Medição Final importada do W.Vetro:', erroMedicao)
-      await supabaseAdmin.from('orcamentos').delete().eq('id', orcamentoId)
+      if (!orcamentoExistenteId) {
+        await supabaseAdmin.from('orcamentos').delete().eq('id', orcamentoId)
+      }
       await removerArquivoStorage(storagePath)
       return NextResponse.json({ error: 'O orçamento foi lido, mas a Medição Final não pôde ser criada.' }, { status: 500 })
     }
@@ -245,7 +279,9 @@ export async function POST(req: NextRequest) {
     if (erroItens) {
       console.error('Erro ao criar itens da Medição Final importada:', erroItens)
       await supabaseAdmin.from('medicoes_finais').delete().eq('id', medicao.id)
-      await supabaseAdmin.from('orcamentos').delete().eq('id', orcamentoId)
+      if (!orcamentoExistenteId) {
+        await supabaseAdmin.from('orcamentos').delete().eq('id', orcamentoId)
+      }
       await removerArquivoStorage(storagePath)
       return NextResponse.json({ error: 'A Medição Final foi criada, mas os itens do orçamento não puderam ser gravados. A operação foi cancelada.' }, { status: 500 })
     }
@@ -256,6 +292,7 @@ export async function POST(req: NextRequest) {
       orcamento_id: orcamentoId,
       itens_criados: itensMedicao.length,
       numero_orcamento: resumo.numero_orcamento,
+      orcamento_reaproveitado: !!orcamentoExistenteId,
     })
   } catch (e) {
     console.error('Erro ao importar orçamento W.Vetro para Medição Final:', e)
