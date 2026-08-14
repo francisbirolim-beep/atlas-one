@@ -11,8 +11,8 @@ import HomeOperationalAttention from '@/components/system/HomeOperationalAttenti
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
-import MedicaoPadroesFixosPanel from '@/components/system/MedicaoPadroesFixosPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
+import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -57,11 +57,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           )}
           {medicaoFinalId && (
             <div className="atlas-medicao-tools">
+              <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
               <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
               <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
               <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
-              <MedicaoPadroesFixosPanel medicaoId={medicaoFinalId} />
             </div>
           )}
           <div

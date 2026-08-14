@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, Loader2, MessageSquare, Save } from 'lucide-react'
+import { Check, Loader2, MessageSquare, Save } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { MedicaoItem } from '@/lib/tipos'
 
@@ -24,83 +24,63 @@ function valorTexto(item: MedicaoItem | null, chave: string): string {
   return valor == null ? '' : String(valor)
 }
 
-export default function MedicaoPadroesFixosPanel({ medicaoId }: { medicaoId: string }) {
-  const [itens, setItens] = useState<MedicaoItem[]>([])
-  const [itemId, setItemId] = useState('')
+export default function MedicaoPadroesFixosPanel({ itemId }: { itemId: string }) {
+  const [item, setItem] = useState<MedicaoItem | null>(null)
   const [observacao, setObservacao] = useState('')
   const [salvando, setSalvando] = useState<string | null>(null)
   const [mensagem, setMensagem] = useState('')
   const [carregando, setCarregando] = useState(true)
-  const [mostrarAvisoInicio, setMostrarAvisoInicio] = useState(false)
-  const [avisoDispensado, setAvisoDispensado] = useState(false)
 
   useEffect(() => {
     void carregar()
-  }, [medicaoId])
-
-  useEffect(() => {
-    let ativo = true
-
-    async function verificarInicio() {
-      const { data, error } = await supabase
-        .from('medicoes_finais')
-        .select('status_operacional, iniciado_em')
-        .eq('id', medicaoId)
-        .maybeSingle()
-
-      if (!ativo || error || !data) return
-      const vaiIniciar = data.status_operacional === 'liberado' && !data.iniciado_em
-      if (vaiIniciar && !avisoDispensado) setMostrarAvisoInicio(true)
-    }
-
-    void verificarInicio()
-    const timer = window.setInterval(() => void verificarInicio(), 2500)
-    return () => {
-      ativo = false
-      window.clearInterval(timer)
-    }
-  }, [medicaoId, avisoDispensado])
-
-  const item = useMemo(() => itens.find(i => i.id === itemId) || null, [itens, itemId])
+  }, [itemId])
 
   useEffect(() => {
     setObservacao(valorTexto(item, 'observacao_medicao'))
     setMensagem('')
-  }, [itemId, item])
+  }, [item])
 
   async function carregar() {
-    setCarregando(true)
-    const { data, error } = await supabase
-      .from('medicao_itens')
-      .select('*')
-      .eq('medicao_id', medicaoId)
-      .order('ordem', { ascending: true })
-
-    if (error) {
-      console.error('Erro ao carregar padrões fixos da medição:', error)
-      setItens([])
+    if (!itemId) {
+      setItem(null)
       setCarregando(false)
       return
     }
 
-    const lista = (data || []) as MedicaoItem[]
-    setItens(lista)
-    setItemId(atual => atual && lista.some(i => i.id === atual) ? atual : (lista[0]?.id || ''))
+    setCarregando(true)
+    const { data, error } = await supabase
+      .from('medicao_itens')
+      .select('*')
+      .eq('id', itemId)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Erro ao carregar padrões fixos da medição:', error)
+      setItem(null)
+      setCarregando(false)
+      return
+    }
+
+    setItem((data || null) as MedicaoItem | null)
     setCarregando(false)
   }
 
-  async function salvarExtras(itemAtual: MedicaoItem, extras: Record<string, string | number>) {
+  const extrasAtuais = useMemo(() => item?.campos_extras || {}, [item])
+
+  async function salvarExtras(extras: Record<string, string | number>) {
+    if (!item) return false
+
     const { error } = await supabase
       .from('medicao_itens')
       .update({ campos_extras: extras })
-      .eq('id', itemAtual.id)
+      .eq('id', item.id)
 
     if (error) {
       console.error('Erro ao salvar padrões fixos da medição:', error)
       return false
     }
 
-    setItens(prev => prev.map(i => i.id === itemAtual.id ? { ...i, campos_extras: extras } : i))
+    setItem(atual => atual ? { ...atual, campos_extras: extras } : atual)
     return true
   }
 
@@ -109,8 +89,7 @@ export default function MedicaoPadroesFixosPanel({ medicaoId }: { medicaoId: str
     setSalvando(chave)
     setMensagem('')
 
-    const extras = { ...(item.campos_extras || {}), [chave]: valor }
-    const ok = await salvarExtras(item, extras)
+    const ok = await salvarExtras({ ...extrasAtuais, [chave]: valor })
 
     setSalvando(null)
     setMensagem(ok ? 'Informação salva.' : 'Não foi possível salvar esta informação.')
@@ -121,142 +100,83 @@ export default function MedicaoPadroesFixosPanel({ medicaoId }: { medicaoId: str
     setSalvando('observacao_medicao')
     setMensagem('')
 
-    const extras = { ...(item.campos_extras || {}), observacao_medicao: observacao.trim() }
-    const ok = await salvarExtras(item, extras)
+    const ok = await salvarExtras({ ...extrasAtuais, observacao_medicao: observacao.trim() })
 
     setSalvando(null)
     setMensagem(ok ? 'Observação salva.' : 'Não foi possível salvar a observação.')
   }
 
   if (carregando) {
-    return (
-      <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
-        <div className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
-      </section>
-    )
+    return <div className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
   }
 
-  if (itens.length === 0) return null
+  if (!item) return null
 
   return (
-    <>
-      {mostrarAvisoInicio && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-amber-100 p-2 text-amber-700"><AlertTriangle size={22} /></div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">Antes de iniciar a medição</p>
-                <h3 className="mt-1 text-lg font-bold text-slate-950">Sempre medir pela vista interna do vão.</h3>
-                <p className="mt-2 text-sm leading-5 text-slate-600">Use a vista interna como referência durante toda a Medição Final para manter o mesmo padrão em todas as peças.</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setMostrarAvisoInicio(false); setAvisoDispensado(true) }}
-              className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800"
-            >
-              Entendi — medir pela vista interna
-            </button>
-          </div>
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Conferências fixas</p>
+        <p className="mt-0.5 text-sm font-semibold text-slate-800">Complete na sequência das medidas da peça</p>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="grid grid-cols-[1fr_78px_78px] border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold text-slate-600 sm:grid-cols-[1fr_88px_88px]">
+          <div className="px-3 py-2 text-left">Item</div>
+          <div className="border-l border-slate-200 px-2 py-2">SIM</div>
+          <div className="border-l border-slate-200 px-2 py-2">NÃO</div>
         </div>
-      )}
 
-      <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Padrões da medição</p>
-            <h2 className="mt-0.5 text-sm font-semibold text-slate-900">Conferências fixas e observação por peça</h2>
-          </div>
-
-          <div className="p-4">
-            <div className="mb-4 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
-              <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-600" />
-              <div>
-                <p className="text-xs font-bold uppercase">Atenção na medição</p>
-                <p className="mt-0.5 text-sm font-semibold">Sempre fazer a medição pela vista interna do vão.</p>
-              </div>
+        {CAMPOS_PADRAO.map(campo => {
+          const valor = valorTexto(item, campo.chave) as RespostaSimNao
+          return (
+            <div key={campo.chave} className="grid grid-cols-[1fr_78px_78px] border-b border-slate-100 last:border-b-0 sm:grid-cols-[1fr_88px_88px]">
+              <div className="px-3 py-2.5 text-sm font-medium text-slate-700">{campo.nome}</div>
+              <button
+                type="button"
+                disabled={!!salvando}
+                onClick={() => void escolher(campo.chave, 'sim')}
+                className={`flex items-center justify-center border-l border-slate-200 px-2 py-2.5 text-xs font-semibold transition ${valor === 'sim' ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              >
+                {salvando === campo.chave ? <Loader2 size={15} className="animate-spin" /> : valor === 'sim' ? <Check size={16} /> : 'SIM'}
+              </button>
+              <button
+                type="button"
+                disabled={!!salvando}
+                onClick={() => void escolher(campo.chave, 'nao')}
+                className={`flex items-center justify-center border-l border-slate-200 px-2 py-2.5 text-xs font-semibold transition ${valor === 'nao' ? 'bg-red-50 text-red-700' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              >
+                {salvando === campo.chave ? <Loader2 size={15} className="animate-spin" /> : valor === 'nao' ? <Check size={16} /> : 'NÃO'}
+              </button>
             </div>
+          )
+        })}
+      </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-3">
-              {itens.map((peca, indice) => (
-                <button
-                  key={peca.id}
-                  type="button"
-                  onClick={() => setItemId(peca.id)}
-                  className={`min-w-[145px] rounded-lg border px-3 py-2 text-left text-xs transition ${peca.id === itemId ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
-                >
-                  <span className="block font-semibold">Peça {indice + 1}</span>
-                  <span className={`mt-0.5 block truncate ${peca.id === itemId ? 'text-slate-300' : 'text-slate-400'}`}>{peca.descricao || peca.tipo_esquadria}</span>
-                </button>
-              ))}
-            </div>
-
-            {item && (
-              <div className="space-y-5">
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <div className="grid grid-cols-[1fr_88px_88px] border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold text-slate-600">
-                    <div className="px-3 py-2 text-left">Item</div>
-                    <div className="border-l border-slate-200 px-2 py-2">SIM</div>
-                    <div className="border-l border-slate-200 px-2 py-2">NÃO</div>
-                  </div>
-
-                  {CAMPOS_PADRAO.map(campo => {
-                    const valor = valorTexto(item, campo.chave) as RespostaSimNao
-                    return (
-                      <div key={campo.chave} className="grid grid-cols-[1fr_88px_88px] border-b border-slate-100 last:border-b-0">
-                        <div className="px-3 py-2.5 text-sm font-medium text-slate-700">{campo.nome}</div>
-                        <button
-                          type="button"
-                          disabled={!!salvando}
-                          onClick={() => void escolher(campo.chave, 'sim')}
-                          className={`flex items-center justify-center border-l border-slate-200 px-2 py-2.5 text-xs font-semibold transition ${valor === 'sim' ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                        >
-                          {salvando === campo.chave ? <Loader2 size={15} className="animate-spin" /> : valor === 'sim' ? <Check size={16} /> : 'SIM'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!!salvando}
-                          onClick={() => void escolher(campo.chave, 'nao')}
-                          className={`flex items-center justify-center border-l border-slate-200 px-2 py-2.5 text-xs font-semibold transition ${valor === 'nao' ? 'bg-red-50 text-red-700' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                        >
-                          {salvando === campo.chave ? <Loader2 size={15} className="animate-spin" /> : valor === 'nao' ? <Check size={16} /> : 'NÃO'}
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-3">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    <MessageSquare size={14} /> Observação da peça
-                  </label>
-                  <textarea
-                    value={observacao}
-                    onChange={e => setObservacao(e.target.value)}
-                    rows={4}
-                    placeholder="Digite aqui qualquer observação encontrada durante a medição..."
-                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={!!salvando}
-                      onClick={() => void salvarObservacao()}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      {salvando === 'observacao_medicao' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                      Salvar observação
-                    </button>
-                  </div>
-                </div>
-
-                {mensagem && <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{mensagem}</p>}
-              </div>
-            )}
-          </div>
+      <div className="rounded-xl border border-slate-200 p-3">
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+          <MessageSquare size={14} /> Observação da peça
+        </label>
+        <textarea
+          value={observacao}
+          onChange={e => setObservacao(e.target.value)}
+          rows={4}
+          placeholder="Digite aqui qualquer observação encontrada durante a medição..."
+          className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+        />
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            disabled={!!salvando}
+            onClick={() => void salvarObservacao()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {salvando === 'observacao_medicao' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Salvar observação
+          </button>
         </div>
-      </section>
-    </>
+      </div>
+
+      {mensagem && <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{mensagem}</p>}
+    </div>
   )
 }
