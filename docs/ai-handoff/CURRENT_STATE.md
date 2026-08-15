@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-15. `main` esta no merge da PR #127. A branch atual `feat/limpeza-e-fluxo-operacional` agrupa limpeza da navegacao, padrao configuravel de orcamento/PDF e a nova etapa Plano de Corte da Producao.
+Verificado em: 2026-08-15. `main` esta no merge da PR #127. A PR #129 (`feat/limpeza-e-fluxo-operacional`) agrupa limpeza da navegacao, padrao configuravel de orcamento/PDF e a nova etapa Plano de Corte da Producao.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -23,7 +23,7 @@ Verificado em: 2026-08-15. `main` esta no merge da PR #127. A branch atual `feat
 - Engenharia Fases 1 a 4 concluidas.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
 
-## BRANCH ATUAL — LIMPEZA DA NAVEGACAO
+## PR #129 — LIMPEZA DA NAVEGACAO
 Implementado:
 - navegacao diaria reduzida a `Inicio`, `Clientes`, `Orcamentos`, `Kanban`, `Medicao Final`, `Producao` e `Engenharia`;
 - desktop Sidebar deixa de misturar setores dinamicos, paginas antigas, historico, relatorios, dashboard e atalhos administrativos com a operacao diaria;
@@ -33,7 +33,7 @@ Implementado:
 - topbar remove botoes sem funcao real e transforma o perfil em menu funcional com logout/configuracoes;
 - nenhuma rota funcional foi excluida do codigo e nenhum dado foi apagado.
 
-## BRANCH ATUAL — CONFIGURACOES DO ORCAMENTO E PDF
+## PR #129 — CONFIGURACOES DO ORCAMENTO E PDF
 Implementado:
 - nova rota Master `/configuracoes/orcamento`;
 - configuracoes persistidas em `configuracoes_gerais`, chave `configuracao_orcamento`;
@@ -41,7 +41,7 @@ Implementado:
 - validade inicial = 7 dias;
 - PDF de Orcamento Balcao aplica o padrao salvo.
 
-## BRANCH ATUAL — PRODUCAO / PLANO DE CORTE V1
+## PR #129 — PRODUCAO / PLANO DE CORTE V1
 Implementado:
 - nova etapa `/producao/plano-corte`, ligada ao setor Producao ao lado da Medicao Final;
 - pesquisa produtos cadastrados na categoria `porta_janela_padrao` (ex.: porta de correr 3 folhas);
