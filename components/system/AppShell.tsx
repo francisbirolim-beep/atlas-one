@@ -7,7 +7,6 @@ import SidebarQuickSearch from '@/components/system/SidebarQuickSearch'
 import AppTopbar from '@/components/system/AppTopbar'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
-import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
 import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
@@ -40,26 +39,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <MobileNavigationControls />
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
-        <main
-          className={`min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0 ${
-            ehHome
-              ? '[&>div>header]:hidden [&>div]:mx-auto [&>div]:max-w-7xl [&>div]:!min-h-0 [&>div]:px-4 [&>div]:pb-8 [&>div]:[background-image:none] md:[&>div]:px-6'
-              : ''
-          }`}
-        >
+        <main className="min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0">
           {ehHome && <HomeExecutiveHero />}
           <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehHome && <HomeManagementOverview />}
-          {ehHome && <HomeOperationalAttention />}
-          {ehHome && (
-            <section className="mx-auto w-full max-w-7xl px-4 pt-7 md:px-6 md:pt-8">
-              <div className="border-t border-slate-200 pt-6">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Organização pessoal</p>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Agenda e produtividade</h2>
-                <p className="mt-1 text-sm text-slate-500">Tarefas, compromissos e atalhos do seu dia em um único lugar.</p>
-              </div>
-            </section>
-          )}
+
           {medicaoFinalId && (
             <div className="atlas-medicao-tools">
               <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
@@ -70,27 +54,30 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
             </div>
           )}
-          <div
-            className={
-              ehMedicaoFinal
-                ? ehQuadroMedicaoFinal
-                  ? 'atlas-medicao-final atlas-medicao-final-board'
-                  : 'atlas-medicao-final atlas-medicao-final-detail'
-                : ehKanbanComercial
-                  ? 'atlas-kanban-commercial'
-                  : ehOrcamentos
-                    ? 'atlas-orcamentos-professional'
-                    : ehProducao
-                      ? 'atlas-producao-professional'
-                      : ehEngenharia
-                        ? 'atlas-engenharia-professional'
-                        : ehSetorGenerico
-                          ? 'atlas-setor-professional'
-                          : undefined
-            }
-          >
-            {children}
-          </div>
+
+          {!ehHome && (
+            <div
+              className={
+                ehMedicaoFinal
+                  ? ehQuadroMedicaoFinal
+                    ? 'atlas-medicao-final atlas-medicao-final-board'
+                    : 'atlas-medicao-final atlas-medicao-final-detail'
+                  : ehKanbanComercial
+                    ? 'atlas-kanban-commercial'
+                    : ehOrcamentos
+                      ? 'atlas-orcamentos-professional'
+                      : ehProducao
+                        ? 'atlas-producao-professional'
+                        : ehEngenharia
+                          ? 'atlas-engenharia-professional'
+                          : ehSetorGenerico
+                            ? 'atlas-setor-professional'
+                            : undefined
+              }
+            >
+              {children}
+            </div>
+          )}
         </main>
       </div>
     </div>
