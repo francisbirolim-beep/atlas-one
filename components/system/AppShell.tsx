@@ -36,7 +36,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <Sidebar />
         <SidebarQuickSearch />
       </div>
-      <MobileFavorites mostrarAcessoRapido={ehHome} />
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
         <main
@@ -47,6 +46,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           }`}
         >
           {ehHome && <HomeExecutiveHero />}
+          <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehHome && <HomeManagementOverview />}
           {ehHome && <HomeOperationalAttention />}
           {ehHome && (
