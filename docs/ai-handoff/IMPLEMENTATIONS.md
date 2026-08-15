@@ -53,22 +53,30 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - historico registra inicio, parcial e retomada com data/hora, usuario e contagem feita/em aberto;
 - reutiliza `medicao_revisoes`, sem migration nova.
 
-## Navegacao mobile — Favoritos — branch `feat/mobile-favoritos` — 2026-08-14
+## Navegacao mobile — Favoritos — PR #123 — 2026-08-14
 - remove visualmente no celular a barra inferior extensa do `Sidebar`, mantendo-a intacta no desktop;
 - cria botao compacto `Favoritos` fixo no mobile;
 - abre painel inferior para acessar e editar favoritos;
 - permite favoritar/desfavoritar paginas e setores;
-- reaproveita `atlas_guias_ocultos` e `atlas_setores_favoritos`, preservando preferencias ja existentes;
-- respeita permissoes dos setores;
-- tela Inicio ganha bloco `Acesso rápido / Favoritos`, mostrando ate 5 atalhos e acesso aos demais.
+- reaproveita preferencias ja existentes;
+- tela Inicio ganha bloco `Acesso rápido / Favoritos`.
+
+## Navegacao mobile — Voltar e Inicio — branch `fix/mobile-voltar-inicio` — 2026-08-14
+- novo componente `MobileNavigationControls` somente para celular;
+- fora da Home mostra `Voltar` e `Inicio` no canto inferior esquerdo;
+- `Voltar` usa o historico do navegador e possui fallback para `/`;
+- `Inicio` sempre retorna para a Home;
+- na Home fica somente `Inicio`;
+- Favoritos permanece independente no canto inferior direito;
+- desktop permanece sem alteracao.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
-- Validar no iPhone: barra inferior antiga sumiu, botao Favoritos aparece sem cobrir conteudo e painel abre/fecha corretamente.
-- Validar adicao/remocao de favoritos e persistencia apos recarregar.
-- Validar bloco de Acesso rapido na Inicio.
+- Validar no iPhone se `Voltar` e `Inicio` ficam acessiveis em telas internas sem cobrir campos/botoes.
+- Validar se `Voltar` retorna corretamente para a tela anterior e se `Inicio` sempre abre a Home.
+- Validar Favoritos da PR #123 em conjunto com os novos controles.
 - Validar em celular a medicao parcial: iniciar -> medir algumas pecas -> salvar parcial -> recarregar -> conferir feitas/em aberto -> retomar -> concluir restante.
 - Validar PR #121 visualmente e persistencia dos SIM/NAO/observacao.
 - Validar PR #119 em campo: seis medidas, fotos e heranca de `tipo_medida=final`.

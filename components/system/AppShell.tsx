@@ -9,6 +9,7 @@ import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
 import MobileFavorites from '@/components/system/MobileFavorites'
+import MobileNavigationControls from '@/components/system/MobileNavigationControls'
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
@@ -36,6 +37,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <Sidebar />
         <SidebarQuickSearch />
       </div>
+      <MobileNavigationControls />
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
         <main
