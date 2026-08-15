@@ -1,39 +1,38 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar a branch `fix/home-mais-limpa` no iPhone.
+Validar a branch `fix/limpeza-home-operacional` no iPhone.
 
-O usuario pediu simplificar a Home e retirar atalhos redundantes ou sem uso.
+O usuario autorizou uma limpeza maior para retirar da Home elementos duplicados e pouco usados, sem apagar dados ou rotas de forma arriscada.
 
 ## IMPLEMENTADO NA BRANCH ATUAL
-1. Remove o botao `Medições finais` do bloco principal escuro da Home.
-2. Remove o link `Abrir operação` do mesmo bloco.
-3. Mantem apenas `Novo orçamento` como acao principal do hero.
-4. Favoritos continua sendo o acesso rapido para Medicao Final e demais areas escolhidas.
-5. Na propria Home, o botao flutuante `Inicio` nao aparece mais.
-6. Fora da Home, `Voltar` e `Inicio` continuam disponiveis.
-7. Nenhuma rota ou funcionalidade foi apagada; e uma limpeza de navegacao/visual.
-8. Nenhuma migration.
+1. Home mostra somente Hero, Favoritos e Resumo da operação.
+2. Remove da Home o bloco `Atenção necessária / Ações rápidas`, que repetia tarefas e atalhos já disponíveis em outros lugares.
+3. Não renderiza mais na Home o conteúdo legado de agenda, calendário e tarefas pessoais de `app/page.tsx`.
+4. As rotas próprias de tarefas e demais funcionalidades continuam existentes.
+5. Remove o link `Ver relatórios` do resumo central.
+6. Nenhuma rota, tabela ou dado foi apagado.
+7. Nenhuma migration.
 
 ## VALIDAR ANTES DO MERGE
 1. Confirmar Build Validation verde.
-2. Abrir a Home no iPhone e confirmar que o bloco escuro mostra somente `Novo orçamento`.
-3. Confirmar que `Medições finais` e `Abrir operação` nao aparecem mais nesse bloco.
-4. Confirmar que o botao flutuante `Inicio` nao aparece na Home.
-5. Abrir uma tela interna e confirmar que `Voltar` e `Inicio` continuam aparecendo.
-6. Confirmar que Favoritos continua abrindo e que a Medicao Final oficial permanece acessivel por ele.
+2. Abrir a Home no iPhone e confirmar que a tela termina após o Resumo da operação.
+3. Confirmar que não aparecem mais `Atenção necessária`, `Ações rápidas`, `Agenda e produtividade`, calendário ou tarefas na Home.
+4. Confirmar que Favoritos continua funcionando.
+5. Abrir Medição Final e Kanban pelos Favoritos e confirmar navegação normal.
+6. Confirmar que `/tarefas` continua acessível quando necessário.
 
 ## DEPOIS DESTA VALIDACAO
-- Fazer uma segunda limpeza orientada por uso real: listar paginas/setores que nao sao usados antes de remover qualquer rota ou dado.
-- Continuar validacao da Medicao Final em campo: parcial, tempo, historico, seis medidas, fotos e SIM/NAO.
-- Continuar adicionando os proximos campos da Medicao Final.
+- Fazer auditoria da navegação principal e retirar da lista padrão apenas páginas claramente antigas/duplicadas, sempre escondendo antes de apagar.
+- Continuar validação da Medição Final em campo: parcial, tempo, histórico, seis medidas, fotos e SIM/NÃO.
+- Continuar adicionando os próximos campos da Medição Final.
 - Criar `Configurações -> Orçamento` e melhorar o PDF Atlas profissional.
 - Iniciar conector W.Vetro API somente leitura quando houver credencial/ambiente de teste.
 
 ## CUIDADOS
-- GitHub e a unica fonte da verdade.
+- GitHub e a única fonte da verdade.
 - Nunca commitar direto na `main`; branch -> PR -> Build Validation -> merge.
-- A unica Medicao Final operacional deve ser `/producao/medicao-final`.
-- Antes de remover outras paginas/setores, confirmar uso e dependencias; esconder primeiro quando houver duvida.
+- A única Medição Final operacional deve ser `/producao/medicao-final`.
+- Em limpeza de navegação, esconder primeiro quando houver dúvida; só apagar código/dados depois de validar dependências.
 - PDF W.Vetro original deve ser preservado.
-- Nunca inventar dimensao ausente.
+- Nunca inventar dimensão ausente.
