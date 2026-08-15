@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Minus, Trash2, Search } from 'lucide-react'
 import { listarProdutos, CATEGORIAS_PRODUTO } from '@/lib/produtos'
-import { lerDadosEmpresa } from '@/lib/configGeral'
+import { lerConfiguracaoOrcamento, lerDadosEmpresa, type ConfiguracaoOrcamento } from '@/lib/configGeral'
 import { criarOrcamentoBalcao } from '@/lib/orcamentoBalcao'
 import { gerarPdfOrcamentoBalcao } from '@/lib/pdfOrcamentoBalcao'
 import { usuarioAtual } from '@/lib/auth'
@@ -15,6 +15,7 @@ export default function NovoOrcamentoBalcao() {
   const router = useRouter()
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [empresa, setEmpresa] = useState<DadosEmpresa | null>(null)
+  const [configOrcamento, setConfigOrcamento] = useState<ConfiguracaoOrcamento | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<CategoriaProduto | 'todas'>('todas')
@@ -37,10 +38,17 @@ export default function NovoOrcamentoBalcao() {
 
   useEffect(() => {
     async function carregar() {
-      const [listaProdutos, dadosEmpresa] = await Promise.all([listarProdutos(), lerDadosEmpresa()])
+      const [listaProdutos, dadosEmpresa, config] = await Promise.all([
+        listarProdutos(),
+        lerDadosEmpresa(),
+        lerConfiguracaoOrcamento(),
+      ])
       setProdutos(listaProdutos)
       setEmpresa(dadosEmpresa)
-      if (dadosEmpresa?.condicoesPadrao) setCondicoes(dadosEmpresa.condicoesPadrao)
+      setConfigOrcamento(config)
+      setMostrarFoto(config.mostrarFoto)
+      setMostrarPrecoUnitario(config.mostrarPrecoUnitario)
+      setCondicoes(dadosEmpresa?.condicoesPadrao || config.observacaoPadrao || '')
       setCarregando(false)
     }
     carregar()
@@ -69,6 +77,7 @@ export default function NovoOrcamentoBalcao() {
   function adicionar(produtoId: string) {
     setCarrinho(c => ({ ...c, [produtoId]: (c[produtoId] || 0) + 1 }))
   }
+
   function decrementar(produtoId: string) {
     setCarrinho(c => {
       const atual = c[produtoId] || 0
@@ -79,6 +88,7 @@ export default function NovoOrcamentoBalcao() {
       return { ...c, [produtoId]: atual - 1 }
     })
   }
+
   function remover(produtoId: string) {
     setCarrinho(c => {
       const { [produtoId]: _omit, ...resto } = c
@@ -130,6 +140,7 @@ export default function NovoOrcamentoBalcao() {
 
     try {
       const usuario = await usuarioAtual()
+      const config = configOrcamento || await lerConfiguracaoOrcamento()
       const doc = await gerarPdfOrcamentoBalcao(
         empresa || { nome: 'Empresa' },
         {
@@ -146,7 +157,14 @@ export default function NovoOrcamentoBalcao() {
           itens,
           condicoes: condicoes || null,
         },
-        { mostrarFoto, mostrarPrecoUnitario }
+        {
+          mostrarFoto,
+          mostrarPrecoUnitario,
+          tituloDocumento: config.tituloDocumento,
+          validadeDias: config.validadeDias,
+          mostrarAssinatura: config.mostrarAssinatura,
+          rodape: config.rodape,
+        }
       )
       doc.save(`orcamento-${resultado.numero || 'balcao'}.pdf`)
     } catch (e) {
@@ -172,7 +190,6 @@ export default function NovoOrcamentoBalcao() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        {/* Busca e filtro de produtos */}
         <section className="bg-white rounded-2xl border border-slate-200 p-4">
           <h2 className="text-sm font-semibold text-slate-800 mb-3">Produtos</h2>
           <div className="flex items-center gap-2 mb-3">
@@ -212,7 +229,6 @@ export default function NovoOrcamentoBalcao() {
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {produtosFiltrados.map(produto => (
                 <div key={produto.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   {produto.foto_url ? (
                     <img src={produto.foto_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                   ) : (
@@ -234,7 +250,6 @@ export default function NovoOrcamentoBalcao() {
           )}
         </section>
 
-        {/* Carrinho */}
         <section className="bg-white rounded-2xl border border-slate-200 p-4">
           <h2 className="text-sm font-semibold text-slate-800 mb-3">Itens do orçamento</h2>
           {itensCarrinho.length === 0 ? (
@@ -273,7 +288,6 @@ export default function NovoOrcamentoBalcao() {
           )}
         </section>
 
-        {/* Dados do cliente */}
         <section className="bg-white rounded-2xl border border-slate-200 p-4">
           <h2 className="text-sm font-semibold text-slate-800 mb-3">Dados do cliente</h2>
           <div className="space-y-3">
@@ -316,9 +330,16 @@ export default function NovoOrcamentoBalcao() {
           </div>
         </section>
 
-        {/* Condições e opções do PDF */}
         <section className="bg-white rounded-2xl border border-slate-200 p-4">
-          <h2 className="text-sm font-semibold text-slate-800 mb-3">Condições e opções do PDF</h2>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Condições e opções do PDF</h2>
+              {configOrcamento && (
+                <p className="mt-1 text-xs text-slate-400">Padrão Atlas: validade de {configOrcamento.validadeDias} dias. Você pode ajustar as opções deste orçamento antes de gerar.</p>
+              )}
+            </div>
+            <Link href="/configuracoes/orcamento" className="text-xs font-semibold text-brand-navy hover:underline">Padrão</Link>
+          </div>
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Forma de pagamento / Prazo de entrega</label>
