@@ -4,7 +4,7 @@ import { formatarMoeda } from './formatacao'
 
 export interface DadosPdfBalcao {
   numero: number | null
-  emissao: string // data já formatada, ex: 08/08/2026
+  emissao: string
   vendedorNome: string
   clienteNome: string
   clienteTelefone?: string | null
@@ -20,12 +20,12 @@ export interface DadosPdfBalcao {
 export interface OpcoesPdfBalcao {
   mostrarFoto: boolean
   mostrarPrecoUnitario: boolean
+  tituloDocumento?: string
+  validadeDias?: number
+  mostrarAssinatura?: boolean
+  rodape?: string
 }
 
-// Converte uma URL de imagem pública (Supabase Storage) em dataURL base64,
-// pra poder desenhar no PDF com jsPDF (addImage exige base64, não aceita URL
-// remota direto). Se der erro (foto não existe mais, CORS etc.), retorna null
-// e o PDF segue sem a foto daquele item.
 async function urlParaDataUrl(url: string): Promise<string | null> {
   try {
     const resp = await fetch(url)
@@ -52,9 +52,10 @@ export async function gerarPdfOrcamentoBalcao(
   opcoes: OpcoesPdfBalcao
 ): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const tituloDocumento = (opcoes.tituloDocumento || 'ORÇAMENTO').trim() || 'ORÇAMENTO'
+  const validadeDias = Math.max(1, Math.round(Number(opcoes.validadeDias) || 7))
+  const mostrarAssinatura = opcoes.mostrarAssinatura !== false
 
-  // Pré-carrega as fotos dos itens (se a opção estiver ligada) antes de
-  // desenhar, já que addImage precisa de dataURL síncrono.
   const fotosDataUrl: Record<number, string | null> = {}
   if (opcoes.mostrarFoto) {
     await Promise.all(
@@ -78,7 +79,6 @@ export async function gerarPdfOrcamentoBalcao(
     }
   }
 
-  // ---- Cabeçalho: empresa (esquerda) + orçamento (direita) ----
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
   doc.text(empresa.nome || 'Empresa', MARGEM, y)
@@ -97,13 +97,14 @@ export async function gerarPdfOrcamentoBalcao(
   const xDireita = LARGURA_PAGINA - MARGEM
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
-  doc.text('ORÇAMENTO', xDireita, y, { align: 'right' })
+  doc.text(tituloDocumento.toUpperCase(), xDireita, y, { align: 'right' })
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   let yDir = y + 5
   const linhasDireita = [
     dados.numero ? `Número: ${dados.numero}` : null,
     `Emissão: ${dados.emissao}`,
+    `Validade: ${validadeDias} dias`,
     `Vendedor: ${dados.vendedorNome || '-'}`,
   ].filter(Boolean) as string[]
   linhasDireita.forEach(l => { doc.text(l, xDireita, yDir, { align: 'right' }); yDir += 4 })
@@ -112,7 +113,6 @@ export async function gerarPdfOrcamentoBalcao(
   linha(y)
   y += 6
 
-  // ---- Dados do cliente ----
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.text('CLIENTE:', MARGEM, y)
@@ -131,7 +131,6 @@ export async function gerarPdfOrcamentoBalcao(
   linha(y)
   y += 6
 
-  // ---- Tabela de itens ----
   const colFoto = opcoes.mostrarFoto ? 20 : 0
   const colQtde = 14
   const colUnit = opcoes.mostrarPrecoUnitario ? 26 : 0
@@ -199,7 +198,6 @@ export async function gerarPdfOrcamentoBalcao(
 
   y += 4
 
-  // ---- Condições / observações ----
   if (dados.condicoes) {
     garantirEspaco(20)
     doc.setFont('helvetica', 'bold')
@@ -212,7 +210,6 @@ export async function gerarPdfOrcamentoBalcao(
     y += linhasCond.length * 4 + 4
   }
 
-  // ---- Total ----
   const valorTotal = dados.itens.reduce((soma, it) => soma + it.preco_total, 0)
   garantirEspaco(30)
   doc.setDrawColor(0)
@@ -225,15 +222,26 @@ export async function gerarPdfOrcamentoBalcao(
   doc.text(formatarMoeda(valorTotal), LARGURA_PAGINA - MARGEM, y, { align: 'right' })
   y += 14
 
-  // ---- Assinatura ----
-  garantirEspaco(20)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.text('_______________________________________', MARGEM, y)
-  y += 4
-  doc.text('Aceite do Cliente', MARGEM, y)
-  doc.setFont('helvetica', 'bold')
-  doc.text(empresa.nome || '', LARGURA_PAGINA - MARGEM, y, { align: 'right' })
+  if (mostrarAssinatura) {
+    garantirEspaco(20)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text('_______________________________________', MARGEM, y)
+    y += 4
+    doc.text('Aceite do Cliente', MARGEM, y)
+    doc.setFont('helvetica', 'bold')
+    doc.text(empresa.nome || '', LARGURA_PAGINA - MARGEM, y, { align: 'right' })
+    y += 8
+  }
+
+  if (opcoes.rodape) {
+    garantirEspaco(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(120)
+    doc.text(opcoes.rodape, LARGURA_PAGINA / 2, Math.min(y + 4, ALTURA_PAGINA - 12), { align: 'center' })
+    doc.setTextColor(0)
+  }
 
   return doc
 }
