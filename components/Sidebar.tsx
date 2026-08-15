@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutGrid, LogOut, Settings } from 'lucide-react'
+import { FileText, LayoutGrid, LogOut, Settings } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { GUIAS } from '@/lib/guias'
@@ -61,10 +61,18 @@ export default function Sidebar() {
           <Link
             href="/configuracoes"
             className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-              pathname.startsWith('/configuracoes') ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+              pathname === '/configuracoes' ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
             }`}
           >
             <Settings size={17} /> Configurações
+          </Link>
+          <Link
+            href="/configuracoes/orcamento"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+              pathname.startsWith('/configuracoes/orcamento') ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            }`}
+          >
+            <FileText size={17} /> Padrão do Orçamento
           </Link>
           <Link
             href="/setores"
