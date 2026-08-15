@@ -1,52 +1,43 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar a branch `feat/medicao-parcial-historico-tempo`.
+Validar a branch `feat/mobile-favoritos`.
 
-A `main` ja possui a PR #121 com o fluxo da peça na ordem:
-medidas/fotos da trena -> SIM/NAO -> observacao -> demais campos -> fotos adicionais.
+A `main` ja possui a PR #122 com Medicao Parcial, cronometro ativo, historico de pausa/retomada e pecas `✅ FEITA` / `EM ABERTO`.
 
-O usuario pediu agora controle real de visita parcial:
-- depois de iniciar, registrar data/hora e contar o tempo;
-- permitir medir apenas parte das pecas e salvar como Medicao Parcial;
-- marcar visualmente as feitas com check e manter as demais em aberto;
-- preservar tudo para uma segunda visita;
-- ao liberar o restante, retomar a mesma medicao;
-- manter historico de quando iniciou, quando ficou parcial e quando retomou.
+O usuario pediu agora retirar a barra fixa inferior do celular, que estava cheia de icones/labels cortados, mas manter um local simples para Favoritos.
 
 ## IMPLEMENTADO NA BRANCH ATUAL
-1. `MedicaoParcialPanel` aparece quando existe `iniciado_em`.
-2. Cronometro conta somente tempo ativo.
-3. `Salvar medição parcial` registra snapshot e pausa o cronometro.
-4. `Retomar medição` registra nova entrada de historico e volta a contar.
-5. Pecas com `medido=true` aparecem como `✅ FEITA`; as outras como `EM ABERTO`.
-6. Medidas, fotos, checklist e observacoes ja salvos nao sao alterados ao pausar/retomar.
-7. Historico usa `medicao_revisoes` ja existente, com motivo `Medição parcial` / `Retomada da medição`, data/hora, usuario e contagem feita/em aberto.
-8. O inicio e sintetizado a partir de `medicoes_finais.iniciado_em`.
-9. Nao ha migration nova nesta etapa.
-10. Para compatibilidade com telas antigas, `status_operacional` nao ganhou novo valor; o estado parcial e derivado do ultimo evento do historico.
+1. A barra/nav antiga do `Sidebar` fica oculta somente no mobile; desktop permanece igual.
+2. Novo botao compacto `Favoritos` fica fixo no canto inferior do celular.
+3. Ao tocar, abre uma folha inferior com os favoritos atuais.
+4. A mesma folha permite marcar/desmarcar Paginas com estrela.
+5. Tambem permite marcar/desmarcar Setores visiveis ao usuario.
+6. Reaproveita as preferencias existentes de `lib/guias.ts` e `lib/favoritosSetores.ts`, portanto os antigos atalhos favoritos nao sao descartados.
+7. Permissoes dos Setores continuam sendo aplicadas.
+8. Na Inicio existe um bloco `Acesso rápido / Favoritos` com ate 5 atalhos; se houver mais, mostra acesso para os demais.
+9. Nao remove nenhuma rota do sistema e nao exige migration.
 
 ## VALIDAR ANTES DO MERGE
 1. Confirmar Build Validation verde.
-2. Abrir uma Medicao Final ainda nao iniciada e confirmar que o painel parcial nao aparece.
-3. Iniciar a medicao; confirmar que o painel aparece e o cronometro comeca.
-4. Medir 2 ou 3 pecas e salvar as seis medidas de cada uma.
-5. Confirmar que essas pecas aparecem com `✅ FEITA` e as demais com `EM ABERTO`.
-6. Clicar `Salvar medição parcial`.
-7. Confirmar banner de parcial e cronometro pausado.
-8. Recarregar a pagina; confirmar que estado parcial, pecas feitas e historico continuam iguais.
-9. Abrir `Histórico`; confirmar data/hora do inicio e da parcial, usuario e quantidade feita/em aberto.
-10. Clicar `Retomar medição`; confirmar nova entrada no historico e cronometro voltando a contar.
-11. Medir o restante; confirmar que os checks antigos permanecem e novos checks aparecem.
-12. Salvar parcial uma segunda vez e confirmar novo ciclo no historico.
-13. Retomar e concluir 100% da medicao normalmente.
-14. Fazer regressao dos campos SIM/NAO, observacao, fotos da trena e aviso de vista interna.
+2. Abrir a Inicio no iPhone e confirmar que a barra inferior antiga nao aparece.
+3. Confirmar que o botao `Favoritos` aparece no canto inferior sem cobrir conteudo importante.
+4. Tocar no botao e confirmar que a folha abre e fecha corretamente.
+5. Confirmar que favoritos que ja existiam aparecem em `Abrir favorito`.
+6. Marcar uma Pagina nova com estrela, fechar e reabrir; confirmar que ela aparece nos favoritos.
+7. Desmarcar a mesma Pagina e confirmar que sai dos favoritos.
+8. Repetir com um Setor, especialmente `Medida Final` se estiver disponivel para o usuario.
+9. Recarregar a pagina e confirmar persistencia dos favoritos.
+10. Na Inicio, confirmar o bloco `Acesso rápido / Favoritos` e os atalhos funcionando.
+11. Abrir no desktop e confirmar que a Sidebar continua exatamente disponivel, sem regressao.
+12. Conferir uma tela longa de Medicao Final para garantir que o botao flutuante nao bloqueia salvar/continuar.
 
 ## DEPOIS DESTA VALIDACAO
-- Se desejado, transformar Medicao Parcial em status operacional dedicado e refletir esse status tambem no quadro principal.
-- Replicar o mesmo controle no link externo `/medicao-final/acesso/[token]` se esse for o fluxo principal do medidor.
-- Avaliar leitura por IA das fotos da trena diretamente na Medicao Final V2.
-- Continuar adicionando os proximos campos de medicao na mesma sequencia solicitada pelo usuario.
+- Ajustar tamanho/posicao do botao Favoritos se o teste real no iPhone pedir.
+- Se desejado, sincronizar favoritos no banco por usuario em vez de somente localStorage por navegador.
+- Continuar validacao da PR #122 em campo: parcial, tempo e historico.
+- Replicar parcial/campos fixos no link externo se esse for o fluxo principal do medidor.
+- Continuar adicionando os proximos campos de Medicao Final na ordem definida pelo usuario.
 - Criar `Configurações -> Orçamento` e melhorar o PDF Atlas profissional.
 - Iniciar conector W.Vetro API somente leitura quando houver credencial/ambiente de teste.
 - Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
@@ -54,10 +45,9 @@ O usuario pediu agora controle real de visita parcial:
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`; branch -> PR -> Build Validation -> merge.
-- Salvar como parcial nunca pode apagar ou zerar pecas ja medidas.
-- Retomar deve continuar a mesma `medicao_id`; nunca recriar a Medicao Final.
-- O tempo parcial deve excluir intervalos entre pausa e retomada.
-- O historico deve ser append-only: novas pausas/retomadas criam novas revisoes.
+- Remover visualmente a barra mobile nao pode remover rotas/acessos do desktop.
+- Favoritos devem respeitar permissoes do usuario.
+- Nao apagar preferencias ja existentes ao migrar da barra antiga para o novo painel.
 - PDF W.Vetro original deve ser preservado.
 - Nunca inventar dimensao ausente.
 - Credenciais W.Vetro nunca devem ficar no browser.
