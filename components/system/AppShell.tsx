@@ -15,6 +15,7 @@ import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
 import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
+import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -22,6 +23,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const ehKanbanComercial = pathname.startsWith('/kanban')
   const ehOrcamentos = pathname === '/orcamento' || pathname.startsWith('/orcamento/pesquisar')
   const ehProducao = pathname === '/producao'
+  const ehPlanoCorte = pathname.startsWith('/producao/plano-corte')
   const ehEngenharia = pathname.startsWith('/engenharia')
   const ehSetorGenerico = pathname.startsWith('/setor/')
   const ehMedicaoFinal = pathname.startsWith('/producao/medicao-final')
@@ -43,6 +45,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {ehHome && <HomeExecutiveHero />}
           <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehHome && <HomeManagementOverview />}
+          {ehProducao && <ProducaoEtapasBar />}
 
           {medicaoFinalId && (
             <div className="atlas-medicao-tools">
@@ -66,7 +69,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     ? 'atlas-kanban-commercial'
                     : ehOrcamentos
                       ? 'atlas-orcamentos-professional'
-                      : ehProducao
+                      : ehProducao || ehPlanoCorte
                         ? 'atlas-producao-professional'
                         : ehEngenharia
                           ? 'atlas-engenharia-professional'
