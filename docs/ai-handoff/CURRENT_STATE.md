@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #124, com navegacao mobile Voltar/Inicio. A branch atual `fix/remover-medida-final-duplicada` elimina a Medida final genérica/legada e mantém somente a Medição Final oficial.
+Verificado em: 2026-08-14. `main` esta no merge da PR #124, com navegacao mobile Voltar/Inicio. A branch atual `fix/remover-medida-final-duplicada` elimina a Medida final genérica/legada da navegação e mantém somente a Medição Final oficial.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -27,8 +27,8 @@ Implementado na branch atual:
 - adiciona a Medicao Final oficial como pagina fixa de navegacao/favoritos;
 - `listarSetores()` remove o setor generico legado chamado `Medida final`/`Medicao final` quando ele nao aponta para `/producao/medicao-final`;
 - isso tira a duplicata de Favoritos, Setores, Sidebar e demais telas que consomem a lista global de setores;
-- acesso direto antigo em `/setor/<id>` ao setor duplicado redireciona para `/producao/medicao-final` em vez de abrir o Kanban vazio;
-- dados antigos do setor nao sao apagados do banco nesta etapa, evitando risco de quebrar relacoes; ele apenas deixa de existir na navegacao operacional.
+- o Kanban generico antigo deixa de ser oferecido pela navegacao normal;
+- dados antigos do setor nao sao apagados do banco nesta etapa, evitando risco de quebrar relacoes.
 
 ## ORDEM ATUAL POR PECA — MEDICAO FINAL
 1. identificacao da peca;
@@ -46,13 +46,13 @@ Implementado na branch atual:
 Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do orcamento e nunca preenche automaticamente as seis medidas finais da obra sem uma fonte explicitamente marcada como Medida Final.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- Remocao/redirect da Medida Final generica da branch atual.
+- Remocao visual/global da Medida Final generica da branch atual.
 - PR #124 precisa validacao visual continua no iPhone.
 - PR #122 precisa teste real de pausa/retomada em campo.
 - Persistencia dos quatro SIM/NAO, observacao, fotos e medidas continua em validacao de campo.
 
 ## PARCIAL / DIVIDA TECNICA
-- O registro legado de setor `Medida final` pode continuar fisicamente no banco; foi retirado da operacao por filtro/redirect. Excluir fisicamente so deve ser feito depois de verificar dependencias.
+- O registro legado de setor `Medida final` pode continuar fisicamente no banco; foi retirado da operacao por filtro. Excluir fisicamente so deve ser feito depois de verificar dependencias.
 - Favoritos ficam salvos no localStorage por dispositivo/navegador; sincronizacao por usuario/banco pode ser adicionada depois.
 - Campos fixos e controle parcial estao inicialmente na tela interna; acesso externo precisa ser estendido se for a interface principal do medidor.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
