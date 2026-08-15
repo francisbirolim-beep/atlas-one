@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { ArrowLeft, ShieldAlert, ArrowRight, Plus, Pencil, Trash2, X, LayoutGrid } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
-import { ehMedicaoFinalLegada, listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
+import { listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
 import { Usuario, Setor, NivelPermissao, SetorKanbanColuna, SetorKanbanItem } from '@/lib/tipos'
 import {
   listarColunasSetor,
@@ -21,7 +21,6 @@ import {
 
 export default function SetorDetalhe() {
   const params = useParams()
-  const router = useRouter()
   const slug = String(params?.slug || '')
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [setor, setSetor] = useState<Setor | null | undefined>(undefined)
@@ -47,14 +46,6 @@ export default function SetorDetalhe() {
     setUsuario(me)
     const { data } = await supabase.from('setores').select('*').eq('id', slug).maybeSingle()
     const s = (data as Setor) || null
-
-    // O antigo setor genérico "Medida final" não deve mais abrir seu Kanban
-    // vazio. Qualquer acesso antigo/favorito salvo é levado para o fluxo oficial.
-    if (ehMedicaoFinalLegada(s)) {
-      router.replace('/producao/medicao-final')
-      return
-    }
-
     setSetor(s)
     let nivelAtual: NivelPermissao = 'oculto'
     if (s) {
@@ -187,116 +178,160 @@ export default function SetorDetalhe() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        {setor.ativo && setor.rota ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-brand-navyLight flex items-center justify-center text-brand-navy">
-                <LayoutGrid size={20} />
-              </div>
-              <div>
-                <h2 className="font-semibold text-slate-800">Área disponível</h2>
-                <p className="text-sm text-slate-500">Este setor já possui uma área própria no Atlas.</p>
-              </div>
-            </div>
-            <Link
-              href={setor.rota}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
-            >
-              Abrir {setor.nome} <ArrowRight size={16} />
-            </Link>
+      {setor.ativo && setor.rota ? (
+        <main className="max-w-3xl mx-auto px-4 py-16 flex flex-col items-center text-center gap-4">
+          <p className="text-slate-500 max-w-md">Esse setor já está funcionando. Clique abaixo pra acessar.</p>
+          <Link
+            href={setor.rota}
+            className="flex items-center gap-2 px-5 py-2.5 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition"
+          >
+            Acessar {setor.nome} <ArrowRight size={16} />
+          </Link>
+        </main>
+      ) : carregandoKanban ? (
+        <div className="flex items-center justify-center text-slate-400 py-24">Carregando kanban...</div>
+      ) : (
+        <main className="max-w-6xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-slate-500">{itens.length} card(s){!editavel ? ' - somente consulta' : ''}</p>
+            {editavel && (
+              <button onClick={novaColuna} className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline">
+                <Plus size={16} /> Nova coluna
+              </button>
+            )}
           </div>
-        ) : (
-          <>
-            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div>
-                <p className="text-sm font-medium text-slate-700">{itens.length} card(s)</p>
-                {carregandoKanban && <p className="text-xs text-slate-400">Atualizando...</p>}
-              </div>
+
+          {colunas.length === 0 ? (
+            <div className="flex flex-col items-center text-center gap-3 py-16 text-slate-400">
+              <LayoutGrid size={36} className="text-slate-300" />
+              <p>Nenhuma coluna criada ainda.</p>
               {editavel && (
-                <button onClick={novaColuna} className="flex items-center gap-2 rounded-lg border border-brand-green/30 bg-brand-greenLight px-3 py-2 text-sm font-medium text-brand-green hover:bg-emerald-100">
-                  <Plus size={16} /> Nova coluna
+                <button onClick={novaColuna} className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline">
+                  <Plus size={16} /> Criar primeira coluna
                 </button>
               )}
             </div>
-
+          ) : (
             <div className="flex gap-4 overflow-x-auto pb-4">
-              {colunas.map((col) => (
-                <section
-                  key={col.id}
-                  onDragOver={(e) => { e.preventDefault(); setColunaArrastando(col.id) }}
-                  onDragLeave={() => setColunaArrastando(null)}
-                  onDrop={(e) => handleDrop(e, col.id)}
-                  className={`w-80 flex-shrink-0 rounded-xl border bg-slate-100 p-3 transition ${colunaArrastando === col.id ? 'border-brand-green ring-2 ring-brand-green/20' : 'border-slate-200'}`}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-2 px-1">
-                    <h3 className="font-semibold text-slate-700">{col.nome} <span className="ml-1 font-normal text-slate-400">{itensDaColuna(col.id).length}</span></h3>
-                    {editavel && (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => editarColuna(col)} className="rounded p-1 text-slate-400 hover:bg-white hover:text-brand-navy" title="Renomear coluna"><Pencil size={14} /></button>
-                        <button onClick={() => apagarColuna(col)} className="rounded p-1 text-slate-400 hover:bg-white hover:text-red-500" title="Apagar coluna"><Trash2 size={14} /></button>
+              {colunas.map((col) => {
+                const cardsColuna = itensDaColuna(col.id)
+                return (
+                  <div
+                    key={col.id}
+                    onDragOver={(e) => { if (editavel) { e.preventDefault(); setColunaArrastando(col.id) } }}
+                    onDragLeave={() => setColunaArrastando(null)}
+                    onDrop={(e) => { if (editavel) handleDrop(e, col.id) }}
+                    className={`flex-shrink-0 w-72 bg-slate-100 rounded-2xl p-3 transition ${
+                      colunaArrastando === col.id ? 'ring-2 ring-brand-navy bg-brand-navyLight' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3 px-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-slate-700">{col.nome}</span>
+                        <span className="text-xs text-slate-400">{cardsColuna.length}</span>
                       </div>
+                      {editavel && (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => editarColuna(col)} className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200">
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => apagarColuna(col)} className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-slate-200">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 min-h-[80px]">
+                      {cardsColuna.map((item) => (
+                        <div
+                          key={item.id}
+                          draggable={editavel}
+                          onDragStart={(e) => editavel && e.dataTransfer.setData('text/plain', item.id)}
+                          onClick={() => setSelecionado(item)}
+                          className="rounded-xl border-2 border-slate-200 bg-white p-3 cursor-pointer hover:shadow-md transition"
+                        >
+                          <p className="font-medium text-sm text-slate-800">{item.titulo}</p>
+                          {item.criado_por_nome && (
+                            <p className="text-xs text-slate-400 mt-1">por {item.criado_por_nome}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {editavel && (
+                      <button
+                        onClick={() => abrirNovoItem(col.id)}
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-brand-navy py-2 rounded-lg hover:bg-white transition"
+                      >
+                        <Plus size={14} /> Adicionar card
+                      </button>
                     )}
                   </div>
-
-                  <div className="space-y-2 min-h-32">
-                    {itensDaColuna(col.id).map((item) => (
-                      <button
-                        key={item.id}
-                        draggable={editavel}
-                        onDragStart={(e) => { if (editavel) e.dataTransfer.setData('text/plain', item.id) }}
-                        onClick={() => setSelecionado(item)}
-                        className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-slate-300"
-                      >
-                        <p className="text-sm font-medium text-slate-800">{item.titulo}</p>
-                        {item.descricao && <p className="mt-1 line-clamp-2 text-xs text-slate-500">{item.descricao}</p>}
-                      </button>
-                    ))}
-                  </div>
-
-                  {editavel && (
-                    <button onClick={() => abrirNovoItem(col.id)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm text-slate-500 hover:bg-white hover:text-brand-navy">
-                      <Plus size={16} /> Adicionar card
-                    </button>
-                  )}
-                </section>
-              ))}
+                )
+              })}
             </div>
-          </>
-        )}
-      </main>
+          )}
+        </main>
+      )}
 
       {novoEm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.currentTarget === e.target) setNovoEm(null) }}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800">Novo card</h2>
-              <button onClick={() => setNovoEm(null)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-700">Novo card</h3>
+              <button onClick={() => setNovoEm(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
             </div>
-            <input autoFocus value={tituloNovo} onChange={(e) => setTituloNovo(e.target.value)} placeholder="Título" className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-brand-navy" />
-            <textarea value={descNova} onChange={(e) => setDescNova(e.target.value)} placeholder="Descrição (opcional)" rows={4} className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-brand-navy" />
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setNovoEm(null)} className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100">Cancelar</button>
-              <button onClick={salvarNovoItem} disabled={!tituloNovo.trim()} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Criar</button>
-            </div>
+            <input
+              value={tituloNovo}
+              onChange={(e) => setTituloNovo(e.target.value)}
+              placeholder="Titulo"
+              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              autoFocus
+            />
+            <textarea
+              value={descNova}
+              onChange={(e) => setDescNova(e.target.value)}
+              placeholder="Descricao (opcional)"
+              className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+              rows={3}
+            />
+            <button
+              onClick={salvarNovoItem}
+              disabled={!tituloNovo.trim()}
+              className="w-full bg-brand-navy text-white rounded-xl py-2 text-sm font-medium disabled:opacity-40"
+            >
+              Salvar
+            </button>
           </div>
         </div>
       )}
 
       {selecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.currentTarget === e.target) setSelecionado(null) }}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800">{selecionado.titulo}</h2>
-              <button onClick={() => setSelecionado(null)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-700">{selecionado.titulo}</h3>
+              <button onClick={() => setSelecionado(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
             </div>
-            {selecionado.descricao && <p className="whitespace-pre-wrap text-sm text-slate-600">{selecionado.descricao}</p>}
-            <div className="mt-5 flex justify-between">
-              {editavel ? (
-                <button onClick={() => apagar(selecionado)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-red-50"><Trash2 size={16} /> Excluir</button>
-              ) : <span />}
-              <button onClick={() => setSelecionado(null)} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600">Fechar</button>
-            </div>
+            {selecionado.descricao && <p className="text-sm text-slate-500">{selecionado.descricao}</p>}
+            {selecionado.criado_por_nome && (
+              <p className="text-xs text-slate-400">Criado por {selecionado.criado_por_nome}</p>
+            )}
+            {editavel && (
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => apagar(selecionado)}
+                  className="flex-1 flex items-center justify-center gap-1.5 p-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium"
+                >
+                  <Trash2 size={16} /> Excluir
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
