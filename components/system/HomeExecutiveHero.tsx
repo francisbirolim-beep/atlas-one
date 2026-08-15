@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Building2, CalendarDays, CircleCheck, Plus, Sparkles } from 'lucide-react'
+import { Building2, CalendarDays, Plus, Sparkles } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
@@ -43,15 +43,9 @@ export default function HomeExecutiveHero() {
             <h1 className="mt-1 max-w-3xl text-2xl font-semibold tracking-tight text-white md:text-3xl">Visão central da operação</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Acompanhe comercial, medições, produção e prioridades do dia em um único ambiente de gestão.</p>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5">
               <Link href="/orcamento-rapido" className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400">
                 <Plus size={16} /> Novo orçamento
-              </Link>
-              <Link href="/producao/medicao-final" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10">
-                <CircleCheck size={16} /> Medições finais
-              </Link>
-              <Link href="/kanban" className="inline-flex h-10 items-center gap-2 px-2 text-sm font-semibold text-slate-300 transition hover:text-white">
-                Abrir operação <ArrowRight size={15} />
               </Link>
             </div>
           </div>

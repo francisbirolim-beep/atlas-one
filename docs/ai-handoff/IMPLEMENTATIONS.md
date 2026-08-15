@@ -31,8 +31,7 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 ## Medicao Final — medidas fixas e fotos da trena — PR #119 — 2026-08-14
 - 3 larguras + 3 alturas fixas por peca;
 - foto da trena da LARGURA e ALTURA;
-- `medido=true` somente com as seis medidas positivas;
-- heranca de medidas/fotos somente de orcamento Atlas `tipo_medida=final`.
+- `medido=true` somente com as seis medidas positivas.
 
 ## Medicao Final — padroes SIM/NAO e vista interna — PR #120 — 2026-08-14
 - CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA com SIM/NAO por peca;
@@ -40,51 +39,47 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - lembrete para medir pela vista interna do vao.
 
 ## Medicao Final — ordem do fluxo por peca — PR #121 — 2026-08-14
-- tabela SIM/NAO movida para logo abaixo das medidas finais;
+- tabela SIM/NAO logo abaixo das medidas finais;
 - observacao logo depois;
-- remove barra/painel duplicado de pecas;
-- demais campos e fotos adicionais ficam na sequencia.
+- demais campos e fotos adicionais na sequencia.
 
 ## Medicao Final — parcial, tempo e historico — PR #122 — 2026-08-14
 - cronometro de tempo ativo apos inicio;
 - `Salvar medição parcial` pausa sem apagar dados;
 - `Retomar medição` continua a mesma medicao;
 - cada peca mostra `✅ FEITA` ou `EM ABERTO`;
-- historico registra inicio, parcial e retomada com data/hora, usuario e contagem feita/em aberto;
-- reutiliza `medicao_revisoes`, sem migration nova.
+- historico registra inicio, parcial e retomada.
 
 ## Navegacao mobile — Favoritos — PR #123 — 2026-08-14
-- remove visualmente no celular a barra inferior extensa do `Sidebar`, mantendo-a intacta no desktop;
-- cria botao compacto `Favoritos` fixo no mobile;
-- abre painel inferior para acessar e editar favoritos;
+- remove barra inferior extensa no celular;
+- cria botao compacto `Favoritos`;
 - permite favoritar/desfavoritar paginas e setores;
-- reaproveita preferencias ja existentes;
-- tela Inicio ganha bloco `Acesso rápido / Favoritos`.
+- Home ganha bloco `Acesso rápido / Favoritos`.
 
 ## Navegacao mobile — Voltar e Inicio — PR #124 — 2026-08-14
-- novo componente `MobileNavigationControls` somente para celular;
-- fora da Home mostra `Voltar` e `Inicio` no canto inferior esquerdo;
-- `Voltar` usa o historico do navegador e possui fallback para `/`;
-- `Inicio` sempre retorna para a Home;
-- Favoritos permanece independente no canto inferior direito.
+- fora da Home mostra `Voltar` e `Inicio`;
+- `Voltar` usa historico com fallback para `/`;
+- Favoritos permanece independente.
 
-## Medicao Final — remover duplicata generica — branch `fix/remover-medida-final-duplicada` — 2026-08-14
+## Medicao Final — remover duplicata generica — PR #125 — 2026-08-14
 - confirma `/producao/medicao-final` como unica Medicao Final oficial;
-- adiciona a rota oficial como pagina fixa de navegacao/favoritos;
-- filtra o setor generico legado `Medida final`/`Medicao final` das listas globais quando nao aponta para a rota oficial;
-- remove a duplicata de Favoritos, Setores, Sidebar e demais consumidores de `listarSetores()`;
-- o Kanban generico antigo deixa de ser oferecido pela navegacao normal;
-- registro legado nao e excluido fisicamente do banco nesta etapa.
+- filtra a entrada generica/legada das listas globais;
+- remove duplicata de Favoritos, Setores e Sidebar.
+
+## Home — limpeza de atalhos — branch `fix/home-mais-limpa` — 2026-08-14
+- remove do hero o botao redundante `Medições finais`;
+- remove `Abrir operação` do hero;
+- mantem `Novo orçamento` como unica acao principal do bloco;
+- esconde o botao flutuante `Inicio` quando o usuario ja esta na Home;
+- preserva Favoritos e `Voltar` + `Inicio` nas telas internas.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
-- Validar no iPhone que em Favoritos aparece somente a Medicao Final oficial e a duplicata generica desapareceu.
-- Validar PR #124 no iPhone.
-- Validar em celular a medicao parcial: iniciar -> medir algumas pecas -> salvar parcial -> recarregar -> conferir feitas/em aberto -> retomar -> concluir restante.
-- Validar persistencia dos SIM/NAO/observacao, seis medidas e fotos em campo.
-- Replicar parcial/campos fixos no link externo se ele for usado como interface principal do medidor.
+- Validar a Home limpa no iPhone.
+- Validar Medicao Final em campo: parcial, tempo, historico, SIM/NAO, medidas e fotos.
+- Replicar parcial/campos fixos no link externo se necessario.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
 - Criar conector W.Vetro API somente leitura depois de credenciais/testes reais.
 - Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
