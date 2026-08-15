@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Bell, ChevronDown, Command, FileText, MapPin, Plus, Search, Sparkles, UserRound, X } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { usePathname, useRouter } from 'next/navigation'
+import { ChevronDown, Command, FileText, LayoutGrid, LogOut, MapPin, Plus, Search, Settings, Sparkles, UserRound, X } from 'lucide-react'
+import { logout, usuarioAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { bateBusca } from '@/lib/texto'
 import type { Usuario } from '@/lib/tipos'
@@ -14,13 +14,11 @@ const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
   { prefixo: '/vendas/confirmar', titulo: 'Confirmar Venda', grupo: 'Comercial' },
   { prefixo: '/orcamento', titulo: 'Orçamentos', grupo: 'Comercial' },
   { prefixo: '/clientes', titulo: 'Clientes', grupo: 'Comercial' },
-  { prefixo: '/crm', titulo: 'CRM', grupo: 'Comercial' },
   { prefixo: '/producao/medicao-final', titulo: 'Medição Final', grupo: 'Operações' },
   { prefixo: '/producao', titulo: 'Produção', grupo: 'Operações' },
-  { prefixo: '/setores', titulo: 'Setores', grupo: 'Operações' },
-  { prefixo: '/financeiro', titulo: 'Financeiro', grupo: 'Financeiro' },
+  { prefixo: '/engenharia', titulo: 'Engenharia', grupo: 'Operações' },
+  { prefixo: '/setores', titulo: 'Setores', grupo: 'Administração' },
   { prefixo: '/configuracoes', titulo: 'Configurações', grupo: 'Administração' },
-  { prefixo: '/historico', titulo: 'Histórico', grupo: 'Administração' },
 ]
 
 type ResultadoBusca = {
@@ -44,8 +42,10 @@ function IconeResultado({ tipo }: { tipo: ResultadoBusca['tipo'] }) {
 
 export default function AppTopbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [buscaAberta, setBuscaAberta] = useState(false)
+  const [menuUsuario, setMenuUsuario] = useState(false)
   const [termo, setTermo] = useState('')
   const [resultados, setResultados] = useState<ResultadoBusca[]>([])
   const [buscando, setBuscando] = useState(false)
@@ -55,12 +55,19 @@ export default function AppTopbar() {
   }, [])
 
   useEffect(() => {
+    setMenuUsuario(false)
+  }, [pathname])
+
+  useEffect(() => {
     function atalho(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setBuscaAberta(true)
       }
-      if (e.key === 'Escape') setBuscaAberta(false)
+      if (e.key === 'Escape') {
+        setBuscaAberta(false)
+        setMenuUsuario(false)
+      }
     }
     window.addEventListener('keydown', atalho)
     return () => window.removeEventListener('keydown', atalho)
@@ -84,7 +91,6 @@ export default function AppTopbar() {
       ])
 
       if (cancelado) return
-
       const encontrados: ResultadoBusca[] = []
 
       for (const c of clientesResp.data || []) {
@@ -149,6 +155,11 @@ export default function AppTopbar() {
     setResultados([])
   }
 
+  async function sair() {
+    await logout()
+    router.replace('/login')
+  }
+
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
@@ -174,7 +185,7 @@ export default function AppTopbar() {
               className="group flex h-10 w-full max-w-2xl items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 text-left text-sm text-slate-400 shadow-inner transition hover:border-slate-300 hover:bg-white"
               title="Busca global"
             >
-              <Search size={16} className="text-slate-400 group-hover:text-slate-600" />
+              <Search size={16} />
               <span className="flex-1 truncate">Buscar cliente, obra, orçamento, medição...</span>
               <span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-400 shadow-sm">
                 <Command size={10} /> K
@@ -182,32 +193,47 @@ export default function AppTopbar() {
             </button>
           </div>
 
-          <div className="flex flex-1 items-center justify-end gap-2 xl:max-w-[430px]">
-            <Link href="/orcamento-rapido" className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700 sm:inline-flex" title="Criar novo orçamento rápido">
+          <div className="relative flex flex-1 items-center justify-end gap-2 xl:max-w-[390px]">
+            <Link href="/orcamento-rapido" className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:inline-flex" title="Criar novo orçamento">
               <Plus size={16} /> Novo
             </Link>
-
-            <button type="button" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 lg:inline-flex" title="IA Atlas">
-              <Sparkles size={15} className="text-emerald-600" /> IA Atlas
-            </button>
 
             <button type="button" onClick={abrirBusca} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 xl:hidden" title="Busca global">
               <Search size={16} />
             </button>
 
-            <button type="button" className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50" title="Notificações — em breve">
-              <Bell size={16} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white bg-emerald-500" />
-            </button>
-
-            <button type="button" className="ml-1 flex h-11 items-center gap-2.5 rounded-xl border border-transparent px-1.5 transition hover:border-slate-200 hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={() => setMenuUsuario(aberto => !aberto)}
+              className="ml-1 flex h-11 items-center gap-2.5 rounded-xl border border-transparent px-1.5 transition hover:border-slate-200 hover:bg-slate-50"
+              aria-expanded={menuUsuario}
+            >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-xs font-bold text-white shadow-sm">{iniciais(usuario?.nome)}</div>
               <div className="hidden min-w-0 text-left sm:block">
                 <div className="max-w-32 truncate text-sm font-semibold text-slate-800">{usuario?.nome || 'Usuário'}</div>
                 <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{usuario?.role || 'usuário'}</div>
               </div>
-              <ChevronDown size={14} className="hidden text-slate-400 sm:block" />
+              <ChevronDown size={14} className={`hidden text-slate-400 transition sm:block ${menuUsuario ? 'rotate-180' : ''}`} />
             </button>
+
+            {menuUsuario && (
+              <div className="absolute right-0 top-14 z-50 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                {usuario?.role === 'master' && (
+                  <>
+                    <Link href="/configuracoes" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                      <Settings size={16} /> Configurações
+                    </Link>
+                    <Link href="/setores" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                      <LayoutGrid size={16} /> Setores
+                    </Link>
+                    <div className="my-1 border-t border-slate-100" />
+                  </>
+                )}
+                <button type="button" onClick={sair} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50">
+                  <LogOut size={16} /> Sair
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -230,7 +256,7 @@ export default function AppTopbar() {
 
             <div className="max-h-[58vh] overflow-y-auto p-2">
               {termo.trim().length < 2 ? (
-                <div className="px-4 py-10 text-center text-sm text-slate-400">Digite pelo menos 2 caracteres. A busca ignora acentos e maiúsculas/minúsculas.</div>
+                <div className="px-4 py-10 text-center text-sm text-slate-400">Digite pelo menos 2 caracteres.</div>
               ) : buscando ? (
                 <div className="px-4 py-10 text-center text-sm text-slate-400">Pesquisando...</div>
               ) : resultados.length === 0 ? (
@@ -255,8 +281,6 @@ export default function AppTopbar() {
                 </div>
               )}
             </div>
-
-            <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 text-[11px] text-slate-400">Ex.: “joao” encontra “JOÃO”; “sao jose” encontra “SÃO JOSÉ”.</div>
           </div>
         </div>
       )}
