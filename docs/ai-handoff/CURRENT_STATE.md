@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #121 (`be277ffe5636a18ca7973c04c60d7abba2eb50a5`). A branch atual `feat/medicao-parcial-historico-tempo` adiciona controle de tempo ativo, medicao parcial, historico de pausas/retomadas e identificacao visual das pecas feitas/em aberto.
+Verificado em: 2026-08-14. `main` esta no merge da PR #122 (`a398a7ac0206b7443fe0c37ef1a8e17d2cf4dcfe`). A branch atual `feat/mobile-favoritos` substitui a barra fixa inferior do celular por um acesso compacto de Favoritos.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -11,32 +11,31 @@ Verificado em: 2026-08-14. `main` esta no merge da PR #121 (`be277ffe5636a18ca79
 - PRs #109 a #111: anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual de anexos.
 - PRs #112 a #118: importacao W.Vetro em Nova Medicao, suporte a PDF sem dimensoes e correcoes do parser; teste real do PDF 861 confirmou Cliente `FELIPE ALVES SANTANA`, Cidade `JOSE BONIFACIO - SP`, 7 itens.
 - PR #119: toda peca da Medicao Final mostra sempre 3 larguras, 3 alturas, foto da trena de LARGURA e ALTURA; `medido=true` somente quando as seis medidas sao positivas; heranca somente de orcamento Atlas `tipo_medida=final`.
-- PR #120: toda peca ganhou CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA com SIM/NAO, observacao por peca e lembrete para medir pela vista interna do vao.
-- PR #121: reorganiza o fluxo da peca no celular: medidas/fotos -> SIM/NAO -> observacao -> demais campos -> fotos adicionais, removendo o painel duplicado.
+- PR #120: CONTRAMARCO, ARREMATE, CADEIRINHA, CANTONEIRA SIM/NAO, observacao por peca e lembrete da vista interna.
+- PR #121: fluxo mobile por peca em ordem unica: medidas/fotos -> SIM/NAO -> observacao -> demais campos -> fotos adicionais.
+- PR #122: medicao parcial, tempo ativo, historico de pausa/retomada e indicacao das pecas feitas/em aberto.
 - Medicao Final V2 operacional, com status, responsavel, pendencias, checklist/fotos e link externo seguro.
 - Engenharia Fases 1 a 4 concluidas.
 - Build Validation no GitHub Actions (`npm install` + `npm run build`).
 
-## EM VALIDACAO — MEDICAO PARCIAL / TEMPO / HISTORICO
-Pedido do usuario:
-- depois de iniciar, registrar data e contar o tempo gasto na medicao;
-- permitir salvar uma visita como Medicao Parcial quando nem todos os vaos puderem ser medidos;
-- preservar tudo que ja foi feito;
-- mostrar claramente cada peca como feita ou em aberto;
-- permitir voltar depois, retomar e medir apenas o restante;
-- manter historico das pausas e retomadas.
+## EM VALIDACAO — FAVORITOS NO MOBILE
+Pedido do usuario apos teste no iPhone:
+- remover a barra inferior fixa com varios icones e labels cortados;
+- manter um local claro para favoritos;
+- permitir escolher/desmarcar atalhos favoritos;
+- mostrar favoritos tambem na tela Inicio.
 
-Implementado na branch atual sem nova migration:
-- novo `MedicaoParcialPanel` aparece depois que a medicao possui `iniciado_em`;
-- cronometro mostra somente tempo ativo; ao salvar parcial, o tempo pausa; ao retomar, volta a contar;
-- resumo visual mostra `✅ feita` e `em aberto` por peca;
-- botao `Salvar medição parcial` preserva medidas, fotos, checklist e demais dados ja gravados;
-- botao `Retomar medição` continua a mesma Medicao Final sem recriar itens;
-- historico usa a tabela ja existente `medicao_revisoes`, registrando snapshots `Medição parcial` e `Retomada da medição` com data, usuario e quantidade feita/em aberto;
-- o inicio original continua vindo de `medicoes_finais.iniciado_em`;
-- nao foi criado novo status em `status_operacional` nesta etapa para evitar incompatibilidade com telas antigas; o estado parcial e derivado do ultimo evento do historico.
+Implementado na branch atual:
+- a navegacao antiga do `Sidebar` continua intacta no desktop, mas fica oculta no mobile;
+- novo `MobileFavorites` cria um botao compacto `Favoritos` no canto inferior do celular;
+- ao tocar, abre uma folha inferior com os favoritos atuais e a lista de Paginas e Setores disponiveis;
+- tocar na estrela adiciona/remove favorito usando as mesmas preferencias ja existentes em `lib/guias.ts` e `lib/favoritosSetores.ts`;
+- favoritos antigos da barra sao preservados, pois as mesmas chaves de localStorage continuam sendo usadas;
+- na tela Inicio, aparece um bloco `Acesso rápido / Favoritos` com ate 5 atalhos e acesso para editar/abrir os demais;
+- permissoes de usuario continuam respeitadas ao listar Setores;
+- nenhum destino/rota foi removido.
 
-## ORDEM ATUAL POR PECA
+## ORDEM ATUAL POR PECA — MEDICAO FINAL
 1. identificacao da peca;
 2. foto da trena LARGURA / ALTURA;
 3. Largura Baixo / Meio / Cima;
@@ -57,14 +56,12 @@ Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do or
 - Ainda nao foi confirmado endpoint publico para receitas/BOM, formulas de corte, usinagens, lista/plano de corte ou otimizacao de barras.
 
 ## IMPLEMENTADO MAS NAO VALIDADO FUNCIONALMENTE
-- Medicao parcial, tempo ativo e historico da branch atual.
-- PR #121 precisa validacao visual final em celular.
-- Persistencia real dos quatro SIM/NAO e observacao precisa continuar sendo testada em campo.
-- PR #119 precisa validacao completa das fotos da trena e heranca de `tipo_medida=final`.
-- Confirmacao de Venda Fase 1.
+- Novo fluxo de Favoritos mobile da branch atual.
+- PR #122 precisa teste real de pausa/retomada em campo.
+- Persistencia dos quatro SIM/NAO, observacao, fotos e medidas continua em validacao de campo.
 
 ## PARCIAL / DIVIDA TECNICA
-- Estado parcial ainda e derivado do historico em `medicao_revisoes`; uma futura versao pode ganhar status/entidade de sessoes dedicado se necessario.
+- Favoritos ficam salvos no localStorage por dispositivo/navegador, como ja ocorria antes; sincronizacao por usuario/banco pode ser adicionada depois.
 - Campos fixos e controle parcial estao inicialmente na tela interna; acesso externo precisa ser estendido se for a interface principal do medidor.
 - Entidade persistente `vendas`/`obras` ainda nao existe.
 - Regras condicionais completas do checklist V2 e `exigir_foto_quando` ainda pendentes.
@@ -74,5 +71,5 @@ Regra preservada: medida impressa em PDF W.Vetro continua sendo referencia do or
 ## SEGURANCA / MIGRATIONS
 - Acesso externo da Medicao Final e server-side, com token-hash, validade e revogacao.
 - Importacao W.Vetro e identificacao server-side exigem sessao Atlas valida.
-- Esta etapa de medicao parcial reutiliza `medicao_revisoes`; nao depende de migration nova.
+- Favoritos mobile nao exigem migration.
 - Nao usar `migration repair --reverted` no banco atual sem diagnostico explicito.

@@ -8,6 +8,7 @@ import AppTopbar from '@/components/system/AppTopbar'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeOperationalAttention from '@/components/system/HomeOperationalAttention'
+import MobileFavorites from '@/components/system/MobileFavorites'
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
@@ -31,20 +32,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
-      <div className="atlas-sidebar-shell contents md:block">
+      <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
         <Sidebar />
         <SidebarQuickSearch />
       </div>
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
         <main
-          className={`min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-20 md:pb-0 ${
+          className={`min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0 ${
             ehHome
               ? '[&>div>header]:hidden [&>div]:mx-auto [&>div]:max-w-7xl [&>div]:!min-h-0 [&>div]:px-4 [&>div]:pb-8 [&>div]:[background-image:none] md:[&>div]:px-6'
               : ''
           }`}
         >
           {ehHome && <HomeExecutiveHero />}
+          <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehHome && <HomeManagementOverview />}
           {ehHome && <HomeOperationalAttention />}
           {ehHome && (

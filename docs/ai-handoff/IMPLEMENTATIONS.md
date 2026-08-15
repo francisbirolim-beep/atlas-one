@@ -45,22 +45,31 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - remove barra/painel duplicado de pecas;
 - demais campos e fotos adicionais ficam na sequencia.
 
-## Medicao Final — parcial, tempo e historico — branch `feat/medicao-parcial-historico-tempo` — 2026-08-14
-- novo painel de controle aparece depois que a Medicao Final e iniciada;
-- mostra cronometro de tempo ativo;
-- `Salvar medição parcial` pausa a contagem sem apagar medidas/fotos/checklist;
-- `Retomar medição` continua a mesma medicao e volta a contar o tempo;
-- cada peca e mostrada como `✅ FEITA` ou `EM ABERTO`;
-- historico registra inicio, medicao parcial e retomada com data/hora, usuario e quantidade feita/em aberto;
-- reutiliza `medicao_revisoes`, sem migration nova;
-- estado parcial e derivado do ultimo evento de historico para manter compatibilidade com o `status_operacional` atual.
+## Medicao Final — parcial, tempo e historico — PR #122 — 2026-08-14
+- cronometro de tempo ativo apos inicio;
+- `Salvar medição parcial` pausa sem apagar dados;
+- `Retomar medição` continua a mesma medicao;
+- cada peca mostra `✅ FEITA` ou `EM ABERTO`;
+- historico registra inicio, parcial e retomada com data/hora, usuario e contagem feita/em aberto;
+- reutiliza `medicao_revisoes`, sem migration nova.
+
+## Navegacao mobile — Favoritos — branch `feat/mobile-favoritos` — 2026-08-14
+- remove visualmente no celular a barra inferior extensa do `Sidebar`, mantendo-a intacta no desktop;
+- cria botao compacto `Favoritos` fixo no mobile;
+- abre painel inferior para acessar e editar favoritos;
+- permite favoritar/desfavoritar paginas e setores;
+- reaproveita `atlas_guias_ocultos` e `atlas_setores_favoritos`, preservando preferencias ja existentes;
+- respeita permissoes dos setores;
+- tela Inicio ganha bloco `Acesso rápido / Favoritos`, mostrando ate 5 atalhos e acesso aos demais.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
+- Validar no iPhone: barra inferior antiga sumiu, botao Favoritos aparece sem cobrir conteudo e painel abre/fecha corretamente.
+- Validar adicao/remocao de favoritos e persistencia apos recarregar.
+- Validar bloco de Acesso rapido na Inicio.
 - Validar em celular a medicao parcial: iniciar -> medir algumas pecas -> salvar parcial -> recarregar -> conferir feitas/em aberto -> retomar -> concluir restante.
-- Confirmar que o cronometro pausa e retoma corretamente e que o historico preserva data/hora.
 - Validar PR #121 visualmente e persistencia dos SIM/NAO/observacao.
 - Validar PR #119 em campo: seis medidas, fotos e heranca de `tipo_medida=final`.
 - Replicar parcial/campos fixos no link externo se ele for usado como interface principal do medidor.
