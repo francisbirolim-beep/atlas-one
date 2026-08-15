@@ -9,7 +9,7 @@ O usuario confirmou pelo print que a Medicao Final correta e a tela oficial em `
 1. A Medicao Final oficial foi adicionada como pagina fixa de navegacao/favoritos em `/producao/medicao-final`.
 2. `listarSetores()` filtra o setor legado chamado `Medida final` ou `Medicao final` quando ele nao aponta para a rota oficial.
 3. Como Sidebar, Favoritos, Setores, Inicio e outras areas usam `listarSetores()`, a duplicata deixa de aparecer globalmente nessas listas.
-4. Se algum favorito/link antigo ainda abrir `/setor/<id>` para a duplicata, a pagina redireciona automaticamente para `/producao/medicao-final`.
+4. O Kanban generico antigo deixa de ser oferecido pela navegacao normal.
 5. O registro antigo nao e apagado fisicamente do banco nesta etapa, evitando risco com dependencias antigas.
 6. Nenhuma migration foi criada.
 
@@ -18,9 +18,8 @@ O usuario confirmou pelo print que a Medicao Final correta e a tela oficial em `
 2. No iPhone, abrir Favoritos e confirmar que a entrada generica `Medida final` com icone de setor desapareceu.
 3. Confirmar que existe/acessa a Medicao Final oficial `/producao/medicao-final`.
 4. Abrir a tela de Setores e confirmar que a duplicata nao aparece.
-5. Se houver um link antigo salvo para a duplicata, confirmar que ele redireciona para a tela oficial em vez de abrir o Kanban vazio.
-6. Confirmar que outros setores genericos continuam funcionando normalmente.
-7. Confirmar que desktop/Sidebar nao perderam outros atalhos.
+5. Confirmar que outros setores genericos continuam funcionando normalmente.
+6. Confirmar que desktop/Sidebar nao perderam outros atalhos.
 
 ## DEPOIS DESTA VALIDACAO
 - Continuar validacao da Medicao Final em campo: parcial, tempo, historico, seis medidas, fotos e SIM/NAO.
