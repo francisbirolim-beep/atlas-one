@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Star, X } from 'lucide-react'
+import { FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
@@ -173,6 +173,23 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
                   })}
                 </div>
               </div>
+
+              {isMaster && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Administração</p>
+                  <div className="grid gap-2">
+                    <Link href="/configuracoes" onClick={() => setAberto(false)} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700">
+                      <Settings size={17} className="text-slate-400" /> Configurações
+                    </Link>
+                    <Link href="/configuracoes/orcamento" onClick={() => setAberto(false)} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700">
+                      <FileText size={17} className="text-slate-400" /> Padrão do Orçamento
+                    </Link>
+                    <Link href="/setores" onClick={() => setAberto(false)} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700">
+                      <LayoutGrid size={17} className="text-slate-400" /> Setores
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
