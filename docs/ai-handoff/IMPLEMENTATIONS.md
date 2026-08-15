@@ -73,7 +73,7 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - adiciona a rota oficial como pagina fixa de navegacao/favoritos;
 - filtra o setor generico legado `Medida final`/`Medicao final` das listas globais quando nao aponta para a rota oficial;
 - remove a duplicata de Favoritos, Setores, Sidebar e demais consumidores de `listarSetores()`;
-- links antigos para `/setor/<id>` do duplicado passam a redirecionar para a Medicao Final oficial;
+- o Kanban generico antigo deixa de ser oferecido pela navegacao normal;
 - registro legado nao e excluido fisicamente do banco nesta etapa.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
@@ -81,7 +81,6 @@ Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, 
 
 ## Pontos funcionais ainda pendentes
 - Validar no iPhone que em Favoritos aparece somente a Medicao Final oficial e a duplicata generica desapareceu.
-- Validar link antigo da duplicata redirecionando para `/producao/medicao-final`.
 - Validar PR #124 no iPhone.
 - Validar em celular a medicao parcial: iniciar -> medir algumas pecas -> salvar parcial -> recarregar -> conferir feitas/em aberto -> retomar -> concluir restante.
 - Validar persistencia dos SIM/NAO/observacao, seis medidas e fotos em campo.
