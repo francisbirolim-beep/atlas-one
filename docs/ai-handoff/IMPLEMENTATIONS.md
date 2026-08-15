@@ -61,25 +61,29 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - reaproveita preferencias ja existentes;
 - tela Inicio ganha bloco `Acesso rápido / Favoritos`.
 
-## Navegacao mobile — Voltar e Inicio — branch `fix/mobile-voltar-inicio` — 2026-08-14
+## Navegacao mobile — Voltar e Inicio — PR #124 — 2026-08-14
 - novo componente `MobileNavigationControls` somente para celular;
 - fora da Home mostra `Voltar` e `Inicio` no canto inferior esquerdo;
 - `Voltar` usa o historico do navegador e possui fallback para `/`;
 - `Inicio` sempre retorna para a Home;
-- na Home fica somente `Inicio`;
-- Favoritos permanece independente no canto inferior direito;
-- desktop permanece sem alteracao.
+- Favoritos permanece independente no canto inferior direito.
+
+## Medicao Final — remover duplicata generica — branch `fix/remover-medida-final-duplicada` — 2026-08-14
+- confirma `/producao/medicao-final` como unica Medicao Final oficial;
+- adiciona a rota oficial como pagina fixa de navegacao/favoritos;
+- filtra o setor generico legado `Medida final`/`Medicao final` das listas globais quando nao aponta para a rota oficial;
+- remove a duplicata de Favoritos, Setores, Sidebar e demais consumidores de `listarSetores()`;
+- o Kanban generico antigo deixa de ser oferecido pela navegacao normal;
+- registro legado nao e excluido fisicamente do banco nesta etapa.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
-- Validar no iPhone se `Voltar` e `Inicio` ficam acessiveis em telas internas sem cobrir campos/botoes.
-- Validar se `Voltar` retorna corretamente para a tela anterior e se `Inicio` sempre abre a Home.
-- Validar Favoritos da PR #123 em conjunto com os novos controles.
+- Validar no iPhone que em Favoritos aparece somente a Medicao Final oficial e a duplicata generica desapareceu.
+- Validar PR #124 no iPhone.
 - Validar em celular a medicao parcial: iniciar -> medir algumas pecas -> salvar parcial -> recarregar -> conferir feitas/em aberto -> retomar -> concluir restante.
-- Validar PR #121 visualmente e persistencia dos SIM/NAO/observacao.
-- Validar PR #119 em campo: seis medidas, fotos e heranca de `tipo_medida=final`.
+- Validar persistencia dos SIM/NAO/observacao, seis medidas e fotos em campo.
 - Replicar parcial/campos fixos no link externo se ele for usado como interface principal do medidor.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
 - Criar conector W.Vetro API somente leitura depois de credenciais/testes reais.

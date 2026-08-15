@@ -11,9 +11,27 @@ export const GRUPOS_ORDEM = [
   'Sistema',
 ] as const
 
+function normalizarNomeSetor(nome: string | null | undefined) {
+  return (nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+// Existiu um setor genérico chamado "Medida final" que abria apenas o Kanban
+// padrão de setores. Ele não faz parte do fluxo real e foi substituído pela
+// Medição Final oficial em /producao/medicao-final.
+export function ehMedicaoFinalLegada(setor: Pick<Setor, 'nome' | 'rota'> | null | undefined) {
+  if (!setor) return false
+  const nome = normalizarNomeSetor(setor.nome)
+  const rota = (setor.rota || '').trim()
+  return (nome === 'medida final' || nome === 'medicao final') && rota !== '/producao/medicao-final'
+}
+
 export async function listarSetores(): Promise<Setor[]> {
   const { data } = await supabase.from('setores').select('*').order('grupo').order('ordem')
-  return (data as Setor[]) || []
+  return ((data as Setor[]) || []).filter((setor) => !ehMedicaoFinalLegada(setor))
 }
 
 export async function listarPermissoesUsuario(usuarioId: string): Promise<Record<string, NivelPermissao>> {
