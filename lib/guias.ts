@@ -1,4 +1,4 @@
-import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, ListTodo, UserPlus, Home, FileText, ListChecks, WandSparkles, Layers3 } from 'lucide-react'
+import { History, BarChart3, Users, Columns3, Settings, LayoutGrid, ListTodo, UserPlus, Home, FileText, ListChecks, WandSparkles, Layers3, Ruler } from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -16,6 +16,9 @@ export const GUIAS: Guia[] = [
   { href: '/kanban', label: 'Painel de Orçamentos', icon: Columns3, grupo: 'Comercial' },
   { href: '/ia/comercial', label: 'Assistente IA', icon: WandSparkles, grupo: 'Comercial' },
   { href: '/historico', label: 'Histórico', icon: History, grupo: 'Comercial' },
+  // Medição Final oficial. Esta é a única entrada de navegação que deve existir
+  // para medição final; o antigo setor genérico/kanban com o mesmo nome é legado.
+  { href: '/producao/medicao-final', label: 'Medição Final', icon: Ruler, grupo: 'Técnico' },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, grupo: 'Sistema' },
   { href: '/setores', label: 'Setores', icon: LayoutGrid, grupo: 'Sistema' },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3, grupo: 'Sistema' },
