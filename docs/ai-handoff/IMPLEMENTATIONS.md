@@ -26,7 +26,7 @@ Entrada automatica apos Medicao Final aprovada, rota `/engenharia`, conferencia 
 Fotos de campo, leitura por IA da trena, correcao Baixo/Cima, anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual.
 
 ## Medicao Final — importacao W.Vetro — PRs #112 a #118 — 2026-08-14
-Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao do original, reparo de apoios antigos e correcoes do parser. Teste do PDF 861 confirmou FELIPE ALVES SANTANA, JOSE BONIFACIO - SP e 7 itens.
+Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao do original e correcoes do parser.
 
 ## Medicao Final — medidas fixas e fotos da trena — PR #119 — 2026-08-14
 - 3 larguras + 3 alturas fixas por peca;
@@ -66,18 +66,24 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - filtra a entrada generica/legada das listas globais;
 - remove duplicata de Favoritos, Setores e Sidebar.
 
-## Home — limpeza de atalhos — branch `fix/home-mais-limpa` — 2026-08-14
-- remove do hero o botao redundante `Medições finais`;
-- remove `Abrir operação` do hero;
-- mantem `Novo orçamento` como unica acao principal do bloco;
-- esconde o botao flutuante `Inicio` quando o usuario ja esta na Home;
-- preserva Favoritos e `Voltar` + `Inicio` nas telas internas.
+## Home — limpeza de atalhos — PR #126 — 2026-08-14
+- remove do hero `Medições finais` e `Abrir operação`;
+- mantem `Novo orçamento` como unica acao principal;
+- esconde `Inicio` flutuante na propria Home.
+
+## Home — limpeza operacional — branch `fix/limpeza-home-operacional` — 2026-08-14
+- remove da Home o bloco duplicado `Atenção necessária / Ações rápidas`;
+- deixa de renderizar na Home a agenda/calendario/tarefas legadas de `app/page.tsx`;
+- preserva essas funcionalidades em suas rotas proprias;
+- Home passa a mostrar somente Hero, Favoritos e Resumo da operação;
+- remove `Ver relatórios` do resumo central;
+- nenhuma rota, dado ou migration removidos.
 
 ## W.Vetro API — levantamento de integracao — 2026-08-14
 Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
 
 ## Pontos funcionais ainda pendentes
-- Validar a Home limpa no iPhone.
+- Validar a Home operacional limpa no iPhone.
 - Validar Medicao Final em campo: parcial, tempo, historico, SIM/NAO, medidas e fotos.
 - Replicar parcial/campos fixos no link externo se necessario.
 - Criar `Configurações -> Orçamento` e PDF Atlas profissional.
