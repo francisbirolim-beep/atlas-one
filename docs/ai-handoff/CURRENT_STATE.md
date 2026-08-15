@@ -2,7 +2,7 @@
 
 > Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-14. `main` esta no merge da PR #127. A branch atual `feat/limpeza-e-fluxo-operacional` agrupa a proxima fase de limpeza da navegacao e o novo padrao configuravel de orcamento/PDF.
+Verificado em: 2026-08-15. `main` esta no merge da PR #127. A branch atual `feat/limpeza-e-fluxo-operacional` agrupa limpeza da navegacao, padrao configuravel de orcamento/PDF e a nova etapa Plano de Corte da Producao.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -30,18 +30,30 @@ Implementado:
 - administracao fica separada para Master: `Configuracoes`, `Padrao do Orcamento` e `Setores`;
 - Favoritos mobile passa a listar apenas as sete areas principais;
 - Master continua tendo acesso administrativo pelo painel de Favoritos no celular;
-- atalhos antigos salvos no localStorage que nao pertencem mais a `GUIAS` deixam de aparecer, sem apagar rotas ou dados;
-- topbar remove botoes sem funcao real (`IA Atlas` e notificacoes) e transforma o perfil em menu funcional com logout/configuracoes;
+- topbar remove botoes sem funcao real e transforma o perfil em menu funcional com logout/configuracoes;
 - nenhuma rota funcional foi excluida do codigo e nenhum dado foi apagado.
 
 ## BRANCH ATUAL — CONFIGURACOES DO ORCAMENTO E PDF
 Implementado:
 - nova rota Master `/configuracoes/orcamento`;
-- configuracoes persistidas na tabela existente `configuracoes_gerais`, chave `configuracao_orcamento`; sem migration;
-- campos: titulo do documento, validade em dias, foto dos itens, preco unitario, assinatura/aceite, observacao padrao e rodape;
-- padrao inicial de validade = 7 dias;
-- `lib/pdfOrcamentoBalcao.ts` agora aceita titulo, validade, assinatura e rodape configuraveis;
-- `app/orcamento/balcao/novo` carrega o padrao salvo e aplica as opcoes ao PDF, mantendo a possibilidade de ajustar foto/preco unitario no orcamento atual.
+- configuracoes persistidas em `configuracoes_gerais`, chave `configuracao_orcamento`;
+- titulo, validade, fotos, preco unitario, assinatura/aceite, observacao padrao e rodape;
+- validade inicial = 7 dias;
+- PDF de Orcamento Balcao aplica o padrao salvo.
+
+## BRANCH ATUAL — PRODUCAO / PLANO DE CORTE V1
+Implementado:
+- nova etapa `/producao/plano-corte`, ligada ao setor Producao ao lado da Medicao Final;
+- pesquisa produtos cadastrados na categoria `porta_janela_padrao` (ex.: porta de correr 3 folhas);
+- produto fornece nome e medidas de referencia quando cadastradas;
+- usuario escolhe a tipologia/receita tecnica validada da Engenharia; o sistema nao adivinha receita;
+- ao gerar, cria snapshot editavel do plano e copia perfis/acessorios/reforcos da receita sem alterar a receita original;
+- variaveis editaveis por plano: largura, altura, quantidade, folga largura/altura, linha, folhas, montagem, trilho, contramarco, arremate, fechadura, puxador, mao amiga, travessas e roldana;
+- componentes do snapshot permitem trocar perfil/acessorio por outro produto tecnico cadastrado, ajustar quantidade, unidade e corte final em mm;
+- formulas existentes na receita aparecem como referencia; se ainda nao estiverem validadas o sistema nao inventa resultado de corte;
+- planos recentes podem ser reabertos e continuados;
+- permissao usa o setor Producao existente: Master = edicao; funcionario com `edicao` pode alterar; `consulta` apenas visualiza; `oculto` nao acessa;
+- migration `20260815100000_plano_corte_producao_v1.sql` cria `planos_corte` e `plano_corte_componentes`.
 
 ## ORDEM ATUAL POR PECA — MEDICAO FINAL
 1. identificacao da peca;
@@ -53,38 +65,24 @@ Implementado:
 7. demais campos configuraveis;
 8. fotos adicionais.
 
-O fluxo existente foi revisado nesta etapa e a ordem acima continua coerente com o pedido validado. Nao foram inventados novos campos de medicao sem validacao do usuario.
-
 ## W.VETRO
-Referencia publica informada pelo usuario: `Wvetro Integrations v2` no Postman. A pagina publica foi localizada, mas o crawler nao expoe os schemas/exemplos internos dos endpoints de forma suficiente para implementar campos proprietarios com seguranca.
-
-Regra permanente:
-- integracao sera server-side;
-- iniciar somente leitura;
-- nao adivinhar payload, campos ou autenticacao;
-- Atlas continua fonte da verdade;
-- PDF W.Vetro original sempre preservado;
-- dimensao ausente nunca e inventada.
-
-Implementacao live da API continua bloqueada ate haver credenciais/ambiente de teste W.Vetro e acesso aos schemas reais dos endpoints.
+Integracao live continua bloqueada ate haver credenciais/ambiente de teste e schemas reais. Regras: server-side, iniciar somente leitura, nao adivinhar payload, Atlas continua fonte da verdade, PDF original preservado e dimensao ausente nunca inventada.
 
 ## VERCEL
 - conta Hobby atingiu limite diario de deployments (>100 em 24h);
-- PR #128 de retry foi fechada sem merge para nao gerar novas tentativas desnecessarias;
-- continuar desenvolvimento em uma unica branch/PR agrupada;
-- nao promover/mergear para producao enquanto o limite estiver ativo, salvo decisao explicita do usuario.
+- PR #128 de retry foi fechada sem merge;
+- continuar desenvolvimento agrupado na PR #129;
+- nao mergear para producao enquanto o limite estiver ativo, salvo decisao explicita do usuario.
 
 ## IMPLEMENTADO MAS NAO VALIDADO EM PRODUCAO
-- navegacao essencial da branch atual;
-- Favoritos mobile simplificado e administracao mobile;
-- Configuracoes -> Orcamento;
-- novo padrao aplicado ao PDF de orcamento Balcao;
-- PR #122 ainda precisa teste real de pausa/retomada em campo;
-- persistencia dos quatro SIM/NAO, observacao, fotos e medidas continua em validacao de campo.
+- navegacao essencial/Favoritos simplificados;
+- Configuracoes -> Orcamento e novo padrao do PDF;
+- Plano de Corte V1 e migration ainda precisam validacao depois que a quota de deploy liberar;
+- PR #122 ainda precisa teste real de pausa/retomada em campo.
 
 ## DIVIDA TECNICA / SEGURANCA
-- paginas antigas/menos usadas continuam no codigo, apenas fora da navegacao principal; excluir somente depois de validar dependencias.
-- registro legado de setor `Medida final` pode continuar fisicamente no banco; esta fora da operacao.
-- Favoritos seguem locais por dispositivo/navegador.
-- testes automatizados de regra de negocio ainda nao existem.
+- formulas de corte ainda dependem das receitas tecnicas validadas por tipologia; nao executar formula nao validada automaticamente;
+- paginas antigas continuam no codigo, apenas fora da navegacao principal;
+- Favoritos seguem locais por dispositivo/navegador;
+- testes automatizados de regra de negocio ainda nao existem;
 - nao usar `migration repair --reverted` sem diagnostico explicito.
