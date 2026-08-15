@@ -57,15 +57,10 @@ export default function HomeManagementOverview() {
   ]
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 pt-6 md:px-6 md:pt-7">
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Indicadores centrais</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Resumo da operação</h2>
-        </div>
-        <Link href="/relatorios" className="hidden items-center gap-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900 sm:inline-flex">
-          Ver relatórios <ArrowUpRight size={13} />
-        </Link>
+    <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-6 md:px-6 md:pb-10 md:pt-7">
+      <div className="mb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Indicadores centrais</p>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Resumo da operação</h2>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
