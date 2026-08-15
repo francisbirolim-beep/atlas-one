@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { LayoutGrid, Star, X } from 'lucide-react'
+import { Star, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
+import type { Usuario } from '@/lib/tipos'
 import {
   GUIAS,
   EVENTO_OCULTOS_MUDOU,
@@ -12,46 +12,19 @@ import {
   guiasFavoritos,
   lerOcultos,
 } from '@/lib/guias'
-import {
-  EVENTO_FAVORITOS_SETORES_MUDOU,
-  alternarFavoritoSetor,
-  lerFavoritosSetores,
-} from '@/lib/favoritosSetores'
-import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/setores'
-
-function hrefDoSetor(setor: Setor) {
-  return setor.ativo && setor.rota ? setor.rota : `/setor/${setor.id}`
-}
 
 export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostrarAcessoRapido?: boolean }) {
   const [aberto, setAberto] = useState(false)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [ocultos, setOcultos] = useState<string[]>([])
-  const [setores, setSetores] = useState<Setor[]>([])
-  const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
-  const [favoritosSetores, setFavoritosSetores] = useState<string[]>([])
 
   useEffect(() => {
     setOcultos(lerOcultos())
-    setFavoritosSetores(lerFavoritosSetores())
+    usuarioAtual().then(setUsuario)
 
-    usuarioAtual().then(async atual => {
-      setUsuario(atual)
-      if (!atual) return
-      const lista = await listarSetores()
-      const mapa = atual.role === 'master' ? {} : await listarPermissoesUsuario(atual.id)
-      setSetores(lista)
-      setPermissoes(mapa)
-    })
-
-    const atualizarGuias = () => setOcultos(lerOcultos())
-    const atualizarSetores = () => setFavoritosSetores(lerFavoritosSetores())
-    window.addEventListener(EVENTO_OCULTOS_MUDOU, atualizarGuias)
-    window.addEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, atualizarSetores)
-    return () => {
-      window.removeEventListener(EVENTO_OCULTOS_MUDOU, atualizarGuias)
-      window.removeEventListener(EVENTO_FAVORITOS_SETORES_MUDOU, atualizarSetores)
-    }
+    const atualizar = () => setOcultos(lerOcultos())
+    window.addEventListener(EVENTO_OCULTOS_MUDOU, atualizar)
+    return () => window.removeEventListener(EVENTO_OCULTOS_MUDOU, atualizar)
   }, [])
 
   const isMaster = usuario?.role === 'master'
@@ -59,40 +32,13 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
     () => GUIAS.filter(guia => !guia.masterOnly || isMaster),
     [isMaster],
   )
-  const favoritosGuias = useMemo(
+  const favoritos = useMemo(
     () => guiasFavoritos(ocultos, Boolean(isMaster)),
     [ocultos, isMaster],
   )
-  const setoresVisiveis = useMemo(
-    () => usuario ? setores.filter(setor => nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto') : [],
-    [usuario, setores, permissoes],
-  )
-  const setoresFavoritados = useMemo(
-    () => setoresVisiveis.filter(setor => favoritosSetores.includes(setor.id)),
-    [setoresVisiveis, favoritosSetores],
-  )
-
-  const favoritosRapidos = [
-    ...favoritosGuias.map(guia => ({
-      chave: `guia:${guia.href}`,
-      href: guia.href,
-      label: guia.label,
-      Icon: guia.icon,
-    })),
-    ...setoresFavoritados.map(setor => ({
-      chave: `setor:${setor.id}`,
-      href: hrefDoSetor(setor),
-      label: setor.nome,
-      Icon: LayoutGrid,
-    })),
-  ]
 
   function alternarGuia(href: string) {
     setOcultos(alternarOculto(href))
-  }
-
-  function alternarSetor(id: string) {
-    setFavoritosSetores(alternarFavoritoSetor(id))
   }
 
   return (
@@ -114,27 +60,30 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
               </button>
             </div>
 
-            {favoritosRapidos.length > 0 ? (
+            {favoritos.length > 0 ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
-                {favoritosRapidos.slice(0, 5).map(({ chave, href, label, Icon }) => (
-                  <Link
-                    key={chave}
-                    href={href}
-                    className="flex min-h-16 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-brand-navy shadow-sm">
-                      <Icon size={18} />
-                    </span>
-                    <span className="min-w-0 truncate">{label}</span>
-                  </Link>
-                ))}
-                {favoritosRapidos.length > 5 && (
+                {favoritos.slice(0, 6).map(guia => {
+                  const Icon = guia.icon
+                  return (
+                    <Link
+                      key={guia.href}
+                      href={guia.href}
+                      className="flex min-h-16 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-brand-navy shadow-sm">
+                        <Icon size={18} />
+                      </span>
+                      <span className="min-w-0 truncate">{guia.label}</span>
+                    </Link>
+                  )
+                })}
+                {favoritos.length > 6 && (
                   <button
                     type="button"
                     onClick={() => setAberto(true)}
                     className="min-h-16 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-500"
                   >
-                    +{favoritosRapidos.length - 5} favoritos
+                    +{favoritos.length - 6} favorito
                   </button>
                 )}
               </div>
@@ -178,30 +127,35 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
             </div>
 
             <div className="space-y-5 p-4">
-              {favoritosRapidos.length > 0 && (
+              {favoritos.length > 0 && (
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Abrir favorito</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {favoritosRapidos.map(({ chave, href, label, Icon }) => (
-                      <Link
-                        key={chave}
-                        href={href}
-                        onClick={() => setAberto(false)}
-                        className="flex min-h-14 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-                      >
-                        <Icon size={17} className="shrink-0 text-brand-navy" />
-                        <span className="truncate">{label}</span>
-                      </Link>
-                    ))}
+                    {favoritos.map(guia => {
+                      const Icon = guia.icon
+                      return (
+                        <Link
+                          key={guia.href}
+                          href={guia.href}
+                          onClick={() => setAberto(false)}
+                          className="flex min-h-14 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                        >
+                          <Icon size={17} className="shrink-0 text-brand-navy" />
+                          <span className="truncate">{guia.label}</span>
+                        </Link>
+                      )
+                    })}
                   </div>
                 </div>
               )}
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Páginas</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Escolher atalhos</p>
+                <p className="mb-3 text-xs leading-5 text-slate-500">Somente as áreas principais do Atlas aparecem aqui. Configurações e telas antigas ficam fora do uso diário.</p>
                 <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
                   {guiasDisponiveis.map(guia => {
                     const favorito = !ocultos.includes(guia.href)
+                    const Icon = guia.icon
                     return (
                       <button
                         key={guia.href}
@@ -210,7 +164,7 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
                         className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
                       >
                         <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-700">
-                          <guia.icon size={17} className="shrink-0 text-slate-400" />
+                          <Icon size={17} className="shrink-0 text-slate-400" />
                           <span className="truncate">{guia.label}</span>
                         </span>
                         <Star size={18} className={favorito ? 'text-amber-500' : 'text-slate-300'} fill={favorito ? 'currentColor' : 'none'} />
@@ -219,31 +173,6 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
                   })}
                 </div>
               </div>
-
-              {setoresVisiveis.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Setores</p>
-                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-                    {setoresVisiveis.map(setor => {
-                      const favorito = favoritosSetores.includes(setor.id)
-                      return (
-                        <button
-                          key={setor.id}
-                          type="button"
-                          onClick={() => alternarSetor(setor.id)}
-                          className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-                        >
-                          <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-700">
-                            <LayoutGrid size={17} className="shrink-0 text-slate-400" />
-                            <span className="truncate">{setor.nome}</span>
-                          </span>
-                          <Star size={18} className={favorito ? 'text-amber-500' : 'text-slate-300'} fill={favorito ? 'currentColor' : 'none'} />
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
