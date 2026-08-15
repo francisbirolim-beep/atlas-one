@@ -51,35 +51,44 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - Home passa a mostrar Hero, Favoritos e Resumo da operacao;
 - agenda/tarefas/calendario e acoes duplicadas deixam de poluir a Home, sem excluir rotas ou dados.
 
-## Navegacao operacional essencial — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-14
+## Navegacao operacional essencial — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
 - lista diaria reduzida a Inicio, Clientes, Orcamentos, Kanban, Medicao Final, Producao e Engenharia;
-- Sidebar desktop simplificada, sem setores dinamicos misturados ao fluxo diario;
+- Sidebar desktop simplificada;
 - administracao separada para Master;
-- Favoritos mobile mostra apenas areas essenciais e oferece secao administrativa separada para Master;
-- remove da topbar botoes sem funcao real (`IA Atlas` e notificacoes);
-- perfil da topbar passa a abrir menu funcional com logout/configuracoes;
-- paginas antigas continuam acessiveis por URL quando necessario; nenhuma exclusao destrutiva nesta etapa.
+- Favoritos mobile mostra apenas areas essenciais;
+- topbar remove botoes sem funcao real e perfil ganha menu funcional/logout.
 
-## Configuracoes -> Orcamento e PDF — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-14
-- nova rota `/configuracoes/orcamento`, exclusiva para Master;
-- usa a tabela existente `configuracoes_gerais`, chave `configuracao_orcamento`; sem migration;
-- permite configurar titulo do documento, validade, foto, preco unitario, assinatura, observacao padrao e rodape;
+## Configuracoes -> Orcamento e PDF — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
+- nova rota `/configuracoes/orcamento` exclusiva para Master;
+- usa `configuracoes_gerais`, sem migration;
+- configura titulo, validade, foto, preco unitario, assinatura, observacao e rodape;
 - validade padrao = 7 dias;
-- `pdfOrcamentoBalcao` aplica titulo/validade/assinatura/rodape;
-- novo Orcamento Balcao carrega as configuracoes e usa o padrao no PDF.
+- PDF de Orcamento Balcao aplica o padrao salvo.
+
+## Producao -> Plano de Corte V1 — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
+- nova rota `/producao/plano-corte` e novo atalho no setor Producao ao lado da Medicao Final;
+- pesquisa produtos cadastrados como `porta_janela_padrao`;
+- seleciona uma tipologia com receita tecnica da Engenharia;
+- gera snapshot persistente e editavel da receita para cada plano, sem alterar a receita mestre;
+- variaveis: largura, altura, quantidade, folgas, linha, folhas, montagem, trilho, contramarco, arremate, fechadura, puxador, mao amiga, travessas e roldana;
+- permite substituir perfil/acessorio por produto tecnico cadastrado, ajustar quantidade, unidade e corte final;
+- formulas da receita sao exibidas; resultado automatico so deve existir depois de validacao da formula real da tipologia;
+- permissao segue o setor Producao: Master/edicao podem alterar; consulta apenas visualiza; oculto bloqueia;
+- migration cria `planos_corte` e `plano_corte_componentes`.
 
 ## W.Vetro API — estado da integracao
-A documentacao publica `Wvetro Integrations v2` foi localizada. O escopo conhecido inclui autenticacao, linhas, produtos, cores, vidros, pessoas/vendedores, vendas/orcamentos, compras, estoque, financeiro, producao e instalacoes. A integracao live deve ser server-side e comecar somente leitura. Nao implementar payloads proprietarios por suposicao. Credenciais/ambiente de teste e schemas reais ainda sao prerequisitos para validar chamadas.
+A documentacao publica `Wvetro Integrations v2` foi localizada. Integracao live deve ser server-side e comecar somente leitura. Nao implementar payloads proprietarios por suposicao. Credenciais/ambiente de teste e schemas reais ainda sao prerequisitos.
 
 ## Vercel — limite temporario
 - Hobby atingiu limite diario de deployments (>100/24h);
 - PR #128 de retry foi fechada sem merge;
-- trabalho atual deve ser agrupado em uma unica PR e nao mergeado para producao ate a janela liberar, salvo decisao explicita.
+- trabalho atual fica agrupado na PR #129 ate a janela liberar.
 
 ## Pontos funcionais ainda pendentes
-- rodar Build Validation da branch atual;
-- validar visualmente menu/favoritos/configuracao de orcamento quando houver Preview/Deploy disponivel;
-- validar Medicao Final em campo: parcial, tempo, historico, SIM/NAO, medidas e fotos;
-- validar PDF de orcamento Balcao com configuracoes reais da empresa;
-- iniciar conector W.Vetro somente leitura quando houver credenciais/schemas de teste;
-- Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
+- validar PR #129 no Build Validation apos cada bloco relevante;
+- validar visualmente menu/favoritos/configuracao de orcamento/Plano de Corte quando houver Preview/Deploy;
+- cadastrar e validar receitas reais por tipologia para ativar calculos automaticos de corte;
+- validar Medicao Final em campo;
+- validar PDF com configuracoes reais;
+- iniciar W.Vetro somente leitura quando houver credenciais/schemas de teste;
+- evoluir Plano de Corte para lista de barras, otimizacao de barras e impressao/romaneio depois das formulas validadas.
