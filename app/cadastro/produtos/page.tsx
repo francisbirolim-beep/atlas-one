@@ -87,6 +87,7 @@ export default function Produtos() {
   const [carregando, setCarregando] = useState(true)
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [busca, setBusca] = useState('')
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [cores, setCores] = useState<Cor[]>([])
@@ -607,11 +608,24 @@ export default function Produtos() {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
             <Package size={16} /> Produtos cadastrados
           </h2>
+
+          <input
+            type="text"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por codigo, nome ou descricao (ex.: SU010)"
+            className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+          />
           {produtos.length === 0 ? (
             <p className="text-sm text-slate-400">Nenhum produto cadastrado ainda.</p>
           ) : (
             <div className="space-y-2">
-              {produtos.map(p => (
+              {produtos.filter(p => {
+                const q = busca.trim().toLowerCase()
+                if (!q) return true
+                const codigo = (p.codigo || p.nome.split(' - ')[0] || '').toLowerCase()
+                return p.nome.toLowerCase().includes(q) || codigo.includes(q) || (p.descricao || '').toLowerCase().includes(q)
+              }).map(p => (
                 <div key={p.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2 min-w-0">
@@ -624,7 +638,7 @@ export default function Produtos() {
                         </span>
                       )}
                       <div className="min-w-0">
-                        <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{p.nome}</p>
+                        <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}><span className="inline-block px-1.5 py-0.5 mr-1.5 rounded bg-slate-100 text-slate-600 text-[10px] font-mono align-middle">{p.codigo || p.nome.split(' - ')[0]}</span>{p.nome}</p>
                         <p className="text-slate-400 text-xs">
                           {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
                           {p.custo != null ? ` · custo R$ ${p.custo.toFixed(2)}` : ''}
