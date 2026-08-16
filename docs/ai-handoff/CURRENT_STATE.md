@@ -123,3 +123,34 @@ Integracao live continua bloqueada ate haver credenciais/ambiente de teste e sch
 
 ## ATUALIZACAO -- variaveis declarativas + variantes + presets -- 2026-08-16
 Branch `francisbirolim-beep-patch-10` (ainda nao mesclada): implementa a secao "3. Variantes condicionais" do NEXT_TASK.md -- catalogo de variaveis com opcoes (`engenharia_variaveis` / `engenharia_variavel_opcoes`), vinculo por tipologia (`engenharia_tipologia_variaveis`), variantes condicionais de componente (`engenharia_componente_variantes`, resolvidas por `resolverVarianteComponente` -- comparacao de igualdade declarada, sem eval) e presets fixos salvaveis (`engenharia_variaveis_preset`). UI em `app/engenharia/receitas/page.tsx` (gestao) e `app/producao/plano-corte/page.tsx` (selects dinamicos + presets no lugar do texto livre anterior). Ver NEXT_TASK.md para detalhes e pendencias (apply da migration, PR, merge).
+
+
+## ATUALIZACAO -- identidade tecnica de Produto (perfis/acessorios) -- 2026-08-16
+Branch `feat/produtos-identidade-tecnica-wvetro` (ainda nao mesclada): adiciona
+identidade tecnica confiavel ao cadastro de Produtos -- `codigo`/`codigo_origem`/
+`origem`/`id_externo_wvetro`, `peso_kg_m`/`tamanho_barra_mm`/`tamanho_barra_mm_origem`,
+`dados_origem jsonb` (snapshot congelado do que veio do W.Vetro), `status_validacao`
+(importado/revisado/validado), `ncm_origem`/`ncm_status` (pendente/valido/invalido,
+sem corrigir o NCM), tabela `produto_linhas` (N:N produto<->linha) e unique index
+parcial em `upper(codigo)`. Migration `20260816180000_produtos_identidade_tecnica_v1.sql`
+inclui o backfill simples de `codigo`/`codigo_origem`/`origem`/`dados_origem` a partir
+do padrao "CODIGO - DESCRICAO" ja existente em `produtos.nome` -- nao depende de
+lista externa. Auditoria completa (1.700 produtos: 1.405 OK / 14 ATENCAO / 281 REVISAR,
+0 duplicidade de codigo) em `docs/tecnico/auditoria-produtos-2026-08-16.md`, gerada por
+`scripts/auditoria-produtos-wvetro.sql` (reutilizavel).
+
+`app/cadastro/produtos/page.tsx` ganhou busca por codigo/nome/descricao e badge de
+codigo em cada card. Confirmado que Engenharia > Receitas e Plano de Corte ja exibem
+o codigo tecnico (esta embutido em `produto.nome`) -- nenhuma mudanca foi necessaria
+nesses dois.
+
+Divergencia registrada: o pedido original presumia `ExportWWAcessorios` (~1.174
+acessorios) ja importado -- na verdade so os 392 acessorios da extracao historica via
+API (com `preco=0`) existem hoje; o arquivo `ExportWWAcessorios` nunca foi enviado
+nesta conversa.
+
+Pendente: aplicar a migration em producao via `Supabase Database Control`
+(`apply` + `APPLY_PRODUCTION`); backfill de `tamanho_barra_mm` a partir da coluna
+"Tamanho" do W.Vetro (dados prontos, migration nao commitada por escopo); vincular
+`produto_linhas` a alguma tela (so existe o CRUD em `lib/produtoLinhas.ts`). Ver
+NEXT_TASK.md para detalhes.
