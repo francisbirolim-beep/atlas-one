@@ -4,7 +4,7 @@
 
 Verificado em: 2026-08-15. `main` esta no merge da PR #129, commit `91d4bd97167342dfb76ca24de53947d12a7a63d0`. O status Vercel desse commit esta `success`, portanto o pacote da PR #129 foi aceito pelo deploy de producao.
 
-A branch atual `fix/pos-merge-plano-corte` faz a revisao pos-merge, documenta a primeira receita tecnica real estudada a partir de relatorios W.Vetro e corrige o handoff antes da proxima evolucao do Plano de Corte.
+A branch atual `fix/pos-merge-plano-corte`, PR #130, faz a revisao pos-merge e prepara a arquitetura real do Plano de Corte: produto cadastrado + receita mestre + variaveis + snapshot editavel.
 
 ## FUNCIONANDO / MERGEADO EM MAIN
 - Login/autenticacao e controle Master/funcionario.
@@ -41,7 +41,29 @@ O arquivo `supabase/migrations/20260815100000_plano_corte_producao_v1.sql` esta 
 - `planos_corte`;
 - `plano_corte_componentes`.
 
-IMPORTANTE: o workflow `Supabase Database Control` nao aplica migration automaticamente no merge. `apply` exige `workflow_dispatch` manual com confirmacao `APPLY_PRODUCTION`. Portanto, ate confirmar uma execucao `apply` bem-sucedida, considerar a migration **pendente de aplicacao em producao**, mesmo com o frontend ja deployado.
+Na PR #130 esse arquivo foi corrigido para usar `public.*` explicitamente e habilitar RLS com a policy permissiva temporaria ja adotada no projeto.
+
+IMPORTANTE: o workflow `Supabase Database Control` nao aplica migration automaticamente no merge. `apply` exige `workflow_dispatch` manual com confirmacao `APPLY_PRODUCTION`. Portanto, ate confirmar uma execucao `apply` bem-sucedida, considerar as migrations do Plano de Corte **pendentes de aplicacao em producao**, mesmo com frontend deployado.
+
+## PR #130 — RECEITAS ORIENTADAS A PRODUTO
+Implementado na branch:
+- migration `20260815223000_receitas_por_produto_v1.sql` adiciona `produto_id` em `engenharia_receitas`;
+- remove a restricao antiga de uma unica receita ativa por tipologia para todos os produtos;
+- preserva no maximo uma receita generica ativa por tipologia como fallback;
+- permite no maximo uma receita ativa especifica por produto;
+- `engenhariaReceitas.ts` mantem a tela generica compativel e adiciona busca/criacao de receita especifica por produto;
+- criacao da receita generica continua compativel mesmo antes da nova migration ser aplicada.
+
+## PR #130 — MOTOR SEGURO DE FORMULAS
+Criado `lib/formulasCorte.ts`:
+- sem `eval` e sem `new Function`;
+- aceita somente numeros, parenteses, `+ - * /`, variaveis permitidas e funcoes matematicas controladas;
+- variaveis iniciais: `largura`, `altura`, `quantidade`, `folga_largura`, `folga_altura`, `folhas`;
+- funcoes permitidas: `abs`, `ceil`, `floor`, `round`, `min`, `max`;
+- trata formula vazia, caractere proibido, variavel desconhecida, divisao por zero e resultado nao finito;
+- ainda NAO esta ligado automaticamente ao `corte_mm`; primeiro deve existir marcacao explicita de formula validada e regras de variantes.
+
+O Supabase Database Control da PR #130 ja passou no dry-run com as migrations pendentes. O Build Validation final deve permanecer verde antes do merge.
 
 ## REVISAO TECNICA — PORTA DE CORRER 03 FOLHAS SUPREMA
 Foi recuperado da biblioteca do usuario o relatorio W.Vetro `app.core.relorientativocortesimplificadoitem(8).pdf` e outros relatorios da mesma tipologia/projeto `*SUCB-PC3-01EF`.
@@ -66,7 +88,7 @@ NAO VALIDADO COMO FORMULA UNICA:
 - variaveis selecionam a variante correta;
 - plano e snapshot editavel e nao altera a receita mestre;
 - formula pendente nunca gera medida inventada;
-- modelo final precisa suportar receitas/variantes orientadas ao produto; a estrutura atual de uma receita ativa por tipologia e apenas base inicial e sera evoluida antes de automatizar formulas complexas.
+- receitas especificas por produto tem prioridade e receita generica por tipologia funciona apenas como fallback.
 
 ## ORDEM ATUAL POR PECA — MEDICAO FINAL
 1. identificacao da peca;
@@ -84,14 +106,16 @@ Integracao live continua bloqueada ate haver credenciais/ambiente de teste e sch
 ## IMPLEMENTADO MAS AINDA PRECISA VALIDACAO DE USO
 - navegacao/Favoritos da PR #129 no iPhone;
 - Configuracoes -> Orcamento e PDF com dados reais da empresa;
-- Plano de Corte V1 depois de aplicar a migration de banco;
+- Plano de Corte V1 depois de aplicar as migrations de banco;
+- receitas por produto da PR #130 depois do apply da migration;
 - Medicao Final parcial/tempo/historico em campo;
 - persistencia dos quatro SIM/NAO, observacao, fotos e medidas em uso real.
 
 ## DIVIDA TECNICA / SEGURANCA
-- schema de receita hoje restringe uma receita ativa por `tipologia_id`; isso e insuficiente para o modelo final produto + variantes e deve ser evoluido antes do motor automatico completo;
-- formulas condicionais ainda nao possuem sintaxe oficial/evaluador seguro;
+- ligar automaticamente produto -> receita especifica na UI do Plano de Corte;
+- criar modelo declarativo de variantes condicionais (ex.: mao-de-amigo/reforco) sem colocar logica opaca em string;
+- marcar formula como validada antes de permitir calculo automatico de `corte_mm`;
+- adicionar testes automatizados para o motor de formulas e regras tecnicas;
 - paginas antigas continuam no codigo, apenas fora da navegacao principal;
 - Favoritos seguem locais por dispositivo/navegador;
-- testes automatizados de regra de negocio ainda nao existem;
 - nao usar `migration repair --reverted` sem diagnostico explicito.
