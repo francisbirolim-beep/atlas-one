@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Truck } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Package, Briefcase, Pencil, Truck, Layers } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -481,6 +481,11 @@ export default function Cadastro() {
 
             <Link href="/cadastro/fornecedores" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
               <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Truck size={18} className="text-brand-navy" /> Fornecedores</span>
+              <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+            </Link>
+
+            <Link href="/cadastro/materiais" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
+              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Layers size={18} className="text-brand-navy" /> Materiais (linhas, cores, Kg alumínio)</span>
               <ChevronDown size={16} className="-rotate-90 text-slate-300" />
             </Link>
 
