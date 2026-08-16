@@ -43,7 +43,7 @@ O arquivo `supabase/migrations/20260815100000_plano_corte_producao_v1.sql` esta 
 
 Na PR #130 esse arquivo foi corrigido para usar `public.*` explicitamente e habilitar RLS com a policy permissiva temporaria ja adotada no projeto.
 
-IMPORTANTE: o workflow `Supabase Database Control` nao aplica migration automaticamente no merge. `apply` exige `workflow_dispatch` manual com confirmacao `APPLY_PRODUCTION`. Portanto, ate confirmar uma execucao `apply` bem-sucedida, considerar as migrations do Plano de Corte **pendentes de aplicacao em producao**, mesmo com frontend deployado.
+IMPORTANTE: o workflow `Supabase Database Control` nao aplica migration automaticamente no merge. `apply` exige `workflow_dispatch` manual com confirmacao `APPLY_PRODUCTION`. ATUALIZACAO 2026-08-16: confirmado via SQL que as tabelas `planos_corte` e `plano_corte_componentes` ja existem em producao -- o apply ja foi executado com sucesso em algum momento. Este paragrafo ficou obsoleto e foi mantido so como historico do raciocinio.
 
 ## PR #130 — RECEITAS ORIENTADAS A PRODUTO
 Implementado na branch:
@@ -106,8 +106,8 @@ Integracao live continua bloqueada ate haver credenciais/ambiente de teste e sch
 ## IMPLEMENTADO MAS AINDA PRECISA VALIDACAO DE USO
 - navegacao/Favoritos da PR #129 no iPhone;
 - Configuracoes -> Orcamento e PDF com dados reais da empresa;
-- Plano de Corte V1 depois de aplicar as migrations de banco;
-- receitas por produto da PR #130 depois do apply da migration;
+- Plano de Corte V1 (migrations ja aplicadas, confirmado 2026-08-16 -- falta validacao de uso real);
+- receitas por produto da PR #130 (migration ja aplicada, confirmado 2026-08-16 -- falta validacao de uso real);
 - Medicao Final parcial/tempo/historico em campo;
 - persistencia dos quatro SIM/NAO, observacao, fotos e medidas em uso real.
 
@@ -119,3 +119,7 @@ Integracao live continua bloqueada ate haver credenciais/ambiente de teste e sch
 - paginas antigas continuam no codigo, apenas fora da navegacao principal;
 - Favoritos seguem locais por dispositivo/navegador;
 - nao usar `migration repair --reverted` sem diagnostico explicito.
+
+
+## ATUALIZACAO -- variaveis declarativas + variantes + presets -- 2026-08-16
+Branch `francisbirolim-beep-patch-10` (ainda nao mesclada): implementa a secao "3. Variantes condicionais" do NEXT_TASK.md -- catalogo de variaveis com opcoes (`engenharia_variaveis` / `engenharia_variavel_opcoes`), vinculo por tipologia (`engenharia_tipologia_variaveis`), variantes condicionais de componente (`engenharia_componente_variantes`, resolvidas por `resolverVarianteComponente` -- comparacao de igualdade declarada, sem eval) e presets fixos salvaveis (`engenharia_variaveis_preset`). UI em `app/engenharia/receitas/page.tsx` (gestao) e `app/producao/plano-corte/page.tsx` (selects dinamicos + presets no lugar do texto livre anterior). Ver NEXT_TASK.md para detalhes e pendencias (apply da migration, PR, merge).
