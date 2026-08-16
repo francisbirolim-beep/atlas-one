@@ -1,50 +1,78 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar tecnicamente a branch `feat/limpeza-e-fluxo-operacional` e manter tudo agrupado na PR #129 enquanto o limite diario da Vercel estiver ativo.
+Fechar a ativacao e a arquitetura correta do Plano de Corte depois do merge da PR #129.
 
-## IMPLEMENTADO NA BRANCH ATUAL
-1. Navegacao diaria reduzida a Inicio, Clientes, Orcamentos, Kanban, Medicao Final, Producao e Engenharia.
-2. Sidebar desktop/Favoritos mobile simplificados e administracao separada para Master.
-3. Topbar limpa e perfil/logout funcional.
-4. Nova rota `/configuracoes/orcamento` e padrao configuravel do PDF de Orcamento Balcao.
-5. Nova etapa `/producao/plano-corte` ligada ao setor Producao junto da Medicao Final.
-6. Plano de Corte pesquisa produto cadastrado, escolhe receita tecnica, cria snapshot persistente e editavel e permite ajustar variaveis, perfis, acessorios, quantidades e corte final.
-7. Permissoes do Plano de Corte seguem o setor Producao: Master/edicao alteram; consulta visualiza; oculto bloqueia.
-8. Migration `20260815100000_plano_corte_producao_v1.sql` cria `planos_corte` e `plano_corte_componentes`.
-9. Formula nao validada nunca gera medida inventada; fica visivel como referencia e o corte final permanece para conferencia/ajuste.
+A PR #129 ja foi mergeada na `main` e o commit de merge `91d4bd97167342dfb76ca24de53947d12a7a63d0` esta com status Vercel `success`.
 
-## VALIDAR ANTES DO MERGE
-1. Build Validation verde no GitHub.
-2. Desktop/mobile: navegacao essencial e administracao separada.
-3. `/configuracoes/orcamento`: salvar/recarregar e gerar PDF com o padrao.
-4. Producao deve mostrar as etapas `Medicao Final` e `Plano de Corte`.
-5. Plano de Corte: pesquisar um produto `porta_janela_padrao`, selecionar receita, gerar snapshot e reabrir em Planos recentes.
-6. Confirmar que usuario com `consulta` em Producao nao consegue editar; `edicao` consegue; `oculto` nao acessa.
-7. Trocar um perfil/acessorio do snapshot e confirmar que a receita tecnica original nao e alterada.
-8. Confirmar que Medicao Final oficial continua em `/producao/medicao-final`.
-9. Nao mergear apenas para testar producao enquanto a Vercel estiver bloqueada por quota diaria.
+## BLOQUEIO OPERACIONAL IMEDIATO — BANCO
+A migration `20260815100000_plano_corte_producao_v1.sql` passou no dry-run, mas o workflow nao aplica migration automaticamente no merge.
 
-## PROXIMA EVOLUCAO DO PLANO DE CORTE
-- cadastrar/validar receitas reais por tipologia, comecando por Porta de Correr 3 Folhas;
-- definir sintaxe oficial das formulas de quantidade/corte e variaveis aceitas;
-- so depois ativar calculo automatico dos comprimentos;
-- adicionar lista de barras/perfis, otimizacao de barras e aproveitamento de sobras;
-- gerar PDF/romaneio de producao com desenho tecnico do perfil quando houver imagem validada;
-- vincular futuramente o plano diretamente a obra/Medicao Final/Engenharia liberada.
+Para ativar as tabelas em producao e necessario executar manualmente o workflow `Supabase Database Control` com:
+- mode: `apply`
+- confirmation: `APPLY_PRODUCTION`
 
-## BLOQUEIOS REAIS
-### Vercel
-Plano Hobby atingiu >100 deployments em 24h. Esperar a janela liberar antes do proximo deploy de producao; manter mudancas agrupadas.
+Nao declarar o Plano de Corte persistente como validado antes de confirmar esse apply com sucesso.
 
-### W.Vetro API
-Para chamadas live ainda faltam credenciais/ambiente de teste e schemas reais. Integracao deve ser server-side, inicialmente somente leitura e sem adivinhar campos.
+## REVISAO TECNICA JA FEITA
+Foi analisada a Porta de Correr 03 Folhas Moveis | Suprema (`*SUCB-PC3-01EF`) usando relatorios W.Vetro reais da biblioteca do usuario.
+
+Documento: `docs/tecnico/receitas/porta-correr-3f-suprema.md`.
+
+Conclusao importante: largura da folha muda com a configuracao de mao-de-amigo/reforco mesmo quando o vao e igual. Portanto, nao implementar uma formula unica de largura de folha para toda `porta_correr`.
+
+## PROXIMA EVOLUCAO DO SCHEMA DE RECEITAS
+A estrutura atual de `engenharia_receitas` permite uma unica receita ativa por `tipologia_id`. Isso e insuficiente para produtos diferentes como porta 2F, 3F, 4F, 5F e linhas distintas.
+
+Evoluir sem quebrar o que existe:
+1. permitir receita vinculada a produto cadastrado;
+2. manter receita generica por tipologia apenas como fallback;
+3. produto deve sugerir/carregar automaticamente sua receita ativa no Plano de Corte;
+4. permitir variantes condicionadas pelas variaveis do plano;
+5. preservar snapshot do plano sem alterar receita mestre.
+
+## MOTOR DE FORMULAS — ORDEM CORRETA
+1. Definir sintaxe oficial e restrita (sem `eval`).
+2. Definir variaveis aceitas: largura, altura, quantidade, folgas, folhas e opcoes tecnicas.
+3. Suportar condicoes/variantes de perfil de forma declarativa.
+4. Validar cada formula contra pelo menos duas amostras reais da mesma configuracao quando a geometria puder variar.
+5. Somente depois calcular automaticamente `corte_mm`.
+6. Mostrar origem da formula e permitir override somente para Master/edicao.
+
+## PORTA 3F SUPREMA — O QUE JA PODE SER USADO COMO CANDIDATO FORTE
+- SU010 = largura - 30;
+- TMC = largura - 30;
+- SU012 = altura - folga_altura (4 mm nas amostras);
+- montantes verticais da folha = altura - 34;
+- SU102 vertical = altura - 185;
+- vidro altura = altura - 167;
+- MP347 face interna observado: horizontal = largura + 44; vertical = altura + 22.
+
+Ainda NAO automatizar largura de folha/vidro ate validar amostras suficientes por variante de mao-de-amigo/reforco.
+
+## DEPOIS DA RECEITA 3F
+- cadastrar acessorios e quantidades reais;
+- regras de usinagem;
+- lista de barras/perfis;
+- otimizacao em barras de 6 m;
+- reaproveitamento de sobras;
+- PDF/romaneio de producao com desenho tecnico validado do perfil;
+- vincular plano a obra/Medicao Final/Engenharia liberada.
+
+## VALIDACOES DE CAMPO PARALELAS
+- Medicao Final: parcial, tempo, historico, seis medidas, fotos e SIM/NAO;
+- Configuracoes -> Orcamento: salvar/recarregar e validar PDF real;
+- mobile: navegacao essencial/Favoritos/Voltar/Inicio.
+
+## W.VETRO API
+Chamadas live ainda dependem de credenciais/ambiente de teste e schemas reais. Integracao server-side, inicialmente somente leitura, sem adivinhar campos.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
 - Nunca commitar direto na `main`; branch -> PR -> Build Validation -> merge.
-- A unica Medicao Final operacional deve ser `/producao/medicao-final`.
-- Plano de Corte deve derivar de produto/receita cadastrados, sem inventar perfis, acessorios ou formulas.
-- Alteracoes do plano sao snapshot da producao e nao devem modificar silenciosamente a receita mestre.
+- A unica Medicao Final operacional e `/producao/medicao-final`.
+- Plano de Corte parte do produto cadastrado e usa receita/variantes validadas.
+- Snapshot nunca deve modificar silenciosamente a receita mestre.
+- Formula nao validada nao gera medida.
 - PDF W.Vetro original deve ser preservado.
-- Credenciais W.Vetro nunca devem ficar no browser.
+- Credenciais W.Vetro nunca ficam no browser.
