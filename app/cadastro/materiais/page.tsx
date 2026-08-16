@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Plus, Layers, Palette, Weight, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Plus, Layers, Palette, Weight, ShieldAlert, PaintBucket } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import {
@@ -13,12 +13,15 @@ import {
 import {
   listarCores,
   criarCor,
+  atualizarCor,
   alternarAtivoCor,
   excluirCor,
 } from '@/lib/cores'
 import {
   lerPrecoKgAluminio,
   salvarPrecoKgAluminio,
+  lerCustoPinturaKg,
+  salvarCustoPinturaKg,
 } from '@/lib/configuracoesPrecificacao'
 import { Linha, Cor } from '@/lib/tipos'
 
@@ -33,11 +36,16 @@ export default function Materiais() {
   const [cores, setCores] = useState<Cor[]>([])
   const [novaCor, setNovaCor] = useState('')
   const [novaCorPeso, setNovaCorPeso] = useState('')
+  const [novaCorPintura, setNovaCorPintura] = useState(false)
   const [salvandoCor, setSalvandoCor] = useState(false)
 
   const [precoKg, setPrecoKg] = useState('')
   const [salvandoPreco, setSalvandoPreco] = useState(false)
   const [precoSalvo, setPrecoSalvo] = useState(false)
+
+  const [custoPintura, setCustoPintura] = useState('')
+  const [salvandoCustoPintura, setSalvandoCustoPintura] = useState(false)
+  const [custoPinturaSalvo, setCustoPinturaSalvo] = useState(false)
 
   useEffect(() => {
     carregar()
@@ -52,6 +60,8 @@ export default function Materiais() {
       setCores(await listarCores())
       const preco = await lerPrecoKgAluminio()
       setPrecoKg(String(preco || ''))
+      const custoPint = await lerCustoPinturaKg()
+      setCustoPintura(String(custoPint || ''))
     }
     setCarregando(false)
   }
@@ -83,15 +93,21 @@ export default function Materiais() {
     if (!novaCor.trim()) return
     setSalvandoCor(true)
     const peso = novaCorPeso.trim() ? parseFloat(novaCorPeso.replace(',', '.')) : null
-    await criarCor(novaCor.trim(), peso)
+    await criarCor(novaCor.trim(), peso, novaCorPintura)
     setNovaCor('')
     setNovaCorPeso('')
+    setNovaCorPintura(false)
     setCores(await listarCores())
     setSalvandoCor(false)
   }
 
   async function alternarCor(c: Cor) {
     await alternarAtivoCor(c.id, !c.ativo)
+    setCores(await listarCores())
+  }
+
+  async function alternarPinturaCor(c: Cor) {
+    await atualizarCor(c.id, { pintura: !c.pintura })
     setCores(await listarCores())
   }
 
@@ -111,6 +127,17 @@ export default function Materiais() {
     setSalvandoPreco(false)
     setPrecoSalvo(true)
     setTimeout(() => setPrecoSalvo(false), 2500)
+  }
+
+  async function salvarCustoPintura(e: React.FormEvent) {
+    e.preventDefault()
+    const valor = parseFloat(custoPintura.replace(',', '.'))
+    if (isNaN(valor) || valor < 0) return
+    setSalvandoCustoPintura(true)
+    await salvarCustoPinturaKg(valor)
+    setSalvandoCustoPintura(false)
+    setCustoPinturaSalvo(true)
+    setTimeout(() => setCustoPinturaSalvo(false), 2500)
   }
 
   if (carregando) {
@@ -145,7 +172,7 @@ export default function Materiais() {
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <section className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
-            <Weight size={16} /> Preço do Kg do alumínio
+            <Weight size={16} /> Preço do Kg do alumínio natural
           </h2>
           <form onSubmit={salvarPreco} className="flex gap-2 items-center">
             <span className="text-slate-500 text-sm">R$</span>
@@ -166,7 +193,33 @@ export default function Materiais() {
             </button>
             {precoSalvo && <span className="text-brand-teal text-xs">Preço salvo.</span>}
           </form>
-          <p className="text-xs text-slate-400 mt-2">Usado para calcular o custo de perfis de alumínio por peso.</p>
+          <p className="text-xs text-slate-400 mt-2">Usado para calcular o custo de perfis de alumínio natural por peso.</p>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
+            <PaintBucket size={16} /> Custo adicional de pintura (R$/Kg)
+          </h2>
+          <form onSubmit={salvarCustoPintura} className="flex gap-2 items-center">
+            <span className="text-slate-500 text-sm">R$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={custoPintura}
+              onChange={e => setCustoPintura(e.target.value)}
+              placeholder="0,00"
+              className="w-32 border border-slate-300 rounded-xl p-2.5 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={salvandoCustoPintura}
+              className="px-4 py-2.5 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+            >
+              {salvandoCustoPintura ? 'Salvando...' : 'Salvar'}
+            </button>
+            {custoPinturaSalvo && <span className="text-brand-teal text-xs">Custo salvo.</span>}
+          </form>
+          <p className="text-xs text-slate-400 mt-2">Somado ao preço do Kg do alumínio natural para cores marcadas como "Pintura" abaixo.</p>
         </section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6">
@@ -218,7 +271,7 @@ export default function Materiais() {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
             <Palette size={16} /> Cores
           </h2>
-          <form onSubmit={adicionarCor} className="flex gap-2 mb-4">
+          <form onSubmit={adicionarCor} className="flex flex-wrap gap-2 mb-4 items-center">
             <input
               type="text"
               value={novaCor}
@@ -234,6 +287,14 @@ export default function Materiais() {
               placeholder="Kg/metro — opcional"
               className="w-36 border border-slate-300 rounded-xl p-2.5 text-sm"
             />
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={novaCorPintura}
+                onChange={e => setNovaCorPintura(e.target.checked)}
+              />
+              Pintura
+            </label>
             <button
               type="submit"
               disabled={salvandoCor}
@@ -249,12 +310,22 @@ export default function Materiais() {
               {cores.map(c => (
                 <div key={c.id} className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2 text-sm">
                   <div className="min-w-0">
-                    <p className={c.ativo ? 'font-medium text-slate-800' : 'font-medium text-slate-400 line-through'}>{c.nome}</p>
+                    <p className={c.ativo ? 'font-medium text-slate-800' : 'font-medium text-slate-400 line-through'}>
+                      {c.nome}
+                      {c.pintura && (
+                        <span className="ml-2 text-[10px] font-normal bg-brand-navyLight text-brand-navy px-2 py-0.5 rounded-full align-middle">
+                          Pintura
+                        </span>
+                      )}
+                    </p>
                     <p className="text-slate-400 text-xs">
                       {c.peso_kg_metro ? c.peso_kg_metro + ' kg/metro' : 'Sem peso cadastrado'}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
+                    <button onClick={() => alternarPinturaCor(c)} className="text-xs text-slate-500 hover:underline">
+                      {c.pintura ? 'Marcar natural' : 'Marcar pintura'}
+                    </button>
                     <button onClick={() => alternarCor(c)} className="text-xs text-slate-500 hover:underline">
                       {c.ativo ? 'Desativar' : 'Ativar'}
                     </button>
