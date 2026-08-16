@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Plus, Pencil, Package, ShieldAlert, Image as ImageIcon, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Package, ShieldAlert, Image as ImageIcon, ChevronDown, ChevronUp, Receipt, Tag } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import {
@@ -336,10 +336,13 @@ export default function Produtos() {
             <ArrowLeft size={20} />
           </Link>
           <Package size={22} className="text-brand-navy" />
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-800">Produtos</h1>
             <p className="text-sm text-slate-500">Catálogo, custo, margem e impostos</p>
           </div>
+          <Link href="/cadastro/produtos/precificacao" className="flex items-center gap-1.5 text-xs font-medium text-brand-navy border border-brand-navy rounded-lg px-3 py-1.5 hover:bg-brand-navyLight transition">
+            <Tag size={14} /> Precificar em lote
+          </Link>
         </div>
       </header>
 
