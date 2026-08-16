@@ -141,3 +141,68 @@ Limitacoes e cuidados desta extracao:
 - `linhas` populada com as 38 linhas reais extraidas do Wvetro anteriormente (ver secao de extracao historica acima);
 - PR #134 mergeado em main; migration aplicada em producao via workflow `Supabase Database Control` (mode=apply, run #51, sucesso);
 - pendente: (a) selects de Linha/Cor no formulario de produto (`app/cadastro/produtos/page.tsx`) ainda nao existem -- os campos `linha_id`/`cor_id` ja estao no schema e em `lib/tipos.ts` mas nada na tela os usa ainda; (b) precificacao de acessorios (392 produtos importados do Wvetro com preco=0) ainda depende de edicao manual produto a produto -- nao ha tela de precificacao em lote.
+
+
+## Identidade tecnica de Produto (perfis/acessorios W.Vetro) -- 2026-08-16
+Branch `feat/produtos-identidade-tecnica-wvetro`. Auditoria completa em
+`docs/tecnico/auditoria-produtos-2026-08-16.md` (1.700 produtos: 1.405 OK,
+14 ATENCAO, 281 REVISAR -- nenhuma duplicidade de codigo). Divergencia
+encontrada e registrada nesse mesmo documento: `ExportWWAcessorios`
+(~1.174 linhas) nunca foi enviado/importado nesta conversa -- so os 392
+acessorios da extracao historica via API existem hoje.
+
+Implementado:
+- migration `20260816180000_produtos_identidade_tecnica_v1.sql`: colunas
+  `codigo`/`codigo_origem`/`origem`/`id_externo_wvetro` (identidade tecnica),
+  `peso_kg_m`/`tamanho_barra_mm`/`tamanho_barra_mm_origem` (dados de perfil),
+  `dados_origem jsonb` (snapshot congelado dos valores importados),
+  `status_validacao` (importado/revisado/validado) + `validado_em/_por_id/_por_nome`
+  + `observacao_validacao`, `ncm_origem`/`ncm_status` (pendente/valido/invalido,
+  sem corrigir o numero do NCM), tabela `produto_linhas` (N:N produto<->linha,
+  RLS permissiva igual ao padrao do projeto), unique index parcial em
+  `upper(codigo)` (seguro pois a auditoria confirmou 0 duplicidade), e backfill
+  simples via `UPDATE ... SET codigo = split_part(nome, ' - ', 1)` (sem
+  depender de lista externa de valores) para os 1.699 produtos com padrao
+  "CODIGO - DESCRICAO" em `nome`;
+- `scripts/auditoria-produtos-wvetro.sql`: script reutilizavel (rodar de novo
+  apos qualquer nova importacao) que classifica cada produto em OK/ATENCAO/REVISAR
+  sem corrigir nada automaticamente;
+- `lib/tipos.ts` (`Produto`) e `lib/produtos.ts` (`criarProduto`/`atualizarProduto`):
+  todos os campos novos adicionados como opcionais, compativel com o formulario
+  atual sem quebrar nada;
+- `lib/produtoLinhas.ts`: CRUD do vinculo N:N produto<->linha (ainda nao usado
+  por nenhuma tela -- ver NEXT_TASK.md);
+- `app/cadastro/produtos/page.tsx`: campo de busca por codigo/nome/descricao
+  acima da lista de produtos cadastrados, e badge com o codigo ao lado do nome
+  em cada card (usa `produto.codigo` quando existir, com fallback para o
+  prefixo de `nome` antes de " - " enquanto a migration nao for aplicada em
+  producao).
+
+Decisoes de arquitetura tomadas nesta implementacao (ver DECISIONS.md para o
+detalhe/motivo):
+- `dados_origem jsonb` na propria tabela `produtos` (nao uma tabela
+  `produto_origens` separada) -- mais simples e consistente com o padrao leve
+  ja usado no projeto; documentado como trade-off deliberado.
+- `marca` ja cumpre o papel de "fabricante" do pedido original -- nao foi
+  criada coluna duplicada. `codigo_fabricante` e `perda_percentual` tambem nao
+  foram criados por falta de dado de origem distinto / necessidade concreta.
+- Codigo tecnico ("CODIGO - DESCRICAO" em `nome`) ja aparecia em todo lugar que
+  renderiza `produto.nome` (selects de Engenharia > Receitas e Plano de Corte)
+  -- confirmado lendo `app/producao/plano-corte/page.tsx` e
+  `app/engenharia/receitas/page.tsx`. Por isso o item "codigo tecnico deve
+  aparecer em Engenharia/Plano de Corte" do pedido ja estava satisfeito e
+  nenhuma mudanca foi necessaria ali.
+
+Pendente antes de declarar isso ativo em producao:
+- aplicar `supabase/migrations/20260816180000_produtos_identidade_tecnica_v1.sql`
+  via `Supabase Database Control` (`apply` + `APPLY_PRODUCTION`);
+- backfill de `tamanho_barra_mm`/`tamanho_barra_mm_origem` a partir da coluna
+  "Tamanho" de `ExportWWPerfil (1).xlsx` **nao foi commitado nesta PR** (ficou
+  fora por tamanho/escopo -- e uma segunda migration de ~1.300 linhas de
+  `VALUES`, gerabel a qualquer momento a partir do mesmo arquivo ja usado para
+  peso/NCM/unidade/fabricante);
+- vincular `produto_linhas` a alguma UI (hoje so existe o CRUD em
+  `lib/produtoLinhas.ts`, nada na tela usa ainda);
+- quando `ExportWWAcessorios` for enviado, reusar a mesma estrutura
+  (`codigo`/`origem`/`dados_origem`/`ncm_status`) -- e nao tratar "GERAL"
+  (linha) nem codigos de cor numericos como vinculo tecnico automatico.
