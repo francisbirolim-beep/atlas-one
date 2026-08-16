@@ -24,9 +24,23 @@ const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
   { prefixo: '/historico', titulo: 'Histórico', grupo: 'Administração' },
 ]
 
+const PAGINAS: { id: string; titulo: string; subtitulo: string; href: string; termos: string[] }[] = [
+  { id: 'pagina-inicio', titulo: 'Início', subtitulo: 'Painel de Gestão', href: '/', termos: ['inicio', 'painel', 'home', 'dashboard'] },
+  { id: 'pagina-clientes', titulo: 'Clientes', subtitulo: 'Página · Clientes', href: '/clientes', termos: ['clientes', 'cliente'] },
+  { id: 'pagina-orcamentos', titulo: 'Orçamentos', subtitulo: 'Página · Pesquisar orçamentos', href: '/orcamento/pesquisar', termos: ['orcamento', 'orcamentos', 'orçamento'] },
+  { id: 'pagina-kanban', titulo: 'Kanban', subtitulo: 'Página · Funil comercial', href: '/kanban', termos: ['kanban', 'funil'] },
+  { id: 'pagina-medicao-final', titulo: 'Medição Final', subtitulo: 'Página · Medições', href: '/producao/medicao-final', termos: ['medicao final', 'medicao', 'medida'] },
+  { id: 'pagina-producao', titulo: 'Produção', subtitulo: 'Página · Produção', href: '/producao', termos: ['producao'] },
+  { id: 'pagina-engenharia', titulo: 'Engenharia', subtitulo: 'Página · Receitas e plano de corte', href: '/engenharia', termos: ['engenharia', 'receita', 'plano de corte'] },
+  { id: 'pagina-cadastro', titulo: 'Cadastro', subtitulo: 'Página · Linhas, cores, materiais, produtos, fornecedores', href: '/cadastro', termos: ['cadastro', 'linhas', 'cores', 'materiais', 'produtos', 'fornecedores', 'aluminio', 'alumínio', 'kg', 'pintura'] },
+  { id: 'pagina-setores', titulo: 'Setores', subtitulo: 'Página · Setores do sistema', href: '/setores', termos: ['setores', 'setor'] },
+  { id: 'pagina-configuracoes', titulo: 'Configurações', subtitulo: 'Página · Configurações gerais', href: '/configuracoes', termos: ['configuracoes', 'config', 'ajustes'] },
+  { id: 'pagina-padrao-orcamento', titulo: 'Padrão do Orçamento', subtitulo: 'Página · Configurações de orçamento', href: '/configuracoes/orcamento', termos: ['padrao do orcamento', 'padrao orcamento', 'modelo de orcamento'] },
+]
+
 type ResultadoBusca = {
   id: string
-  tipo: 'cliente' | 'orcamento' | 'medicao'
+  tipo: 'cliente' | 'orcamento' | 'medicao' | 'pagina'
   titulo: string
   subtitulo: string
   href: string
@@ -40,6 +54,7 @@ function iniciais(nome?: string | null) {
 function IconeResultado({ tipo }: { tipo: ResultadoBusca['tipo'] }) {
   if (tipo === 'cliente') return <UserRound size={16} />
   if (tipo === 'medicao') return <MapPin size={16} />
+  if (tipo === 'pagina') return <Sparkles size={16} />
   return <FileText size={16} />
 }
 
@@ -107,6 +122,11 @@ export default function AppTopbar() {
           encontrados.push({ id: `medicao-${m.id}`, tipo: 'medicao', titulo: `MEDIÇÃO — ${m.cliente_nome || 'SEM CLIENTE'}`, subtitulo: [m.endereco, m.cidade].filter(Boolean).join(' · '), href: `/producao/medicao-final/${m.id}` })
         }
       }
+
+      const paginasEncontradas: ResultadoBusca[] = PAGINAS
+        .filter(p => bateBusca(q, p.titulo, p.href, ...p.termos))
+        .map(p => ({ id: p.id, tipo: 'pagina' as const, titulo: p.titulo, subtitulo: p.subtitulo, href: p.href }))
+      encontrados.unshift(...paginasEncontradas)
 
       setResultados(encontrados.slice(0, 16))
       setBuscando(false)
