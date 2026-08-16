@@ -26,7 +26,7 @@ Entrada automatica apos Medicao Final aprovada, rota `/engenharia`, conferencia 
 Fotos de campo, leitura por IA da trena, correcao Baixo/Cima, anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual.
 
 ## Medicao Final — importacao W.Vetro — PRs #112 a #118 — 2026-08-14
-Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao do original e correcoes do parser.
+Importacao direta em `Nova medicao`, suporte a PDFs sem dimensoes, preservacao do original e correcoes do parser.
 
 ## Medicao Final — medidas e fluxo — PRs #119 a #122 — 2026-08-14
 - 3 larguras + 3 alturas fixas por peca;
@@ -51,44 +51,69 @@ Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao
 - Home passa a mostrar Hero, Favoritos e Resumo da operacao;
 - agenda/tarefas/calendario e acoes duplicadas deixam de poluir a Home, sem excluir rotas ou dados.
 
-## Navegacao operacional essencial — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
-- lista diaria reduzida a Inicio, Clientes, Orcamentos, Kanban, Medicao Final, Producao e Engenharia;
-- Sidebar desktop simplificada;
-- administracao separada para Master;
-- Favoritos mobile mostra apenas areas essenciais;
-- topbar remove botoes sem funcao real e perfil ganha menu funcional/logout.
+## PR #129 — navegacao, orcamento/PDF e Plano de Corte — 2026-08-15
+Mergeada em `main` no commit `91d4bd97167342dfb76ca24de53947d12a7a63d0`; status Vercel do commit: success.
 
-## Configuracoes -> Orcamento e PDF — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
-- nova rota `/configuracoes/orcamento` exclusiva para Master;
-- usa `configuracoes_gerais`, sem migration;
-- configura titulo, validade, foto, preco unitario, assinatura, observacao e rodape;
-- validade padrao = 7 dias;
+Navegacao:
+- lista diaria reduzida a Inicio, Clientes, Orcamentos, Kanban, Medicao Final, Producao e Engenharia;
+- Sidebar/Favoritos simplificados;
+- administracao separada para Master;
+- topbar limpa e perfil/logout funcional.
+
+Orcamento/PDF:
+- `/configuracoes/orcamento` exclusiva para Master;
+- titulo, validade, foto, preco unitario, assinatura, observacao e rodape configuraveis;
 - PDF de Orcamento Balcao aplica o padrao salvo.
 
-## Producao -> Plano de Corte V1 — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
-- nova rota `/producao/plano-corte` e novo atalho no setor Producao ao lado da Medicao Final;
-- pesquisa produtos cadastrados como `porta_janela_padrao`;
-- seleciona uma tipologia com receita tecnica da Engenharia;
-- gera snapshot persistente e editavel da receita para cada plano, sem alterar a receita mestre;
-- variaveis: largura, altura, quantidade, folgas, linha, folhas, montagem, trilho, contramarco, arremate, fechadura, puxador, mao amiga, travessas e roldana;
-- permite substituir perfil/acessorio por produto tecnico cadastrado, ajustar quantidade, unidade e corte final;
-- formulas da receita sao exibidas; resultado automatico so deve existir depois de validacao da formula real da tipologia;
-- permissao segue o setor Producao: Master/edicao podem alterar; consulta apenas visualiza; oculto bloqueia;
-- migration cria `planos_corte` e `plano_corte_componentes`.
+Plano de Corte V1:
+- `/producao/plano-corte` e atalho em Producao junto da Medicao Final;
+- pesquisa produtos `porta_janela_padrao`;
+- usa receita tecnica da Engenharia;
+- gera snapshot persistente/editavel sem alterar receita mestre;
+- variaveis de medidas, folgas e configuracao tecnica;
+- permite substituir perfil/acessorio, ajustar quantidade/unidade/corte;
+- permissao: Master/edicao altera, consulta visualiza, oculto bloqueia;
+- migration `20260815100000_plano_corte_producao_v1.sql` cria as tabelas do recurso.
+
+Observacao operacional: a migration passou no dry-run da PR, mas o workflow de banco exige `workflow_dispatch` manual com `mode=apply` e confirmacao `APPLY_PRODUCTION`. Merge/deploy do frontend nao prova que a migration foi aplicada.
+
+## PR #130 — revisao tecnica e arquitetura do Plano de Corte — 2026-08-15
+Branch `fix/pos-merge-plano-corte`.
+
+Base tecnica:
+- recuperados relatorios reais W.Vetro da Porta de Correr 03 Folhas Moveis | Suprema (`*SUCB-PC3-01EF`);
+- criado `docs/tecnico/receitas/porta-correr-3f-suprema.md` com quatro configuracoes observadas;
+- registradas formulas candidatas fortes de marco, montantes, baguete vertical, vidro e arremate;
+- demonstrado com dados reais que a largura da folha muda conforme mao-de-amigo/reforco, inclusive com o mesmo vao.
+
+Receitas por produto:
+- migration `20260815223000_receitas_por_produto_v1.sql` adiciona `produto_id` a `engenharia_receitas`;
+- preserva uma receita generica ativa por tipologia como fallback;
+- permite uma receita ativa especifica por produto;
+- `engenhariaReceitas.ts` adiciona busca/criacao por produto sem quebrar o comportamento generico existente.
+
+Motor de formulas:
+- criado `lib/formulasCorte.ts` sem `eval`/`new Function`;
+- parser aceita somente aritmetica controlada, variaveis permitidas e funcoes `abs/ceil/floor/round/min/max`;
+- formulas ainda nao preenchem `corte_mm` automaticamente; falta marcacao explicita de validacao e regras declarativas de variante.
+
+Banco/seguranca:
+- migration original do Plano de Corte corrigida para `public.*` e RLS/policy permissiva temporaria conforme o padrao atual do projeto;
+- Supabase Database Control passou no dry-run das migrations da PR #130.
+
+Decisao consolidada: Plano de Corte = **produto cadastrado + receita mestre + variaveis + snapshot editavel**. Receita especifica por produto tem prioridade; receita generica de tipologia e apenas fallback.
 
 ## W.Vetro API — estado da integracao
 A documentacao publica `Wvetro Integrations v2` foi localizada. Integracao live deve ser server-side e comecar somente leitura. Nao implementar payloads proprietarios por suposicao. Credenciais/ambiente de teste e schemas reais ainda sao prerequisitos.
 
-## Vercel — limite temporario
-- Hobby atingiu limite diario de deployments (>100/24h);
-- PR #128 de retry foi fechada sem merge;
-- trabalho atual fica agrupado na PR #129 ate a janela liberar.
-
 ## Pontos funcionais ainda pendentes
-- validar PR #129 no Build Validation apos cada bloco relevante;
-- validar visualmente menu/favoritos/configuracao de orcamento/Plano de Corte quando houver Preview/Deploy;
-- cadastrar e validar receitas reais por tipologia para ativar calculos automaticos de corte;
+- Build Validation final verde e merge da PR #130;
+- aplicar migrations do Plano de Corte/receitas por produto via workflow manual confirmado;
+- ligar selecao de produto a receita especifica automaticamente na UI;
+- adicionar metadados de validacao de formula e variantes condicionais;
+- fechar receita Porta 3F Suprema com mais amostras por variante, acessorios e usinagens;
+- validar Plano de Corte V1 no celular/desktop com banco ativo;
 - validar Medicao Final em campo;
 - validar PDF com configuracoes reais;
 - iniciar W.Vetro somente leitura quando houver credenciais/schemas de teste;
-- evoluir Plano de Corte para lista de barras, otimizacao de barras e impressao/romaneio depois das formulas validadas.
+- evoluir Plano de Corte para lista de barras, otimizacao, sobras e romaneio com desenho tecnico.
