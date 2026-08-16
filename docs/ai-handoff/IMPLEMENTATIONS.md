@@ -132,3 +132,12 @@ Limitacoes e cuidados desta extracao:
 - categoria de tipologia (porta/janela) foi inferida por palavra-chave no nome/modelo, nao validada manualmente;
 - nome de produto usa "codigo - nome" do W.Vetro; pode haver duplicatas semanticas (mesma peca, cores diferentes) nao deduplicadas por cor;
 - o token/credenciais do W.Vetro foram usados temporariamente em uma aba do browser (via extensao Chrome) porque o sandbox de execucao nao tem acesso de rede a api.wvetro.com.br (bloqueado por allowlist); a aba foi fechada ao final. Para integracao permanente, seguir a recomendacao ja existente de fazer isso server-side, sem credenciais no browser.
+
+
+## Materiais -- cadastro de Linha, Cor e preco do Kg do aluminio -- 2026-08-16
+- migration `20260816130000_linhas_cores_precificacao_v1.sql`: tabelas `linhas`, `cores` (com `peso_kg_metro`), `configuracoes_precificacao` (chave/valor, seed `preco_kg_aluminio=0`); colunas `linha_id`/`cor_id` (FK) adicionadas em `produtos`; RLS `acesso_total_temporario` igual ao padrao do projeto;
+- libs: `lib/linhas.ts`, `lib/cores.ts`, `lib/configuracoesPrecificacao.ts` (CRUD simples, mesmo padrao de `lib/fornecedores.ts`);
+- UI nova em `app/cadastro/materiais/page.tsx` (link adicionado em `app/cadastro/page.tsx`): cadastro de linhas (chips ativar/desativar/excluir), cores (nome + peso opcional kg/metro) e preco do Kg do aluminio (RS, salvar);
+- `linhas` populada com as 38 linhas reais extraidas do Wvetro anteriormente (ver secao de extracao historica acima);
+- PR #134 mergeado em main; migration aplicada em producao via workflow `Supabase Database Control` (mode=apply, run #51, sucesso);
+- pendente: (a) selects de Linha/Cor no formulario de produto (`app/cadastro/produtos/page.tsx`) ainda nao existem -- os campos `linha_id`/`cor_id` ja estao no schema e em `lib/tipos.ts` mas nada na tela os usa ainda; (b) precificacao de acessorios (392 produtos importados do Wvetro com preco=0) ainda depende de edicao manual produto a produto -- nao ha tela de precificacao em lote.
