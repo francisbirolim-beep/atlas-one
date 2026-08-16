@@ -30,3 +30,12 @@ export async function lerPrecoKgAluminio(): Promise<number> {
 export async function salvarPrecoKgAluminio(valor: number) {
   return salvarConfiguracao('preco_kg_aluminio', valor)
 }
+
+export async function lerCustoPinturaKg(): Promise<number> {
+  const valor = await lerConfiguracao('custo_pintura_kg')
+  return valor ?? 0
+}
+
+export async function salvarCustoPinturaKg(valor: number) {
+  return salvarConfiguracao('custo_pintura_kg', valor)
+}

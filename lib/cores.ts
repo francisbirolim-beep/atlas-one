@@ -8,11 +8,11 @@ export async function listarCores(somenteAtivas = false): Promise<Cor[]> {
   return (data as Cor[]) || []
 }
 
-export async function criarCor(nome: string, pesoKgMetro?: number | null) {
-  return supabase.from('cores').insert({ nome: nome.trim(), peso_kg_metro: pesoKgMetro ?? null, ativo: true })
+export async function criarCor(nome: string, pesoKgMetro?: number | null, pintura?: boolean) {
+  return supabase.from('cores').insert({ nome: nome.trim(), peso_kg_metro: pesoKgMetro ?? null, pintura: pintura ?? false, ativo: true })
 }
 
-export async function atualizarCor(id: string, dados: Partial<{ nome: string; peso_kg_metro: number | null; ativo: boolean }>) {
+export async function atualizarCor(id: string, dados: Partial<{ nome: string; peso_kg_metro: number | null; pintura: boolean; ativo: boolean }>) {
   return supabase.from('cores').update({ ...dados, updated_at: new Date().toISOString() }).eq('id', id)
 }
 
