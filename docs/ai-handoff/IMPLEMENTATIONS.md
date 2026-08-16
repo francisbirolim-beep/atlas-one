@@ -77,27 +77,42 @@ Plano de Corte V1:
 
 Observacao operacional: a migration passou no dry-run da PR, mas o workflow de banco exige `workflow_dispatch` manual com `mode=apply` e confirmacao `APPLY_PRODUCTION`. Merge/deploy do frontend nao prova que a migration foi aplicada.
 
-## Revisao pos-merge — base tecnica Porta de Correr 03 Folhas Suprema — 2026-08-15
-Foi recuperado e analisado o material W.Vetro real da biblioteca do usuario, incluindo o relatorio do orcamento 866 e outras amostras do projeto `*SUCB-PC3-01EF`.
+## PR #130 — revisao tecnica e arquitetura do Plano de Corte — 2026-08-15
+Branch `fix/pos-merge-plano-corte`.
 
-Criado `docs/tecnico/receitas/porta-correr-3f-suprema.md` com:
-- perfis observados;
-- variaveis do projeto;
-- quatro amostras reais;
-- formulas candidatas fortes de marco, montantes, baguete vertical, vidro e arremate;
-- evidencia de que a largura da folha depende da variante de mao-de-amigo/reforco.
+Base tecnica:
+- recuperados relatorios reais W.Vetro da Porta de Correr 03 Folhas Moveis | Suprema (`*SUCB-PC3-01EF`);
+- criado `docs/tecnico/receitas/porta-correr-3f-suprema.md` com quatro configuracoes observadas;
+- registradas formulas candidatas fortes de marco, montantes, baguete vertical, vidro e arremate;
+- demonstrado com dados reais que a largura da folha muda conforme mao-de-amigo/reforco, inclusive com o mesmo vao.
 
-Decisao consolidada: o motor final de Plano de Corte deve ser orientado a **produto + receita mestre + variaveis + snapshot**. Uma unica receita/formula generica por `porta_correr` nao e suficiente para automatizacao segura.
+Receitas por produto:
+- migration `20260815223000_receitas_por_produto_v1.sql` adiciona `produto_id` a `engenharia_receitas`;
+- preserva uma receita generica ativa por tipologia como fallback;
+- permite uma receita ativa especifica por produto;
+- `engenhariaReceitas.ts` adiciona busca/criacao por produto sem quebrar o comportamento generico existente.
+
+Motor de formulas:
+- criado `lib/formulasCorte.ts` sem `eval`/`new Function`;
+- parser aceita somente aritmetica controlada, variaveis permitidas e funcoes `abs/ceil/floor/round/min/max`;
+- formulas ainda nao preenchem `corte_mm` automaticamente; falta marcacao explicita de validacao e regras declarativas de variante.
+
+Banco/seguranca:
+- migration original do Plano de Corte corrigida para `public.*` e RLS/policy permissiva temporaria conforme o padrao atual do projeto;
+- Supabase Database Control passou no dry-run das migrations da PR #130.
+
+Decisao consolidada: Plano de Corte = **produto cadastrado + receita mestre + variaveis + snapshot editavel**. Receita especifica por produto tem prioridade; receita generica de tipologia e apenas fallback.
 
 ## W.Vetro API — estado da integracao
 A documentacao publica `Wvetro Integrations v2` foi localizada. Integracao live deve ser server-side e comecar somente leitura. Nao implementar payloads proprietarios por suposicao. Credenciais/ambiente de teste e schemas reais ainda sao prerequisitos.
 
 ## Pontos funcionais ainda pendentes
-- confirmar/apply da migration do Plano de Corte em producao;
+- Build Validation final verde e merge da PR #130;
+- aplicar migrations do Plano de Corte/receitas por produto via workflow manual confirmado;
+- ligar selecao de produto a receita especifica automaticamente na UI;
+- adicionar metadados de validacao de formula e variantes condicionais;
+- fechar receita Porta 3F Suprema com mais amostras por variante, acessorios e usinagens;
 - validar Plano de Corte V1 no celular/desktop com banco ativo;
-- evoluir schema de receitas para vinculo por produto/variantes mantendo fallback por tipologia;
-- definir motor de formulas restrito e seguro;
-- fechar receita real Porta de Correr 3F Suprema com mais amostras por variante e acessorios completos;
 - validar Medicao Final em campo;
 - validar PDF com configuracoes reais;
 - iniciar W.Vetro somente leitura quando houver credenciais/schemas de teste;
