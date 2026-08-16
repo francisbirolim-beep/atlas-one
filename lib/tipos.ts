@@ -579,6 +579,7 @@ export interface Cor {
   id: string
   nome: string
   peso_kg_metro?: number | null
+  pintura?: boolean
   ativo: boolean
   created_at?: string
 }
