@@ -1,7 +1,9 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar e concluir a PR #130 (`fix/pos-merge-plano-corte`), que corrige o handoff da PR #129 e prepara o Plano de Corte para receitas especificas por produto e formulas seguras.
+PR #130 ja foi mesclada em main (merged em 2026-08-16 02:17 UTC). As migrations do Plano de Corte e de receitas por produto ja estao aplicadas em producao (confirmado via SQL em 2026-08-16: tabelas planos_corte, plano_corte_componentes existem e engenharia_receitas.produto_id existe). O texto abaixo (BLOQUEIO OPERACIONAL) estava desatualizado e foi mantido apenas como historico.
+
+Agora em andamento: branch `francisbirolim-beep-patch-10` implementa a secao "3. Variantes condicionais" descrita mais abaixo -- variaveis declarativas por tipologia (com opcoes, nao texto livre), variantes condicionais nos componentes da receita e presets fixos salvaveis. Ver secao "ATUALIZACAO -- variaveis declarativas" no fim deste arquivo.
 
 ## ESTADO DA PR #130
 Implementado:
@@ -27,6 +29,8 @@ Migrations pendentes relevantes:
 - `20260815223000_receitas_por_produto_v1.sql`.
 
 Nao declarar essas estruturas como ativas no banco sem confirmar o workflow `apply` concluido com sucesso.
+
+(Historico: confirmado em 2026-08-16 que essas migrations ja estao aplicadas em producao.)
 
 ## PROXIMA IMPLEMENTACAO APOS PR #130
 ### 1. Produto -> receita automatica
@@ -108,3 +112,13 @@ Diferente do que este arquivo dizia antes ("credenciais/ambiente de teste ainda 
 Isto NAO substitui nem conflita com o trabalho de integracao live/server-side descrito acima (PR #130 e receitas por produto) -- sao objetivos diferentes. O aviso "Credenciais W.Vetro nunca ficam no browser" (secao CUIDADOS) permanece valido como norma para integracao PERMANENTE; a extracao pontual feita aqui usou o browser por necessidade tecnica (sandbox sem rede ate api.wvetro.com.br) e a aba/token foram descartados ao final.
 
 Pendente agora: revisar/precificar o catalogo de produtos importado (esta com preco 0) antes de usar em orcamento real.
+
+
+## ATUALIZACAO -- variaveis declarativas + variantes + presets -- 2026-08-16
+Implementado na branch `francisbirolim-beep-patch-10` (secao "3. Variantes condicionais" deste documento):
+- migration `20260816150000_engenharia_variantes_v1.sql`: tabelas `engenharia_variaveis`, `engenharia_variavel_opcoes`, `engenharia_tipologia_variaveis`, `engenharia_componente_variantes`, `engenharia_variaveis_preset`;
+- `lib/engenhariaVariaveis.ts`: CRUD completo + `resolverVarianteComponente` (a variante mais especifica cujas condicoes batem 100% com as variaveis escolhidas vence; sem eval, sem heuristica oculta) + `aplicarVarianteAoComponente`;
+- `app/engenharia/receitas/page.tsx`: nova secao "Variaveis desta tipologia" (vincular variavel do catalogo, criar variavel nova, criar/remover opcoes) e, por componente da receita, um painel de "Variantes condicionais" (combinacao de variaveis -> produto/formula alternativos);
+- `app/producao/plano-corte/page.tsx`: as variaveis do plano deixam de ser campo de texto livre e viram `<select>` com as opcoes cadastradas para aquela tipologia; adiciona presets fixos salvaveis (nome + marcar como padrao, pre-carrega automaticamente na proxima vez); ao gerar o plano, cada componente base passa por `resolverVarianteComponente` antes de virar snapshot -- se nenhuma variante bater, usa o componente base (nunca inventa).
+
+Pendente antes de declarar isso ativo em producao: aplicar a migration `20260816150000_engenharia_variantes_v1.sql` via `Supabase Database Control` (`apply` + `APPLY_PRODUCTION`), abrir PR, confirmar Build Validation verde, mergear. Depois do merge, o catalogo de variaveis vem vazio de vinculos (so a seed de variaveis/opcoes) -- o Master precisa entrar em Engenharia > Receitas tecnicas e vincular as variaveis certas a cada tipologia antes delas aparecerem no Plano de Corte.
