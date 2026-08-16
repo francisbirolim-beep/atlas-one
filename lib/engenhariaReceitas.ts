@@ -51,9 +51,11 @@ export async function listarTipologiasComReceita(): Promise<TipologiaComReceita[
 }
 
 export async function criarReceitaParaTipologia(tipologia: Tipologia, usuario: Usuario | null): Promise<ReceitaTecnica | null> {
+  // Nao envia produto_id aqui para manter compatibilidade mesmo antes da
+  // migration de receitas por produto. Depois da migration, o default NULL
+  // representa a receita generica/fallback da tipologia.
   const { data, error } = await supabase.from('engenharia_receitas').insert({
     tipologia_id: tipologia.id,
-    produto_id: null,
     nome: `Receita ${tipologia.label}`,
     versao: 1,
     ativo: true,
