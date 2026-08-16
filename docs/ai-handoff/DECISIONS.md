@@ -25,3 +25,17 @@ As tabelas tem RLS habilitado mas com policy permissiva total. Isso foi uma deci
 
 ## Migrations aplicadas direto no banco (sem arquivo .sql commitado)
 A partir da v16, varias migrations foram aplicadas diretamente via ferramenta MCP do Supabase (apply_migration) sem gerar um arquivo supabase-migration-v*.sql correspondente no repo. Isso e uma divida tecnica conhecida (ver CURRENT_STATE.md), nao uma recomendacao — idealmente, migrations futuras deveriam voltar a ser commitadas como arquivo .sql no repo para manter o historico completo e permitir recriar o schema do zero se necessario.
+
+## Plano de Corte: produto + receita mestre + variaveis + snapshot
+O Plano de Corte nao pode ser tratado como uma formula unica por tipologia generica. O produto cadastrado e o ponto de entrada operacional (ex.: Porta de Correr 03 Folhas Moveis | Suprema), e a receita deve considerar as variaveis que alteram geometria e componentes: linha, folhas, montagem, trilho, contramarco, arremate, fechadura, puxador, mao-de-amigo/reforcos, travessas e roldanas.
+
+Regras permanentes:
+- pesquisar/selecionar o produto cadastrado primeiro;
+- receita mestre define componentes, variantes e formulas validadas;
+- variaveis escolhem a variante correta da receita;
+- o plano de producao e um snapshot editavel da receita naquele momento;
+- alterar perfil, acessorio, folga ou corte no snapshot nao altera silenciosamente a receita mestre;
+- somente Master ou usuario com permissao de edicao em Producao pode alterar o plano; consulta apenas visualiza;
+- formula sem evidencia tecnica suficiente deve permanecer pendente, nunca gerar medida inventada.
+
+Motivo: relatorios reais do W.Vetro da Porta de Correr 03 Folhas Suprema mostraram que duas configuracoes com o mesmo vao podem gerar larguras de folha diferentes quando muda o tipo de mao-de-amigo/reforco. Portanto, uma receita apenas por `tipologia_id` e insuficiente como modelo final. A evolucao do schema deve permitir receitas/variantes orientadas ao produto e suas variaveis, preservando fallback generico quando fizer sentido.
