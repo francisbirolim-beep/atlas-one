@@ -28,64 +28,67 @@ Fotos de campo, leitura por IA da trena, correcao Baixo/Cima, anexo W.Vetro orig
 ## Medicao Final — importacao W.Vetro — PRs #112 a #118 — 2026-08-14
 Importacao direta em `Nova medição`, suporte a PDFs sem dimensoes, preservacao do original e correcoes do parser.
 
-## Medicao Final — medidas fixas e fotos da trena — PR #119 — 2026-08-14
+## Medicao Final — medidas e fluxo — PRs #119 a #122 — 2026-08-14
 - 3 larguras + 3 alturas fixas por peca;
 - foto da trena da LARGURA e ALTURA;
-- `medido=true` somente com as seis medidas positivas.
+- CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA SIM/NAO;
+- observacao por peca e lembrete da vista interna;
+- ordem por peca validada;
+- medicao parcial, cronometro ativo, historico de pausa/retomada e status FEITA/EM ABERTO.
 
-## Medicao Final — padroes SIM/NAO e vista interna — PR #120 — 2026-08-14
-- CONTRAMARCO, ARREMATE, CADEIRINHA e CANTONEIRA com SIM/NAO por peca;
-- observacao por peca;
-- lembrete para medir pela vista interna do vao.
-
-## Medicao Final — ordem do fluxo por peca — PR #121 — 2026-08-14
-- tabela SIM/NAO logo abaixo das medidas finais;
-- observacao logo depois;
-- demais campos e fotos adicionais na sequencia.
-
-## Medicao Final — parcial, tempo e historico — PR #122 — 2026-08-14
-- cronometro de tempo ativo apos inicio;
-- `Salvar medição parcial` pausa sem apagar dados;
-- `Retomar medição` continua a mesma medicao;
-- cada peca mostra `✅ FEITA` ou `EM ABERTO`;
-- historico registra inicio, parcial e retomada.
-
-## Navegacao mobile — Favoritos — PR #123 — 2026-08-14
+## Navegacao mobile — PRs #123 e #124 — 2026-08-14
 - remove barra inferior extensa no celular;
-- cria botao compacto `Favoritos`;
-- permite favoritar/desfavoritar paginas e setores;
-- Home ganha bloco `Acesso rápido / Favoritos`.
-
-## Navegacao mobile — Voltar e Inicio — PR #124 — 2026-08-14
-- fora da Home mostra `Voltar` e `Inicio`;
-- `Voltar` usa historico com fallback para `/`;
-- Favoritos permanece independente.
+- cria Favoritos;
+- adiciona Voltar e Inicio nas telas internas.
 
 ## Medicao Final — remover duplicata generica — PR #125 — 2026-08-14
 - confirma `/producao/medicao-final` como unica Medicao Final oficial;
-- filtra a entrada generica/legada das listas globais;
-- remove duplicata de Favoritos, Setores e Sidebar.
+- retira a entrada generica/legada da navegacao.
 
-## Home — limpeza de atalhos — PR #126 — 2026-08-14
-- remove do hero `Medições finais` e `Abrir operação`;
-- mantem `Novo orçamento` como unica acao principal;
-- esconde `Inicio` flutuante na propria Home.
+## Home — limpeza — PRs #126 e #127 — 2026-08-14
+- hero fica com `Novo orçamento` como acao principal;
+- remove atalhos redundantes;
+- Home passa a mostrar Hero, Favoritos e Resumo da operacao;
+- agenda/tarefas/calendario e acoes duplicadas deixam de poluir a Home, sem excluir rotas ou dados.
 
-## Home — limpeza operacional — branch `fix/limpeza-home-operacional` — 2026-08-14
-- remove da Home o bloco duplicado `Atenção necessária / Ações rápidas`;
-- deixa de renderizar na Home a agenda/calendario/tarefas legadas de `app/page.tsx`;
-- preserva essas funcionalidades em suas rotas proprias;
-- Home passa a mostrar somente Hero, Favoritos e Resumo da operação;
-- remove `Ver relatórios` do resumo central;
-- nenhuma rota, dado ou migration removidos.
+## Navegacao operacional essencial — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
+- lista diaria reduzida a Inicio, Clientes, Orcamentos, Kanban, Medicao Final, Producao e Engenharia;
+- Sidebar desktop simplificada;
+- administracao separada para Master;
+- Favoritos mobile mostra apenas areas essenciais;
+- topbar remove botoes sem funcao real e perfil ganha menu funcional/logout.
 
-## W.Vetro API — levantamento de integracao — 2026-08-14
-Endpoints mapeados para autenticacao, linhas, produto por chave, cores, vidros, pessoas/vendedores, metas, pedidos/orcamentos, compras/NF, estoque, financeiro, lotes, producao e instalacoes. Futura integracao deve ser server-side e Atlas continua fonte da verdade.
+## Configuracoes -> Orcamento e PDF — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
+- nova rota `/configuracoes/orcamento` exclusiva para Master;
+- usa `configuracoes_gerais`, sem migration;
+- configura titulo, validade, foto, preco unitario, assinatura, observacao e rodape;
+- validade padrao = 7 dias;
+- PDF de Orcamento Balcao aplica o padrao salvo.
+
+## Producao -> Plano de Corte V1 — branch `feat/limpeza-e-fluxo-operacional` — 2026-08-15
+- nova rota `/producao/plano-corte` e novo atalho no setor Producao ao lado da Medicao Final;
+- pesquisa produtos cadastrados como `porta_janela_padrao`;
+- seleciona uma tipologia com receita tecnica da Engenharia;
+- gera snapshot persistente e editavel da receita para cada plano, sem alterar a receita mestre;
+- variaveis: largura, altura, quantidade, folgas, linha, folhas, montagem, trilho, contramarco, arremate, fechadura, puxador, mao amiga, travessas e roldana;
+- permite substituir perfil/acessorio por produto tecnico cadastrado, ajustar quantidade, unidade e corte final;
+- formulas da receita sao exibidas; resultado automatico so deve existir depois de validacao da formula real da tipologia;
+- permissao segue o setor Producao: Master/edicao podem alterar; consulta apenas visualiza; oculto bloqueia;
+- migration cria `planos_corte` e `plano_corte_componentes`.
+
+## W.Vetro API — estado da integracao
+A documentacao publica `Wvetro Integrations v2` foi localizada. Integracao live deve ser server-side e comecar somente leitura. Nao implementar payloads proprietarios por suposicao. Credenciais/ambiente de teste e schemas reais ainda sao prerequisitos.
+
+## Vercel — limite temporario
+- Hobby atingiu limite diario de deployments (>100/24h);
+- PR #128 de retry foi fechada sem merge;
+- trabalho atual fica agrupado na PR #129 ate a janela liberar.
 
 ## Pontos funcionais ainda pendentes
-- Validar a Home operacional limpa no iPhone.
-- Validar Medicao Final em campo: parcial, tempo, historico, SIM/NAO, medidas e fotos.
-- Replicar parcial/campos fixos no link externo se necessario.
-- Criar `Configurações -> Orçamento` e PDF Atlas profissional.
-- Criar conector W.Vetro API somente leitura depois de credenciais/testes reais.
-- Engenharia Fase 5: receitas tecnicas, MEE, lista de materiais, lista de corte e otimizacao.
+- validar PR #129 no Build Validation apos cada bloco relevante;
+- validar visualmente menu/favoritos/configuracao de orcamento/Plano de Corte quando houver Preview/Deploy;
+- cadastrar e validar receitas reais por tipologia para ativar calculos automaticos de corte;
+- validar Medicao Final em campo;
+- validar PDF com configuracoes reais;
+- iniciar W.Vetro somente leitura quando houver credenciais/schemas de teste;
+- evoluir Plano de Corte para lista de barras, otimizacao de barras e impressao/romaneio depois das formulas validadas.

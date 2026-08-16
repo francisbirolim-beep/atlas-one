@@ -1,10 +1,6 @@
 import { supabase } from './supabase'
 import { DadosEmpresa } from './tipos'
 
-// Config geral do sistema, guardada como chave/valor. Comeca com a cor do
-// card de assistencia no painel de orcamento, mas da pra reaproveitar essa
-// tabela pra outras configuracoes soltas no futuro.
-
 const CHAVE_COR_ASSISTENCIA = 'cor_assistencia_kanban'
 const COR_ASSISTENCIA_PADRAO = '#8b5cf6'
 
@@ -24,10 +20,6 @@ export async function salvarCorAssistencia(cor: string): Promise<boolean> {
   return !error
 }
 
-// Dados da empresa: usados no cabeçalho dos PDFs.
-// Regra atual: registros antigos/seedados nao devem aparecer como se o usuario
-// tivesse configurado a empresa. Somente um salvamento feito pela tela de
-// Cadastro marca o registro como configurado manualmente.
 const CHAVE_DADOS_EMPRESA = 'dados_empresa'
 
 type DadosEmpresaPersistidos = DadosEmpresa & {
@@ -62,6 +54,70 @@ export async function salvarDadosEmpresa(dados: DadosEmpresa): Promise<boolean> 
     .upsert({
       chave: CHAVE_DADOS_EMPRESA,
       valor: JSON.stringify(dadosPersistidos),
+      updated_at: new Date().toISOString(),
+    })
+  return !error
+}
+
+export type ConfiguracaoOrcamento = {
+  tituloDocumento: string
+  validadeDias: number
+  mostrarFoto: boolean
+  mostrarPrecoUnitario: boolean
+  mostrarAssinatura: boolean
+  observacaoPadrao: string
+  rodape: string
+}
+
+export const CONFIGURACAO_ORCAMENTO_PADRAO: ConfiguracaoOrcamento = {
+  tituloDocumento: 'ORÇAMENTO',
+  validadeDias: 7,
+  mostrarFoto: true,
+  mostrarPrecoUnitario: true,
+  mostrarAssinatura: true,
+  observacaoPadrao: 'Validade da proposta: 7 dias.',
+  rodape: 'Esquadrifácio Soluções em Alumínio',
+}
+
+const CHAVE_CONFIGURACAO_ORCAMENTO = 'configuracao_orcamento'
+
+export async function lerConfiguracaoOrcamento(): Promise<ConfiguracaoOrcamento> {
+  const { data } = await supabase
+    .from('configuracoes_gerais')
+    .select('valor')
+    .eq('chave', CHAVE_CONFIGURACAO_ORCAMENTO)
+    .maybeSingle()
+
+  if (!data?.valor) return CONFIGURACAO_ORCAMENTO_PADRAO
+
+  try {
+    const salvo = JSON.parse(data.valor) as Partial<ConfiguracaoOrcamento>
+    return {
+      ...CONFIGURACAO_ORCAMENTO_PADRAO,
+      ...salvo,
+      validadeDias: Number(salvo.validadeDias || CONFIGURACAO_ORCAMENTO_PADRAO.validadeDias),
+    }
+  } catch {
+    return CONFIGURACAO_ORCAMENTO_PADRAO
+  }
+}
+
+export async function salvarConfiguracaoOrcamento(config: ConfiguracaoOrcamento): Promise<boolean> {
+  const normalizada: ConfiguracaoOrcamento = {
+    tituloDocumento: config.tituloDocumento.trim() || CONFIGURACAO_ORCAMENTO_PADRAO.tituloDocumento,
+    validadeDias: Math.max(1, Math.round(Number(config.validadeDias) || 7)),
+    mostrarFoto: Boolean(config.mostrarFoto),
+    mostrarPrecoUnitario: Boolean(config.mostrarPrecoUnitario),
+    mostrarAssinatura: Boolean(config.mostrarAssinatura),
+    observacaoPadrao: config.observacaoPadrao.trim(),
+    rodape: config.rodape.trim(),
+  }
+
+  const { error } = await supabase
+    .from('configuracoes_gerais')
+    .upsert({
+      chave: CHAVE_CONFIGURACAO_ORCAMENTO,
+      valor: JSON.stringify(normalizada),
       updated_at: new Date().toISOString(),
     })
   return !error
