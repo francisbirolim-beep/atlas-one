@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { Produto, Usuario } from './tipos'
 import type { ComponenteReceita, ReceitaTecnica, TipologiaComReceita } from './engenhariaReceitas'
+import { avaliarFormulaCorte, criarContextoFormulaCorte } from './formulasCorte'
 
 export type VariaveisPlanoCorte = {
   linha?: string
@@ -49,6 +50,8 @@ export type ComponentePlanoCorte = {
   corte_mm?: number | null
   formula_quantidade?: string | null
   formula_corte?: string | null
+  formula_quantidade_validada?: boolean
+  formula_corte_validada?: boolean
   observacao?: string | null
   ordem: number
 }
@@ -109,20 +112,42 @@ export async function criarPlanoCorte(dados: {
   }
 
   if (dados.componentesReceita.length > 0) {
-    const linhas = dados.componentesReceita.map((componente, indice) => ({
-      plano_id: plano.id,
-      receita_componente_id: componente.id,
-      tipo: componente.tipo,
-      produto_id: componente.produto_id || null,
-      nome: componente.nome,
-      unidade: componente.unidade,
-      quantidade: Number(componente.quantidade_base || 0) * Math.max(1, dados.quantidade),
-      corte_mm: null,
-      formula_quantidade: componente.formula_quantidade || null,
-      formula_corte: componente.formula_corte || null,
-      observacao: componente.observacao || null,
-      ordem: componente.ordem ?? indice,
-    }))
+    const podeCalcular = Number(dados.largura_mm) > 0 && Number(dados.altura_mm) > 0
+    const contexto = criarContextoFormulaCorte({
+      largura: dados.largura_mm,
+      altura: dados.altura_mm,
+      quantidade: dados.quantidade,
+      folga_largura: dados.folga_largura_mm,
+      folga_altura: dados.folga_altura_mm,
+      folhas: dados.variaveis.folhas == null ? 0 : String(dados.variaveis.folhas),
+    })
+
+    const linhas = dados.componentesReceita.map((componente, indice) => {
+      let corteCalculado: number | null = null
+      if (podeCalcular && componente.formula_corte_validada && componente.formula_corte) {
+        const resultado = avaliarFormulaCorte(componente.formula_corte, contexto)
+        if (resultado.ok && resultado.valor > 0) {
+          corteCalculado = Math.round(resultado.valor * 1000) / 1000
+        }
+      }
+
+      return {
+        plano_id: plano.id,
+        receita_componente_id: componente.id,
+        tipo: componente.tipo,
+        produto_id: componente.produto_id || null,
+        nome: componente.nome,
+        unidade: componente.unidade,
+        quantidade: Number(componente.quantidade_base || 0) * Math.max(1, dados.quantidade),
+        corte_mm: corteCalculado,
+        formula_quantidade: componente.formula_quantidade || null,
+        formula_corte: componente.formula_corte || null,
+        formula_quantidade_validada: Boolean(componente.formula_quantidade_validada),
+        formula_corte_validada: Boolean(componente.formula_corte_validada),
+        observacao: componente.observacao || null,
+        ordem: componente.ordem ?? indice,
+      }
+    })
     const { error: erroComponentes } = await supabase.from('plano_corte_componentes').insert(linhas)
     if (erroComponentes) console.error('Erro ao copiar componentes do plano de corte:', erroComponentes)
   }
