@@ -516,6 +516,8 @@ export interface Produto {
       peso_kg?: number | null
       marca?: string | null
       fornecedor_id?: string | null
+  linha_id?: string | null
+  cor_id?: string | null
       ncm?: string | null
       icms_percentual?: number | null
       ipi_percentual?: number | null
@@ -563,4 +565,20 @@ export interface Fornecedor {
       ativo: boolean
       criado_por_id?: string | null
       criado_por_nome?: string | null
+}
+
+
+export interface Linha {
+  id: string
+  nome: string
+  ativo: boolean
+  created_at?: string
+}
+
+export interface Cor {
+  id: string
+  nome: string
+  peso_kg_metro?: number | null
+  ativo: boolean
+  created_at?: string
 }
