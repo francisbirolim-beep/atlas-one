@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { FileText, LayoutGrid, LogOut, Settings } from 'lucide-react'
+import { Boxes, FileText, LayoutGrid, LogOut, Settings } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { GUIAS } from '@/lib/guias'
@@ -81,6 +81,14 @@ export default function Sidebar() {
             }`}
           >
             <LayoutGrid size={17} /> Setores
+          </Link>
+          <Link
+            href="/cadastro"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+              pathname.startsWith('/cadastro') ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            }`}
+          >
+            <Boxes size={17} /> Cadastro
           </Link>
         </div>
       )}
