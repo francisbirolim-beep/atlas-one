@@ -27,6 +27,12 @@ export type ComponenteReceita = {
   quantidade_base: number
   formula_quantidade?: string | null
   formula_corte?: string | null
+  formula_quantidade_validada?: boolean
+  formula_corte_validada?: boolean
+  formula_validada_em?: string | null
+  formula_validada_por_id?: string | null
+  formula_validada_por_nome?: string | null
+  evidencia_validacao?: string | null
   observacao?: string | null
   ordem: number
   created_at: string
@@ -134,9 +140,65 @@ export async function adicionarComponente(receitaId: string, dados: {
 }): Promise<ComponenteReceita | null> {
   const { data: ultimo } = await supabase.from('engenharia_receita_componentes').select('ordem').eq('receita_id', receitaId).order('ordem', { ascending: false }).limit(1)
   const ordem = ((ultimo?.[0]?.ordem as number | undefined) ?? -1) + 1
-  const { data, error } = await supabase.from('engenharia_receita_componentes').insert({ ...dados, receita_id: receitaId, ordem }).select().single()
+  const { data, error } = await supabase.from('engenharia_receita_componentes').insert({
+    ...dados,
+    receita_id: receitaId,
+    ordem,
+    formula_quantidade_validada: false,
+    formula_corte_validada: false,
+  }).select().single()
   if (error) return null
   return data as ComponenteReceita
+}
+
+export async function atualizarComponenteReceita(
+  id: string,
+  dados: Partial<Pick<ComponenteReceita,
+    | 'produto_id'
+    | 'nome'
+    | 'unidade'
+    | 'quantidade_base'
+    | 'formula_quantidade'
+    | 'formula_corte'
+    | 'formula_quantidade_validada'
+    | 'formula_corte_validada'
+    | 'formula_validada_em'
+    | 'formula_validada_por_id'
+    | 'formula_validada_por_nome'
+    | 'evidencia_validacao'
+    | 'observacao'
+  >>
+): Promise<ComponenteReceita | null> {
+  const { data, error } = await supabase
+    .from('engenharia_receita_componentes')
+    .update({ ...dados, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    console.error('Erro ao atualizar componente da receita:', error)
+    return null
+  }
+  return data as ComponenteReceita
+}
+
+export async function validarFormulasComponente(
+  componente: ComponenteReceita,
+  dados: {
+    quantidadeValidada: boolean
+    corteValidado: boolean
+    evidencia?: string | null
+  },
+  usuario: Usuario | null
+): Promise<ComponenteReceita | null> {
+  return atualizarComponenteReceita(componente.id, {
+    formula_quantidade_validada: Boolean(componente.formula_quantidade) && dados.quantidadeValidada,
+    formula_corte_validada: Boolean(componente.formula_corte) && dados.corteValidado,
+    formula_validada_em: new Date().toISOString(),
+    formula_validada_por_id: usuario?.id || null,
+    formula_validada_por_nome: usuario?.nome || null,
+    evidencia_validacao: dados.evidencia?.trim() || null,
+  })
 }
 
 export async function excluirComponente(id: string): Promise<boolean> {
