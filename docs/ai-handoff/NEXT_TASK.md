@@ -1,98 +1,81 @@
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL
-Validar e concluir a PR #130 (`fix/pos-merge-plano-corte`), que corrige o handoff da PR #129 e prepara o Plano de Corte para receitas especificas por produto e formulas seguras.
+Concluir e mergear a PR #131 depois do Build Validation final verde.
 
-## ESTADO DA PR #130
-Implementado:
-1. base tecnica real da Porta de Correr 03 Folhas Suprema em `docs/tecnico/receitas/porta-correr-3f-suprema.md`;
-2. migration `20260815223000_receitas_por_produto_v1.sql` para `engenharia_receitas.produto_id`;
-3. receita generica por tipologia preservada como fallback e receita ativa especifica por produto permitida;
-4. `engenhariaReceitas.ts` com busca/criacao de receita por produto mantendo compatibilidade pre-migration;
-5. `lib/formulasCorte.ts`, parser aritmetico restrito sem `eval`;
-6. migration original do Plano de Corte corrigida para `public.*` + RLS/policy permissiva temporaria;
-7. Supabase Database Control ja passou no dry-run das migrations da PR.
+A PR #131 implementa:
+- produto -> receita especifica automatica no Plano de Corte;
+- fallback generico por tipologia;
+- tela `/engenharia/receitas-produtos`;
+- validacao auditavel de formulas;
+- calculo automatico de `corte_mm` somente para formula validada;
+- snapshot continua editavel e independente da receita mestre.
 
-Antes do merge, confirmar Build Validation verde no head final da PR.
+## BLOQUEIO OPERACIONAL — BANCO
+As migrations passam em dry-run, mas nao sao aplicadas automaticamente.
 
-## BLOQUEIO OPERACIONAL — APPLY DO BANCO
-O workflow nao aplica migrations automaticamente no merge.
+Para ativar em producao e necessario executar manualmente `Supabase Database Control` com:
+- `mode = apply`
+- `confirmation = APPLY_PRODUCTION`
 
-Para ativar o Plano de Corte persistente e as receitas por produto em producao e necessario executar manualmente `Supabase Database Control` com:
-- mode: `apply`
-- confirmation: `APPLY_PRODUCTION`
+Migrations pendentes:
+1. `20260815100000_plano_corte_producao_v1.sql`
+2. `20260815223000_receitas_por_produto_v1.sql`
+3. `20260815224500_validacao_formulas_receitas_v1.sql`
 
-Migrations pendentes relevantes:
-- `20260815100000_plano_corte_producao_v1.sql`;
-- `20260815223000_receitas_por_produto_v1.sql`.
+Somente depois de workflow `apply` concluido com sucesso considerar o Plano de Corte persistente/receitas por produto/formulas validadas ativos no banco.
 
-Nao declarar essas estruturas como ativas no banco sem confirmar o workflow `apply` concluido com sucesso.
-
-## PROXIMA IMPLEMENTACAO APOS PR #130
-### 1. Produto -> receita automatica
-- ao selecionar produto no Plano de Corte, buscar primeiro receita ativa do `produto_id`;
-- se nao existir, oferecer fallback generico da tipologia;
-- mostrar claramente qual receita/versao esta sendo usada;
-- permitir troca manual somente para Master/edicao.
-
-### 2. Validacao formal de formulas
-Adicionar metadados de validacao na receita/componente, por exemplo:
-- `formula_validada`;
-- `formula_validada_em`;
-- `formula_validada_por_id/nome`;
-- observacao/evidencia tecnica.
-
-Somente formula marcada como validada pode preencher `corte_mm` automaticamente. Formula nao validada continua apenas como referencia.
-
-### 3. Variantes condicionais
-Criar estrutura declarativa para variantes que alteram componentes/geometria, especialmente:
-- mao-de-amigo comum/largo;
+## PROXIMA IMPLEMENTACAO DEPOIS DO APPLY
+### Variantes condicionais declarativas
+Criar estrutura propria, sem `eval`, para determinar componentes/formulas conforme variaveis do produto/plano:
+- mao-de-amigo comum ou largo;
 - reforco interno/externo;
 - fechadura;
-- roldana 100/200 kg;
+- roldana 100 kg / 200 kg;
 - contramarco;
 - arremate;
-- trilho convencional/embutido;
-- numero/montagem das folhas.
+- trilho convencional / embutido;
+- quantidade e montagem das folhas;
+- linha tecnica.
 
-Nao colocar condicoes arbitrarias em `eval` nem em scripts salvos no banco.
+A variante deve ser visivel e auditavel na receita e no snapshot.
 
-## PORTA 3F SUPREMA — BASE CANDIDATA FORTE
-Amostras reais W.Vetro suportam:
-- `SU010 = largura - 30`;
-- `TMC = largura - 30`;
-- `SU012 = altura - folga_altura` (4 mm nas amostras);
-- montantes verticais da folha = `altura - 34`;
-- SU102 vertical = `altura - 185`;
-- vidro altura = `altura - 167`;
-- MP347 face interna observado: horizontal = `largura + 44`; vertical = `altura + 22`.
+## RECEITA PRIORITARIA PARA VALIDACAO
+Porta de Correr 03 Folhas Moveis | Suprema (`*SUCB-PC3-01EF`).
 
-Ainda NAO automatizar largura da folha/vidro. Mesmo vao 2500 x 2100 gerou 771 mm e 756 mm conforme mao-de-amigo/reforco.
+Candidatas fortes ja documentadas:
+- `SU010 = largura - 30`
+- `TMC = largura - 30`
+- `SU012 = altura - folga_altura`
+- montantes verticais = `altura - 34`
+- SU102 vertical = `altura - 185`
+- vidro altura = `altura - 167`
+- MP347 face interna observado: horizontal `largura + 44`; vertical `altura + 22`
 
-## DEPOIS DA RECEITA 3F
-- acessorios e quantidades reais;
-- usinagens;
-- lista de barras/perfis;
-- otimizacao de barras de 6 m;
-- reaproveitamento de sobras;
-- PDF/romaneio de producao com desenho tecnico validado;
-- vinculo direto com obra/Medicao Final/Engenharia liberada.
+Ainda NAO validar formula unica da largura da folha/vidro. A mesma medida 2500 x 2100 produziu larguras diferentes conforme mao-de-amigo/reforco.
+
+## DEPOIS DAS VARIANTES
+- cadastrar acessorios e quantidades reais;
+- cadastrar usinagens;
+- gerar lista de barras/perfis;
+- otimizar barras de 6 m;
+- controlar reaproveitamento de sobras;
+- gerar PDF/romaneio de producao com desenho tecnico validado;
+- vincular plano diretamente a obra/Medicao Final/Engenharia liberada.
 
 ## VALIDACOES PARALELAS
-- Medicao Final: parcial, tempo, historico, seis medidas, fotos e SIM/NAO;
-- Configuracoes -> Orcamento: salvar/recarregar e validar PDF real;
-- mobile: navegacao essencial/Favoritos/Voltar/Inicio.
+- Medicao Final: parcial, tempo, historico, medidas, fotos e SIM/NAO;
+- Configuracoes -> Orcamento: PDF real;
+- mobile: navegacao/Favoritos/Voltar/Inicio.
 
-## W.VETRO API
-Chamadas live ainda dependem de credenciais/ambiente de teste e schemas reais. Integracao server-side, inicialmente somente leitura, sem adivinhar campos.
+## W.VETRO
+Integracao live continua bloqueada por credenciais/schemas reais. Quando disponivel: server-side e inicialmente somente leitura.
 
 ## CUIDADOS
 - GitHub e a unica fonte da verdade.
-- Nunca commitar direto na `main`; branch -> PR -> Build Validation -> merge.
-- A unica Medicao Final operacional e `/producao/medicao-final`.
-- Plano de Corte parte do produto cadastrado.
-- Receita especifica do produto tem prioridade; generica da tipologia e fallback.
-- Snapshot nunca modifica silenciosamente a receita mestre.
-- Formula nao validada nao gera medida.
-- PDF W.Vetro original deve ser preservado.
-- Credenciais W.Vetro nunca ficam no browser.
+- Branch -> PR -> Build Validation -> merge.
+- Formula nao validada nao gera corte.
+- Receita especifica do produto tem prioridade; tipologia e fallback.
+- Snapshot nao altera receita mestre.
+- Nunca inventar dimensao.
+- Nunca usar `eval` para formulas/variantes.
