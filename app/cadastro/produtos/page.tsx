@@ -14,8 +14,10 @@ import {
   labelCategoriaProduto,
 } from '@/lib/produtos'
 import { listarFornecedores } from '@/lib/fornecedores'
+import { listarLinhas } from '@/lib/linhas'
+import { listarCores } from '@/lib/cores'
 import { uploadFotoProduto } from '@/lib/upload'
-import { Produto, CategoriaProduto, Fornecedor } from '@/lib/tipos'
+import { Produto, CategoriaProduto, Fornecedor, Linha, Cor } from '@/lib/tipos'
 
 // Margem calculada sobre o custo: preço = custo * (1 + margem / 100).
 // As duas contas abaixo são usadas nos dois sentidos (digitou margem -> sai
@@ -46,6 +48,8 @@ interface FormProduto {
   marca: string
   peso_kg: string
   fornecedor_id: string
+  linha_id: string
+  cor_id: string
   largura_mm: string
   altura_mm: string
   descricao: string
@@ -67,6 +71,8 @@ const FORM_VAZIO: FormProduto = {
   marca: '',
   peso_kg: '',
   fornecedor_id: '',
+  linha_id: '',
+  cor_id: '',
   largura_mm: '',
   altura_mm: '',
   descricao: '',
@@ -82,6 +88,8 @@ export default function Produtos() {
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
+  const [linhas, setLinhas] = useState<Linha[]>([])
+  const [cores, setCores] = useState<Cor[]>([])
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [impostosNovoAberto, setImpostosNovoAberto] = useState(false)
@@ -106,12 +114,16 @@ export default function Produtos() {
     const me = await usuarioAtual()
     setEuSouMaster(me?.role === 'master')
     if (me?.role === 'master') {
-      const [listaProdutos, listaFornecedores] = await Promise.all([
+      const [listaProdutos, listaFornecedores, listaLinhas, listaCores] = await Promise.all([
         listarProdutos(),
         listarFornecedores(),
+        listarLinhas(),
+        listarCores(),
       ])
       setProdutos(listaProdutos)
       setFornecedores(listaFornecedores)
+      setLinhas(listaLinhas)
+      setCores(listaCores)
     }
     setCarregando(false)
   }
@@ -179,6 +191,8 @@ export default function Produtos() {
       marca: form.marca.trim() || null,
       peso_kg: form.peso_kg.trim() ? parseFloat(form.peso_kg.replace(',', '.')) : null,
       fornecedor_id: form.fornecedor_id || null,
+      linha_id: form.linha_id || null,
+      cor_id: form.cor_id || null,
       ncm: form.ncm.trim() || null,
       icms_percentual: form.icms_percentual.trim() ? parseFloat(form.icms_percentual.replace(',', '.')) : null,
       ipi_percentual: form.ipi_percentual.trim() ? parseFloat(form.ipi_percentual.replace(',', '.')) : null,
@@ -214,6 +228,8 @@ export default function Produtos() {
         marca: p.marca || '',
         peso_kg: p.peso_kg != null ? String(p.peso_kg) : '',
         fornecedor_id: p.fornecedor_id || '',
+        linha_id: p.linha_id || '',
+        cor_id: p.cor_id || '',
         largura_mm: p.largura_mm != null ? String(p.largura_mm) : '',
         altura_mm: p.altura_mm != null ? String(p.altura_mm) : '',
         descricao: p.descricao || '',
@@ -289,6 +305,8 @@ export default function Produtos() {
       marca: dados.marca.trim() || null,
       peso_kg: dados.peso_kg.trim() ? parseFloat(dados.peso_kg.replace(',', '.')) : null,
       fornecedor_id: dados.fornecedor_id || null,
+      linha_id: dados.linha_id || null,
+      cor_id: dados.cor_id || null,
       ncm: dados.ncm.trim() || null,
       icms_percentual: dados.icms_percentual.trim() ? parseFloat(dados.icms_percentual.replace(',', '.')) : null,
       ipi_percentual: dados.ipi_percentual.trim() ? parseFloat(dados.ipi_percentual.replace(',', '.')) : null,
@@ -444,6 +462,29 @@ export default function Produtos() {
                       <option value="">Fornecedor — opcional</option>
                       {fornecedores.map(f => (
                         <option key={f.id} value={f.id}>{f.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={form.linha_id}
+                      onChange={e => mudarCampo('linha_id', e.target.value)}
+                      className="border border-slate-300 rounded-xl p-3 text-sm"
+                    >
+                      <option value="">Linha — opcional</option>
+                      {linhas.map(l => (
+                        <option key={l.id} value={l.id}>{l.nome}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={form.cor_id}
+                      onChange={e => mudarCampo('cor_id', e.target.value)}
+                      className="border border-slate-300 rounded-xl p-3 text-sm"
+                    >
+                      <option value="">Cor — opcional</option>
+                      {cores.map(c => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
                       ))}
                     </select>
                   </div>
@@ -683,6 +724,29 @@ export default function Produtos() {
                           <option value="">Sem fornecedor</option>
                           {fornecedores.map(f => (
                             <option key={f.id} value={f.id}>{f.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={editForm[p.id]?.linha_id ?? ''}
+                          onChange={e => mudarCampoEdicao(p.id, 'linha_id', e.target.value)}
+                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        >
+                          <option value="">Sem linha</option>
+                          {linhas.map(l => (
+                            <option key={l.id} value={l.id}>{l.nome}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={editForm[p.id]?.cor_id ?? ''}
+                          onChange={e => mudarCampoEdicao(p.id, 'cor_id', e.target.value)}
+                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        >
+                          <option value="">Sem cor</option>
+                          {cores.map(c => (
+                            <option key={c.id} value={c.id}>{c.nome}</option>
                           ))}
                         </select>
                       </div>

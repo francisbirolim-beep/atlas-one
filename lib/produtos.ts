@@ -37,6 +37,8 @@ export async function criarProduto(dados: {
   peso_kg?: number | null
   marca?: string | null
   fornecedor_id?: string | null
+  linha_id?: string | null
+  cor_id?: string | null
   ncm?: string | null
   icms_percentual?: number | null
   ipi_percentual?: number | null
@@ -64,6 +66,8 @@ export async function atualizarProduto(
     peso_kg: number | null
     marca: string | null
     fornecedor_id: string | null
+    linha_id: string | null
+    cor_id: string | null
     ncm: string | null
     icms_percentual: number | null
     ipi_percentual: number | null
