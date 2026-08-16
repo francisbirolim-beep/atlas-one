@@ -96,3 +96,15 @@ Chamadas live ainda dependem de credenciais/ambiente de teste e schemas reais. I
 - Formula nao validada nao gera medida.
 - PDF W.Vetro original deve ser preservado.
 - Credenciais W.Vetro nunca ficam no browser.
+
+
+## ATUALIZACAO -- W.Vetro extracao historica concluida -- 2026-08-16
+Diferente do que este arquivo dizia antes ("credenciais/ambiente de teste ainda sao prerequisitos"): o usuario forneceu credenciais reais da API W.Vetro no chat e uma extracao pontual (nao recorrente) foi feita:
+- 109 tipologias novas inseridas em `tipologias` (total 120), a partir de Linha+Modelo reais de 1038 vendas/orcamentos;
+- 871 produtos inseridos em `produtos` (479 perfil + 392 acessorio) com `preco = 0` (placeholder);
+- mapeamento completo da API em `docs/ai-handoff/WVETRO_API_MAPPING.md`;
+- detalhes/limitacoes em IMPLEMENTATIONS.md, secao "W.Vetro -- extracao historica inicial".
+
+Isto NAO substitui nem conflita com o trabalho de integracao live/server-side descrito acima (PR #130 e receitas por produto) -- sao objetivos diferentes. O aviso "Credenciais W.Vetro nunca ficam no browser" (secao CUIDADOS) permanece valido como norma para integracao PERMANENTE; a extracao pontual feita aqui usou o browser por necessidade tecnica (sandbox sem rede ate api.wvetro.com.br) e a aba/token foram descartados ao final.
+
+Pendente agora: revisar/precificar o catalogo de produtos importado (esta com preco 0) antes de usar em orcamento real.

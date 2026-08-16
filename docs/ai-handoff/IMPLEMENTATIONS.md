@@ -117,3 +117,18 @@ A documentacao publica `Wvetro Integrations v2` foi localizada. Integracao live 
 - validar PDF com configuracoes reais;
 - iniciar W.Vetro somente leitura quando houver credenciais/schemas de teste;
 - evoluir Plano de Corte para lista de barras, otimizacao, sobras e romaneio com desenho tecnico.
+
+
+## W.Vetro -- extracao historica inicial (tipologias + catalogo) -- 2026-08-16
+- autenticado via ValidarUsuario com credenciais fornecidas pelo usuario diretamente no chat (nao commitadas em nenhum arquivo);
+- extraidas 1038 vendas/orcamentos reais (193 pedidos + 845 orcamentos) do periodo 2019-2026, licenca real "ESQUADRIFACIO SOLUCAO EM ALUMINIO LTDA";
+- geradas 109 tipologias novas (chave/label/categoria/ordem) a partir dos pares Linha+Modelo unicos dos itens vendidos, inseridas em `tipologias` com ON CONFLICT (chave) DO NOTHING -- total agora 120;
+- gerados 871 produtos (479 perfil + 392 acessorio) a partir dos itens unicos em Perfil[]/Acessorios[] das vendas, inseridos em `produtos` com `preco = 0` (placeholder -- API W.Vetro nao expoe lista de precos via GET);
+- mapeamento completo da API documentado em `docs/ai-handoff/WVETRO_API_MAPPING.md`.
+
+Limitacoes e cuidados desta extracao:
+- foi uma extracao pontual via script no browser (fetch direto para api.wvetro.com.br e para o REST do Supabase), nao uma integracao live/recorrente -- nao ha rota server-side nem sincronizacao automatica;
+- preco dos produtos importados esta zerado, precisa ser preenchido manualmente antes de usar em orcamento real;
+- categoria de tipologia (porta/janela) foi inferida por palavra-chave no nome/modelo, nao validada manualmente;
+- nome de produto usa "codigo - nome" do W.Vetro; pode haver duplicatas semanticas (mesma peca, cores diferentes) nao deduplicadas por cor;
+- o token/credenciais do W.Vetro foram usados temporariamente em uma aba do browser (via extensao Chrome) porque o sandbox de execucao nao tem acesso de rede a api.wvetro.com.br (bloqueado por allowlist); a aba foi fechada ao final. Para integracao permanente, seguir a recomendacao ja existente de fazer isso server-side, sem credenciais no browser.
