@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
+import { Boxes, FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
@@ -186,6 +186,9 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
                     </Link>
                     <Link href="/setores" onClick={() => setAberto(false)} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700">
                       <LayoutGrid size={17} className="text-slate-400" /> Setores
+                    </Link>
+                    <Link href="/cadastro" onClick={() => setAberto(false)} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-700">
+                      <Boxes size={17} className="text-slate-400" /> Cadastro
                     </Link>
                   </div>
                 </div>
