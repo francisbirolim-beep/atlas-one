@@ -6,6 +6,7 @@ export type TipoComponenteReceita = 'perfil' | 'acessorio' | 'vidro' | 'reforco'
 export type ReceitaTecnica = {
   id: string
   tipologia_id: string
+  produto_id?: string | null
   nome: string
   versao: number
   ativo: boolean
@@ -34,19 +35,25 @@ export type ComponenteReceita = {
 
 export type TipologiaComReceita = Tipologia & { receita: ReceitaTecnica | null }
 
+// A tela de receitas por tipologia continua usando somente a receita generica
+// (produto_id nulo/ausente). Receitas especificas de produto nao podem
+// sobrescrever o fallback da tipologia no mapa.
 export async function listarTipologiasComReceita(): Promise<TipologiaComReceita[]> {
   const [{ data: tipologias }, { data: receitas }] = await Promise.all([
     supabase.from('tipologias').select('*').order('ordem', { ascending: true }),
     supabase.from('engenharia_receitas').select('*').eq('ativo', true),
   ])
   const mapa = new Map<string, ReceitaTecnica>()
-  ;((receitas || []) as ReceitaTecnica[]).forEach(r => mapa.set(r.tipologia_id, r))
+  ;((receitas || []) as ReceitaTecnica[])
+    .filter(r => !r.produto_id)
+    .forEach(r => mapa.set(r.tipologia_id, r))
   return ((tipologias || []) as Tipologia[]).map(t => ({ ...t, receita: mapa.get(t.id) || null }))
 }
 
 export async function criarReceitaParaTipologia(tipologia: Tipologia, usuario: Usuario | null): Promise<ReceitaTecnica | null> {
   const { data, error } = await supabase.from('engenharia_receitas').insert({
     tipologia_id: tipologia.id,
+    produto_id: null,
     nome: `Receita ${tipologia.label}`,
     versao: 1,
     ativo: true,
@@ -55,6 +62,48 @@ export async function criarReceitaParaTipologia(tipologia: Tipologia, usuario: U
   }).select().single()
   if (error) {
     console.error('Erro ao criar receita técnica:', error)
+    return null
+  }
+  return data as ReceitaTecnica
+}
+
+// Receita especifica do produto tem prioridade operacional no Plano de Corte.
+// Se a migration de produto ainda nao estiver aplicada, a consulta falha de
+// forma controlada e o chamador pode continuar usando a receita generica.
+export async function buscarReceitaAtivaProduto(produtoId: string): Promise<ReceitaTecnica | null> {
+  const { data, error } = await supabase
+    .from('engenharia_receitas')
+    .select('*')
+    .eq('produto_id', produtoId)
+    .eq('ativo', true)
+    .order('versao', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('Receita por produto ainda indisponível:', error.message)
+    return null
+  }
+  return (data as ReceitaTecnica | null) || null
+}
+
+export async function criarReceitaParaProduto(
+  produto: Produto,
+  tipologia: Tipologia,
+  usuario: Usuario | null
+): Promise<ReceitaTecnica | null> {
+  const { data, error } = await supabase.from('engenharia_receitas').insert({
+    tipologia_id: tipologia.id,
+    produto_id: produto.id,
+    nome: `Receita ${produto.nome}`,
+    versao: 1,
+    ativo: true,
+    criado_por_id: usuario?.id || null,
+    criado_por_nome: usuario?.nome || null,
+  }).select().single()
+
+  if (error) {
+    console.error('Erro ao criar receita técnica do produto:', error)
     return null
   }
   return data as ReceitaTecnica
