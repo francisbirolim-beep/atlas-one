@@ -194,15 +194,18 @@ Commit de merge:
 - adicionou o script de export somente leitura dos 392 acessórios atuais;
 - manteve bloqueada qualquer importação antes da reconciliação item a item.
 
-## PR #147 — export seguro, reconciliação completa e correção de proveniência/unidade — 2026-08-16/17
-PR em aberto na branch `chore/export-acessorios-reconciliacao`.
+## PR #147 — export seguro, reconciliação completa e correção de proveniência/unidade — mergeada
+Mergeada em `main` em 2026-08-17.
+
+Commit de merge:
+`dee7af37b0bc31a024988b456e039a5beefd5cdd`
 
 Implementado/documentado:
 - workflow `Export Accessories Reconciliation`;
 - execução somente manual (`workflow_dispatch`);
 - sessão PostgreSQL forçada a `default_transaction_read_only=on`;
 - artifact temporário com o export atual do Atlas;
-- primeiro export executado com sucesso: **392 acessórios**;
+- export executado com sucesso: **392 acessórios**;
 - relatório `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`.
 
 Resultado da reconciliação por código técnico normalizado:
@@ -230,11 +233,11 @@ Não houve divergência de descrição, NCM válido/seguro ou ativo entre códig
 
 A fonte possui `Qtde Emb.`. Entre os divergentes há PT com 121/89, PC com 8 e MT com ocorrências 50/1. Isso torna inseguro copiar a unidade da origem diretamente para `produtos.unidade`.
 
-O código atual também confirmou que `produtos.unidade` é operacional: a tela de Engenharia copia essa unidade para o componente da receita quando um produto é selecionado.
+O código confirmou que `produtos.unidade` é operacional: a tela de Engenharia copia essa unidade para o componente da receita quando um produto é selecionado.
 
 ### Correção preventiva da migration ainda não aplicada
 
-A migration `20260816210000_produtos_identidade_tecnica_v1.sql` foi corrigida na própria PR #147 antes de qualquer apply:
+A migration `20260816210000_produtos_identidade_tecnica_v1.sql` foi corrigida antes de qualquer apply:
 - adiciona `unidade_origem`;
 - adiciona `qtde_embalagem_origem`;
 - mantém `produtos.unidade` como unidade operacional existente;
@@ -246,18 +249,35 @@ A migration `20260816210000_produtos_identidade_tecnica_v1.sql` foi corrigida na
 
 `lib/produtos.ts` foi expandido para aceitar os dois novos campos de origem em futuras cargas reconciliadas.
 
-O export bruto do banco, com IDs internos, não é versionado no repositório público; permanece apenas em artifact temporário. O detalhamento integral foi gerado em planilha de trabalho com abas específicas para divergentes e faltantes.
+Checks antes do merge:
+- Supabase Database Control / dry-run: success;
+- Build Validation: success;
+- Vercel: success;
+- apply em produção: não executado.
 
-Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado em produção.
+Nenhum `INSERT`, `UPDATE`, `DELETE` de dados de produto ou migration foi executado em produção nessa etapa.
+
+## PR #148 — filtro por Linha em Cadastro > Produtos — mergeada
+Mergeada em `main` em 2026-08-17.
+
+Commit de merge:
+`9427c57b794d3116a68cf6401d8542b2ac9e88af`
+
+Implementado:
+- select de Linha acima da busca textual em `Cadastro > Produtos`;
+- opção padrão `Todas as linhas`;
+- filtro por `linha_id` combinado com busca por código/nome/descrição;
+- sem alteração de schema/banco.
 
 ## Próxima etapa
 
-1. aguardar/confirmar Build Validation, Vercel e `Supabase Database Control` dry-run da PR #147;
-2. manter merge manual;
-3. após merge, decidir explicitamente o apply da migration corrigida;
+O próximo gate exige decisão explícita:
+1. decidir se aplica `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
+2. se aprovado, executar somente via `Supabase Database Control` com `APPLY_PRODUCTION`;
+3. confirmar que o schema foi realmente aplicado;
 4. com schema ativo, preparar carga dos 785 faltantes seguros em PR separada;
 5. preencher `unidade_origem`/`qtde_embalagem_origem` a partir da fonte real sem sobrescrever silenciosamente `produtos.unidade`;
-6. validar os 93 divergentes segundo uso operacional, compra/estoque e Engenharia;
+6. validar os 93 divergentes segundo uso operacional, Compras, Estoque e Engenharia;
 7. reauditar;
 8. avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
 
