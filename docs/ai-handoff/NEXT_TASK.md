@@ -118,3 +118,16 @@ A tela `Cadastro > Produtos` possui filtro por Linha combinado com a busca textu
 - snapshot não altera receita mestre;
 - fórmula não validada não gera medida;
 - credenciais W.Vetro nunca ficam no frontend/browser em integração permanente.
+
+## ORÇAMENTO — HISTÓRICO DE VERSÕES — PR #150
+
+A PR #150 já foi mergeada no commit `2e983943fab550f7e32d0adeff0806a3dae2458c`.
+
+Não refazer esta tarefa. O comportamento esperado é:
+- nova versão de orçamento gera Versão 01/02/03... com data e hora;
+- versões anteriores ficam preservadas;
+- legado sem data individual não recebe timestamp inventado;
+- reenvio individual fica registrado no histórico;
+- envio de versão nova não manda novamente os PDFs Atlas antigos.
+
+Essa melhoria não altera o próximo gate principal da base de produtos: a migration `20260816210000_produtos_identidade_tecnica_v1.sql` continua dependendo de autorização explícita para apply em produção.

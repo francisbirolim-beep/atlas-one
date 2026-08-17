@@ -171,3 +171,21 @@ Ordem por peça:
 - não usar `migration repair --reverted` sem diagnóstico explícito;
 - não inventar medidas, fórmulas, NCM, linha, cor, unidade, fator de conversão ou identificador externo;
 - credenciais W.Vetro nunca ficam no frontend/browser em integração permanente.
+
+## ORÇAMENTO — HISTÓRICO DE VERSÕES — PR #150
+
+PR #150 — **mergeada** em 2026-08-17.
+
+Commit de merge:
+`2e983943fab550f7e32d0adeff0806a3dae2458c`
+
+Implementado na tela de Editar orçamento:
+- PDFs do Atlas passam a receber numeração sequencial: Versão 01, 02, 03...;
+- cada nova versão registra data e hora no próprio título exibido no histórico de anexos;
+- versões anteriores permanecem preservadas;
+- PDFs legados sem timestamp individual são identificados como `data anterior não registrada`, sem inventar data;
+- o botão de reenviar versão/anexo continua disponível e o reenvio passa a ser registrado no histórico do orçamento;
+- ao enviar uma nova versão pelo WhatsApp, PDFs Atlas de versões anteriores não são incluídos novamente na mensagem;
+- a área de anexos em elaboração passou a se chamar `Anexos e histórico de versões`.
+
+Sem migration e sem alteração de schema/banco.

@@ -289,3 +289,18 @@ O próximo gate exige decisão explícita:
 - não inventar NCM, linha, cor, preço, custo, medida, unidade operacional, fator de conversão ou identificador externo;
 - `GERAL`, códigos numéricos de cor, unidade da fonte e Qtde Emb. permanecem dados de origem até validação de sua semântica;
 - integração W.Vetro permanente deve ser server-side, sem credenciais no browser/frontend.
+
+## ORÇAMENTO — HISTÓRICO DE VERSÕES — PR #150
+
+Mergeada em 2026-08-17.
+
+Commit de merge:
+`2e983943fab550f7e32d0adeff0806a3dae2458c`
+
+- versionamento sequencial dos PDFs gerados no Editar orçamento;
+- data/hora registrada no título de cada nova versão;
+- preservação das versões anteriores;
+- legado sem timestamp individual marcado como data anterior não registrada;
+- reenvio individual registrado no histórico;
+- envio novo por WhatsApp exclui PDFs Atlas de versões anteriores;
+- sem migration/schema change.
