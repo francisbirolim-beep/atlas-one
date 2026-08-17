@@ -1,5 +1,29 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — PERFIS W.VETRO — 2026-08-17
+
+A etapa dos acessórios W.Vetro está **concluída em produção**. Os trechos antigos deste arquivo que tratam migrations de acessórios como pendentes são históricos e não devem orientar novas ações.
+
+Estado confirmado:
+- 1.174 acessórios da fonte W.Vetro reconciliados;
+- 785 faltantes adicionados;
+- 389 preexistentes enriquecidos com proveniência;
+- 93 divergências de unidade preservadas;
+- 136 acessórios permanecem com unidade operacional pendente e fora de fluxos que exigem unidade validada;
+- 3 itens exclusivos do Atlas preservados.
+
+Próxima frente principal:
+1. localizar/usar a fonte real `ExportWWPerfil (1).xlsx`;
+2. auditar os 1.307 perfis antes de qualquer escrita;
+3. exportar o snapshot atual dos perfis Atlas em modo somente leitura;
+4. reconciliar por código técnico, separando iguais, divergentes, faltantes e exclusivos Atlas;
+5. preservar unidade, peso, tamanho de barra, linha, cor, NCM e demais campos de origem sem promover automaticamente dados não validados a verdade técnica;
+6. somente depois preparar migrations de carga em PRs pequenas, com dry-run e apply explícito em produção.
+
+Fila secundária:
+- validar humanamente a unidade operacional dos 136 acessórios pendentes;
+- nunca inferir fator de conversão a partir de `Qtde Emb.` ou unidade da fonte.
+
 ## TAREFA ATUAL
 
 A PR #147 foi mergeada em `main` no commit `dee7af37b0bc31a024988b456e039a5beefd5cdd`.
