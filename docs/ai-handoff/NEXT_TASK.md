@@ -1,5 +1,38 @@
 # NEXT_TASK.md — Atlas One
 
+## ESTADO ATUAL — PERFIS W.VETRO CONCLUÍDOS EM PRODUÇÃO — 2026-08-17
+
+A frente de perfis W.Vetro está **concluída em produção**. A migration `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` foi aplicada no run #86 (`32059852704`) com `APPLY_PRODUCTION` e `Finished supabase db push.`.
+
+Não repetir auditoria, carga ou apply dos 1.307 perfis. Os trechos históricos abaixo que dizem que a migration está pendente devem ser ignorados.
+
+Próxima frente recomendada de Produtos/Engenharia:
+1. validar humanamente a unidade operacional dos 136 acessórios que permanecem com `produtos.unidade = NULL`;
+2. manter `unidade_origem` e `qtde_embalagem_origem` como dados de proveniência, sem inferir fator de conversão;
+3. só liberar cada item para fluxos técnicos/comerciais após unidade operacional validada;
+4. em paralelo, continuar Engenharia/Plano de Corte usando apenas receitas e fórmulas tecnicamente validadas, sem inventar medidas.
+
+
+## GATE ATUAL — APLICAR PROVENIÊNCIA DOS PERFIS W.VETRO — 2026-08-17
+
+A PR #163 já foi mergeada em `main` no commit `0b4b4a145f89bd3ad52626cd23335fb7bef2043e`. O dry-run oficial do Supabase passou no run #85 (`32049150791`) e detectou somente:
+
+`20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`
+
+A migration **NÃO está aplicada em produção**. Não existe run de apply posterior ao dry-run #85.
+
+Próximo passo é um gate humano explícito:
+1. pedir autorização específica para aplicar esta migration em produção;
+2. somente após autorização, executar `Supabase Database Control` na branch `main`;
+3. `mode = apply`;
+4. `confirmation = APPLY_PRODUCTION`;
+5. acompanhar job/log até `Finished supabase db push.`;
+6. verificar pós-estado dos 1.307 perfis antes de documentar como ativo.
+
+Não interpretar mensagens genéricas como `pode continuar` como autorização deste apply.
+
+Após o apply confirmado, atualizar handoff e então seguir para a próxima frente de Produtos/Engenharia.
+
 ## TAREFA ATUAL — PROVENIÊNCIA DOS 1.307 PERFIS W.VETRO — 2026-08-17
 
 A auditoria/reconciliação da fonte `ExportWWPerfil (1)(1).xlsx` está concluída. **Não criar carga de novos perfis**: os 1.307 códigos da fonte já existem no Atlas, sem faltantes e sem exclusivos Atlas.
