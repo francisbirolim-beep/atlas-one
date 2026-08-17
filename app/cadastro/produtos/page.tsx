@@ -649,8 +649,15 @@ export default function Produtos() {
               <option key={l.id} value={l.id}>{l.nome}</option>
             ))}
           </select>
-          {produtos.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhum produto cadastrado ainda.</p>
+          {produtos.filter(p => {
+            if (filtroCategoria && p.categoria !== filtroCategoria) return false
+            if (filtroLinha && p.linha_id !== filtroLinha) return false
+            const q = busca.trim().toLowerCase()
+            if (!q) return true
+            const codigo = (p.codigo || p.nome.split(' - ')[0] || '').toLowerCase()
+            return p.nome.toLowerCase().includes(q) || codigo.includes(q) || (p.descricao || '').toLowerCase().includes(q)
+          }).length === 0 ? (
+            <p className="text-sm text-slate-400">Nenhum produto encontrado nesta categoria ou com estes filtros.</p>
           ) : (
             <div className="space-y-2">
               {produtos.filter(p => {
