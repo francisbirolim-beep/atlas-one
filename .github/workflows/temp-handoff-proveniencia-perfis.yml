@@ -1,0 +1,29 @@
+name: Temp Handoff Profiles Provenance
+
+on:
+  push:
+    branches:
+      - feat/proveniencia-perfis-wvetro
+    paths:
+      - .github/workflows/temp-handoff-proveniencia-perfis.yml
+
+permissions:
+  contents: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update handoff docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/temp_handoff_proveniencia_perfis.py
+          rm scripts/temp_handoff_proveniencia_perfis.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ai-handoff/CURRENT_STATE.md docs/ai-handoff/IMPLEMENTATIONS.md docs/ai-handoff/NEXT_TASK.md scripts/temp_handoff_proveniencia_perfis.py
+          git diff --cached --check
+          git commit -m "docs: registrar proveniência de perfis preparada"
+          git push
