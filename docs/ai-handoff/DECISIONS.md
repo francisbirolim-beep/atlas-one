@@ -39,3 +39,39 @@ Regras permanentes:
 - formula sem evidencia tecnica suficiente deve permanecer pendente, nunca gerar medida inventada.
 
 Motivo: relatorios reais do W.Vetro da Porta de Correr 03 Folhas Suprema mostraram que duas configuracoes com o mesmo vao podem gerar larguras de folha diferentes quando muda o tipo de mao-de-amigo/reforco. Portanto, uma receita apenas por `tipologia_id` e insuficiente como modelo final. A evolucao do schema deve permitir receitas/variantes orientadas ao produto e suas variaveis, preservando fallback generico quando fizer sentido.
+
+
+## Identidade tecnica de Produto: dados_origem como jsonb na propria tabela
+Para preservar "o que veio exatamente do W.Vetro antes de alguem corrigir",
+foi escolhido um campo `produtos.dados_origem jsonb` (snapshot congelado no
+momento da migration) em vez de uma tabela `produto_origens` separada.
+Motivo: e' a opcao mais simples e consistente com o padrao ja leve do projeto
+(RLS aberto, poucas camadas), e resolve o caso de uso atual (um snapshot por
+produto). Se no futuro for necessario manter *multiplas* versoes/importacoes
+por produto ao longo do tempo, isso exige evoluir para uma tabela dedicada --
+nao foi feito agora por nao haver necessidade concreta ainda.
+
+## Identidade tecnica de Produto: codigo nao substitui nome
+`produtos.codigo`/`codigo_origem` foram adicionados como colunas novas,
+extraidas do padrao ja existente "CODIGO - DESCRICAO" em `produtos.nome`.
+`nome` continua sendo a fonte visual usada em todo o app (selects de
+Engenharia/Plano de Corte, cards de Cadastro). Nao remover o codigo de dentro
+de `nome` -- isso quebraria a exibicao em varias telas que hoje dependem
+apenas de `produto.nome`.
+
+## Identidade tecnica de Produto: unique index em codigo so depois de auditar
+Antes de criar `uq_produtos_codigo_upper`, foi rodada uma auditoria completa
+confirmando 0 duplicidade de `codigo` (case-insensitive) nos 1.700 produtos
+existentes, inclusive sem colisao entre categorias diferentes (perfil vs
+acessorio). Se uma futura importacao (ex.: `ExportWWAcessorios`) revelar
+colisao, tratar como dado a revisar antes de forcar o insert -- nao relaxar o
+unique index sem entender a causa.
+
+## NCM: nunca inferir "valido" automaticamente
+`ncm_status` so e marcado `invalido` quando o valor e inequivocamente
+placeholder (`0`, vazio, `12345678`, `12345667`). Nunca e marcado `valido`
+automaticamente so por ter 8 digitos numericos -- isso nao prova correcao
+fiscal. Todo NCM que nao e claramente placeholder fica `pendente` ate revisao
+humana. Mesma logica se aplica a peso de perfil fora de faixa plausivel
+(> 50 kg): o valor nunca e alterado ou zerado, so sinalizado via
+`observacao_validacao`.
