@@ -399,3 +399,15 @@ Próxima implementação: migration apenas de proveniência dos 1.307 registros 
 - run efêmero `32048680317` executou a migration inteira sobre snapshot read-only da produção: `UPDATE 1307`, pós-checks aprovados e `COMMIT`;
 - resultado efêmero: 1.307 proveniências W.Vetro, 1.307 tamanhos de origem e 0 promoções de tamanho operacional;
 - produção permaneceu sem escrita; migration ainda não aplicada.
+
+## Perfis W.Vetro — PR #163 mergeada; dry-run oficial aprovado — 2026-08-17
+
+- PR #163 consolidou auditoria + migration de proveniência e foi mergeada em `main`;
+- merge commit `0b4b4a145f89bd3ad52626cd23335fb7bef2043e`;
+- Build Validation oficial: success;
+- Vercel Preview do head validado: success;
+- Supabase Database Control run #85 / `32049150791`: dry-run success;
+- somente `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` apareceu como pendente;
+- nenhuma migration foi aplicada pelo PR/merge;
+- #162 encerrada como substituída para não ignorar o Vercel vermelho por rate limit;
+- apply em produção segue bloqueado até autorização explícita específica.

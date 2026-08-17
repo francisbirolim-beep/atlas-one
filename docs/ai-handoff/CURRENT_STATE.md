@@ -375,3 +375,20 @@ Validação completa executada fora da produção no run `32048680317`:
 Uma primeira execução efêmera foi corretamente bloqueada por diferença de collation na ordenação do hash. A investigação comprovou 0 drift de dados; a correção foi somente tornar os dois `ORDER BY` dos hashes determinísticos com `COLLATE "C"`.
 
 Próximo gate: PR da migration + dry-run oficial. Apply em produção exige autorização explícita específica e confirmação `APPLY_PRODUCTION`.
+
+## PRODUTOS — PERFIS W.VETRO MERGEADOS; APPLY PENDENTE — 2026-08-17
+
+Estado mais recente, que substitui os gates antigos desta seção:
+- PR consolidada **#163** foi mergeada em `main`;
+- merge commit: `0b4b4a145f89bd3ad52626cd23335fb7bef2043e`;
+- a antiga PR #162 foi fechada como substituída, sem mergear seu preview Vercel vermelho;
+- o conjunto consolidado da #163 passou Build Validation, Vercel Preview e Supabase Database Control dry-run antes do merge;
+- dry-run oficial: run #85 / ID `32049150791`;
+- única migration pendente detectada: `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`;
+- log oficial confirmou `DRY RUN: migrations will *not* be pushed to the database.`;
+- etapas de confirmação e apply ficaram `skipped`;
+- nenhum run de `Supabase Database Control` posterior ao #85 apareceu após o merge, portanto a migration **continua NÃO aplicada em produção**.
+
+O preview Vercel da #163 foi `success`. O deploy de produção do merge commit foi recusado por `build-rate-limit`; esta PR não altera código executável do app, apenas documentação, export read-only e arquivo de migration. Não confundir falha de quota de deploy com falha de build da implementação.
+
+Próximo gate de banco: obter autorização explícita específica do usuário para aplicar `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` e só então executar `Supabase Database Control` em `main` com `mode=apply` e confirmação `APPLY_PRODUCTION`.
