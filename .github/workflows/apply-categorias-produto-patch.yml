@@ -1,0 +1,31 @@
+name: Apply Categorias Produto Patch
+
+on:
+  push:
+    branches:
+      - feat/categorias-produtos-dinamicas
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/categorias-produtos-dinamicas
+      - name: Apply patch
+        run: python3 scripts/patch-categorias-produto.py
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/tipos.ts lib/produtos.ts app/cadastro/page.tsx app/cadastro/produtos/page.tsx
+          git commit -m "feat: categorias dinamicas no cadastro de produtos"
+          git push origin HEAD:feat/categorias-produtos-dinamicas
