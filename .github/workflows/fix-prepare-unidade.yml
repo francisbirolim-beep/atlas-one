@@ -1,0 +1,28 @@
+name: Fix Prepare Unidade
+
+on:
+  push:
+    branches:
+      - feat/unidade-operacional-pendente
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix workflow and remove bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i '/^[[:space:]]*cache: npm$/d' .github/workflows/prepare-unidade-operacional-pendente.yml
+          sed -i 's/run: npm ci/run: npm install --no-audit --no-fund/' .github/workflows/prepare-unidade-operacional-pendente.yml
+          rm .github/workflows/fix-prepare-unidade.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "chore: ajustar validação de unidade pendente"
+          git push
