@@ -47,7 +47,7 @@ jobs:
             exit 1
           fi
           psql --version
-          test "$(sha256sum "$MIGRATION" | awk '{print $1}')" = "5e7a7973d897b0b977db39eac3fac5ccf08ae9ba3852569e7f47bb5bb5f7186a"
+          test "$(sha256sum "$MIGRATION" | awk '{print $1}')" = "cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf"
 
       - name: Build production read-only connection
         shell: bash
