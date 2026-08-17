@@ -34,6 +34,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+          for filename in (
+              'scripts/temp_generate_proveniencia_migration.py',
+              'scripts/temp_generate_proveniencia_seed.py',
+          ):
+              path = Path(filename)
+              text = path.read_text()
+              text = text.replace(
+                  'base64.b64decode(payload)',
+                  "base64.b64decode(payload + '=' * (-len(payload) % 4))",
+              )
+              path.write_text(text)
+          PY
           python scripts/temp_generate_proveniencia_migration.py
           python scripts/temp_generate_proveniencia_seed.py
           test -s supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql
