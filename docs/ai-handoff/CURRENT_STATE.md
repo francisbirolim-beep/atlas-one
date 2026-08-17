@@ -13,7 +13,7 @@ Commit de merge:
 
 Ela consolidou o handoff pós-PR #143 e iniciou formalmente a reconciliação da base completa de acessórios.
 
-## PR #147 — RECONCILIAÇÃO DE ACESSÓRIOS — EM ABERTO
+## PR #147 — RECONCILIAÇÃO / UNIDADE / PROVENIÊNCIA — EM ABERTO
 
 Branch:
 `chore/export-acessorios-reconciliacao`
@@ -30,6 +30,23 @@ A PR #147 contém:
 O primeiro export foi executado com sucesso e retornou exatamente **392 acessórios**.
 
 Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado em produção para concluir a reconciliação.
+
+## CHECKS DA CORREÇÃO TÉCNICA
+
+Commit técnico validado:
+`235d31f0b3ec900f9eb06157ab1a75cd6133de26`
+
+Resultados:
+- `Supabase Database Control`: **success**;
+- `Audit migration history`: **success**;
+- `Dry-run pending migrations`: **success**;
+- `Apply pending migrations`: **skipped**;
+- `Build Validation`: **success**;
+- `Vercel`: **success**.
+
+A migration corrigida passou no dry-run e **não foi aplicada em produção**.
+
+Commits posteriores de handoff/documentação não alteram a migration nem a lógica de produto; o gate operacional continua sendo merge manual e, depois, decisão explícita de apply.
 
 ## IDENTIDADE TÉCNICA DE PRODUTOS — MIGRATION PENDENTE E CORRIGIDA NA PR #147
 
@@ -72,8 +89,6 @@ E para alterar o backfill seguro:
 Não considerar os novos campos/tabela ativos no banco até haver execução confirmada do workflow `Supabase Database Control` com:
 - mode: `apply`;
 - confirmation: `APPLY_PRODUCTION`.
-
-Antes de qualquer apply, a versão corrigida deve passar pelo dry-run da PR #147.
 
 ## BASE W.VETRO EXISTENTE NO ATLAS
 
@@ -174,6 +189,16 @@ Portanto linha, cor e fabricante da origem devem ser preservados como dados de o
 - quando a fonte estiver confirmada, preservar `codigo_origem`, `unidade_origem`, `qtde_embalagem_origem`, `dados_origem` e então registrar `origem = wvetro`;
 - só preencher `id_externo_wvetro` com chave externa real;
 - não inventar linha, cor, NCM, fabricante, preço, custo, unidade operacional ou fator de conversão.
+
+## PRÓXIMO GATE
+
+A PR #147 deve permanecer aberta até revisão/merge manual.
+
+Depois do merge:
+1. decidir explicitamente se aplica `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
+2. apply somente via `Supabase Database Control` com `APPLY_PRODUCTION`;
+3. confirmar o apply antes de considerar os novos campos ativos;
+4. só então preparar PR separada de carga dos 785 faltantes seguros.
 
 ## PLANO DE CORTE / ENGENHARIA
 
