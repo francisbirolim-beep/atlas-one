@@ -18,20 +18,22 @@ Ela consolidou o handoff pós-PR #143 e iniciou formalmente a reconciliação da
 Branch:
 `chore/export-acessorios-reconciliacao`
 
-A PR #147 adiciona:
+A PR #147 contém:
 - workflow reutilizável de exportação dos acessórios atuais do Atlas;
 - execução manual (`workflow_dispatch`) apenas;
 - sessão PostgreSQL forçada a `default_transaction_read_only=on`;
 - artifact temporário com o CSV exportado;
-- relatório consolidado da reconciliação em `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`.
+- relatório consolidado da reconciliação em `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`;
+- correção da migration de identidade técnica após descoberta de divergência de unidade/proveniência;
+- suporte em `lib/produtos.ts` para `unidade_origem` e `qtde_embalagem_origem`.
 
 O primeiro export foi executado com sucesso e retornou exatamente **392 acessórios**.
 
-Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado para concluir a reconciliação.
+Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado em produção para concluir a reconciliação.
 
-## IDENTIDADE TÉCNICA DE PRODUTOS — MERGEADA, NÃO APLICADA
+## IDENTIDADE TÉCNICA DE PRODUTOS — MIGRATION PENDENTE E CORRIGIDA NA PR #147
 
-A PR #143 adicionou ao código/schema:
+A PR #143 havia adicionado ao código/schema proposto:
 - `codigo`;
 - `codigo_origem`;
 - `origem`;
@@ -46,14 +48,32 @@ A PR #143 adicionou ao código/schema:
 - busca por código/nome/descrição;
 - badge de código técnico.
 
-Migration final:
+Migration:
 `supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
 **Ainda não aplicada em produção.**
 
+A reconciliação posterior mostrou que uma premissa da migration original era falsa: `produtos.unidade` dos acessórios atuais não pode ser tratado como valor cru W.Vetro, pois todos os 392 registros atuais estão em `UN`, enquanto 93 códigos correspondentes na fonte usam MT/PR/TB/BR/PT/PC.
+
+Além disso, a fonte possui `Qtde Emb.`, o que impede assumir automaticamente que a unidade da fonte é a unidade operacional/consumo.
+
+A migration foi corrigida na PR #147 para adicionar:
+- `unidade_origem`;
+- `qtde_embalagem_origem`.
+
+E para alterar o backfill seguro:
+- `produtos.unidade` permanece unidade operacional do Atlas;
+- `unidade_origem` e `qtde_embalagem_origem` não recebem o `UN` legado como falso valor de origem;
+- produtos técnicos preexistentes recebem `origem = legado` até reconciliação;
+- `dados_origem` dos registros legados é identificado como `atlas_legacy_pre_reconciliacao`;
+- o nome no formato `CODIGO - DESCRICAO` não basta para afirmar `origem = wvetro`;
+- `id_externo_wvetro` continua sem preenchimento artificial.
+
 Não considerar os novos campos/tabela ativos no banco até haver execução confirmada do workflow `Supabase Database Control` com:
 - mode: `apply`;
 - confirmation: `APPLY_PRODUCTION`.
+
+Antes de qualquer apply, a versão corrigida deve passar pelo dry-run da PR #147.
 
 ## BASE W.VETRO EXISTENTE NO ATLAS
 
@@ -63,7 +83,8 @@ Extração histórica registrada:
 - 871 produtos importados;
 - 479 perfis;
 - 392 acessórios;
-- os 392 acessórios atuais estão com `preco = 0` como placeholder histórico.
+- os 392 acessórios atuais estão com `preco = 0` como placeholder histórico;
+- os 392 acessórios atuais estão com `unidade = UN`, o que não representa fielmente a unidade da fonte em pelo menos 93 casos.
 
 ## BASE COMPLETA DE ACESSÓRIOS — AUDITORIA
 
@@ -100,7 +121,7 @@ Os 3 itens somente no Atlas são:
 - `TELA-132`;
 - `TELA-254`.
 
-Não apagar esses itens automaticamente.
+Não apagar esses itens automaticamente. A existência deles também impede classificar todo produto técnico legado como W.Vetro apenas pelo padrão do nome.
 
 ## DIVERGÊNCIAS REAIS
 
@@ -117,10 +138,21 @@ Entre códigos correspondentes:
 - divergência de NCM válido/seguro: 0;
 - divergência de ativo: 0.
 
-NCM `0`, `12345678` ou formato suspeito permanece flag de origem e não participa como valor seguro de divergência.
+A fonte também possui `Qtde Emb.`. Exemplos entre os divergentes:
+- PT com 121 e 89;
+- PC com 8;
+- MT com ocorrências 50 e 1.
 
-Relatório:
-`docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`
+Não interpretar automaticamente `Qtde Emb.` como fator de conversão.
+
+## IMPACTO EM ENGENHARIA
+
+O código atual usa `produtos.unidade` como campo operacional. Ao selecionar um produto em uma receita de Engenharia, a tela copia `produto.unidade` para `engenharia_receita_componentes.unidade`.
+
+Consequência:
+- não sobrescrever os 93 divergentes em lote;
+- unidade da fonte deve ficar separada em `unidade_origem`;
+- eventual unidade de compra/estoque/conversão só será modelada após validação operacional.
 
 ## CAMPOS NÃO COMPARÁVEIS NESTA ETAPA
 
@@ -138,9 +170,10 @@ Portanto linha, cor e fabricante da origem devem ser preservados como dados de o
 - `GERAL` permanece dado de origem, não linha técnica validada;
 - código numérico de cor permanece código de origem, não nome de cor;
 - NCM `0`, `12345678` ou formato suspeito não recebe status válido automaticamente;
-- preservar `codigo_origem`, `dados_origem` e `origem = wvetro` quando o schema estiver ativo;
+- registros legados permanecem com proveniência não confirmada até correspondência real;
+- quando a fonte estiver confirmada, preservar `codigo_origem`, `unidade_origem`, `qtde_embalagem_origem`, `dados_origem` e então registrar `origem = wvetro`;
 - só preencher `id_externo_wvetro` com chave externa real;
-- não inventar linha, cor, NCM, fabricante, preço ou custo.
+- não inventar linha, cor, NCM, fabricante, preço, custo, unidade operacional ou fator de conversão.
 
 ## PLANO DE CORTE / ENGENHARIA
 
@@ -173,5 +206,5 @@ Ordem por peça:
 - branch -> PR -> checks verdes -> merge manual;
 - migration só é considerada ativa após confirmação do apply em produção;
 - não usar `migration repair --reverted` sem diagnóstico explícito;
-- não inventar medidas, fórmulas, NCM, linha, cor ou identificador externo;
+- não inventar medidas, fórmulas, NCM, linha, cor, unidade ou identificador externo;
 - credenciais W.Vetro nunca devem ficar no frontend/browser em integração permanente.
