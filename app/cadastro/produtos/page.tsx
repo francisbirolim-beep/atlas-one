@@ -88,6 +88,7 @@ export default function Produtos() {
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [busca, setBusca] = useState('')
+  const [filtroLinha, setFiltroLinha] = useState('')
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [cores, setCores] = useState<Cor[]>([])
@@ -616,11 +617,23 @@ export default function Produtos() {
             placeholder="Buscar por codigo, nome ou descricao (ex.: SU010)"
             className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
           />
+
+          <select
+            value={filtroLinha}
+            onChange={e => setFiltroLinha(e.target.value)}
+            className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+          >
+            <option value="">Todas as linhas</option>
+            {linhas.filter(l => l.ativo).map(l => (
+              <option key={l.id} value={l.id}>{l.nome}</option>
+            ))}
+          </select>
           {produtos.length === 0 ? (
             <p className="text-sm text-slate-400">Nenhum produto cadastrado ainda.</p>
           ) : (
             <div className="space-y-2">
               {produtos.filter(p => {
+                if (filtroLinha && p.linha_id !== filtroLinha) return false
                 const q = busca.trim().toLowerCase()
                 if (!q) return true
                 const codigo = (p.codigo || p.nome.split(' - ')[0] || '').toLowerCase()
