@@ -225,3 +225,23 @@ Estado ativo:
 - filtro por Linha continua combinado com categoria e busca textual.
 
 Sem migration e sem alteração de schema: `produtos.categoria` já é texto livre.
+
+## ORÇAMENTO — EXCLUSÃO AUDITÁVEL DE ANEXOS E REENVIO — PR #156
+
+PR #156 — **mergeada** em 2026-08-17.
+
+Commit de merge:
+`9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`
+
+Estado ativo em `Editar orçamento`:
+- anexos não são apagados fisicamente quando o usuário escolhe Excluir;
+- a exclusão é lógica e exige motivo obrigatório;
+- o JSON do anexo preserva `excluido_em`, `excluido_por_id`, `excluido_por_nome` e `motivo_exclusao`;
+- a exclusão também é registrada em `historico_orcamento` via helper existente;
+- anexo excluído permanece visível em vermelho/riscado e o arquivo continua podendo ser aberto para auditoria;
+- anexo excluído não pode ser reenviado e é removido de futuros conjuntos de envio;
+- versões excluídas continuam contando no histórico, portanto números de versão não são reutilizados;
+- orçamento finalizado passa a exibir o campo WhatsApp do vendedor e a mensagem antes do reenvio, preenchendo o número cadastrado quando disponível e permitindo alteração manual;
+- a mesma exclusão lógica/auditável vale durante a elaboração.
+
+Sem migration e sem alteração de schema: os metadados adicionais usam o JSON existente em `orcamentos.anexos`.
