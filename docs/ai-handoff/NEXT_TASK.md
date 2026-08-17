@@ -149,3 +149,13 @@ Não voltar a fixar `CategoriaProduto` em um union fechado nem reintroduzir a li
 Importante: nenhum produto existente foi recategorizado automaticamente por esta implementação.
 
 O gate principal de produtos permanece separado: a migration `20260816210000_produtos_identidade_tecnica_v1.sql` continua dependendo de apply explícito em produção.
+
+## ORÇAMENTO — EXCLUSÃO AUDITÁVEL DE ANEXOS E REENVIO — PR #156
+
+A PR #156 já foi mergeada no commit `9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`.
+
+Não voltar a excluir anexos de orçamento com `filter/splice` ou removendo o arquivo do Storage. O comportamento esperado é soft delete com motivo obrigatório e trilha de auditoria, preservando acesso de consulta ao arquivo.
+
+Anexos com `excluido_em` não devem ser reenviados nem incluídos em novos envios. O campo de WhatsApp do vendedor deve permanecer disponível também no orçamento finalizado para reenvio.
+
+Essa melhoria é independente do gate da migration de identidade técnica de produtos, que continua exigindo apply explícito em produção.

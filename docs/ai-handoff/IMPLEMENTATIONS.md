@@ -327,3 +327,14 @@ Mergeada em 2026-08-17 no commit `a4ae49e58ddd6317e903dfee1e032a8b8694a5f4`.
 - tela Produtos abre filtrada pela categoria escolhida e mantém filtro por linha/busca;
 - categorias legadas e produtos existentes são preservados sem movimentação automática;
 - sem migration/schema change.
+
+## ORÇAMENTO — EXCLUSÃO AUDITÁVEL DE ANEXOS E REENVIO — PR #156
+
+Mergeada em 2026-08-17 no commit `9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`.
+
+- exclusão de anexo virou soft delete auditável;
+- motivo é obrigatório e ficam registrados data, usuário e motivo;
+- arquivo excluído permanece abrível e visualmente marcado em vermelho/riscado;
+- reenvio e novos envios ignoram anexos excluídos;
+- orçamento finalizado ganhou WhatsApp do vendedor e mensagem no fluxo de reenvio;
+- sem migration/schema change.
