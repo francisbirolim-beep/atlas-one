@@ -51,6 +51,8 @@ export async function criarProduto(dados: {
   peso_kg_m?: number | null
   tamanho_barra_mm?: number | null
   tamanho_barra_mm_origem?: number | null
+  unidade_origem?: string | null
+  qtde_embalagem_origem?: number | null
   dados_origem?: Record<string, any> | null
   status_validacao?: string | null
   ncm_origem?: string | null
@@ -91,6 +93,8 @@ export async function atualizarProduto(
     peso_kg_m: number | null
     tamanho_barra_mm: number | null
     tamanho_barra_mm_origem: number | null
+    unidade_origem: string | null
+    qtde_embalagem_origem: number | null
     dados_origem: Record<string, any> | null
     status_validacao: string | null
     validado_em: string | null
