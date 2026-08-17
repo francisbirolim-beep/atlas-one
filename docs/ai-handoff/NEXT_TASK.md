@@ -139,3 +139,13 @@ A PR #152 já foi mergeada no commit `a7679d9bd103a56e838d1e4376232c65d0e9f75a`.
 Não refazer esta correção. Em orçamento finalizado, a área `Anexar novo orçamento / revisão` deve permanecer disponível e o upload deve ser persistido imediatamente, preservando todos os anexos anteriores.
 
 A tarefa principal de produtos/migration continua separada desta correção de interface.
+
+## CADASTRO — CATEGORIAS DINÂMICAS DE PRODUTOS — PR #154
+
+A PR #154 já foi mergeada no commit `a4ae49e58ddd6317e903dfee1e032a8b8694a5f4`.
+
+Não voltar a fixar `CategoriaProduto` em um union fechado nem reintroduzir a lista hardcoded como fonte operacional. Categorias novas devem continuar sendo criáveis pelo usuário e categorias legadas em uso devem permanecer visíveis.
+
+Importante: nenhum produto existente foi recategorizado automaticamente por esta implementação.
+
+O gate principal de produtos permanece separado: a migration `20260816210000_produtos_identidade_tecnica_v1.sql` continua dependendo de apply explícito em produção.

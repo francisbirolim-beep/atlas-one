@@ -206,3 +206,22 @@ Correção ativa em `Editar orçamento`:
 - a inclusão do novo arquivo é registrada no histórico do orçamento.
 
 Sem migration e sem alteração de schema.
+
+## CADASTRO — CATEGORIAS DINÂMICAS DE PRODUTOS — PR #154
+
+PR #154 — **mergeada** em 2026-08-17.
+
+Commit de merge:
+`a4ae49e58ddd6317e903dfee1e032a8b8694a5f4`
+
+Estado ativo:
+- a tela principal `Cadastro` mostra as categorias de produto diretamente, em vez de um único acesso genérico a Produtos;
+- categorias principais: `Produto`, `Acessório`, `Perfil` e `Produto pronto`;
+- o usuário master pode criar outras categorias pelo botão `Nova categoria`;
+- categorias personalizadas são persistidas em `configuracoes_gerais`;
+- clicar numa categoria abre `/cadastro/produtos` já filtrado por ela;
+- cadastro e edição de produtos usam a lista dinâmica de categorias;
+- categorias legadas já usadas por produtos são preservadas e continuam aparecendo, sem recategorização automática;
+- filtro por Linha continua combinado com categoria e busca textual.
+
+Sem migration e sem alteração de schema: `produtos.categoria` já é texto livre.
