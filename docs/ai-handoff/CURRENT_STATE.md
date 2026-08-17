@@ -2,127 +2,42 @@
 
 > Regra multiagente: o repositório GitHub é a única fonte da verdade. Antes de alterar código, verificar o estado real do repositório. Ao concluir implementação relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em 2026-08-16/17.
+Verificado em 2026-08-17.
 
 ## ESTADO REAL DA MAIN
 
-A PR #146 foi mergeada em `main` em 2026-08-17.
+PR #147 — **mergeada**.
 
 Commit de merge:
-`f629f3598ef06b6e15e909752c2b461a3396ff07`
+`dee7af37b0bc31a024988b456e039a5beefd5cdd`
 
-Ela consolidou o handoff pós-PR #143 e iniciou formalmente a reconciliação da base completa de acessórios.
+Conteúdo principal:
+- reconciliação completa dos acessórios W.Vetro x Atlas;
+- workflow de exportação somente leitura;
+- correção preventiva da migration de identidade técnica;
+- separação entre unidade operacional e unidade de origem;
+- `unidade_origem` e `qtde_embalagem_origem` preparados no schema proposto;
+- proveniência de registros preexistentes corrigida para `legado` até reconciliação real.
 
-## PR #147 — RECONCILIAÇÃO / UNIDADE / PROVENIÊNCIA — EM ABERTO
+PR #148 — **mergeada**.
 
-Branch:
-`chore/export-acessorios-reconciliacao`
+Commit de merge:
+`9427c57b794d3116a68cf6401d8542b2ac9e88af`
 
-A PR #147 contém:
-- workflow reutilizável de exportação dos acessórios atuais do Atlas;
-- execução manual (`workflow_dispatch`) apenas;
-- sessão PostgreSQL forçada a `default_transaction_read_only=on`;
-- artifact temporário com o CSV exportado;
-- relatório consolidado da reconciliação em `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`;
-- correção da migration de identidade técnica após descoberta de divergência de unidade/proveniência;
-- suporte em `lib/produtos.ts` para `unidade_origem` e `qtde_embalagem_origem`.
+Conteúdo:
+- filtro por Linha na tela `Cadastro > Produtos`;
+- combinado com a busca textual existente;
+- sem alteração de schema/banco.
 
-O primeiro export foi executado com sucesso e retornou exatamente **392 acessórios**.
+## RECONCILIAÇÃO DOS ACESSÓRIOS — CONCLUÍDA
 
-Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado em produção para concluir a reconciliação.
+Fonte W.Vetro:
+- 1.174 acessórios.
 
-## CHECKS DA CORREÇÃO TÉCNICA
+Atlas atual:
+- 392 acessórios.
 
-Commit técnico validado:
-`235d31f0b3ec900f9eb06157ab1a75cd6133de26`
-
-Resultados:
-- `Supabase Database Control`: **success**;
-- `Audit migration history`: **success**;
-- `Dry-run pending migrations`: **success**;
-- `Apply pending migrations`: **skipped**;
-- `Build Validation`: **success**;
-- `Vercel`: **success**.
-
-A migration corrigida passou no dry-run e **não foi aplicada em produção**.
-
-Commits posteriores de handoff/documentação não alteram a migration nem a lógica de produto; o gate operacional continua sendo merge manual e, depois, decisão explícita de apply.
-
-## IDENTIDADE TÉCNICA DE PRODUTOS — MIGRATION PENDENTE E CORRIGIDA NA PR #147
-
-A PR #143 havia adicionado ao código/schema proposto:
-- `codigo`;
-- `codigo_origem`;
-- `origem`;
-- `id_externo_wvetro`;
-- `peso_kg_m`;
-- `tamanho_barra_mm`;
-- `tamanho_barra_mm_origem`;
-- `dados_origem jsonb`;
-- `status_validacao` e auditoria;
-- `ncm_origem` / `ncm_status`;
-- tabela `produto_linhas` N:N;
-- busca por código/nome/descrição;
-- badge de código técnico.
-
-Migration:
-`supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
-
-**Ainda não aplicada em produção.**
-
-A reconciliação posterior mostrou que uma premissa da migration original era falsa: `produtos.unidade` dos acessórios atuais não pode ser tratado como valor cru W.Vetro, pois todos os 392 registros atuais estão em `UN`, enquanto 93 códigos correspondentes na fonte usam MT/PR/TB/BR/PT/PC.
-
-Além disso, a fonte possui `Qtde Emb.`, o que impede assumir automaticamente que a unidade da fonte é a unidade operacional/consumo.
-
-A migration foi corrigida na PR #147 para adicionar:
-- `unidade_origem`;
-- `qtde_embalagem_origem`.
-
-E para alterar o backfill seguro:
-- `produtos.unidade` permanece unidade operacional do Atlas;
-- `unidade_origem` e `qtde_embalagem_origem` não recebem o `UN` legado como falso valor de origem;
-- produtos técnicos preexistentes recebem `origem = legado` até reconciliação;
-- `dados_origem` dos registros legados é identificado como `atlas_legacy_pre_reconciliacao`;
-- o nome no formato `CODIGO - DESCRICAO` não basta para afirmar `origem = wvetro`;
-- `id_externo_wvetro` continua sem preenchimento artificial.
-
-Não considerar os novos campos/tabela ativos no banco até haver execução confirmada do workflow `Supabase Database Control` com:
-- mode: `apply`;
-- confirmation: `APPLY_PRODUCTION`.
-
-## BASE W.VETRO EXISTENTE NO ATLAS
-
-Extração histórica registrada:
-- 1.038 vendas/orçamentos W.Vetro analisados;
-- 109 tipologias novas;
-- 871 produtos importados;
-- 479 perfis;
-- 392 acessórios;
-- os 392 acessórios atuais estão com `preco = 0` como placeholder histórico;
-- os 392 acessórios atuais estão com `unidade = UN`, o que não representa fielmente a unidade da fonte em pelo menos 93 casos.
-
-## BASE COMPLETA DE ACESSÓRIOS — AUDITORIA
-
-`ExportWWAcessorios.xlsx`:
-- 1.174 acessórios;
-- 1.174 códigos preenchidos;
-- 1.174 códigos únicos;
-- 0 códigos duplicados;
-- 36 descrições repetidas / 96 linhas envolvidas;
-- 955 com `Linha = GERAL`;
-- 891 com Cor Única numérica;
-- 156 NCM `0`;
-- 65 NCM `12345678`;
-- 20 outros NCM fora do formato de 8 dígitos;
-- todos ativos.
-
-Relatório de auditoria:
-`docs/tecnico/auditoria-exportwwacessorios-2026-08-16.md`
-
-## RECONCILIAÇÃO COMPLETA — RESULTADO
-
-Comparação por código técnico normalizado entre 1.174 itens da fonte e 392 acessórios atuais do Atlas:
-
+Resultado:
 - códigos encontrados nos dois lados: **389**;
 - `EXISTENTE_IGUAL`: **296**;
 - `EXISTENTE_DIVERGENTE`: **93**;
@@ -131,16 +46,19 @@ Comparação por código técnico normalizado entre 1.174 itens da fonte e 392 a
 - `SEM_CODIGO`: **0**;
 - itens existentes somente no Atlas: **3**.
 
-Os 3 itens somente no Atlas são:
+Itens somente no Atlas:
 - `TELA-1000-GALV`;
 - `TELA-132`;
 - `TELA-254`.
 
-Não apagar esses itens automaticamente. A existência deles também impede classificar todo produto técnico legado como W.Vetro apenas pelo padrão do nome.
+Não apagar automaticamente.
+
+Relatório:
+`docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`
 
 ## DIVERGÊNCIAS REAIS
 
-As **93 divergências** encontradas são exclusivamente de **unidade de medida**:
+As 93 divergências encontradas são exclusivamente de unidade:
 - MT -> UN: 66;
 - PR -> UN: 12;
 - TB -> UN: 9;
@@ -148,61 +66,81 @@ As **93 divergências** encontradas são exclusivamente de **unidade de medida**
 - PT -> UN: 2;
 - PC -> UN: 1.
 
-Entre códigos correspondentes:
-- divergência de descrição: 0;
-- divergência de NCM válido/seguro: 0;
-- divergência de ativo: 0.
+Não houve divergência de descrição, NCM válido/seguro ou status ativo entre códigos correspondentes.
 
-A fonte também possui `Qtde Emb.`. Exemplos entre os divergentes:
-- PT com 121 e 89;
-- PC com 8;
-- MT com ocorrências 50 e 1.
+A fonte também possui `Qtde Emb.`; sua semântica não deve ser inventada.
 
-Não interpretar automaticamente `Qtde Emb.` como fator de conversão.
+## DECISÃO DE MODELAGEM DE UNIDADE
 
-## IMPACTO EM ENGENHARIA
+`produtos.unidade` continua sendo a unidade operacional/canônica usada pelo Atlas.
 
-O código atual usa `produtos.unidade` como campo operacional. Ao selecionar um produto em uma receita de Engenharia, a tela copia `produto.unidade` para `engenharia_receita_componentes.unidade`.
+A fonte externa deve ser preservada separadamente:
+- `unidade_origem`;
+- `qtde_embalagem_origem`.
 
-Consequência:
-- não sobrescrever os 93 divergentes em lote;
-- unidade da fonte deve ficar separada em `unidade_origem`;
-- eventual unidade de compra/estoque/conversão só será modelada após validação operacional.
+Não sobrescrever `produtos.unidade` automaticamente.
 
-## CAMPOS NÃO COMPARÁVEIS NESTA ETAPA
+O motivo é operacional: Engenharia copia `produto.unidade` para a unidade do componente ao selecionar um produto em receita.
 
-- preço/custo: fonte W.Vetro não possui esses campos;
-- `linha_id`: 0/392 preenchidos no Atlas atual;
-- `cor_id`: 0/392 preenchidos no Atlas atual;
-- `marca`: 0/392 preenchidos no Atlas atual.
+## IDENTIDADE TÉCNICA — MIGRATION MERGEADA, MAS NÃO APLICADA
 
-Portanto linha, cor e fabricante da origem devem ser preservados como dados de origem, sem validação técnica automática.
+Migration:
+`supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
-## REGRAS DE RECONCILIAÇÃO PRESERVADAS
+Estado: **ainda não aplicada em produção**.
 
-- reconciliar por código técnico normalizado;
-- nunca sobrescrever silenciosamente;
-- `GERAL` permanece dado de origem, não linha técnica validada;
-- código numérico de cor permanece código de origem, não nome de cor;
-- NCM `0`, `12345678` ou formato suspeito não recebe status válido automaticamente;
-- registros legados permanecem com proveniência não confirmada até correspondência real;
-- quando a fonte estiver confirmada, preservar `codigo_origem`, `unidade_origem`, `qtde_embalagem_origem`, `dados_origem` e então registrar `origem = wvetro`;
-- só preencher `id_externo_wvetro` com chave externa real;
-- não inventar linha, cor, NCM, fabricante, preço, custo, unidade operacional ou fator de conversão.
+Ela passou em dry-run antes do merge.
+
+A versão corrigida:
+- adiciona `unidade_origem`;
+- adiciona `qtde_embalagem_origem`;
+- mantém `produtos.unidade` operacional;
+- não usa `UN` legado como falso valor de origem;
+- classifica produtos técnicos preexistentes como `origem = legado` até reconciliação real;
+- identifica snapshot legado como `atlas_legacy_pre_reconciliacao`;
+- não usa código técnico como falso `id_externo_wvetro`.
+
+Só considerar os novos campos/tabela ativos depois de apply confirmado via `Supabase Database Control`.
+
+## BASE W.VETRO EXISTENTE NO ATLAS
+
+Extração histórica registrada:
+- 1.038 vendas/orçamentos analisados;
+- 109 tipologias novas;
+- 871 produtos importados;
+- 479 perfis;
+- 392 acessórios;
+- preço dos 392 acessórios atuais permanece `0` como placeholder histórico;
+- unidade atual dos 392 acessórios está `UN`, mas 93 correspondências têm unidade diferente na fonte.
+
+## QUALIDADE DA FONTE W.VETRO
+
+`ExportWWAcessorios.xlsx`:
+- 1.174 códigos preenchidos e únicos;
+- 0 duplicados;
+- 955 com `Linha = GERAL`;
+- 891 com Cor Única numérica;
+- 156 NCM `0`;
+- 65 NCM `12345678`;
+- 20 outros NCM fora do formato de 8 dígitos;
+- todos ativos.
+
+Esses valores de origem não devem ser automaticamente tratados como dados técnicos validados.
 
 ## PRÓXIMO GATE
 
-A PR #147 deve permanecer aberta até revisão/merge manual.
-
-Depois do merge:
-1. decidir explicitamente se aplica `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
-2. apply somente via `Supabase Database Control` com `APPLY_PRODUCTION`;
-3. confirmar o apply antes de considerar os novos campos ativos;
-4. só então preparar PR separada de carga dos 785 faltantes seguros.
+O próximo passo exige decisão explícita:
+1. aplicar ou não `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
+2. se aprovado, executar `Supabase Database Control` com modo `apply` e confirmação `APPLY_PRODUCTION`;
+3. confirmar a aplicação real;
+4. só depois preparar PR separada para carga dos 785 acessórios faltantes seguros;
+5. tratar os 93 divergentes sem sobrescrita silenciosa;
+6. reauditar;
+7. depois avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
 
 ## PLANO DE CORTE / ENGENHARIA
 
-Mantêm-se as decisões já validadas:
+Decisões preservadas:
 - produto cadastrado é a entrada do Plano de Corte;
 - receita específica por produto tem prioridade;
 - receita genérica da tipologia é fallback;
@@ -212,7 +150,7 @@ Mantêm-se as decisões já validadas:
 
 ## MEDIÇÃO FINAL OFICIAL
 
-Rota operacional:
+Rota:
 `/producao/medicao-final`
 
 Ordem por peça:
@@ -229,7 +167,7 @@ Ordem por peça:
 
 - nunca commitar direto na `main`;
 - branch -> PR -> checks verdes -> merge manual;
-- migration só é considerada ativa após confirmação do apply em produção;
+- migration só é considerada ativa após apply confirmado;
 - não usar `migration repair --reverted` sem diagnóstico explícito;
-- não inventar medidas, fórmulas, NCM, linha, cor, unidade ou identificador externo;
-- credenciais W.Vetro nunca devem ficar no frontend/browser em integração permanente.
+- não inventar medidas, fórmulas, NCM, linha, cor, unidade, fator de conversão ou identificador externo;
+- credenciais W.Vetro nunca ficam no frontend/browser em integração permanente.
