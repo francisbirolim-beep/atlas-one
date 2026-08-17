@@ -146,8 +146,9 @@ nesses dois.
 
 Divergencia registrada: o pedido original presumia `ExportWWAcessorios` (~1.174
 acessorios) ja importado -- na verdade so os 392 acessorios da extracao historica via
-API (com `preco=0`) existem hoje; o arquivo `ExportWWAcessorios` nunca foi enviado
-nesta conversa.
+API (com `preco=0`) existem hoje. O arquivo completo de acessorios nao estava
+disponivel no ambiente desta execucao; a base completa de 1.174 acessorios sera
+reconciliada em etapa separada.
 
 Pendente: aplicar a migration em producao via `Supabase Database Control`
 (`apply` + `APPLY_PRODUCTION`); backfill de `tamanho_barra_mm` a partir da coluna
