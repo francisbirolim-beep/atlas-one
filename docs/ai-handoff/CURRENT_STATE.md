@@ -1,157 +1,158 @@
 # CURRENT_STATE.md — Atlas One
 
-> Regra multiagente: o repositorio e a unica fonte da verdade. Antes de alterar codigo, verificar o estado real do repositorio. Ao concluir implementacao relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
+> Regra multiagente: o repositório GitHub é a única fonte da verdade. Antes de alterar código, verificar o estado real do repositório. Ao concluir implementação relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
-Verificado em: 2026-08-15. `main` esta no merge da PR #129, commit `91d4bd97167342dfb76ca24de53947d12a7a63d0`. O status Vercel desse commit esta `success`, portanto o pacote da PR #129 foi aceito pelo deploy de producao.
+Verificado em 2026-08-16.
 
-A branch atual `fix/pos-merge-plano-corte`, PR #130, faz a revisao pos-merge e prepara a arquitetura real do Plano de Corte: produto cadastrado + receita mestre + variaveis + snapshot editavel.
+## ESTADO REAL DA MAIN
 
-## FUNCIONANDO / MERGEADO EM MAIN
-- Login/autenticacao e controle Master/funcionario.
-- Kanban de orcamentos, cadastros, Orcamento Rapido/Balcao, tipologias dinamicas e automacoes.
-- PRs #105 a #108: fotos de campo, identificacao LARGURA/ALTURA, leitura por IA da trena/laser e correcao Baixo/Cima da largura.
-- PRs #109 a #111: anexo W.Vetro original, leitura automatica do total, moeda BRL e envio/reenvio individual de anexos.
-- PRs #112 a #118: importacao W.Vetro em Nova Medicao e correcoes do parser.
-- PR #119: 3 larguras + 3 alturas e fotos da trena fixas na Medicao Final.
-- PR #120: CONTRAMARCO, ARREMATE, CADEIRINHA, CANTONEIRA SIM/NAO, observacao e aviso de vista interna.
-- PR #121: ordem mobile por peca consolidada.
-- PR #122: medicao parcial, tempo ativo, historico de pausa/retomada e FEITA/EM ABERTO.
-- PR #123: Favoritos substitui a barra inferior extensa no mobile.
-- PR #124: Voltar e Inicio nas telas internas do mobile.
-- PR #125: somente `/producao/medicao-final` permanece como Medicao Final oficial.
-- PRs #126 e #127: limpeza da Home.
-- PR #129: navegacao essencial, Configuracoes de Orcamento/PDF e Plano de Corte V1.
-- Engenharia Fases 1 a 4 concluidas; base de receitas tecnicas da Fase 5 existe.
-- Build Validation no GitHub Actions.
+A PR #143 foi **mergeada em `main`** em 2026-08-17 01:55:49 UTC.
 
-## PR #129 — NAVEGACAO / ORCAMENTO / PRODUCAO
-Mergeado em `main`:
-- navegacao diaria: Inicio, Clientes, Orcamentos, Kanban, Medicao Final, Producao e Engenharia;
-- administracao separada para Master;
-- Favoritos mobile simplificados;
-- topbar limpa e perfil/logout funcional;
-- `/configuracoes/orcamento` com titulo, validade, fotos, preco unitario, assinatura/aceite, observacao e rodape;
-- PDF de Orcamento Balcao aplica o padrao configurado;
-- `/producao` mostra as etapas tecnicas Medicao Final e Plano de Corte;
-- `/producao/plano-corte` pesquisa produto cadastrado, seleciona receita tecnica e cria snapshot editavel do plano;
-- permissao do Plano de Corte segue Producao: Master/edicao altera; consulta visualiza; oculto bloqueia.
+Commit de merge:
+`bc08fe6443e41475497d8c1947f840236dc00762`
 
-## BANCO — PLANO DE CORTE
-O arquivo `supabase/migrations/20260815100000_plano_corte_producao_v1.sql` esta em `main` e passou no dry-run da PR #129. Ele cria:
-- `planos_corte`;
-- `plano_corte_componentes`.
+O status Vercel desse commit está `success`.
 
-Na PR #130 esse arquivo foi corrigido para usar `public.*` explicitamente e habilitar RLS com a policy permissiva temporaria ja adotada no projeto.
+A PR #143 passou antes do merge em:
+- Build Validation;
+- Supabase Database Control / dry-run;
+- verificação de merge sem conflitos.
 
-IMPORTANTE: o workflow `Supabase Database Control` nao aplica migration automaticamente no merge. `apply` exige `workflow_dispatch` manual com confirmacao `APPLY_PRODUCTION`. ATUALIZACAO 2026-08-16: confirmado via SQL que as tabelas `planos_corte` e `plano_corte_componentes` ja existem em producao -- o apply ja foi executado com sucesso em algum momento. Este paragrafo ficou obsoleto e foi mantido so como historico do raciocinio.
+## IDENTIDADE TÉCNICA DE PRODUTOS — MERGEADA
 
-## PR #130 — RECEITAS ORIENTADAS A PRODUTO
-Implementado na branch:
-- migration `20260815223000_receitas_por_produto_v1.sql` adiciona `produto_id` em `engenharia_receitas`;
-- remove a restricao antiga de uma unica receita ativa por tipologia para todos os produtos;
-- preserva no maximo uma receita generica ativa por tipologia como fallback;
-- permite no maximo uma receita ativa especifica por produto;
-- `engenhariaReceitas.ts` mantem a tela generica compativel e adiciona busca/criacao de receita especifica por produto;
-- criacao da receita generica continua compativel mesmo antes da nova migration ser aplicada.
+A PR #143 adicionou ao código/schema do Atlas:
+- `codigo`;
+- `codigo_origem`;
+- `origem`;
+- `id_externo_wvetro`;
+- `peso_kg_m`;
+- `tamanho_barra_mm`;
+- `tamanho_barra_mm_origem`;
+- `dados_origem jsonb`;
+- `status_validacao` (`importado`, `revisado`, `validado`);
+- campos de auditoria de validação;
+- `ncm_origem`;
+- `ncm_status` (`pendente`, `valido`, `invalido`);
+- tabela `produto_linhas` para relação N:N produto x linha;
+- busca por código/nome/descrição no Cadastro de Produtos;
+- badge de código técnico nos produtos.
 
-## PR #130 — MOTOR SEGURO DE FORMULAS
-Criado `lib/formulasCorte.ts`:
-- sem `eval` e sem `new Function`;
-- aceita somente numeros, parenteses, `+ - * /`, variaveis permitidas e funcoes matematicas controladas;
-- variaveis iniciais: `largura`, `altura`, `quantidade`, `folga_largura`, `folga_altura`, `folhas`;
-- funcoes permitidas: `abs`, `ceil`, `floor`, `round`, `min`, `max`;
-- trata formula vazia, caractere proibido, variavel desconhecida, divisao por zero e resultado nao finito;
-- ainda NAO esta ligado automaticamente ao `corte_mm`; primeiro deve existir marcacao explicita de formula validada e regras de variantes.
+Migration final correta:
+`supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
-O Supabase Database Control da PR #130 ja passou no dry-run com as migrations pendentes. O Build Validation final deve permanecer verde antes do merge.
+## MIGRATION AINDA NÃO APLICADA EM PRODUÇÃO
 
-## REVISAO TECNICA — PORTA DE CORRER 03 FOLHAS SUPREMA
-Foi recuperado da biblioteca do usuario o relatorio W.Vetro `app.core.relorientativocortesimplificadoitem(8).pdf` e outros relatorios da mesma tipologia/projeto `*SUCB-PC3-01EF`.
+A migration `20260816210000_produtos_identidade_tecnica_v1.sql` está mergeada no repositório, mas **não foi aplicada em produção**.
 
-A base detalhada esta em `docs/tecnico/receitas/porta-correr-3f-suprema.md`.
+Não considerar os novos campos/tabela ativos no banco até haver execução confirmada do workflow `Supabase Database Control` com:
+- mode: `apply`
+- confirmation: `APPLY_PRODUCTION`
 
-Regras candidatas fortes observadas em amostras reais:
-- SU010 = largura do vao - 30 mm;
-- TMC = largura do vao - 30 mm;
-- SU012 = altura do vao - folga_altura (4 mm nas amostras);
-- montantes verticais da folha = altura do vao - 34 mm;
-- SU102 vertical = altura do vao - 185 mm;
-- vidro altura = altura do vao - 167 mm;
-- arremate MP347 face interna: horizontal = largura + 44 mm; vertical = altura + 22 mm nas amostras observadas.
+Decisão operacional atual: **não aplicar ainda** até fechar a auditoria/reconciliação da base completa de acessórios e confirmar que o modelo atende a fonte completa sem perda de informação.
 
-NAO VALIDADO COMO FORMULA UNICA:
-- largura da folha/vidro. O mesmo vao 2500 x 2100 gerou folha 771 mm ou 756 mm dependendo da configuracao de mao-de-amigo/reforco. Isso confirma que o motor precisa ser orientado por produto + variaveis, e nao por uma unica formula generica de `porta_correr`.
+## CORREÇÃO DE HISTÓRICO DE MIGRATION
 
-## DECISAO DE ARQUITETURA DO PLANO DE CORTE
-- produto cadastrado e o ponto de entrada;
-- receita mestre contem componentes/variantes/formulas validadas;
-- variaveis selecionam a variante correta;
-- plano e snapshot editavel e nao altera a receita mestre;
-- formula pendente nunca gera medida inventada;
-- receitas especificas por produto tem prioridade e receita generica por tipologia funciona apenas como fallback.
+A divergência de versão de `setor_cadastro_v1` foi resolvida na PR #144 por rename puro do arquivo local para a versão já registrada em produção:
+`20260816204749_setor_cadastro_v1.sql`.
 
-## ORDEM ATUAL POR PECA — MEDICAO FINAL
-1. identificacao da peca;
-2. foto da trena LARGURA / ALTURA;
-3. Largura Baixo / Meio / Cima;
-4. Altura Direita / Meio / Esquerda;
-5. Contramarco / Arremate / Cadeirinha / Cantoneira — SIM/NAO;
-6. observacao;
-7. demais campos configuraveis;
+O conteúdo SQL não foi alterado e o Supabase Database Control voltou a ficar verde.
+
+A correção foi incorporada à branch da PR #143 antes do merge.
+
+## BASE W.VETRO EXISTENTE NO ATLAS
+
+Extração histórica já registrada:
+- 1.038 vendas/orçamentos W.Vetro analisados;
+- 109 tipologias novas criadas;
+- 871 produtos importados da composição histórica das vendas;
+- desses produtos: 479 perfis + 392 acessórios;
+- os 392 acessórios estão com `preco = 0` como placeholder da extração histórica.
+
+## ARQUIVOS COMPLETOS DISPONÍVEIS NA CONVERSA
+
+O usuário forneceu:
+- `ExportWWAcessorios.xlsx` — 1.174 acessórios;
+- `ExportWWPerfil (1).xlsx` — 1.307 perfis.
+
+Essas bases são mais completas que a extração histórica de itens vendidos e devem ser reconciliadas sem sobrescrita silenciosa.
+
+## AUDITORIA DA FONTE DE ACESSÓRIOS — CONCLUÍDA
+
+Auditoria de `ExportWWAcessorios.xlsx`:
+- 1.174 linhas;
+- 1.174 códigos preenchidos;
+- 1.174 códigos únicos;
+- 0 códigos duplicados na origem;
+- 36 descrições repetidas, envolvendo 96 linhas;
+- 955 registros com `Linha = GERAL`;
+- 891 registros com `Cor Única` numérica;
+- 891 registros com `Cor Única = 15`;
+- 156 registros com NCM `0`;
+- 65 registros com NCM `12345678`;
+- 20 outros registros com NCM fora do formato de 8 dígitos;
+- 0 descrição ausente;
+- 0 unidade ausente;
+- 0 linha ausente;
+- todos os 1.174 marcados como ativos.
+
+Fonte detalhada:
+`docs/tecnico/auditoria-exportwwacessorios-2026-08-16.md`
+
+## BLOQUEIO ATUAL DA RECONCILIAÇÃO
+
+Ainda não existe neste ambiente uma exportação item a item dos 392 acessórios atuais do banco Atlas.
+
+Sem essa lista não é seguro afirmar quantos itens da planilha são:
+- EXISTENTE IGUAL;
+- EXISTENTE COM DIVERGÊNCIA;
+- FALTANTE NO ATLAS.
+
+Foi criado o script somente leitura:
+`scripts/export-acessorios-atlas-reconciliacao.sql`
+
+Ele exporta os acessórios atuais usando apenas colunas já existentes antes da migration pendente. O resultado deve ser comparado à planilha completa antes de qualquer insert/update.
+
+## REGRAS DE RECONCILIAÇÃO
+
+- reconciliar por código técnico normalizado;
+- nunca sobrescrever silenciosamente;
+- `GERAL` permanece dado de origem, não linha técnica validada;
+- código numérico de cor permanece código de origem, não nome de cor;
+- NCM `0`, `12345678` ou formato suspeito não recebe status válido automaticamente;
+- preservar `codigo_origem`, `dados_origem`, `origem = wvetro` e identificador externo somente quando houver evidência real;
+- a planilha de acessórios não contém preço/custo, portanto esses campos não podem ser auditados a partir dela;
+- nenhuma inserção dos acessórios faltantes deve ocorrer antes do relatório de reconciliação completo.
+
+## PLANO DE CORTE / ENGENHARIA
+
+Mantêm-se as decisões já validadas:
+- produto cadastrado é a entrada do Plano de Corte;
+- receita específica por produto tem prioridade;
+- receita genérica da tipologia é fallback;
+- snapshot do plano não altera receita mestre;
+- fórmula não validada não inventa corte;
+- variantes devem ser declarativas, sem `eval`.
+
+## MEDIÇÃO FINAL OFICIAL
+
+A rota operacional continua:
+`/producao/medicao-final`
+
+Ordem por peça:
+1. identificação;
+2. fotos de trena largura/altura;
+3. largura baixo/meio/cima;
+4. altura direita/meio/esquerda;
+5. contramarco/arremate/cadeirinha/cantoneira SIM/NÃO;
+6. observação;
+7. campos configuráveis;
 8. fotos adicionais.
 
-## W.VETRO API
-Integracao live continua bloqueada ate haver credenciais/ambiente de teste e schemas reais. Regras: server-side, iniciar somente leitura, nao adivinhar payload, Atlas continua fonte da verdade, PDF original preservado e dimensao ausente nunca inventada.
+## CUIDADOS PERMANENTES
 
-## IMPLEMENTADO MAS AINDA PRECISA VALIDACAO DE USO
-- navegacao/Favoritos da PR #129 no iPhone;
-- Configuracoes -> Orcamento e PDF com dados reais da empresa;
-- Plano de Corte V1 (migrations ja aplicadas, confirmado 2026-08-16 -- falta validacao de uso real);
-- receitas por produto da PR #130 (migration ja aplicada, confirmado 2026-08-16 -- falta validacao de uso real);
-- Medicao Final parcial/tempo/historico em campo;
-- persistencia dos quatro SIM/NAO, observacao, fotos e medidas em uso real.
-
-## DIVIDA TECNICA / SEGURANCA
-- ligar automaticamente produto -> receita especifica na UI do Plano de Corte;
-- criar modelo declarativo de variantes condicionais (ex.: mao-de-amigo/reforco) sem colocar logica opaca em string;
-- marcar formula como validada antes de permitir calculo automatico de `corte_mm`;
-- adicionar testes automatizados para o motor de formulas e regras tecnicas;
-- paginas antigas continuam no codigo, apenas fora da navegacao principal;
-- Favoritos seguem locais por dispositivo/navegador;
-- nao usar `migration repair --reverted` sem diagnostico explicito.
-
-
-## ATUALIZACAO -- variaveis declarativas + variantes + presets -- 2026-08-16
-Branch `francisbirolim-beep-patch-10` (ainda nao mesclada): implementa a secao "3. Variantes condicionais" do NEXT_TASK.md -- catalogo de variaveis com opcoes (`engenharia_variaveis` / `engenharia_variavel_opcoes`), vinculo por tipologia (`engenharia_tipologia_variaveis`), variantes condicionais de componente (`engenharia_componente_variantes`, resolvidas por `resolverVarianteComponente` -- comparacao de igualdade declarada, sem eval) e presets fixos salvaveis (`engenharia_variaveis_preset`). UI em `app/engenharia/receitas/page.tsx` (gestao) e `app/producao/plano-corte/page.tsx` (selects dinamicos + presets no lugar do texto livre anterior). Ver NEXT_TASK.md para detalhes e pendencias (apply da migration, PR, merge).
-
-
-## ATUALIZACAO -- identidade tecnica de Produto (perfis/acessorios) -- 2026-08-16
-Branch `feat/produtos-identidade-tecnica-wvetro` (ainda nao mesclada): adiciona
-identidade tecnica confiavel ao cadastro de Produtos -- `codigo`/`codigo_origem`/
-`origem`/`id_externo_wvetro`, `peso_kg_m`/`tamanho_barra_mm`/`tamanho_barra_mm_origem`,
-`dados_origem jsonb` (snapshot congelado do que veio do W.Vetro), `status_validacao`
-(importado/revisado/validado), `ncm_origem`/`ncm_status` (pendente/valido/invalido,
-sem corrigir o NCM), tabela `produto_linhas` (N:N produto<->linha) e unique index
-parcial em `upper(codigo)`. Migration `20260816180000_produtos_identidade_tecnica_v1.sql`
-inclui o backfill simples de `codigo`/`codigo_origem`/`origem`/`dados_origem` a partir
-do padrao "CODIGO - DESCRICAO" ja existente em `produtos.nome` -- nao depende de
-lista externa. Auditoria completa (1.700 produtos: 1.405 OK / 14 ATENCAO / 281 REVISAR,
-0 duplicidade de codigo) em `docs/tecnico/auditoria-produtos-2026-08-16.md`, gerada por
-`scripts/auditoria-produtos-wvetro.sql` (reutilizavel).
-
-`app/cadastro/produtos/page.tsx` ganhou busca por codigo/nome/descricao e badge de
-codigo em cada card. Confirmado que Engenharia > Receitas e Plano de Corte ja exibem
-o codigo tecnico (esta embutido em `produto.nome`) -- nenhuma mudanca foi necessaria
-nesses dois.
-
-Divergencia registrada: o pedido original presumia `ExportWWAcessorios` (~1.174
-acessorios) ja importado -- na verdade so os 392 acessorios da extracao historica via
-API (com `preco=0`) existem hoje. O arquivo completo de acessorios nao estava
-disponivel no ambiente desta execucao; a base completa de 1.174 acessorios sera
-reconciliada em etapa separada.
-
-Pendente: aplicar a migration em producao via `Supabase Database Control`
-(`apply` + `APPLY_PRODUCTION`); backfill de `tamanho_barra_mm` a partir da coluna
-"Tamanho" do W.Vetro (dados prontos, migration nao commitada por escopo); vincular
-`produto_linhas` a alguma tela (so existe o CRUD em `lib/produtoLinhas.ts`). Ver
-NEXT_TASK.md para detalhes.
+- nunca commitar direto na `main`;
+- branch -> PR -> Build Validation -> merge;
+- migration só é considerada ativa após confirmação do apply em produção;
+- não usar `migration repair --reverted` sem diagnóstico explícito;
+- não inventar medidas, fórmulas, NCM, linha, cor ou identificador externo;
+- credenciais W.Vetro nunca devem ficar no frontend/browser em integração permanente.
