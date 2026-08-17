@@ -236,3 +236,28 @@ Checkpoint mais recente:
 4. validar no banco 785 novos acessórios reconciliados;
 5. reconciliar a proveniência dos 389 acessórios já existentes, sem mudar `produtos.unidade` nos 93 divergentes;
 6. avançar para perfis somente com a fonte real.
+
+## GATE ATUAL — PERFIS W.VETRO / PROVENIÊNCIA — 2026-08-17
+
+A auditoria dos 1.307 perfis está concluída e a migration de proveniência está preparada/testada em banco efêmero, mas **não está aplicada em produção**.
+
+Migration:
+`supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`
+
+Estado:
+- 1.307 perfis da fonte = 1.307 perfis Atlas; 0 faltantes e 0 exclusivos;
+- migration sem INSERT e sem overwrite operacional;
+- SHA-256 `cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf`;
+- validação integral em PostgreSQL efêmero aprovada no run `32048680317`;
+- produção acessada somente em `READ ONLY`;
+- tamanho/NCM/fabricante suspeitos continuam não promovidos.
+
+Próximos passos obrigatórios:
+1. concluir/mergear a PR de auditoria #162 somente com checks exigidos verdes;
+2. abrir/validar PR separada da migration;
+3. exigir dry-run oficial do `Supabase Database Control`;
+4. mergear somente com Build Validation + Vercel + controle de migration verdes;
+5. depois do merge, solicitar autorização explícita para esta migration específica antes de `APPLY_PRODUCTION`;
+6. após apply, verificar run/log e pós-estado antes de documentar como ativo.
+
+Não interpretar `pode continuar` como autorização para apply em produção.

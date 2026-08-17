@@ -388,3 +388,14 @@ A migration de proveniência preserva os campos operacionais e aborta se detecta
 Relatório: `docs/tecnico/reconciliacao-exportwwperfil-2026-08-17.md`.
 
 Próxima implementação: migration apenas de proveniência dos 1.307 registros existentes, sem alterar nome, preço/custo, unidade, peso, tamanho operacional, NCM operacional, marca, ativo, linha, cor ou ID externo.
+
+## Perfis W.Vetro — proveniência preparada e validada fora de produção — 2026-08-17
+
+- criada `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`;
+- sem INSERT: reconcilia os 1.307 perfis preexistentes;
+- somente campos de proveniência são atualizados; campos operacionais ficam protegidos por snapshot JSON antes/depois;
+- fonte compactada com 249 exceções explícitas e dois hashes canônicos de auditoria;
+- hashes tornados determinísticos com `COLLATE "C"`;
+- run efêmero `32048680317` executou a migration inteira sobre snapshot read-only da produção: `UPDATE 1307`, pós-checks aprovados e `COMMIT`;
+- resultado efêmero: 1.307 proveniências W.Vetro, 1.307 tamanhos de origem e 0 promoções de tamanho operacional;
+- produção permaneceu sem escrita; migration ainda não aplicada.

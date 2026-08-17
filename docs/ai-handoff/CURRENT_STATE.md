@@ -343,3 +343,35 @@ Decisão: **não inserir novos perfis**. A próxima migration deve apenas enriqu
 
 Relatório técnico:
 `docs/tecnico/reconciliacao-exportwwperfil-2026-08-17.md`.
+
+## PRODUTOS — PROVENIÊNCIA DOS PERFIS W.VETRO PREPARADA E TESTADA — 2026-08-17
+
+A migration `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` está preparada, mas **NÃO aplicada em produção**.
+
+Escopo:
+- reconcilia somente os 1.307 perfis W.Vetro já existentes no Atlas;
+- não insere produtos;
+- altera apenas `codigo_origem`, `origem`, `unidade_origem`, `tamanho_barra_mm_origem`, `ncm_origem`, `dados_origem` e `updated_at`;
+- todos os demais campos são congelados e comparados antes/depois dentro da própria transação;
+- `tamanho_barra_mm` operacional permanece sem promoção automática;
+- os 4 `NCM = 16` e os 68 `Nome Fabricante = 16` permanecem somente como dados crus de origem, sem promover NCM/marca operacional.
+
+Proteções:
+- Gate 1 exige exatamente 1.307 perfis e o hash canônico do snapshot Atlas auditado;
+- Gate 2 reconstrói a fonte W.Vetro com 249 exceções explícitas e exige o hash canônico da planilha auditada;
+- os dois hashes usam `COLLATE "C"` para ordenação determinística independente da locale do PostgreSQL;
+- a migration aborta se qualquer campo operacional/protegido mudar.
+
+SHA-256 da migration preparada: `cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf`.
+
+Validação completa executada fora da produção no run `32048680317`:
+- snapshot atual de produção exportado em transação `READ ONLY`: 1.307 perfis;
+- snapshot antigo x atual comparado: 0 diferenças nos campos auditados;
+- migration executada integralmente em PostgreSQL 16 efêmero;
+- log: `UPDATE 1307`;
+- todos os pós-checks passaram e a transação efêmera terminou em `COMMIT`;
+- verificação final: 1.307 perfis com `origem = wvetro`, 1.307 tamanhos de origem preenchidos e 0 tamanhos promovidos para `tamanho_barra_mm`.
+
+Uma primeira execução efêmera foi corretamente bloqueada por diferença de collation na ordenação do hash. A investigação comprovou 0 drift de dados; a correção foi somente tornar os dois `ORDER BY` dos hashes determinísticos com `COLLATE "C"`.
+
+Próximo gate: PR da migration + dry-run oficial. Apply em produção exige autorização explícita específica e confirmação `APPLY_PRODUCTION`.
