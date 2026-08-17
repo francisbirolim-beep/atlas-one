@@ -15,17 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild exact migration
+      - name: Rebuild exact migration with deterministic collation
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/temp_fix_migration_perfis_wvetro.py
+          python scripts/temp_fix_collation_perfis_wvetro.py
           sha256sum supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql
-          test "$(sha256sum supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql | awk '{print $1}')" = "5e7a7973d897b0b977db39eac3fac5ccf08ae9ba3852569e7f47bb5bb5f7186a"
-          rm scripts/temp_fix_migration_perfis_wvetro.py
+          test "$(sha256sum supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql | awk '{print $1}')" = "cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf"
+          rm scripts/temp_fix_collation_perfis_wvetro.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql scripts/temp_fix_migration_perfis_wvetro.py
+          git add supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql scripts/temp_fix_collation_perfis_wvetro.py
           git diff --cached --check
-          git commit -m "fix: restaurar migration auditada de perfis"
+          git commit -m "fix: tornar hashes de perfis determinísticos"
           git push
