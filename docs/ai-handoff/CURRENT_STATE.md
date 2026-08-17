@@ -302,3 +302,44 @@ PR final de proveniência:
 Pendência operacional remanescente, sem bloquear a base:
 - validar humanamente a unidade operacional dos 136 acessórios com unidade de origem diferente de `UN`;
 - não inferir conversão, unidade canônica ou `Qtde Emb.` automaticamente.
+
+## PRODUTOS — PERFIS W.VETRO — RECONCILIAÇÃO CONCLUÍDA — 2026-08-17
+
+Fonte real auditada: `ExportWWPerfil (1)(1).xlsx`.
+
+Resultado da fonte:
+- 1.307 linhas;
+- 1.307 códigos preenchidos e únicos;
+- 0 duplicados;
+- todos ativos.
+
+Snapshot atual do Atlas exportado em transação PostgreSQL explicitamente `READ ONLY` pelo run `32045643983`:
+- 1.307 perfis;
+- `transaction_read_only = on` confirmado antes do SELECT;
+- nenhuma escrita executada.
+
+Reconciliação por código técnico:
+- presentes nos dois lados: **1.307**;
+- faltantes no Atlas: **0**;
+- somente no Atlas: **0**;
+- `EXISTENTE_IGUAL`: **1.235**;
+- `EXISTENTE_FONTE_NAO_PROMOVIDA`: **72**;
+- divergência operacional real: **0**.
+
+Os 72 casos de fonte não promovida são deliberados:
+- 68 registros com `Nome Fabricante = 16` e marca operacional vazia;
+- 4 registros com `NCM = 16` e NCM operacional vazio.
+
+Qualidade da fonte que deve permanecer pendente/de origem:
+- 221 NCM placeholders;
+- 18 NCM em formato atípico;
+- 7 tamanhos atípicos (`6` ou `60000`);
+- 2 pesos acima de 50 (`0000000056 = 3462`, `0000000171 = 11538`);
+- 68 fabricantes numéricos `16`;
+- 61 campos `Cod.Barras` preenchidos;
+- 83 valores de sucata não zero.
+
+Decisão: **não inserir novos perfis**. A próxima migration deve apenas enriquecer a proveniência dos 1.307 registros já existentes, preservando integralmente os campos operacionais e mantendo `tamanho_barra_mm` sem promoção automática.
+
+Relatório técnico:
+`docs/tecnico/reconciliacao-exportwwperfil-2026-08-17.md`.
