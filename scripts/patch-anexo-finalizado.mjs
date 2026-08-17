@@ -47,7 +47,7 @@ await registrarHistorico(
 cardSelecionado.id,
 usuario,
 'Anexou nova versão/arquivo ao orçamento',
-\`${titulo} — ${file.name}\`
+titulo + ' — ' + file.name
 )
 listarHistorico(cardSelecionado.id).then(setHistorico)
 }
@@ -84,11 +84,12 @@ placeholder="Título da nova versão (ex: Revisão 02)"
 className="flex-1 border border-slate-300 rounded-lg p-2 text-xs text-slate-700 bg-white"
 />
 <label
-className={\`flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0 ${
+className={[
+'flex items-center gap-1 px-2.5 py-2 border border-dashed rounded-lg text-xs flex-shrink-0',
 novoAnexoTitulo.trim()
 ? 'border-brand-navy text-brand-navy cursor-pointer hover:bg-brand-navyLight'
 : 'border-slate-200 text-slate-300'
-}\`}
+].join(' ')}
 >
 <Paperclip size={13} /> Anexar
 <input
