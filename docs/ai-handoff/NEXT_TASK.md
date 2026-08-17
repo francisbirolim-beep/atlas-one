@@ -131,3 +131,11 @@ Não refazer esta tarefa. O comportamento esperado é:
 - envio de versão nova não manda novamente os PDFs Atlas antigos.
 
 Essa melhoria não altera o próximo gate principal da base de produtos: a migration `20260816210000_produtos_identidade_tecnica_v1.sql` continua dependendo de autorização explícita para apply em produção.
+
+## ORÇAMENTO FINALIZADO — ANEXO PERMANENTE — PR #152
+
+A PR #152 já foi mergeada no commit `a7679d9bd103a56e838d1e4376232c65d0e9f75a`.
+
+Não refazer esta correção. Em orçamento finalizado, a área `Anexar novo orçamento / revisão` deve permanecer disponível e o upload deve ser persistido imediatamente, preservando todos os anexos anteriores.
+
+A tarefa principal de produtos/migration continua separada desta correção de interface.

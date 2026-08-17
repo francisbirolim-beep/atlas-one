@@ -304,3 +304,14 @@ Commit de merge:
 - reenvio individual registrado no histórico;
 - envio novo por WhatsApp exclui PDFs Atlas de versões anteriores;
 - sem migration/schema change.
+
+## ORÇAMENTO FINALIZADO — ANEXO PERMANENTE — PR #152
+
+Mergeada em 2026-08-17 no commit `a7679d9bd103a56e838d1e4376232c65d0e9f75a`.
+
+- corrigido desaparecimento do botão/campo de anexo após finalização do orçamento;
+- adicionada área permanente para nova revisão em orçamento finalizado;
+- upload finalizado persiste imediatamente no JSON de anexos;
+- histórico e anexos anteriores preservados;
+- inclusão registrada no histórico;
+- sem migration/schema change.

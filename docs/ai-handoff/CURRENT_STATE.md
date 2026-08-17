@@ -189,3 +189,20 @@ Implementado na tela de Editar orçamento:
 - a área de anexos em elaboração passou a se chamar `Anexos e histórico de versões`.
 
 Sem migration e sem alteração de schema/banco.
+
+## ORÇAMENTO FINALIZADO — ANEXO PERMANENTE — PR #152
+
+PR #152 — **mergeada** em 2026-08-17.
+
+Commit de merge:
+`a7679d9bd103a56e838d1e4376232c65d0e9f75a`
+
+Correção ativa em `Editar orçamento`:
+- orçamento já finalizado continua exibindo o histórico de anexos e `Reenviar`;
+- passa a exibir também, de forma permanente, `Anexar novo orçamento / revisão`;
+- novo anexo em orçamento finalizado é persistido imediatamente em `orcamentos.anexos`;
+- anexos anteriores são preservados;
+- o card e o modal são atualizados na mesma sessão;
+- a inclusão do novo arquivo é registrada no histórico do orçamento.
+
+Sem migration e sem alteração de schema.
