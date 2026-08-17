@@ -1,0 +1,31 @@
+name: Apply Anexos Auditoria Patch
+
+on:
+  push:
+    branches:
+      - feat/anexos-auditoria-reenvio
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/anexos-auditoria-reenvio
+      - name: Apply patch
+        run: python3 scripts/patch-anexos-auditoria.py
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/tipos.ts components/system/KanbanPageFixed.tsx
+          git commit -m "feat: auditar exclusao de anexos e corrigir reenvio"
+          git push origin HEAD:feat/anexos-auditoria-reenvio
