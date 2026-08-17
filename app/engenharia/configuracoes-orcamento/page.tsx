@@ -77,12 +77,12 @@ export default function ConfiguracoesOrcamentoPage() {
 
   const linha = linhas.find(l => l.id === linhaId) || null
   const tipologiasFiltradas = useMemo(() => {
-    if (!linha || !linha.tipologia_ids?.length) return tipologias
-    return tipologias.filter(t => linha.tipologia_ids!.includes(t.id))
+    if (!linha) return tipologias
+    return tipologias.filter(t => Boolean(linha.tipologia_ids?.includes(t.id)))
   }, [linha, tipologias])
   const produtosFiltrados = useMemo(() => {
-    if (!linha || !linha.produto_ids?.length) return produtos
-    return produtos.filter(p => linha.produto_ids!.includes(p.id))
+    if (!linha) return produtos
+    return produtos.filter(p => Boolean(linha.produto_ids?.includes(p.id)))
   }, [linha, produtos])
 
   const configuracoesFiltradas = useMemo(() => {

@@ -109,14 +109,12 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
 
   const produtosCompativeis = useMemo(() => {
     if (!linha) return catalogo.produtos
-    if (!linha.produto_ids?.length) return catalogo.produtos
-    return catalogo.produtos.filter(p => linha.produto_ids!.includes(p.id))
+    return catalogo.produtos.filter(p => Boolean(linha.produto_ids?.includes(p.id)))
   }, [catalogo.produtos, linha])
 
   const tipologiasCompativeis = useMemo(() => {
     if (!linha) return catalogo.tipologias
-    if (!linha.tipologia_ids?.length) return catalogo.tipologias
-    return catalogo.tipologias.filter(t => linha.tipologia_ids!.includes(t.id))
+    return catalogo.tipologias.filter(t => Boolean(linha.tipologia_ids?.includes(t.id)))
   }, [catalogo.tipologias, linha])
 
   const q = normalizar(busca)
@@ -306,6 +304,9 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
 
               {produtosEncontrados.length > 0 && <div><p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Produtos cadastrados</p>{produtosEncontrados.map(p => <button type="button" key={p.id} onMouseDown={e => e.preventDefault()} onClick={() => selecionarProduto(p)} className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50"><span className="text-sm font-medium text-slate-700">{p.nome}</span><span className="block text-xs text-slate-400">Produto cadastrado{p.preco ? ` · R$ ${p.preco.toFixed(2)}` : ''}</span></button>)}</div>}
 
+              {linha && configsEncontradas.length === 0 && tipologiasEncontradas.length === 0 && produtosEncontrados.length === 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cadastro vinculado à linha {linha.nome} corresponde à busca. Você ainda pode seguir com texto livre, sem criar vínculo técnico falso.</div>
+              )}
               <button type="button" onMouseDown={e => e.preventDefault()} onClick={usarTextoLivre} className="w-full text-left rounded-lg border border-dashed border-slate-200 px-3 py-2 hover:bg-slate-50"><span className="text-xs text-slate-500">Não encontrou? Usar exatamente:</span><span className="block text-sm font-medium text-slate-700">“{busca.trim()}”</span></button>
             </div>
           )}
