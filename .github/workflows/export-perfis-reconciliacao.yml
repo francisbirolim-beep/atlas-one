@@ -14,7 +14,7 @@ jobs:
     env:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-      PGOPTIONS: "-c default_transaction_read_only=on -c statement_timeout=30000"
+      PGOPTIONS: "-c statement_timeout=30000"
 
     steps:
       - name: Checkout
@@ -55,13 +55,15 @@ jobs:
           )
           echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
 
-      - name: Confirm database session is read-only
+      - name: Confirm read-only transaction support
         shell: bash
         run: |
           set -euo pipefail
-          MODE=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command='show default_transaction_read_only;' | tr -d '[:space:]')
-          test "$MODE" = "on" || { echo "ERRO: sessao nao esta read-only"; exit 1; }
-          echo "Sessao PostgreSQL confirmada como read-only."
+          MODE=$(psql "$SUPABASE_DB_URL" --quiet --tuples-only --no-align \
+            --command="begin transaction read only; select current_setting('transaction_read_only'); rollback;" \
+            | tr -d '[:space:]')
+          test "$MODE" = "on" || { echo "ERRO: transacao nao esta read-only"; exit 1; }
+          echo "Transacao PostgreSQL confirmada como read-only."
 
       - name: Export current Atlas profiles
         shell: bash
@@ -70,6 +72,7 @@ jobs:
           mkdir -p reconciliation-output
           psql "$SUPABASE_DB_URL" \
             --set=ON_ERROR_STOP=1 \
+            --quiet \
             --csv \
             --file=scripts/export-perfis-atlas-reconciliacao.sql \
             --output=reconciliation-output/perfis-atlas-atual.csv
