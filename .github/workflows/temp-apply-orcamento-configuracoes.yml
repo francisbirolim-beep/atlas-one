@@ -1,4 +1,5 @@
 name: Temp Apply Orcamento Configuracoes
+# Reexecucao apos ajuste do patch — remover antes da PR.
 
 on:
   push:
