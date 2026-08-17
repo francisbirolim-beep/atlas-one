@@ -91,8 +91,6 @@ export default function UnidadesPendentes() {
       produtoId: produto.id,
       unidade,
       evidencia,
-      usuarioId: usuario.id,
-      usuarioNome: usuario.nome,
     })
     setSalvandoId(null)
 

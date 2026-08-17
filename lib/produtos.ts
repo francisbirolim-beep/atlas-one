@@ -230,54 +230,30 @@ export async function validarUnidadeOperacionalProduto(params: {
   produtoId: string
   unidade: string
   evidencia: string
-  usuarioId: string | null
-  usuarioNome: string | null
 }): Promise<{ error: string | null }> {
   const unidade = params.unidade.trim()
   const evidencia = params.evidencia.trim()
   if (!unidade) return { error: 'Informe a unidade operacional.' }
   if (!evidencia) return { error: 'Registre como a unidade foi confirmada.' }
 
-  const { data: atual, error: erroLeitura } = await supabase
-    .from('produtos')
-    .select('id, nome, unidade, unidade_origem, qtde_embalagem_origem, observacao_validacao')
-    .eq('id', params.produtoId)
-    .maybeSingle()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return { error: 'Sessão expirada. Entre novamente no Atlas.' }
 
-  if (erroLeitura || !atual) return { error: 'Não foi possível localizar o produto para validação.' }
-  if (atual.unidade) return { error: 'Este produto já possui unidade operacional. Recarregue a fila antes de continuar.' }
-
-  const agora = new Date()
-  const agoraIso = agora.toISOString()
-  const origem = atual.unidade_origem || 'não informada'
-  const embalagem = atual.qtde_embalagem_origem != null ? String(atual.qtde_embalagem_origem) : 'não informada'
-  const registro = [
-    `Unidade operacional validada manualmente como "${unidade}".`,
-    `Origem preservada: ${origem}; Qtde Emb.: ${embalagem}.`,
-    `Evidência: ${evidencia}.`,
-    `Responsável: ${params.usuarioNome || 'usuário não identificado'} em ${agora.toLocaleString('pt-BR')}.`,
-  ].join(' ')
-  const observacao = [atual.observacao_validacao?.trim(), registro].filter(Boolean).join('\n')
-
-  const { data: atualizado, error } = await supabase
-    .from('produtos')
-    .update({
-      unidade,
-      status_validacao: 'revisado',
-      validado_em: agoraIso,
-      validado_por_id: params.usuarioId,
-      validado_por_nome: params.usuarioNome,
-      observacao_validacao: observacao,
-      updated_at: agoraIso,
+  try {
+    const resp = await fetch('/api/produtos/validar-unidade-operacional', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ produtoId: params.produtoId, unidade, evidencia }),
     })
-    .eq('id', params.produtoId)
-    .is('unidade', null)
-    .select('id')
-    .maybeSingle()
-
-  if (error) return { error: 'Não foi possível registrar a unidade operacional.' }
-  if (!atualizado) return { error: 'O produto foi alterado por outro usuário. Recarregue a fila antes de continuar.' }
-  return { error: null }
+    const json = await resp.json().catch(() => ({}))
+    if (!resp.ok) return { error: json.error || 'Não foi possível registrar a unidade operacional.' }
+    return { error: null }
+  } catch {
+    return { error: 'Não foi possível conectar ao servidor para validar a unidade operacional.' }
+  }
 }
 
 export async function alternarAtivoProduto(id: string, ativo: boolean) {
