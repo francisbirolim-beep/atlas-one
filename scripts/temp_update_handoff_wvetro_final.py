@@ -1,0 +1,26 @@
+from pathlib import Path
+
+current = Path('docs/ai-handoff/CURRENT_STATE.md')
+impl = Path('docs/ai-handoff/IMPLEMENTATIONS.md')
+next_task = Path('docs/ai-handoff/NEXT_TASK.md')
+
+marker = '## PRODUTOS — ACESSÓRIOS W.VETRO — PRODUÇÃO CONCLUÍDA — 2026-08-17'
+
+current_block = '''\n\n## PRODUTOS — ACESSÓRIOS W.VETRO — PRODUÇÃO CONCLUÍDA — 2026-08-17\n\nA reconciliação/carga dos acessórios W.Vetro está concluída em produção. Não voltar a tratá-la como migration pendente.\n\nAplicações confirmadas pelo `Supabase Database Control`:\n- run #82 (ID `32043969549`): aplicou `20260817141000_carga_acessorios_wvetro_un_v1.sql`, `20260817150000_produtos_unidade_operacional_pendente_v1.sql` e `20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql`;\n- run #84 (ID `32044325910`): aplicou `20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql`;\n- ambos com confirmação explícita `APPLY_PRODUCTION` e `Finished supabase db push.`.\n\nEstado consolidado:\n- fonte W.Vetro: 1.174 acessórios;\n- 785 acessórios faltantes foram adicionados ao Atlas;\n- 649 desses 785 usam unidade operacional `UN`;\n- 136 ficaram com `produtos.unidade = NULL`, preservando a unidade de origem e permanecendo fora dos fluxos operacionais que exigem unidade validada;\n- 389 acessórios preexistentes receberam proveniência W.Vetro;\n- 296 correspondências iguais foram confirmadas;\n- 93 divergências de unidade foram preservadas sem sobrescrever `produtos.unidade`;\n- os 3 itens exclusivos do Atlas (`TELA-1000-GALV`, `TELA-132`, `TELA-254`) permanecem preservados;\n- total esperado da categoria acessório após a consolidação: 1.177 registros, sendo 1.174 ligados à fonte W.Vetro e 3 exclusivos do Atlas.\n\nA migration final possui pós-checks transacionais que abortam se não houver 389 registros reconciliados, se a proveniência ficar incompleta, se algum campo operacional for alterado, se as 93 divergências não forem preservadas ou se as 296 correspondências iguais não forem confirmadas. O apply concluído confirma que essas guardas passaram.\n\nPR final de proveniência:\n- PR #160;\n- merge commit `ec2a97fbf2f6c2accfe1cbcc7e4030527fd2ce1c`.\n\nPendência operacional remanescente, sem bloquear a base:\n- validar humanamente a unidade operacional dos 136 acessórios com unidade de origem diferente de `UN`;\n- não inferir conversão, unidade canônica ou `Qtde Emb.` automaticamente.\n'''
+
+impl_block = '''\n\n## Acessórios W.Vetro — carga e proveniência concluídas em produção — 2026-08-17\n\nFechamento da reconciliação iniciada na PR #147:\n- migration de identidade técnica ativa em produção;\n- 785 acessórios faltantes carregados;\n- 649 com unidade operacional `UN`;\n- 136 com unidade operacional pendente (`NULL`) e unidade de origem preservada;\n- 389 acessórios já existentes enriquecidos com proveniência W.Vetro;\n- 296 correspondências iguais confirmadas;\n- 93 divergências de unidade preservadas sem sobrescrita;\n- 3 itens exclusivos do Atlas preservados.\n\nRuns de produção:\n- #82 / ID `32043969549`: migrations `20260817141000`, `20260817150000` e `20260817151000`;\n- #84 / ID `32044325910`: migration `20260817160000`;\n- ambos concluídos com `APPLY_PRODUCTION`.\n\nPR #160 mergeada em `main` no commit `ec2a97fbf2f6c2accfe1cbcc7e4030527fd2ce1c`.\n\nA migration de proveniência preserva os campos operacionais e aborta se detectar alteração indevida em nome, categoria, preço, unidade, descrição, ativo, marca, NCM, linha, cor ou ID externo.\n'''
+
+next_block = '''## TAREFA ATUAL — PERFIS W.VETRO — 2026-08-17\n\nA etapa dos acessórios W.Vetro está **concluída em produção**. Os trechos antigos deste arquivo que tratam migrations de acessórios como pendentes são históricos e não devem orientar novas ações.\n\nEstado confirmado:\n- 1.174 acessórios da fonte W.Vetro reconciliados;\n- 785 faltantes adicionados;\n- 389 preexistentes enriquecidos com proveniência;\n- 93 divergências de unidade preservadas;\n- 136 acessórios permanecem com unidade operacional pendente e fora de fluxos que exigem unidade validada;\n- 3 itens exclusivos do Atlas preservados.\n\nPróxima frente principal:\n1. localizar/usar a fonte real `ExportWWPerfil (1).xlsx`;\n2. auditar os 1.307 perfis antes de qualquer escrita;\n3. exportar o snapshot atual dos perfis Atlas em modo somente leitura;\n4. reconciliar por código técnico, separando iguais, divergentes, faltantes e exclusivos Atlas;\n5. preservar unidade, peso, tamanho de barra, linha, cor, NCM e demais campos de origem sem promover automaticamente dados não validados a verdade técnica;\n6. somente depois preparar migrations de carga em PRs pequenas, com dry-run e apply explícito em produção.\n\nFila secundária:\n- validar humanamente a unidade operacional dos 136 acessórios pendentes;\n- nunca inferir fator de conversão a partir de `Qtde Emb.` ou unidade da fonte.\n\n'''
+
+text = current.read_text()
+if marker not in text:
+    current.write_text(text.rstrip() + current_block + '\n')
+
+text = impl.read_text()
+if '## Acessórios W.Vetro — carga e proveniência concluídas em produção — 2026-08-17' not in text:
+    impl.write_text(text.rstrip() + impl_block + '\n')
+
+text = next_task.read_text()
+if '## TAREFA ATUAL — PERFIS W.VETRO — 2026-08-17' not in text:
+    title, rest = text.split('\n', 1)
+    next_task.write_text(title + '\n\n' + next_block + rest.lstrip())
