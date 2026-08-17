@@ -2,146 +2,145 @@
 
 ## TAREFA ATUAL
 
-Concluir a reconciliação da base completa `ExportWWAcessorios.xlsx` (1.174 acessórios) contra os 392 acessórios atualmente existentes no Atlas, **sem inserir ou atualizar nada antes do relatório completo**.
+A PR #147 está tecnicamente validada. O próximo gate é **merge manual**; depois do merge, decidir explicitamente se a migration corrigida deve ser aplicada em produção. Nenhuma carga de acessórios deve ocorrer antes disso.
 
 ## ESTADO DE PARTIDA
 
-PR #143 foi mergeada em `main`.
-
-Commit de merge:
-`bc08fe6443e41475497d8c1947f840236dc00762`
-
-Migration de identidade técnica mergeada, mas ainda pendente de apply em produção:
-`supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
-
-Não aplicar automaticamente.
-
-## AUDITORIA DA FONTE JÁ CONCLUÍDA
-
-Arquivo:
-`ExportWWAcessorios.xlsx`
+A reconciliação `ExportWWAcessorios.xlsx` x Atlas foi concluída na PR #147.
 
 Resultado:
-- 1.174 acessórios;
-- 1.174 códigos preenchidos;
-- 1.174 códigos únicos;
-- 0 códigos duplicados;
-- 36 descrições repetidas / 96 linhas envolvidas;
-- 955 com Linha `GERAL`;
-- 891 com Cor Única numérica;
-- 891 especificamente com código de cor `15`;
-- 156 NCM `0`;
-- 65 NCM `12345678`;
-- 20 outros NCM com formato diferente de 8 dígitos;
-- 0 descrição ausente;
-- 0 unidade ausente;
-- todos ativos.
+- fonte W.Vetro: 1.174 acessórios;
+- Atlas atual: 392 acessórios;
+- códigos em ambos: 389;
+- `EXISTENTE_IGUAL`: 296;
+- `EXISTENTE_DIVERGENTE`: 93;
+- `FALTANTE_ATLAS`: 785;
+- duplicados na origem: 0;
+- sem código: 0;
+- somente no Atlas: 3.
 
 Relatório:
-`docs/tecnico/auditoria-exportwwacessorios-2026-08-16.md`
+`docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`
 
-## PRÓXIMO PASSO OBRIGATÓRIO
+## CHECKS DA CORREÇÃO TÉCNICA
 
-Obter a lista item a item dos 392 acessórios atuais do Atlas.
+No commit `235d31f0b3ec900f9eb06157ab1a75cd6133de26`, que contém a correção de migration/unidade/proveniência:
+- `Supabase Database Control`: **success**;
+- `Audit migration history`: **success**;
+- `Dry-run pending migrations`: **success**;
+- `Apply pending migrations`: **skipped**;
+- `Build Validation`: **success**;
+- `Vercel`: **success**.
 
-Foi criado o script somente leitura:
-`scripts/export-acessorios-atlas-reconciliacao.sql`
+Portanto a migration foi validada em dry-run, mas **não foi aplicada**.
 
-A consulta deve retornar pelo menos:
-- id;
-- código inferido pelo prefixo de `nome` antes de ` - `;
-- nome;
-- preço;
-- unidade;
-- NCM;
-- grupo;
-- marca;
-- fornecedor_id;
-- linha_id;
-- cor_id;
-- ativo;
-- timestamps.
+## DESCOBERTA DE MODELAGEM — UNIDADE NÃO É UM CAMPO SIMPLES
 
-A consulta foi desenhada para funcionar **antes** da aplicação da migration pendente de identidade técnica.
+Todas as 93 divergências reais são de unidade:
+- MT -> UN: 66;
+- PR -> UN: 12;
+- TB -> UN: 9;
+- BR -> UN: 3;
+- PT -> UN: 2;
+- PC -> UN: 1.
 
-## RECONCILIAÇÃO
+Não houve divergência de descrição, NCM válido/seguro ou status ativo entre códigos correspondentes.
 
-Depois de obter o export dos 392, comparar por código técnico normalizado e classificar cada linha da planilha completa em:
+A fonte também possui `Qtde Emb.`. Entre os divergentes há, por exemplo:
+- PT com Qtde Emb. 121 e 89;
+- PC com Qtde Emb. 8;
+- MT com ocorrências de Qtde Emb. 50 e 1.
 
-1. `EXISTENTE_IGUAL`
-2. `EXISTENTE_DIVERGENTE`
-3. `FALTANTE_ATLAS`
-4. `DUPLICADO_ORIGEM`
-5. `SEM_CODIGO`
-6. `REVISAR`
+Isso impede assumir que a unidade da fonte é automaticamente a unidade operacional/consumo do Atlas.
 
-## CAMPOS DE COMPARAÇÃO
+O código atual confirma que `produtos.unidade` é operacional: ao selecionar um produto numa receita de Engenharia, a tela copia `produto.unidade` para a unidade do componente.
 
-Quando disponíveis nos dois lados:
-- código;
-- descrição/nome;
-- unidade;
-- NCM;
-- linha;
-- cor/código de cor;
-- marca/fabricante;
-- ativo;
-- preço/custo somente quando a fonte realmente trouxer esses campos.
+## CORREÇÃO FEITA NA MIGRATION — AINDA NÃO APLICADA
 
-IMPORTANTE: `ExportWWAcessorios.xlsx` não contém colunas de preço/custo. Logo, preço/custo não pode ser validado contra essa fonte.
+Migration:
+`supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
-## REGRAS
+A versão anterior tinha uma premissa incorreta: tratava `unidade` atual como valor cru W.Vetro e classificava automaticamente produtos técnicos preexistentes como `origem = wvetro`.
 
-- nunca sobrescrever silenciosamente;
-- `GERAL` é dado de origem, não vínculo técnico validado;
-- código numérico de cor não vira nome de cor;
-- NCM `0`, `12345678` ou formato suspeito não vira válido automaticamente;
-- preservar `codigo_origem`;
-- preservar `dados_origem`;
-- usar `origem = wvetro` para itens provenientes dessa base;
-- só preencher `id_externo_wvetro` quando houver uma chave externa real; não usar o código técnico como falso ID externo;
-- não inventar linha, cor, NCM, fabricante, preço ou custo;
-- nenhum insert/update antes da aprovação do relatório de reconciliação.
+A reconciliação provou que isso não é seguro.
 
-## RELATÓRIO OBRIGATÓRIO ANTES DE IMPORTAR
+A migration foi corrigida na PR #147 para:
+- adicionar `unidade_origem`;
+- adicionar `qtde_embalagem_origem`;
+- manter `produtos.unidade` como unidade operacional/canônica existente;
+- não fazer backfill da unidade de origem usando o `UN` atual;
+- classificar produtos técnicos preexistentes como `origem = legado` até reconciliação;
+- manter snapshot em `dados_origem` identificado como `atlas_legacy_pre_reconciliacao`;
+- não fingir que o snapshot legado é o dado cru da base completa W.Vetro;
+- continuar sem usar código técnico como falso `id_externo_wvetro`.
 
-Entregar:
-- total planilha;
-- total banco;
-- existentes iguais;
-- existentes divergentes;
-- faltantes;
-- duplicados;
-- sem código;
-- NCM suspeitos;
-- Linha GERAL;
-- cor numérica/origem;
-- unidades raras/suspeitas;
-- campos impossíveis de comparar por ausência na fonte;
-- lista detalhada dos divergentes;
-- lista detalhada dos faltantes.
+`lib/produtos.ts` também aceita os novos campos de origem para futura carga reconciliada.
 
-## DEPOIS DA RECONCILIAÇÃO
+## PRÓXIMO GATE MANUAL
 
-Somente após validação do relatório:
-1. decidir se aplica primeiro `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
-2. preparar PR separada para inserir apenas acessórios faltantes seguros;
-3. tratar divergentes sem sobrescrita silenciosa;
-4. reexecutar `scripts/auditoria-produtos-wvetro.sql` após qualquer importação;
-5. depois tratar o backfill dos 1.307 perfis a partir de `ExportWWPerfil (1).xlsx`.
+1. revisar a PR #147;
+2. fazer **merge manual** quando aprovado;
+3. após o merge, rodar `Supabase Database Control` em modo `apply` somente se houver decisão explícita;
+4. para apply em produção, exigir `confirmation = APPLY_PRODUCTION`;
+5. confirmar que a migration foi realmente aplicada antes de considerar os novos campos ativos;
+6. somente então abrir PR separada para carga de acessórios.
 
-## PERFIS — PRÓXIMA FASE
+Não fazer merge automático e não fazer apply automático.
+
+## REGRA PARA OS 93 DIVERGENTES
+
+Não substituir `produtos.unidade` em lote.
+
+Para cada item/grupo comprovadamente homogêneo, distinguir:
+- unidade operacional/consumo no Atlas;
+- unidade exatamente informada pelo W.Vetro (`unidade_origem`);
+- quantidade de embalagem exatamente informada (`qtde_embalagem_origem`);
+- eventual unidade de compra/estoque e fator de conversão — **somente se houver evidência e necessidade operacional**.
+
+Não inventar a semântica de `Qtde Emb.`.
+
+## APÓS A MIGRATION ESTAR ATIVA
+
+Sequência recomendada:
+1. preparar carga dos 785 faltantes seguros em PR separada;
+2. para itens vindos da fonte real, gravar `origem = wvetro`, `codigo_origem`, `unidade_origem`, `qtde_embalagem_origem` e `dados_origem`;
+3. não sobrescrever silenciosamente a `unidade` operacional dos 93 divergentes;
+4. não usar código técnico como falso `id_externo_wvetro`;
+5. reexecutar `scripts/auditoria-produtos-wvetro.sql` e a reconciliação;
+6. somente depois avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
+
+## DADOS DA ORIGEM QUE NÃO DEVEM SER VALIDADOS AUTOMATICAMENTE
+
+- `Linha = GERAL`: 955;
+- Cor Única numérica: 891;
+- NCM `0`: 156;
+- NCM `12345678`: 65;
+- outros NCM fora do formato de 8 dígitos: 20.
+
+Esses valores devem ser preservados como origem e permanecer pendentes de validação técnica/fiscal quando aplicável.
+
+## ITENS SOMENTE NO ATLAS
+
+Preservar e não apagar automaticamente:
+- `TELA-1000-GALV`;
+- `TELA-132`;
+- `TELA-254`.
+
+A existência desses itens é a razão pela qual nome/código legado, sozinho, não comprova `origem = wvetro`.
+
+## PERFIS — FASE POSTERIOR
 
 `ExportWWPerfil (1).xlsx` possui 1.307 perfis e será tratado depois dos acessórios.
 
-Já foram observados dados que exigem validação antes do backfill, incluindo pesos muito fora da faixa comum e tamanhos de barra com possíveis diferenças de unidade. Não corrigir automaticamente.
+Já há sinais que exigem revisão antes de backfill, incluindo pesos fora da faixa comum e possíveis diferenças de unidade no tamanho de barra. Não corrigir automaticamente.
 
 ## CUIDADOS PERMANENTES
 
 - GitHub é a única fonte da verdade;
 - nunca commitar direto na `main`;
-- branch -> PR -> checks verdes -> merge;
+- branch -> PR -> checks verdes -> merge manual;
 - não aplicar migration automaticamente em produção;
+- nenhum insert/update de dados de produto antes da etapa explicitamente aprovada;
 - Plano de Corte parte do produto cadastrado;
 - receita específica por produto tem prioridade;
 - snapshot não altera receita mestre;

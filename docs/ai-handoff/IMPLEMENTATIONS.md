@@ -130,7 +130,7 @@ Merge em `main` em 2026-08-17 01:55:49 UTC.
 Commit de merge:
 `bc08fe6443e41475497d8c1947f840236dc00762`
 
-Implementado no código/schema:
+Implementado no código/schema proposto:
 - `codigo`;
 - `codigo_origem`;
 - `origem`;
@@ -146,7 +146,7 @@ Implementado no código/schema:
 - busca por código/nome/descrição;
 - badge de código técnico.
 
-Migration final:
+Migration:
 `supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
 Estado de produção: **migration ainda não aplicada**.
@@ -163,7 +163,7 @@ Relatório:
 `docs/tecnico/auditoria-produtos-2026-08-16.md`
 
 ## Auditoria da base completa `ExportWWAcessorios.xlsx` — 2026-08-16
-Fonte completa fornecida pelo usuário e analisada sem alterar o banco:
+Fonte completa analisada sem alterar o banco:
 - 1.174 acessórios;
 - 1.174 códigos preenchidos;
 - 1.174 códigos únicos;
@@ -180,33 +180,92 @@ Fonte completa fornecida pelo usuário e analisada sem alterar o banco:
 Relatório técnico:
 `docs/tecnico/auditoria-exportwwacessorios-2026-08-16.md`
 
-Script somente leitura para exportar os 392 acessórios atuais do Atlas:
+Script somente leitura:
 `scripts/export-acessorios-atlas-reconciliacao.sql`
+
+## PR #146 — handoff pós-PR #143 e preparação da reconciliação
+Mergeada em `main`.
+
+Commit de merge:
+`f629f3598ef06b6e15e909752c2b461a3396ff07`
+
+- atualizou `CURRENT_STATE.md`, `NEXT_TASK.md` e `IMPLEMENTATIONS.md`;
+- registrou a auditoria da fonte completa;
+- adicionou o script de export somente leitura dos 392 acessórios atuais;
+- manteve bloqueada qualquer importação antes da reconciliação item a item.
+
+## PR #147 — export seguro, reconciliação completa e correção de proveniência/unidade — 2026-08-16/17
+PR em aberto na branch `chore/export-acessorios-reconciliacao`.
+
+Implementado/documentado:
+- workflow `Export Accessories Reconciliation`;
+- execução somente manual (`workflow_dispatch`);
+- sessão PostgreSQL forçada a `default_transaction_read_only=on`;
+- artifact temporário com o export atual do Atlas;
+- primeiro export executado com sucesso: **392 acessórios**;
+- relatório `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`.
+
+Resultado da reconciliação por código técnico normalizado:
+- fonte: 1.174;
+- Atlas: 392;
+- códigos em ambos: 389;
+- `EXISTENTE_IGUAL`: 296;
+- `EXISTENTE_DIVERGENTE`: 93;
+- `FALTANTE_ATLAS`: 785;
+- `DUPLICADO_ORIGEM`: 0;
+- `SEM_CODIGO`: 0;
+- somente no Atlas: 3 (`TELA-1000-GALV`, `TELA-132`, `TELA-254`).
+
+As 93 divergências reais são exclusivamente de unidade:
+- MT -> UN: 66;
+- PR -> UN: 12;
+- TB -> UN: 9;
+- BR -> UN: 3;
+- PT -> UN: 2;
+- PC -> UN: 1.
+
+Não houve divergência de descrição, NCM válido/seguro ou ativo entre códigos correspondentes.
+
+### Descoberta de semântica de unidade
+
+A fonte possui `Qtde Emb.`. Entre os divergentes há PT com 121/89, PC com 8 e MT com ocorrências 50/1. Isso torna inseguro copiar a unidade da origem diretamente para `produtos.unidade`.
+
+O código atual também confirmou que `produtos.unidade` é operacional: a tela de Engenharia copia essa unidade para o componente da receita quando um produto é selecionado.
+
+### Correção preventiva da migration ainda não aplicada
+
+A migration `20260816210000_produtos_identidade_tecnica_v1.sql` foi corrigida na própria PR #147 antes de qualquer apply:
+- adiciona `unidade_origem`;
+- adiciona `qtde_embalagem_origem`;
+- mantém `produtos.unidade` como unidade operacional existente;
+- não usa `UN` legado como falso valor de origem;
+- usa `origem = legado` nos produtos técnicos preexistentes até reconciliação;
+- salva `dados_origem` legado com `snapshot_tipo = atlas_legacy_pre_reconciliacao`;
+- não classifica automaticamente todo `CODIGO - DESCRICAO` como origem W.Vetro;
+- não cria falso `id_externo_wvetro`.
+
+`lib/produtos.ts` foi expandido para aceitar os dois novos campos de origem em futuras cargas reconciliadas.
+
+O export bruto do banco, com IDs internos, não é versionado no repositório público; permanece apenas em artifact temporário. O detalhamento integral foi gerado em planilha de trabalho com abas específicas para divergentes e faltantes.
+
+Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado em produção.
 
 ## Próxima etapa
 
-Completar a reconciliação item a item dos 1.174 acessórios da fonte contra os 392 atuais do Atlas.
-
-Nenhum insert/update até classificar:
-- EXISTENTE_IGUAL;
-- EXISTENTE_DIVERGENTE;
-- FALTANTE_ATLAS;
-- DUPLICADO_ORIGEM;
-- SEM_CODIGO;
-- REVISAR.
-
-Depois da validação dos acessórios:
-- decidir o apply da migration `20260816210000_produtos_identidade_tecnica_v1.sql`;
-- importar somente faltantes seguros em PR separada;
-- tratar divergentes sem sobrescrita silenciosa;
-- reauditar;
-- avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
+1. aguardar/confirmar Build Validation, Vercel e `Supabase Database Control` dry-run da PR #147;
+2. manter merge manual;
+3. após merge, decidir explicitamente o apply da migration corrigida;
+4. com schema ativo, preparar carga dos 785 faltantes seguros em PR separada;
+5. preencher `unidade_origem`/`qtde_embalagem_origem` a partir da fonte real sem sobrescrever silenciosamente `produtos.unidade`;
+6. validar os 93 divergentes segundo uso operacional, compra/estoque e Engenharia;
+7. reauditar;
+8. avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
 
 ## Regras permanentes
 - GitHub é a única fonte da verdade;
 - nunca commitar direto na `main`;
-- branch -> PR -> checks verdes -> merge;
+- branch -> PR -> checks verdes -> merge manual;
 - migration só conta como ativa após apply confirmado;
-- não inventar NCM, linha, cor, preço, custo, medida ou identificador externo;
-- `GERAL` e códigos numéricos de cor permanecem dados de origem até validação;
+- não inventar NCM, linha, cor, preço, custo, medida, unidade operacional, fator de conversão ou identificador externo;
+- `GERAL`, códigos numéricos de cor, unidade da fonte e Qtde Emb. permanecem dados de origem até validação de sua semântica;
 - integração W.Vetro permanente deve ser server-side, sem credenciais no browser/frontend.
