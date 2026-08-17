@@ -42,6 +42,10 @@ export interface Anexo {
       titulo: string
       nome: string
       url: string
+      excluido_em?: string | null
+      excluido_por_id?: string | null
+      excluido_por_nome?: string | null
+      motivo_exclusao?: string | null
 }
 
 export interface HistoricoItem {
