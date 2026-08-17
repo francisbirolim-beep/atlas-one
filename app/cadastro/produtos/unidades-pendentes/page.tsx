@@ -1,0 +1,258 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowLeft, CheckCircle2, PackageSearch, Search, ShieldAlert } from 'lucide-react'
+import { usuarioAtual } from '@/lib/auth'
+import { listarProdutos, validarUnidadeOperacionalProduto } from '@/lib/produtos'
+import { Produto, Usuario } from '@/lib/tipos'
+
+function codigoProduto(produto: Produto): string {
+  return produto.codigo || produto.nome.split(' - ')[0] || produto.nome
+}
+
+export default function UnidadesPendentes() {
+  const [carregando, setCarregando] = useState(true)
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [busca, setBusca] = useState('')
+  const [filtroOrigem, setFiltroOrigem] = useState('')
+  const [unidadePorId, setUnidadePorId] = useState<Record<string, string>>({})
+  const [evidenciaPorId, setEvidenciaPorId] = useState<Record<string, string>>({})
+  const [salvandoId, setSalvandoId] = useState<string | null>(null)
+  const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState('')
+
+  useEffect(() => {
+    carregar()
+  }, [])
+
+  async function carregar() {
+    setCarregando(true)
+    const me = await usuarioAtual()
+    setUsuario(me)
+    if (me?.role === 'master') {
+      setProdutos(await listarProdutos())
+      const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''
+      setBusca(q)
+    }
+    setCarregando(false)
+  }
+
+  const pendentes = useMemo(
+    () => produtos.filter(p => p.categoria === 'acessorio' && !p.unidade),
+    [produtos]
+  )
+
+  const unidadesOrigem = useMemo(
+    () => Array.from(new Set(pendentes.map(p => p.unidade_origem?.trim() || 'NÃO INFORMADA'))).sort((a, b) => a.localeCompare(b)),
+    [pendentes]
+  )
+
+  const contagemOrigem = useMemo(() => {
+    const mapa = new Map<string, number>()
+    for (const produto of pendentes) {
+      const origem = produto.unidade_origem?.trim() || 'NÃO INFORMADA'
+      mapa.set(origem, (mapa.get(origem) || 0) + 1)
+    }
+    return mapa
+  }, [pendentes])
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return pendentes.filter(p => {
+      const origem = p.unidade_origem?.trim() || 'NÃO INFORMADA'
+      if (filtroOrigem && origem !== filtroOrigem) return false
+      if (!q) return true
+      return codigoProduto(p).toLowerCase().includes(q)
+        || p.nome.toLowerCase().includes(q)
+        || (p.descricao || '').toLowerCase().includes(q)
+    })
+  }, [pendentes, busca, filtroOrigem])
+
+  async function validar(produto: Produto) {
+    if (!usuario) return
+    setErro('')
+    setSucesso('')
+    const unidade = (unidadePorId[produto.id] || '').trim()
+    const evidencia = (evidenciaPorId[produto.id] || '').trim()
+
+    if (!unidade) {
+      setErro(`Informe a unidade operacional de ${codigoProduto(produto)}.`)
+      return
+    }
+    if (!evidencia) {
+      setErro(`Registre como a unidade de ${codigoProduto(produto)} foi confirmada.`)
+      return
+    }
+
+    setSalvandoId(produto.id)
+    const resultado = await validarUnidadeOperacionalProduto({
+      produtoId: produto.id,
+      unidade,
+      evidencia,
+      usuarioId: usuario.id,
+      usuarioNome: usuario.nome,
+    })
+    setSalvandoId(null)
+
+    if (resultado.error) {
+      setErro(resultado.error)
+      return
+    }
+
+    setUnidadePorId(prev => ({ ...prev, [produto.id]: '' }))
+    setEvidenciaPorId(prev => ({ ...prev, [produto.id]: '' }))
+    setProdutos(await listarProdutos())
+    setSucesso(`${codigoProduto(produto)}: unidade operacional registrada como “${unidade}”.`)
+  }
+
+  if (carregando) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
+  }
+
+  if (usuario?.role !== 'master') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 gap-3">
+        <ShieldAlert size={40} className="text-slate-300" />
+        <p className="text-slate-500">Só o usuário master pode validar unidade operacional de produtos.</p>
+        <Link href="/cadastro/produtos" className="text-brand-navy text-sm hover:underline">Voltar aos Produtos</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
+      <header className="bg-white border-b border-slate-200">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
+          <Link href="/cadastro/produtos?categoria=acessorio" className="p-2 hover:bg-slate-100 rounded-lg transition">
+            <ArrowLeft size={20} />
+          </Link>
+          <PackageSearch size={22} className="text-brand-navy" />
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-slate-800">Unidades operacionais pendentes</h1>
+            <p className="text-sm text-slate-500">Validação humana dos acessórios importados do W.Vetro</p>
+          </div>
+          <span className="px-3 py-1.5 rounded-full bg-amber-100 text-amber-800 text-sm font-semibold">
+            {pendentes.length} pendentes
+          </span>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-8 space-y-5">
+        <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+          <AlertTriangle size={20} className="text-amber-700 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900 space-y-1">
+            <p className="font-semibold">A unidade da fonte é referência, não decisão automática.</p>
+            <p>MT, PR, TB, BR, PC, CJ, M2, CT ou RO permanecem como <strong>unidade de origem</strong>. Digite a unidade operacional somente depois de confirmar como o Atlas deve consumir esse item. Nenhum fator de conversão é criado nesta tela.</p>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-4">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+              <input
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar código, nome ou descrição"
+                className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+              />
+            </div>
+            <select
+              value={filtroOrigem}
+              onChange={e => setFiltroOrigem(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+            >
+              <option value="">Todas as unidades de origem</option>
+              {unidadesOrigem.map(unidade => (
+                <option key={unidade} value={unidade}>{unidade} ({contagemOrigem.get(unidade) || 0})</option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        {erro && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">{erro}</div>}
+        {sucesso && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2"><CheckCircle2 size={16} /> {sucesso}</div>}
+
+        {pendentes.length === 0 ? (
+          <section className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
+            <CheckCircle2 size={36} className="mx-auto text-emerald-500 mb-3" />
+            <h2 className="font-semibold text-slate-800">Nenhuma unidade operacional pendente</h2>
+            <p className="text-sm text-slate-500 mt-1">Todos os acessórios desta fila já possuem unidade operacional definida.</p>
+          </section>
+        ) : filtrados.length === 0 ? (
+          <section className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-500 text-center">Nenhum item encontrado com estes filtros.</section>
+        ) : (
+          <div className="space-y-3">
+            {filtrados.map(produto => {
+              const codigo = codigoProduto(produto)
+              return (
+                <section key={produto.id} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-mono">{codigo}</span>
+                        <span className={`text-xs px-2 py-1 rounded-full ${produto.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
+                          {produto.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-800">Unidade pendente</span>
+                      </div>
+                      <h2 className="font-semibold text-slate-800 mt-2">{produto.nome}</h2>
+                      {produto.descricao && <p className="text-sm text-slate-500 mt-1">{produto.descricao}</p>}
+                    </div>
+                    <div className="text-sm sm:text-right flex-shrink-0">
+                      <p className="text-slate-500">Origem W.Vetro</p>
+                      <p className="font-semibold text-slate-800">Unidade: {produto.unidade_origem || 'não informada'}</p>
+                      <p className="text-slate-500">Qtde Emb.: {produto.qtde_embalagem_origem ?? 'não informada'}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Unidade operacional Atlas *</label>
+                      <input
+                        value={unidadePorId[produto.id] || ''}
+                        onChange={e => setUnidadePorId(prev => ({ ...prev, [produto.id]: e.target.value }))}
+                        placeholder="Digite após confirmar (ex.: UN, MT, PR...)"
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">O valor não é preenchido a partir da unidade de origem.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Evidência / como foi confirmado *</label>
+                      <input
+                        value={evidenciaPorId[produto.id] || ''}
+                        onChange={e => setEvidenciaPorId(prev => ({ ...prev, [produto.id]: e.target.value }))}
+                        placeholder="Ex.: catálogo do fornecedor, embalagem, confirmação técnica"
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+                      />
+                    </div>
+                  </div>
+
+                  {produto.dados_origem && (
+                    <details className="text-xs text-slate-500">
+                      <summary className="cursor-pointer hover:text-slate-700">Ver dados crus preservados da origem</summary>
+                      <pre className="mt-2 bg-slate-50 border border-slate-100 rounded-xl p-3 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(produto.dados_origem, null, 2)}</pre>
+                    </details>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={salvandoId === produto.id}
+                      onClick={() => validar(produto)}
+                      className="px-4 py-2.5 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
+                    >
+                      {salvandoId === produto.id ? 'Validando...' : 'Confirmar unidade operacional'}
+                    </button>
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
