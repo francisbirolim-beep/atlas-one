@@ -245,3 +245,13 @@ Estado ativo em `Editar orçamento`:
 - a mesma exclusão lógica/auditável vale durante a elaboração.
 
 Sem migration e sem alteração de schema: os metadados adicionais usam o JSON existente em `orcamentos.anexos`.
+
+## PRODUTOS — IDENTIDADE TÉCNICA APLICADA E CARGA UN PREPARADA — 2026-08-17
+
+A migration de identidade técnica `20260816210000_produtos_identidade_tecnica_v1.sql` está **ativa em produção**. Apply confirmado pelo `Supabase Database Control` run #79 (ID `32037239260`), com `APPLY_PRODUCTION`, etapa de apply concluída e log `Finished supabase db push.`.
+
+Com isso, os campos de identidade/proveniência e `produto_linhas` passam a ser considerados ativos no banco.
+
+Próxima carga preparada em PR separada: `20260817141000_carga_acessorios_wvetro_un_v1.sql`, contendo somente **649 dos 785 acessórios faltantes**, todos com unidade de origem `UN`. Os **136 não-UN** ficam fora até validação da unidade operacional.
+
+A carga não inventa preço/custo, linha técnica, cor técnica, fator de conversão ou ID externo W.Vetro. Preço 0 permanece placeholder explícito por exigência do schema/fonte sem preço. NCM nunca é validado automaticamente.
