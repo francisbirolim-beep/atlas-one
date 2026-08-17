@@ -2,7 +2,7 @@
 
 ## TAREFA ATUAL
 
-Validar as **93 divergências de unidade de medida** encontradas na reconciliação de acessórios e definir quais valores representam a unidade técnica/comercial correta antes de qualquer atualização ou importação.
+Concluir a PR #147 com o **dry-run da migration corrigida** e, somente depois, validar a semântica das 93 divergências de unidade antes de qualquer atualização/importação de acessórios.
 
 ## ESTADO DE PARTIDA
 
@@ -22,7 +22,7 @@ Resultado:
 Relatório:
 `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`
 
-## DIVERGÊNCIAS A VALIDAR
+## DESCOBERTA DE MODELAGEM — UNIDADE NÃO É UM CAMPO SIMPLES
 
 Todas as 93 divergências reais são de unidade:
 - MT -> UN: 66;
@@ -34,46 +34,67 @@ Todas as 93 divergências reais são de unidade:
 
 Não houve divergência de descrição, NCM válido/seguro ou status ativo entre códigos correspondentes.
 
-## PRÓXIMO PASSO OBRIGATÓRIO
+A fonte também possui `Qtde Emb.`. Entre os divergentes há, por exemplo:
+- PT com Qtde Emb. 121 e 89;
+- PC com Qtde Emb. 8;
+- MT com ocorrências de Qtde Emb. 50 e 1.
 
-Revisar os 93 itens divergentes por natureza do produto e decidir, item a item ou por grupo comprovadamente homogêneo, qual unidade deve ser mantida no Atlas.
+Isso impede assumir que a unidade da fonte é automaticamente a unidade operacional/consumo do Atlas.
 
-Objetivo da revisão:
-1. separar divergências claramente causadas pela extração histórica que gravou `UN` como placeholder;
-2. identificar casos em que a unidade W.Vetro representa embalagem/fornecimento e não unidade de consumo técnico;
-3. não converter automaticamente MT, PR, TB, BR, PT ou PC para outra unidade sem evidência;
-4. registrar a decisão e a justificativa antes de qualquer `UPDATE`.
+O código atual confirma que `produtos.unidade` é operacional: ao selecionar um produto numa receita de Engenharia, a tela copia `produto.unidade` para a unidade do componente.
 
-## MIGRATION DE IDENTIDADE TÉCNICA
+## CORREÇÃO FEITA NA MIGRATION — AINDA NÃO APLICADA
 
-Migration mergeada e ainda não aplicada:
+Migration:
 `supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
-Não aplicar automaticamente.
+A versão anterior tinha uma premissa incorreta: tratava `unidade` atual como valor cru W.Vetro e classificava automaticamente produtos técnicos preexistentes como `origem = wvetro`.
 
-A reconciliação confirmou que o modelo proposto consegue preservar:
-- código técnico e código de origem;
-- dados brutos de origem;
-- NCM de origem separado do status validado;
-- origem W.Vetro;
-- múltiplos vínculos produto x linha.
+A reconciliação provou que isso não é seguro.
 
-Mas o apply em produção continua sendo uma ação separada e explícita via `Supabase Database Control`.
+A migration foi corrigida na PR #147 para:
+- adicionar `unidade_origem`;
+- adicionar `qtde_embalagem_origem`;
+- manter `produtos.unidade` como unidade operacional/canônica existente;
+- não fazer backfill da unidade de origem usando o `UN` atual;
+- classificar produtos técnicos preexistentes como `origem = legado` até reconciliação;
+- manter snapshot em `dados_origem` identificado como `atlas_legacy_pre_reconciliacao`;
+- não fingir que o snapshot legado é o dado cru da base completa W.Vetro;
+- continuar sem usar código técnico como falso `id_externo_wvetro`.
 
-## APÓS A VALIDAÇÃO DAS UNIDADES
+`lib/produtos.ts` também aceita os novos campos de origem para futura carga reconciliada.
+
+## PRÓXIMO PASSO OBRIGATÓRIO
+
+1. confirmar checks da PR #147;
+2. confirmar `Supabase Database Control` em **dry-run**, sem apply;
+3. manter a PR sem merge automático — merge é manual;
+4. após merge, decidir explicitamente se aplica a migration em produção;
+5. somente com schema ativo preparar PR separada de carga dos acessórios.
+
+## REGRA PARA OS 93 DIVERGENTES
+
+Não substituir `produtos.unidade` em lote.
+
+Para cada item/grupo comprovadamente homogêneo, distinguir:
+- unidade operacional/consumo no Atlas;
+- unidade exatamente informada pelo W.Vetro (`unidade_origem`);
+- quantidade de embalagem exatamente informada (`qtde_embalagem_origem`);
+- eventual unidade de compra/estoque e fator de conversão — **somente se houver evidência e necessidade operacional**.
+
+Não inventar a semântica de `Qtde Emb.`.
+
+## APÓS A MIGRATION ESTAR ATIVA
 
 Sequência recomendada:
-1. aprovar a regra/decisão dos 93 divergentes;
-2. decidir explicitamente se aplica `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
-3. após o schema estar ativo, preparar PR separada de carga;
-4. inserir apenas os acessórios faltantes considerados seguros;
-5. preservar `codigo_origem`, `dados_origem` e `origem = wvetro`;
-6. não usar código técnico como falso `id_externo_wvetro`;
-7. tratar divergentes em operação separada, sem sobrescrita silenciosa;
-8. reexecutar `scripts/auditoria-produtos-wvetro.sql` e o export de reconciliação;
-9. somente depois avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
+1. preparar carga dos 785 faltantes seguros em PR separada;
+2. para itens vindos da fonte real, gravar `origem = wvetro`, `codigo_origem`, `unidade_origem`, `qtde_embalagem_origem` e `dados_origem`;
+3. não sobrescrever silenciosamente a `unidade` operacional dos 93 divergentes;
+4. não usar código técnico como falso `id_externo_wvetro`;
+5. reexecutar `scripts/auditoria-produtos-wvetro.sql` e a reconciliação;
+6. somente depois avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
 
-## DADOS DA ORIGEM QUE NÃO DEVEM SER VALIDADO AUTOMATICAMENTE
+## DADOS DA ORIGEM QUE NÃO DEVEM SER VALIDADOS AUTOMATICAMENTE
 
 - `Linha = GERAL`: 955;
 - Cor Única numérica: 891;
@@ -89,6 +110,8 @@ Preservar e não apagar automaticamente:
 - `TELA-1000-GALV`;
 - `TELA-132`;
 - `TELA-254`.
+
+A existência desses itens é a razão pela qual nome/código legado, sozinho, não comprova `origem = wvetro`.
 
 ## PERFIS — FASE POSTERIOR
 
