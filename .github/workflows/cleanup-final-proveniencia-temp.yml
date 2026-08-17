@@ -1,0 +1,44 @@
+name: Cleanup Final Proveniencia Temp
+
+on:
+  push:
+    branches:
+      - feat/reconciliar-proveniencia-acessorios-wvetro
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require validated migration commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql'
+          test -f "$file"
+          echo '2a1cd7c8f29c3cf6349caa1e6e9673396c445971ebd93ac287976fd7ddcb04b4  '"$file" | sha256sum -c -
+          git log --format='%s' -- "$file" | grep -F 'feat: reconciliar proveniência de 389 acessórios W.Vetro'
+
+      - name: Remove every temporary validation artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f scripts/temp_generate_proveniencia_migration.py
+          rm -f scripts/temp_generate_proveniencia_seed.py
+          rm -f scripts/.tmp_prov_mig_{1,2,3,4,5}.b64
+          rm -f scripts/.tmp_prov_seed_{1,2,3,4,5}.b64
+          rm -f .github/workflows/validate-proveniencia-acessorios-temp.yml
+          rm -f .github/workflows/cleanup-proveniencia-temp.yml
+          rm -f .github/workflows/cleanup-final-proveniencia-temp.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'chore: remover validação temporária de proveniência'
+          git push
