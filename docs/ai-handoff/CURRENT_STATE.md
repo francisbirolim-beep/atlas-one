@@ -272,3 +272,33 @@ Migrations preparadas:
 - `20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql`.
 
 Essas migrations só contam como ativas após apply confirmado no `Supabase Database Control`.
+
+## PRODUTOS — ACESSÓRIOS W.VETRO — PRODUÇÃO CONCLUÍDA — 2026-08-17
+
+A reconciliação/carga dos acessórios W.Vetro está concluída em produção. Não voltar a tratá-la como migration pendente.
+
+Aplicações confirmadas pelo `Supabase Database Control`:
+- run #82 (ID `32043969549`): aplicou `20260817141000_carga_acessorios_wvetro_un_v1.sql`, `20260817150000_produtos_unidade_operacional_pendente_v1.sql` e `20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql`;
+- run #84 (ID `32044325910`): aplicou `20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql`;
+- ambos com confirmação explícita `APPLY_PRODUCTION` e `Finished supabase db push.`.
+
+Estado consolidado:
+- fonte W.Vetro: 1.174 acessórios;
+- 785 acessórios faltantes foram adicionados ao Atlas;
+- 649 desses 785 usam unidade operacional `UN`;
+- 136 ficaram com `produtos.unidade = NULL`, preservando a unidade de origem e permanecendo fora dos fluxos operacionais que exigem unidade validada;
+- 389 acessórios preexistentes receberam proveniência W.Vetro;
+- 296 correspondências iguais foram confirmadas;
+- 93 divergências de unidade foram preservadas sem sobrescrever `produtos.unidade`;
+- os 3 itens exclusivos do Atlas (`TELA-1000-GALV`, `TELA-132`, `TELA-254`) permanecem preservados;
+- total esperado da categoria acessório após a consolidação: 1.177 registros, sendo 1.174 ligados à fonte W.Vetro e 3 exclusivos do Atlas.
+
+A migration final possui pós-checks transacionais que abortam se não houver 389 registros reconciliados, se a proveniência ficar incompleta, se algum campo operacional for alterado, se as 93 divergências não forem preservadas ou se as 296 correspondências iguais não forem confirmadas. O apply concluído confirma que essas guardas passaram.
+
+PR final de proveniência:
+- PR #160;
+- merge commit `ec2a97fbf2f6c2accfe1cbcc7e4030527fd2ce1c`.
+
+Pendência operacional remanescente, sem bloquear a base:
+- validar humanamente a unidade operacional dos 136 acessórios com unidade de origem diferente de `UN`;
+- não inferir conversão, unidade canônica ou `Qtde Emb.` automaticamente.

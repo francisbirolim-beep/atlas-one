@@ -350,3 +350,24 @@ Mergeada em 2026-08-17 no commit `9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`.
 ## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
 
 Preparada a modelagem de unidade operacional pendente para permitir importar 136 acessórios W.Vetro sem copiar automaticamente MT/PR/BR/PC/CJ/TB/M2/CT/RO para a unidade de consumo do Atlas. `unidade = NULL` representa a pendência; a origem permanece preservada e os fluxos que dependem de unidade ocultam esses itens até definição manual.
+
+## Acessórios W.Vetro — carga e proveniência concluídas em produção — 2026-08-17
+
+Fechamento da reconciliação iniciada na PR #147:
+- migration de identidade técnica ativa em produção;
+- 785 acessórios faltantes carregados;
+- 649 com unidade operacional `UN`;
+- 136 com unidade operacional pendente (`NULL`) e unidade de origem preservada;
+- 389 acessórios já existentes enriquecidos com proveniência W.Vetro;
+- 296 correspondências iguais confirmadas;
+- 93 divergências de unidade preservadas sem sobrescrita;
+- 3 itens exclusivos do Atlas preservados.
+
+Runs de produção:
+- #82 / ID `32043969549`: migrations `20260817141000`, `20260817150000` e `20260817151000`;
+- #84 / ID `32044325910`: migration `20260817160000`;
+- ambos concluídos com `APPLY_PRODUCTION`.
+
+PR #160 mergeada em `main` no commit `ec2a97fbf2f6c2accfe1cbcc7e4030527fd2ce1c`.
+
+A migration de proveniência preserva os campos operacionais e aborta se detectar alteração indevida em nome, categoria, preço, unidade, descrição, ativo, marca, NCM, linha, cor ou ID externo.
