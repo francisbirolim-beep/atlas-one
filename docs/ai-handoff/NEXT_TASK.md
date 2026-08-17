@@ -159,3 +159,11 @@ Não voltar a excluir anexos de orçamento com `filter/splice` ou removendo o ar
 Anexos com `excluido_em` não devem ser reenviados nem incluídos em novos envios. O campo de WhatsApp do vendedor deve permanecer disponível também no orçamento finalizado para reenvio.
 
 Essa melhoria é independente do gate da migration de identidade técnica de produtos, que continua exigindo apply explícito em produção.
+
+## PRODUTOS — IDENTIDADE TÉCNICA APLICADA E CARGA UN PREPARADA — 2026-08-17
+
+O gate da identidade técnica foi concluído: `20260816210000_produtos_identidade_tecnica_v1.sql` foi aplicada em produção no run #79 (ID `32037239260`). Não voltar a tratá-la como pendente.
+
+Tarefa atual: validar por PR/dry-run `20260817141000_carga_acessorios_wvetro_un_v1.sql`, com **649 acessórios faltantes cuja unidade de origem é UN**. A PR não autoriza apply automático em produção. Após dry-run verde, exigir autorização explícita antes do novo `apply`.
+
+Os **136 faltantes com MT/PR/BR/PC/CJ/TB/M2/CT/RO** permanecem pendentes. Não definir `produtos.unidade` nem fator de conversão para eles sem validação operacional.

@@ -338,3 +338,11 @@ Mergeada em 2026-08-17 no commit `9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`.
 - reenvio e novos envios ignoram anexos excluídos;
 - orçamento finalizado ganhou WhatsApp do vendedor e mensagem no fluxo de reenvio;
 - sem migration/schema change.
+
+## PRODUTOS — IDENTIDADE TÉCNICA APLICADA E CARGA UN PREPARADA — 2026-08-17
+
+- identidade técnica de produtos aplicada em produção via Supabase Database Control run #79 / ID `32037239260`;
+- campos de proveniência/unidade de origem e tabela `produto_linhas` agora ativos;
+- preparada migration separada para 649 acessórios W.Vetro faltantes com unidade de origem `UN`;
+- 136 faltantes não-UN deliberadamente retidos para validação;
+- sem inferência de preço/custo, linha, cor, conversão ou ID externo.
