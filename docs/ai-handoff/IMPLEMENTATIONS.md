@@ -315,3 +315,15 @@ Mergeada em 2026-08-17 no commit `a7679d9bd103a56e838d1e4376232c65d0e9f75a`.
 - histórico e anexos anteriores preservados;
 - inclusão registrada no histórico;
 - sem migration/schema change.
+
+## CADASTRO — CATEGORIAS DINÂMICAS DE PRODUTOS — PR #154
+
+Mergeada em 2026-08-17 no commit `a4ae49e58ddd6317e903dfee1e032a8b8694a5f4`.
+
+- categorias de produto passaram de lista fixa para configuração dinâmica;
+- Cadastro exibe Produto, Acessório, Perfil e Produto pronto separadamente;
+- botão Nova categoria permite expansão sem código/migration;
+- categorias customizadas são armazenadas em `configuracoes_gerais`;
+- tela Produtos abre filtrada pela categoria escolhida e mantém filtro por linha/busca;
+- categorias legadas e produtos existentes são preservados sem movimentação automática;
+- sem migration/schema change.
