@@ -9,8 +9,9 @@ Comparar a base completa `ExportWWAcessorios.xlsx` com os acessórios atualmente
 - Fonte W.Vetro auditada: **1174 acessórios**.
 - Export somente leitura do Atlas: **392 acessórios**.
 - Consulta utilizada: `scripts/export-acessorios-atlas-reconciliacao.sql`.
-- Export do Atlas executado em GitHub Actions com conexão ao banco em modo somente leitura.
-- Detalhamento linha a linha: `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.csv`.
+- Export do Atlas executado em GitHub Actions usando apenas `SELECT`.
+- O detalhamento integral linha a linha foi gerado na planilha de reconciliação entregue nesta etapa, com abas `Reconciliacao`, `Divergentes`, `Faltantes` e `Atlas Atual`.
+- O export bruto do banco, que contém IDs internos, **não é versionado no repositório público**. O artifact do GitHub Actions tem retenção temporária.
 
 ## Método
 
@@ -136,4 +137,4 @@ Esses itens **não devem ser apagados** por causa da reconciliação. Devem perm
 
 ## Segurança da extração
 
-A extração utilizada para este relatório foi **somente leitura**. Nenhuma operação de escrita no banco foi necessária para concluir a reconciliação.
+A extração usada para este relatório executou somente o script SQL já existente, que contém apenas `SELECT`. Nenhuma operação de escrita no banco foi necessária para concluir a reconciliação.
