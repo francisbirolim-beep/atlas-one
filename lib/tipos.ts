@@ -493,7 +493,9 @@ export interface MedicaoFinal {
       criado_por_nome?: string | null
 }
 
-export type CategoriaProduto = 'porta_janela_padrao' | 'perfil' | 'pu' | 'acessorio' | 'outro'
+// Categoria de produto e dinamica. Os valores historicos continuam validos,
+// mas novas categorias podem ser criadas pelo usuario em Cadastro.
+export type CategoriaProduto = string
 
 export interface Produto {
       id: string
