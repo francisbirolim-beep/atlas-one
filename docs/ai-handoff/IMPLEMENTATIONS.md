@@ -163,7 +163,7 @@ Relatório:
 `docs/tecnico/auditoria-produtos-2026-08-16.md`
 
 ## Auditoria da base completa `ExportWWAcessorios.xlsx` — 2026-08-16
-Fonte completa fornecida pelo usuário e analisada sem alterar o banco:
+Fonte completa analisada sem alterar o banco:
 - 1.174 acessórios;
 - 1.174 códigos preenchidos;
 - 1.174 códigos únicos;
@@ -180,24 +180,63 @@ Fonte completa fornecida pelo usuário e analisada sem alterar o banco:
 Relatório técnico:
 `docs/tecnico/auditoria-exportwwacessorios-2026-08-16.md`
 
-Script somente leitura para exportar os 392 acessórios atuais do Atlas:
+Script somente leitura:
 `scripts/export-acessorios-atlas-reconciliacao.sql`
+
+## PR #146 — handoff pós-PR #143 e preparação da reconciliação
+Mergeada em `main`.
+
+Commit de merge:
+`f629f3598ef06b6e15e909752c2b461a3396ff07`
+
+- atualizou `CURRENT_STATE.md`, `NEXT_TASK.md` e `IMPLEMENTATIONS.md`;
+- registrou a auditoria da fonte completa;
+- adicionou o script de export somente leitura dos 392 acessórios atuais;
+- manteve bloqueada qualquer importação antes da reconciliação item a item.
+
+## PR #147 — export seguro e reconciliação completa — 2026-08-16/17
+PR em aberto na branch `chore/export-acessorios-reconciliacao`.
+
+Implementado/documentado:
+- workflow `Export Accessories Reconciliation`;
+- execução somente manual (`workflow_dispatch`);
+- sessão PostgreSQL forçada a `default_transaction_read_only=on`;
+- artifact temporário com o export atual do Atlas;
+- primeiro export executado com sucesso: **392 acessórios**;
+- relatório `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`.
+
+Resultado da reconciliação por código técnico normalizado:
+- fonte: 1.174;
+- Atlas: 392;
+- códigos em ambos: 389;
+- `EXISTENTE_IGUAL`: 296;
+- `EXISTENTE_DIVERGENTE`: 93;
+- `FALTANTE_ATLAS`: 785;
+- `DUPLICADO_ORIGEM`: 0;
+- `SEM_CODIGO`: 0;
+- somente no Atlas: 3 (`TELA-1000-GALV`, `TELA-132`, `TELA-254`).
+
+As 93 divergências reais são exclusivamente de unidade:
+- MT -> UN: 66;
+- PR -> UN: 12;
+- TB -> UN: 9;
+- BR -> UN: 3;
+- PT -> UN: 2;
+- PC -> UN: 1.
+
+Não houve divergência de descrição, NCM válido/seguro ou ativo entre códigos correspondentes.
+
+O export bruto do banco, com IDs internos, não é versionado no repositório público; permanece apenas em artifact temporário. O detalhamento integral foi gerado em planilha de trabalho com abas específicas para divergentes e faltantes.
+
+Nenhum `INSERT`, `UPDATE`, `DELETE` ou migration foi executado.
 
 ## Próxima etapa
 
-Completar a reconciliação item a item dos 1.174 acessórios da fonte contra os 392 atuais do Atlas.
+Validar as 93 divergências de unidade antes de qualquer atualização.
 
-Nenhum insert/update até classificar:
-- EXISTENTE_IGUAL;
-- EXISTENTE_DIVERGENTE;
-- FALTANTE_ATLAS;
-- DUPLICADO_ORIGEM;
-- SEM_CODIGO;
-- REVISAR.
-
-Depois da validação dos acessórios:
-- decidir o apply da migration `20260816210000_produtos_identidade_tecnica_v1.sql`;
-- importar somente faltantes seguros em PR separada;
+Depois da validação:
+- decidir explicitamente o apply da migration `20260816210000_produtos_identidade_tecnica_v1.sql`;
+- preparar carga dos 785 faltantes seguros em PR separada;
 - tratar divergentes sem sobrescrita silenciosa;
 - reauditar;
 - avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
@@ -205,7 +244,7 @@ Depois da validação dos acessórios:
 ## Regras permanentes
 - GitHub é a única fonte da verdade;
 - nunca commitar direto na `main`;
-- branch -> PR -> checks verdes -> merge;
+- branch -> PR -> checks verdes -> merge manual;
 - migration só conta como ativa após apply confirmado;
 - não inventar NCM, linha, cor, preço, custo, medida ou identificador externo;
 - `GERAL` e códigos numéricos de cor permanecem dados de origem até validação;
