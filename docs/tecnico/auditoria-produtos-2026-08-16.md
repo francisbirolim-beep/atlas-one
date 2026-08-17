@@ -14,13 +14,14 @@ hoje existem:
   atualizados + 828 novos cadastrados).
 - **392 acessórios** — não confere. Vieram de uma extração histórica via API
   W.Vetro (ver `docs/ai-handoff/NEXT_TASK.md`, seção "W.Vetro extração
-  histórica"), com `preco = 0` como placeholder. O arquivo
-  `ExportWWAcessorios` (~1.174 linhas) **nunca foi enviado nem importado**
-  nesta conversa — não existe no repositório nem no banco.
+  histórica"), com `preco = 0` como placeholder. O arquivo completo de acessórios não estava disponível no ambiente desta
+  execução; o banco atual contém apenas 392 acessórios de uma importação
+  anterior. A base completa de 1.174 acessórios será reconciliada em etapa
+  separada.
 
 Esta implementação foi feita para funcionar com os dados que **já existem**
 (1.307 perfis + 392 acessórios). Nenhum dado de `ExportWWAcessorios` foi
-inventado ou assumido. Quando esse arquivo for enviado, a mesma estrutura
+inventado ou assumido. Quando essa reconciliação for feita, a mesma estrutura
 (campos `codigo`/`origem`/`dados_origem`/`ncm_status`/etc.) já está pronta
 para recebê-lo.
 
