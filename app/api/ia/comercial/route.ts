@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
         .select('id,cliente_nome,cidade,temperatura,acabamento,contramarco,tipo_medida,itens,valor_estimado,status,created_at,criado_por_nome')
         .order('created_at', { ascending: false })
         .limit(18),
-      supabaseAdmin.from('produtos').select('*').eq('ativo', true).limit(50),
+      supabaseAdmin.from('produtos').select('*').eq('ativo', true).not('unidade', 'is', null).neq('unidade', '').limit(50),
       supabaseAdmin.from('tipologias').select('*').limit(80),
       supabaseAdmin.from('ai_memorias').select('titulo,conteudo,updated_at').eq('escopo', 'comercial').eq('ativo', true).order('updated_at', { ascending: false }).limit(20),
       supabaseAdmin.from('ai_interacoes').select('id,pergunta,resposta,created_at').eq('contexto', 'comercial').eq('status', 'ok').order('created_at', { ascending: false }).limit(20),

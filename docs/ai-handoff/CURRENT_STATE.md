@@ -255,3 +255,20 @@ Com isso, os campos de identidade/proveniência e `produto_linhas` passam a ser 
 Próxima carga preparada em PR separada: `20260817141000_carga_acessorios_wvetro_un_v1.sql`, contendo somente **649 dos 785 acessórios faltantes**, todos com unidade de origem `UN`. Os **136 não-UN** ficam fora até validação da unidade operacional.
 
 A carga não inventa preço/custo, linha técnica, cor técnica, fator de conversão ou ID externo W.Vetro. Preço 0 permanece placeholder explícito por exigência do schema/fonte sem preço. NCM nunca é validado automaticamente.
+
+## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
+
+A carga dos 649 acessórios com unidade de origem `UN` está mergeada na `main`, porém ainda não aplicada em produção.
+
+Foi preparada a etapa dos 136 acessórios faltantes com unidade de origem MT/PR/BR/PC/CJ/TB/M2/CT/RO sem inferir conversão:
+- `produtos.unidade` poderá ser `NULL`, significando unidade operacional ainda não definida;
+- `unidade_origem` e `qtde_embalagem_origem` preservam a fonte;
+- os 136 entram com `unidade = NULL` e `status_validacao = importado`;
+- itens sem unidade operacional ficam fora de Engenharia, Plano de Corte, Orçamento Balcão, seleção de produto no Orçamento Rápido e contexto da IA Comercial;
+- continuam visíveis em Cadastro, exibindo unidade de origem e Qtde Emb. para validação humana.
+
+Migrations preparadas:
+- `20260817150000_produtos_unidade_operacional_pendente_v1.sql`;
+- `20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql`.
+
+Essas migrations só contam como ativas após apply confirmado no `Supabase Database Control`.

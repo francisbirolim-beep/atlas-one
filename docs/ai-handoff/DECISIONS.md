@@ -81,3 +81,9 @@ Antes de criar `uq_produtos_codigo_upper`, foi rodada uma auditoria completa con
 
 ## NCM: nunca inferir "valido" automaticamente
 `ncm_status` so e marcado `invalido` quando o valor e inequivocamente placeholder (`0`, vazio, `12345678`, `12345667`). Nunca e marcado `valido` automaticamente so por ter 8 digitos numericos -- isso nao prova correcao fiscal. Todo NCM que nao e claramente placeholder fica `pendente` ate revisao humana. Mesma logica se aplica a peso de perfil fora de faixa plausivel (> 50 kg): o valor nunca e alterado ou zerado, so sinalizado via `observacao_validacao`.
+
+## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
+
+`produtos.unidade = NULL` significa unidade operacional ainda não definida. Não significa `UN` e não autoriza copiar `unidade_origem`.
+
+Produtos sem unidade operacional não devem participar de fluxos técnicos/comerciais que exijam unidade. `unidade_origem` e `qtde_embalagem_origem` permanecem dados de proveniência; conversão só pode ser criada após validação operacional.

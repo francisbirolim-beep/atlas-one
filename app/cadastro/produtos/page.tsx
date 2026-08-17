@@ -232,7 +232,7 @@ export default function Produtos() {
         custo: p.custo != null ? String(p.custo) : '',
         margem: p.margem_percentual != null ? String(p.margem_percentual) : '',
         preco: String(p.preco),
-        unidade: p.unidade,
+        unidade: p.unidade || '',
         grupo: p.grupo || '',
         marca: p.marca || '',
         peso_kg: p.peso_kg != null ? String(p.peso_kg) : '',
@@ -304,7 +304,8 @@ export default function Produtos() {
       nome: dados.nome.trim(),
       categoria: dados.categoria,
       preco,
-      unidade: dados.unidade.trim() || 'unidade',
+      unidade: dados.unidade.trim() || null,
+      status_validacao: dados.unidade.trim() ? (produtos.find(p => p.id === id)?.status_validacao || 'importado') : 'importado',
       largura_mm: dados.largura_mm.trim() ? parseInt(dados.largura_mm) : null,
       altura_mm: dados.altura_mm.trim() ? parseInt(dados.altura_mm) : null,
       descricao: dados.descricao.trim() || null,
@@ -682,7 +683,7 @@ export default function Produtos() {
                       <div className="min-w-0">
                         <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}><span className="inline-block px-1.5 py-0.5 mr-1.5 rounded bg-slate-100 text-slate-600 text-[10px] font-mono align-middle">{p.codigo || p.nome.split(' - ')[0]}</span>{p.nome}</p>
                         <p className="text-slate-400 text-xs">
-                          {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade}
+                          {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade || `pendente — origem ${p.unidade_origem || 'não informada'}`}{p.qtde_embalagem_origem != null ? ` · Qtde Emb. ${p.qtde_embalagem_origem}` : ''}
                           {p.custo != null ? ` · custo R$ ${p.custo.toFixed(2)}` : ''}
                           {p.margem_percentual != null ? ` · margem ${p.margem_percentual.toFixed(1)}%` : ''}
                         </p>
@@ -746,7 +747,7 @@ export default function Produtos() {
                         type="text"
                         value={editForm[p.id]?.unidade ?? ''}
                         onChange={e => mudarCampoEdicao(p.id, 'unidade', e.target.value)}
-                        placeholder="Unidade"
+                        placeholder="Unidade operacional (origem preservada no cartão)"
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
                       />
 

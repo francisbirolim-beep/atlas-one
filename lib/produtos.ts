@@ -185,7 +185,7 @@ export async function atualizarProduto(
     nome: string
     categoria: CategoriaProduto
     preco: number
-    unidade: string
+    unidade: string | null
     largura_mm: number | null
     altura_mm: number | null
     descricao: string | null

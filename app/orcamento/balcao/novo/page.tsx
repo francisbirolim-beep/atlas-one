@@ -43,7 +43,7 @@ export default function NovoOrcamentoBalcao() {
         lerDadosEmpresa(),
         lerConfiguracaoOrcamento(),
       ])
-      setProdutos(listaProdutos)
+      setProdutos(listaProdutos.filter(p => Boolean(p.unidade?.trim())))
       setEmpresa(dadosEmpresa)
       setConfigOrcamento(config)
       setMostrarFoto(config.mostrarFoto)
@@ -114,7 +114,7 @@ export default function NovoOrcamentoBalcao() {
       categoria: produto.categoria,
       descricao: produto.descricao || null,
       foto_url: produto.foto_url || null,
-      unidade: produto.unidade,
+      unidade: produto.unidade!,
       quantidade,
       preco_unit: produto.preco,
       preco_total: produto.preco * quantidade,

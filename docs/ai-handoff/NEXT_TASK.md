@@ -167,3 +167,13 @@ O gate da identidade técnica foi concluído: `20260816210000_produtos_identidad
 Tarefa atual: validar por PR/dry-run `20260817141000_carga_acessorios_wvetro_un_v1.sql`, com **649 acessórios faltantes cuja unidade de origem é UN**. A PR não autoriza apply automático em produção. Após dry-run verde, exigir autorização explícita antes do novo `apply`.
 
 Os **136 faltantes com MT/PR/BR/PC/CJ/TB/M2/CT/RO** permanecem pendentes. Não definir `produtos.unidade` nem fator de conversão para eles sem validação operacional.
+
+## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
+
+Checkpoint mais recente:
+1. concluir PR desta modelagem e validar build + teste SQL;
+2. depois executar um único `Supabase Database Control` na `main`, modo `apply`, confirmação `APPLY_PRODUCTION`;
+3. o apply deverá executar a carga 649 `UN`, a alteração nullable de unidade e a carga 136 pendente;
+4. validar no banco 785 novos acessórios reconciliados;
+5. reconciliar a proveniência dos 389 acessórios já existentes, sem mudar `produtos.unidade` nos 93 divergentes;
+6. avançar para perfis somente com a fonte real.

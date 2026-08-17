@@ -508,7 +508,7 @@ export interface Produto {
       nome: string
       categoria: CategoriaProduto
       preco: number
-      unidade: string
+      unidade: string | null
       largura_mm?: number | null
       altura_mm?: number | null
       descricao?: string | null
@@ -536,6 +536,8 @@ export interface Produto {
       peso_kg_m?: number | null
       tamanho_barra_mm?: number | null
       tamanho_barra_mm_origem?: number | null
+      unidade_origem?: string | null
+      qtde_embalagem_origem?: number | null
       dados_origem?: Record<string, any> | null
       status_validacao?: string | null
       validado_em?: string | null
