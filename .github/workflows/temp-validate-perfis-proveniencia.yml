@@ -88,6 +88,15 @@ jobs:
           )
           test "$ROWS" = "1307" || { echo "ERRO: snapshot exportou $ROWS linhas"; exit 1; }
           echo "Snapshot de produção exportado em read-only: $ROWS perfis."
+          sha256sum /tmp/perfis-prod.csv
+
+      - name: Upload current read-only snapshot for drift diagnosis
+        uses: actions/upload-artifact@v4
+        with:
+          name: perfis-prod-drift-diagnostico
+          path: /tmp/perfis-prod.csv
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Create ephemeral Atlas products table
         shell: bash
