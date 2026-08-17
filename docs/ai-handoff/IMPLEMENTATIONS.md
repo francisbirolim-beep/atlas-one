@@ -147,9 +147,10 @@ Limitacoes e cuidados desta extracao:
 Branch `feat/produtos-identidade-tecnica-wvetro`. Auditoria completa em
 `docs/tecnico/auditoria-produtos-2026-08-16.md` (1.700 produtos: 1.405 OK,
 14 ATENCAO, 281 REVISAR -- nenhuma duplicidade de codigo). Divergencia
-encontrada e registrada nesse mesmo documento: `ExportWWAcessorios`
-(~1.174 linhas) nunca foi enviado/importado nesta conversa -- so os 392
-acessorios da extracao historica via API existem hoje.
+encontrada e registrada nesse mesmo documento: o arquivo completo de
+`ExportWWAcessorios` (~1.174 linhas) nao estava disponivel no ambiente desta
+execucao -- hoje existem apenas os 392 acessorios da extracao historica via
+API. A base completa sera reconciliada em etapa separada.
 
 Implementado:
 - migration `20260816180000_produtos_identidade_tecnica_v1.sql`: colunas
@@ -203,6 +204,6 @@ Pendente antes de declarar isso ativo em producao:
   peso/NCM/unidade/fabricante);
 - vincular `produto_linhas` a alguma UI (hoje so existe o CRUD em
   `lib/produtoLinhas.ts`, nada na tela usa ainda);
-- quando `ExportWWAcessorios` for enviado, reusar a mesma estrutura
+- quando a base completa de `ExportWWAcessorios` for reconciliada, reusar a mesma estrutura
   (`codigo`/`origem`/`dados_origem`/`ncm_status`) -- e nao tratar "GERAL"
   (linha) nem codigos de cor numericos como vinculo tecnico automatico.
