@@ -1,0 +1,54 @@
+name: Assemble Proveniencia Final Once
+
+on:
+  push:
+    branches:
+      - feat/reconciliar-proveniencia-acessorios-wvetro
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+
+      - name: Rebuild and verify migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          import base64, hashlib, lzma
+          from pathlib import Path
+
+          payload = ''.join(
+              Path(f'scripts/.tmp_prov_mig_{i}.b64').read_text().strip()
+              for i in range(1, 6)
+          )
+          raw = base64.b64decode(payload + '=' * (-len(payload) % 4))
+          data = lzma.decompress(raw)
+          digest = hashlib.sha256(data).hexdigest()
+          expected = '2a1cd7c8f29c3cf6349caa1e6e9673396c445971ebd93ac287976fd7ddcb04b4'
+          print('migration sha256:', digest)
+          if digest != expected:
+              raise SystemExit(f'SHA-256 divergente: {digest}')
+          Path('/tmp/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql').write_bytes(data)
+          PY
+
+      - name: Commit only final migration on clean branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main feat/proveniencia-acessorios-wvetro-final
+          git checkout -B feat/proveniencia-acessorios-wvetro-final origin/feat/proveniencia-acessorios-wvetro-final
+          cp /tmp/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql
+          git add supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql
+          git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l)" -eq 1
+          test "$(git diff --cached --name-only)" = "supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql"
+          git commit -m "feat: reconciliar proveniência de 389 acessórios W.Vetro"
+          git push origin HEAD:feat/proveniencia-acessorios-wvetro-final
