@@ -10,8 +10,9 @@ import {
   atualizarProduto,
   alternarAtivoProduto,
   excluirProduto,
-  CATEGORIAS_PRODUTO,
   labelCategoriaProduto,
+  listarCategoriasProduto,
+  CategoriaProdutoConfig,
 } from '@/lib/produtos'
 import { listarFornecedores } from '@/lib/fornecedores'
 import { listarLinhas } from '@/lib/linhas'
@@ -62,7 +63,7 @@ interface FormProduto {
 
 const FORM_VAZIO: FormProduto = {
   nome: '',
-  categoria: 'porta_janela_padrao',
+  categoria: 'produto',
   custo: '',
   margem: '',
   preco: '',
@@ -89,6 +90,8 @@ export default function Produtos() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [busca, setBusca] = useState('')
   const [filtroLinha, setFiltroLinha] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [categorias, setCategorias] = useState<CategoriaProdutoConfig[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [cores, setCores] = useState<Cor[]>([])
@@ -116,13 +119,17 @@ export default function Produtos() {
     const me = await usuarioAtual()
     setEuSouMaster(me?.role === 'master')
     if (me?.role === 'master') {
-      const [listaProdutos, listaFornecedores, listaLinhas, listaCores] = await Promise.all([
+      const [listaProdutos, listaFornecedores, listaLinhas, listaCores, listaCategorias] = await Promise.all([
         listarProdutos(),
         listarFornecedores(),
         listarLinhas(),
         listarCores(),
+        listarCategoriasProduto(),
       ])
       setProdutos(listaProdutos)
+      setCategorias(listaCategorias)
+      const categoriaUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('categoria') || '' : ''
+      setFiltroCategoria(categoriaUrl)
       setFornecedores(listaFornecedores)
       setLinhas(listaLinhas)
       setCores(listaCores)
@@ -207,7 +214,7 @@ export default function Produtos() {
       return
     }
     setSucesso(`Produto ${form.nome} cadastrado com sucesso.`)
-    setForm(FORM_VAZIO)
+    setForm({ ...FORM_VAZIO, categoria: (filtroCategoria || 'produto') as CategoriaProduto })
     setFotoNovo(null)
     setImpostosNovoAberto(false)
     setProdutos(await listarProdutos())
@@ -371,7 +378,10 @@ export default function Produtos() {
           <div className="mb-8">
             {!novoAberto ? (
               <button
-                onClick={() => setNovoAberto(true)}
+                onClick={() => {
+                  setForm({ ...FORM_VAZIO, categoria: (filtroCategoria || 'produto') as CategoriaProduto })
+                  setNovoAberto(true)
+                }}
                 className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
               >
                 <Plus size={16} /> Cadastrar produto novo
@@ -394,7 +404,7 @@ export default function Produtos() {
                     onChange={e => mudarCampo('categoria', e.target.value as CategoriaProduto)}
                     className="w-full border border-slate-300 rounded-xl p-3 text-sm"
                   >
-                    {CATEGORIAS_PRODUTO.map(c => (
+                    {categorias.map(c => (
                       <option key={c.valor} value={c.valor}>{c.label}</option>
                     ))}
                   </select>
@@ -610,6 +620,17 @@ export default function Produtos() {
             <Package size={16} /> Produtos cadastrados
           </h2>
 
+          <select
+            value={filtroCategoria}
+            onChange={e => setFiltroCategoria(e.target.value)}
+            className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
+          >
+            <option value="">Todas as categorias</option>
+            {categorias.map(c => (
+              <option key={c.valor} value={c.valor}>{c.label}</option>
+            ))}
+          </select>
+
           <input
             type="text"
             value={busca}
@@ -633,6 +654,7 @@ export default function Produtos() {
           ) : (
             <div className="space-y-2">
               {produtos.filter(p => {
+                if (filtroCategoria && p.categoria !== filtroCategoria) return false
                 if (filtroLinha && p.linha_id !== filtroLinha) return false
                 const q = busca.trim().toLowerCase()
                 if (!q) return true
@@ -684,7 +706,7 @@ export default function Produtos() {
                         onChange={e => mudarCampoEdicao(p.id, 'categoria', e.target.value as CategoriaProduto)}
                         className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
                       >
-                        {CATEGORIAS_PRODUTO.map(c => (
+                        {categorias.map(c => (
                           <option key={c.valor} value={c.valor}>{c.label}</option>
                         ))}
                       </select>

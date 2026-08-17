@@ -10,6 +10,7 @@ import { listarSetores, listarPermissoesUsuario, salvarPermissoesUsuario, agrupa
 import { mesAtual, listarMetas, salvarMeta } from '@/lib/crm'
 import { listarBackups, criarBackupAgora, restaurarBackup, RegistroBackup } from '@/lib/backup'
 import { lerCorAssistencia, salvarCorAssistencia, lerDadosEmpresa, salvarDadosEmpresa } from '@/lib/configGeral'
+import { listarCategoriasProduto, criarCategoriaProduto, CategoriaProdutoConfig } from '@/lib/produtos'
 import { Usuario, KanbanColuna, Setor, NivelPermissao, Meta, DadosEmpresa } from '@/lib/tipos'
 
 const nivelLabel: Record<NivelPermissao, string> = {
@@ -83,6 +84,12 @@ export default function Cadastro() {
   const [salvandoEmpresa, setSalvandoEmpresa] = useState(false)
   const [msgEmpresa, setMsgEmpresa] = useState('')
 
+  const [categoriasProduto, setCategoriasProduto] = useState<CategoriaProdutoConfig[]>([])
+  const [novaCategoriaProdutoAberta, setNovaCategoriaProdutoAberta] = useState(false)
+  const [novaCategoriaProdutoNome, setNovaCategoriaProdutoNome] = useState('')
+  const [salvandoCategoriaProduto, setSalvandoCategoriaProduto] = useState(false)
+  const [msgCategoriaProduto, setMsgCategoriaProduto] = useState('')
+
   useEffect(() => {
     carregar()
   }, [])
@@ -94,7 +101,7 @@ export default function Cadastro() {
     setMeuId(me?.id || null)
 
     if (me?.role === 'master') {
-      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia, dadosEmpresa] = await Promise.all([
+      const [{ data: users }, cols, listaSetores, listaMetas, listaBackups, corAssistencia, dadosEmpresa, categoriasProdutoCarregadas] = await Promise.all([
         supabase.from('usuarios').select('*').order('created_at', { ascending: true }),
         listarColunas(),
         listarSetores(),
@@ -102,7 +109,9 @@ export default function Cadastro() {
         listarBackups(),
         lerCorAssistencia(),
         lerDadosEmpresa(),
+        listarCategoriasProduto(),
       ])
+      setCategoriasProduto(categoriasProdutoCarregadas)
       setBackups(listaBackups)
       setCorAssistenciaEdit(corAssistencia)
       setSetores(listaSetores)
@@ -416,6 +425,23 @@ export default function Cadastro() {
     setMsgCorAssistencia(ok ? 'Cor salva.' : 'Erro ao salvar a cor.')
   }
 
+  async function criarNovaCategoriaProduto(e: React.FormEvent) {
+    e.preventDefault()
+    if (!novaCategoriaProdutoNome.trim()) return
+    setSalvandoCategoriaProduto(true)
+    setMsgCategoriaProduto('')
+    const resultado = await criarCategoriaProduto(novaCategoriaProdutoNome)
+    setSalvandoCategoriaProduto(false)
+    if (!resultado.categoria) {
+      setMsgCategoriaProduto(resultado.erro || 'Erro ao criar categoria.')
+      return
+    }
+    setCategoriasProduto(await listarCategoriasProduto())
+    setNovaCategoriaProdutoNome('')
+    setNovaCategoriaProdutoAberta(false)
+    setMsgCategoriaProduto(`Categoria ${resultado.categoria.label} criada.`)
+  }
+
   async function salvarDadosEmpresaAcao() {
     setSalvandoEmpresa(true)
     setMsgEmpresa('')
@@ -474,10 +500,51 @@ export default function Cadastro() {
               <ChevronDown size={16} className="-rotate-90 text-slate-300" />
             </button>
 
-            <Link href="/cadastro/produtos" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
-              <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Package size={18} className="text-brand-navy" /> Produtos</span>
-              <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-            </Link>
+            <div className="pt-2 space-y-2">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Produtos e itens</p>
+              {categoriasProduto.map(categoria => (
+                <Link
+                  key={categoria.valor}
+                  href={`/cadastro/produtos?categoria=${encodeURIComponent(categoria.valor)}`}
+                  className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition"
+                >
+                  <span className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                    {categoria.valor === 'acessorio' ? <Wrench size={18} className="text-brand-navy" /> : categoria.valor === 'perfil' ? <Layers size={18} className="text-brand-navy" /> : <Package size={18} className="text-brand-navy" />}
+                    {categoria.label}
+                  </span>
+                  <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+                </Link>
+              ))}
+
+              {!novaCategoriaProdutoAberta ? (
+                <button
+                  onClick={() => { setNovaCategoriaProdutoAberta(true); setMsgCategoriaProduto('') }}
+                  className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 p-4 text-sm font-medium text-brand-navy hover:border-brand-navy transition"
+                >
+                  <Plus size={18} /> Nova categoria
+                </button>
+              ) : (
+                <form onSubmit={criarNovaCategoriaProduto} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={novaCategoriaProdutoNome}
+                    onChange={e => setNovaCategoriaProdutoNome(e.target.value)}
+                    placeholder="Nome da nova categoria"
+                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={salvandoCategoriaProduto} className="flex-1 py-2 bg-brand-navy text-white rounded-xl text-sm font-medium disabled:opacity-50">
+                      {salvandoCategoriaProduto ? 'Salvando...' : 'Criar categoria'}
+                    </button>
+                    <button type="button" onClick={() => { setNovaCategoriaProdutoAberta(false); setNovaCategoriaProdutoNome('') }} className="px-4 py-2 border border-slate-300 rounded-xl text-sm text-slate-600">
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
+              {msgCategoriaProduto && <p className="px-1 text-xs text-slate-500">{msgCategoriaProduto}</p>}
+            </div>
 
             <Link href="/cadastro/fornecedores" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
               <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Truck size={18} className="text-brand-navy" /> Fornecedores</span>
