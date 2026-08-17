@@ -71,6 +71,31 @@ Total: **93**.
 
 Essas divergências devem ser tratadas explicitamente. Não sobrescrever a unidade atual em lote sem validar a regra de consumo/compra de cada categoria.
 
+### `Qtde Emb.` prova que unidade de origem não deve ser copiada cegamente
+
+A fonte W.Vetro possui também a coluna `Qtde Emb.`. Nos 93 divergentes, há valores que reforçam que **unidade da fonte e unidade operacional de consumo não podem ser assumidas como a mesma coisa**:
+
+- itens `PT` aparecem com `Qtde Emb.` **121** e **89**;
+- o item `PC` aparece com `Qtde Emb.` **8**;
+- entre itens `MT`, há registros com `Qtde Emb.` **50** e **1**, além de muitos zeros;
+- entre `PR` e `TB`, também existem registros com `Qtde Emb.` **1**.
+
+A semântica exata de `Qtde Emb.` não será inventada. Ela será preservada como dado cru de origem até validação de compras/estoque.
+
+### Decisão de modelagem após a reconciliação
+
+O Atlas possui hoje apenas `produtos.unidade`. Esse campo é operacional: ao selecionar um produto em uma receita de Engenharia, a tela copia `produto.unidade` para a unidade do componente da receita.
+
+Portanto:
+
+1. **não substituir `produtos.unidade` automaticamente pela unidade W.Vetro**;
+2. manter `produtos.unidade` como unidade operacional/canônica do Atlas até validação;
+3. adicionar `produtos.unidade_origem` para preservar exatamente `UN/MT/PR/TB/BR/PT/PC/...` da fonte;
+4. adicionar `produtos.qtde_embalagem_origem` para preservar exatamente `Qtde Emb.` sem inferir conversão;
+5. somente após entender compra, embalagem, estoque e consumo técnico decidir se o Atlas precisa de campos próprios como unidade de compra, unidade de estoque e fator de conversão.
+
+Essa decisão evita que uma unidade de embalagem/fornecimento seja propagada incorretamente para Engenharia e Plano de Corte.
+
 ## Qualidade da fonte W.Vetro
 
 | Alerta | Quantidade |
@@ -123,15 +148,32 @@ Os seguintes códigos existem entre os 392 acessórios atuais do Atlas e não ap
 
 Esses itens **não devem ser apagados** por causa da reconciliação. Devem permanecer até validação da sua origem/uso.
 
+A existência desses três itens também prova que o padrão de nome `CODIGO - DESCRICAO` não basta, sozinho, para classificar todo produto técnico preexistente como `origem = wvetro`.
+
+## Correção necessária na migration de identidade técnica
+
+A versão anterior de `20260816210000_produtos_identidade_tecnica_v1.sql` assumia que `unidade`, NCM, peso e marca já eram os valores crus trazidos do W.Vetro e congelava esses campos em `dados_origem` como se a proveniência estivesse confirmada.
+
+A reconciliação invalidou essa premissa para unidade e mostrou três acessórios que não constam na fonte completa.
+
+Antes de qualquer apply, a migration foi corrigida para:
+
+- classificar produtos técnicos preexistentes como `origem = legado` até reconciliação;
+- manter `codigo`/`codigo_origem` a partir do código legado já existente no nome;
+- congelar `dados_origem` como `atlas_legacy_pre_reconciliacao`, sem fingir que é o valor cru W.Vetro;
+- não fazer backfill de `unidade_origem` nem `qtde_embalagem_origem` a partir do `UN` atual;
+- preservar `unidade_origem` e `qtde_embalagem_origem` para a futura carga reconciliada da fonte real;
+- continuar sem preencher `id_externo_wvetro` com um falso identificador.
+
 ## Regras para a próxima etapa
 
-1. Não inserir ou atualizar acessórios antes da aprovação deste relatório.
+1. Não inserir ou atualizar acessórios antes da aprovação deste relatório e do dry-run da migration corrigida.
 2. Não transformar `GERAL` em linha técnica validada.
 3. Não transformar código numérico de cor em nome de cor.
 4. Não validar automaticamente NCM `0`, `12345678` ou NCM com formato suspeito.
-5. Preservar dados de origem (`codigo_origem`, `dados_origem`, `origem = wvetro`) quando a migration de identidade técnica for aplicada.
+5. Não classificar automaticamente todos os registros legados como `origem = wvetro`; a origem externa deve ser confirmada pela reconciliação.
 6. Não usar o código técnico como falso `id_externo_wvetro`.
-7. Tratar os 93 divergentes de unidade sem sobrescrita silenciosa.
+7. Preservar unidade e quantidade de embalagem da fonte em campos de origem próprios, sem sobrescrever a unidade operacional.
 8. Somente depois decidir o apply da migration `20260816210000_produtos_identidade_tecnica_v1.sql`.
 9. Após a migration, preparar PR separada para inclusão dos acessórios faltantes que forem considerados seguros.
 
