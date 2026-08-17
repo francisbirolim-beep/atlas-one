@@ -83,7 +83,7 @@ export default function OrcamentoRapido() {
   const [tipos, setTipos] = useState<Tipologia[]>([])
 
   useEffect(() => {
-    listarProdutos(true).then(setProdutos)
+    listarProdutos(true).then(lista => setProdutos(lista.filter(p => Boolean(p.unidade?.trim()))))
     listarTipologias().then(setTipos)
   }, [])
 

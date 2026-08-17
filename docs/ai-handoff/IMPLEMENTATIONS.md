@@ -346,3 +346,7 @@ Mergeada em 2026-08-17 no commit `9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`.
 - preparada migration separada para 649 acessórios W.Vetro faltantes com unidade de origem `UN`;
 - 136 faltantes não-UN deliberadamente retidos para validação;
 - sem inferência de preço/custo, linha, cor, conversão ou ID externo.
+
+## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
+
+Preparada a modelagem de unidade operacional pendente para permitir importar 136 acessórios W.Vetro sem copiar automaticamente MT/PR/BR/PC/CJ/TB/M2/CT/RO para a unidade de consumo do Atlas. `unidade = NULL` representa a pendência; a origem permanece preservada e os fluxos que dependem de unidade ocultam esses itens até definição manual.

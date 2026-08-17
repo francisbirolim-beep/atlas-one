@@ -118,7 +118,7 @@ export async function listarComponentesReceita(receitaId: string): Promise<Compo
 }
 
 export async function listarProdutosTecnicos(): Promise<Produto[]> {
-  const { data } = await supabase.from('produtos').select('*').eq('ativo', true).in('categoria', ['perfil','acessorio','outro']).order('categoria').order('nome')
+  const { data } = await supabase.from('produtos').select('*').eq('ativo', true).in('categoria', ['perfil','acessorio','outro']).not('unidade', 'is', null).neq('unidade', '').order('categoria').order('nome')
   return (data || []) as Produto[]
 }
 
