@@ -1,11 +1,13 @@
 -- Export seguro dos perfis atuais do Atlas para reconciliação com ExportWWPerfil (1).xlsx
 --
 -- IMPORTANTE:
--- - somente leitura;
+-- - transação explicitamente READ ONLY;
 -- - não altera nenhum dado;
 -- - usa o código técnico persistido quando disponível;
 -- - usa apenas o prefixo legado de `nome` como fallback de identificação;
 -- - preserva separadamente campos operacionais e campos de origem para auditoria.
+
+begin transaction read only;
 
 select
   id,
@@ -40,3 +42,5 @@ select
 from public.produtos
 where categoria = 'perfil'
 order by upper(coalesce(nullif(trim(codigo), ''), trim(split_part(nome, ' - ', 1)))), upper(nome);
+
+rollback;
