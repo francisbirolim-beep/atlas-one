@@ -347,7 +347,7 @@ begin
         coalesce(p.origem, '')
       ),
       E'\x1e'
-      order by upper(trim(p.codigo))
+      order by upper(trim(p.codigo)) collate "C"
     )
   )
   into v_hash
@@ -499,7 +499,7 @@ begin
         coalesce(fabricante_fonte, '')
       ),
       E'\x1e'
-      order by codigo_norm
+      order by codigo_norm collate "C"
     )
   )
   into v_hash
