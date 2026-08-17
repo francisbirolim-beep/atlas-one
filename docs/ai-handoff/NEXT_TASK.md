@@ -1,5 +1,40 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — PROVENIÊNCIA DOS 1.307 PERFIS W.VETRO — 2026-08-17
+
+A auditoria/reconciliação da fonte `ExportWWPerfil (1)(1).xlsx` está concluída. **Não criar carga de novos perfis**: os 1.307 códigos da fonte já existem no Atlas, sem faltantes e sem exclusivos Atlas.
+
+Estado reconciliado:
+- fonte: 1.307;
+- Atlas: 1.307;
+- códigos correspondentes: 1.307;
+- `EXISTENTE_IGUAL`: 1.235;
+- `EXISTENTE_FONTE_NAO_PROMOVIDA`: 72;
+- divergência operacional real: 0.
+
+Próximo passo:
+1. preparar migration exclusivamente de proveniência para os 1.307 perfis existentes;
+2. gravar os valores crus em `codigo_origem`, `unidade_origem`, `tamanho_barra_mm_origem`, `ncm_origem` e `dados_origem`;
+3. não promover automaticamente `Tamanho` para `tamanho_barra_mm`;
+4. não sobrescrever nome, preço/custo, unidade operacional, peso, NCM operacional, marca, ativo, linha, cor ou ID externo;
+5. incluir guardas transacionais de contagem, IDs/códigos e pós-check de zero alteração operacional;
+6. validar em PR e dry-run;
+7. somente depois de autorização explícita executar `Supabase Database Control` com `APPLY_PRODUCTION`.
+
+Fonte com revisão pendente deve permanecer preservada, sem correção por suposição:
+- 221 NCM placeholders;
+- 18 NCM em formato atípico;
+- 7 tamanhos atípicos;
+- 2 pesos muito altos;
+- 68 fabricantes numéricos `16`.
+
+Relatório:
+`docs/tecnico/reconciliacao-exportwwperfil-2026-08-17.md`.
+
+Fila secundária permanece:
+- validar humanamente a unidade operacional dos 136 acessórios pendentes;
+- nunca inferir fator de conversão a partir de unidade/embalagem da fonte.
+
 ## TAREFA ATUAL — PERFIS W.VETRO — 2026-08-17
 
 A etapa dos acessórios W.Vetro está **concluída em produção**. Os trechos antigos deste arquivo que tratam migrations de acessórios como pendentes são históricos e não devem orientar novas ações.
@@ -201,3 +236,28 @@ Checkpoint mais recente:
 4. validar no banco 785 novos acessórios reconciliados;
 5. reconciliar a proveniência dos 389 acessórios já existentes, sem mudar `produtos.unidade` nos 93 divergentes;
 6. avançar para perfis somente com a fonte real.
+
+## GATE ATUAL — PERFIS W.VETRO / PROVENIÊNCIA — 2026-08-17
+
+A auditoria dos 1.307 perfis está concluída e a migration de proveniência está preparada/testada em banco efêmero, mas **não está aplicada em produção**.
+
+Migration:
+`supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`
+
+Estado:
+- 1.307 perfis da fonte = 1.307 perfis Atlas; 0 faltantes e 0 exclusivos;
+- migration sem INSERT e sem overwrite operacional;
+- SHA-256 `cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf`;
+- validação integral em PostgreSQL efêmero aprovada no run `32048680317`;
+- produção acessada somente em `READ ONLY`;
+- tamanho/NCM/fabricante suspeitos continuam não promovidos.
+
+Próximos passos obrigatórios:
+1. concluir/mergear a PR de auditoria #162 somente com checks exigidos verdes;
+2. abrir/validar PR separada da migration;
+3. exigir dry-run oficial do `Supabase Database Control`;
+4. mergear somente com Build Validation + Vercel + controle de migration verdes;
+5. depois do merge, solicitar autorização explícita para esta migration específica antes de `APPLY_PRODUCTION`;
+6. após apply, verificar run/log e pós-estado antes de documentar como ativo.
+
+Não interpretar `pode continuar` como autorização para apply em produção.

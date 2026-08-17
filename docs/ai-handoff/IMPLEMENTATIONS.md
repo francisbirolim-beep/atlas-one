@@ -371,3 +371,31 @@ Runs de produção:
 PR #160 mergeada em `main` no commit `ec2a97fbf2f6c2accfe1cbcc7e4030527fd2ce1c`.
 
 A migration de proveniência preserva os campos operacionais e aborta se detectar alteração indevida em nome, categoria, preço, unidade, descrição, ativo, marca, NCM, linha, cor ou ID externo.
+
+## Perfis W.Vetro — auditoria e reconciliação read-only — 2026-08-17
+
+- recebida a fonte real `ExportWWPerfil (1)(1).xlsx`;
+- fonte auditada: 1.307 códigos únicos;
+- criado export específico de perfis do Atlas com transação `READ ONLY`;
+- snapshot real do Atlas: 1.307 perfis;
+- todos os 1.307 códigos coincidem entre fonte e Atlas;
+- 0 faltantes e 0 exclusivos Atlas;
+- 1.235 correspondências iguais;
+- 72 dados de fonte deliberadamente não promovidos (68 fabricante `16`, 4 NCM `16`);
+- 0 divergências operacionais reais;
+- nenhuma escrita no banco nesta etapa.
+
+Relatório: `docs/tecnico/reconciliacao-exportwwperfil-2026-08-17.md`.
+
+Próxima implementação: migration apenas de proveniência dos 1.307 registros existentes, sem alterar nome, preço/custo, unidade, peso, tamanho operacional, NCM operacional, marca, ativo, linha, cor ou ID externo.
+
+## Perfis W.Vetro — proveniência preparada e validada fora de produção — 2026-08-17
+
+- criada `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`;
+- sem INSERT: reconcilia os 1.307 perfis preexistentes;
+- somente campos de proveniência são atualizados; campos operacionais ficam protegidos por snapshot JSON antes/depois;
+- fonte compactada com 249 exceções explícitas e dois hashes canônicos de auditoria;
+- hashes tornados determinísticos com `COLLATE "C"`;
+- run efêmero `32048680317` executou a migration inteira sobre snapshot read-only da produção: `UPDATE 1307`, pós-checks aprovados e `COMMIT`;
+- resultado efêmero: 1.307 proveniências W.Vetro, 1.307 tamanhos de origem e 0 promoções de tamanho operacional;
+- produção permaneceu sem escrita; migration ainda não aplicada.

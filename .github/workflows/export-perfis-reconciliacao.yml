@@ -1,0 +1,97 @@
+name: Export Profiles Reconciliation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export profiles (read-only)
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      PGOPTIONS: "-c statement_timeout=30000"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_PASSWORD:-}" || { echo "ERRO: SUPABASE_DB_PASSWORD ausente"; exit 1; }
+          test -n "${SUPABASE_PROJECT_ID:-}" || { echo "ERRO: SUPABASE_PROJECT_ID ausente"; exit 1; }
+          if ! [[ "$SUPABASE_PROJECT_ID" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "ERRO: SUPABASE_PROJECT_ID nao tem o formato esperado."
+            exit 1
+          fi
+
+      - name: Ensure PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+          psql --version
+
+      - name: Build IPv4 session pooler URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB_URL=$(python - <<'PY'
+          import os
+          import urllib.parse
+          project = os.environ['SUPABASE_PROJECT_ID']
+          password = urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{project}:{password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+
+      - name: Confirm read-only transaction support
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODE=$(psql "$SUPABASE_DB_URL" --quiet --tuples-only --no-align \
+            --command="begin transaction read only; select current_setting('transaction_read_only'); rollback;" \
+            | tr -d '[:space:]')
+          test "$MODE" = "on" || { echo "ERRO: transacao nao esta read-only"; exit 1; }
+          echo "Transacao PostgreSQL confirmada como read-only."
+
+      - name: Export current Atlas profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reconciliation-output
+          psql "$SUPABASE_DB_URL" \
+            --set=ON_ERROR_STOP=1 \
+            --quiet \
+            --csv \
+            --file=scripts/export-perfis-atlas-reconciliacao.sql \
+            --output=reconciliation-output/perfis-atlas-atual.csv
+
+          ROWS=$(python - <<'PY'
+          import csv
+          with open('reconciliation-output/perfis-atlas-atual.csv', newline='', encoding='utf-8') as f:
+              rows = list(csv.reader(f))
+          print(max(len(rows) - 1, 0))
+          PY
+          )
+          echo "Linhas exportadas: $ROWS"
+          printf '%s\n' "$ROWS" > reconciliation-output/total-linhas.txt
+          sha256sum reconciliation-output/perfis-atlas-atual.csv > reconciliation-output/sha256.txt
+
+      - name: Upload reconciliation export
+        uses: actions/upload-artifact@v4
+        with:
+          name: perfis-atlas-reconciliacao
+          path: reconciliation-output/
+          retention-days: 1
+          if-no-files-found: error
