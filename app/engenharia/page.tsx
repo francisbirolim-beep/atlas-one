@@ -147,7 +147,10 @@ export default function EngenhariaPage() {
     <div className="atlas-eng-page">
       <section className="atlas-eng-hero">
         <div><p className="atlas-eng-eyebrow">Técnico · Engenharia</p><h1>Engenharia de obras</h1><p>Obras com Medição Final aprovada entram aqui automaticamente para conferência e desenvolvimento técnico.</p></div>
-        <div className="atlas-eng-hero-status"><CheckCircle2 size={18} /> Fluxo conectado à Medição Final</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="atlas-eng-hero-status"><CheckCircle2 size={18} /> Fluxo conectado à Medição Final</div>
+          <Link href="/engenharia/configuracoes-orcamento" className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20">Configurações de orçamento <ArrowRight size={15}/></Link>
+        </div>
       </section>
 
       <section className="atlas-eng-kpis">
