@@ -15,10 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild exact migration with deterministic collation
+      - name: Patch exact migration with deterministic collation
         shell: bash
         run: |
           set -euo pipefail
+          echo "Aplicando somente duas substituições de ORDER BY com COLLATE C."
           python scripts/temp_fix_collation_perfis_wvetro.py
           sha256sum supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql
           test "$(sha256sum supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql | awk '{print $1}')" = "cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf"
