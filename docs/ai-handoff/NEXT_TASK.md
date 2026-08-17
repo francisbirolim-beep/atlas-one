@@ -122,3 +122,54 @@ Implementado na branch `francisbirolim-beep-patch-10` (secao "3. Variantes condi
 - `app/producao/plano-corte/page.tsx`: as variaveis do plano deixam de ser campo de texto livre e viram `<select>` com as opcoes cadastradas para aquela tipologia; adiciona presets fixos salvaveis (nome + marcar como padrao, pre-carrega automaticamente na proxima vez); ao gerar o plano, cada componente base passa por `resolverVarianteComponente` antes de virar snapshot -- se nenhuma variante bater, usa o componente base (nunca inventa).
 
 Pendente antes de declarar isso ativo em producao: aplicar a migration `20260816150000_engenharia_variantes_v1.sql` via `Supabase Database Control` (`apply` + `APPLY_PRODUCTION`), abrir PR, confirmar Build Validation verde, mergear. Depois do merge, o catalogo de variaveis vem vazio de vinculos (so a seed de variaveis/opcoes) -- o Master precisa entrar em Engenharia > Receitas tecnicas e vincular as variaveis certas a cada tipologia antes delas aparecerem no Plano de Corte.
+
+## ATUALIZACAO -- identidade tecnica de Produto -- 2026-08-16
+Branch `feat/produtos-identidade-tecnica-wvetro` (ainda nao mesclada; PR #143).
+Adiciona identidade tecnica confiavel ao cadastro de Produtos (perfis/acessorios
+W.Vetro): `codigo`/`codigo_origem`/`origem`/`id_externo_wvetro`,
+`peso_kg_m`/`tamanho_barra_mm`/`tamanho_barra_mm_origem`, `dados_origem jsonb`
+(snapshot congelado do que veio do W.Vetro), `status_validacao`
+(importado/revisado/validado), `ncm_origem`/`ncm_status`
+(pendente/valido/invalido, sem corrigir o NCM), tabela `produto_linhas` (N:N
+produto<->linha) e unique index parcial em `upper(codigo)`. Detalhes completos
+em IMPLEMENTATIONS.md e CURRENT_STATE.md; decisoes de arquitetura em
+DECISIONS.md; auditoria pre-migration em
+`docs/tecnico/auditoria-produtos-2026-08-16.md`.
+
+Nota sobre o arquivo de acessorios: o arquivo completo `ExportWWAcessorios`
+(~1.174 linhas) nao estava disponivel no ambiente desta execucao; o banco
+atual contem apenas 392 acessorios de uma importacao anterior. A base
+completa de 1.174 acessorios sera reconciliada em etapa separada (ver item 3
+da lista abaixo) -- reconciliacao por codigo tecnico, nunca sobrescrita
+silenciosa.
+
+Antes de mergear a PR #143:
+- confirmar Build Validation verde;
+- confirmar Supabase Database Control (dry-run) verde para a migration
+`20260816180000_produtos_identidade_tecnica_v1.sql`;
+- NAO aplicar essa migration em producao automaticamente -- apply manual via
+`workflow_dispatch` (`apply` + `APPLY_PRODUCTION`) fica para depois do merge,
+com confirmacao explicita do usuario.
+
+Depois do merge, proxima implementacao (em ordem):
+1. aplicar `20260816180000_produtos_identidade_tecnica_v1.sql` em producao via
+`Supabase Database Control` (`apply` + `APPLY_PRODUCTION`);
+2. gerar e aplicar o backfill de `tamanho_barra_mm`/`tamanho_barra_mm_origem` a
+partir da coluna "Tamanho" de `ExportWWPerfil (1).xlsx` (dados ja levantados,
+migration nao commitada nesta PR por escopo);
+3. reconciliar a base completa de acessorios (`ExportWWAcessorios`, ~1.174
+linhas) contra os 392 ja existentes no banco -- por CODIGO tecnico: codigo ja
+existe = comparar campos; codigo novo = candidato a insercao; mesmo codigo com
+dados diferentes = marcar divergencia; codigo duplicado na origem = revisar;
+nunca sobrescrever silenciosamente. Gerar relatorio de auditoria completo
+(total planilha, total banco, existentes iguais, existentes divergentes,
+faltantes no banco, duplicados, sem codigo, NCM suspeito, linha GERAL, cor
+numerica/origem, unidade suspeita, preco/custo suspeito) ANTES de propor
+qualquer insert. Preservar `codigo_origem`/`dados_origem`/`origem=wvetro`/id
+externo/linha e cor originais mesmo quando pendentes de validacao. Nao
+transformar "GERAL" em linha tecnica validada, codigo de cor numerico em nome
+de cor, nem NCM placeholder em NCM valido. PR separada desta.
+4. vincular `produto_linhas` a alguma tela (hoje so existe o CRUD em
+`lib/produtoLinhas.ts`, nenhuma tela usa ainda);
+5. avaliar se vale uma tela de detalhe tecnico dedicada para produto, ou se o
+formulario atual ja e suficiente.
