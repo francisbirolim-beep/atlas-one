@@ -1,5 +1,26 @@
 # CURRENT_STATE.md — Atlas One
 
+## PERFIS W.VETRO — PRODUÇÃO CONCLUÍDA — 2026-08-17
+
+A reconciliação de proveniência dos **1.307 perfis W.Vetro** está concluída em produção. Não voltar a tratar `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` como pendente.
+
+Apply confirmado pelo `Supabase Database Control` run **#86** (ID `32059852704`), branch `main`, commit `0b4b4a145f89bd3ad52626cd23335fb7bef2043e`, com `CONFIRMATION: APPLY_PRODUCTION`, log `Applying migration 20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql...` e `Finished supabase db push.`.
+
+Estado consolidado:
+- fonte W.Vetro: 1.307 perfis;
+- Atlas: 1.307 perfis;
+- 1.307 códigos correspondentes;
+- 0 faltantes e 0 exclusivos Atlas;
+- 1.235 correspondências iguais;
+- 72 valores de fonte deliberadamente não promovidos por qualidade;
+- 0 divergência operacional real;
+- nenhum INSERT de perfil e nenhuma sobrescrita de nome, preço/custo, unidade operacional, peso, NCM operacional, marca, ativo, linha, cor ou ID externo.
+
+Os valores crus permanecem preservados em campos de origem. `Tamanho` da fonte não foi promovido automaticamente para tamanho operacional; NCM/fabricante suspeitos continuam pendentes conforme regras de qualidade.
+
+Os blocos abaixo que dizem que esta migration ainda está pendente são históricos e não devem orientar nova ação.
+
+
 > Regra multiagente: o repositório GitHub é a única fonte da verdade. Antes de alterar código, verificar o estado real do repositório. Ao concluir implementação relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md.
 
 Verificado em 2026-08-17.

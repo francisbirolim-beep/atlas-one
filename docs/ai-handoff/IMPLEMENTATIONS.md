@@ -1,5 +1,15 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-17 — Perfis W.Vetro: proveniência aplicada em produção
+
+- PR #163 mergeada em `main`, commit `0b4b4a145f89bd3ad52626cd23335fb7bef2043e`.
+- `Supabase Database Control` run #86 (`32059852704`) executado com `APPLY_PRODUCTION`.
+- Migration `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` aplicada com sucesso (`Finished supabase db push.`).
+- 1.307 perfis reconciliados por código; 0 faltantes; 0 exclusivos; 0 divergência operacional real.
+- Proveniência W.Vetro enriquecida sem inserir perfis nem sobrescrever campos operacionais/técnicos.
+- Dados de fonte suspeitos continuam apenas como origem/pendência de validação, sem correção por suposição.
+
+
 Resumo cronológico das implementações relevantes. Para estado operacional usar `CURRENT_STATE.md`; para a próxima tarefa usar `NEXT_TASK.md`.
 
 ## Base funcional
