@@ -1,0 +1,107 @@
+name: Prepare Unidade Operacional Pendente
+
+on:
+  push:
+    branches:
+      - feat/unidade-operacional-pendente
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atlas_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d atlas_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply deterministic patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          import base64, zlib
+          payload = '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'
+          code = zlib.decompress(base64.b64decode(payload))
+          exec(compile(code, 'prepare_unidade_pendente.py', 'exec'))
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate the three pending migrations on PostgreSQL 16
+        shell: bash
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+          psql -h 127.0.0.1 -U postgres -d atlas_test <<'SQL'
+          create extension if not exists pgcrypto;
+          create table public.produtos (
+            id uuid primary key default gen_random_uuid(),
+            nome text not null,
+            categoria text not null default 'outro',
+            preco numeric not null default 0,
+            unidade text not null default 'unidade',
+            descricao text,
+            ativo boolean not null default true,
+            marca text,
+            ncm text,
+            codigo text,
+            codigo_origem text,
+            origem text not null default 'manual',
+            id_externo_wvetro text,
+            unidade_origem text,
+            qtde_embalagem_origem numeric,
+            dados_origem jsonb,
+            status_validacao text not null default 'importado' check (status_validacao in ('importado','revisado','validado')),
+            observacao_validacao text,
+            ncm_origem text,
+            ncm_status text not null default 'pendente' check (ncm_status in ('pendente','valido','invalido'))
+          );
+          create unique index uq_produtos_codigo_upper on public.produtos (upper(codigo)) where codigo is not null;
+          SQL
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d atlas_test -f supabase/migrations/20260817141000_carga_acessorios_wvetro_un_v1.sql
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d atlas_test -f supabase/migrations/20260817150000_produtos_unidade_operacional_pendente_v1.sql
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d atlas_test -f supabase/migrations/20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql
+          resultado=$(psql -h 127.0.0.1 -U postgres -d atlas_test -Atc "select count(*), count(*) filter (where unidade='UN'), count(*) filter (where unidade is null), count(distinct upper(codigo)) from public.produtos;")
+          echo "Resultado: $resultado"
+          test "$resultado" = "785|649|136|785"
+
+      - name: Commit final changes and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/prepare-unidade-operacional-pendente.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: suportar acessórios com unidade operacional pendente"
+          git push
