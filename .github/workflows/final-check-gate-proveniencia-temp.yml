@@ -1,0 +1,83 @@
+name: Final Check Gate Proveniencia Temp
+
+on:
+  push:
+    branches:
+      - feat/reconciliar-proveniencia-acessorios-wvetro
+
+permissions:
+  contents: write
+  checks: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require clean migration-only diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          expected='supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql'
+          mapfile -t files < <(git diff --name-only origin/main...HEAD | grep -v '^.github/workflows/final-check-gate-proveniencia-temp.yml$')
+          printf 'Files excluding gate:\n%s\n' "${files[*]}"
+          test "${#files[@]}" -eq 1
+          test "${files[0]}" = "$expected"
+          echo '2a1cd7c8f29c3cf6349caa1e6e9673396c445971ebd93ac287976fd7ddcb04b4  '"$expected" | sha256sum -c -
+
+      - name: Remove gate and push final clean head
+        id: clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/final-check-gate-proveniencia-temp.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'chore: remover gate temporário da proveniência'
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for final standard checks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.clean.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 42); do
+            checks=$(gh api -H 'Accept: application/vnd.github+json' "/repos/${GITHUB_REPOSITORY}/commits/${FINAL_SHA}/check-runs?per_page=100")
+            build_status=$(jq -r '[.check_runs[] | select(.name=="Next.js build")][0].status // "missing"' <<<"$checks")
+            build_conclusion=$(jq -r '[.check_runs[] | select(.name=="Next.js build")][0].conclusion // ""' <<<"$checks")
+            supa_status=$(jq -r '[.check_runs[] | select(.name=="Supabase migration control")][0].status // "missing"' <<<"$checks")
+            supa_conclusion=$(jq -r '[.check_runs[] | select(.name=="Supabase migration control")][0].conclusion // ""' <<<"$checks")
+            echo "attempt=$attempt build=$build_status/$build_conclusion supabase=$supa_status/$supa_conclusion"
+
+            if [[ "$build_status" == "completed" && "$build_conclusion" != "success" ]]; then
+              echo 'Build final falhou.'
+              exit 1
+            fi
+            if [[ "$supa_status" == "completed" && "$supa_conclusion" != "success" ]]; then
+              echo 'Supabase dry-run final falhou.'
+              exit 1
+            fi
+            if [[ "$build_status" == "completed" && "$build_conclusion" == "success" && "$supa_status" == "completed" && "$supa_conclusion" == "success" ]]; then
+              echo 'Final standard checks passed.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Timeout aguardando checks finais.'
+          exit 1
+
+      - name: Mark PR ready only after final checks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr ready 160 --repo francisbirolim-beep/atlas-one
