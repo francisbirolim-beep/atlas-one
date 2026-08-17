@@ -2,7 +2,7 @@
 
 ## TAREFA ATUAL
 
-Concluir a PR #147 com o **dry-run da migration corrigida** e, somente depois, validar a semântica das 93 divergências de unidade antes de qualquer atualização/importação de acessórios.
+A PR #147 está tecnicamente validada. O próximo gate é **merge manual**; depois do merge, decidir explicitamente se a migration corrigida deve ser aplicada em produção. Nenhuma carga de acessórios deve ocorrer antes disso.
 
 ## ESTADO DE PARTIDA
 
@@ -21,6 +21,18 @@ Resultado:
 
 Relatório:
 `docs/tecnico/reconciliacao-exportwwacessorios-2026-08-16.md`
+
+## CHECKS DA CORREÇÃO TÉCNICA
+
+No commit `235d31f0b3ec900f9eb06157ab1a75cd6133de26`, que contém a correção de migration/unidade/proveniência:
+- `Supabase Database Control`: **success**;
+- `Audit migration history`: **success**;
+- `Dry-run pending migrations`: **success**;
+- `Apply pending migrations`: **skipped**;
+- `Build Validation`: **success**;
+- `Vercel`: **success**.
+
+Portanto a migration foi validada em dry-run, mas **não foi aplicada**.
 
 ## DESCOBERTA DE MODELAGEM — UNIDADE NÃO É UM CAMPO SIMPLES
 
@@ -64,13 +76,16 @@ A migration foi corrigida na PR #147 para:
 
 `lib/produtos.ts` também aceita os novos campos de origem para futura carga reconciliada.
 
-## PRÓXIMO PASSO OBRIGATÓRIO
+## PRÓXIMO GATE MANUAL
 
-1. confirmar checks da PR #147;
-2. confirmar `Supabase Database Control` em **dry-run**, sem apply;
-3. manter a PR sem merge automático — merge é manual;
-4. após merge, decidir explicitamente se aplica a migration em produção;
-5. somente com schema ativo preparar PR separada de carga dos acessórios.
+1. revisar a PR #147;
+2. fazer **merge manual** quando aprovado;
+3. após o merge, rodar `Supabase Database Control` em modo `apply` somente se houver decisão explícita;
+4. para apply em produção, exigir `confirmation = APPLY_PRODUCTION`;
+5. confirmar que a migration foi realmente aplicada antes de considerar os novos campos ativos;
+6. somente então abrir PR separada para carga de acessórios.
+
+Não fazer merge automático e não fazer apply automático.
 
 ## REGRA PARA OS 93 DIVERGENTES
 
