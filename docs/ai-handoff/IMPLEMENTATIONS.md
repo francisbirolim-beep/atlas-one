@@ -1,5 +1,18 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-18 — linha_tipologias / linha_produtos: carga idempotente (PR #180, apply pendente)
+
+- PR #180 mergeada em `main`, merge commit `e1bc573`.
+- Nova migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql`: idempotente (`ON CONFLICT DO NOTHING`), sem UPDATE/DELETE em nenhuma tabela, com pós-checks que abortam a transação se os limiares mínimos não forem atingidos (incluindo checagem explícita de `SUPREMA -> Porta de Correr 03 Folhas`).
+- Fonte para `linha_tipologias`: token "(Linha)" já presente no final de `tipologias.label` (herdado de extração histórica do W.Vetro), comparado por igualdade exata (case-insensitive, sem fuzzy) a `linhas_tecnicas.nome`/`apelidos`.
+- Fonte para `linha_produtos`: `produtos.dados_origem->>'linha_raw'` (só existe para acessórios, fonte `ExportWWAcessorios.xlsx`), também por igualdade exata.
+- Resultado: +46 `linha_tipologias` (SUPREMA 23, GOLD 17, LINHA 30 5, PELE DE VIDRO/FACHADA ATLANTA 1) e +8 `linha_produtos` (SUPREMA 2, GOLD 1, FACHADA ATLANTA 5), cobrindo 4 das 5 linhas técnicas existentes.
+- REVESTIMENTO_RIPADO (sem match exato de apelido), os 1.307 perfis (sem campo de Linha na fonte) e 1 acessório com `linha_raw = "GOLD - LINHA GOLD"` (ambíguo) ficaram de fora, documentados como pendentes de decisão humana.
+- Confirmado nesta tarefa: não há integração/API W.Vetro viva configurada; toda a base atual vem de exports manuais já importados (`ExportWWPerfil`, `ExportWWAcessorios`).
+- Relatório: `docs/tecnico/carga-linha-tipologias-produtos-2026-08-18.md`.
+- Build Validation e Supabase Database Control (dry-run, run #99) verdes antes do merge.
+- Migration NÃO aplicada em produção; depende de autorização explícita para `APPLY_PRODUCTION`.
+
 ## 2026-08-17 — Perfis W.Vetro: proveniência aplicada em produção
 
 - PR #163 mergeada em `main`, commit `0b4b4a145f89bd3ad52626cd23335fb7bef2043e`.
@@ -159,7 +172,7 @@ Implementado no código/schema proposto:
 Migration:
 `supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
-Estado de produção: **migration ainda não aplicada**.
+Estado de produção: aplicada em 2026-08-17 (run #79, ID `32037239260`).
 
 ## Auditoria pré-PR #143
 Base do banco na época:
@@ -279,18 +292,6 @@ Implementado:
 - filtro por `linha_id` combinado com busca por código/nome/descrição;
 - sem alteração de schema/banco.
 
-## Próxima etapa
-
-O próximo gate exige decisão explícita:
-1. decidir se aplica `20260816210000_produtos_identidade_tecnica_v1.sql` em produção;
-2. se aprovado, executar somente via `Supabase Database Control` com `APPLY_PRODUCTION`;
-3. confirmar que o schema foi realmente aplicado;
-4. com schema ativo, preparar carga dos 785 faltantes seguros em PR separada;
-5. preencher `unidade_origem`/`qtde_embalagem_origem` a partir da fonte real sem sobrescrever silenciosamente `produtos.unidade`;
-6. validar os 93 divergentes segundo uso operacional, Compras, Estoque e Engenharia;
-7. reauditar;
-8. avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
-
 ## Regras permanentes
 - GitHub é a única fonte da verdade;
 - nunca commitar direto na `main`;
@@ -298,6 +299,7 @@ O próximo gate exige decisão explícita:
 - migration só conta como ativa após apply confirmado;
 - não inventar NCM, linha, cor, preço, custo, medida, unidade operacional, fator de conversão ou identificador externo;
 - `GERAL`, códigos numéricos de cor, unidade da fonte e Qtde Emb. permanecem dados de origem até validação de sua semântica;
+- não inventar vínculo Linha -> Tipologia/Produto por semelhança de nome;
 - integração W.Vetro permanente deve ser server-side, sem credenciais no browser/frontend.
 
 ## ORÇAMENTO — HISTÓRICO DE VERSÕES — PR #150
@@ -451,7 +453,7 @@ Branch `feat/colaboracao-notificacoes-v1`.
 - Home e Minhas Tarefas permitem selecionar responsável; prioridade alta/urgente é registrada na atribuição.
 - Automações existentes de orçamento/assistência migradas para a rota segura com compatibilidade pré-migration.
 - Migration validada em PostgreSQL 16 efêmero; build completo verde.
-- Produção ainda não alterada.
+- Produção ainda não alterada nesta implementação; a migration foi posteriormente mergeada em `main` (confirmar apply antes de assumir ativa).
 
 ## 2026-08-18 — PR #169 — paginação de produtos/perfis
 
@@ -460,3 +462,12 @@ Branch `feat/colaboracao-notificacoes-v1`.
 - Preserva filtro `somenteAtivos`.
 - Em falha de uma página, não retorna conjunto parcial.
 - Sem migration e sem escrita em produtos.
+
+## 2026-08-18 — PRs #177, #178, #179 — cadastro por linha e seletor de orçamento (não auditado em detalhe)
+
+Mergeadas em `main` antes desta tarefa. Títulos observados nos commits:
+- #177 "feat: selecionar orçamento por linha, modelo e projeto";
+- #178 "feat: alinhar cadastro por linha com seletor de orçamento";
+- #179 "fix: cadastrar linha e modelos antes de liberar no orçamento".
+
+Esta tarefa (linha_tipologias/linha_produtos) leu e usou o código resultante (`components/orcamento/SeletorEsquadriaInteligente.tsx`, `app/cadastro/produtos/por-linha/page.tsx`) como estava em `main`, mas não auditou o diff completo dessas três PRs. Registrar aqui para que a próxima tarefa leia o código atual antes de reimplementar qualquer coisa nessa área.
