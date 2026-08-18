@@ -1,0 +1,46 @@
+name: Temp Handoff Listar Produtos
+
+on:
+  push:
+    branches:
+      - fix/listar-todos-produtos
+    paths:
+      - '.github/workflows/temp-handoff-listar-produtos.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar handoffs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          updates = {
+            'docs/ai-handoff/CURRENT_STATE.md': '''\n\n## CADASTRO DE PRODUTOS — CORREÇÃO DA LISTAGEM ACIMA DE 1.000 REGISTROS — 2026-08-18\n\nFoi identificado por que o cadastro de Perfil aparecia vazio embora os 1.307 perfis estivessem preservados no banco: `listarProdutos()` fazia uma única consulta Supabase sem paginação. Como o PostgREST limita a resposta e a consulta ordenava por `categoria`, mais de 1.000 acessórios eram retornados antes de qualquer perfil. A UI filtrava em memória e portanto não recebia perfis.\n\nCorreção preparada na branch `fix/listar-todos-produtos`: `listarProdutos()` passa a paginar em blocos de 1.000 com ordenação estável `categoria -> nome -> id`, acumulando todas as páginas antes de devolver os produtos. Sem migration e sem alteração de dados. Build completo verde antes da PR.\n''',
+            'docs/ai-handoff/IMPLEMENTATIONS.md': '''\n\n## 2026-08-18 — Paginação completa de Produtos\n\n- Corrige truncamento silencioso de `listarProdutos()` quando a tabela possui mais de 1.000 registros.\n- Paginação client-side em blocos de 1.000 via `.range()`.\n- Ordenação determinística por `categoria`, `nome` e `id` evita inconsistência entre páginas.\n- Em erro de qualquer página, o helper retorna lista vazia em vez de lista parcial, preservando comportamento seguro.\n- Impacta positivamente Cadastro > Produtos, linhas, precificação, orçamento de balcão e demais consumidores do helper.\n- Sem migration e sem escrita em produtos.\n''',
+            'docs/ai-handoff/NEXT_TASK.md': '''\n\n## GATE — CORREÇÃO DA LISTAGEM DE PRODUTOS/PERFIS — 2026-08-18\n\nBranch `fix/listar-todos-produtos`. Próximo passo: PR -> Build Validation + Vercel verdes -> merge. Depois do deploy, validar em `Cadastro > Perfil` que os perfis voltaram a aparecer e que busca por código (ex.: SU010) funciona. Não recarregar/reimportar perfis: o problema era de paginação da consulta, não perda de dados.\n'''
+          }
+          for filename, addition in updates.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              marker = addition.strip().splitlines()[0]
+              if marker not in text:
+                  path.write_text(text.rstrip() + addition + '\n', encoding='utf-8')
+          PY
+      - name: Commit handoffs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'atlas-one-bot'
+          git config user.email 'atlas-one-bot@users.noreply.github.com'
+          git add docs/ai-handoff/CURRENT_STATE.md docs/ai-handoff/IMPLEMENTATIONS.md docs/ai-handoff/NEXT_TASK.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs: registrar correção da listagem de produtos'
+            git push
+          fi
