@@ -132,10 +132,32 @@ export function labelCategoriaProduto(categoria: CategoriaProduto): string {
 }
 
 export async function listarProdutos(somenteAtivos = false): Promise<Produto[]> {
-  let query = supabase.from('produtos').select('*').order('categoria').order('nome')
-  if (somenteAtivos) query = query.eq('ativo', true)
-  const { data } = await query
-  return (data as Produto[]) || []
+  const tamanhoPagina = 1000
+  const todos: Produto[] = []
+
+  for (let inicio = 0; ; inicio += tamanhoPagina) {
+    let query = supabase
+      .from('produtos')
+      .select('*')
+      .order('categoria')
+      .order('nome')
+      .order('id')
+      .range(inicio, inicio + tamanhoPagina - 1)
+
+    if (somenteAtivos) query = query.eq('ativo', true)
+
+    const { data, error } = await query
+    if (error) {
+      console.error('Erro ao listar produtos:', error)
+      return []
+    }
+
+    const pagina = (data as Produto[]) || []
+    todos.push(...pagina)
+    if (pagina.length < tamanhoPagina) break
+  }
+
+  return todos
 }
 
 export async function criarProduto(dados: {
