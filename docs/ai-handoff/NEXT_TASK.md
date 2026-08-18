@@ -1,8 +1,23 @@
 # NEXT_TASK.md — Atlas One
 
-## GATE ATUAL — APLICAR linha_tipologias / linha_produtos — 2026-08-18
+## CONCLUÍDO — linha_tipologias / linha_produtos aplicado em produção — 2026-08-18
 
-PR #180 já foi mergeada em `main` (commit `e1bc573`) com Build Validation e Supabase Database Control (dry-run, run #99) verdes. A migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql` está pronta, mas **NÃO aplicada em produção** — `linha_tipologias` e `linha_produtos` continuam com 0 linhas no banco real.
+A migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql` foi aplicada em produção com autorização explícita do Francis, via `Supabase Database Control` run #100 (`mode=apply`, `confirmation=APPLY_PRODUCTION`), commit `8f5f61b`. Pós-estado confirmado: `linha_tipologias` = 46, `linha_produtos` = 8, incluindo `SUPREMA → Porta de Correr 03 Folhas`. Não repetir esta carga.
+
+Efeito colateral relevante para a próxima tarefa: o mesmo run também aplicou `20260817203000_configuracoes_validadas_orcamento_v1.sql` (pendente desde a PR #173), porque o apply do workflow roda TODAS as migrations pendentes em ordem cronológica, não uma migration isolada. Essa migration extra é aditiva/segura (novas colunas nullable/default + índice em `engenharia_variaveis_preset`, tabela vazia no momento do apply) e está documentada em `CURRENT_STATE.md`/`IMPLEMENTATIONS.md`. Não é preciso reaplicá-la nem tratá-la como pendente.
+
+Lição operacional para qualquer apply futuro: antes de rodar `Supabase Database Control` em modo apply, checar a fila completa de migrations pendentes (via MCP `list_migrations` ou dry-run) para saber exatamente o que vai ser aplicado junto — o apply não é seletivo por arquivo.
+
+Pendências que continuam abertas, para decisão humana futura (não inventar vínculo):
+- REVESTIMENTO_RIPADO sem vínculo automático — apelidos cadastrados (`"RIPADO"`/`"REVESTIMENTO RIPADO"`) não batem com o token `"Ripados"` (plural) usado nas tipologias da fonte;
+- os 1.307 perfis (`ExportWWPerfil`) sem campo de Linha na fonte original — não vincular por semelhança de nome;
+- 1 acessório com `linha_raw = "GOLD - LINHA GOLD"`, ambíguo;
+- `engenharia_variaveis_preset` está com as novas colunas de validação (`usar_no_orcamento`, `validado`, etc.) mas 0 presets cadastrados — não é uma tarefa em aberto desta frente, apenas registrar que a tabela está pronta para uso futuro pela frente de "configurações validadas de orçamento" (PR #173), que segue com sua própria tarefa separada.
+
+## GATE ANTIGO — APLICAR linha_tipologias / linha_produtos — 2026-08-18 (histórico, já concluído acima)
+
+PR #180 já foi mergeada em `main` (commit `e1bc573`) com Build Validation e Supabase Database Control (dry-run, run #99) verdes.
+ A migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql` está pronta, mas **NÃO aplicada em produção** — `linha_tipologias` e `linha_produtos` continuam com 0 linhas no banco real.
 
 Próximo passo é gate humano explícito:
 1. pedir autorização específica do Francis para aplicar esta migration em produção;
