@@ -501,29 +501,19 @@ export default function Cadastro() {
             </button>
 
             <div className="pt-2 space-y-2">
-              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Produtos e itens</p>
-              {categoriasProduto.map(categoria => (
-                <Link
-                  key={categoria.valor}
-                  href={`/cadastro/produtos?categoria=${encodeURIComponent(categoria.valor)}`}
-                  className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition"
-                >
-                  <span className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                    {categoria.valor === 'acessorio' ? <Wrench size={18} className="text-brand-navy" /> : categoria.valor === 'perfil' ? <Layers size={18} className="text-brand-navy" /> : <Package size={18} className="text-brand-navy" />}
-                    {categoria.label}
-                  </span>
-                  <ChevronDown size={16} className="-rotate-90 text-slate-300" />
-                </Link>
-              ))}
+              <div className="flex items-center justify-between gap-3 px-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Produtos e itens</p>
+                {!novaCategoriaProdutoAberta && (
+                  <button
+                    onClick={() => { setNovaCategoriaProdutoAberta(true); setMsgCategoriaProduto('') }}
+                    className="flex items-center gap-1 text-xs font-medium text-brand-navy hover:underline"
+                  >
+                    <Plus size={14} /> Nova categoria
+                  </button>
+                )}
+              </div>
 
-              {!novaCategoriaProdutoAberta ? (
-                <button
-                  onClick={() => { setNovaCategoriaProdutoAberta(true); setMsgCategoriaProduto('') }}
-                  className="w-full flex items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 p-4 text-sm font-medium text-brand-navy hover:border-brand-navy transition"
-                >
-                  <Plus size={18} /> Nova categoria
-                </button>
-              ) : (
+              {novaCategoriaProdutoAberta && (
                 <form onSubmit={criarNovaCategoriaProduto} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
                   <input
                     autoFocus
@@ -544,6 +534,20 @@ export default function Cadastro() {
                 </form>
               )}
               {msgCategoriaProduto && <p className="px-1 text-xs text-slate-500">{msgCategoriaProduto}</p>}
+
+              {categoriasProduto.filter(categoria => categoria.valor !== 'porta_janela_padrao').map(categoria => (
+                <Link
+                  key={categoria.valor}
+                  href={categoria.valor === 'produto' ? '/cadastro/produtos/por-linha' : `/cadastro/produtos?categoria=${encodeURIComponent(categoria.valor)}`}
+                  className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition"
+                >
+                  <span className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                    {categoria.valor === 'acessorio' ? <Wrench size={18} className="text-brand-navy" /> : categoria.valor === 'perfil' ? <Layers size={18} className="text-brand-navy" /> : <Package size={18} className="text-brand-navy" />}
+                    {categoria.label}
+                  </span>
+                  <ChevronDown size={16} className="-rotate-90 text-slate-300" />
+                </Link>
+              ))}
             </div>
 
             <Link href="/cadastro/fornecedores" className="w-full flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-4 hover:border-brand-navy transition">
