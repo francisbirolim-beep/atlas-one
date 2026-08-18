@@ -1,0 +1,81 @@
+/* Kanban Comercial — correções específicas para viewport mobile. */
+@media (max-width: 767px) {
+  .atlas-kanban-commercial {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .atlas-kanban-commercial > div,
+  .atlas-kanban-commercial > div > main {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .atlas-kanban-commercial > div > main {
+    padding: 0.75rem !important;
+    overflow-x: hidden;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    margin: 0 0 0.75rem !important;
+    padding: 0.6rem !important;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child > div:first-child {
+    grid-column: 1 / -1;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child > input[type="date"],
+  .atlas-kanban-commercial > div > main > div:first-child > select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    font-size: 0.875rem !important;
+  }
+
+  .atlas-kanban-commercial > div > main > div:first-child > button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .atlas-kanban-commercial > div > main > div:nth-child(2) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 1rem !important;
+    gap: 0.65rem !important;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    scroll-padding-left: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > div,
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > button {
+    flex: 0 0 calc(100vw - 2.25rem) !important;
+    width: calc(100vw - 2.25rem) !important;
+    max-width: calc(100vw - 2.25rem) !important;
+    min-width: 0 !important;
+    scroll-snap-align: start;
+  }
+
+  .atlas-kanban-commercial > div > main > div:nth-child(2) > div > div:nth-child(2) > div {
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
+  .atlas-kanban-commercial > div > main > div:nth-child(2) p {
+    overflow-wrap: anywhere;
+  }
+}
