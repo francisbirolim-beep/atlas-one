@@ -1,0 +1,46 @@
+name: Temp Validate Home Operacional
+
+on:
+  push:
+    branches:
+      - feat/home-operacional-v1
+    paths:
+      - '.github/workflows/temp-home-operacional-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: build-validation-placeholder
+      SUPABASE_SECRET_KEY: build-validation-placeholder
+      ANTHROPIC_API_KEY: build-validation-placeholder
+      OLLAMA_DEFAULT_MODEL: llama3.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply topbar patch
+        run: python scripts/temp_patch_home_topbar.py
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Commit validated topbar change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'atlas-one-bot'
+          git config user.email 'atlas-one-bot@users.noreply.github.com'
+          git add components/system/AppTopbar.tsx
+          if git diff --cached --quiet; then
+            echo 'Nada para commitar.'
+          else
+            git commit -m 'feat: exibir alertas no topo da home'
+            git push
+          fi
