@@ -24,12 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Apply UI patch
-        id: patch
+      - name: Apply UI patches
         shell: bash
         run: |
           set +e
-          python scripts/temp_patch_colaboracao_ui.py 2>&1 | tee /tmp/patch.log
+          { python scripts/temp_patch_colaboracao_ui.py && python scripts/temp_patch_colaboracao_ui_extra.py; } 2>&1 | tee /tmp/patch.log
           STATUS=${PIPESTATUS[0]}
           set -e
           if [ "$STATUS" -ne 0 ]; then
