@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { AutomacaoAssistencia } from './tipos'
 import { primeiraColunaTarefaId, criarTarefa } from './tarefas'
+import { atribuirTarefa } from './tarefasColaboracao'
 
 export async function listarAutomacoesAssistencia(): Promise<AutomacaoAssistencia[]> {
   const { data, error } = await supabase
@@ -58,6 +59,18 @@ export async function excluirAutomacaoAssistencia(id: string): Promise<boolean> 
   return !error
 }
 
+async function criarTarefaAutomaticaCompatibilidade(usuarioAlvo: string, titulo: string) {
+  const atribuicao = await atribuirTarefa({ responsavelId: usuarioAlvo, titulo })
+  if (atribuicao.ok) return
+
+  if (atribuicao.code === 'COLABORACAO_INATIVA') {
+    const colunaTarefaId = await primeiraColunaTarefaId(usuarioAlvo)
+    if (colunaTarefaId) await criarTarefa(usuarioAlvo, colunaTarefaId, titulo)
+    return
+  }
+  console.error('Erro ao criar tarefa automática de assistência:', atribuicao.error)
+}
+
 export async function executarAutomacoesAssistencia(assistencia: {
   cliente_nome?: string | null
   criado_por_id?: string | null
@@ -78,13 +91,9 @@ export async function executarAutomacoesAssistencia(assistencia: {
 
       if (!usuarioAlvo) continue
 
-      const colunaTarefaId = await primeiraColunaTarefaId(usuarioAlvo)
-      if (!colunaTarefaId) continue
-
       const cliente = assistencia.cliente_nome || 'cliente'
       const titulo = automacao.titulo_tarefa.replace(/\{cliente\}/g, cliente)
-
-      await criarTarefa(usuarioAlvo, colunaTarefaId, titulo)
+      await criarTarefaAutomaticaCompatibilidade(usuarioAlvo, titulo)
     }
   } catch (e) {
     console.error('Erro ao executar automacoes de assistencia:', e)

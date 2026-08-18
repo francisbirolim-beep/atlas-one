@@ -294,3 +294,32 @@ Próximos passos obrigatórios:
 6. após apply, verificar run/log e pós-estado antes de documentar como ativo.
 
 Não interpretar `pode continuar` como autorização para apply em produção.
+
+## Frente ativa — Home Operacional
+
+A Home Operacional V1 está em `feat/home-operacional-v1` e deve passar pelos gates normais antes do merge.
+
+Depois da V1, criar uma implementação separada para colaboração e comunicação, sem atalhos de schema:
+1. registrar solicitante/atribuidor da tarefa e auditoria de atribuição antes de permitir tarefa formal para outro usuário;
+2. criar notificações persistentes com estado lido/não lido e vínculo ao objeto de origem;
+3. preferências por usuário para categorias de alerta e som;
+4. alertas sonoros somente com configuração/consentimento adequado do navegador;
+5. chat direto e chat contextual (orçamento/obra/tarefa) com participantes e histórico;
+6. estudar sincronização de agenda externa (Google/Outlook) sem substituir a agenda operacional do Atlas.
+
+Não declarar nenhum desses itens da fase seguinte como implementado até existir código/schema real e checks verdes.
+
+## Frente ativa — Colaboração e notificações
+
+Concluir PR da branch `feat/colaboracao-notificacoes-v1` pelos gates oficiais.
+
+Se Build + Vercel + Supabase dry-run ficarem verdes:
+1. mergear o código/migration na `main`;
+2. NÃO considerar a migration ativa;
+3. pedir autorização explícita para aplicar somente `20260818013000_colaboracao_notificacoes_v1.sql`;
+4. depois do apply, fazer pós-auditoria read-only de RLS, colunas, tabelas de notificação, publication realtime e triggers;
+5. testar funcionalmente atribuição entre dois usuários e convite de agenda com notificação.
+
+Após essa V1 estar ativa, próxima implementação separada: chat direto + chat contextual (orçamento/obra/tarefa). Depois, estudar sincronização Google/Outlook mantendo o Atlas como agenda operacional principal.
+
+A PR #166 (orçamento Linha -> Tipologia -> Configuração validada) continua separada; não aplicar sua migration sem autorização específica própria.

@@ -133,17 +133,6 @@ foto_larguras_url?: string | null
 produto_id?: string | null
       preco_unit?: number | null
       preco_total?: number | null
-      // Snapshot do fluxo Linha -> Tipologia -> Configuracao. Campos opcionais
-      // preservam compatibilidade com orcamentos antigos.
-      linha_id?: string | null
-      linha_nome?: string | null
-      tipologia_id?: string | null
-      configuracao_preset_id?: string | null
-      configuracao_nome?: string | null
-      configuracao_validada?: boolean
-      modo_configuracao?: 'rapido' | 'assistido'
-      configuracao_status?: 'pendente' | 'preenchida' | 'validada'
-      variaveis?: Record<string, string>
 }
 
 export interface OrcamentoRapido {
@@ -384,7 +373,38 @@ export interface TarefaPessoal {
       recorrencia_tipo?: string | null
       recorrencia_valor?: number | null
       regra_origem_id?: string | null
+      solicitante_id?: string | null
+      solicitante_nome?: string | null
+      atribuida_em?: string | null
+      prioridade?: 'baixa' | 'normal' | 'alta' | 'urgente'
       created_at?: string
+}
+
+export interface Notificacao {
+      id: string
+      usuario_id: string
+      categoria: 'tarefas' | 'agenda' | 'chat' | 'operacao'
+      tipo: string
+      titulo: string
+      mensagem?: string | null
+      href?: string | null
+      origem_tipo?: string | null
+      origem_id?: string | null
+      criado_por_id?: string | null
+      criado_por_nome?: string | null
+      lida_em?: string | null
+      created_at: string
+}
+
+export interface NotificacaoPreferencias {
+      usuario_id: string
+      som_ativo: boolean
+      som_volume: number
+      tarefas: boolean
+      agenda: boolean
+      chat: boolean
+      operacao: boolean
+      updated_at?: string
 }
 
 export type StatusConvite = 'pendente' | 'aceito' | 'recusado'

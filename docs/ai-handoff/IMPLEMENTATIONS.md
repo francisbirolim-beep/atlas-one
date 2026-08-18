@@ -421,3 +421,34 @@ Próxima implementação: migration apenas de proveniência dos 1.307 registros 
 - nenhuma migration foi aplicada pelo PR/merge;
 - #162 encerrada como substituída para não ignorar o Vercel vermelho por rate limit;
 - apply em produção segue bloqueado até autorização explícita específica.
+
+## 2026-08-17 — Home Operacional V1 (em validação)
+
+Branch `feat/home-operacional-v1`, sem migration.
+
+- Home diária conecta dados reais de tarefas e eventos já existentes.
+- Criação rápida de tarefa pessoal e compromisso de agenda.
+- Compromisso pode convidar outros usuários pelo mecanismo existente `evento_convidados`.
+- Calendário mensal + agenda do dia.
+- Alertas derivados de tarefa vencida, tarefa de hoje, convite pendente e compromisso próximo.
+- Sino de alertas no Topbar.
+- Hero sem segundo botão de orçamento.
+- KPIs operacionais com critérios explícitos; Produção conta cards do quadro sem inferir coluna final.
+- Build completo local/temporário verde antes da PR.
+- Som, lido/não lido persistente, tarefa criada por outro usuário, chat e sync Google/Outlook NÃO fazem parte desta V1.
+
+## 2026-08-18 — Colaboração de tarefas + notificações V1 (em validação)
+
+Branch `feat/colaboracao-notificacoes-v1`.
+
+- Auditoria read-only confirmou RLS temporária permissiva em `tarefas` e `tarefa_colunas`.
+- Migration preparada para fechar essa RLS e adicionar metadados auditáveis de atribuição.
+- Atribuição para outro usuário ocorre pela API autenticada server-side; o browser não recebe poder de escrever tarefas de terceiros.
+- Notificações persistentes com lido/não lido, origem, criador e destinatário.
+- Preferência de som por usuário; som usa Web Audio após interação do usuário e só toca quando habilitado.
+- Realtime em `notificacoes`.
+- Tarefa atribuída e convite de agenda geram notificação por trigger de banco.
+- Home e Minhas Tarefas permitem selecionar responsável; prioridade alta/urgente é registrada na atribuição.
+- Automações existentes de orçamento/assistência migradas para a rota segura com compatibilidade pré-migration.
+- Migration validada em PostgreSQL 16 efêmero; build completo verde.
+- Produção ainda não alterada.
