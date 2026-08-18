@@ -1,5 +1,32 @@
 # CURRENT_STATE.md — Atlas One
 
+## LINHA_TIPOLOGIAS E LINHA_PRODUTOS — PR #180 MERGEADA; APPLY PENDENTE — 2026-08-18
+
+PR #180 mergeada em `main`, merge commit `e1bc573`.
+
+Contexto: `linhas_tecnicas` já tinha 5 linhas (SUPREMA, GOLD, LINHA 30, PELE DE VIDRO/FACHADA ATLANTA, REVESTIMENTO RIPADO), mas `linha_tipologias` e `linha_produtos` estavam com 0 registros, fazendo o seletor de orçamento (`components/orcamento/SeletorEsquadriaInteligente.tsx`) mostrar "Nenhum modelo disponível" para qualquer linha selecionada, incluindo SUPREMA -> Porta de Correr 03 Folhas.
+
+Migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql`, idempotente (`ON CONFLICT DO NOTHING`, sem UPDATE/DELETE), popula:
+- `linha_tipologias`: +46 pares (SUPREMA 23, GOLD 17, LINHA 30 5, PELE DE VIDRO/FACHADA ATLANTA 1), usando match exato entre o token "(Linha)" no final de `tipologias.label` e `linhas_tecnicas.nome`/`apelidos`;
+- `linha_produtos`: +8 pares (SUPREMA 2, GOLD 1, FACHADA ATLANTA 5), usando `produtos.dados_origem->>'linha_raw'` (campo real da fonte W.Vetro `ExportWWAcessorios.xlsx`), também com igualdade exata, sem semelhança de nome.
+
+Relatório completo: `docs/tecnico/carga-linha-tipologias-produtos-2026-08-18.md`.
+
+Build Validation e Supabase Database Control (dry-run, run #99, sucesso em 21s, acionado via `pull_request`) verdes antes do merge.
+
+Estado: **migration mergeada em `main`, mas NÃO aplicada em produção**. `linha_tipologias` e `linha_produtos` continuam com 0 linhas no banco real até apply confirmado via `Supabase Database Control` com `APPLY_PRODUCTION`.
+
+Pendências fora do escopo desta PR, aguardando decisão humana:
+- REVESTIMENTO_RIPADO: apelidos cadastrados (`"RIPADO"`/`"REVESTIMENTO RIPADO"`) não batem exatamente com o token `"Ripados"` (plural) usado nas tipologias da fonte;
+- os 1.307 perfis (`ExportWWPerfil`) não têm campo de Linha na fonte original, só `fabricante_raw` (marca) e nome livre — vincular por nome seria semelhança de nome, proibido pela regra do usuário;
+- 1 acessório com `dados_origem->>'linha_raw' = "GOLD - LINHA GOLD"` (não é match exato de nenhum apelido cadastrado de GOLD).
+
+Confirmado nesta auditoria: não existe integração/API viva do W.Vetro configurada no repositório ou no ambiente. Toda a base W.Vetro em produção vem de dois exports manuais já importados e reconciliados (`ExportWWPerfil (1)(1).xlsx`, `ExportWWAcessorios.xlsx`). Resolve a pendência histórica sobre a limitação de credenciais W.Vetro.
+
+Achado à parte, não alterado nesta tarefa: RLS continua desabilitado em `engenharia_conferencias`, `engenharia_receitas` e `engenharia_receita_componentes`.
+
+Nota de estado da main (não auditado em detalhe por esta tarefa): PRs #177, #178 e #179 também estão mergeadas em `main`, cobrindo uma frente de UI de cadastro por linha e seletor de orçamento por linha/modelo/projeto (`app/cadastro/produtos/por-linha/`, `components/orcamento/SeletorEsquadriaInteligente.tsx`). Antes de reimplementar qualquer coisa nessa área, ler o código atual dessas rotas.
+
 ## PERFIS W.VETRO — PRODUÇÃO CONCLUÍDA — 2026-08-17
 
 A reconciliação de proveniência dos **1.307 perfis W.Vetro** está concluída em produção. Não voltar a tratar `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` como pendente.
@@ -191,6 +218,7 @@ Ordem por peça:
 - migration só é considerada ativa após apply confirmado;
 - não usar `migration repair --reverted` sem diagnóstico explícito;
 - não inventar medidas, fórmulas, NCM, linha, cor, unidade, fator de conversão ou identificador externo;
+- não inventar vínculo Linha -> Tipologia/Produto por semelhança de nome; usar apenas fonte W.Vetro rastreável (LinhaId/LinhaNome, ou campos crus preservados em `dados_origem`);
 - credenciais W.Vetro nunca ficam no frontend/browser em integração permanente.
 
 ## ORÇAMENTO — HISTÓRICO DE VERSÕES — PR #150
@@ -462,6 +490,8 @@ Validações já concluídas na branch:
 - build Next.js completo verde após integração da UI.
 
 A migration ainda NÃO foi aplicada em produção. Próximo gate: PR -> Build + Vercel + Supabase dry-run oficiais -> merge. Depois pedir autorização explícita específica antes de `APPLY_PRODUCTION`. Chat e sincronização externa de calendário continuam fora desta V1.
+
+Nota: este branch já foi mergeado em `main` (a migration `20260818013000_colaboracao_notificacoes_v1.sql` está presente no repositório em 2026-08-18), mas não há confirmação de apply em produção registrada por esta tarefa. Confirmar estado real antes de assumir ativo.
 
 ## PRODUTOS — PAGINAÇÃO ACIMA DE 1.000 REGISTROS — PR #169 — 2026-08-18
 

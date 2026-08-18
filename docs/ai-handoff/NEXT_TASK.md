@@ -1,5 +1,28 @@
 # NEXT_TASK.md — Atlas One
 
+## GATE ATUAL — APLICAR linha_tipologias / linha_produtos — 2026-08-18
+
+PR #180 já foi mergeada em `main` (commit `e1bc573`) com Build Validation e Supabase Database Control (dry-run, run #99) verdes. A migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql` está pronta, mas **NÃO aplicada em produção** — `linha_tipologias` e `linha_produtos` continuam com 0 linhas no banco real.
+
+Próximo passo é gate humano explícito:
+1. pedir autorização específica do Francis para aplicar esta migration em produção;
+2. só então executar `Supabase Database Control` em `main`, `mode = apply`, `confirmation = APPLY_PRODUCTION`;
+3. confirmar pós-estado real (46 `linha_tipologias`, 8 `linha_produtos`, incluindo especificamente `SUPREMA -> Porta de Correr 03 Folhas`);
+4. só depois validar visualmente que a linha SUPREMA passa a mostrar modelos no seletor de orçamento (`components/orcamento/SeletorEsquadriaInteligente.tsx`).
+
+Não interpretar mensagem genérica como autorização deste apply.
+
+Pendências que ficaram fora do escopo da PR #180, para decisão humana futura (não inventar vínculo, aguardar decisão explícita):
+- REVESTIMENTO_RIPADO sem vínculo automático — apelidos cadastrados (`"RIPADO"`/`"REVESTIMENTO RIPADO"`) não batem com o token `"Ripados"` (plural) usado nas tipologias da fonte;
+- os 1.307 perfis (`ExportWWPerfil`) sem campo de Linha na fonte original — não vincular por semelhança de nome (ex. "MARCO LATERAL / SUPREMA");
+- 1 acessório com `linha_raw = "GOLD - LINHA GOLD"`, ambíguo (não bate exatamente com nenhum apelido de GOLD).
+
+Confirmado nesta tarefa: não existe integração/API viva do W.Vetro configurada no repo/ambiente. Toda a base atual vem de exports manuais já importados (`ExportWWPerfil`, `ExportWWAcessorios`), já refletidos em `produtos.dados_origem`.
+
+Relatório completo: `docs/tecnico/carga-linha-tipologias-produtos-2026-08-18.md`.
+
+Nota de correção: a referência mais abaixo neste arquivo à "PR #166 (orçamento Linha -> Tipologia -> Configuração validada)" está desatualizada. A #166 foi fechada/substituída pela PR #173 (mergeada em `main`), que por sua vez depende de apply separado da migration `20260817203000_configuracoes_validadas_orcamento_v1.sql` (não aplicada). Além disso, há uma frente de UI mais recente (PRs #177, #178, #179, também mergeadas) cobrindo cadastro por linha e o seletor de orçamento atual — ler o código real (`app/cadastro/produtos/por-linha/page.tsx`, `components/orcamento/SeletorEsquadriaInteligente.tsx`, `lib/orcamentoConfiguracoes.ts`) antes de continuar essa frente, pois este arquivo não foi atualizado quando elas foram mergeadas.
+
 ## ESTADO ATUAL — PERFIS W.VETRO CONCLUÍDOS EM PRODUÇÃO — 2026-08-17
 
 A frente de perfis W.Vetro está **concluída em produção**. A migration `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` foi aplicada no run #86 (`32059852704`) com `APPLY_PRODUCTION` e `Finished supabase db push.`.
@@ -102,7 +125,7 @@ O próximo gate é decidir explicitamente se a migration corrigida de identidade
 
 `supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql`
 
-A migration já passou em dry-run, mas **ainda não foi aplicada em produção**.
+Nota: esta migration já foi aplicada em 2026-08-17 (run #79, ID `32037239260`). Não voltar a tratá-la como pendente.
 
 ## ESTADO DA RECONCILIAÇÃO
 
@@ -183,6 +206,8 @@ Somente com autorização explícita:
 7. tratar os 93 divergentes segundo uso em Engenharia, Compras e Estoque;
 8. depois avançar para os 1.307 perfis de `ExportWWPerfil (1).xlsx`.
 
+Nota: os passos 1-8 acima já foram concluídos historicamente (ver `CURRENT_STATE.md`). O gate ativo agora é o do topo deste arquivo (linha_tipologias/linha_produtos).
+
 ## FILTRO POR LINHA — JÁ MERGEADO
 
 A PR #148 foi mergeada em `main` no commit `9427c57b794d3116a68cf6401d8542b2ac9e88af`.
@@ -205,6 +230,7 @@ A tela `Cadastro > Produtos` possui filtro por Linha combinado com a busca textu
 - migration só conta como ativa após apply confirmado;
 - nenhum insert/update de produto antes da etapa explicitamente aprovada;
 - não inventar NCM, linha, cor, unidade, custo, preço, fator de conversão ou identificador externo;
+- não inventar vínculo Linha -> Tipologia/Produto por semelhança de nome;
 - Plano de Corte parte do produto cadastrado;
 - receita específica por produto tem prioridade;
 - snapshot não altera receita mestre;
@@ -222,15 +248,11 @@ Não refazer esta tarefa. O comportamento esperado é:
 - reenvio individual fica registrado no histórico;
 - envio de versão nova não manda novamente os PDFs Atlas antigos.
 
-Essa melhoria não altera o próximo gate principal da base de produtos: a migration `20260816210000_produtos_identidade_tecnica_v1.sql` continua dependendo de autorização explícita para apply em produção.
-
 ## ORÇAMENTO FINALIZADO — ANEXO PERMANENTE — PR #152
 
 A PR #152 já foi mergeada no commit `a7679d9bd103a56e838d1e4376232c65d0e9f75a`.
 
 Não refazer esta correção. Em orçamento finalizado, a área `Anexar novo orçamento / revisão` deve permanecer disponível e o upload deve ser persistido imediatamente, preservando todos os anexos anteriores.
-
-A tarefa principal de produtos/migration continua separada desta correção de interface.
 
 ## CADASTRO — CATEGORIAS DINÂMICAS DE PRODUTOS — PR #154
 
@@ -240,8 +262,6 @@ Não voltar a fixar `CategoriaProduto` em um union fechado nem reintroduzir a li
 
 Importante: nenhum produto existente foi recategorizado automaticamente por esta implementação.
 
-O gate principal de produtos permanece separado: a migration `20260816210000_produtos_identidade_tecnica_v1.sql` continua dependendo de apply explícito em produção.
-
 ## ORÇAMENTO — EXCLUSÃO AUDITÁVEL DE ANEXOS E REENVIO — PR #156
 
 A PR #156 já foi mergeada no commit `9a6cbb024cdc6aca9e7fe2faee8d14acb1adac69`.
@@ -250,50 +270,19 @@ Não voltar a excluir anexos de orçamento com `filter/splice` ou removendo o ar
 
 Anexos com `excluido_em` não devem ser reenviados nem incluídos em novos envios. O campo de WhatsApp do vendedor deve permanecer disponível também no orçamento finalizado para reenvio.
 
-Essa melhoria é independente do gate da migration de identidade técnica de produtos, que continua exigindo apply explícito em produção.
-
 ## PRODUTOS — IDENTIDADE TÉCNICA APLICADA E CARGA UN PREPARADA — 2026-08-17
 
 O gate da identidade técnica foi concluído: `20260816210000_produtos_identidade_tecnica_v1.sql` foi aplicada em produção no run #79 (ID `32037239260`). Não voltar a tratá-la como pendente.
 
-Tarefa atual: validar por PR/dry-run `20260817141000_carga_acessorios_wvetro_un_v1.sql`, com **649 acessórios faltantes cuja unidade de origem é UN**. A PR não autoriza apply automático em produção. Após dry-run verde, exigir autorização explícita antes do novo `apply`.
-
-Os **136 faltantes com MT/PR/BR/PC/CJ/TB/M2/CT/RO** permanecem pendentes. Não definir `produtos.unidade` nem fator de conversão para eles sem validação operacional.
+Tarefa histórica: validar por PR/dry-run `20260817141000_carga_acessorios_wvetro_un_v1.sql`, com 649 acessórios faltantes cuja unidade de origem é UN. Já concluída (ver `CURRENT_STATE.md`).
 
 ## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
 
-Checkpoint mais recente:
-1. concluir PR desta modelagem e validar build + teste SQL;
-2. depois executar um único `Supabase Database Control` na `main`, modo `apply`, confirmação `APPLY_PRODUCTION`;
-3. o apply deverá executar a carga 649 `UN`, a alteração nullable de unidade e a carga 136 pendente;
-4. validar no banco 785 novos acessórios reconciliados;
-5. reconciliar a proveniência dos 389 acessórios já existentes, sem mudar `produtos.unidade` nos 93 divergentes;
-6. avançar para perfis somente com a fonte real.
+Checkpoint histórico, já concluído: carga 649 UN, alteração nullable de unidade e carga 136 pendente aplicadas em produção (runs #82 e #84). Os 136 acessórios com unidade não-UN continuam pendentes de validação humana individual.
 
 ## GATE ATUAL — PERFIS W.VETRO / PROVENIÊNCIA — 2026-08-17
 
-A auditoria dos 1.307 perfis está concluída e a migration de proveniência está preparada/testada em banco efêmero, mas **não está aplicada em produção**.
-
-Migration:
-`supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql`
-
-Estado:
-- 1.307 perfis da fonte = 1.307 perfis Atlas; 0 faltantes e 0 exclusivos;
-- migration sem INSERT e sem overwrite operacional;
-- SHA-256 `cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf`;
-- validação integral em PostgreSQL efêmero aprovada no run `32048680317`;
-- produção acessada somente em `READ ONLY`;
-- tamanho/NCM/fabricante suspeitos continuam não promovidos.
-
-Próximos passos obrigatórios:
-1. concluir/mergear a PR de auditoria #162 somente com checks exigidos verdes;
-2. abrir/validar PR separada da migration;
-3. exigir dry-run oficial do `Supabase Database Control`;
-4. mergear somente com Build Validation + Vercel + controle de migration verdes;
-5. depois do merge, solicitar autorização explícita para esta migration específica antes de `APPLY_PRODUCTION`;
-6. após apply, verificar run/log e pós-estado antes de documentar como ativo.
-
-Não interpretar `pode continuar` como autorização para apply em produção.
+Histórico: já concluído em produção (run #86). Ver seção "ESTADO ATUAL — PERFIS W.VETRO CONCLUÍDOS EM PRODUÇÃO" acima.
 
 ## Frente ativa — Home Operacional
 
@@ -311,21 +300,14 @@ Não declarar nenhum desses itens da fase seguinte como implementado até existi
 
 ## Frente ativa — Colaboração e notificações
 
-Concluir PR da branch `feat/colaboracao-notificacoes-v1` pelos gates oficiais.
-
-Se Build + Vercel + Supabase dry-run ficarem verdes:
-1. mergear o código/migration na `main`;
-2. NÃO considerar a migration ativa;
-3. pedir autorização explícita para aplicar somente `20260818013000_colaboracao_notificacoes_v1.sql`;
-4. depois do apply, fazer pós-auditoria read-only de RLS, colunas, tabelas de notificação, publication realtime e triggers;
-5. testar funcionalmente atribuição entre dois usuários e convite de agenda com notificação.
+A branch `feat/colaboracao-notificacoes-v1` já foi mergeada em `main` (migration `20260818013000_colaboracao_notificacoes_v1.sql` presente no repositório). Confirmar se houve apply em produção antes de assumir ativa; se não houve, pedir autorização explícita antes de `APPLY_PRODUCTION`.
 
 Após essa V1 estar ativa, próxima implementação separada: chat direto + chat contextual (orçamento/obra/tarefa). Depois, estudar sincronização Google/Outlook mantendo o Atlas como agenda operacional principal.
 
-A PR #166 (orçamento Linha -> Tipologia -> Configuração validada) continua separada; não aplicar sua migration sem autorização específica própria.
+A PR #173 (configurações validadas para orçamento, sucessora da antiga #166) está mergeada em `main`, mas sua migration `20260817203000_configuracoes_validadas_orcamento_v1.sql` continua **não aplicada**; não aplicar sem autorização específica própria.
 
 ## GATE — PR #169 — LISTAGEM COMPLETA DE PRODUTOS — 2026-08-18
 
-Aguardar Build Validation e Vercel verdes no head final da PR #169. Se ambos passarem e a PR continuar mergeável contra a `main` atual, fazer merge e verificar o deploy. Depois confirmar em produção que Cadastro > Perfil consegue consumir a listagem completa acima do limite de 1.000 registros.
+Já concluído: PR #169 mergeada, Cadastro > Perfil consegue consumir a listagem completa acima do limite de 1.000 registros.
 
-Após essa correção, reconstruir/validar a fila dos 136 acessórios com unidade operacional pendente preservando a paginação nova.
+Após essa correção, reconstruir/validar a fila dos 136 acessórios com unidade operacional pendente preservando a paginação nova. Esta fila secundária continua em aberto.
