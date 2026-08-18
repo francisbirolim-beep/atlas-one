@@ -46,6 +46,12 @@ export default function CadastroLinhas() {
       setLinhas(l)
       setProdutos(p)
       setTipologias(t)
+
+      if (typeof window !== 'undefined') {
+        const linhaUrl = new URLSearchParams(window.location.search).get('linha') || ''
+        const linhaSelecionada = l.find(linha => linha.id === linhaUrl)
+        if (linhaSelecionada) abrirEdicao(linhaSelecionada)
+      }
     }
     setCarregando(false)
   }
@@ -155,9 +161,9 @@ export default function CadastroLinhas() {
               <label className="block text-xs font-medium text-slate-600 mt-3">Apelidos / nomes de reconhecimento<input value={form.apelidos} onChange={e => setForm({ ...form, apelidos: e.target.value })} className="mt-1 w-full border rounded-xl px-3 py-2.5" placeholder="L. SUPREMA, LINHA SUPREMA" /><span className="font-normal text-slate-400">Separe por vírgula. Isso será usado depois no reconhecimento de PDFs.</span></label>
               <label className="block text-xs font-medium text-slate-600 mt-3">Descrição<textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })} className="mt-1 w-full border rounded-xl px-3 py-2.5 min-h-20" /></label>
 
-              <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Tipologias associadas</h3><div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">{tipologias.map(t => <label key={t.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.tipologia_ids.includes(t.id)} onChange={() => alternarLista('tipologia_ids', t.id)} /> {t.label}</label>)}</div></div>
+              <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Tipologias associadas</h3><p className="text-xs text-slate-400 mt-0.5">Estas tipologias passam a aparecer no campo Modelo / Tipologia do orçamento quando esta linha for escolhida.</p><div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">{tipologias.map(t => <label key={t.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.tipologia_ids.includes(t.id)} onChange={() => alternarLista('tipologia_ids', t.id)} /> {t.label}</label>)}</div></div>
 
-              <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Produtos, perfis e acessórios associados</h3><p className="text-xs text-slate-400">Usa o cadastro de Produtos existente; não cria duplicidade.</p><div className="grid sm:grid-cols-2 gap-2 mt-2 max-h-56 overflow-y-auto">{produtos.map(p => <label key={p.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.produto_ids.includes(p.id)} onChange={() => alternarLista('produto_ids', p.id)} /><span className="flex-1">{p.nome}</span><span className="text-slate-400">{labelCategoriaProduto(p.categoria)}</span></label>)}</div></div>
+              <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Produtos, perfis e acessórios associados</h3><p className="text-xs text-slate-400">Usa o cadastro de Produtos existente; não cria duplicidade. Para projeto pronto, cadastre o produto primeiro e marque-o aqui.</p><div className="grid sm:grid-cols-2 gap-2 mt-2 max-h-56 overflow-y-auto">{produtos.map(p => <label key={p.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.produto_ids.includes(p.id)} onChange={() => alternarLista('produto_ids', p.id)} /><span className="flex-1">{p.nome}</span><span className="text-slate-400">{labelCategoriaProduto(p.categoria)}</span></label>)}</div></div>
 
               {erro && <p className="text-sm text-red-600 mt-4">{erro}</p>}
               <div className="flex justify-end gap-2 mt-6"><button onClick={() => setEditando(false)} className="px-4 py-2.5 rounded-xl border text-sm">Cancelar</button><button onClick={salvar} disabled={salvando} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-50"><Save size={16} /> {salvando ? 'Salvando...' : 'Salvar linha'}</button></div>
