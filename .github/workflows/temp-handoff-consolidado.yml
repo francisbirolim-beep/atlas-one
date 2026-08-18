@@ -1,0 +1,114 @@
+name: Temp Handoff Consolidado 20260818
+
+on:
+  push:
+    branches:
+      - docs/handoff-consolidado-20260818
+    paths:
+      - '.github/workflows/temp-handoff-consolidado.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar handoffs consolidados
+        shell: python
+        run: |
+          from pathlib import Path
+
+          updates = {
+            'docs/ai-handoff/CURRENT_STATE.md': r'''
+
+## CONSOLIDADO — PRODUTOS, MOBILE E CONFIGURAÇÕES DE ORÇAMENTO — 2026-08-18
+
+Estado mais recente, que prevalece sobre blocos históricos anteriores:
+
+- PR #169 mergeada e deploy de produção verde: `listarProdutos()` pagina a tabela `produtos` em blocos de 1.000, com ordenação estável. O cadastro de Perfil deixa de ficar vazio quando acessórios ocupam os primeiros 1.000 registros; os 1.307 perfis W.Vetro permanecem preservados.
+- PR #170 mergeada e deploy de produção verde: Home mobile ganhou `Novo orçamento` apontando para `/orcamento-rapido`; o ícone Sparkles abre o Assistente Comercial `/ia/comercial`; busca global ficou mais tolerante a diferenças de schema e mantém páginas do Atlas.
+- PR #171 mergeada e deploy de produção verde: Kanban Comercial recebeu CSS exclusivo para mobile, sem alterar regra comercial nem desktop.
+- PR #172 mergeada e deploy de produção verde: existe fila Master-only `/cadastro/produtos/unidades-pendentes` para validar humanamente acessórios com `produtos.unidade IS NULL`; exige evidência e usa API server-side autenticada com guarda concorrente `unidade IS NULL`. Não existe preenchimento em lote nem inferência de unidade/fator de conversão.
+- PR #173 mergeada e deploy de produção verde: fluxo de orçamento usa Linha opcional -> busca/Tipologia -> Configuração validada -> modo rápido ou assistido; configurações validadas podem coexistir em múltiplas variantes por tipologia/produto e o item do orçamento preserva snapshot da configuração escolhida.
+- PRs antigas #100, #101, #165 e #166 foram encerradas como substituídas pelas reconstruções atuais.
+
+### Banco — gate atual
+
+A migration `20260817203000_configuracoes_validadas_orcamento_v1.sql` está mergeada na `main`, porém **NÃO aplicada em produção**.
+
+Validação final da PR #173:
+- Build Validation #238: sucesso;
+- Vercel Preview: sucesso;
+- Supabase Database Control #98: sucesso em dry-run;
+- dry-run com `--include-all` encontrou exatamente uma migration pendente: `20260817203000_configuracoes_validadas_orcamento_v1.sql`;
+- etapas de confirmação e apply ficaram `skipped`.
+
+A migration de colaboração `20260818013000_colaboracao_notificacoes_v1.sql` permanece ativa em produção e aparece aplicada no histórico remoto.
+
+Próximo gate: obter autorização explícita específica do usuário antes de qualquer `APPLY_PRODUCTION` da migration `20260817203000_configuracoes_validadas_orcamento_v1.sql`.
+''',
+            'docs/ai-handoff/IMPLEMENTATIONS.md': r'''
+
+## 2026-08-18 — Consolidação de entregas #169, #170, #171, #172 e #173
+
+### Produtos / perfis
+- `listarProdutos()` agora pagina resultados e não trunca categorias após 1.000 linhas.
+- Não houve reimportação nem alteração automática dos 1.307 perfis.
+
+### Home e IA no mobile
+- `Novo orçamento` visível no Hero mobile -> `/orcamento-rapido`.
+- Sparkles do Topbar mobile -> `/ia/comercial`.
+- Busca global mantém `PAGINAS` e trata falhas/fontes com schema variável de forma legível.
+
+### Kanban mobile
+- `app/atlas-kanban-mobile.css` atua apenas em viewport mobile e namespace `.atlas-kanban-commercial`.
+- Desktop e lógica comercial permanecem intactos.
+
+### Unidades operacionais pendentes
+- Nova rota `/cadastro/produtos/unidades-pendentes` e API `/api/produtos/validar-unidade-operacional`.
+- Somente Master; evidência obrigatória; responsável derivado da sessão; guarda `unidade IS NULL`.
+- Nenhum bulk update e nenhuma inferência de unidade/fator de conversão.
+
+### Configurações validadas de orçamento
+- Nova administração Master em `/engenharia/configuracoes-orcamento`.
+- Fonte: `engenharia_variaveis_preset`, sem cadastro técnico paralelo.
+- Apenas configurações ativas, validadas e liberadas para orçamento entram como configuração pronta.
+- Linha selecionada filtra somente por vínculos técnicos reais; não inferir linha por nome.
+- Suporta múltiplas variantes por tipologia/produto, por exemplo 3F sem reforço, aba, aba+interno, aba+externo e aba+interno+externo.
+- Orçamento preserva snapshot de linha, tipologia, preset, modo, status e variáveis.
+- Migration `20260817203000_configuracoes_validadas_orcamento_v1.sql` mergeada, mas ainda não aplicada em produção.
+''',
+            'docs/ai-handoff/NEXT_TASK.md': r'''
+
+## PRIORIDADE ATUAL — ATIVAR CONFIGURAÇÕES VALIDADAS — 2026-08-18
+
+1. Não refazer PRs #169/#170/#171/#172/#173; código correspondente já está mergeado e com deploy de produção verde.
+2. A única migration pendente detectada no dry-run final é `20260817203000_configuracoes_validadas_orcamento_v1.sql`.
+3. Antes do apply, exigir autorização explícita específica do usuário.
+4. Se autorizado, executar Supabase Database Control na `main` com `mode=apply` e confirmação exata `APPLY_PRODUCTION`; confirmar no log `Finished supabase db push.` e que a migration aparece aplicada no histórico remoto.
+5. Depois do apply, validar read-only os novos campos de `engenharia_variaveis_preset` e testar publicação Master de uma configuração sem promover presets antigos automaticamente.
+6. Em seguida, iniciar cadastro técnico humano das configurações reais por tipologia com evidência, começando pelas variantes operacionais aprovadas pelo usuário (ex.: Porta de correr 3F — sem reforço; aba; aba+interno; aba+externo; aba+interno+externo).
+7. A fila dos acessórios com unidade operacional pendente é trabalho humano; não preencher em lote nem inferir conversões.
+'''
+          }
+
+          for filename, addition in updates.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              marker = addition.strip().splitlines()[0]
+              if marker not in text:
+                  path.write_text(text.rstrip() + addition + '\n', encoding='utf-8')
+      - name: Commitar documentação
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'atlas-one-bot'
+          git config user.email 'atlas-one-bot@users.noreply.github.com'
+          git add docs/ai-handoff/CURRENT_STATE.md docs/ai-handoff/IMPLEMENTATIONS.md docs/ai-handoff/NEXT_TASK.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs: consolidar entregas de 18-08'
+            git push
+          fi
