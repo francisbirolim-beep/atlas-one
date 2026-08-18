@@ -1,0 +1,44 @@
+name: Temp Validate Colaboracao UI
+
+on:
+  push:
+    branches:
+      - feat/colaboracao-notificacoes-v1
+    paths:
+      - '.github/workflows/temp-colaboracao-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: build-validation-placeholder
+      SUPABASE_SECRET_KEY: build-validation-placeholder
+      ANTHROPIC_API_KEY: build-validation-placeholder
+      OLLAMA_DEFAULT_MODEL: llama3.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply UI patch
+        run: python scripts/temp_patch_colaboracao_ui.py
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'atlas-one-bot'
+          git config user.email 'atlas-one-bot@users.noreply.github.com'
+          git add lib/tipos.ts components/system/HomeOperationsWorkspace.tsx app/tarefas/page.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat: permitir atribuir tarefas entre usuarios'
+            git push
+          fi
