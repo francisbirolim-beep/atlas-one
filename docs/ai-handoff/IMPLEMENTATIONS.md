@@ -452,3 +452,11 @@ Branch `feat/colaboracao-notificacoes-v1`.
 - Automações existentes de orçamento/assistência migradas para a rota segura com compatibilidade pré-migration.
 - Migration validada em PostgreSQL 16 efêmero; build completo verde.
 - Produção ainda não alterada.
+
+## 2026-08-18 — PR #169 — paginação de produtos/perfis
+
+- `lib/produtos.ts`: `listarProdutos()` passou a paginar consultas Supabase em blocos de 1.000.
+- Ordenação estável por categoria, nome e id.
+- Preserva filtro `somenteAtivos`.
+- Em falha de uma página, não retorna conjunto parcial.
+- Sem migration e sem escrita em produtos.

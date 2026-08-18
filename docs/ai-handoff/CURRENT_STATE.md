@@ -462,3 +462,11 @@ Validações já concluídas na branch:
 - build Next.js completo verde após integração da UI.
 
 A migration ainda NÃO foi aplicada em produção. Próximo gate: PR -> Build + Vercel + Supabase dry-run oficiais -> merge. Depois pedir autorização explícita específica antes de `APPLY_PRODUCTION`. Chat e sincronização externa de calendário continuam fora desta V1.
+
+## PRODUTOS — PAGINAÇÃO ACIMA DE 1.000 REGISTROS — PR #169 — 2026-08-18
+
+Correção preparada para `listarProdutos()` após constatar que os 1.307 perfis continuavam preservados no banco, mas não apareciam em Cadastro > Perfil porque uma única consulta Supabase era truncada em 1.000 registros.
+
+A correção pagina `produtos` em blocos de 1.000, acumula todas as páginas, mantém `somenteAtivos`, usa ordenação estável `categoria -> nome -> id` e retorna lista vazia em erro de qualquer página para não expor resultado parcial.
+
+Sem migration, INSERT, UPDATE ou DELETE de produtos. Nenhum perfil foi reimportado ou alterado.

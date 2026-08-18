@@ -323,3 +323,9 @@ Se Build + Vercel + Supabase dry-run ficarem verdes:
 Após essa V1 estar ativa, próxima implementação separada: chat direto + chat contextual (orçamento/obra/tarefa). Depois, estudar sincronização Google/Outlook mantendo o Atlas como agenda operacional principal.
 
 A PR #166 (orçamento Linha -> Tipologia -> Configuração validada) continua separada; não aplicar sua migration sem autorização específica própria.
+
+## GATE — PR #169 — LISTAGEM COMPLETA DE PRODUTOS — 2026-08-18
+
+Aguardar Build Validation e Vercel verdes no head final da PR #169. Se ambos passarem e a PR continuar mergeável contra a `main` atual, fazer merge e verificar o deploy. Depois confirmar em produção que Cadastro > Perfil consegue consumir a listagem completa acima do limite de 1.000 registros.
+
+Após essa correção, reconstruir/validar a fila dos 136 acessórios com unidade operacional pendente preservando a paginação nova.
