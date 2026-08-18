@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { ArrowLeft, ChevronDown, Image as ImageIcon, Layers, Package, Pencil, Search, ShieldAlert } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarProdutos } from '@/lib/produtos'
-import { listarLinhas } from '@/lib/linhas'
-import type { Linha, Produto } from '@/lib/tipos'
+import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
+import type { Produto } from '@/lib/tipos'
 
 function ehProdutoCatalogo(produto: Produto) {
   return produto.categoria === 'produto' || produto.categoria === 'porta_janela_padrao'
@@ -20,7 +20,7 @@ export default function ProdutosPorLinha() {
   const [carregando, setCarregando] = useState(true)
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [produtos, setProdutos] = useState<Produto[]>([])
-  const [linhas, setLinhas] = useState<Linha[]>([])
+  const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
   const [linhaId, setLinhaId] = useState('')
   const [busca, setBusca] = useState('')
 
@@ -36,15 +36,16 @@ export default function ProdutosPorLinha() {
     if (me?.role === 'master') {
       const [listaProdutos, listaLinhas] = await Promise.all([
         listarProdutos(),
-        listarLinhas(true),
+        listarLinhasTecnicas(),
       ])
+      const linhasAtivas = listaLinhas.filter(linha => linha.ativo)
       setProdutos(listaProdutos)
-      setLinhas(listaLinhas)
+      setLinhas(linhasAtivas)
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search)
         const linhaUrl = params.get('linha') || ''
-        if (linhaUrl && listaLinhas.some(linha => linha.id === linhaUrl)) {
+        if (linhaUrl && linhasAtivas.some(linha => linha.id === linhaUrl)) {
           setLinhaId(linhaUrl)
         }
       }
@@ -67,27 +68,34 @@ export default function ProdutosPorLinha() {
 
   const linhaSelecionada = linhas.find(linha => linha.id === linhaId) || null
 
-  const quantidadePorLinha = useMemo(() => {
-    const mapa = new Map<string, number>()
-    produtos.filter(ehProdutoCatalogo).forEach(produto => {
-      if (!produto.linha_id) return
-      mapa.set(produto.linha_id, (mapa.get(produto.linha_id) || 0) + 1)
-    })
+  const produtosCatalogoPorId = useMemo(() => {
+    const mapa = new Map<string, Produto>()
+    produtos.filter(ehProdutoCatalogo).forEach(produto => mapa.set(produto.id, produto))
     return mapa
   }, [produtos])
 
+  const quantidadePorLinha = useMemo(() => {
+    const mapa = new Map<string, number>()
+    linhas.forEach(linha => {
+      const quantidade = (linha.produto_ids || []).filter(produtoId => produtosCatalogoPorId.has(produtoId)).length
+      mapa.set(linha.id, quantidade)
+    })
+    return mapa
+  }, [linhas, produtosCatalogoPorId])
+
   const produtosDaLinha = useMemo(() => {
-    if (!linhaId) return []
+    if (!linhaSelecionada) return []
+    const idsDaLinha = new Set(linhaSelecionada.produto_ids || [])
     const q = busca.trim().toLocaleLowerCase('pt-BR')
     return produtos
       .filter(ehProdutoCatalogo)
-      .filter(produto => produto.linha_id === linhaId)
+      .filter(produto => idsDaLinha.has(produto.id))
       .filter(produto => {
         if (!q) return true
         return `${codigoProduto(produto)} ${produto.nome} ${produto.descricao || ''}`.toLocaleLowerCase('pt-BR').includes(q)
       })
       .sort((a, b) => (codigoProduto(a) || '').localeCompare(codigoProduto(b) || '', 'pt-BR', { numeric: true }))
-  }, [produtos, linhaId, busca])
+  }, [produtos, linhaSelecionada, busca])
 
   if (carregando) {
     return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando produtos...</div>
@@ -129,7 +137,7 @@ export default function ProdutosPorLinha() {
           <div className="mb-3">
             <p className="text-xs font-bold uppercase tracking-wide text-brand-navy">1. Linha</p>
             <h2 className="text-base font-semibold text-slate-800 mt-1">Escolha a linha do produto</h2>
-            <p className="text-xs text-slate-500 mt-1">Exemplo: Suprema. Depois o Atlas mostra somente os produtos cadastrados nessa linha.</p>
+            <p className="text-xs text-slate-500 mt-1">Exemplo: Suprema. Depois o Atlas mostra somente os produtos vinculados tecnicamente a essa linha.</p>
           </div>
 
           <div className="relative">
@@ -186,7 +194,7 @@ export default function ProdutosPorLinha() {
             {produtosDaLinha.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
                 <Package size={28} className="mx-auto text-slate-300 mb-2" />
-                <p className="text-sm text-slate-500">Nenhum produto encontrado nessa linha com o filtro atual.</p>
+                <p className="text-sm text-slate-500">Nenhum produto vinculado tecnicamente a esta linha foi encontrado com o filtro atual.</p>
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
