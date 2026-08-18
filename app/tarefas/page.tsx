@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar, Repeat } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar, Repeat, Users } from 'lucide-react'
 import Link from 'next/link'
 import { TarefaPessoalColuna, TarefaPessoal, Usuario } from '@/lib/tipos'
 import {
@@ -19,6 +19,8 @@ import {
 } from '@/lib/tarefas'
 import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
 import { usuarioAtual } from '@/lib/auth'
+import { listarUsuariosConvidaveis } from '@/lib/eventos'
+import { atribuirTarefa, type PrioridadeTarefa } from '@/lib/tarefasColaboracao'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 
@@ -44,6 +46,9 @@ export default function Tarefas() {
   const [dataNova, setDataNova] = useState('')
   const [repetirNova, setRepetirNova] = useState<TipoRecorrencia | ''>('')
   const [repetirValorNova, setRepetirValorNova] = useState(5)
+  const [responsavelNova, setResponsavelNova] = useState('')
+  const [prioridadeNova, setPrioridadeNova] = useState<PrioridadeTarefa>('normal')
+  const [usuariosTarefa, setUsuariosTarefa] = useState<{ id: string; nome: string }[]>([])
   const [selecionada, setSelecionada] = useState<TarefaPessoal | null>(null)
 
   useEffect(() => {
@@ -117,10 +122,40 @@ export default function Tarefas() {
     setDataNova('')
     setRepetirNova('')
     setRepetirValorNova(5)
+    setPrioridadeNova('normal')
+    if (usuario) {
+      setResponsavelNova(usuario.id)
+      if (usuariosTarefa.length === 0) {
+        listarUsuariosConvidaveis(usuario.id).then(outros => setUsuariosTarefa([{ id: usuario.id, nome: usuario.nome }, ...outros]))
+      }
+    }
   }
 
   async function salvarNovaTarefa() {
     if (!usuario || !novaEm || !tituloNovo.trim()) return
+    const responsavelId = responsavelNova || usuario.id
+    if (responsavelId !== usuario.id) {
+      if (repetirNova) {
+        alert('Nesta versão, tarefas recorrentes só podem ser criadas para você. Para outro usuário, crie uma tarefa única.')
+        return
+      }
+      const resultado = await atribuirTarefa({
+        responsavelId,
+        titulo: tituloNovo.trim(),
+        descricao: descNova.trim() || undefined,
+        dataHora: dataNova ? new Date(dataNova).toISOString() : null,
+        prioridade: prioridadeNova,
+      })
+      if (!resultado.ok) {
+        alert(resultado.error || 'Não foi possível atribuir a tarefa.')
+        return
+      }
+      const nome = usuariosTarefa.find(u => u.id === responsavelId)?.nome || 'o responsável'
+      alert(`Tarefa atribuída para ${nome}.`)
+      setNovaEm(null)
+      return
+    }
+
     if (repetirNova) {
       if (!dataNova) { alert('Defina uma data para a tarefa repetir a partir dela.'); return }
       await criarTarefaRecorrente(usuario.id, novaEm, tituloNovo.trim(), new Date(dataNova).toISOString(), repetirNova, repetirValorNova, descNova.trim() || undefined)
@@ -299,6 +334,18 @@ export default function Tarefas() {
               rows={2}
             />
             <div>
+              <label className="text-xs text-slate-400 flex items-center gap-1 mb-1"><Users size={12} /> Responsável</label>
+              <select value={responsavelNova || usuario?.id || ''} onChange={(e) => setResponsavelNova(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm">
+                {usuariosTarefa.map(u => <option key={u.id} value={u.id}>{u.id === usuario?.id ? `${u.nome} (eu)` : u.nome}</option>)}
+              </select>
+            </div>
+            {responsavelNova && responsavelNova !== usuario?.id && <div>
+              <label className="text-xs text-slate-400 mb-1 block">Prioridade</label>
+              <select value={prioridadeNova} onChange={(e) => setPrioridadeNova(e.target.value as PrioridadeTarefa)} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm">
+                <option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option>
+              </select>
+            </div>}
+            <div>
               <label className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                 <Calendar size={12} /> Data e hora (opcional - dispara alerta)
               </label>
@@ -365,6 +412,8 @@ export default function Tarefas() {
               </button>
             </div>
             {selecionada.descricao && <p className="text-sm text-slate-500">{selecionada.descricao}</p>}
+            {selecionada.solicitante_nome && selecionada.solicitante_id !== usuario?.id && <p className="text-xs text-blue-600">Criada por {selecionada.solicitante_nome}</p>}
+            {selecionada.prioridade && selecionada.prioridade !== 'normal' && <p className={`text-xs font-semibold ${selecionada.prioridade === 'urgente' ? 'text-red-600' : selecionada.prioridade === 'alta' ? 'text-amber-600' : 'text-slate-500'}`}>Prioridade: {selecionada.prioridade}</p>}
             {selecionada.data_hora && (
               <p className="text-xs text-slate-400 flex items-center gap-1">
                 <Calendar size={12} />
