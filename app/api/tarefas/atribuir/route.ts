@@ -91,7 +91,10 @@ export async function POST(req: NextRequest) {
     if (tarefaErro) {
       const msg = tarefaErro.message || ''
       if (msg.includes('solicitante_id') || msg.includes('prioridade')) {
-        return NextResponse.json({ error: 'A colaboração ainda não foi ativada no banco de produção.' }, { status: 503 })
+        return NextResponse.json({
+          code: 'COLABORACAO_INATIVA',
+          error: 'A colaboração ainda não foi ativada no banco de produção.',
+        }, { status: 503 })
       }
       throw tarefaErro
     }
