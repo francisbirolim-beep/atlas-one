@@ -413,3 +413,21 @@ Estado mais recente, que substitui os gates antigos desta seção:
 O preview Vercel da #163 foi `success`. O deploy de produção do merge commit foi recusado por `build-rate-limit`; esta PR não altera código executável do app, apenas documentação, export read-only e arquivo de migration. Não confundir falha de quota de deploy com falha de build da implementação.
 
 Próximo gate de banco: obter autorização explícita específica do usuário para aplicar `20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql` e só então executar `Supabase Database Control` em `main` com `mode=apply` e confirmação `APPLY_PRODUCTION`.
+
+## HOME OPERACIONAL V1 — implementação em validação (2026-08-17)
+
+Branch: `feat/home-operacional-v1`.
+
+Direção funcional aprovada pelo usuário: a Home passa a ser a central diária do Atlas, com tarefas, agenda/calendário, alertas e indicadores operacionais.
+
+Implementado nesta V1 sem migration:
+- Hero simplificado; removido o botão duplicado `Novo orçamento` de dentro do Hero; o `+ Novo` do Topbar continua sendo a entrada de orçamento rápido.
+- Ações rápidas `Nova tarefa` e `Novo compromisso`.
+- `Minhas tarefas` usa a tabela/helper existente `tarefas`; permite concluir e criar tarefa para o próprio usuário.
+- `Agenda / Calendário` usa `eventos` + `evento_convidados`; mostra compromissos próprios/convites e permite criar compromisso convidando usuários já cadastrados.
+- Alertas são derivados em tempo real de dados já existentes: tarefa vencida, tarefa para hoje, convite de agenda pendente e compromisso iniciando em até 60 minutos.
+- Topbar ganhou sino com badge desses alertas operacionais. Nesta V1 não existe persistência de lido/não lido e não existe som.
+- Indicadores inferiores usam critérios explícitos: orçamentos `rascunho/enviado`; medições ainda não `aprovado`; total de cards em `producao_itens`; tarefas vencidas do usuário logado.
+- Não foi criada tabela de chat e não foi simulada atribuição de tarefas entre usuários. O schema atual de `tarefas` não registra solicitante; colaboração formal fica para migration/PR separada.
+
+Próximo gate desta frente: PR -> Build Validation + Vercel verdes -> merge. Depois, em PR separada, desenhar colaboração auditável (solicitante/responsável), notificações persistentes, preferências de som, chat e posterior sincronização de agendas externas.
