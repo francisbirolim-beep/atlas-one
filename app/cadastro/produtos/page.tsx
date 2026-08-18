@@ -342,6 +342,8 @@ export default function Produtos() {
     setProdutos(await listarProdutos())
   }
 
+  const unidadesPendentes = produtos.filter(p => p.categoria === 'acessorio' && !p.unidade).length
+
   if (carregando) {
     return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
   }
@@ -368,6 +370,11 @@ export default function Produtos() {
             <h1 className="text-lg font-bold text-slate-800">Produtos</h1>
             <p className="text-sm text-slate-500">Catálogo, custo, margem e impostos</p>
           </div>
+          {unidadesPendentes > 0 && (
+            <Link href="/cadastro/produtos/unidades-pendentes" className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-3 py-1.5 hover:bg-amber-100 transition">
+              <ShieldAlert size={14} /> {unidadesPendentes} unidades pendentes
+            </Link>
+          )}
           <Link href="/cadastro/produtos/precificacao" className="flex items-center gap-1.5 text-xs font-medium text-brand-navy border border-brand-navy rounded-lg px-3 py-1.5 hover:bg-brand-navyLight transition">
             <Tag size={14} /> Precificar em lote
           </Link>
@@ -747,9 +754,21 @@ export default function Produtos() {
                         type="text"
                         value={editForm[p.id]?.unidade ?? ''}
                         onChange={e => mudarCampoEdicao(p.id, 'unidade', e.target.value)}
-                        placeholder="Unidade operacional (origem preservada no cartão)"
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                        disabled={!p.unidade}
+                        placeholder={p.unidade ? 'Unidade operacional' : 'Unidade pendente — use a validação auditada'}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs disabled:bg-amber-50 disabled:text-amber-800 disabled:border-amber-200"
                       />
+                      {!p.unidade && (
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                          <span>Origem {p.unidade_origem || 'não informada'}{p.qtde_embalagem_origem != null ? ` · Qtde Emb. ${p.qtde_embalagem_origem}` : ''}. Não preencher por inferência.</span>
+                          <Link
+                            href={`/cadastro/produtos/unidades-pendentes?q=${encodeURIComponent(p.codigo || p.nome.split(' - ')[0] || '')}`}
+                            className="font-semibold underline whitespace-nowrap"
+                          >
+                            Validar unidade
+                          </Link>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <input

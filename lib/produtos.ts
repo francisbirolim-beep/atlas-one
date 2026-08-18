@@ -248,6 +248,36 @@ export async function atualizarProduto(
   return supabase.from('produtos').update({ ...dados, updated_at: new Date().toISOString() }).eq('id', id)
 }
 
+export async function validarUnidadeOperacionalProduto(params: {
+  produtoId: string
+  unidade: string
+  evidencia: string
+}): Promise<{ error: string | null }> {
+  const unidade = params.unidade.trim()
+  const evidencia = params.evidencia.trim()
+  if (!unidade) return { error: 'Informe a unidade operacional.' }
+  if (!evidencia) return { error: 'Registre como a unidade foi confirmada.' }
+
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return { error: 'Sessão expirada. Entre novamente no Atlas.' }
+
+  try {
+    const resp = await fetch('/api/produtos/validar-unidade-operacional', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ produtoId: params.produtoId, unidade, evidencia }),
+    })
+    const json = await resp.json().catch(() => ({}))
+    if (!resp.ok) return { error: json.error || 'Não foi possível registrar a unidade operacional.' }
+    return { error: null }
+  } catch {
+    return { error: 'Não foi possível conectar ao servidor para validar a unidade operacional.' }
+  }
+}
+
 export async function alternarAtivoProduto(id: string, ativo: boolean) {
   return supabase.from('produtos').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
 }
