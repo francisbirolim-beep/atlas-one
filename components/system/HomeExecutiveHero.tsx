@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Building2, CalendarDays, CalendarPlus, CheckSquare, Plus } from 'lucide-react'
+import Link from 'next/link'
+import { Building2, CalendarDays, CalendarPlus, CheckSquare, FilePlus2 } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
@@ -51,14 +52,16 @@ export default function HomeExecutiveHero() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Acompanhe prioridades, agenda, tarefas e alertas em um único ambiente de gestão.</p>
           </div>
 
-          <div className="flex flex-wrap items-end gap-2 md:max-w-[360px] md:justify-end">
-            <button type="button" onClick={novaTarefa} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 md:w-auto md:min-w-[560px] md:self-end">
+            <Link href="/orcamento-rapido" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-950/20 transition hover:bg-emerald-500">
+              <FilePlus2 size={17} /> Novo orçamento
+            </Link>
+            <button type="button" onClick={novaTarefa} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
               <CheckSquare size={16} /> Nova tarefa
             </button>
-            <button type="button" onClick={novoCompromisso} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
+            <button type="button" onClick={novoCompromisso} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
               <CalendarPlus size={16} /> Novo compromisso
             </button>
-            <div className="hidden w-full justify-end pt-1 text-[11px] text-slate-500 md:flex"><Plus size={12} className="mr-1"/> Orçamentos continuam disponíveis no botão Novo do topo.</div>
           </div>
         </div>
       </div>
