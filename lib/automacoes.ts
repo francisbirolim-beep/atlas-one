@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { AutomacaoOrcamento } from './tipos'
 import { primeiraColunaTarefaId, criarTarefa } from './tarefas'
+import { atribuirTarefa } from './tarefasColaboracao'
 
 export async function listarAutomacoesOrcamento(): Promise<AutomacaoOrcamento[]> {
   const { data, error } = await supabase
@@ -60,6 +61,21 @@ export async function excluirAutomacaoOrcamento(id: string): Promise<boolean> {
   return !error
 }
 
+async function criarTarefaAutomaticaCompatibilidade(usuarioAlvo: string, titulo: string) {
+  const atribuicao = await atribuirTarefa({ responsavelId: usuarioAlvo, titulo })
+  if (atribuicao.ok) return
+
+  // Janela transitória entre deploy do código e apply da migration: enquanto
+  // COLABORACAO_INATIVA, preserva o comportamento legado. Depois da migration
+  // a API passa a ser o único caminho cross-user permitido pela RLS.
+  if (atribuicao.code === 'COLABORACAO_INATIVA') {
+    const colunaTarefaId = await primeiraColunaTarefaId(usuarioAlvo)
+    if (colunaTarefaId) await criarTarefa(usuarioAlvo, colunaTarefaId, titulo)
+    return
+  }
+  console.error('Erro ao criar tarefa automática:', atribuicao.error)
+}
+
 export async function executarAutomacoesColuna(
   colunaId: string,
   orcamento: { cliente_nome?: string | null; criado_por_id?: string | null }
@@ -81,13 +97,9 @@ export async function executarAutomacoesColuna(
 
       if (!usuarioAlvo) continue
 
-      const colunaTarefaId = await primeiraColunaTarefaId(usuarioAlvo)
-      if (!colunaTarefaId) continue
-
       const cliente = orcamento.cliente_nome || 'cliente'
       const titulo = automacao.titulo_tarefa.replace(/\{cliente\}/g, cliente)
-
-      await criarTarefa(usuarioAlvo, colunaTarefaId, titulo)
+      await criarTarefaAutomaticaCompatibilidade(usuarioAlvo, titulo)
     }
   } catch (e) {
     console.error('Erro ao executar automacoes da coluna:', e)
