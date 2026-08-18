@@ -33,6 +33,15 @@ export interface ItemOrcamentoForm {
   modoOrigem?: 'manual' | 'produto'
   produtoId?: string | null
   precoUnit?: number | null
+  linhaId?: string | null
+  linhaNome?: string | null
+  tipologiaId?: string | null
+  configuracaoPresetId?: string | null
+  configuracaoNome?: string | null
+  configuracaoValidada?: boolean
+  modoConfiguracao?: 'rapido' | 'assistido'
+  configuracaoStatus?: 'pendente' | 'preenchida' | 'validada'
+  variaveis?: Record<string, string>
 }
 
 export interface DadosOrcamentoForm {
@@ -85,6 +94,17 @@ export async function criarOrcamentoNoServidor(
     const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
     const quantidadeNum = parseInt(it.quantidade) || 1
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
+    const snapshotConfiguracao = {
+      linha_id: it.linhaId || null,
+      linha_nome: it.linhaNome || null,
+      tipologia_id: it.tipologiaId || null,
+      configuracao_preset_id: it.configuracaoPresetId || null,
+      configuracao_nome: it.configuracaoNome || null,
+      configuracao_validada: Boolean(it.configuracaoValidada),
+      modo_configuracao: it.modoConfiguracao || 'rapido',
+      configuracao_status: it.configuracaoStatus || (it.configuracaoValidada ? 'validada' : 'pendente'),
+      variaveis: it.variaveis || {},
+    }
 
     if (tipoMedida === 'final') {
       const usaFotoLargura = it.modoLargura === 'foto'
@@ -121,6 +141,7 @@ export async function criarOrcamentoNoServidor(
         produto_id,
         preco_unit,
         preco_total,
+        ...snapshotConfiguracao,
       })
     } else {
       itensSalvos.push({
@@ -139,6 +160,7 @@ export async function criarOrcamentoNoServidor(
         produto_id,
         preco_unit,
         preco_total,
+        ...snapshotConfiguracao,
       })
     }
   }

@@ -152,6 +152,13 @@ doc.setFontSize(9.5)
 
 if (item.ambiente) { doc.text(`Ambiente: ${item.ambiente}`, margem + 4, y); linhaNova(5) }
 if (item.folhas) { doc.text(`Folhas: ${item.folhas}`, margem + 4, y); linhaNova(5) }
+if (item.linha_nome) { doc.text(`Linha: ${item.linha_nome}`, margem + 4, y); linhaNova(5) }
+if (item.configuracao_nome) { doc.text(`Configuração: ${item.configuracao_nome}${item.configuracao_validada ? ' (validada)' : ''}`, margem + 4, y); linhaNova(5) }
+if (item.variaveis && Object.keys(item.variaveis).length > 0) {
+const resumoVariaveis = Object.entries(item.variaveis).map(([chave, valor]) => `${chave}: ${valor}`).join(' · ')
+const linhasVariaveis = doc.splitTextToSize(`Variáveis: ${resumoVariaveis}`, largura - 4)
+doc.text(linhasVariaveis, margem + 4, y); linhaNova(5 * linhasVariaveis.length)
+}
 
 if (card.tipo_medida === 'final' && (item.largura_baixo_mm || item.largura_meio_mm || item.largura_cima_mm)) {
 doc.text(
@@ -1234,6 +1241,18 @@ onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
 placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
+{(item.linha_nome || item.configuracao_nome || item.tipologia_id || Object.keys(item.variaveis || {}).length > 0) && (
+<div className={`rounded-xl border p-3 text-xs ${item.configuracao_validada ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+<div className="flex flex-wrap items-center gap-2 mb-2">
+{item.linha_nome && <span className="rounded-full bg-white px-2 py-1 border border-slate-200">Linha: {item.linha_nome}</span>}
+{item.configuracao_nome && <span className="rounded-full bg-white px-2 py-1 border border-slate-200 font-semibold">{item.configuracao_nome}</span>}
+<span className={`rounded-full px-2 py-1 font-semibold ${item.configuracao_status === 'validada' ? 'bg-emerald-100 text-emerald-700' : item.configuracao_status === 'preenchida' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-800'}`}>
+{item.configuracao_status === 'validada' ? 'Configuração validada' : item.configuracao_status === 'preenchida' ? 'Variáveis preenchidas' : 'Conferir configuração'}
+</span>
+</div>
+{Object.keys(item.variaveis || {}).length > 0 && <div className="grid sm:grid-cols-2 gap-1 text-slate-600">{Object.entries(item.variaveis || {}).map(([chave, valor]) => <span key={chave}><strong>{chave.replace(/_/g, ' ')}:</strong> {String(valor).replace(/_/g, ' ')}</span>)}</div>}
+</div>
+)}
 <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
 <div className="flex items-center justify-between gap-2">
 <p className="text-[11px] font-medium text-slate-600 flex items-center gap-1.5"><Camera size={12} /> Fotos coletadas em campo</p>
