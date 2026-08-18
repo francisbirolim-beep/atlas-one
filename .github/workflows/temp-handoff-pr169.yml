@@ -1,0 +1,41 @@
+name: Temp Handoff PR169
+
+on:
+  push:
+    branches:
+      - fix/listar-todos-produtos
+    paths:
+      - '.github/workflows/temp-handoff-pr169.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar handoffs e remover workflow temporario
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          updates = {
+            'docs/ai-handoff/CURRENT_STATE.md': '''\n\n## PRODUTOS — PAGINAÇÃO ACIMA DE 1.000 REGISTROS — PR #169 — 2026-08-18\n\nCorreção preparada para `listarProdutos()` após constatar que os 1.307 perfis continuavam preservados no banco, mas não apareciam em Cadastro > Perfil porque uma única consulta Supabase era truncada em 1.000 registros.\n\nA correção pagina `produtos` em blocos de 1.000, acumula todas as páginas, mantém `somenteAtivos`, usa ordenação estável `categoria -> nome -> id` e retorna lista vazia em erro de qualquer página para não expor resultado parcial.\n\nSem migration, INSERT, UPDATE ou DELETE de produtos. Nenhum perfil foi reimportado ou alterado.\n''',
+            'docs/ai-handoff/IMPLEMENTATIONS.md': '''\n\n## 2026-08-18 — PR #169 — paginação de produtos/perfis\n\n- `lib/produtos.ts`: `listarProdutos()` passou a paginar consultas Supabase em blocos de 1.000.\n- Ordenação estável por categoria, nome e id.\n- Preserva filtro `somenteAtivos`.\n- Em falha de uma página, não retorna conjunto parcial.\n- Sem migration e sem escrita em produtos.\n''',
+            'docs/ai-handoff/NEXT_TASK.md': '''\n\n## GATE — PR #169 — LISTAGEM COMPLETA DE PRODUTOS — 2026-08-18\n\nAguardar Build Validation e Vercel verdes no head final da PR #169. Se ambos passarem e a PR continuar mergeável contra a `main` atual, fazer merge e verificar o deploy. Depois confirmar em produção que Cadastro > Perfil consegue consumir a listagem completa acima do limite de 1.000 registros.\n\nApós essa correção, reconstruir/validar a fila dos 136 acessórios com unidade operacional pendente preservando a paginação nova.\n'''
+          }
+          for filename, addition in updates.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              marker = addition.strip().splitlines()[0]
+              if marker not in text:
+                  path.write_text(text.rstrip() + addition + '\n', encoding='utf-8')
+          PY
+          git rm .github/workflows/temp-handoff-pr169.yml
+          git diff --check
+          git config user.name 'atlas-one-bot'
+          git config user.email 'atlas-one-bot@users.noreply.github.com'
+          git add docs/ai-handoff/CURRENT_STATE.md docs/ai-handoff/IMPLEMENTATIONS.md docs/ai-handoff/NEXT_TASK.md
+          git commit -m 'docs: registrar paginacao completa de produtos'
+          git push
