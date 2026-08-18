@@ -112,3 +112,5 @@ Próximo gate: obter autorização explícita específica do usuário antes de q
             git commit -m 'docs: consolidar entregas de 18-08'
             git push
           fi
+
+# retrigger 2026-08-18
