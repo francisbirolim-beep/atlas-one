@@ -28,19 +28,25 @@ jobs:
         run: python scripts/temp_patch_home_topbar.py
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Build
-        run: npm run build
-      - name: Commit validated topbar change
+      - name: Build and record result
         shell: bash
         run: |
-          set -euo pipefail
-          git diff --check
+          set +e
+          npm run build 2>&1 | tee /tmp/home-build.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
           git config user.name 'atlas-one-bot'
           git config user.email 'atlas-one-bot@users.noreply.github.com'
+          if [ "$STATUS" -ne 0 ]; then
+            cp /tmp/home-build.log scripts/temp-home-build.log
+            git add scripts/temp-home-build.log
+            git commit -m 'chore: registrar erro temporario da home' || true
+            git push || true
+            exit "$STATUS"
+          fi
+          git diff --check
           git add components/system/AppTopbar.tsx
-          if git diff --cached --quiet; then
-            echo 'Nada para commitar.'
-          else
+          if ! git diff --cached --quiet; then
             git commit -m 'feat: exibir alertas no topo da home'
             git push
           fi
