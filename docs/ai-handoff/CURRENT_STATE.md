@@ -1,6 +1,23 @@
 # CURRENT_STATE.md — Atlas One
 
-## LINHA_TIPOLOGIAS E LINHA_PRODUTOS — PR #180 MERGEADA; APPLY PENDENTE — 2026-08-18
+## LINHA_TIPOLOGIAS E LINHA_PRODUTOS — APLICADO EM PRODUÇÃO — 2026-08-18
+
+Autorização explícita do Francis recebida ("pode aplicar"). Migration `20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql` aplicada em produção via `Supabase Database Control` run **#100**, branch `main`, commit `8f5f61b`, `mode=apply`, `confirmation=APPLY_PRODUCTION`. Job "Aplicar migrações pendentes" concluído com sucesso em 5s.
+
+Pós-estado confirmado por leitura direta no banco (Supabase MCP, somente leitura):
+- `linha_tipologias`: **46** linhas;
+- `linha_produtos`: **8** linhas;
+- confirmado especificamente `SUPREMA → Porta De Correr 03 Folhas (L. Suprema)` presente em `linha_tipologias`.
+
+O seletor de orçamento (`components/orcamento/SeletorEsquadriaInteligente.tsx`) já pode mostrar modelos para SUPREMA, GOLD, LINHA 30 e PELE DE VIDRO/FACHADA ATLANTA. REVESTIMENTO_RIPADO continua sem vínculo (pendência documentada abaixo).
+
+**Achado operacional importante:** o step "Aplicar migrações pendentes" do workflow `Supabase Database Control` aplica **todas** as migrations pendentes em ordem cronológica, não apenas uma migration específica. Como efeito colateral desta autorização, a migration `20260817203000_configuracoes_validadas_orcamento_v1.sql` (que já estava mergeada em `main` desde a PR #173, mas ainda não aplicada, e que `NEXT_TASK.md` explicitamente marcava como exigindo autorização própria separada) também foi aplicada no mesmo run #100.
+
+Auditoria dessa migration extra, feita após o apply: é puramente aditiva e segura — adiciona 7 colunas nullable/com default (`usar_no_orcamento boolean default false`, `validado boolean default false`, `validado_em`, `validado_por_id`, `validado_por_nome`, `evidencia_validacao`, `ativo boolean default true`) e 1 índice em `engenharia_variaveis_preset`, mais 1 check constraint que só passa a exigir preenchimento quando `validado = true`. Confirmado por leitura direta: `engenharia_variaveis_preset` tinha **0 linhas** no momento do apply, então nenhum dado existente foi alterado ou validado automaticamente. Nenhum preset passou a aparecer no orçamento como consequência disso (`usar_no_orcamento` e `validado` nascem `false` por padrão).
+
+Registrar como lição permanente: ao autorizar apply de uma migration específica neste projeto, considerar que **qualquer outra migration pendente mais antiga também será aplicada junto**, mesmo que não tenha sido mencionada no pedido. Antes de um próximo apply, sempre listar `list_migrations`/dry-run para saber exatamente o que está na fila.
+
+## LINHA_TIPOLOGIAS E LINHA_PRODUTOS — PR #180 MERGEADA; APPLY PENDENTE — 2026-08-18 (histórico, já superado pela seção acima)
 
 PR #180 mergeada em `main`, merge commit `e1bc573`.
 

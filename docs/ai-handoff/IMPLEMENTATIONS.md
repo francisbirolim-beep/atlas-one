@@ -1,6 +1,14 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-18 — linha_tipologias / linha_produtos: carga idempotente (PR #180, apply pendente)
+## 2026-08-18 — linha_tipologias / linha_produtos: aplicado em produção (run #100)
+
+- Autorização explícita do Francis recebida ("pode aplicar").
+- `Supabase Database Control` run #100, branch `main`, commit `8f5f61b`, `mode=apply`, `confirmation=APPLY_PRODUCTION`: sucesso em 23s (job "Aplicar migrações pendentes" em 5s).
+- Pós-estado confirmado por leitura direta (Supabase MCP): `linha_tipologias` = 46 linhas, `linha_produtos` = 8 linhas, incluindo `SUPREMA → Porta De Correr 03 Folhas (L. Suprema)`.
+- Efeito colateral: o apply também aplicou `20260817203000_configuracoes_validadas_orcamento_v1.sql` (mergeada desde a PR #173, pendente até então), porque o step de apply do workflow roda todas as migrations pendentes em ordem, não uma única. Auditado como seguro: só adiciona colunas nullable/com default e 1 índice em `engenharia_variaveis_preset` (tabela com 0 linhas no momento), sem alterar dado nenhum e sem publicar nenhum preset no orçamento automaticamente.
+- Lição registrada em `CURRENT_STATE.md`: antes de autorizar apply, checar a fila completa de migrations pendentes (`list_migrations`/dry-run), pois o apply não é seletivo por migration.
+
+## 2026-08-18 — linha_tipologias / linha_produtos: carga idempotente (PR #180, apply pendente) — histórico, ver seção acima
 
 - PR #180 mergeada em `main`, merge commit `e1bc573`.
 - Nova migration `supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql`: idempotente (`ON CONFLICT DO NOTHING`), sem UPDATE/DELETE em nenhuma tabela, com pós-checks que abortam a transação se os limiares mínimos não forem atingidos (incluindo checagem explícita de `SUPREMA -> Porta de Correr 03 Folhas`).
