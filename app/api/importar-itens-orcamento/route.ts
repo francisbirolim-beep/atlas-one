@@ -30,6 +30,36 @@ function extrairLinhaDaDescricao(descricao?: string) {
   return match?.[1]?.trim() || null
 }
 
+function ehPdf(anexo: Anexo) {
+  const nome = (anexo.nome || '').toLowerCase()
+  const url = (anexo.url || '').toLowerCase().split('?')[0].split('#')[0]
+  return nome.endsWith('.pdf') || url.endsWith('.pdf')
+}
+
+function ehPdfGeradoPeloAtlas(anexo: Anexo) {
+  const titulo = (anexo.titulo || '').trim()
+  return titulo === 'Orçamento (PDF)' || /^Orçamento — Versão \d+/i.test(titulo)
+}
+
+function ultimo<T>(lista: T[]): T | undefined {
+  return lista.length > 0 ? lista[lista.length - 1] : undefined
+}
+
+function escolherPdfParaImportacao(anexos: Anexo[], urlSolicitada?: string) {
+  const pdfsAtivos = anexos.filter(anexo => !anexo.excluido_em && ehPdf(anexo))
+
+  if (urlSolicitada) {
+    return pdfsAtivos.find(anexo => anexo.url === urlSolicitada) || null
+  }
+
+  // O histórico pode conter PDFs gerados pelo próprio Atlas e revisões externas
+  // (ex.: W.Vetro). Para reconstruir os itens técnicos, a fonte externa mais
+  // recente é preferida. Se não existir uma fonte externa, usamos o PDF ativo
+  // mais recente em vez do primeiro PDF antigo do histórico.
+  const pdfsExternos = pdfsAtivos.filter(anexo => !ehPdfGeradoPeloAtlas(anexo))
+  return ultimo(pdfsExternos) || ultimo(pdfsAtivos) || null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || ''
@@ -43,6 +73,7 @@ export async function POST(req: NextRequest) {
     const orcamentoId = body?.orcamentoId
     const persistirOrcamento = body?.persistirOrcamento !== false
     const substituirMedicao = body?.substituirMedicao === true
+    const anexoUrl = typeof body?.anexoUrl === 'string' ? body.anexoUrl.trim() : ''
     if (!orcamentoId) return NextResponse.json({ error: 'orcamentoId e obrigatorio' }, { status: 400 })
 
     const { data: orcamento, error: erroOrcamento } = await supabaseAdmin
@@ -54,12 +85,14 @@ export async function POST(req: NextRequest) {
     if (erroOrcamento || !orcamento) return NextResponse.json({ error: 'Orcamento nao encontrado' }, { status: 404 })
 
     const anexos: Anexo[] = orcamento.anexos || []
-    const anexoPdf = anexos.find(a => {
-      const nome = (a.nome || '').toLowerCase()
-      const url = (a.url || '').toLowerCase().split('?')[0].split('#')[0]
-      return nome.endsWith('.pdf') || url.endsWith('.pdf')
-    })
-    if (!anexoPdf) return NextResponse.json({ error: 'Nenhum PDF encontrado nos anexos deste orcamento.' }, { status: 400 })
+    const anexoPdf = escolherPdfParaImportacao(anexos, anexoUrl || undefined)
+
+    if (anexoUrl && !anexoPdf) {
+      return NextResponse.json({ error: 'O PDF selecionado nao pertence aos anexos ativos deste orcamento.' }, { status: 400 })
+    }
+    if (!anexoPdf) {
+      return NextResponse.json({ error: 'Nenhum PDF ativo encontrado nos anexos deste orcamento.' }, { status: 400 })
+    }
 
     const resposta = await fetch(anexoPdf.url)
     if (!resposta.ok) return NextResponse.json({ error: 'Nao foi possivel baixar o PDF anexado.' }, { status: 502 })
@@ -71,15 +104,19 @@ export async function POST(req: NextRequest) {
 
     const itensParciais = parseItensDoTextoPdf(texto)
     if (itensParciais.length === 0) {
-      return NextResponse.json({ error: 'Nao foi possivel identificar itens no PDF. Verifique o layout do anexo.' }, { status: 422 })
+      return NextResponse.json({
+        error: `Nao foi possivel identificar itens no PDF "${anexoPdf.nome || anexoPdf.titulo}". Verifique o layout do anexo.`,
+        anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
+      }, { status: 422 })
     }
 
     const invalidos = itensParciais.filter(it => !itemImportadoValido(it))
     if (invalidos.length > 0) {
       return NextResponse.json({
-        error: `O PDF foi lido, mas ${invalidos.length} de ${itensParciais.length} item(ns) ficaram incompletos. A importacao foi cancelada para nao criar pecas genericas.`,
+        error: `O PDF "${anexoPdf.nome || anexoPdf.titulo}" foi lido, mas ${invalidos.length} de ${itensParciais.length} item(ns) ficaram incompletos. A importacao foi cancelada para nao criar pecas genericas.`,
         itens_identificados: itensParciais.length,
         itens_incompletos: invalidos.length,
+        anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
       }, { status: 422 })
     }
 
@@ -163,6 +200,7 @@ export async function POST(req: NextRequest) {
       origem: /w\.vetro/i.test(texto) ? 'wvetro' : 'pdf',
       linhas_associadas: linhasAssociadas,
       linhas_identificadas: itensParciais.map(it => extrairLinhaDaDescricao(it.descricao)).filter(Boolean),
+      anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
     })
   } catch (e: any) {
     console.error('Erro ao importar itens do PDF:', e)
