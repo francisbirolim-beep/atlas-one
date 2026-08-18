@@ -8,6 +8,7 @@ import { logout, usuarioAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { bateBusca } from '@/lib/texto'
 import type { Usuario } from '@/lib/tipos'
+import HomeNotificationBell from '@/components/system/HomeNotificationBell'
 
 const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
   { prefixo: '/kanban', titulo: 'Kanban Comercial', grupo: 'Comercial' },
@@ -177,6 +178,7 @@ export default function AppTopbar() {
           </div>
 
           <div className="relative flex flex-1 items-center justify-end gap-2 xl:max-w-[430px]">
+            <HomeNotificationBell />
             <Link href="/orcamento-rapido" className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700 sm:inline-flex" title="Criar novo orçamento rápido"><Plus size={16} /> Novo</Link>
             <button type="button" onClick={abrirBusca} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 xl:hidden" title="Busca global"><Search size={16} /></button>
 

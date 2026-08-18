@@ -421,3 +421,18 @@ Próxima implementação: migration apenas de proveniência dos 1.307 registros 
 - nenhuma migration foi aplicada pelo PR/merge;
 - #162 encerrada como substituída para não ignorar o Vercel vermelho por rate limit;
 - apply em produção segue bloqueado até autorização explícita específica.
+
+## 2026-08-17 — Home Operacional V1 (em validação)
+
+Branch `feat/home-operacional-v1`, sem migration.
+
+- Home diária conecta dados reais de tarefas e eventos já existentes.
+- Criação rápida de tarefa pessoal e compromisso de agenda.
+- Compromisso pode convidar outros usuários pelo mecanismo existente `evento_convidados`.
+- Calendário mensal + agenda do dia.
+- Alertas derivados de tarefa vencida, tarefa de hoje, convite pendente e compromisso próximo.
+- Sino de alertas no Topbar.
+- Hero sem segundo botão de orçamento.
+- KPIs operacionais com critérios explícitos; Produção conta cards do quadro sem inferir coluna final.
+- Build completo local/temporário verde antes da PR.
+- Som, lido/não lido persistente, tarefa criada por outro usuário, chat e sync Google/Outlook NÃO fazem parte desta V1.

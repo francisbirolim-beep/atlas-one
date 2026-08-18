@@ -2,18 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowUpRight, BriefcaseBusiness, ClipboardCheck, FileText, Users } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, ClipboardCheck, FileText, PackageOpen } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { formatarMoeda } from '@/lib/formatacao'
+import { usuarioAtual } from '@/lib/auth'
 
 type Indicadores = {
-  orcamentos: number
-  valorPropostas: number
-  clientes: number
-  medicoes: number
+  orcamentosAbertos: number
+  medicoesPendentes: number
+  itensProducao: number
+  tarefasAtrasadas: number
 }
 
-const inicial: Indicadores = { orcamentos: 0, valorPropostas: 0, clientes: 0, medicoes: 0 }
+const inicial: Indicadores = { orcamentosAbertos: 0, medicoesPendentes: 0, itensProducao: 0, tarefasAtrasadas: 0 }
 
 export default function HomeManagementOverview() {
   const [dados, setDados] = useState<Indicadores>(inicial)
@@ -23,24 +23,26 @@ export default function HomeManagementOverview() {
     let ativo = true
 
     async function carregar() {
-      const [orcamentos, clientes, medicoes] = await Promise.all([
-        supabase.from('orcamentos').select('valor_estimado'),
-        supabase.from('clientes').select('id', { count: 'exact', head: true }),
-        supabase.from('medicoes_finais').select('id', { count: 'exact', head: true }),
+      const usuario = await usuarioAtual()
+      const [orcamentos, medicoes, producao, tarefas] = await Promise.all([
+        supabase.from('orcamentos').select('id', { count: 'exact', head: true }).in('status', ['rascunho', 'enviado']),
+        supabase.from('medicoes_finais').select('status_operacional'),
+        supabase.from('producao_itens').select('id', { count: 'exact', head: true }),
+        usuario?.id
+          ? supabase.from('tarefas').select('id,data_hora,concluida_em').eq('usuario_id', usuario.id).is('concluida_em', null)
+          : Promise.resolve({ data: [] as { id: string; data_hora: string | null; concluida_em: string | null }[] }),
       ])
 
       if (!ativo) return
-      const listaOrcamentos = orcamentos.data || []
-      const valorPropostas = listaOrcamentos.reduce((total, item) => {
-        const valor = Number(item.valor_estimado || 0)
-        return total + (Number.isFinite(valor) ? valor : 0)
-      }, 0)
+      const agora = Date.now()
+      const tarefasAtrasadas = (tarefas.data || []).filter(t => t.data_hora && new Date(t.data_hora).getTime() < agora).length
+      const medicoesPendentes = (medicoes.data || []).filter(m => m.status_operacional !== 'aprovado').length
 
       setDados({
-        orcamentos: listaOrcamentos.length,
-        valorPropostas,
-        clientes: clientes.count || 0,
-        medicoes: medicoes.count || 0,
+        orcamentosAbertos: orcamentos.count || 0,
+        medicoesPendentes,
+        itensProducao: producao.count || 0,
+        tarefasAtrasadas,
       })
       setCarregando(false)
     }
@@ -50,40 +52,29 @@ export default function HomeManagementOverview() {
   }, [])
 
   const cards = [
-    { label: 'Orçamentos', valor: carregando ? '—' : String(dados.orcamentos), detalhe: 'propostas cadastradas', href: '/orcamento/pesquisar', icon: FileText },
-    { label: 'Valor em propostas', valor: carregando ? '—' : formatarMoeda(dados.valorPropostas), detalhe: 'volume estimado no Atlas', href: '/kanban', icon: BriefcaseBusiness },
-    { label: 'Clientes', valor: carregando ? '—' : String(dados.clientes), detalhe: 'cadastros no sistema', href: '/clientes', icon: Users },
-    { label: 'Medições finais', valor: carregando ? '—' : String(dados.medicoes), detalhe: 'processos criados', href: '/producao/medicao-final', icon: ClipboardCheck },
+    { label: 'Orçamentos em aberto', valor: dados.orcamentosAbertos, detalhe: 'status rascunho ou enviado', href: '/kanban', icon: FileText, classe: 'text-emerald-600 bg-emerald-50' },
+    { label: 'Medições pendentes', valor: dados.medicoesPendentes, detalhe: 'ainda não aprovadas', href: '/producao/medicao-final', icon: ClipboardCheck, classe: 'text-blue-600 bg-blue-50' },
+    { label: 'Itens na produção', valor: dados.itensProducao, detalhe: 'cards no quadro de produção', href: '/producao', icon: PackageOpen, classe: 'text-amber-600 bg-amber-50' },
+    { label: 'Tarefas atrasadas', valor: dados.tarefasAtrasadas, detalhe: 'do usuário logado', href: '/tarefas', icon: AlertTriangle, classe: dados.tarefasAtrasadas > 0 ? 'text-red-600 bg-red-50' : 'text-slate-500 bg-slate-50' },
   ]
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-6 md:px-6 md:pb-10 md:pt-7">
-      <div className="mb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Indicadores centrais</p>
-        <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Resumo da operação</h2>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
-          {cards.map((card, index) => {
-            const Icon = card.icon
-            return (
-              <Link key={card.label} href={card.href} className={`group relative min-h-[142px] p-5 transition hover:bg-slate-50 ${index === 2 ? 'sm:border-t sm:border-slate-200 xl:border-t-0' : ''} ${index === 3 ? 'sm:border-t sm:border-slate-200 xl:border-t-0' : ''}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 transition group-hover:border-slate-300 group-hover:bg-white">
-                    <Icon size={16} />
-                  </div>
-                  <ArrowUpRight size={14} className="text-slate-300 transition group-hover:text-slate-600" />
-                </div>
-                <p className="mt-4 text-xs font-medium text-slate-500">{card.label}</p>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <p className="truncate text-2xl font-semibold tracking-tight text-slate-950">{card.valor}</p>
-                </div>
-                <p className="mt-1 text-[11px] text-slate-400">{card.detalhe}</p>
-              </Link>
-            )
-          })}
-        </div>
+    <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 md:px-6 md:pb-10">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map(card => {
+          const Icon = card.icon
+          return (
+            <Link key={card.label} href={card.href} className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md md:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.classe}`}><Icon size={18}/></span>
+                <ArrowUpRight size={15} className="text-slate-300 transition group-hover:text-slate-600"/>
+              </div>
+              <p className="mt-4 text-xs font-medium text-slate-500">{card.label}</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{carregando ? '—' : card.valor}</p>
+              <p className="mt-1 text-[11px] text-slate-400">{carregando ? 'Carregando...' : card.detalhe}</p>
+            </Link>
+          )
+        })}
       </div>
     </section>
   )
