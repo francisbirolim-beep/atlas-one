@@ -1,79 +1,153 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Bell, CalendarClock, CheckSquare, Users } from 'lucide-react'
+import { Bell, CheckCheck, Volume2, VolumeX } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { listarTarefas } from '@/lib/tarefas'
-import { listarEventosDoUsuario, type EventoComConvite } from '@/lib/eventos'
-import type { TarefaPessoal } from '@/lib/tipos'
+import {
+  assinarNovasNotificacoes,
+  carregarPreferenciasNotificacao,
+  listarNotificacoes,
+  marcarNotificacaoLida,
+  marcarTodasNotificacoesLidas,
+  salvarPreferenciasNotificacao,
+} from '@/lib/notificacoes'
+import type { Notificacao, NotificacaoPreferencias, Usuario } from '@/lib/tipos'
 
-function hora(iso: string) {
-  return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+function tempoRelativo(iso: string) {
+  const ms = Date.now() - new Date(iso).getTime()
+  const min = Math.max(0, Math.floor(ms / 60000))
+  if (min < 1) return 'agora'
+  if (min < 60) return `${min}min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h}h`
+  return `${Math.floor(h / 24)}d`
 }
-
-type Alerta = { id: string; titulo: string; detalhe: string; href: string; tipo: 'atraso' | 'agenda' | 'convite' | 'tarefa' }
 
 export default function HomeNotificationBell() {
   const [aberto, setAberto] = useState(false)
-  const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
-  const [eventos, setEventos] = useState<EventoComConvite[]>([])
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
+  const [preferencias, setPreferencias] = useState<NotificacaoPreferencias | null>(null)
+  const preferenciasRef = useRef<NotificacaoPreferencias | null>(null)
+
+  function tocarSom(volume?: number) {
+    try {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext
+      if (!Ctx) return
+      const ctx = new Ctx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(880, ctx.currentTime)
+      gain.gain.setValueAtTime(Math.max(0.02, Math.min(0.2, (volume ?? 0.6) * 0.18)), ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.22)
+      setTimeout(() => void ctx.close(), 400)
+    } catch {
+      // Browser pode bloquear áudio até existir interação do usuário.
+    }
+  }
 
   useEffect(() => {
     let ativo = true
+    let limpar: (() => void) | undefined
     usuarioAtual().then(async u => {
-      if (!u) return
-      const [tfs, evs] = await Promise.all([listarTarefas(u.id), listarEventosDoUsuario(u.id)])
+      if (!ativo || !u) return
+      setUsuario(u)
+      const [lista, prefs] = await Promise.all([
+        listarNotificacoes(u.id),
+        carregarPreferenciasNotificacao(u.id),
+      ])
       if (!ativo) return
-      setTarefas(tfs)
-      setEventos(evs)
+      setNotificacoes(lista)
+      setPreferencias(prefs)
+      preferenciasRef.current = prefs
+      limpar = assinarNovasNotificacoes(u.id, nova => {
+        setNotificacoes(prev => [nova, ...prev.filter(n => n.id !== nova.id)].slice(0, 30))
+        const atual = preferenciasRef.current
+        if (!atual?.som_ativo) return
+        const categoriaAtiva = nova.categoria === 'tarefas' ? atual.tarefas
+          : nova.categoria === 'agenda' ? atual.agenda
+          : nova.categoria === 'chat' ? atual.chat
+          : atual.operacao
+        if (categoriaAtiva) tocarSom(atual.som_volume)
+      })
     })
-    return () => { ativo = false }
+    return () => { ativo = false; limpar?.() }
   }, [])
 
-  const alertas = useMemo<Alerta[]>(() => {
-    const agora = Date.now()
-    const lista: Alerta[] = []
-    const abertas = tarefas.filter(t => !t.concluida_em)
-    const vencidas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < agora)
-    if (vencidas.length) lista.push({ id: 'vencidas', tipo: 'atraso', href: '/tarefas', titulo: `${vencidas.length} tarefa${vencidas.length > 1 ? 's' : ''} atrasada${vencidas.length > 1 ? 's' : ''}`, detalhe: vencidas[0].titulo })
+  const naoLidas = useMemo(() => notificacoes.filter(n => !n.lida_em).length, [notificacoes])
 
-    const convites = eventos.filter(e => e.meuStatus === 'pendente')
-    if (convites.length) lista.push({ id: 'convites', tipo: 'convite', href: '/', titulo: `${convites.length} convite${convites.length > 1 ? 's' : ''} de agenda`, detalhe: convites[0].titulo })
+  async function abrirNotificacao(n: Notificacao) {
+    if (!n.lida_em) {
+      const agora = new Date().toISOString()
+      setNotificacoes(prev => prev.map(item => item.id === n.id ? { ...item, lida_em: agora } : item))
+      await marcarNotificacaoLida(n.id)
+    }
+    setAberto(false)
+  }
 
-    const proximos = eventos
-      .filter(e => e.meuStatus !== 'recusado')
-      .filter(e => {
-        const quando = new Date(e.data_inicio).getTime()
-        return quando >= agora && quando <= agora + 60 * 60 * 1000
-      })
-      .sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime())
-    if (proximos.length) lista.push({ id: 'proximo', tipo: 'agenda', href: '/#agenda-home', titulo: 'Compromisso em breve', detalhe: `${hora(proximos[0].data_inicio)} · ${proximos[0].titulo}` })
+  async function marcarTodas() {
+    if (!usuario) return
+    const agora = new Date().toISOString()
+    setNotificacoes(prev => prev.map(n => n.lida_em ? n : { ...n, lida_em: agora }))
+    await marcarTodasNotificacoesLidas(usuario.id)
+  }
 
-    const hoje = new Date()
-    const paraHoje = abertas.filter(t => t.data_hora && new Date(t.data_hora).toDateString() === hoje.toDateString() && new Date(t.data_hora).getTime() >= agora)
-    if (paraHoje.length) lista.push({ id: 'hoje', tipo: 'tarefa', href: '/tarefas', titulo: `${paraHoje.length} tarefa${paraHoje.length > 1 ? 's' : ''} para hoje`, detalhe: paraHoje[0].titulo })
-    return lista
-  }, [eventos, tarefas])
-
-  const Icone = ({ tipo }: { tipo: Alerta['tipo'] }) => tipo === 'atraso'
-    ? <AlertTriangle size={14}/>
-    : tipo === 'agenda'
-      ? <CalendarClock size={14}/>
-      : tipo === 'convite'
-        ? <Users size={14}/>
-        : <CheckSquare size={14}/>
+  async function alternarSom() {
+    if (!usuario) return
+    const novoValor = !preferencias?.som_ativo
+    const base = preferencias || {
+      usuario_id: usuario.id, som_ativo: false, som_volume: 0.6,
+      tarefas: true, agenda: true, chat: true, operacao: true,
+    }
+    const otimista = { ...base, som_ativo: novoValor }
+    setPreferencias(otimista)
+    preferenciasRef.current = otimista
+    if (novoValor) tocarSom(otimista.som_volume)
+    const salvo = await salvarPreferenciasNotificacao(usuario.id, { som_ativo: novoValor })
+    if (salvo) {
+      setPreferencias(salvo)
+      preferenciasRef.current = salvo
+    }
+  }
 
   return (
     <div className="relative">
-      <button type="button" onClick={() => setAberto(v => !v)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50" title="Alertas operacionais">
+      <button type="button" onClick={() => setAberto(v => !v)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50" title="Notificações">
         <Bell size={17}/>
-        {alertas.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{alertas.length}</span>}
+        {naoLidas > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{naoLidas > 99 ? '99+' : naoLidas}</span>}
       </button>
-      {aberto && <div className="absolute right-0 top-12 z-50 w-[min(92vw,360px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><p className="text-sm font-semibold text-slate-900">Alertas</p><p className="text-[11px] text-slate-400">Gerados a partir da operação atual</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">{alertas.length}</span></div>
-        {alertas.length === 0 ? <p className="px-4 py-5 text-sm text-slate-400">Nenhum alerta agora.</p> : <div className="divide-y divide-slate-100">{alertas.map(a => <Link key={a.id} href={a.href} onClick={() => setAberto(false)} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50"><span className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${a.tipo === 'atraso' ? 'bg-red-50 text-red-600' : a.tipo === 'agenda' ? 'bg-blue-50 text-blue-600' : a.tipo === 'convite' ? 'bg-violet-50 text-violet-600' : 'bg-emerald-50 text-emerald-600'}`}><Icone tipo={a.tipo}/></span><span className="min-w-0"><span className="block text-sm font-medium text-slate-800">{a.titulo}</span><span className="mt-0.5 block truncate text-xs text-slate-400">{a.detalhe}</span></span></Link>)}</div>}
-        <Link href="/" onClick={() => setAberto(false)} className="block border-t border-slate-100 px-4 py-3 text-center text-xs font-semibold text-brand-navy hover:bg-slate-50">Abrir central operacional</Link>
+
+      {aberto && <div className="absolute right-0 top-12 z-50 w-[min(94vw,390px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div><p className="text-sm font-semibold text-slate-900">Notificações</p><p className="text-[11px] text-slate-400">{naoLidas} não lida{naoLidas === 1 ? '' : 's'}</p></div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => void alternarSom()} className={`rounded-lg p-2 ${preferencias?.som_ativo ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50'}`} title={preferencias?.som_ativo ? 'Som ligado' : 'Ativar som'}>
+              {preferencias?.som_ativo ? <Volume2 size={15}/> : <VolumeX size={15}/>}
+            </button>
+            {naoLidas > 0 && <button onClick={() => void marcarTodas()} className="rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700" title="Marcar todas como lidas"><CheckCheck size={15}/></button>}
+          </div>
+        </div>
+
+        {notificacoes.length === 0 ? (
+          <div className="px-4 py-6 text-center"><Bell size={20} className="mx-auto mb-2 text-slate-300"/><p className="text-sm text-slate-400">Nenhuma notificação persistente ainda.</p><p className="mt-1 text-[11px] text-slate-300">Tarefas atribuídas e convites de agenda aparecerão aqui.</p></div>
+        ) : (
+          <div className="max-h-[420px] divide-y divide-slate-100 overflow-y-auto">{notificacoes.map(n => (
+            <Link key={n.id} href={n.href || '/'} onClick={() => void abrirNotificacao(n)} className={`block px-4 py-3 transition hover:bg-slate-50 ${!n.lida_em ? 'bg-blue-50/45' : ''}`}>
+              <div className="flex items-start gap-3">
+                <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${!n.lida_em ? 'bg-blue-500' : 'bg-slate-200'}`}/>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">{n.titulo}</span>{n.mensagem && <span className="mt-0.5 block truncate text-xs text-slate-500">{n.mensagem}</span>}<span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300">{n.categoria} · {tempoRelativo(n.created_at)}</span></span>
+              </div>
+            </Link>
+          ))}</div>
+        )}
+
+        <div className="border-t border-slate-100 px-4 py-2.5 text-center text-[11px] text-slate-400">Som é opcional e configurado por usuário.</div>
       </div>}
     </div>
   )

@@ -31,6 +31,9 @@ import {
   type EventoComConvite,
 } from '@/lib/eventos'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
+import { atribuirTarefa, type PrioridadeTarefa } from '@/lib/tarefasColaboracao'
+import { listarNotificacoes } from '@/lib/notificacoes'
+import type { Notificacao } from '@/lib/tipos'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -68,6 +71,7 @@ export default function HomeOperationsWorkspace() {
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
+  const [notificacoesPersistentes, setNotificacoesPersistentes] = useState<Notificacao[]>([])
   const [carregando, setCarregando] = useState(true)
   const [mes, setMes] = useState(() => { const d = new Date(); d.setDate(1); return d })
   const [diaSelecionado, setDiaSelecionado] = useState(() => new Date())
@@ -76,6 +80,9 @@ export default function HomeOperationsWorkspace() {
   const [tituloTarefa, setTituloTarefa] = useState('')
   const [dataTarefa, setDataTarefa] = useState(dataInput())
   const [horaTarefa, setHoraTarefa] = useState('')
+  const [responsavelTarefaId, setResponsavelTarefaId] = useState('')
+  const [prioridadeTarefa, setPrioridadeTarefa] = useState<PrioridadeTarefa>('normal')
+  const [usuariosTarefa, setUsuariosTarefa] = useState<{ id: string; nome: string }[]>([])
   const [tituloEvento, setTituloEvento] = useState('')
   const [dataEvento, setDataEvento] = useState(dataInput())
   const [inicioEvento, setInicioEvento] = useState('09:00')
@@ -91,22 +98,24 @@ export default function HomeOperationsWorkspace() {
       if (!ativo) return
       setUsuario(u)
       if (!u) { setCarregando(false); return }
-      const [tfs, cls, evs] = await Promise.all([
+      const [tfs, cls, evs, notifs] = await Promise.all([
         listarTarefas(u.id),
         listarColunasTarefas(u.id),
         listarEventosDoUsuario(u.id),
+        listarNotificacoes(u.id, 6),
       ])
       if (!ativo) return
       setTarefas(tfs)
       setColunas(cls)
       setEventos(evs)
+      setNotificacoesPersistentes(notifs)
       setCarregando(false)
     })
     return () => { ativo = false }
   }, [])
 
   useEffect(() => {
-    const novaTarefa = () => setModalTarefa(true)
+    const novaTarefa = () => void abrirTarefa()
     const novoCompromisso = () => void abrirEvento()
     window.addEventListener('atlas:nova-tarefa', novaTarefa)
     window.addEventListener('atlas:novo-compromisso', novoCompromisso)
@@ -180,17 +189,47 @@ export default function HomeOperationsWorkspace() {
     if (!ok) setTarefas(prev => prev.map(t => t.id === tarefa.id ? tarefa : t))
   }
 
+  async function abrirTarefa() {
+    if (!usuario) return
+    setResponsavelTarefaId(usuario.id)
+    setPrioridadeTarefa('normal')
+    setModalTarefa(true)
+    if (usuariosTarefa.length === 0) {
+      const outros = await listarUsuariosConvidaveis(usuario.id)
+      setUsuariosTarefa([{ id: usuario.id, nome: usuario.nome }, ...outros])
+    }
+  }
+
   async function salvarTarefa() {
     if (!usuario || !tituloTarefa.trim()) return
     setSalvando(true)
-    const colunaId = colunas[0]?.id || await primeiraColunaTarefaId(usuario.id)
-    if (colunaId) {
-      const dataHora = dataTarefa
-        ? new Date(`${dataTarefa}T${horaTarefa || '09:00'}:00`).toISOString()
-        : null
-      const criada = await criarTarefa(usuario.id, colunaId, tituloTarefa.trim(), undefined, dataHora)
-      if (criada) setTarefas(prev => [...prev, criada])
+    const responsavelId = responsavelTarefaId || usuario.id
+    const dataHora = dataTarefa
+      ? new Date(`${dataTarefa}T${horaTarefa || '09:00'}:00`).toISOString()
+      : null
+
+    if (responsavelId === usuario.id) {
+      const colunaId = colunas[0]?.id || await primeiraColunaTarefaId(usuario.id)
+      if (colunaId) {
+        const criada = await criarTarefa(usuario.id, colunaId, tituloTarefa.trim(), undefined, dataHora)
+        if (criada) setTarefas(prev => [...prev, criada])
+      }
+    } else {
+      const resultado = await atribuirTarefa({
+        responsavelId,
+        titulo: tituloTarefa.trim(),
+        dataHora,
+        prioridade: prioridadeTarefa,
+      })
+      if (!resultado.ok) {
+        alert(resultado.error || 'Não foi possível atribuir a tarefa.')
+        setSalvando(false)
+        return
+      }
+      const nome = usuariosTarefa.find(u => u.id === responsavelId)?.nome || 'o responsável'
+      alert(`Tarefa atribuída para ${nome}.`)
     }
+
     setTituloTarefa('')
     setHoraTarefa('')
     setModalTarefa(false)
@@ -228,6 +267,17 @@ export default function HomeOperationsWorkspace() {
     setSalvando(false)
   }
 
+  const alertasPainel = useMemo<AlertaHome[]>(() => {
+    const persistentes: AlertaHome[] = notificacoesPersistentes.slice(0, 4).map(n => ({
+      id: `notif-${n.id}`,
+      titulo: n.titulo,
+      detalhe: n.mensagem || n.criado_por_nome || 'Nova notificação',
+      tipo: n.categoria === 'agenda' ? 'agenda' : n.categoria === 'tarefas' ? 'tarefa' : 'convite',
+      href: n.href || '/',
+    }))
+    return [...persistentes, ...alertas].slice(0, 4)
+  }, [notificacoesPersistentes, alertas])
+
   const tituloDia = mesmoDia(diaSelecionado, agora)
     ? 'Hoje'
     : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long' }).format(diaSelecionado)
@@ -246,12 +296,12 @@ export default function HomeOperationsWorkspace() {
         <article className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white shadow-sm md:p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2"><Bell size={17} className="text-emerald-400" /><h2 className="font-semibold">Notificações e alertas</h2></div>
-            <span className="rounded-full bg-white/5 px-2 py-1 text-[11px] text-slate-400">{alertas.length} agora</span>
+            <span className="rounded-full bg-white/5 px-2 py-1 text-[11px] text-slate-400">{alertasPainel.length} agora</span>
           </div>
           <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
-            {carregando ? <p className="p-4 text-sm text-slate-500">Carregando...</p> : alertas.length === 0 ? (
+            {carregando ? <p className="p-4 text-sm text-slate-500">Carregando...</p> : alertasPainel.length === 0 ? (
               <div className="p-5 text-sm text-slate-400"><Check size={16} className="mb-2 text-emerald-400" />Nenhum alerta operacional neste momento.</div>
-            ) : alertas.map(alerta => (
+            ) : alertasPainel.map(alerta => (
               <Link key={alerta.id} href={alerta.href} className="flex items-center gap-3 px-3 py-3 transition hover:bg-white/5">
                 <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${corAlerta(alerta.tipo)}`}>
                   {alerta.tipo === 'atraso' ? <AlertTriangle size={15}/> : alerta.tipo === 'agenda' ? <Clock3 size={15}/> : alerta.tipo === 'convite' ? <Users size={15}/> : <CheckSquare size={15}/>}
@@ -265,14 +315,14 @@ export default function HomeOperationsWorkspace() {
         <article className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white shadow-sm md:p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2"><CheckSquare size={17} className="text-emerald-400" /><h2 className="font-semibold">Minhas tarefas</h2></div>
-            <div className="flex items-center gap-2"><button onClick={() => setModalTarefa(true)} className="rounded-lg border border-white/10 p-1.5 text-slate-400 hover:bg-white/5 hover:text-white" title="Nova tarefa"><Plus size={14}/></button><Link href="/tarefas" className="text-xs font-medium text-blue-300 hover:text-blue-200">Ver todas</Link></div>
+            <div className="flex items-center gap-2"><button onClick={() => void abrirTarefa()} className="rounded-lg border border-white/10 p-1.5 text-slate-400 hover:bg-white/5 hover:text-white" title="Nova tarefa"><Plus size={14}/></button><Link href="/tarefas" className="text-xs font-medium text-blue-300 hover:text-blue-200">Ver todas</Link></div>
           </div>
           <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
             {carregando ? <p className="p-4 text-sm text-slate-500">Carregando...</p> : tarefasAbertas.length === 0 ? <p className="p-5 text-sm text-slate-400">Nenhuma tarefa pendente.</p> : tarefasAbertas.slice(0, 5).map(t => {
               const vencida = !!t.data_hora && new Date(t.data_hora).getTime() < Date.now()
               return <div key={t.id} className="flex items-center gap-3 px-3 py-3">
                 <button onClick={() => void concluir(t)} className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-slate-500 text-transparent hover:border-emerald-400 hover:text-emerald-400"><Check size={14}/></button>
-                <span className="min-w-0 flex-1 truncate text-sm text-slate-100">{t.titulo}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-100">{t.titulo}</span>{t.solicitante_nome && t.solicitante_id !== usuario?.id && <span className="block truncate text-[10px] text-blue-300">Criada por {t.solicitante_nome}</span>}</span>
                 <span className={`flex-shrink-0 text-xs ${vencida ? 'font-semibold text-red-300' : 'text-slate-500'}`}>{vencida ? 'Atrasada' : t.data_hora ? hora(t.data_hora) : 'Sem prazo'}</span>
               </div>
             })}
@@ -309,7 +359,7 @@ export default function HomeOperationsWorkspace() {
         </div>
       </article>
 
-      {modalTarefa && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalTarefa(false) }}><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Tarefa</p><h3 className="text-lg font-bold text-slate-900">Nova tarefa</h3></div><button onClick={() => setModalTarefa(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloTarefa} onChange={e => setTituloTarefa(e.target.value)} placeholder="O que precisa ser feito?" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"/><div className="grid grid-cols-2 gap-3"><input type="date" value={dataTarefa} onChange={e => setDataTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="time" value={horaTarefa} onChange={e => setHoraTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div><button disabled={salvando || !tituloTarefa.trim()} onClick={() => void salvarTarefa()} className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">{salvando ? 'Salvando...' : 'Criar tarefa'}</button></div></div></div>}
+      {modalTarefa && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalTarefa(false) }}><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Tarefa</p><h3 className="text-lg font-bold text-slate-900">Nova tarefa</h3></div><button onClick={() => setModalTarefa(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloTarefa} onChange={e => setTituloTarefa(e.target.value)} placeholder="O que precisa ser feito?" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"/><div><label className="mb-1 block text-xs font-medium text-slate-500">Responsável</label><select value={responsavelTarefaId || usuario?.id || ''} onChange={e => setResponsavelTarefaId(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">{usuariosTarefa.map(u => <option key={u.id} value={u.id}>{u.id === usuario?.id ? `${u.nome} (eu)` : u.nome}</option>)}</select></div><div className="grid grid-cols-2 gap-3"><input type="date" value={dataTarefa} onChange={e => setDataTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="time" value={horaTarefa} onChange={e => setHoraTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>{responsavelTarefaId && responsavelTarefaId !== usuario?.id && <div><label className="mb-1 block text-xs font-medium text-slate-500">Prioridade</label><select value={prioridadeTarefa} onChange={e => setPrioridadeTarefa(e.target.value as PrioridadeTarefa)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"><option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></div>}<button disabled={salvando || !tituloTarefa.trim()} onClick={() => void salvarTarefa()} className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">{salvando ? 'Salvando...' : ((responsavelTarefaId && responsavelTarefaId !== usuario?.id) ? 'Atribuir tarefa' : 'Criar tarefa')}</button></div></div></div>}
 
       {modalEvento && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalEvento(false) }}><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Agenda</p><h3 className="text-lg font-bold text-slate-900">Novo compromisso</h3></div><button onClick={() => setModalEvento(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloEvento} onChange={e => setTituloEvento(e.target.value)} placeholder="Título do compromisso" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input value={localEvento} onChange={e => setLocalEvento(e.target.value)} placeholder="Local (opcional)" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="date" value={dataEvento} onChange={e => setDataEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-slate-500">Início</label><input type="time" value={inicioEvento} onChange={e => setInicioEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div><div><label className="mb-1 block text-xs text-slate-500">Fim</label><input type="time" value={fimEvento} onChange={e => setFimEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div></div>{usuariosConvidaveis.length > 0 && <div><p className="mb-2 text-xs font-semibold text-slate-600">Convidar usuários</p><div className="flex flex-wrap gap-2">{usuariosConvidaveis.map(u => <button key={u.id} onClick={() => setConvidados(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${convidados.includes(u.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{primeiroNome(u.nome)}</button>)}</div></div>}<button disabled={salvando || !tituloEvento.trim()} onClick={() => void salvarEvento()} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">{salvando ? 'Salvando...' : 'Adicionar à agenda'}</button></div></div></div>}
     </section>

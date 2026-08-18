@@ -431,3 +431,34 @@ Implementado nesta V1 sem migration:
 - Não foi criada tabela de chat e não foi simulada atribuição de tarefas entre usuários. O schema atual de `tarefas` não registra solicitante; colaboração formal fica para migration/PR separada.
 
 Próximo gate desta frente: PR -> Build Validation + Vercel verdes -> merge. Depois, em PR separada, desenhar colaboração auditável (solicitante/responsável), notificações persistentes, preferências de som, chat e posterior sincronização de agendas externas.
+
+## COLABORAÇÃO + NOTIFICAÇÕES V1 — preparada em branch (2026-08-18)
+
+Branch: `feat/colaboracao-notificacoes-v1`.
+
+Auditoria read-only de produção confirmou:
+- `tarefas` e `tarefa_colunas` ainda usavam `acesso_total_temporario` (`ALL using=true/check=true`);
+- `eventos` e `evento_convidados` já possuíam RLS por dono/convidado.
+
+Implementado na branch:
+- migration `20260818013000_colaboracao_notificacoes_v1.sql`;
+- `tarefas`: `solicitante_id`, `solicitante_nome`, `atribuida_em`, `prioridade`;
+- substituição da RLS permissiva de `tarefas`/`tarefa_colunas` por policies do próprio usuário;
+- API server-side autenticada `/api/tarefas/atribuir` para atribuição cross-user;
+- criação automática das colunas padrão do responsável quando necessário;
+- notificações persistentes por destinatário (`notificacoes`) com RLS própria;
+- preferências por usuário (`notificacao_preferencias`), incluindo `som_ativo` e volume;
+- Realtime para novas notificações;
+- trigger tarefa atribuída -> notificação;
+- trigger convite de agenda -> notificação;
+- sino do Topbar lê notificações persistentes, marca lidas e permite ativar/desativar som;
+- Home e tela `Minhas Tarefas` permitem escolher responsável; tarefa recebida mostra quem criou;
+- tarefa recorrente atribuída para outro usuário permanece bloqueada nesta V1;
+- automações de orçamento/assistência passaram a usar a API segura; existe fallback legado somente para a janela anterior ao apply da migration.
+
+Validações já concluídas na branch:
+- auditoria PostgreSQL READ ONLY registrada em `docs/tecnico/auditoria-rls-colaboracao-2026-08-17.md`;
+- migration executada integralmente em PostgreSQL 16 efêmero; triggers de tarefa/agenda geraram exatamente uma notificação cada; RLS temporária removida no teste; Realtime confirmado;
+- build Next.js completo verde após integração da UI.
+
+A migration ainda NÃO foi aplicada em produção. Próximo gate: PR -> Build + Vercel + Supabase dry-run oficiais -> merge. Depois pedir autorização explícita específica antes de `APPLY_PRODUCTION`. Chat e sincronização externa de calendário continuam fora desta V1.
