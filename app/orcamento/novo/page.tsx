@@ -29,8 +29,8 @@ export default function NovoOrcamento() {
             <FileText size={20} />
           </span>
           <span>
-            <span className="block text-sm font-semibold text-slate-800">Orçamento Detalhado</span>
-            <span className="block text-xs text-slate-500">Esquadria por esquadria, com medidas e fotos</span>
+            <span className="block text-sm font-semibold text-slate-800">Orçamento de Esquadrias</span>
+            <span className="block text-xs text-slate-500">Modo rápido ou assistido, com Linha → Tipologia → Configuração</span>
           </span>
         </Link>
 
