@@ -11,8 +11,9 @@
 --
 -- Idempotência / segurança:
 -- - usa chaves exatas de tipologia;
--- - identifica os 4 projetos por código normalizado exato, não por semelhança;
--- - exige exatamente 4 registros-alvo entre a tipologia errada e a correta;
+-- - identifica os 4 projetos pela ocorrência do código exato normalizado dentro do nome;
+-- - não usa fuzzy/semelhança de nome;
+-- - exige exatamente 4 registros-alvo e 4 códigos distintos;
 -- - aborta se houver duplicidade/conflito;
 -- - não cria presets novos;
 -- - não altera produto, receita, preço, fórmula ou imagem.
@@ -26,6 +27,7 @@ declare
   v_total_alvos integer;
   v_distintos integer;
   v_outros integer;
+  v_ambiguos integer;
 begin
   select id into v_janela_03
   from public.tipologias
@@ -43,16 +45,42 @@ begin
     raise exception 'Gate falhou: tipologia exata l_suprema_porta_de_correr_03_folhas não encontrada';
   end if;
 
-  -- Considera somente os quatro códigos comprovados, aceitando o estado histórico
-  -- JC3 incorreto ou o estado PC3 já corrigido para permitir reexecução idempotente.
-  select count(*), count(distinct regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g'))
-    into v_total_alvos, v_distintos
-  from public.engenharia_variaveis_preset
-  where tipologia_id in (v_janela_03, v_porta_03)
-    and regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') in (
-      'SUCBJC301EF', 'SUCBJC302EF', 'SUCBJC303EF', 'SUCBJC304EF',
-      'SUCBPC301EF', 'SUCBPC302EF', 'SUCBPC303EF', 'SUCBPC304EF'
-    );
+  -- O nome real do preset contém descrição + código entre parênteses, por exemplo:
+  -- "JC3 — vidro + vidro + vidro (*SUCB-JC3-01EF)".
+  -- Portanto o gate procura a SEQUÊNCIA EXATA do código normalizado dentro do nome,
+  -- em vez de comparar o nome inteiro com o código puro.
+  with base as (
+    select
+      p.id,
+      regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') as nome_normalizado
+    from public.engenharia_variaveis_preset p
+    where p.tipologia_id in (v_janela_03, v_porta_03)
+  ), candidatos as (
+    select
+      id,
+      nome_normalizado,
+      case
+        when nome_normalizado like '%SUCBJC301EF%' or nome_normalizado like '%SUCBPC301EF%' then '01'
+        when nome_normalizado like '%SUCBJC302EF%' or nome_normalizado like '%SUCBPC302EF%' then '02'
+        when nome_normalizado like '%SUCBJC303EF%' or nome_normalizado like '%SUCBPC303EF%' then '03'
+        when nome_normalizado like '%SUCBJC304EF%' or nome_normalizado like '%SUCBPC304EF%' then '04'
+      end as codigo,
+      ((nome_normalizado like '%SUCBJC301EF%' or nome_normalizado like '%SUCBPC301EF%')::int
+       + (nome_normalizado like '%SUCBJC302EF%' or nome_normalizado like '%SUCBPC302EF%')::int
+       + (nome_normalizado like '%SUCBJC303EF%' or nome_normalizado like '%SUCBPC303EF%')::int
+       + (nome_normalizado like '%SUCBJC304EF%' or nome_normalizado like '%SUCBPC304EF%')::int) as ocorrencias
+    from base
+  )
+  select
+    count(*) filter (where codigo is not null),
+    count(distinct codigo) filter (where codigo is not null),
+    count(*) filter (where codigo is not null and ocorrencias <> 1)
+  into v_total_alvos, v_distintos, v_ambiguos
+  from candidatos;
+
+  if v_ambiguos <> 0 then
+    raise exception 'Gate falhou: existem % presets contendo mais de um código alvo', v_ambiguos;
+  end if;
 
   if v_total_alvos <> 4 or v_distintos <> 4 then
     raise exception 'Gate falhou: esperado exatamente 4 presets PC3/JC3 distintos, encontrado total=% distintos=%', v_total_alvos, v_distintos;
@@ -61,11 +89,17 @@ begin
   -- Nenhum dos mesmos códigos pode existir em outra tipologia: isso indicaria
   -- conflito de cadastro e exige revisão humana antes de qualquer correção.
   select count(*) into v_outros
-  from public.engenharia_variaveis_preset
-  where tipologia_id not in (v_janela_03, v_porta_03)
-    and regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') in (
-      'SUCBJC301EF', 'SUCBJC302EF', 'SUCBJC303EF', 'SUCBJC304EF',
-      'SUCBPC301EF', 'SUCBPC302EF', 'SUCBPC303EF', 'SUCBPC304EF'
+  from public.engenharia_variaveis_preset p
+  where p.tipologia_id not in (v_janela_03, v_porta_03)
+    and (
+      regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC301EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC301EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC302EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC302EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC303EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC303EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC304EF%'
+      or regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC304EF%'
     );
 
   if v_outros <> 0 then
@@ -78,35 +112,33 @@ with tipologia_correta as (
   select id
   from public.tipologias
   where chave = 'l_suprema_porta_de_correr_03_folhas'
-), alvos as (
+), base as (
   select
     p.id,
-    regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') as codigo_normalizado
+    regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') as nome_normalizado
   from public.engenharia_variaveis_preset p
   join public.tipologias t on t.id = p.tipologia_id
   where t.chave in (
     'l_suprema_janela_de_correr_03_folhas',
     'l_suprema_porta_de_correr_03_folhas'
   )
-    and regexp_replace(upper(p.nome), '[^A-Z0-9]', '', 'g') in (
-      'SUCBJC301EF', 'SUCBJC302EF', 'SUCBJC303EF', 'SUCBJC304EF',
-      'SUCBPC301EF', 'SUCBPC302EF', 'SUCBPC303EF', 'SUCBPC304EF'
-    )
 ), mapeado as (
   select
     id,
     case
-      when codigo_normalizado in ('SUCBJC301EF','SUCBPC301EF') then '*SUCB-PC3-01EF'
-      when codigo_normalizado in ('SUCBJC302EF','SUCBPC302EF') then '*SUCB-PC3-02-EF'
-      when codigo_normalizado in ('SUCBJC303EF','SUCBPC303EF') then '*SUCB-PC3-03-EF'
-      when codigo_normalizado in ('SUCBJC304EF','SUCBPC304EF') then '*SUCB-PC3-04-EF'
+      when nome_normalizado like '%SUCBJC301EF%' or nome_normalizado like '%SUCBPC301EF%' then '*SUCB-PC3-01EF'
+      when nome_normalizado like '%SUCBJC302EF%' or nome_normalizado like '%SUCBPC302EF%' then '*SUCB-PC3-02-EF'
+      when nome_normalizado like '%SUCBJC303EF%' or nome_normalizado like '%SUCBPC303EF%' then '*SUCB-PC3-03-EF'
+      when nome_normalizado like '%SUCBJC304EF%' or nome_normalizado like '%SUCBPC304EF%' then '*SUCB-PC3-04-EF'
     end as nome_correto
-  from alvos
+  from base
+), alvos as (
+  select * from mapeado where nome_correto is not null
 )
 update public.engenharia_variaveis_preset p
 set
   tipologia_id = tc.id,
-  nome = m.nome_correto,
+  nome = a.nome_correto,
   valores = '{}'::jsonb,
   evidencia_validacao = case
     when coalesce(p.evidencia_validacao, '') ilike '%CORRECAO AUDITADA PC3 2026-08-19%'
@@ -118,9 +150,9 @@ set
     )
   end,
   updated_at = now()
-from mapeado m
+from alvos a
 cross join tipologia_correta tc
-where p.id = m.id;
+where p.id = a.id;
 
 -- Remove apenas os vínculos de composição adicionados às janelas Suprema sem
 -- evidência suficiente no print que originou esta frente. Variáveis/opções globais
@@ -160,9 +192,15 @@ begin
   select count(*) into v_jc3
   from public.engenharia_variaveis_preset
   where tipologia_id = v_janela_03
-    and regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') in (
-      'SUCBJC301EF','SUCBJC302EF','SUCBJC303EF','SUCBJC304EF',
-      'SUCBPC301EF','SUCBPC302EF','SUCBPC303EF','SUCBPC304EF'
+    and (
+      regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC301EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC301EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC302EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC302EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC303EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC303EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBJC304EF%'
+      or regexp_replace(upper(nome), '[^A-Z0-9]', '', 'g') like '%SUCBPC304EF%'
     );
 
   select count(*) into v_valores_nao_vazios
