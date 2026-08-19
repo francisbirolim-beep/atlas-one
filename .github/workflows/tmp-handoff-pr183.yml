@@ -1,0 +1,108 @@
+name: Temporary Handoff PR183
+
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  update-handoff:
+    if: github.head_ref == 'docs/handoff-configuracoes-composicao-folhas'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Prepend handoff sections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sections = {
+            'docs/ai-handoff/CURRENT_STATE.md': '''## CONFIGURAÇÕES VISUAIS / COMPOSIÇÃO POR FOLHA — PR #183 MERGEADA; MIGRATION PENDENTE — 2026-08-18
+
+PR #183 (`feat: composição de folhas e imagem nas configurações`) mergeada em `main`, merge commit `f89c82855218438669911246105c6c2ebc879825`.
+
+Código implementado:
+- `engenharia_variaveis_preset` passa a suportar `imagem_url` após a migration pendente;
+- variáveis propostas `composicao_folha_1` até `composicao_folha_6`, com opções `vidro`, `persiana`, `tela`;
+- vínculos propostos somente para L. Suprema > Janela de Correr 02/03/04/06 folhas, por `tipologias.chave`, sem UUID fixo e sem fuzzy;
+- Engenharia > Configurações validadas ganhou upload/preview de desenho técnico por configuração;
+- `uploadImagemConfiguracao()` reutiliza o bucket `fotos`, pasta `configuracoes`;
+- cards do orçamento priorizam `config.imagem_url`, com fallback para `produto.foto_url`;
+- nenhuma configuração real foi criada, validada ou liberada automaticamente.
+
+Migration: `supabase/migrations/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql`.
+
+Estado do banco: **NÃO APLICADA EM PRODUÇÃO**. Supabase Database Control run #102 passou em dry-run e deixou `Require explicit production confirmation` e `Apply pending migrations` como `skipped`. Portanto `imagem_url`, as 6 variáveis, as 18 opções e os 15 vínculos de composição ainda não existem no banco real até autorização explícita do Francis para apply.
+
+Compatibilidade pré-apply: o POST de configurações só envia `imagem_url` quando uma imagem foi realmente selecionada. Assim, o cadastro antigo sem imagem continua funcionando antes da migration; tentar salvar uma imagem antes do apply retorna erro controlado.
+
+Dados reais continuam pendentes: `engenharia_variaveis_preset` não recebeu presets nesta implementação. Depois do apply, ainda será necessário cadastrar configurações reais (ex.: Suprema > Janela de Correr 03 Folhas) com composição por folha, evidência técnica e desenho técnico manual.
+
+''',
+            'docs/ai-handoff/IMPLEMENTATIONS.md': '''## 2026-08-18 — PR #183 — composição por folha + desenho técnico por configuração
+
+- PR #183 mergeada em `main`, commit `f89c82855218438669911246105c6c2ebc879825`.
+- Migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` criada de forma aditiva/idempotente, mas **não aplicada em produção**.
+- Adiciona `imagem_url` a `engenharia_variaveis_preset` quando aplicada.
+- Seeds declarativos: `composicao_folha_1..6`, cada uma com opções `vidro`, `persiana`, `tela`.
+- Vincula 2/3/4/6 posições somente às tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas, por chave exata.
+- Upload manual de desenho técnico/foto por configuração via `uploadImagemConfiguracao()`.
+- Tela Master de configurações ganhou upload + preview; seletor do orçamento prioriza imagem da configuração e usa foto do produto como fallback.
+- API normaliza/valida as variáveis existentes e persiste imagem somente quando fornecida, preservando compatibilidade antes do apply.
+- Build Validation #256: success; Vercel Preview: success; Supabase Database Control #102: dry-run success, apply skipped.
+- Nenhum preset/configuração real criado e nenhuma migration aplicada por esta PR.
+- Incidente operacional durante a preparação: um `tmp.txt` foi criado acidentalmente direto na `main` e removido imediatamente no commit seguinte, sem alteração líquida de conteúdo. Reforço: continuar usando somente branch → PR → checks → merge.
+
+''',
+            'docs/ai-handoff/NEXT_TASK.md': '''## GATE ATUAL — APLICAR COMPOSIÇÃO POR FOLHA / IMAGEM DE CONFIGURAÇÃO — 2026-08-18
+
+PR #183 já está mergeada em `main` (`f89c82855218438669911246105c6c2ebc879825`). Build Validation #256 e Vercel Preview passaram; Supabase Database Control #102 passou apenas em dry-run e confirmou `Apply pending migrations = skipped`.
+
+Migration pendente: `supabase/migrations/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql`.
+
+Próximo passo exige autorização explícita do Francis:
+1. antes de qualquer apply, listar/dry-run **toda** a fila de migrations pendentes, porque o workflow aplica todas as pendentes em ordem;
+2. somente com autorização específica executar `Supabase Database Control` em `main`, modo `apply`, confirmação `APPLY_PRODUCTION`;
+3. confirmar pós-estado: coluna `imagem_url`, 6 variáveis de composição, 18 opções e pelo menos 15 vínculos nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
+4. depois cadastrar manualmente configurações reais em Engenharia > Configurações validadas, com evidência técnica e upload do desenho técnico;
+5. primeira validação funcional recomendada: `SUPREMA → JANELA DE CORRER 03 FOLHAS`, criando cards com diferentes combinações de `vidro/persiana/tela` por posição;
+6. confirmar que somente presets `validado=true`, `usar_no_orcamento=true` e `ativo=true` aparecem no orçamento.
+
+Não inventar composição, imagem, receita, perfil ou acessório. O desenho técnico continua sendo upload manual por configuração; o Atlas não deve gerá-lo automaticamente nesta etapa.
+
+''',
+          }
+
+          for filename, section in sections.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              marker = section.splitlines()[0]
+              if marker in text:
+                  continue
+              first_newline = text.find('\n')
+              if first_newline == -1:
+                  path.write_text(text + '\n\n' + section, encoding='utf-8')
+              else:
+                  path.write_text(text[:first_newline+1] + '\n' + section + text[first_newline+1:], encoding='utf-8')
+          PY
+
+      - name: Commit handoff update
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No handoff changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ai-handoff/CURRENT_STATE.md docs/ai-handoff/IMPLEMENTATIONS.md docs/ai-handoff/NEXT_TASK.md
+          git commit -m "docs: registrar PR 183 e migration pendente"
+          git push origin HEAD:${{ github.head_ref }}
