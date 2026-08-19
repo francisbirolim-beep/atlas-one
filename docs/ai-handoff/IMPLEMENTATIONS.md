@@ -14,37 +14,55 @@ Implementado sem migration:
 - duplicate check exclui o próprio ID;
 - metadados de validação são renovados no UPDATE e `criado_por_*` é preservado.
 
-Gates: Build Validation #281 e Vercel Preview verdes.
+Gates: Build Validation e Vercel Preview verdes.
 
-## 2026-08-19 — PR #197 — correção auditada PC3 Suprema cadastrada como JC3
-
-Merge em `main`: `46a22f4527b60f2bd6da90089f6bb4f018bfa3f5`.
+## 2026-08-19 — PR #197 / #200 — correção auditada PC3 Suprema
 
 Fonte exata: print W.Vetro do Francis mostrando `L. SUPREMA → PORTA DE CORRER 03 FOLHAS` e projetos `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`.
 
-Migration preparada: `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
+Migration: `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
 
-A migration:
-- identifica somente os 4 projetos por código normalizado exato;
-- exige 4 alvos distintos e aborta em conflito;
-- move os presets da tipologia errada Janela 03 para a tipologia exata `l_suprema_porta_de_correr_03_folhas`;
-- corrige JC3 → PC3 conforme o print;
+A correção:
+- trabalha somente com as chaves exatas `l_suprema_janela_de_correr_03_folhas` e `l_suprema_porta_de_correr_03_folhas`;
+- identifica os quatro presets pela sequência exata do código normalizado contida no nome, sem fuzzy;
+- exige exatamente 4 registros e 4 códigos distintos;
+- aborta se houver ambiguidade ou o mesmo código em outra tipologia;
+- move os 4 presets para `l_suprema_porta_de_correr_03_folhas`;
+- renomeia para `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
 - limpa `valores` para `{}` porque a composição anterior foi inferida incorretamente;
-- acrescenta evidência auditada;
-- remove somente os vínculos `composicao_folha_N` criados sem evidência nas janelas Suprema 02/03/04/06;
-- mantém as variáveis/opções globais disponíveis para futura remodelagem;
-- contém pós-checks de contagem/estado final.
+- acrescenta evidência auditada da correção;
+- remove somente os vínculos `composicao_folha_N` das janelas Suprema 02/03/04/06;
+- mantém as variáveis/opções globais para futura remodelagem;
+- não cria preset, receita, produto, preço, fórmula ou imagem.
 
-Gates do head final:
-- Build Validation #282: **success**;
-- Vercel Preview: **success**;
-- Supabase Database Control #104: **success em dry-run**;
-- apply de produção: **não executado**.
+### Primeira tentativa de apply — bloqueada com segurança
 
-### Estado operacional
+Com autorização explícita do Francis, uma primeira operação temporária foi iniciada pela PR #199. A fila de migrations estava correta e continha apenas `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`, mas o gate da migration encontrou 0 alvos e abortou antes de qualquer alteração.
 
-A migration da PR #197 está mergeada, mas **não aplicada em produção**. O banco ainda não deve ser tratado como corrigido até apply explícito e pós-check confirmado.
+Auditoria read-only confirmou os 4 registros reais e a causa: os nomes eram descritivos, como `JC3 — vidro + vidro + vidro (*SUCB-JC3-01EF)`, enquanto o gate comparava o nome inteiro normalizado ao código puro.
+
+PR #200 corrigiu o gate. Build Validation, Vercel e Supabase dry-run passaram.
+
+### Segundo apply — CONCLUÍDO
+
+A PR operacional temporária #201 foi criada em Draft e não foi mergeada. Build Validation e Vercel passaram. Ao sair de Draft, o workflow:
+1. auditou o histórico remoto;
+2. executou dry-run da fila completa;
+3. confirmou exatamente uma pendência, `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`;
+4. executou o apply;
+5. confirmou no histórico remoto `20260819062000 | 20260819062000`.
+
+A migration concluiu com sucesso, portanto seus pós-checks transacionais também passaram. A PR #201 foi fechada sem merge, mantendo o workflow temporário fora da `main`.
+
+### Estado final de produção
+
+- 4 presets PC3 em `l_suprema_porta_de_correr_03_folhas`;
+- 0 alvos PC3/JC3 em `l_suprema_janela_de_correr_03_folhas`;
+- `valores = {}` nos 4 presets;
+- 0 vínculos `composicao_folha_N` nas janelas Suprema 02/03/04/06;
+- variáveis/opções globais preservadas;
+- imagens não alteradas.
 
 ### Lição técnica
 
-Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF comprova composição vertical mista dentro de um painel; portanto a modelagem precisa ser revista antes de replicar presets para outras tipologias.
+Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF mostra composição vertical mista dentro do painel; portanto a modelagem precisa ser revista antes de replicar valores estruturados para outras tipologias.
