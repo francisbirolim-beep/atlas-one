@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
         produto_id: produtoId,
         nome,
         valores: valoresNormalizados,
-        imagem_url: imagemUrl,
+        ...(imagemUrl ? { imagem_url: imagemUrl } : {}),
         padrao: false,
         usar_no_orcamento: true,
         validado: true,
