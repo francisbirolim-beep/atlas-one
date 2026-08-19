@@ -1,5 +1,19 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-19 — visual PC3 auditado + grid de 4 cards — EM VALIDAÇÃO
+
+Branch `feat/pc3-imagens-grid-4`.
+
+Implementado sem migration e sem alteração de banco:
+- adicionados quatro ativos estáticos em `public/configuracoes/pc3/`, recortados do print W.Vetro confirmado;
+- resolução estrita por nome exato dos presets `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
+- `config.imagem_url` permanece com prioridade sobre o fallback estático;
+- `produto.foto_url` permanece como fallback posterior;
+- nenhum nome semelhante ou outro preset recebe imagem automaticamente;
+- grid das configurações no orçamento alterado de 3 para 4 colunas em desktop (`lg:grid-cols-4`).
+
+Documento de evidência: `docs/ai-handoff/PC3_VISUAL_20260819.md`.
+
 ## 2026-08-19 — PR #196 — edição de configuração validada existente
 
 Merge em `main`: `e9f6fd2cff93a74d85ad98f00e5f64532fe92cf0`.
@@ -61,7 +75,7 @@ A migration concluiu com sucesso, portanto seus pós-checks transacionais també
 - `valores = {}` nos 4 presets;
 - 0 vínculos `composicao_folha_N` nas janelas Suprema 02/03/04/06;
 - variáveis/opções globais preservadas;
-- imagens não alteradas.
+- imagens não alteradas pela migration.
 
 ### Lição técnica
 
