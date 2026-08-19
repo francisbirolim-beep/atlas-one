@@ -1,96 +1,50 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-19 — PR #194 — Catalogo por Linha com modelos clicaveis
+## 2026-08-19 — PR #196 — edição de configuração validada existente
 
-PR #194 foi mergeada em `main` no commit `da7c6df`.
+Merge em `main`: `e9f6fd2cff93a74d85ad98f00e5f64532fe92cf0`.
 
-### Implementado
+Implementado sem migration:
+- atualização autenticada de preset existente via `PUT /api/engenharia/configuracoes-orcamento`;
+- helper client `atualizarConfiguracaoValidadaOrcamento`;
+- botão `Editar` na tela `Engenharia > Configurações validadas`;
+- pré-carregamento de nome, evidência, valores, produto e imagem;
+- troca/remoção de imagem no mesmo registro;
+- linha/tipologia bloqueadas durante edição para preservar identidade técnica;
+- duplicate check exclui o próprio ID;
+- metadados de validação são renovados no UPDATE e `criado_por_*` é preservado.
 
-• `app/cadastro/produtos/por-linha/page.tsx`: os modelos (tipologias) de cada linha, antes exibidos como pilulas estaticas (`span`), agora sao links clicaveis (`Link`) para `/engenharia/configuracoes-orcamento?linha={id}&tipologia={id}`, abrindo a tela de configuracoes validadas ja filtrada pela linha e tipologia clicadas. Vale para todas as linhas/tipologias cadastradas, nao um caso isolado;
-• `app/engenharia/configuracoes-orcamento/page.tsx` (commit `40b8ab9`, mesma PR): passou a ler os parametros de URL `linha` e `tipologia` em `carregar()` para pre-selecionar a tela direto no destino certo.
+Gates: Build Validation #281 e Vercel Preview verdes.
 
-### O que NAO foi feito
+## 2026-08-19 — PR #197 — correção auditada PC3 Suprema cadastrada como JC3
 
-• nenhuma migration, alteracao de schema ou dado foi tocada;
-• nenhum preset/configuracao foi criado ou alterado.
+Merge em `main`: `46a22f4527b60f2bd6da90089f6bb4f018bfa3f5`.
 
-### Gates
+Fonte exata: print W.Vetro do Francis mostrando `L. SUPREMA → PORTA DE CORRER 03 FOLHAS` e projetos `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`.
 
-• Build Validation: **success**;
-• Vercel Preview: **Ready**;
-• ambos os commits (`40b8ab9`, `7fe1070`) marcados **Verified**.
+Migration preparada: `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
 
-## 2026-08-18 — Cadastro real: L. Suprema > Janela De Correr 03 Folhas (4 configurações)
+A migration:
+- identifica somente os 4 projetos por código normalizado exato;
+- exige 4 alvos distintos e aborta em conflito;
+- move os presets da tipologia errada Janela 03 para a tipologia exata `l_suprema_porta_de_correr_03_folhas`;
+- corrige JC3 → PC3 conforme o print;
+- limpa `valores` para `{}` porque a composição anterior foi inferida incorretamente;
+- acrescenta evidência auditada;
+- remove somente os vínculos `composicao_folha_N` criados sem evidência nas janelas Suprema 02/03/04/06;
+- mantém as variáveis/opções globais disponíveis para futura remodelagem;
+- contém pós-checks de contagem/estado final.
 
-4 configurações reais foram cadastradas em produção em `Engenharia > Configurações validadas`, com base no sistema W.Vetro real (print de tela do Francis, códigos `*SUCB-JC3-01EF` a `04EF`):
+Gates do head final:
+- Build Validation #282: **success**;
+- Vercel Preview: **success**;
+- Supabase Database Control #104: **success em dry-run**;
+- apply de produção: **não executado**.
 
-• 01EF — vidro/vidro/vidro;
-• 02EF — persiana/persiana/persiana;
-• 03EF — persiana/vidro (folha 3 deixada em branco de propósito: o desenho técnico deste código só mostra 2 painéis, apesar do agrupamento "03 folhas" do W.Vetro — não inventado, sinalizado na evidência);
-• 04EF — vidro/tela (mesma ressalva de 2 painéis).
+### Estado operacional
 
-Todos os 4 presets: `validado=true`, `ativo=true`, `usar_no_orcamento=true`, com `evidencia_validacao` citando o código W.Vetro e o print de origem. Confirmado direto no banco via Supabase MCP (leitura): 4 linhas em `engenharia_variaveis_preset` para a tipologia `l_suprema_janela_de_correr_03_folhas`, valores conferem exatamente.
+A migration da PR #197 está mergeada, mas **não aplicada em produção**. O banco ainda não deve ser tratado como corrigido até apply explícito e pós-check confirmado.
 
-`imagem_url` dos 4 presets está `null`: as 4 imagens foram recortadas do print original (`card_01EF.png` a `card_04EF.png`) e entregues ao Francis nesta sessão, mas o upload automático para o Supabase Storage não foi possível — a ferramenta de upload de arquivo do navegador usada nesta sessão só aceita arquivos explicitamente compartilhados com a sessão, e a pasta de outputs local não estava nessa lista. Upload manual pendente (rápido, via "Selecionar imagem" na tela de configuração).
-## 2026-08-18 — Apply em produção — composição de folha / imagem de configuração
+### Lição técnica
 
-A migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` (da PR #183, ver entrada abaixo) foi aplicada em produção via `Supabase Database Control` (`mode=apply`, `confirmation=APPLY_PRODUCTION`), com autorização explícita do Francis. Antes do apply, a fila completa de migrations pendentes foi auditada — só essa migration estava pendente.
-
-Pós-estado confirmado direto no banco:
-• coluna `engenharia_variaveis_preset.imagem_url` ativa;
-• 6 variáveis `composicao_folha_1` a `composicao_folha_6`;
-• 18 opções (`vidro`/`persiana`/`tela` por posição);
-• 15 vínculos em `engenharia_tipologia_variaveis` para L. Suprema > Janela de Correr 02/03/04/06 folhas;
-• 0 linhas em `engenharia_variaveis_preset` — nenhuma configuração real foi criada pela migration.
-
-Próximo passo era cadastro humano (não código) — ver entrada acima, já concluída.
-
-## 2026-08-18 — PR #183 — composição por folha + desenho técnico por configuração
-
-PR #183 foi mergeada em `main` no commit `f89c82855218438669911246105c6c2ebc879825`.
-
-### Implementado
-
-• migration aditiva/idempotente `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql`;
-• `imagem_url` em `engenharia_variaveis_preset` (ativa após o apply registrado acima);
-• 6 variáveis declarativas: `composicao_folha_1` a `composicao_folha_6`;
-• 3 opções por variável: `vidro`, `persiana`, `tela` (18 opções no total);
-• vínculos somente com as tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas, usando joins por `tipologias.chave` exata;
-• 15 vínculos esperados no total (2 + 3 + 4 + 6), todos com `obrigatorio=false`;
-• migration possui gates transacionais para contagem das 6 variáveis, 18 opções, 4 tipologias alvo e pelo menos 15 vínculos;
-• `uploadImagemConfiguracao(file)` reutilizando `subirComTentativas('configuracoes', file)` no bucket `fotos`;
-• `ConfiguracaoOrcamento` ganhou `imagem_url?: string | null`;
-• criação de configuração aceita `imagemUrl`;
-• API valida URL e persiste `imagem_url` somente quando fornecida, mantendo compatibilidade antes do apply;
-• tela Master `Engenharia > Configurações validadas` ganhou input de imagem, preview e upload;
-• listagem administrativa exibe imagem da configuração, com foto do produto como fallback;
-• seletor do orçamento usa `config.imagem_url` como imagem principal do card e `produto.foto_url` como fallback;
-• busca administrativa passou a considerar também os valores das variáveis estruturadas.
-
-### O que NÃO foi feito
-
-• nenhuma configuração real foi criada;
-• nenhum preset foi validado automaticamente;
-• nenhuma composição de folha foi inferida;
-• nenhuma receita, perfil, acessório ou fórmula foi alterada;
-• nenhuma imagem foi gerada automaticamente.
-
-### Gates
-
-Head final da feature: `a628b0055ba8d3795e70e9daae141f5e59b3bfcf`.
-
-• Build Validation #256: **success**;
-• Vercel Preview: **success**;
-• Supabase Database Control #102: **success em dry-run**.
-
-O deploy da `main` do merge `f89c82855218438669911246105c6c2ebc879825` foi confirmado como **success** no Vercel.
-
-### Incidente operacional registrado
-
-Durante a preparação da branch, um arquivo `tmp.txt` foi criado acidentalmente diretamente na `main` e removido imediatamente no commit seguinte, sem alteração líquida de conteúdo. Na sequência, a atualização de handoff (PR #184) gerou uma cadeia de branches/PRs temporárias (#185–#190) tentando reexecutar o preview da Vercel, o que esgotou o limite diário gratuito de deploys da Vercel (100/dia). As branches temporárias foram fechadas sem merge pela própria sessão, com nota explícita de "não mergear"; `.github/workflows` em `main` foi conferido e está limpo. O episódio reforça a regra permanente: **branch → PR → Build Validation verde → merge; nunca escrever diretamente em `main`; evitar reexecuções desnecessárias de deploy**.
-
-## Estado anterior preservado
-
-Toda a cronologia anterior de implementações, incluindo reconciliação W.Vetro, cargas de acessórios/perfis, orçamento, cadastro, Home, colaboração, notificações, paginação e demais PRs, permanece íntegra no snapshot:
-
-`docs/ai-handoff/archive/2026-08-18-pre-pr183-IMPLEMENTATIONS.md`
+Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF comprova composição vertical mista dentro de um painel; portanto a modelagem precisa ser revista antes de replicar presets para outras tipologias.
