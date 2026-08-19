@@ -197,13 +197,21 @@ export default function ProdutosPorLinha() {
               </div>
 
               {tipologiasDaLinha.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {tipologiasDaLinha.map(tipologia => (
-                    <span key={tipologia.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
-                      {tipologia.label}
-                    </span>
-                  ))}
-                </div>
+                <>
+                  <p className="text-[11px] text-slate-400 mt-3">Clique em um modelo para cadastrar ou ajustar as configurações validadas dele.</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {tipologiasDaLinha.map(tipologia => (
+                      <Link
+                        key={tipologia.id}
+                        href={`/engenharia/configuracoes-orcamento?linha=${encodeURIComponent(linhaSelecionada.id)}&tipologia=${encodeURIComponent(tipologia.id)}`}
+                        title="Abrir configurações validadas desta tipologia"
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-navy hover:bg-brand-navyLight hover:text-brand-navy transition"
+                      >
+                        {tipologia.label}
+                      </Link>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="text-sm font-semibold text-amber-900">Nenhum modelo cadastrado nesta linha.</p>
