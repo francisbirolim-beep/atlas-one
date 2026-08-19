@@ -7,6 +7,7 @@ export type ConfiguracaoOrcamento = {
   produto_id?: string | null
   nome: string
   valores: Record<string, string>
+  imagem_url?: string | null
   padrao: boolean
   usar_no_orcamento?: boolean
   validado?: boolean
@@ -22,9 +23,6 @@ export type ConfiguracaoOrcamento = {
 }
 
 export async function listarConfiguracoesValidadasOrcamento(): Promise<ConfiguracaoOrcamento[]> {
-  // select('*') mantem compatibilidade durante a janela entre deploy e apply da
-  // migration: antes dos novos campos existirem, os presets retornam sem as
-  // propriedades e simplesmente nao passam pelo filtro abaixo.
   const { data, error } = await supabase
     .from('engenharia_variaveis_preset')
     .select('*')
@@ -53,6 +51,7 @@ export async function criarConfiguracaoValidadaOrcamento(dados: {
   nome: string
   valores: Record<string, string>
   evidencia: string
+  imagemUrl?: string | null
 }): Promise<{ ok: boolean; error?: string; configuracao?: ConfiguracaoOrcamento }> {
   const token = await tokenAtual()
   if (!token) return { ok: false, error: 'Sessao expirada. Entre novamente no Atlas.' }
