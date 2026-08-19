@@ -9,10 +9,12 @@ import {
   Layers3,
   Loader2,
   Pencil,
+  Plus,
   RotateCcw,
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   Upload,
   XCircle,
 } from 'lucide-react'
@@ -37,8 +39,10 @@ import {
 import type { Produto, Tipologia, Usuario } from '@/lib/tipos'
 
 function normalizar(valor: string) {
-  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+  return valor.normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '').toLowerCase().trim()
 }
+
+type CampoCorteLinha = { chave: string; valor: string }
 
 export default function ConfiguracoesOrcamentoPage() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -58,6 +62,7 @@ export default function ConfiguracoesOrcamentoPage() {
   const [variaveis, setVariaveis] = useState<TipologiaVariavelComVariavel[]>([])
   const [opcoes, setOpcoes] = useState<EngenhariaVariavelOpcao[]>([])
   const [valores, setValores] = useState<Record<string, string>>({})
+  const [camposCorte, setCamposCorte] = useState<CampoCorteLinha[]>([])
   const [busca, setBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
@@ -152,11 +157,24 @@ export default function ConfiguracoesOrcamentoPage() {
     return opcoes.filter(o => o.variavel_id === variavelId)
   }
 
+  function adicionarLinhaCorte() {
+    setCamposCorte(prev => [...prev, { chave: '', valor: '' }])
+  }
+
+  function removerLinhaCorte(indice: number) {
+    setCamposCorte(prev => prev.filter((_, i) => i !== indice))
+  }
+
+  function atualizarLinhaCorte(indice: number, campo: 'chave' | 'valor', valor: string) {
+    setCamposCorte(prev => prev.map((linhaAtual, i) => (i === indice ? { ...linhaAtual, [campo]: valor } : linhaAtual)))
+  }
+
   function limparCampos() {
     setProdutoId('')
     setNome('')
     setEvidencia('')
     setValores({})
+    setCamposCorte([])
     setImagemArquivo(null)
     setImagemExistenteUrl('')
     setEditandoId(null)
@@ -170,6 +188,7 @@ export default function ConfiguracoesOrcamentoPage() {
     setNome(item.nome)
     setEvidencia(item.evidencia_validacao || '')
     setValores({ ...(item.valores || {}) })
+    setCamposCorte(Object.entries(item.campos_corte || {}).map(([chave, valor]) => ({ chave, valor: String(valor) })))
     setImagemArquivo(null)
     setImagemExistenteUrl(item.imagem_url || '')
     setEditandoId(item.id)
@@ -209,11 +228,19 @@ export default function ConfiguracoesOrcamentoPage() {
       }
     }
 
+    const camposCorteObj: Record<string, string> = {}
+    for (const linhaCorte of camposCorte) {
+      const chave = linhaCorte.chave.trim()
+      const valor = linhaCorte.valor.trim()
+      if (chave && valor) camposCorteObj[chave] = valor
+    }
+
     const dados = {
       tipologiaId,
       produtoId: produtoId || null,
       nome: nome.trim(),
       valores,
+      camposCorte: camposCorteObj,
       evidencia: evidencia.trim(),
       imagemUrl,
     }
@@ -359,6 +386,30 @@ export default function ConfiguracoesOrcamentoPage() {
             </div>
           )}
 
+          {tipologiaId && (
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-600">Campos de corte (fórmula por perfil, texto livre)</p>
+                <button type="button" onClick={adicionarLinhaCorte} className="text-xs px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center gap-1">
+                  <Plus size={12}/> Adicionar perfil
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Ainda não temos a fórmula confirmada de cada perfil — registre aqui o código do perfil (ex: SU012) e a
+                fórmula ou observação de corte, com base em orçamentos de teste reais do W.Vetro. Sem validação
+                automática por enquanto; sirva de referência até confirmarmos o padrão com mais testes.
+              </p>
+              {camposCorte.length === 0 && <p className="text-xs text-slate-400">Nenhum perfil registrado ainda.</p>}
+              {camposCorte.map((linhaCorte, indice) => (
+                <div key={indice} className="flex items-center gap-2">
+                  <input value={linhaCorte.chave} onChange={e => atualizarLinhaCorte(indice, 'chave', e.target.value)} placeholder="Perfil (ex: SU012)" className="w-32 shrink-0 border border-slate-300 rounded-lg p-2 text-sm"/>
+                  <input value={linhaCorte.valor} onChange={e => atualizarLinhaCorte(indice, 'valor', e.target.value)} placeholder="Fórmula ou observação de corte" className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"/>
+                  <button type="button" onClick={() => removerLinhaCorte(indice)} className="shrink-0 text-red-500 hover:text-red-700 p-1"><Trash2 size={14}/></button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div>
             <label className="text-xs text-slate-500">Desenho técnico / imagem da configuração (opcional)</label>
             <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-600 hover:border-brand-navy">
@@ -423,7 +474,10 @@ export default function ConfiguracoesOrcamentoPage() {
                           </div>
                           <h3 className="font-semibold text-slate-800 mt-2">{c.nome}</h3>
                           {p && <p className="text-xs text-slate-500 mt-1">Produto base: {p.nome}</p>}
-                          <p className="text-xs text-slate-400 mt-1">{Object.keys(c.valores || {}).length} variável(is) registrada(s)</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {Object.keys(c.valores || {}).length} variável(is) registrada(s)
+                            {Object.keys(c.campos_corte || {}).length > 0 ? ` · ${Object.keys(c.campos_corte || {}).length} perfil(is) de corte` : ''}
+                          </p>
                           {c.evidencia_validacao && <p className="text-xs text-slate-500 mt-2">Evidência: {c.evidencia_validacao}</p>}
                         </div>
                         <div className="flex flex-col gap-2 shrink-0">
