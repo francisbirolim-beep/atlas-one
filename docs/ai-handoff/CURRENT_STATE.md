@@ -1,6 +1,32 @@
 # CURRENT_STATE.md — Atlas One
 
-## ESTADO AUTORITATIVO — CONFIGURAÇÕES VISUAIS / COMPOSIÇÃO POR FOLHA — 2026-08-18
+## ESTADO AUTORITATIVO — COMPOSIÇÃO DE FOLHA / IMAGEM DE CONFIGURAÇÃO — APLICADO EM PRODUÇÃO — 2026-08-18
+
+> Esta seção supera a seção "CONFIGURAÇÕES VISUAIS / COMPOSIÇÃO POR FOLHA — 2026-08-18" logo abaixo (mantida como histórico, já superada).
+
+### Migration aplicada em produção
+
+A migration `supabase/migrations/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` foi aplicada em produção via `Supabase Database Control` (`mode=apply`, `confirmation=APPLY_PRODUCTION`), com autorização explícita do Francis. A fila de migrations pendentes foi auditada antes do apply: essa era a única migration pendente.
+
+Pós-estado confirmado direto no banco (leitura via Supabase MCP, após o apply):
+- `engenharia_variaveis_preset.imagem_url`: coluna existe;
+- variáveis `composicao_folha_1` a `composicao_folha_6`: 6 confirmadas;
+- opções `vidro`/`persiana`/`tela` por posição: 18 confirmadas;
+- vínculos em `engenharia_tipologia_variaveis` para L. Suprema > Janela de Correr 02/03/04/06 folhas: 15 confirmados;
+- `engenharia_variaveis_preset`: 0 linhas — nenhuma configuração real foi criada pela migration, como esperado (gates internos da própria migration também validaram essas contagens em transação).
+
+### O que falta agora é cadastro humano, não código
+
+O schema está pronto e ativo, mas vazio de configuração real. Para os cards aparecerem no seletor de orçamento (grade Linha → Modelo → Configuração com desenho técnico, no estilo do sistema W.Vetro que o Francis mostrou), é necessário cadastrar manualmente em `Engenharia > Configurações validadas`:
+1. escolher Linha = L. Suprema, Tipologia = Janela De Correr 03 Folhas (primeira validação recomendada);
+2. preencher a composição real de cada folha (vidro/persiana/tela), só com combinações tecnicamente comprovadas;
+3. registrar evidência técnica da validação;
+4. subir manualmente o desenho técnico/foto da configuração (upload, sem geração automática);
+5. confirmar que o preset fica `validado=true`, `usar_no_orcamento=true`, `ativo=true` para aparecer no orçamento.
+
+Não inventar composição, imagem ou vínculo por semelhança de nome.
+
+## ESTADO AUTORITATIVO — CONFIGURAÇÕES VISUAIS / COMPOSIÇÃO POR FOLHA — 2026-08-18 (histórico, já superado pela seção acima)
 
 > O snapshot histórico completo anterior a esta atualização foi preservado em `docs/ai-handoff/archive/2026-08-18-pre-pr183-CURRENT_STATE.md`.
 
@@ -32,17 +58,9 @@ O deploy da `main` referente ao commit `f89c82855218438669911246105c6c2ebc879825
 - cards do orçamento priorizam `config.imagem_url` e usam `produto.foto_url` somente como fallback;
 - busca administrativa considera também variáveis estruturadas.
 
-### Estado do banco — importante
+### Estado do banco — importante (histórico, na época desta seção)
 
-A migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` está **MERGEADA, MAS NÃO APLICADA EM PRODUÇÃO**.
-
-Portanto, até autorização explícita do Francis e apply confirmado:
-- a coluna `imagem_url` ainda não deve ser considerada ativa no banco;
-- as 6 variáveis de composição ainda não devem ser consideradas ativas;
-- as 18 opções ainda não devem ser consideradas ativas;
-- os 15 vínculos esperados de composição ainda não devem ser considerados ativos.
-
-Nenhuma configuração/preset real foi criada, validada ou liberada automaticamente pela PR #183.
+Na época em que esta seção foi escrita, a migration ainda **não estava aplicada em produção**. Isso já mudou — ver seção autoritativa no topo do arquivo.
 
 ### Estado técnico anterior que continua válido
 
@@ -54,16 +72,6 @@ A migration `20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql`
 O mesmo run #100 também aplicou a migration anterior de configurações validadas porque o workflow aplica **todas as migrations pendentes em ordem cronológica**. Esta é uma regra operacional permanente: antes de qualquer novo apply, auditar a fila completa de migrations pendentes; nunca presumir apply seletivo por arquivo.
 
 A reconciliação dos acessórios e dos 1.307 perfis W.Vetro está concluída em produção conforme o snapshot histórico arquivado. Os 136 acessórios cuja unidade operacional permanece `NULL` continuam pendentes de validação humana; não inferir unidade ou fator de conversão.
-
-### Próximo gate
-
-O próximo passo desta frente exige autorização explícita do Francis para apply em produção. Antes disso:
-1. listar/dry-run de **toda** a fila pendente;
-2. confirmar exatamente quais migrations serão aplicadas junto;
-3. somente após autorização específica executar `mode=apply` + `APPLY_PRODUCTION`;
-4. confirmar pós-estado da coluna, variáveis, opções e vínculos;
-5. depois cadastrar manualmente configurações reais com evidência técnica e imagem;
-6. primeira validação funcional recomendada: `SUPREMA → JANELA DE CORRER 03 FOLHAS`, com combinações reais de vidro/persiana/tela por posição.
 
 ### Governança permanente
 

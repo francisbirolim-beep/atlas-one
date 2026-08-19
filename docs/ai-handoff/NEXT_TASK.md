@@ -2,56 +2,36 @@
 
 > O snapshot completo anterior foi preservado em `docs/ai-handoff/archive/2026-08-18-pre-pr183-NEXT_TASK.md`.
 
-## GATE ATUAL — aplicar composição por folha / imagem de configuração
+## TAREFA ATUAL — cadastrar configurações reais de composição de folha (L. Suprema)
 
-PR #183 já está mergeada em `main` no commit `f89c82855218438669911246105c6c2ebc879825`. Build Validation #256 e Vercel passaram; Supabase Database Control #102 passou somente em dry-run e confirmou que o apply foi pulado.
+A migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` foi **APLICADA EM PRODUÇÃO em 2026-08-18**, com autorização explícita do Francis, após auditoria da fila completa de migrations pendentes (só essa estava pendente).
 
-Migration pendente:
-`supabase/migrations/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql`
+Pós-estado confirmado direto no banco:
+- coluna `engenharia_variaveis_preset.imagem_url` ativa;
+- 6 variáveis `composicao_folha_1` a `composicao_folha_6`;
+- 18 opções (`vidro`/`persiana`/`tela` por posição);
+- 15 vínculos em `engenharia_tipologia_variaveis` para L. Suprema > Janela de Correr 02/03/04/06 folhas;
+- 0 linhas em `engenharia_variaveis_preset` — nenhuma configuração real foi criada automaticamente.
 
-### Próximo passo — exige autorização explícita do Francis
+### Próximo passo — cadastro humano, não código
 
-Antes de qualquer apply:
-1. listar/dry-run **toda** a fila de migrations pendentes;
-2. registrar exatamente quais arquivos serão aplicados em conjunto — o workflow não é seletivo por migration;
-3. pedir/confirmar autorização explícita específica do Francis;
-4. somente então executar `Supabase Database Control` em `main`, `mode=apply`, `confirmation=APPLY_PRODUCTION`.
+Em `Engenharia > Configurações validadas`:
+1. escolher Linha = L. Suprema, Tipologia = Janela De Correr 03 Folhas (primeira validação recomendada, com base no modelo real do sistema W.Vetro compartilhado pelo Francis);
+2. preencher a composição real de cada folha (vidro/persiana/tela) só com combinações tecnicamente comprovadas;
+3. registrar evidência técnica da validação;
+4. subir manualmente o desenho técnico/foto da configuração (upload, sem geração automática);
+5. confirmar no seletor de orçamento que o card aparece com a imagem certa (produto.foto_url só como fallback) e que somente presets `validado=true`, `usar_no_orcamento=true` e `ativo=true` aparecem.
 
-### Pós-apply obrigatório
-
-Confirmar no banco real:
-- coluna `engenharia_variaveis_preset.imagem_url` existente;
-- 6 variáveis `composicao_folha_1..6`;
-- 18 opções (`vidro`, `persiana`, `tela` para cada posição);
-- pelo menos 15 vínculos de composição nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
-- nenhum preset/configuração criado automaticamente pela migration.
-
-### Depois do banco ativo
-
-Cadastrar manualmente configurações reais em `Engenharia > Configurações validadas`:
-- escolher Linha/Tipologia;
-- preencher somente variáveis comprovadas;
-- registrar evidência técnica;
-- subir manualmente o desenho técnico/foto da configuração;
-- validar/liberar somente configurações realmente conferidas.
-
-Primeira validação recomendada:
-`SUPREMA → JANELA DE CORRER 03 FOLHAS`
-
-Criar alguns cards reais com composições comprovadas de `vidro/persiana/tela` por posição e confirmar no orçamento que:
-- a imagem da configuração aparece primeiro;
-- foto do produto continua fallback;
-- somente presets `validado=true`, `usar_no_orcamento=true` e `ativo=true` aparecem;
-- a seleção carrega o snapshot das variáveis da configuração.
+Não inventar composição, código ou vínculo por semelhança de nome. Depois de validar o caso da Janela De Correr 03 Folhas, avaliar se replica para 02/04/06 folhas e para as demais linhas técnicas (GOLD, LINHA 30, etc.), sempre com evidência real antes de estender.
 
 ## Regras que continuam obrigatórias
 
 - GitHub é a única fonte da verdade;
-- nunca commitar direto em `main`;
-- branch → PR → Build Validation verde → merge;
-- não aplicar migration sem autorização explícita;
-- não inventar composição, imagem, receita, perfil, acessório, unidade, NCM, fórmula ou vínculo por semelhança de nome;
-- desenho técnico desta frente é upload manual por configuração.
+- nunca commitar direto na `main`; branch → PR → Build Validation verde → merge;
+- nunca aplicar migration em produção sem autorização explícita e específica do Francis;
+- antes de qualquer apply, auditar a fila **completa** de migrations pendentes — o workflow aplica tudo de uma vez, não é seletivo por arquivo;
+- nunca inventar dado, vínculo, composição, receita, perfil, acessório, unidade, NCM ou fórmula por semelhança de nome;
+- ao final de qualquer implementação relevante, atualizar CURRENT_STATE.md, IMPLEMENTATIONS.md e NEXT_TASK.md com o estado real.
 
 ## Fila secundária preservada
 
