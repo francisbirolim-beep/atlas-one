@@ -1,5 +1,18 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-18 — Cadastro real: L. Suprema > Janela De Correr 03 Folhas (4 configurações)
+
+4 configurações reais foram cadastradas em produção em `Engenharia > Configurações validadas`, com base no sistema W.Vetro real (print de tela do Francis, códigos `*SUCB-JC3-01EF` a `04EF`):
+
+- 01EF — vidro/vidro/vidro;
+- 02EF — persiana/persiana/persiana;
+- 03EF — persiana/vidro (folha 3 deixada em branco de propósito: o desenho técnico deste código só mostra 2 painéis, apesar do agrupamento "03 folhas" do W.Vetro — não inventado, sinalizado na evidência);
+- 04EF — vidro/tela (mesma ressalva de 2 painéis).
+
+Todos os 4 presets: `validado=true`, `ativo=true`, `usar_no_orcamento=true`, com `evidencia_validacao` citando o código W.Vetro e o print de origem. Confirmado direto no banco via Supabase MCP (leitura): 4 linhas em `engenharia_variaveis_preset` para a tipologia `l_suprema_janela_de_correr_03_folhas`, valores conferem exatamente.
+
+`imagem_url` dos 4 presets está `null`: as 4 imagens foram recortadas do print original (`card_01EF.png` a `card_04EF.png`) e entregues ao Francis nesta sessão, mas o upload automático para o Supabase Storage não foi possível — a ferramenta de upload de arquivo do navegador usada nesta sessão só aceita arquivos explicitamente compartilhados com a sessão, e a pasta de outputs local não estava nessa lista. Upload manual pendente (rápido, via "Selecionar imagem" na tela de configuração).
+
 ## 2026-08-18 — Apply em produção — composição de folha / imagem de configuração
 
 A migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` (da PR #183, ver entrada abaixo) foi aplicada em produção via `Supabase Database Control` (`mode=apply`, `confirmation=APPLY_PRODUCTION`), com autorização explícita do Francis. Antes do apply, a fila completa de migrations pendentes foi auditada — só essa migration estava pendente.
@@ -11,7 +24,7 @@ Pós-estado confirmado direto no banco:
 - 15 vínculos em `engenharia_tipologia_variaveis` para L. Suprema > Janela de Correr 02/03/04/06 folhas;
 - 0 linhas em `engenharia_variaveis_preset` — nenhuma configuração real foi criada pela migration.
 
-Próximo passo é cadastro humano (não código): configurações reais de composição por folha, com evidência técnica e desenho manual, via `Engenharia > Configurações validadas`, começando por L. Suprema > Janela De Correr 03 Folhas.
+Próximo passo era cadastro humano (não código) — ver entrada acima, já concluída.
 
 ## 2026-08-18 — PR #183 — composição por folha + desenho técnico por configuração
 
