@@ -3,7 +3,7 @@ name: Temporary Handoff PR183 Target
 on:
   pull_request_target:
     branches: [main]
-    types: [synchronize]
+    types: [synchronize, reopened]
 
 permissions:
   contents: write
