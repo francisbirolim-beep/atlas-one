@@ -25,8 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const id = (body.id || '').trim()
-    const whatsapp = (body.whatsapp || '').trim() || null
+    const id = typeof body.id === 'string' ? body.id.trim() : ''
 
     if (!id) {
       return NextResponse.json({ error: 'Usuário inválido' }, { status: 400 })
@@ -34,11 +33,15 @@ export async function POST(req: NextRequest) {
 
     const nomeInformado = typeof body.nome === 'string' ? body.nome.trim() : undefined
     const emailInformado = typeof body.email === 'string' ? body.email.trim().toLowerCase() : undefined
+    const whatsappInformado = typeof body.whatsapp === 'string' ? (body.whatsapp.trim() || null) : undefined
     const roleInformado = body.role === 'master' || body.role === 'funcionario' ? body.role : undefined
     const novaSenha = typeof body.novaSenha === 'string' ? body.novaSenha.trim() : ''
 
     if (nomeInformado !== undefined && !nomeInformado) {
       return NextResponse.json({ error: 'Nome não pode ficar em branco' }, { status: 400 })
+    }
+    if (emailInformado !== undefined && !emailInformado) {
+      return NextResponse.json({ error: 'E-mail não pode ficar em branco' }, { status: 400 })
     }
     if (novaSenha && novaSenha.length < 6) {
       return NextResponse.json({ error: 'A nova senha precisa ter pelo menos 6 caracteres' }, { status: 400 })
@@ -54,18 +57,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const camposPerfil: Record<string, any> = { whatsapp }
+    const camposPerfil: Record<string, any> = {}
+    if (whatsappInformado !== undefined) camposPerfil.whatsapp = whatsappInformado
     if (nomeInformado !== undefined) camposPerfil.nome = nomeInformado
-    if (emailInformado) camposPerfil.email = emailInformado
+    if (emailInformado !== undefined) camposPerfil.email = emailInformado
     if (roleInformado !== undefined) camposPerfil.role = roleInformado
 
-    const { error: updErr } = await supabaseAdmin
-      .from('usuarios')
-      .update(camposPerfil)
-      .eq('id', id)
+    if (Object.keys(camposPerfil).length > 0) {
+      const { error: updErr } = await supabaseAdmin
+        .from('usuarios')
+        .update(camposPerfil)
+        .eq('id', id)
 
-    if (updErr) {
-      return NextResponse.json({ error: updErr.message }, { status: 400 })
+      if (updErr) {
+        return NextResponse.json({ error: updErr.message }, { status: 400 })
+      }
     }
 
     return NextResponse.json({ ok: true })
