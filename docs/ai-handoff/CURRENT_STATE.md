@@ -1,5 +1,15 @@
 # CURRENT_STATE.md — Atlas One
 
+
+## ESTADO AUTORITATIVO — CATALOGO POR LINHA: MODELOS CLICAVEIS — 2026-08-19
+
+PR #194 foi mergeada em `main` no commit `da7c6df`. A tela `Cadastro > Produtos > Catalogo por Linha` (`app/cadastro/produtos/por-linha/page.tsx`) agora exibe os modelos (tipologias) de cada linha como pilulas clicaveis: cada uma linka para `Engenharia > Configuracoes validadas` ja filtrada pela linha e tipologia especificas (`/engenharia/configuracoes-orcamento?linha=...&tipologia=...`), permitindo cadastrar ou ajustar a configuracao validada daquele modelo com um clique. Isso vale para todas as linhas e tipologias cadastradas, nao apenas para um caso especifico.
+
+Suporte tecnico: `app/engenharia/configuracoes-orcamento/page.tsx` ja aceitava os parametros de URL `linha` e `tipologia` para pre-selecionar a tela (commit `40b8ab9`, mesma PR).
+
+Validado: Build Validation e Vercel Preview verdes na PR; nenhuma migration envolvida.
+
+
 ## ESTADO AUTORITATIVO — CADASTRO REAL: L. SUPREMA > JANELA DE CORRER 03 FOLHAS — 2026-08-18
 
 > Esta seção supera a seção "COMPOSIÇÃO DE FOLHA / IMAGEM DE CONFIGURAÇÃO — APLICADO EM PRODUÇÃO — 2026-08-18" logo abaixo (mantida como histórico).
