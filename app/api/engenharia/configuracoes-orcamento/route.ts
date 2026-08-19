@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     const produtoId = typeof body.produtoId === 'string' && body.produtoId.trim() ? body.produtoId.trim() : null
     const nome = typeof body.nome === 'string' ? body.nome.trim() : ''
     const evidencia = typeof body.evidencia === 'string' ? body.evidencia.trim() : ''
+    const imagemUrl = typeof body.imagemUrl === 'string' && body.imagemUrl.trim() ? body.imagemUrl.trim() : null
     const valores = body.valores && typeof body.valores === 'object' && !Array.isArray(body.valores)
       ? body.valores as Record<string, unknown>
       : {}
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
     if (!tipologiaId) return NextResponse.json({ error: 'Selecione a tipologia.' }, { status: 400 })
     if (nome.length < 3 || nome.length > 120) return NextResponse.json({ error: 'Nome da configuracao deve ter entre 3 e 120 caracteres.' }, { status: 400 })
     if (evidencia.length < 5 || evidencia.length > 1000) return NextResponse.json({ error: 'Registre uma evidencia tecnica objetiva para a validacao.' }, { status: 400 })
+    if (imagemUrl && !/^https?:\/\//i.test(imagemUrl)) return NextResponse.json({ error: 'URL da imagem da configuracao invalida.' }, { status: 400 })
 
     const { data: tipologia } = await supabaseAdmin
       .from('tipologias')
@@ -127,6 +129,7 @@ export async function POST(req: NextRequest) {
         produto_id: produtoId,
         nome,
         valores: valoresNormalizados,
+        ...(imagemUrl ? { imagem_url: imagemUrl } : {}),
         padrao: false,
         usar_no_orcamento: true,
         validado: true,
@@ -143,9 +146,11 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      const msg = error.message.includes('usar_no_orcamento')
-        ? 'A migration de configuracoes validadas ainda nao foi aplicada.'
-        : error.message
+      const msg = error.message.includes('imagem_url')
+        ? 'A migration de imagem/composicao das configuracoes ainda nao foi aplicada.'
+        : error.message.includes('usar_no_orcamento')
+          ? 'A migration de configuracoes validadas ainda nao foi aplicada.'
+          : error.message
       return NextResponse.json({ error: msg }, { status: 400 })
     }
 

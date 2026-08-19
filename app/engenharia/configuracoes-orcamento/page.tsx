@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Layers3, Loader2, Save, Search, ShieldCheck, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Image as ImageIcon, Layers3, Loader2, Save, Search, ShieldCheck, Upload, XCircle } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarProdutos } from '@/lib/produtos'
 import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
+import { uploadImagemConfiguracao } from '@/lib/upload'
 import {
   listarTodasOpcoes,
   listarVariaveisDaTipologia,
@@ -37,6 +38,8 @@ export default function ConfiguracoesOrcamentoPage() {
   const [produtoId, setProdutoId] = useState('')
   const [nome, setNome] = useState('')
   const [evidencia, setEvidencia] = useState('')
+  const [imagemArquivo, setImagemArquivo] = useState<File | null>(null)
+  const [imagemPreview, setImagemPreview] = useState('')
   const [variaveis, setVariaveis] = useState<TipologiaVariavelComVariavel[]>([])
   const [opcoes, setOpcoes] = useState<EngenhariaVariavelOpcao[]>([])
   const [valores, setValores] = useState<Record<string, string>>({})
@@ -75,6 +78,16 @@ export default function ConfiguracoesOrcamentoPage() {
     void carregarVariaveis()
   }, [tipologiaId])
 
+  useEffect(() => {
+    if (!imagemArquivo) {
+      setImagemPreview('')
+      return
+    }
+    const url = URL.createObjectURL(imagemArquivo)
+    setImagemPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [imagemArquivo])
+
   const linha = linhas.find(l => l.id === linhaId) || null
   const tipologiasFiltradas = useMemo(() => {
     if (!linha) return tipologias
@@ -98,7 +111,8 @@ export default function ConfiguracoesOrcamentoPage() {
         if (!compativel) return false
       }
       if (!q) return true
-      return normalizar(`${c.nome} ${tipologia?.label || ''} ${produto?.nome || ''}`).includes(q)
+      const variaveisTexto = Object.entries(c.valores || {}).map(([chave, valor]) => `${chave} ${valor}`).join(' ')
+      return normalizar(`${c.nome} ${tipologia?.label || ''} ${produto?.nome || ''} ${variaveisTexto}`).includes(q)
     })
   }, [busca, configuracoes, linha, produtos, tipologias])
 
@@ -119,17 +133,28 @@ export default function ConfiguracoesOrcamentoPage() {
     }
 
     setSalvando(true)
+    let imagemUrl: string | null = null
+    if (imagemArquivo) {
+      imagemUrl = await uploadImagemConfiguracao(imagemArquivo)
+      if (!imagemUrl) {
+        setSalvando(false)
+        setErro('Não foi possível enviar a imagem da configuração. Tente novamente.')
+        return
+      }
+    }
+
     const resultado = await criarConfiguracaoValidadaOrcamento({
       tipologiaId,
       produtoId: produtoId || null,
       nome: nome.trim(),
       valores,
       evidencia: evidencia.trim(),
+      imagemUrl,
     })
     setSalvando(false)
     if (!resultado.ok) { setErro(resultado.error || 'Não foi possível salvar.'); return }
 
-    setNome(''); setEvidencia(''); setValores({})
+    setNome(''); setEvidencia(''); setValores({}); setImagemArquivo(null)
     setConfiguracoes(await listarConfiguracoesOrcamentoAdministracao())
     setSucesso('Configuração validada e publicada para o orçamento.')
   }
@@ -165,7 +190,7 @@ export default function ConfiguracoesOrcamentoPage() {
           <div><label className="text-xs text-slate-500">Linha (opcional, usada para filtrar)</label><select value={linhaId} onChange={e => { setLinhaId(e.target.value); setTipologiaId(''); setProdutoId('') }} className="w-full mt-1 border border-slate-300 rounded-xl p-2.5 text-sm"><option value="">Todas / a definir</option>{linhas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></div>
           <div><label className="text-xs text-slate-500">Tipologia *</label><select value={tipologiaId} onChange={e => setTipologiaId(e.target.value)} className="w-full mt-1 border border-slate-300 rounded-xl p-2.5 text-sm"><option value="">Selecione...</option>{tipologiasFiltradas.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></div>
           <div><label className="text-xs text-slate-500">Produto base (opcional)</label><select value={produtoId} onChange={e => setProdutoId(e.target.value)} className="w-full mt-1 border border-slate-300 rounded-xl p-2.5 text-sm"><option value="">Sem produto específico</option>{produtosFiltrados.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
-          <div><label className="text-xs text-slate-500">Nome que o vendedor verá *</label><input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: 3F — Reforço de aba + interno" className="w-full mt-1 border border-slate-300 rounded-xl p-2.5 text-sm"/></div>
+          <div><label className="text-xs text-slate-500">Nome que o vendedor verá *</label><input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: JC3 — vidro + persiana + vidro" className="w-full mt-1 border border-slate-300 rounded-xl p-2.5 text-sm"/></div>
 
           {tipologiaId && (
             <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -177,13 +202,24 @@ export default function ConfiguracoesOrcamentoPage() {
             </div>
           )}
 
+          <div>
+            <label className="text-xs text-slate-500">Desenho técnico / imagem da configuração (opcional)</label>
+            <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-600 hover:border-brand-navy">
+              <Upload size={16}/>
+              {imagemArquivo ? 'Trocar imagem' : 'Selecionar imagem'}
+              <input type="file" accept="image/*" className="hidden" onChange={e => setImagemArquivo(e.target.files?.[0] || null)}/>
+            </label>
+            {imagemPreview && <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white"><img src={imagemPreview} alt="Prévia da configuração" className="h-40 w-full object-contain"/></div>}
+            <p className="mt-1 text-[11px] text-slate-400">A imagem é específica desta configuração e será priorizada no card do orçamento.</p>
+          </div>
+
           <div><label className="text-xs text-slate-500">Evidência técnica da validação *</label><textarea value={evidencia} onChange={e => setEvidencia(e.target.value)} placeholder="Ex: conferido no relatório W.Vetro OC..., catálogo..., teste de produção..." className="w-full mt-1 border border-slate-300 rounded-xl p-2.5 text-sm h-24 resize-none"/></div>
           <button onClick={salvar} disabled={salvando} className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand-navy text-white py-3 text-sm font-semibold disabled:opacity-50"><Save size={16}/>{salvando ? 'Salvando...' : 'Salvar e validar'}</button>
         </section>
 
         <section className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={16}/><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar configuração, tipologia ou produto..." className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm"/></div>
+            <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={16}/><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar configuração, tipologia, produto ou variável..." className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm"/></div>
           </div>
           <div className="space-y-3">
             {configuracoesFiltradas.length === 0 && <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-sm text-slate-500">Nenhuma configuração publicada ainda.</div>}
@@ -191,7 +227,12 @@ export default function ConfiguracoesOrcamentoPage() {
               const t = tipologias.find(x => x.id === c.tipologia_id)
               const p = produtos.find(x => x.id === c.produto_id)
               return <article key={c.id} className={`bg-white border rounded-2xl p-4 ${c.ativo === false ? 'border-slate-200 opacity-60' : c.validado ? 'border-emerald-200' : 'border-amber-200'}`}>
-                <div className="flex items-start justify-between gap-3"><div><div className="flex gap-2 flex-wrap"><span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">{t?.label || 'Tipologia'}</span>{c.validado && <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 flex items-center gap-1"><ShieldCheck size={12}/> Validada</span>}</div><h3 className="font-semibold text-slate-800 mt-2">{c.nome}</h3>{p && <p className="text-xs text-slate-500 mt-1">Produto base: {p.nome}</p>}<p className="text-xs text-slate-400 mt-1">{Object.keys(c.valores || {}).length} variável(is) registrada(s)</p>{c.evidencia_validacao && <p className="text-xs text-slate-500 mt-2">Evidência: {c.evidencia_validacao}</p>}</div><button onClick={() => alternar(c)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${c.ativo === false ? 'border-emerald-200 text-emerald-700' : 'border-red-200 text-red-600'}`}>{c.ativo === false ? <span className="flex gap-1 items-center"><CheckCircle2 size={12}/> Ativar</span> : <span className="flex gap-1 items-center"><XCircle size={12}/> Desativar</span>}</button></div>
+                <div className="flex items-start gap-3">
+                  <div className="h-24 w-28 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-center">
+                    {c.imagem_url || p?.foto_url ? <img src={c.imagem_url || p?.foto_url || ''} alt={c.nome} className="h-full w-full object-contain"/> : <ImageIcon size={28} className="text-slate-300"/>}
+                  </div>
+                  <div className="flex-1 min-w-0"><div className="flex items-start justify-between gap-3"><div><div className="flex gap-2 flex-wrap"><span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">{t?.label || 'Tipologia'}</span>{c.validado && <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 flex items-center gap-1"><ShieldCheck size={12}/> Validada</span>}</div><h3 className="font-semibold text-slate-800 mt-2">{c.nome}</h3>{p && <p className="text-xs text-slate-500 mt-1">Produto base: {p.nome}</p>}<p className="text-xs text-slate-400 mt-1">{Object.keys(c.valores || {}).length} variável(is) registrada(s)</p>{c.evidencia_validacao && <p className="text-xs text-slate-500 mt-2">Evidência: {c.evidencia_validacao}</p>}</div><button onClick={() => alternar(c)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${c.ativo === false ? 'border-emerald-200 text-emerald-700' : 'border-red-200 text-red-600'}`}>{c.ativo === false ? <span className="flex gap-1 items-center"><CheckCircle2 size={12}/> Ativar</span> : <span className="flex gap-1 items-center"><XCircle size={12}/> Desativar</span>}</button></div></div>
+                </div>
               </article>
             })}
           </div>

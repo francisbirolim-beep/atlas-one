@@ -434,6 +434,7 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
               {configuracoesDoModelo.map(config => {
                 const produto = catalogo.produtos.find(p => p.id === config.produto_id)
+                const imagemCard = config.imagem_url || produto?.foto_url || null
                 const ativo = value.configuracaoPresetId === config.id
                 return (
                   <button
@@ -443,9 +444,9 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
                     className={`overflow-hidden rounded-xl border text-left transition ${ativo ? 'border-emerald-500 ring-2 ring-emerald-100 bg-emerald-50' : 'border-slate-200 bg-white hover:border-brand-navy hover:shadow-sm'}`}
                   >
                     <div className="aspect-[4/3] bg-slate-50 border-b border-slate-100 flex items-center justify-center overflow-hidden">
-                      {produto?.foto_url ? (
+                      {imagemCard ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={produto.foto_url} alt={config.nome} className="w-full h-full object-contain" />
+                        <img src={imagemCard} alt={config.nome} className="w-full h-full object-contain" />
                       ) : (
                         <div className="flex flex-col items-center gap-2 text-slate-300">
                           <ImageIcon size={34} />
