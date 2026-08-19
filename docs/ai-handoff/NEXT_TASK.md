@@ -1,6 +1,12 @@
 # NEXT_TASK.md — Atlas One
 
 > O snapshot completo anterior foi preservado em `docs/ai-handoff/archive/2026-08-18-pre-pr183-NEXT_TASK.md`.
+>
+> ## CONCLUIDO — Catalogo por Linha com modelos clicaveis (2026-08-19)
+>
+> PR #194 foi mergeada em `main` (commit `da7c6df`): os modelos/tipologias na tela `Cadastro > Produtos > Catalogo por Linha` agora sao clicaveis e levam direto para `Engenharia > Configuracoes validadas` ja filtrado pela linha e tipologia, para todas as linhas cadastradas. Ver IMPLEMENTATIONS.md para detalhe.
+>
+> 
 
 ## TAREFA ATUAL — validar cards no seletor e decidir replicação
 
