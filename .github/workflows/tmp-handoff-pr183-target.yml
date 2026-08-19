@@ -1,0 +1,72 @@
+name: Temporary Handoff PR183 Target
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  update-handoff:
+    if: github.event.pull_request.head.ref == 'docs/handoff-configuracoes-composicao-folhas'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Update handoff docs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          sections = {
+            'docs/ai-handoff/CURRENT_STATE.md': '''## PR #183 — COMPOSIÇÃO POR FOLHA / IMAGEM DE CONFIGURAÇÃO — MIGRATION PENDENTE — 2026-08-18
+
+PR #183 mergeada em `main` no commit `f89c82855218438669911246105c6c2ebc879825`. O código suporta upload manual de desenho técnico por configuração e prioriza `config.imagem_url` nos cards do orçamento. A migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` cria `imagem_url`, as variáveis `composicao_folha_1..6`, opções `vidro/persiana/tela` e vínculos declarativos apenas para L. Suprema > Janela de Correr 02/03/04/06 folhas.
+
+Estado do banco: **NÃO APLICADA EM PRODUÇÃO**. Supabase Database Control #102 passou apenas em dry-run; os passos de confirmação/apply ficaram `skipped`. Nenhuma configuração real foi criada ou liberada automaticamente. O próximo apply exige autorização explícita do Francis e auditoria de toda a fila de migrations pendentes.
+
+''',
+            'docs/ai-handoff/IMPLEMENTATIONS.md': '''## 2026-08-18 — PR #183 — composição por folha + desenho técnico por configuração
+
+- Merge em `main`: `f89c82855218438669911246105c6c2ebc879825`.
+- Implementados `imagem_url` (migration pendente), `composicao_folha_1..6`, opções `vidro/persiana/tela`, upload manual/preview na Engenharia e prioridade da imagem da configuração nos cards do orçamento.
+- Escopo dos vínculos: somente L. Suprema > Janela de Correr 02/03/04/06 folhas, por chave exata; sem criar presets reais ou inferir receitas/produtos.
+- Build Validation #256, Vercel Preview e Supabase Database Control #102 (dry-run) verdes; apply não executado.
+- Incidente operacional: um `tmp.txt` foi criado acidentalmente direto na `main` e removido imediatamente no commit seguinte, sem alteração líquida. Manter a regra branch → PR → checks → merge.
+
+''',
+            'docs/ai-handoff/NEXT_TASK.md': '''## PRÓXIMO GATE — COMPOSIÇÃO POR FOLHA / IMAGEM DE CONFIGURAÇÃO — 2026-08-18
+
+Migration pendente: `supabase/migrations/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql`.
+
+Antes de qualquer apply: conferir/dry-run de **toda** a fila pendente. Só aplicar com autorização explícita do Francis (`APPLY_PRODUCTION`). Depois confirmar: coluna `imagem_url`, 6 variáveis, 18 opções e pelo menos 15 vínculos nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas.
+
+Após o apply, cadastrar manualmente configurações reais com evidência técnica e desenho técnico. Primeira validação recomendada: `SUPREMA → JANELA DE CORRER 03 FOLHAS`, com combinações reais de vidro/persiana/tela por posição. Somente presets `validado=true`, `usar_no_orcamento=true` e `ativo=true` devem aparecer no orçamento. Não inventar composição, imagem, receita, perfil ou acessório.
+
+''',
+          }
+          for filename, section in sections.items():
+              p = Path(filename)
+              text = p.read_text(encoding='utf-8')
+              marker = section.splitlines()[0]
+              if marker in text:
+                  continue
+              pos = text.find('\n')
+              p.write_text(text[:pos+1] + '\n' + section + text[pos+1:], encoding='utf-8')
+          PY
+
+      - name: Commit handoff
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ai-handoff/CURRENT_STATE.md docs/ai-handoff/IMPLEMENTATIONS.md docs/ai-handoff/NEXT_TASK.md
+          git commit -m "docs: registrar PR 183 e migration pendente"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
