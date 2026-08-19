@@ -1,0 +1,66 @@
+name: TEMP Audit PC3 State
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  audit-pc3:
+    if: ${{ github.head_ref == 'ops/apply-pc3-corretiva-20260819' }}
+    name: Auditoria read-only PC3
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Garantir psql
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client >/dev/null
+          fi
+          psql --version
+
+      - name: Montar URL IPv4
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_PASSWORD:-}"
+          test -n "${SUPABASE_PROJECT_ID:-}"
+          DB_URL=$(python - <<'PY'
+          import os
+          import urllib.parse
+          project = os.environ['SUPABASE_PROJECT_ID']
+          password = urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{project}:{password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+
+      - name: Auditar presets sem escrever
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== TOTAL DE PRESETS ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select count(*) as total_presets from public.engenharia_variaveis_preset;"
+
+          echo '=== TIPOLOGIAS PC3/JC3 EXATAS ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select id, chave, label from public.tipologias where chave in ('l_suprema_janela_de_correr_03_folhas','l_suprema_porta_de_correr_03_folhas') order by chave;"
+
+          echo '=== PRESETS CANDIDATOS POR NOME/EVIDENCIA ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select p.id, t.chave as tipologia_chave, p.nome, p.valores::text as valores, p.validado, p.usar_no_orcamento, p.ativo, left(coalesce(p.evidencia_validacao,''),240) as evidencia from public.engenharia_variaveis_preset p left join public.tipologias t on t.id = p.tipologia_id where upper(coalesce(p.nome,'')) ~ '(SUCB|PC3|JC3|01EF|02EF|03EF|04EF)' or upper(coalesce(p.evidencia_validacao,'')) ~ '(WVETRO|W\.VETRO|PC3|JC3|SUCB|01EF|02EF|03EF|04EF)' order by p.updated_at desc limit 200;"
+
+          echo '=== TODOS OS PRESETS RESUMIDOS (MAX 200) ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select p.id, t.chave as tipologia_chave, p.nome, p.validado, p.usar_no_orcamento, p.ativo, p.created_at, p.updated_at from public.engenharia_variaveis_preset p left join public.tipologias t on t.id = p.tipologia_id order by p.updated_at desc limit 200;"
