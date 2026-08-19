@@ -22,6 +22,39 @@ export type ConfiguracaoOrcamento = {
   updated_at: string
 }
 
+type DadosConfiguracaoValidada = {
+  tipologiaId: string
+  produtoId?: string | null
+  nome: string
+  valores: Record<string, string>
+  evidencia: string
+  imagemUrl?: string | null
+}
+
+async function requisicaoConfiguracao(
+  method: 'POST' | 'PUT',
+  dados: DadosConfiguracaoValidada & { id?: string },
+): Promise<{ ok: boolean; error?: string; configuracao?: ConfiguracaoOrcamento }> {
+  const token = await tokenAtual()
+  if (!token) return { ok: false, error: 'Sessao expirada. Entre novamente no Atlas.' }
+
+  try {
+    const resp = await fetch('/api/engenharia/configuracoes-orcamento', {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(dados),
+    })
+    const json = await resp.json().catch(() => ({}))
+    if (!resp.ok) return { ok: false, error: json.error || 'Nao foi possivel salvar a configuracao.' }
+    return { ok: true, configuracao: json.configuracao as ConfiguracaoOrcamento }
+  } catch {
+    return { ok: false, error: 'Nao foi possivel conectar ao servidor para salvar a configuracao.' }
+  }
+}
+
 export async function listarConfiguracoesValidadasOrcamento(): Promise<ConfiguracaoOrcamento[]> {
   const { data, error } = await supabase
     .from('engenharia_variaveis_preset')
@@ -45,32 +78,17 @@ export async function listarConfiguracoesOrcamentoAdministracao(): Promise<Confi
   return data as ConfiguracaoOrcamento[]
 }
 
-export async function criarConfiguracaoValidadaOrcamento(dados: {
-  tipologiaId: string
-  produtoId?: string | null
-  nome: string
-  valores: Record<string, string>
-  evidencia: string
-  imagemUrl?: string | null
-}): Promise<{ ok: boolean; error?: string; configuracao?: ConfiguracaoOrcamento }> {
-  const token = await tokenAtual()
-  if (!token) return { ok: false, error: 'Sessao expirada. Entre novamente no Atlas.' }
+export async function criarConfiguracaoValidadaOrcamento(
+  dados: DadosConfiguracaoValidada,
+): Promise<{ ok: boolean; error?: string; configuracao?: ConfiguracaoOrcamento }> {
+  return requisicaoConfiguracao('POST', dados)
+}
 
-  try {
-    const resp = await fetch('/api/engenharia/configuracoes-orcamento', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(dados),
-    })
-    const json = await resp.json().catch(() => ({}))
-    if (!resp.ok) return { ok: false, error: json.error || 'Nao foi possivel salvar a configuracao.' }
-    return { ok: true, configuracao: json.configuracao as ConfiguracaoOrcamento }
-  } catch {
-    return { ok: false, error: 'Nao foi possivel conectar ao servidor para salvar a configuracao.' }
-  }
+export async function atualizarConfiguracaoValidadaOrcamento(
+  id: string,
+  dados: DadosConfiguracaoValidada,
+): Promise<{ ok: boolean; error?: string; configuracao?: ConfiguracaoOrcamento }> {
+  return requisicaoConfiguracao('PUT', { id, ...dados })
 }
 
 export async function alternarConfiguracaoOrcamento(id: string, ativo: boolean): Promise<{ ok: boolean; error?: string }> {
