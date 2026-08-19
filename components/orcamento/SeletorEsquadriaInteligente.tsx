@@ -49,8 +49,19 @@ type Catalogo = {
   opcoes: EngenhariaVariavelOpcao[]
 }
 
+const IMAGENS_PC3_VALIDADAS: Record<string, string> = {
+  '*SUCB-PC3-01EF': '/configuracoes/pc3/SUCB-PC3-01EF.png',
+  '*SUCB-PC3-02-EF': '/configuracoes/pc3/SUCB-PC3-02-EF.png',
+  '*SUCB-PC3-03-EF': '/configuracoes/pc3/SUCB-PC3-03-EF.png',
+  '*SUCB-PC3-04-EF': '/configuracoes/pc3/SUCB-PC3-04-EF.png',
+}
+
 function normalizar(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function imagemPadraoConfiguracao(nome: string) {
+  return IMAGENS_PC3_VALIDADAS[nome.trim()] || null
 }
 
 export default function SeletorEsquadriaInteligente({ value, onChange }: Props) {
@@ -290,10 +301,10 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
           </div>
 
           {configuracoesDoModelo.length > 0 ? (
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {configuracoesDoModelo.map(config => {
                 const produto = catalogo.produtos.find(p => p.id === config.produto_id)
-                const imagemCard = config.imagem_url || produto?.foto_url || null
+                const imagemCard = config.imagem_url || imagemPadraoConfiguracao(config.nome) || produto?.foto_url || null
                 const ativo = value.configuracaoPresetId === config.id
                 return (
                   <button type="button" key={config.id} onClick={() => selecionarConfiguracao(config)} className={`overflow-hidden rounded-xl border text-left transition ${ativo ? 'border-emerald-500 ring-2 ring-emerald-100 bg-emerald-50' : 'border-slate-200 bg-white hover:border-brand-navy hover:shadow-sm'}`}>
