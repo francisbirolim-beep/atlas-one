@@ -1,5 +1,27 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+
+## 2026-08-19 — PR #194 — Catalogo por Linha com modelos clicaveis
+
+PR #194 foi mergeada em `main` no commit `da7c6df`.
+
+### Implementado
+
+- `app/cadastro/produtos/por-linha/page.tsx`: os modelos (tipologias) de cada linha, antes exibidos como pilulas estaticas (`span`), agora sao links clicaveis (`Link`) para `/engenharia/configuracoes-orcamento?linha={id}&tipologia={id}`, abrindo a tela de configuracoes validadas ja filtrada pela linha e tipologia clicadas. Vale para todas as linhas/tipologias cadastradas, nao um caso isolado;
+- - `app/engenharia/configuracoes-orcamento/page.tsx` (commit `40b8ab9`, mesma PR): passou a ler os parametros de URL `linha` e `tipologia` em `carregar()` para pre-selecionar a tela direto no destino certo.
+ 
+  - ### O que NAO foi feito
+ 
+  - - nenhuma migration, alteracao de schema ou dado foi tocada;
+    - - nenhum preset/configuracao foi criado ou alterado.
+     
+      - ### Gates
+     
+      - - Build Validation: **success**;
+        - - Vercel Preview: **Ready**;
+          - - ambos os commits (`40b8ab9`, `7fe1070`) marcados **Verified**.
+           
+            - 
 ## 2026-08-18 — Cadastro real: L. Suprema > Janela De Correr 03 Folhas (4 configurações)
 
 4 configurações reais foram cadastradas em produção em `Engenharia > Configurações validadas`, com base no sistema W.Vetro real (print de tela do Francis, códigos `*SUCB-JC3-01EF` a `04EF`):
