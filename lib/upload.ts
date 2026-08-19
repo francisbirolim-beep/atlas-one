@@ -88,3 +88,10 @@ export async function uploadArquivo(file: File): Promise<string | null> {
 export async function uploadFotoProduto(file: File): Promise<string | null> {
   return subirComTentativas('produtos', file)
 }
+
+// Desenho técnico/foto de uma configuração validada de orçamento.
+// Mantém cada imagem separada do cadastro genérico do produto porque duas
+// configurações da mesma tipologia podem ter composições visuais diferentes.
+export async function uploadImagemConfiguracao(file: File): Promise<string | null> {
+  return subirComTentativas('configuracoes', file)
+}
