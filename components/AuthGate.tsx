@@ -10,7 +10,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [autenticado, setAutenticado] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const rotaPublica = pathname === '/login' || pathname.startsWith('/medicao-final/acesso/')
+  const rotaPublica = pathname === '/login'
+    || pathname === '/redefinir-senha'
+    || pathname.startsWith('/medicao-final/acesso/')
 
   useEffect(() => {
     let ativo = true
