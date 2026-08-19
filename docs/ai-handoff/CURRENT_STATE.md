@@ -1,5 +1,15 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — VISUAL PC3 NO SELETOR — 2026-08-19
+
+Branch `feat/pc3-imagens-grid-4` adiciona os quatro desenhos recortados do print W.Vetro confirmado para `SUPREMA → PORTA DE CORRER 03 FOLHAS` e os associa no seletor por correspondência **exata** do nome do preset:
+- `*SUCB-PC3-01EF` → `/configuracoes/pc3/SUCB-PC3-01EF.png`;
+- `*SUCB-PC3-02-EF` → `/configuracoes/pc3/SUCB-PC3-02-EF.png`;
+- `*SUCB-PC3-03-EF` → `/configuracoes/pc3/SUCB-PC3-03-EF.png`;
+- `*SUCB-PC3-04-EF` → `/configuracoes/pc3/SUCB-PC3-04-EF.png`.
+
+`imagem_url` continua sendo a fonte prioritária quando existir. O desenho estático é fallback auditado somente para esses quatro códigos, sem fuzzy e sem alterar banco. O grid do orçamento passa a usar 4 colunas em desktop (`lg:grid-cols-4`). Não há migration nesta branch.
+
 ## ESTADO AUTORITATIVO — PC3 SUPREMA CORRIGIDO EM PRODUÇÃO — 2026-08-19
 
 ### Evidência W.Vetro confirmada
@@ -51,7 +61,7 @@ A transação só conclui se todos os pós-checks passarem. O estado autoritativ
 
 ### Imagens dos quatro PC3
 
-Os desenhos foram recortados novamente do print original do W.Vetro e estão prontos para upload manual nos quatro presets. Como `imagem_url` não foi alterado pela migration, o próximo passo é usar a edição implementada na PR #196 para anexar a imagem correta a cada preset existente, sem duplicá-lo.
+Os desenhos foram recortados novamente do print original do W.Vetro. A branch visual atual os mantém como ativos estáticos auditados para os quatro códigos exatos; a edição da PR #196 continua disponível para substituir o fallback por `imagem_url` persistida quando desejado.
 
 ### Arquitetura de composição — decisão atual
 
@@ -66,4 +76,4 @@ Não replicar a modelagem `composicao_folha_N = vidro|persiana|tela` para novas 
 - qualquer apply exige autorização explícita e específica do Francis;
 - antes do apply, auditar a fila completa de migrations pendentes;
 - nunca inferir tipologia, composição, receita, perfil, acessório, fórmula ou vínculo por semelhança de nome;
-- a imagem/desenho de configuração é evidência visual e upload manual; não reinterpretar automaticamente seu conteúdo como receita técnica.
+- a imagem/desenho de configuração é evidência visual; não reinterpretar automaticamente seu conteúdo como receita técnica.
