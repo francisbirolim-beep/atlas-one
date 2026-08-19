@@ -1,0 +1,178 @@
+name: TEMP Patch Modelos Tipologia
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.head_ref == 'fix/orcamento-modelos-suprema-e-busca-tipologia' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Aplicar ajustes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # 1) Orçamento: remover cache persistente que pode manter vínculos antigos durante a sessão.
+          p = Path('components/orcamento/SeletorEsquadriaInteligente.tsx')
+          s = p.read_text()
+          old = '''let catalogoCache: Catalogo | null = null
+          let catalogoPromise: Promise<Catalogo> | null = null
+
+          function carregarCatalogo(): Promise<Catalogo> {
+            if (catalogoCache) return Promise.resolve(catalogoCache)
+            if (!catalogoPromise) {
+              catalogoPromise = Promise.all([
+                listarLinhasTecnicas(),
+                listarTipologias(),
+                listarProdutos(true),
+                listarConfiguracoesValidadasOrcamento(),
+                listarTodasOpcoes(),
+              ]).then(([linhas, tipologias, produtos, configuracoes, opcoes]) => {
+                catalogoCache = {
+                  linhas: linhas.filter(l => l.ativo),
+                  tipologias,
+                  produtos: produtos.filter(p => Boolean(p.unidade?.trim()) && (p.categoria === 'porta_janela_padrao' || p.categoria === 'produto')),
+                  configuracoes,
+                  opcoes,
+                }
+                return catalogoCache
+              })
+            }
+            return catalogoPromise
+          }
+          '''.replace('          ','')
+          new = '''let catalogoPromise: Promise<Catalogo> | null = null
+
+          function carregarCatalogo(): Promise<Catalogo> {
+            // Compartilha somente requests concorrentes. Depois que a carga termina,
+            // a próxima montagem do seletor relê os vínculos atuais do banco.
+            if (!catalogoPromise) {
+              catalogoPromise = Promise.all([
+                listarLinhasTecnicas(),
+                listarTipologias(),
+                listarProdutos(true),
+                listarConfiguracoesValidadasOrcamento(),
+                listarTodasOpcoes(),
+              ])
+                .then(([linhas, tipologias, produtos, configuracoes, opcoes]) => ({
+                  linhas: linhas.filter(l => l.ativo),
+                  tipologias,
+                  produtos: produtos.filter(p => Boolean(p.unidade?.trim()) && (p.categoria === 'porta_janela_padrao' || p.categoria === 'produto')),
+                  configuracoes,
+                  opcoes,
+                }))
+                .finally(() => {
+                  catalogoPromise = null
+                })
+            }
+            return catalogoPromise
+          }
+          '''.replace('          ','')
+          assert old in s, 'bloco de cache do seletor não encontrado'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 2) Cadastro: trocar 23 chips abertos por busca de tipologia.
+          p = Path('app/cadastro/produtos/por-linha/page.tsx')
+          s = p.read_text()
+          old = "  const [linhaId, setLinhaId] = useState('')\n  const [busca, setBusca] = useState('')\n"
+          new = "  const [linhaId, setLinhaId] = useState('')\n  const [busca, setBusca] = useState('')\n  const [buscaTipologia, setBuscaTipologia] = useState('')\n"
+          assert old in s, 'states do cadastro não encontrados'
+          s = s.replace(old, new, 1)
+
+          old = "  function escolherLinha(id: string) {\n    setLinhaId(id)\n    setBusca('')\n"
+          new = "  function escolherLinha(id: string) {\n    setLinhaId(id)\n    setBusca('')\n    setBuscaTipologia('')\n"
+          assert old in s, 'escolherLinha não encontrado'
+          s = s.replace(old, new, 1)
+
+          marker = "  const produtosDaLinha = useMemo(() => {\n"
+          insert = '''  const tipologiasFiltradas = useMemo(() => {
+            const q = buscaTipologia.trim().toLocaleLowerCase('pt-BR')
+            if (!q) return []
+            return tipologiasDaLinha
+              .filter(tipologia => `${tipologia.label} ${tipologia.chave}`.toLocaleLowerCase('pt-BR').includes(q))
+              .slice(0, 12)
+          }, [tipologiasDaLinha, buscaTipologia])
+
+          '''.replace('          ','')
+          assert marker in s, 'marcador produtosDaLinha não encontrado'
+          s = s.replace(marker, insert + marker, 1)
+
+          old = '''              {tipologiasDaLinha.length > 0 ? (
+                <>
+                  <p className="text-[11px] text-slate-400 mt-3">Clique em um modelo para cadastrar ou ajustar as configurações validadas dele.</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {tipologiasDaLinha.map(tipologia => (
+                      <Link
+                        key={tipologia.id}
+                        href={`/engenharia/configuracoes-orcamento?linha=${encodeURIComponent(linhaSelecionada.id)}&tipologia=${encodeURIComponent(tipologia.id)}`}
+                        title="Abrir configurações validadas desta tipologia"
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-navy hover:bg-brand-navyLight hover:text-brand-navy transition"
+                      >
+                        {tipologia.label}
+                      </Link>
+                    ))}
+                  </div>
+                </>
+              ) : (
+          '''.replace('          ','')
+          new = '''              {tipologiasDaLinha.length > 0 ? (
+                <>
+                  <p className="text-[11px] text-slate-400 mt-3">Pesquise o modelo que deseja configurar. Exemplo: porta de correr 3 folhas.</p>
+                  <div className="relative mt-3">
+                    <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                    <input
+                      value={buscaTipologia}
+                      onChange={e => setBuscaTipologia(e.target.value)}
+                      placeholder="Pesquisar tipologia / modelo"
+                      className="w-full border border-slate-200 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/30"
+                    />
+                  </div>
+
+                  {!buscaTipologia.trim() ? (
+                    <div className="mt-3 rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
+                      <Search size={24} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-sm font-medium text-slate-600">Digite para localizar um dos {tipologiasDaLinha.length} modelos da {linhaSelecionada.nome}.</p>
+                      <p className="text-xs text-slate-400 mt-1">A lista completa não fica mais aberta na tela.</p>
+                    </div>
+                  ) : tipologiasFiltradas.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-2 mt-3">
+                      {tipologiasFiltradas.map(tipologia => (
+                        <Link
+                          key={tipologia.id}
+                          href={`/engenharia/configuracoes-orcamento?linha=${encodeURIComponent(linhaSelecionada.id)}&tipologia=${encodeURIComponent(tipologia.id)}`}
+                          title="Abrir configurações validadas desta tipologia"
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 hover:border-brand-navy hover:bg-brand-navyLight hover:text-brand-navy transition"
+                        >
+                          {tipologia.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      Nenhum modelo da {linhaSelecionada.nome} corresponde a “{buscaTipologia.trim()}”.
+                    </div>
+                  )}
+                </>
+              ) : (
+          '''.replace('          ','')
+          assert old in s, 'bloco de tipologias abertas não encontrado'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          git config user.name "atlas-bot"
+          git config user.email "atlas-bot@users.noreply.github.com"
+          git add components/orcamento/SeletorEsquadriaInteligente.tsx app/cadastro/produtos/por-linha/page.tsx
+          git commit -m "fix: atualizar modelos do orçamento e pesquisar tipologias"
+          git push origin HEAD:${{ github.head_ref }}
