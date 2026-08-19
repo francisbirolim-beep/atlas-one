@@ -1,14 +1,34 @@
 # CURRENT_STATE.md — Atlas One
 
-## EM VALIDAÇÃO — VISUAL PC3 NO SELETOR — 2026-08-19
+## ESTADO AUTORITATIVO — RECUPERAÇÃO E GESTÃO DE SENHAS — 2026-08-19
 
-Branch `feat/pc3-imagens-grid-4` adiciona os quatro desenhos recortados do print W.Vetro confirmado para `SUPREMA → PORTA DE CORRER 03 FOLHAS` e os associa no seletor por correspondência **exata** do nome do preset:
+PR #207 foi mergeada em `main` no commit `045f1fc8f4a75a02a19faa70e51c57d25672798d`, sem migration.
+
+Implementado:
+- Login possui `Esqueci minha senha`;
+- usuário pode informar nome de usuário ou e-mail; o Atlas resolve o e-mail cadastrado e solicita recovery pelo Supabase Auth;
+- link de recovery retorna para a rota pública `/redefinir-senha`;
+- nessa rota o usuário define e confirma a nova senha e depois volta ao login;
+- Master possui `Configurações > Usuários e Senhas`, com busca e redefinição direta da senha de qualquer usuário;
+- troca direta usa o endpoint autenticado `/api/atualizar-usuario` e `supabaseAdmin.auth.admin.updateUserById` somente no servidor;
+- a API foi corrigida para não apagar WhatsApp/nome/e-mail/role quando esses campos não forem enviados;
+- Sidebar do Master possui atalho `Usuários e Senhas`.
+
+Gates da PR #207: Build Validation verde e Vercel Preview `READY`. O Preview confirmou renderização do botão `Esqueci minha senha`. O teste funcional restante é disparar um e-mail real em produção e confirmar o redirect/recovery completo, além de testar uma redefinição administrativa com usuário de teste.
+
+Documento técnico: `docs/tecnico/recuperacao-senha-usuarios-2026-08-19.md`.
+
+## CONCLUÍDO — VISUAL PC3 NO SELETOR — PR #206 — 2026-08-19
+
+PR #206 foi mergeada e publicada em produção no commit `abebb222cd4c056f75a0adae341062774c83b501`.
+
+Os quatro desenhos recortados do print W.Vetro confirmado para `SUPREMA → PORTA DE CORRER 03 FOLHAS` estão associados no seletor por correspondência **exata** do nome do preset:
 - `*SUCB-PC3-01EF` → `/configuracoes/pc3/SUCB-PC3-01EF.png`;
 - `*SUCB-PC3-02-EF` → `/configuracoes/pc3/SUCB-PC3-02-EF.png`;
 - `*SUCB-PC3-03-EF` → `/configuracoes/pc3/SUCB-PC3-03-EF.png`;
 - `*SUCB-PC3-04-EF` → `/configuracoes/pc3/SUCB-PC3-04-EF.png`.
 
-`imagem_url` continua sendo a fonte prioritária quando existir. O desenho estático é fallback auditado somente para esses quatro códigos, sem fuzzy e sem alterar banco. O grid do orçamento passa a usar 4 colunas em desktop (`lg:grid-cols-4`). Não há migration nesta branch.
+`imagem_url` continua sendo a fonte prioritária quando existir. O desenho estático é fallback auditado somente para esses quatro códigos, sem fuzzy e sem alterar banco. O grid do orçamento usa 4 colunas em desktop (`lg:grid-cols-4`).
 
 ## ESTADO AUTORITATIVO — PC3 SUPREMA CORRIGIDO EM PRODUÇÃO — 2026-08-19
 
@@ -48,20 +68,11 @@ Com autorização explícita do Francis, o segundo apply foi executado pela oper
 
 A transação só conclui se todos os pós-checks passarem. O estado autoritativo em produção é:
 - exatamente 4 presets sob `l_suprema_porta_de_correr_03_folhas`;
-- nomes exatos:
-  - `*SUCB-PC3-01EF`;
-  - `*SUCB-PC3-02-EF`;
-  - `*SUCB-PC3-03-EF`;
-  - `*SUCB-PC3-04-EF`;
+- nomes exatos `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
 - zero desses alvos permanece em `l_suprema_janela_de_correr_03_folhas`;
-- `valores = {}` nos 4 presets, removendo a composição inferida anteriormente;
+- `valores = {}` nos 4 presets;
 - zero vínculos `composicao_folha_1..6` nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
-- as variáveis/opções globais `composicao_folha_N` permanecem no catálogo para futura remodelagem correta;
-- imagens não foram alteradas pela migration.
-
-### Imagens dos quatro PC3
-
-Os desenhos foram recortados novamente do print original do W.Vetro. A branch visual atual os mantém como ativos estáticos auditados para os quatro códigos exatos; a edição da PR #196 continua disponível para substituir o fallback por `imagem_url` persistida quando desejado.
+- as variáveis/opções globais `composicao_folha_N` permanecem no catálogo para futura remodelagem correta.
 
 ### Arquitetura de composição — decisão atual
 
@@ -76,4 +87,4 @@ Não replicar a modelagem `composicao_folha_N = vidro|persiana|tela` para novas 
 - qualquer apply exige autorização explícita e específica do Francis;
 - antes do apply, auditar a fila completa de migrations pendentes;
 - nunca inferir tipologia, composição, receita, perfil, acessório, fórmula ou vínculo por semelhança de nome;
-- a imagem/desenho de configuração é evidência visual; não reinterpretar automaticamente seu conteúdo como receita técnica.
+- a imagem/desenho de configuração é evidência visual e não deve ser reinterpretada automaticamente como receita técnica.

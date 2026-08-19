@@ -1,31 +1,34 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar os quatro desenhos PC3 no orçamento
+## TAREFA ATUAL — validar recuperação de senha em produção
 
-A branch `feat/pc3-imagens-grid-4` adicionou os quatro desenhos confirmados do print W.Vetro ao repositório e alterou o seletor para exibi-los somente nos quatro presets exatos de `SUPREMA → PORTA DE CORRER 03 FOLHAS`.
+A PR #207 já foi mergeada em `main` no commit `045f1fc8f4a75a02a19faa70e51c57d25672798d`, sem migration.
 
-Estado desta etapa:
-- `*SUCB-PC3-01EF` → desenho estático validado;
-- `*SUCB-PC3-02-EF` → desenho estático validado;
-- `*SUCB-PC3-03-EF` → desenho estático validado;
-- `*SUCB-PC3-04-EF` → desenho estático validado;
-- `imagem_url` manual continua tendo prioridade;
-- nenhum outro preset recebe imagem por semelhança;
-- desktop passa a mostrar até 4 cards na mesma linha;
-- nenhuma migration e nenhum write de banco nesta etapa.
+Funcionalidades prontas:
+- login com `Esqueci minha senha`;
+- recuperação por nome de usuário ou e-mail;
+- envio do link pelo Supabase Auth;
+- rota pública `/redefinir-senha` para criar nova senha;
+- Master com `Configurações > Usuários e Senhas` para redefinição direta;
+- endpoint administrativo preserva campos que não forem enviados.
 
-### Próximos passos diretos
+### Próximos testes obrigatórios
 
-1. concluir PR com Build Validation e Vercel Preview verdes;
-2. abrir o preview e validar `SUPREMA → PORTA DE CORRER 03 FOLHAS`;
-3. confirmar que os quatro cards mostram, respectivamente, os desenhos 01EF, 02-EF, 03-EF e 04-EF;
-4. conferir que o layout desktop mantém os quatro cards na mesma linha quando houver largura suficiente;
-5. depois da validação visual, decidir se vale persistir as mesmas imagens em `imagem_url` via edição Master, mantendo o ativo estático apenas como fallback histórico;
-6. não preencher `composicao_folha_N` com base apenas nos desenhos.
+1. na produção, abrir `/login` e clicar `Esqueci minha senha`;
+2. informar um usuário/e-mail real controlado para teste;
+3. confirmar recebimento do e-mail do Supabase Auth;
+4. abrir o link e confirmar que retorna para `/redefinir-senha` no domínio do Atlas;
+5. definir uma nova senha e confirmar login com ela;
+6. como Master, abrir `Configurações > Usuários e Senhas`, escolher um usuário de teste e redefinir a senha diretamente;
+7. confirmar que nome, e-mail, WhatsApp e role do usuário permanecem inalterados após a troca apenas de senha.
 
-### Estado técnico já consolidado
+### Se o e-mail não redirecionar para o Atlas
 
-A migration `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql` já foi aplicada em produção com autorização explícita do Francis. Os quatro presets estão em `l_suprema_porta_de_correr_03_folhas`, com `valores = {}`, e não permanecem na tipologia Janela de Correr 03 Folhas.
+Verificar no Supabase Auth a configuração de `Site URL` / `Redirect URLs` e incluir o domínio de produção do Atlas para `/redefinir-senha`. Não alterar essa configuração por suposição: conferir o estado real antes.
+
+### Estado PC3 consolidado
+
+PR #206 está em produção com os quatro desenhos exatos de `SUPREMA → PORTA DE CORRER 03 FOLHAS` e grid de 4 cards no desktop. A migration corretiva PC3 já foi aplicada anteriormente com autorização explícita; não há migration relacionada à tarefa de senhas.
 
 ### Regras permanentes
 
@@ -35,5 +38,4 @@ A migration `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql` já foi aplica
 - nunca aplicar migration sem autorização explícita e específica do Francis;
 - antes de qualquer apply, auditar a fila completa de migrations pendentes;
 - nunca interpretar um simples `pode continuar` como autorização de apply quando a autorização específica não tiver sido dada;
-- nunca inventar vínculo, tipologia, composição, receita, perfil, acessório ou fórmula por semelhança de nome;
-- desenho técnico é evidência visual; não convertê-lo automaticamente em receita ou composição estruturada sem regra validada.
+- nunca inventar vínculo, tipologia, composição, receita, perfil, acessório ou fórmula por semelhança de nome.
