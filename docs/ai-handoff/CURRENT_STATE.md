@@ -1,17 +1,15 @@
 # CURRENT_STATE.md — Atlas One
 
-## ESTADO AUTORITATIVO — CORREÇÃO PC3 SUPREMA PREPARADA, APPLY PENDENTE — 2026-08-19
+## ESTADO AUTORITATIVO — PC3 SUPREMA CORRIGIDO EM PRODUÇÃO — 2026-08-19
 
-> O snapshot completo imediatamente anterior a esta correção foi preservado em `docs/ai-handoff/archive/2026-08-19-pre-pc3-correction-CURRENT_STATE.md`.
-
-### Evidência W.Vetro corrigida
+### Evidência W.Vetro confirmada
 
 O print real compartilhado pelo Francis mostra explicitamente:
 - Linha: `L. SUPREMA`;
 - Modelo: `PORTA DE CORRER 03 FOLHAS`;
 - projetos: `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`.
 
-Portanto, o cadastro/documentação anterior como `Janela de Correr 03 Folhas / JC3` está incorreto. Também foram inferidos valores `composicao_folha_N` que não são sustentados pelo desenho real; o projeto 02EF, por exemplo, possui composição vertical mista dentro dos painéis, o que não cabe no modelo simples `vidro|persiana|tela` por folha.
+O cadastro anterior como `Janela de Correr 03 Folhas / JC3` estava incorreto. Também tinham sido gravados valores `composicao_folha_N` inferidos visualmente e não sustentados pela evidência real.
 
 ### PR #196 — edição de preset existente — CONCLUÍDA
 
@@ -22,38 +20,38 @@ Implementado:
 - `PUT /api/engenharia/configuracoes-orcamento`, Master-only;
 - pré-carregar nome, evidência, valores, produto e imagem;
 - trocar/remover imagem no mesmo preset;
-- linha e tipologia ficam bloqueadas na edição para preservar a identidade técnica;
+- linha e tipologia ficam bloqueadas na edição para preservar identidade técnica;
 - checagem de duplicidade ignora o próprio ID;
 - criação/ativação continuam separadas.
 
-### PR #197 — correção PC3/JC3 — MERGEADA, NÃO APLICADA
+### PR #197 + PR #200 — correção PC3/JC3 — APLICADA EM PRODUÇÃO
 
-PR #197 foi mergeada em `main` no commit `46a22f4527b60f2bd6da90089f6bb4f018bfa3f5`.
+PR #197 introduziu a migration `supabase/migrations/20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
 
-Migration pendente: `supabase/migrations/20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
+O primeiro apply autorizado foi bloqueado com segurança antes de qualquer alteração: o gate original comparava o nome inteiro normalizado do preset com o código puro e encontrou 0 alvos. Auditoria read-only do banco confirmou que existiam exatamente 4 presets, com nomes descritivos contendo os códigos `*SUCB-JC3-01EF` a `04EF`.
 
-Gates do head final da PR #197:
-- Build Validation #282: **success**;
-- Vercel Preview: **success**;
-- Supabase Database Control #104: **success em dry-run**;
-- confirmação de produção: **skipped**;
-- apply: **skipped**.
+PR #200 corrigiu apenas esse gate para detectar a sequência exata do código dentro do nome normalizado, sem fuzzy/semelhança. Gates da PR #200: Build Validation verde, Vercel Preview verde e Supabase Database Control dry-run verde.
 
-A migration, se autorizada/aplicada, foi preparada para:
-1. exigir exatamente os quatro presets alvo, por código normalizado exato;
-2. mover os quatro de `l_suprema_janela_de_correr_03_folhas` para `l_suprema_porta_de_correr_03_folhas`;
-3. corrigir os nomes para os códigos PC3 do print;
-4. limpar `valores` para `{}` em vez de substituir uma inferência errada por outra;
-5. acrescentar evidência auditada da correção;
-6. remover os vínculos `composicao_folha_1..6` criados sem evidência suficiente nas tipologias Suprema > Janela de Correr 02/03/04/06 folhas;
-7. preservar variáveis/opções globais para futura remodelagem;
-8. não criar presets, receitas, produtos, preços, fórmulas ou imagens.
+Com autorização explícita do Francis, o segundo apply foi executado pela operação temporária da PR #201. Antes do write, a fila completa foi auditada novamente e continha exatamente uma migration pendente: `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`. O apply terminou com sucesso e o histórico remoto confirmou `20260819062000 | 20260819062000`. A PR #201 foi fechada sem merge, portanto seu workflow temporário não entrou na `main`.
 
-### Estado REAL de produção neste momento
+### Estado final confirmado pela própria migration
 
-A migration corretiva **ainda não foi aplicada**. Portanto o banco de produção ainda deve ser tratado como contendo os quatro presets no cadastro anterior incorreto (Janela/JC3) e os vínculos de composição nas janelas, até existir apply confirmado.
+A transação só conclui se todos os pós-checks passarem. O estado autoritativo em produção é:
+- exatamente 4 presets sob `l_suprema_porta_de_correr_03_folhas`;
+- nomes exatos:
+  - `*SUCB-PC3-01EF`;
+  - `*SUCB-PC3-02-EF`;
+  - `*SUCB-PC3-03-EF`;
+  - `*SUCB-PC3-04-EF`;
+- zero desses alvos permanece em `l_suprema_janela_de_correr_03_folhas`;
+- `valores = {}` nos 4 presets, removendo a composição inferida anteriormente;
+- zero vínculos `composicao_folha_1..6` nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
+- as variáveis/opções globais `composicao_folha_N` permanecem no catálogo para futura remodelagem correta;
+- imagens não foram alteradas pela migration.
 
-Não declarar PC3 corrigido em produção antes desse apply.
+### Imagens dos quatro PC3
+
+Os desenhos foram recortados novamente do print original do W.Vetro e estão prontos para upload manual nos quatro presets. Como `imagem_url` não foi alterado pela migration, o próximo passo é usar a edição implementada na PR #196 para anexar a imagem correta a cada preset existente, sem duplicá-lo.
 
 ### Arquitetura de composição — decisão atual
 
