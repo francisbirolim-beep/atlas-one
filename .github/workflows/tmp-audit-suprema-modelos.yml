@@ -1,0 +1,45 @@
+name: TEMP Audit Suprema Modelos
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: ${{ github.head_ref == 'audit/suprema-orcamento-modelos' }}
+    name: Auditoria read-only Suprema
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build DB URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_PASSWORD:-}"
+          test -n "${SUPABASE_PROJECT_ID:-}"
+          DB_URL=$(python - <<'PY'
+          import os, urllib.parse
+          p=os.environ['SUPABASE_PROJECT_ID']
+          pw=urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{p}:{pw}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+      - name: Audit Suprema lines and relations
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== LINHAS TECNICAS SUPREMA ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select l.id,l.chave,l.nome,l.ativo,l.ordem,count(distinct lt.tipologia_id) as tipologias,count(distinct lp.produto_id) as produtos from public.linhas_tecnicas l left join public.linha_tipologias lt on lt.linha_id=l.id left join public.linha_produtos lp on lp.linha_id=l.id where upper(l.nome) like '%SUPREMA%' or upper(l.chave) like '%SUPREMA%' group by l.id,l.chave,l.nome,l.ativo,l.ordem order by l.ordem,l.nome;"
+          echo '=== TIPOLOGIAS DA SUPREMA ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select l.id as linha_id,l.nome as linha,t.id,t.chave,t.label from public.linhas_tecnicas l join public.linha_tipologias lt on lt.linha_id=l.id join public.tipologias t on t.id=lt.tipologia_id where upper(l.nome)='SUPREMA' order by t.label;"
+          echo '=== PRESETS PC3 ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "select p.id,t.chave as tipologia,p.nome,p.validado,p.usar_no_orcamento,p.ativo,p.imagem_url from public.engenharia_variaveis_preset p join public.tipologias t on t.id=p.tipologia_id where t.chave='l_suprema_porta_de_correr_03_folhas' order by p.nome;"
