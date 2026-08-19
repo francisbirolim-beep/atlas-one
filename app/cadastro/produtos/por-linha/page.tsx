@@ -36,6 +36,7 @@ export default function ProdutosPorLinha() {
   const [tipologias, setTipologias] = useState<Tipologia[]>([])
   const [linhaId, setLinhaId] = useState('')
   const [busca, setBusca] = useState('')
+  const [buscaTipologia, setBuscaTipologia] = useState('')
 
   useEffect(() => {
     carregar()
@@ -72,6 +73,7 @@ export default function ProdutosPorLinha() {
   function escolherLinha(id: string) {
     setLinhaId(id)
     setBusca('')
+    setBuscaTipologia('')
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (id) params.set('linha', id)
@@ -98,6 +100,14 @@ export default function ProdutosPorLinha() {
     const ids = new Set(linhaSelecionada.tipologia_ids || [])
     return tipologias.filter(tipologia => ids.has(tipologia.id))
   }, [linhaSelecionada, tipologias])
+
+  const tipologiasFiltradas = useMemo(() => {
+  const q = buscaTipologia.trim().toLocaleLowerCase('pt-BR')
+  if (!q) return []
+  return tipologiasDaLinha
+    .filter(tipologia => `${tipologia.label} ${tipologia.chave}`.toLocaleLowerCase('pt-BR').includes(q))
+    .slice(0, 12)
+}, [tipologiasDaLinha, buscaTipologia])
 
   const produtosDaLinha = useMemo(() => {
     if (!linhaSelecionada) return []
@@ -196,23 +206,45 @@ export default function ProdutosPorLinha() {
                 </Link>
               </div>
 
-              {tipologiasDaLinha.length > 0 ? (
-                <>
-                  <p className="text-[11px] text-slate-400 mt-3">Clique em um modelo para cadastrar ou ajustar as configurações validadas dele.</p>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {tipologiasDaLinha.map(tipologia => (
-                      <Link
-                        key={tipologia.id}
-                        href={`/engenharia/configuracoes-orcamento?linha=${encodeURIComponent(linhaSelecionada.id)}&tipologia=${encodeURIComponent(tipologia.id)}`}
-                        title="Abrir configurações validadas desta tipologia"
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-navy hover:bg-brand-navyLight hover:text-brand-navy transition"
-                      >
-                        {tipologia.label}
-                      </Link>
-                    ))}
-                  </div>
-                </>
-              ) : (
+    {tipologiasDaLinha.length > 0 ? (
+      <>
+        <p className="text-[11px] text-slate-400 mt-3">Pesquise o modelo que deseja configurar. Exemplo: porta de correr 3 folhas.</p>
+        <div className="relative mt-3">
+<Search size={16} className="absolute left-3 top-3 text-slate-400" />
+<input
+  value={buscaTipologia}
+  onChange={e => setBuscaTipologia(e.target.value)}
+  placeholder="Pesquisar tipologia / modelo"
+  className="w-full border border-slate-200 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/30"
+/>
+        </div>
+
+        {!buscaTipologia.trim() ? (
+<div className="mt-3 rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
+  <Search size={24} className="mx-auto text-slate-300 mb-2" />
+  <p className="text-sm font-medium text-slate-600">Digite para localizar um dos {tipologiasDaLinha.length} modelos da {linhaSelecionada.nome}.</p>
+  <p className="text-xs text-slate-400 mt-1">A lista completa não fica mais aberta na tela.</p>
+</div>
+        ) : tipologiasFiltradas.length > 0 ? (
+<div className="grid sm:grid-cols-2 gap-2 mt-3">
+  {tipologiasFiltradas.map(tipologia => (
+    <Link
+      key={tipologia.id}
+      href={`/engenharia/configuracoes-orcamento?linha=${encodeURIComponent(linhaSelecionada.id)}&tipologia=${encodeURIComponent(tipologia.id)}`}
+      title="Abrir configurações validadas desta tipologia"
+      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 hover:border-brand-navy hover:bg-brand-navyLight hover:text-brand-navy transition"
+    >
+      {tipologia.label}
+    </Link>
+  ))}
+</div>
+        ) : (
+<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+  Nenhum modelo da {linhaSelecionada.nome} corresponde a “{buscaTipologia.trim()}”.
+</div>
+        )}
+      </>
+    ) : (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="text-sm font-semibold text-amber-900">Nenhum modelo cadastrado nesta linha.</p>
                   <p className="text-xs text-amber-800 mt-1">Primeiro vincule as tipologias da {linhaSelecionada.nome}. Enquanto isso, o orçamento continuará mostrando “Nenhum modelo disponível”.</p>

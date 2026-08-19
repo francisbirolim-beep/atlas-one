@@ -57,11 +57,11 @@ type ModeloOpcao = {
   configuracoes: number
 }
 
-let catalogoCache: Catalogo | null = null
 let catalogoPromise: Promise<Catalogo> | null = null
 
 function carregarCatalogo(): Promise<Catalogo> {
-  if (catalogoCache) return Promise.resolve(catalogoCache)
+  // Compartilha somente requests concorrentes. Depois que a carga termina,
+  // a próxima montagem do seletor relê os vínculos atuais do banco.
   if (!catalogoPromise) {
     catalogoPromise = Promise.all([
       listarLinhasTecnicas(),
@@ -69,16 +69,17 @@ function carregarCatalogo(): Promise<Catalogo> {
       listarProdutos(true),
       listarConfiguracoesValidadasOrcamento(),
       listarTodasOpcoes(),
-    ]).then(([linhas, tipologias, produtos, configuracoes, opcoes]) => {
-      catalogoCache = {
+    ])
+      .then(([linhas, tipologias, produtos, configuracoes, opcoes]) => ({
         linhas: linhas.filter(l => l.ativo),
         tipologias,
         produtos: produtos.filter(p => Boolean(p.unidade?.trim()) && (p.categoria === 'porta_janela_padrao' || p.categoria === 'produto')),
         configuracoes,
         opcoes,
-      }
-      return catalogoCache
-    })
+      }))
+      .finally(() => {
+        catalogoPromise = null
+      })
   }
   return catalogoPromise
 }
