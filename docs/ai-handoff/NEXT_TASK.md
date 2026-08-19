@@ -2,27 +2,19 @@
 
 > O snapshot completo anterior foi preservado em `docs/ai-handoff/archive/2026-08-18-pre-pr183-NEXT_TASK.md`.
 
-## TAREFA ATUAL — cadastrar configurações reais de composição de folha (L. Suprema)
+## TAREFA ATUAL — validar cards no seletor e decidir replicação
 
-A migration `20260818210500_configuracoes_composicao_folhas_imagem_v1.sql` foi **APLICADA EM PRODUÇÃO em 2026-08-18**, com autorização explícita do Francis, após auditoria da fila completa de migrations pendentes (só essa estava pendente).
+O cadastro humano de L. Suprema > Janela De Correr 03 Folhas está concluído: 4 configurações reais (`*SUCB-JC3-01EF` a `04EF`) publicadas em `Engenharia > Configurações validadas`, todas `validado=true`, `ativo=true`, `usar_no_orcamento=true`, com composição de folha e evidência técnica real (ver CURRENT_STATE.md e IMPLEMENTATIONS.md para o detalhe de cada uma).
 
-Pós-estado confirmado direto no banco:
-- coluna `engenharia_variaveis_preset.imagem_url` ativa;
-- 6 variáveis `composicao_folha_1` a `composicao_folha_6`;
-- 18 opções (`vidro`/`persiana`/`tela` por posição);
-- 15 vínculos em `engenharia_tipologia_variaveis` para L. Suprema > Janela de Correr 02/03/04/06 folhas;
-- 0 linhas em `engenharia_variaveis_preset` — nenhuma configuração real foi criada automaticamente.
+### Pendências diretas
 
-### Próximo passo — cadastro humano, não código
+1. **Upload manual de 4 imagens.** `imagem_url` está `null` nos 4 presets. As imagens já recortadas (`card_01EF.png` a `card_04EF.png`) foram entregues ao Francis; falta ele subir cada uma em `Engenharia > Configurações validadas` (editar a configuração → "Selecionar imagem"). Sem isso, os cards caem no fallback `produto.foto_url`, que também está vazio (nenhum produto base vinculado).
+2. **Validar visualmente no seletor de orçamento** (`SeletorEsquadriaInteligente`) que os 4 cards aparecem corretamente com nome e evidência, e depois com imagem após o upload manual.
+3. **Revisar os casos 03EF/04EF**: só têm 2 folhas preenchidas (folha 3 em branco) porque o desenho técnico do W.Vetro para esses dois códigos mostra apenas 2 painéis, apesar do agrupamento "03 folhas". Isso está sinalizado na evidência técnica de cada um; vale uma checagem humana para confirmar se é uma peculiaridade real do modelo ou se falta uma variante.
 
-Em `Engenharia > Configurações validadas`:
-1. escolher Linha = L. Suprema, Tipologia = Janela De Correr 03 Folhas (primeira validação recomendada, com base no modelo real do sistema W.Vetro compartilhado pelo Francis);
-2. preencher a composição real de cada folha (vidro/persiana/tela) só com combinações tecnicamente comprovadas;
-3. registrar evidência técnica da validação;
-4. subir manualmente o desenho técnico/foto da configuração (upload, sem geração automática);
-5. confirmar no seletor de orçamento que o card aparece com a imagem certa (produto.foto_url só como fallback) e que somente presets `validado=true`, `usar_no_orcamento=true` e `ativo=true` aparecem.
+### Depois disso
 
-Não inventar composição, código ou vínculo por semelhança de nome. Depois de validar o caso da Janela De Correr 03 Folhas, avaliar se replica para 02/04/06 folhas e para as demais linhas técnicas (GOLD, LINHA 30, etc.), sempre com evidência real antes de estender.
+Avaliar se replica o mesmo cadastro para as tipologias 02/04/06 folhas da L. Suprema (já têm variáveis `composicao_folha_N` vinculadas, só falta preset real) e para outras linhas técnicas (GOLD, LINHA 30, etc.), sempre com evidência real do W.Vetro antes de estender — nunca por semelhança de nome ou código.
 
 ## Regras que continuam obrigatórias
 
