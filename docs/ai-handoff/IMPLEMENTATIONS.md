@@ -1,11 +1,39 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-19 — visual PC3 auditado + grid de 4 cards — EM VALIDAÇÃO
+## 2026-08-19 — PR #207 — recuperação e gestão de senhas — CONCLUÍDA
 
-Branch `feat/pc3-imagens-grid-4`.
+Merge em `main`: `045f1fc8f4a75a02a19faa70e51c57d25672798d`.
+
+Implementado sem migration:
+- `lib/auth.ts`: resolução comum de usuário/e-mail, `resetPasswordForEmail` e atualização da própria senha;
+- `app/login/page.tsx`: botão `Esqueci minha senha`, modo de recuperação e envio do link para o e-mail cadastrado;
+- `app/redefinir-senha/page.tsx`: rota pública que valida a sessão de recovery, exige nova senha + confirmação e atualiza a senha;
+- `components/AuthGate.tsx`: `/redefinir-senha` liberada como rota pública;
+- `app/configuracoes/usuarios/page.tsx`: tela Master com busca de usuários e redefinição direta da senha;
+- `components/Sidebar.tsx`: atalho `Usuários e Senhas` na Administração;
+- `app/api/atualizar-usuario/route.ts`: mantém `auth.admin.updateUserById` server-only e passa a preservar campos ausentes no POST, evitando apagar WhatsApp ou outros dados durante uma alteração apenas de senha.
+
+Segurança:
+- endpoint administrativo continua exigindo Bearer token válido e `role=master`;
+- service role não é enviado ao browser;
+- senha nova exige mínimo de 6 caracteres e confirmação nas interfaces;
+- recuperação por e-mail usa o fluxo nativo do Supabase Auth.
+
+Validação:
+- Build Validation verde;
+- Vercel Preview `READY`;
+- smoke test do Preview confirmou `/login` HTTP 200 com botão `Esqueci minha senha`;
+- não foi disparado e-mail real durante o CI/smoke test;
+- resta validar em produção o e-mail, redirect para `/redefinir-senha` e uma troca administrativa com usuário de teste.
+
+Documento técnico: `docs/tecnico/recuperacao-senha-usuarios-2026-08-19.md`.
+
+## 2026-08-19 — PR #206 — visual PC3 auditado + grid de 4 cards — CONCLUÍDA
+
+Merge em `main`: `abebb222cd4c056f75a0adae341062774c83b501`; Vercel produção `READY`.
 
 Implementado sem migration e sem alteração de banco:
-- adicionados quatro ativos estáticos em `public/configuracoes/pc3/`, recortados do print W.Vetro confirmado;
+- quatro ativos estáticos em `public/configuracoes/pc3/`, recortados do print W.Vetro confirmado;
 - resolução estrita por nome exato dos presets `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
 - `config.imagem_url` permanece com prioridade sobre o fallback estático;
 - `produto.foto_url` permanece como fallback posterior;
@@ -49,24 +77,9 @@ A correção:
 - mantém as variáveis/opções globais para futura remodelagem;
 - não cria preset, receita, produto, preço, fórmula ou imagem.
 
-### Primeira tentativa de apply — bloqueada com segurança
+### Apply — CONCLUÍDO
 
-Com autorização explícita do Francis, uma primeira operação temporária foi iniciada pela PR #199. A fila de migrations estava correta e continha apenas `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`, mas o gate da migration encontrou 0 alvos e abortou antes de qualquer alteração.
-
-Auditoria read-only confirmou os 4 registros reais e a causa: os nomes eram descritivos, como `JC3 — vidro + vidro + vidro (*SUCB-JC3-01EF)`, enquanto o gate comparava o nome inteiro normalizado ao código puro.
-
-PR #200 corrigiu o gate. Build Validation, Vercel e Supabase dry-run passaram.
-
-### Segundo apply — CONCLUÍDO
-
-A PR operacional temporária #201 foi criada em Draft e não foi mergeada. Build Validation e Vercel passaram. Ao sair de Draft, o workflow:
-1. auditou o histórico remoto;
-2. executou dry-run da fila completa;
-3. confirmou exatamente uma pendência, `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`;
-4. executou o apply;
-5. confirmou no histórico remoto `20260819062000 | 20260819062000`.
-
-A migration concluiu com sucesso, portanto seus pós-checks transacionais também passaram. A PR #201 foi fechada sem merge, mantendo o workflow temporário fora da `main`.
+Após uma primeira tentativa bloqueada com segurança por um gate incorreto, a PR #200 corrigiu o gate para detectar o código exato contido no nome. Com autorização explícita do Francis, a operação temporária #201 auditou a fila, confirmou apenas `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`, aplicou a migration e confirmou o histórico remoto. A PR operacional foi fechada sem merge.
 
 ### Estado final de produção
 
@@ -74,9 +87,8 @@ A migration concluiu com sucesso, portanto seus pós-checks transacionais també
 - 0 alvos PC3/JC3 em `l_suprema_janela_de_correr_03_folhas`;
 - `valores = {}` nos 4 presets;
 - 0 vínculos `composicao_folha_N` nas janelas Suprema 02/03/04/06;
-- variáveis/opções globais preservadas;
-- imagens não alteradas pela migration.
+- variáveis/opções globais preservadas.
 
 ### Lição técnica
 
-Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF mostra composição vertical mista dentro do painel; portanto a modelagem precisa ser revista antes de replicar valores estruturados para outras tipologias.
+Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF mostra composição vertical mista dentro do painel; a modelagem precisa ser revista antes de replicar valores estruturados para outras tipologias.
