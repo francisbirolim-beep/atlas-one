@@ -92,3 +92,10 @@ Após uma primeira tentativa bloqueada com segurança por um gate incorreto, a P
 ### Lição técnica
 
 Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF mostra composição vertical mista dentro do painel; a modelagem precisa ser revista antes de replicar valores estruturados para outras tipologias.
+## Campos de Corte por Perfil (Configuracoes de Orcamento) - 2026-08-19
+
+PR #209 mergeada em `main`. Migration `20260819150000_engenharia_campos_corte_preset_v1.sql` aplicada em producao: adiciona `campos_corte jsonb` em `engenharia_variaveis_preset`.
+
+Permite registrar, por configuracao validada, um mapa `codigo_perfil -> texto livre` com formulas/observacoes de corte documentadas a partir de testes reais no W.Vetro (nao e calculo validado). UI em `app/engenharia/configuracoes-orcamento/page.tsx`.
+
+Exemplo real cadastrado: config `*SUCB-PC3-02-EF` (Porta De Correr 03 Folhas, L. Suprema), dados do orcamento #994 (SU010, SU012, SU008, SU053, SU225, SU280, SU040, SU041, SU102(L), SU102(H), TMC).
