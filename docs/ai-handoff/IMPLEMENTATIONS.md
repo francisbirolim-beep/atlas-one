@@ -1,34 +1,43 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-20 — motor declarativo de fórmulas de corte PC3 — EM VALIDAÇÃO
+## 2026-08-20 — interface de validação das fórmulas de corte PC3 — EM VALIDAÇÃO
+
+Pré-requisitos já concluídos:
+- PR #210 mergeada com `lib/formulasCorteEngine.ts`;
+- migration `engenharia_formulas_corte_v1` aplicada em produção com autorização explícita do Francis;
+- pós-check remoto: tabela criada, 1 seed PC3, 3 variáveis e 11 peças/grupos;
+- histórico Supabase: `20260820160019 / engenharia_formulas_corte_v1`.
+
+Implementado na branch `feat/formulas-corte-interface`:
+- `lib/engenhariaFormulasCorte.ts`: leitura das definições ativas de `engenharia_tipologia_formulas_corte` via Supabase;
+- `app/engenharia/formulas-corte/page.tsx`: tela de teste com tipologia, largura, altura, variáveis condicionais e cálculo pelo motor da PR #210;
+- tabela de resultado por código/eixo em mm;
+- `components/Sidebar.tsx`: atalho Master `Fórmulas de Corte`;
+- nenhuma gravação de plano de corte, nenhuma liberação de produção e nenhuma nova migration.
+
+Objetivo desta etapa: comparar o resultado do Atlas com o W.Vetro antes de ligar o motor ao plano de corte operacional.
+
+## 2026-08-20 — motor declarativo de fórmulas de corte PC3 — PR #210
 
 Continuidade do trabalho iniciado pelo Claude após a PR #209.
 
-Estado encontrado no repositório:
-- migration `20260820000000_engenharia_formulas_corte_v1.sql` já presente na `main`, porém **não tratada como aplicada em produção** nesta etapa;
-- `lib/formulasCorteEngine.ts` ainda não existia.
-
-Implementado na branch `feat/formulas-corte-engine-pc3`:
+Implementado:
 - motor declarativo para ler `variaveis` + `pecas` de `engenharia_tipologia_formulas_corte`;
 - parser aritmético restrito, sem `eval` e sem `Function()`;
 - aceita somente números, identificadores resolvidos, `+ - * /`, parênteses e `ROUND(expr)`;
-- tokenização cobre a string inteira e rejeita caracteres não permitidos, em vez de simplesmente ignorá-los;
+- tokenização cobre a string inteira e rejeita caracteres não permitidos;
 - valida largura/altura positivas e opções declaradas da tipologia;
 - resolve condições por variável e mapeamento de código de perfil;
-- resolve dependências entre peças até não haver mais progresso, sem limite arbitrário de três passadas;
+- resolve dependências entre peças até não haver mais progresso;
 - acusa explicitamente dependência circular, código de referência ausente, divisão por zero e definição inválida.
 
-Critério real de referência já documentado no Atlas para orçamento W.Vetro #994, 3000 x 2500 sem contramarco / mão-de-amigo comum:
+Referência W.Vetro #994, 3000 x 2500 sem contramarco / mão-de-amigo comum:
 - SU010 = 2970;
 - SU012 = 2496;
 - SU008 = 2483;
 - SU280 = 2466;
 - SU102(H) = 2315;
-- travessas = 938 (`ROUND(2970 / 3) - 52`).
-
-A migration também registra a correção observada pelo Claude para contramarco: SU280 e montantes de mão-de-amigo passam de `Altura - 34` para `Altura - 46`, conforme amostras reais registradas anteriormente.
-
-Nenhuma migration foi aplicada nesta implementação. Nenhum plano de corte de produção foi gerado automaticamente.
+- travessas = 938.
 
 ## 2026-08-19 — PR #207 — recuperação e gestão de senhas — CONCLUÍDA
 
@@ -41,36 +50,19 @@ Implementado sem migration:
 - `components/AuthGate.tsx`: `/redefinir-senha` liberada como rota pública;
 - `app/configuracoes/usuarios/page.tsx`: tela Master com busca de usuários e redefinição direta da senha;
 - `components/Sidebar.tsx`: atalho `Usuários e Senhas` na Administração;
-- `app/api/atualizar-usuario/route.ts`: mantém `auth.admin.updateUserById` server-only e passa a preservar campos ausentes no POST, evitando apagar WhatsApp ou outros dados durante uma alteração apenas de senha.
+- `app/api/atualizar-usuario/route.ts`: mantém `auth.admin.updateUserById` server-only e passa a preservar campos ausentes no POST.
 
-Segurança:
-- endpoint administrativo continua exigindo Bearer token válido e `role=master`;
-- service role não é enviado ao browser;
-- senha nova exige mínimo de 6 caracteres e confirmação nas interfaces;
-- recuperação por e-mail usa o fluxo nativo do Supabase Auth.
-
-Validação:
-- Build Validation verde;
-- Vercel Preview `READY`;
-- smoke test do Preview confirmou `/login` HTTP 200 com botão `Esqueci minha senha`;
-- não foi disparado e-mail real durante o CI/smoke test;
-- resta validar em produção o e-mail, redirect para `/redefinir-senha` e uma troca administrativa com usuário de teste.
-
-Documento técnico: `docs/tecnico/recuperacao-senha-usuarios-2026-08-19.md`.
+Validação: Build Validation verde e Vercel Preview `READY`.
 
 ## 2026-08-19 — PR #206 — visual PC3 auditado + grid de 4 cards — CONCLUÍDA
 
 Merge em `main`: `abebb222cd4c056f75a0adae341062774c83b501`; Vercel produção `READY`.
 
 Implementado sem migration e sem alteração de banco:
-- quatro ativos estáticos em `public/configuracoes/pc3/`, recortados do print W.Vetro confirmado;
+- quatro ativos estáticos em `public/configuracoes/pc3/`;
 - resolução estrita por nome exato dos presets `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
-- `config.imagem_url` permanece com prioridade sobre o fallback estático;
-- `produto.foto_url` permanece como fallback posterior;
-- nenhum nome semelhante ou outro preset recebe imagem automaticamente;
-- grid das configurações no orçamento alterado de 3 para 4 colunas em desktop (`lg:grid-cols-4`).
-
-Documento de evidência: `docs/ai-handoff/PC3_VISUAL_20260819.md`.
+- `config.imagem_url` permanece com prioridade;
+- grid das configurações no orçamento em 4 colunas no desktop.
 
 ## 2026-08-19 — PR #196 — edição de configuração validada existente
 
@@ -82,50 +74,17 @@ Implementado sem migration:
 - botão `Editar` na tela `Engenharia > Configurações validadas`;
 - pré-carregamento de nome, evidência, valores, produto e imagem;
 - troca/remoção de imagem no mesmo registro;
-- linha/tipologia bloqueadas durante edição para preservar identidade técnica;
-- duplicate check exclui o próprio ID;
-- metadados de validação são renovados no UPDATE e `criado_por_*` é preservado.
-
-Gates: Build Validation e Vercel Preview verdes.
+- linha/tipologia bloqueadas durante edição;
+- duplicate check exclui o próprio ID.
 
 ## 2026-08-19 — PR #197 / #200 — correção auditada PC3 Suprema
 
 Fonte exata: print W.Vetro do Francis mostrando `L. SUPREMA → PORTA DE CORRER 03 FOLHAS` e projetos `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`.
 
-Migration: `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
+Migration `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql` aplicada com autorização explícita após gate corrigido na PR #200. Estado final: 4 presets PC3 na tipologia correta, valores inferidos removidos e vínculos de composição incorretos retirados das janelas Suprema.
 
-A correção:
-- trabalha somente com as chaves exatas `l_suprema_janela_de_correr_03_folhas` e `l_suprema_porta_de_correr_03_folhas`;
-- identifica os quatro presets pela sequência exata do código normalizado contida no nome, sem fuzzy;
-- exige exatamente 4 registros e 4 códigos distintos;
-- aborta se houver ambiguidade ou o mesmo código em outra tipologia;
-- move os 4 presets para `l_suprema_porta_de_correr_03_folhas`;
-- renomeia para `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
-- limpa `valores` para `{}` porque a composição anterior foi inferida incorretamente;
-- acrescenta evidência auditada da correção;
-- remove somente os vínculos `composicao_folha_N` das janelas Suprema 02/03/04/06;
-- mantém as variáveis/opções globais para futura remodelagem;
-- não cria preset, receita, produto, preço, fórmula ou imagem.
+## 2026-08-19 — Campos de Corte por Perfil — PR #209
 
-### Apply — CONCLUÍDO
+Migration `20260819150000_engenharia_campos_corte_preset_v1.sql` adicionou `campos_corte jsonb` em `engenharia_variaveis_preset`. A coluna existe fisicamente em produção, embora essa versão não apareça no histórico remoto atual do Supabase; tratar essa divergência em tarefa separada.
 
-Após uma primeira tentativa bloqueada com segurança por um gate incorreto, a PR #200 corrigiu o gate para detectar o código exato contido no nome. Com autorização explícita do Francis, a operação temporária #201 auditou a fila, confirmou apenas `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`, aplicou a migration e confirmou o histórico remoto. A PR operacional foi fechada sem merge.
-
-### Estado final de produção
-
-- 4 presets PC3 em `l_suprema_porta_de_correr_03_folhas`;
-- 0 alvos PC3/JC3 em `l_suprema_janela_de_correr_03_folhas`;
-- `valores = {}` nos 4 presets;
-- 0 vínculos `composicao_folha_N` nas janelas Suprema 02/03/04/06;
-- variáveis/opções globais preservadas.
-
-### Lição técnica
-
-Não usar `composicao_folha_N = vidro|persiana|tela` como verdade universal. O desenho PC3-02-EF mostra composição vertical mista dentro do painel; a modelagem precisa ser revista antes de replicar valores estruturados para outras tipologias.
-## Campos de Corte por Perfil (Configuracoes de Orcamento) - 2026-08-19
-
-PR #209 mergeada em `main`. Migration `20260819150000_engenharia_campos_corte_preset_v1.sql` aplicada em producao: adiciona `campos_corte jsonb` em `engenharia_variaveis_preset`.
-
-Permite registrar, por configuracao validada, um mapa `codigo_perfil -> texto livre` com formulas/observacoes de corte documentadas a partir de testes reais no W.Vetro (nao e calculo validado). UI em `app/engenharia/configuracoes-orcamento/page.tsx`.
-
-Exemplo real cadastrado: config `*SUCB-PC3-02-EF` (Porta De Correr 03 Folhas, L. Suprema), dados do orcamento #994 (SU010, SU012, SU008, SU053, SU225, SU280, SU040, SU041, SU102(L), SU102(H), TMC).
+Permite registrar por configuração um mapa `codigo_perfil -> texto livre` com fórmulas/observações documentais. Exemplo real cadastrado na config `*SUCB-PC3-02-EF` com dados do orçamento W.Vetro #994.
