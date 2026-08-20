@@ -1,6 +1,21 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-20 — Plano de Corte imprimível V1 — EM VALIDAÇÃO
+## 2026-08-20 — Plano de Corte V4 — EM VALIDAÇÃO
+
+Protótipo visual `Plano_de_Corte_Atlas_Rascunho_v4.pdf` aprovado pelo Francis como referência.
+
+Implementado em `app/engenharia/formulas-corte/page.tsx`, sem migration e sem alteração de banco:
+- dois modos de geração: `Vinculado à obra / medição final` e `Plano manual`;
+- modo obra com cliente, obra, localização/ambiente, nº do orçamento, item e status da medição final;
+- modo manual com referência interna e campos técnicos livres/editáveis;
+- projeto/configuração, tipologia, quantidade, largura final, altura final, cor de perfil, cor de acessório, vidro e observações de produção;
+- relatório imprimível inclui origem, referência/orçamento, data/hora, localização/ambiente, item, status da medição, medidas finais e observações;
+- geração continua usando exclusivamente `calcularFormulasCorte` e as definições reais do Supabase;
+- tabela mostra somente dados já calculados pelo motor atual. Quantidade por perfil, peso, desenho técnico individual, vidro calculado e fotos da medição final permanecem fora até existir regra/vínculo estruturado e validado.
+
+Alvo aprovado para a próxima integração: quando o plano nascer de um item real, o Atlas deverá preencher automaticamente os dados existentes do Orçamento + Medição Final, sem redigitação.
+
+## 2026-08-20 — Plano de Corte imprimível V1
 
 Referência visual: orientativo real do W.Vetro do orçamento #994 enviado pelo Francis.
 
