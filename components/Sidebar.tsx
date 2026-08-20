@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Boxes, FileText, KeyRound, LayoutGrid, LogOut, Settings } from 'lucide-react'
+import { Boxes, Calculator, FileText, KeyRound, LayoutGrid, LogOut, Settings } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { GUIAS } from '@/lib/guias'
@@ -81,6 +81,14 @@ export default function Sidebar() {
             }`}
           >
             <FileText size={17} /> Padrão do Orçamento
+          </Link>
+          <Link
+            href="/engenharia/formulas-corte"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+              pathname.startsWith('/engenharia/formulas-corte') ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            }`}
+          >
+            <Calculator size={17} /> Fórmulas de Corte
           </Link>
           <Link
             href="/setores"
