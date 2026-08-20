@@ -1,5 +1,18 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — PLANO DE CORTE IMPRIMÍVEL V1 — 2026-08-20
+
+Branch `feat/plano-corte-impressao-v1` evolui `/engenharia/formulas-corte` a partir do orientativo real do W.Vetro fornecido pelo Francis.
+
+Implementado nesta etapa, sem migration e sem alteração de banco:
+- campos manuais de identificação do plano: cliente, obra, projeto/configuração, cor de perfil, cor de acessório e vidro;
+- botão `Gerar plano de corte` continua usando exclusivamente `calcularFormulasCorte` e as definições reais do Supabase;
+- relatório visual separado com cabeçalho de produção, tipologia, largura/altura, tabela de perfis/cortes e variáveis selecionadas;
+- botão `Imprimir / Salvar PDF` usa impressão nativa do navegador e CSS de impressão para isolar somente o documento A4;
+- nenhum dado de quantidade, peso, desenho individual de perfil ou lista de vidro é inferido. Esses campos permanecem fora do relatório até existir fonte estruturada validada.
+
+Referência W.Vetro recebida: `Core.RelOrientativoCorteSimplificadoItem (3).pdf`, orçamento #994, projeto `*SUCB-PC3-01EF`, Porta de Correr 03 Folhas Móveis | Suprema, 3000 x 3500. O documento de referência possui cabeçalho, tabela de perfis, vidro e variáveis; essa organização é a base visual da V1.
+
 ## EM VALIDAÇÃO — INTERFACE REAL DE FÓRMULAS DE CORTE PC3 — 2026-08-20
 
 A migration `engenharia_formulas_corte_v1` foi aplicada em produção com autorização explícita do Francis. Pós-check remoto confirmou:
@@ -11,12 +24,7 @@ A migration `engenharia_formulas_corte_v1` foi aplicada em produção com autori
 
 PR #210 foi mergeada com `lib/formulasCorteEngine.ts`, parser restrito sem `eval`/`Function()` e resolução declarativa de dependências.
 
-Branch atual `feat/formulas-corte-interface` conecta o motor ao banco sem integrar ainda com produção:
-- `lib/engenhariaFormulasCorte.ts` lê definições ativas do Supabase;
-- `/engenharia/formulas-corte` permite selecionar tipologia, largura, altura e variáveis e calcular;
-- resultado é exibido por código/eixo em mm para comparação com W.Vetro;
-- Sidebar Master recebe atalho `Fórmulas de Corte`;
-- nenhum plano de corte é gravado ou liberado automaticamente.
+PR #211 conectou o motor ao banco e à tela `/engenharia/formulas-corte`. PR #213 adicionou navegação própria do setor Engenharia com atalhos visíveis para Painel da Engenharia, Fórmulas de Corte e Configurações de orçamento.
 
 Pendência de governança: `20260819150000_engenharia_campos_corte_preset_v1.sql` não aparece no histórico remoto, embora `engenharia_variaveis_preset.campos_corte` exista fisicamente no schema. Não corrigir por suposição.
 
@@ -76,43 +84,6 @@ O print real compartilhado pelo Francis mostra explicitamente:
 - projetos: `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`.
 
 O cadastro anterior como `Janela de Correr 03 Folhas / JC3` estava incorreto. Também tinham sido gravados valores `composicao_folha_N` inferidos visualmente e não sustentados pela evidência real.
-
-### PR #196 — edição de preset existente — CONCLUÍDA
-
-PR #196 foi mergeada em `main` no commit `e9f6fd2cff93a74d85ad98f00e5f64532fe92cf0`, com Build Validation e Vercel verdes, sem migration.
-
-Implementado:
-- editar uma configuração validada já existente sem criar duplicata;
-- `PUT /api/engenharia/configuracoes-orcamento`, Master-only;
-- pré-carregar nome, evidência, valores, produto e imagem;
-- trocar/remover imagem no mesmo preset;
-- linha e tipologia ficam bloqueadas na edição para preservar identidade técnica;
-- checagem de duplicidade ignora o próprio ID;
-- criação/ativação continuam separadas.
-
-### PR #197 + PR #200 — correção PC3/JC3 — APLICADA EM PRODUÇÃO
-
-PR #197 introduziu a migration `supabase/migrations/20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`.
-
-O primeiro apply autorizado foi bloqueado com segurança antes de qualquer alteração: o gate original comparava o nome inteiro normalizado do preset com o código puro e encontrou 0 alvos. Auditoria read-only do banco confirmou que existiam exatamente 4 presets, com nomes descritivos contendo os códigos `*SUCB-JC3-01EF` a `04EF`.
-
-PR #200 corrigiu apenas esse gate para detectar a sequência exata do código dentro do nome normalizado, sem fuzzy/semelhança. Gates da PR #200: Build Validation verde, Vercel Preview verde e Supabase Database Control dry-run verde.
-
-Com autorização explícita do Francis, o segundo apply foi executado pela operação temporária da PR #201. Antes do write, a fila completa foi auditada novamente e continha exatamente uma migration pendente: `20260819062000_corrigir_pc3_suprema_cadastro_v1.sql`. O apply terminou com sucesso e o histórico remoto confirmou `20260819062000 | 20260819062000`. A PR #201 foi fechada sem merge, portanto seu workflow temporário não entrou na `main`.
-
-### Estado final confirmado pela própria migration
-
-A transação só conclui se todos os pós-checks passarem. O estado autoritativo em produção é:
-- exatamente 4 presets sob `l_suprema_porta_de_correr_03_folhas`;
-- nomes exatos `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
-- zero desses alvos permanece em `l_suprema_janela_de_correr_03_folhas`;
-- `valores = {}` nos 4 presets;
-- zero vínculos `composicao_folha_N` nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
-- as variáveis/opções globais `composicao_folha_N` permanecem no catálogo para futura remodelagem correta.
-
-### Arquitetura de composição — decisão atual
-
-Não replicar a modelagem `composicao_folha_N = vidro|persiana|tela` para novas tipologias com base apenas no print. Os projetos W.Vetro podem possuir subdivisões/composições dentro de um mesmo painel/folha. A próxima modelagem precisa representar a configuração visual real sem inventar semântica técnica.
 
 ### Governança permanente
 
