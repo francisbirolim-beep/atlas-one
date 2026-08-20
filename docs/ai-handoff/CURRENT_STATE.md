@@ -18,6 +18,22 @@ Gates da PR #207: Build Validation verde e Vercel Preview `READY`. O Preview con
 
 Documento técnico: `docs/tecnico/recuperacao-senha-usuarios-2026-08-19.md`.
 
+## ENGENHARIA - CAMPOS DE CORTE POR PERFIL - PR #209 MERGEADA E MIGRATION APLICADA - 2026-08-19
+
+PR #209 ("feat: Campos de Corte em Configuracoes de Orcamento (Porta de Correr 3 Folhas)") foi mergeada em `main`.
+
+Migration `20260819150000_engenharia_campos_corte_preset_v1.sql` foi aplicada em producao (autorizacao explicita do usuario), adicionando a coluna `campos_corte jsonb not null default '{}'::jsonb` em `engenharia_variaveis_preset`. Aditiva, sem afetar linhas existentes.
+
+Implementado:
+- `lib/orcamentoConfiguracoes.ts` e `app/api/engenharia/configuracoes-orcamento/route.ts` normalizam e persistem `campos_corte` (mapa `codigo_perfil -> texto livre`);
+- nova secao "Campos de corte (formula por perfil, texto livre)" em `app/engenharia/configuracoes-orcamento/page.tsx`, permitindo adicionar/editar/remover linhas por perfil;
+- e documentacao/observacao a partir de testes reais no W.Vetro, nao formula validada nem calculo automatico.
+
+Exemplo real cadastrado na config `*SUCB-PC3-02-EF` (Porta De Correr 03 Folhas, L. Suprema), com dados do orcamento #994:
+- SU010 = 2970mm; SU012 = 2496mm; SU008 = 2483mm; SU053 = 938mm; SU225 = 938mm; SU280 = 2466mm; SU040 = 2466mm; SU041 = 2466mm; SU102(L) = 938mm; SU102(H) = 2315mm; TMC = 2970mm.
+
+Segundo o usuario: os dados de corte partem da tipologia e do tamanho da marca (o sistema monta a tipologia e calcula aproveitamento/sobra); os codigos de perfil (SU010, SU012 etc.) vem do cadastro de produtos/perfis, nao sao exclusivos de uma config especifica.
+
 ## CONCLUÍDO — VISUAL PC3 NO SELETOR — PR #206 — 2026-08-19
 
 PR #206 foi mergeada e publicada em produção no commit `abebb222cd4c056f75a0adae341062774c83b501`.
