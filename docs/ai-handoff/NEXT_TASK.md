@@ -1,5 +1,9 @@
 # NEXT_TASK.md — Atlas One
+## TAREFA ATUAL - Campos de Corte concluidos
 
+PR #209 mergeada, migration `20260819150000_engenharia_campos_corte_preset_v1.sql` aplicada em producao, e exemplo real cadastrado (config `*SUCB-PC3-02-EF`, dados do orcamento #994).
+
+Nao ha proxima tarefa definida ainda. Aguardar direcionamento do usuario.
 ## TAREFA ATUAL — validar recuperação de senha em produção
 
 A PR #207 já foi mergeada em `main` no commit `045f1fc8f4a75a02a19faa70e51c57d25672798d`, sem migration.
