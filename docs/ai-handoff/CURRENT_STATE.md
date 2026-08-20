@@ -1,5 +1,20 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — PLANO DE CORTE V4 APROVADO COMO REFERÊNCIA — 2026-08-20
+
+O protótipo `Plano_de_Corte_Atlas_Rascunho_v4.pdf` foi aprovado pelo Francis como referência visual e funcional para o próximo estágio do Plano de Corte.
+
+Branch atual `feat/plano-corte-v4`, sem migration e sem alteração de banco:
+- `/engenharia/formulas-corte` passa a oferecer dois modos: `Vinculado à obra / medição final` e `Plano manual`;
+- modo obra possui campos de cliente, obra, localização/ambiente, nº do orçamento, item do orçamento e status da medição final;
+- modo manual possui referência interna e mantém os campos técnicos editáveis conforme necessidade;
+- ambos os modos possuem projeto/configuração, tipologia, quantidade, largura final, altura final, cores, vidro e observações de produção;
+- relatório imprimível inclui origem do plano, referência/orçamento, data/hora de geração, localização/ambiente, item, status da medição final, medidas finais e observações;
+- tabela de corte mantém somente dados realmente calculados pelo motor atual; quantidade por perfil, peso, desenho técnico individual, vidro calculado e fotos da medição final continuam pendentes de modelagem/vínculo validado;
+- modo `Vinculado à obra / medição final` ainda usa campos editáveis nesta etapa; o preenchimento automático a partir do item real do orçamento/medição final é a próxima integração.
+
+Fluxo aprovado como alvo: `Orçamento → Medição Final aprovada → Engenharia → Gerar Plano de Corte → Produção`. Nenhum dado já conhecido deve ser digitado novamente quando houver histórico vinculado.
+
 ## EM VALIDAÇÃO — PLANO DE CORTE IMPRIMÍVEL V1 — 2026-08-20
 
 Branch `feat/plano-corte-impressao-v1` evolui `/engenharia/formulas-corte` a partir do orientativo real do W.Vetro fornecido pelo Francis.
