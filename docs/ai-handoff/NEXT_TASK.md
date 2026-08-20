@@ -1,38 +1,52 @@
 # NEXT_TASK.md — Atlas One
-## TAREFA ATUAL - Campos de Corte concluidos
 
-PR #209 mergeada, migration `20260819150000_engenharia_campos_corte_preset_v1.sql` aplicada em producao, e exemplo real cadastrado (config `*SUCB-PC3-02-EF`, dados do orcamento #994).
+## TAREFA ATUAL — validar motor declarativo de fórmulas de corte PC3
 
-Nao ha proxima tarefa definida ainda. Aguardar direcionamento do usuario.
-## TAREFA ATUAL — validar recuperação de senha em produção
+Continuidade do trabalho iniciado pelo Claude após a PR #209.
+
+Estado atual:
+- migration `20260820000000_engenharia_formulas_corte_v1.sql` já está na `main`;
+- ela cria `engenharia_tipologia_formulas_corte` e contém o seed da tipologia `Porta De Correr 03 Folhas (L. Suprema)` com fórmulas derivadas de amostras reais do W.Vetro #994;
+- a migration **não deve ser considerada aplicada** enquanto não houver apply remoto confirmado;
+- branch `feat/formulas-corte-engine-pc3` adiciona `lib/formulasCorteEngine.ts` com parser aritmético restrito e resolução declarativa;
+- nenhuma tela visual para cadastrar fórmulas foi criada nesta etapa;
+- nenhum plano de corte de produção é gerado automaticamente nesta etapa.
+
+### Critério de validação do motor
+
+Usar o caso real já registrado do W.Vetro #994, 3000 x 2500, sem contramarco e mão-de-amigo comum:
+- SU010 = 2970;
+- SU012 = 2496;
+- SU008 = 2483;
+- SU280 = 2466;
+- SU102(H) = 2315;
+- travessas = 938 (`ROUND(SU010 / 3) - 52`).
+
+Também validar o comportamento com contramarco, onde as amostras registradas indicam:
+- SU010: `Largura - 54`;
+- SU012: `Altura - 16`;
+- SU008: `Altura - 29`;
+- SU280 e montantes de mão-de-amigo: `Altura - 46`.
+
+### Próximos passos
+
+1. abrir PR da branch e aguardar Build Validation + Vercel Preview;
+2. revisar o diff para garantir que o motor não usa `eval`/`Function()` e rejeita tokens inválidos;
+3. só depois do merge decidir se a migration `20260820000000_engenharia_formulas_corte_v1.sql` deve ser aplicada;
+4. **não aplicar essa migration sem autorização explícita e específica do Francis**;
+5. antes de qualquer apply, auditar a fila completa de migrations pendentes;
+6. após eventual apply, criar uma tela de teste/validação das fórmulas antes de conectar o motor ao plano de corte real;
+7. não gerar fórmulas para outras tipologias por semelhança de nome ou formato.
+
+## PENDENTE — validar recuperação de senha em produção
 
 A PR #207 já foi mergeada em `main` no commit `045f1fc8f4a75a02a19faa70e51c57d25672798d`, sem migration.
 
-Funcionalidades prontas:
-- login com `Esqueci minha senha`;
-- recuperação por nome de usuário ou e-mail;
-- envio do link pelo Supabase Auth;
-- rota pública `/redefinir-senha` para criar nova senha;
-- Master com `Configurações > Usuários e Senhas` para redefinição direta;
-- endpoint administrativo preserva campos que não forem enviados.
-
-### Próximos testes obrigatórios
-
-1. na produção, abrir `/login` e clicar `Esqueci minha senha`;
-2. informar um usuário/e-mail real controlado para teste;
-3. confirmar recebimento do e-mail do Supabase Auth;
-4. abrir o link e confirmar que retorna para `/redefinir-senha` no domínio do Atlas;
-5. definir uma nova senha e confirmar login com ela;
-6. como Master, abrir `Configurações > Usuários e Senhas`, escolher um usuário de teste e redefinir a senha diretamente;
-7. confirmar que nome, e-mail, WhatsApp e role do usuário permanecem inalterados após a troca apenas de senha.
-
-### Se o e-mail não redirecionar para o Atlas
-
-Verificar no Supabase Auth a configuração de `Site URL` / `Redirect URLs` e incluir o domínio de produção do Atlas para `/redefinir-senha`. Não alterar essa configuração por suposição: conferir o estado real antes.
-
-### Estado PC3 consolidado
-
-PR #206 está em produção com os quatro desenhos exatos de `SUPREMA → PORTA DE CORRER 03 FOLHAS` e grid de 4 cards no desktop. A migration corretiva PC3 já foi aplicada anteriormente com autorização explícita; não há migration relacionada à tarefa de senhas.
+Ainda vale validar em produção:
+- envio real do e-mail de recuperação;
+- redirect para `/redefinir-senha`;
+- login com nova senha;
+- troca administrativa por Master sem alterar nome, e-mail, WhatsApp ou role.
 
 ### Regras permanentes
 
