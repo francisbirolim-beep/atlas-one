@@ -10,16 +10,28 @@ import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 
 const ALIASES: Record<string, string> = {
   '/cadastro': 'cadastro usuario usuários perfil perfis acesso funcionario funcionários vendedor vendedores equipe',
-  '/configuracoes': 'configuração configurações sistema parâmetros preferências',
+  '/configuracoes': 'configuração configurações sistema parâmetros preferências administração',
+  '/configuracoes/usuarios': 'usuários senhas usuario senha acesso administração master',
+  '/configuracoes/orcamento': 'padrão orçamento configuração proposta administração',
+  '/engenharia/formulas-corte': 'fórmula fórmulas corte plano corte engenharia tipologia cálculo perfil administração',
   '/configuracoes/campos': 'campos formulários cadastro formulário personalizar',
   '/clientes': 'cliente clientes cadastro cliente comercial',
   '/orcamento': 'orçamento orcamentos orçamento pedido proposta',
   '/kanban': 'painel orçamento orçamentos kanban acompanhamento comercial',
   '/ia/comercial': 'ia assistente inteligência artificial comercial ajuda análise',
-  '/setores': 'setor setores módulos áreas cadastro setor',
+  '/setores': 'setor setores módulos áreas cadastro setor administração',
   '/producao': 'produção fabrica fábrica ordem produção',
-  '/engenharia': 'engenharia técnico técnica projeto conferência receita tipologia',
+  '/engenharia': 'engenharia técnico técnica projeto conferência receita tipologia fórmula fórmulas corte',
 }
+
+const TELAS_ADMIN = [
+  { href: '/configuracoes', label: 'Configurações' },
+  { href: '/configuracoes/usuarios', label: 'Usuários e Senhas' },
+  { href: '/configuracoes/orcamento', label: 'Padrão do Orçamento' },
+  { href: '/engenharia/formulas-corte', label: 'Fórmulas de Corte' },
+  { href: '/setores', label: 'Setores' },
+  { href: '/cadastro', label: 'Cadastro' },
+] as const
 
 function normalizar(texto: string) {
   return texto
@@ -95,6 +107,17 @@ export default function SidebarQuickSearch() {
         tipo: 'tela' as const,
       }))
 
+    const telasAdmin: Resultado[] = usuario.role === 'master'
+      ? TELAS_ADMIN.map((tela) => ({
+          id: `admin:${tela.href}`,
+          titulo: tela.label,
+          subtitulo: 'Administração',
+          href: tela.href,
+          busca: normalizar(`${tela.label} administração admin master ${tela.href} ${ALIASES[tela.href] || ''}`),
+          tipo: 'tela' as const,
+        }))
+      : []
+
     const setoresVisiveis = setores
       .filter((setor) => nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto')
       .map((setor) => {
@@ -110,7 +133,7 @@ export default function SidebarQuickSearch() {
       })
 
     const mapa = new Map<string, Resultado>()
-    ;[...telas, ...setoresVisiveis].forEach((item) => {
+    ;[...telas, ...telasAdmin, ...setoresVisiveis].forEach((item) => {
       if (!mapa.has(item.href)) mapa.set(item.href, item)
     })
     return Array.from(mapa.values())
