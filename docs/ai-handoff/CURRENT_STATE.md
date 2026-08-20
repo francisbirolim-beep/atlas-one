@@ -1,35 +1,24 @@
 # CURRENT_STATE.md — Atlas One
 
-## EM VALIDAÇÃO — MOTOR DECLARATIVO DE FÓRMULAS DE CORTE PC3 — 2026-08-20
+## EM VALIDAÇÃO — INTERFACE REAL DE FÓRMULAS DE CORTE PC3 — 2026-08-20
 
-Continuidade do trabalho iniciado pelo Claude após a PR #209.
+A migration `engenharia_formulas_corte_v1` foi aplicada em produção com autorização explícita do Francis. Pós-check remoto confirmou:
+- tabela `engenharia_tipologia_formulas_corte` existente;
+- exatamente 1 seed PC3 para a tipologia esperada;
+- 3 variáveis condicionais;
+- 11 definições de peças/grupos;
+- histórico Supabase registrado como `20260820160019 / engenharia_formulas_corte_v1`.
 
-Estado real verificado no repositório:
-- `supabase/migrations/20260820000000_engenharia_formulas_corte_v1.sql` já está na `main`;
-- essa migration cria `engenharia_tipologia_formulas_corte` e contém seed para `Porta De Correr 03 Folhas (L. Suprema)` com variáveis e fórmulas baseadas nas amostras W.Vetro #994 registradas pelo usuário;
-- a migration **não é considerada aplicada em produção** nesta etapa, pois não houve apply remoto confirmado por este trabalho;
-- `lib/formulasCorteEngine.ts` não existia na `main` e foi criado na branch `feat/formulas-corte-engine-pc3`.
+PR #210 foi mergeada com `lib/formulasCorteEngine.ts`, parser restrito sem `eval`/`Function()` e resolução declarativa de dependências.
 
-Motor implementado:
-- parser aritmético restrito, sem `eval` e sem `Function()`;
-- aceita somente números, identificadores conhecidos, `+ - * /`, parênteses e `ROUND(expr)`;
-- tokenização cobre a fórmula inteira e rejeita caracteres não permitidos;
-- valida largura/altura e opções declaradas;
-- suporta condições por variável, códigos de perfil mapeados por combinação e fórmulas por variável;
-- resolve dependências entre peças até não haver progresso, acusando dependência circular ou dado faltante;
-- não gera plano de corte de produção automaticamente.
+Branch atual `feat/formulas-corte-interface` conecta o motor ao banco sem integrar ainda com produção:
+- `lib/engenhariaFormulasCorte.ts` lê definições ativas do Supabase;
+- `/engenharia/formulas-corte` permite selecionar tipologia, largura, altura e variáveis e calcular;
+- resultado é exibido por código/eixo em mm para comparação com W.Vetro;
+- Sidebar Master recebe atalho `Fórmulas de Corte`;
+- nenhum plano de corte é gravado ou liberado automaticamente.
 
-Referência real já documentada para W.Vetro #994, 3000 x 2500, sem contramarco / mão-de-amigo comum:
-- SU010 2970;
-- SU012 2496;
-- SU008 2483;
-- SU280 2466;
-- SU102(H) 2315;
-- travessas 938.
-
-A migration já contém a correção observada pelo Claude para contramarco: SU280 e os montantes de mão-de-amigo passam de `Altura - 34` para `Altura - 46`.
-
-Nenhuma migration foi aplicada nesta branch. A próxima etapa é validar PR/build e só então decidir, com autorização explícita do Francis, se a migration deve ser aplicada.
+Pendência de governança: `20260819150000_engenharia_campos_corte_preset_v1.sql` não aparece no histórico remoto, embora `engenharia_variaveis_preset.campos_corte` exista fisicamente no schema. Não corrigir por suposição.
 
 ## ESTADO AUTORITATIVO — RECUPERAÇÃO E GESTÃO DE SENHAS — 2026-08-19
 
@@ -118,7 +107,7 @@ A transação só conclui se todos os pós-checks passarem. O estado autoritativ
 - nomes exatos `*SUCB-PC3-01EF`, `*SUCB-PC3-02-EF`, `*SUCB-PC3-03-EF`, `*SUCB-PC3-04-EF`;
 - zero desses alvos permanece em `l_suprema_janela_de_correr_03_folhas`;
 - `valores = {}` nos 4 presets;
-- zero vínculos `composicao_folha_1..6` nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
+- zero vínculos `composicao_folha_N` nas tipologias L. Suprema > Janela de Correr 02/03/04/06 folhas;
 - as variáveis/opções globais `composicao_folha_N` permanecem no catálogo para futura remodelagem correta.
 
 ### Arquitetura de composição — decisão atual
