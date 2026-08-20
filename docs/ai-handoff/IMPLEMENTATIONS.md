@@ -1,5 +1,35 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-20 — motor declarativo de fórmulas de corte PC3 — EM VALIDAÇÃO
+
+Continuidade do trabalho iniciado pelo Claude após a PR #209.
+
+Estado encontrado no repositório:
+- migration `20260820000000_engenharia_formulas_corte_v1.sql` já presente na `main`, porém **não tratada como aplicada em produção** nesta etapa;
+- `lib/formulasCorteEngine.ts` ainda não existia.
+
+Implementado na branch `feat/formulas-corte-engine-pc3`:
+- motor declarativo para ler `variaveis` + `pecas` de `engenharia_tipologia_formulas_corte`;
+- parser aritmético restrito, sem `eval` e sem `Function()`;
+- aceita somente números, identificadores resolvidos, `+ - * /`, parênteses e `ROUND(expr)`;
+- tokenização cobre a string inteira e rejeita caracteres não permitidos, em vez de simplesmente ignorá-los;
+- valida largura/altura positivas e opções declaradas da tipologia;
+- resolve condições por variável e mapeamento de código de perfil;
+- resolve dependências entre peças até não haver mais progresso, sem limite arbitrário de três passadas;
+- acusa explicitamente dependência circular, código de referência ausente, divisão por zero e definição inválida.
+
+Critério real de referência já documentado no Atlas para orçamento W.Vetro #994, 3000 x 2500 sem contramarco / mão-de-amigo comum:
+- SU010 = 2970;
+- SU012 = 2496;
+- SU008 = 2483;
+- SU280 = 2466;
+- SU102(H) = 2315;
+- travessas = 938 (`ROUND(2970 / 3) - 52`).
+
+A migration também registra a correção observada pelo Claude para contramarco: SU280 e montantes de mão-de-amigo passam de `Altura - 34` para `Altura - 46`, conforme amostras reais registradas anteriormente.
+
+Nenhuma migration foi aplicada nesta implementação. Nenhum plano de corte de produção foi gerado automaticamente.
+
 ## 2026-08-19 — PR #207 — recuperação e gestão de senhas — CONCLUÍDA
 
 Merge em `main`: `045f1fc8f4a75a02a19faa70e51c57d25672798d`.
