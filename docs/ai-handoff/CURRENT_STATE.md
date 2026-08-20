@@ -1,5 +1,36 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — MOTOR DECLARATIVO DE FÓRMULAS DE CORTE PC3 — 2026-08-20
+
+Continuidade do trabalho iniciado pelo Claude após a PR #209.
+
+Estado real verificado no repositório:
+- `supabase/migrations/20260820000000_engenharia_formulas_corte_v1.sql` já está na `main`;
+- essa migration cria `engenharia_tipologia_formulas_corte` e contém seed para `Porta De Correr 03 Folhas (L. Suprema)` com variáveis e fórmulas baseadas nas amostras W.Vetro #994 registradas pelo usuário;
+- a migration **não é considerada aplicada em produção** nesta etapa, pois não houve apply remoto confirmado por este trabalho;
+- `lib/formulasCorteEngine.ts` não existia na `main` e foi criado na branch `feat/formulas-corte-engine-pc3`.
+
+Motor implementado:
+- parser aritmético restrito, sem `eval` e sem `Function()`;
+- aceita somente números, identificadores conhecidos, `+ - * /`, parênteses e `ROUND(expr)`;
+- tokenização cobre a fórmula inteira e rejeita caracteres não permitidos;
+- valida largura/altura e opções declaradas;
+- suporta condições por variável, códigos de perfil mapeados por combinação e fórmulas por variável;
+- resolve dependências entre peças até não haver progresso, acusando dependência circular ou dado faltante;
+- não gera plano de corte de produção automaticamente.
+
+Referência real já documentada para W.Vetro #994, 3000 x 2500, sem contramarco / mão-de-amigo comum:
+- SU010 2970;
+- SU012 2496;
+- SU008 2483;
+- SU280 2466;
+- SU102(H) 2315;
+- travessas 938.
+
+A migration já contém a correção observada pelo Claude para contramarco: SU280 e os montantes de mão-de-amigo passam de `Altura - 34` para `Altura - 46`.
+
+Nenhuma migration foi aplicada nesta branch. A próxima etapa é validar PR/build e só então decidir, com autorização explícita do Francis, se a migration deve ser aplicada.
+
 ## ESTADO AUTORITATIVO — RECUPERAÇÃO E GESTÃO DE SENHAS — 2026-08-19
 
 PR #207 foi mergeada em `main` no commit `045f1fc8f4a75a02a19faa70e51c57d25672798d`, sem migration.
