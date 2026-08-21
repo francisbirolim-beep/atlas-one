@@ -21,18 +21,54 @@ async function usuarioAutenticado(req: NextRequest): Promise<UsuarioAcesso | nul
   return (data as UsuarioAcesso | null) || null
 }
 
-async function assistenciaExiste(id: string) {
-  const { data } = await supabaseAdmin
+async function podeGerenciarAssistencia(usuario: UsuarioAcesso, assistenciaId: string) {
+  const { data: assistencia } = await supabaseAdmin
     .from('assistencias')
-    .select('id')
-    .eq('id', id)
+    .select('id, criado_por_id')
+    .eq('id', assistenciaId)
     .maybeSingle()
-  return Boolean(data)
+
+  if (!assistencia) return { existe: false, permitido: false }
+  if (usuario.role === 'master') return { existe: true, permitido: true }
+
+  const { data: configRow } = await supabaseAdmin
+    .from('configuracoes_gerais')
+    .select('valor')
+    .eq('chave', `home_usuario:${usuario.id}`)
+    .maybeSingle()
+
+  let podeVerTodas = false
+  if (configRow?.valor) {
+    try {
+      const config = typeof configRow.valor === 'string' ? JSON.parse(configRow.valor) : configRow.valor
+      podeVerTodas = config?.assistenciasEscopo === 'todas'
+    } catch {
+      podeVerTodas = false
+    }
+  }
+
+  return {
+    existe: true,
+    permitido: podeVerTodas || assistencia.criado_por_id === usuario.id,
+  }
+}
+
+async function validarEscopo(usuario: UsuarioAcesso, assistenciaId: string) {
+  const acesso = await podeGerenciarAssistencia(usuario, assistenciaId)
+  if (!acesso.existe) {
+    return NextResponse.json({ error: 'Assistencia nao encontrada.' }, { status: 404 })
+  }
+  if (!acesso.permitido) {
+    return NextResponse.json({ error: 'Sem permissao para esta assistencia.' }, { status: 403 })
+  }
+  return null
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+  const bloqueio = await validarEscopo(usuario, params.id)
+  if (bloqueio) return bloqueio
 
   const { data, error } = await supabaseAdmin
     .from('assistencia_acessos_externos')
@@ -47,14 +83,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
-  if (!(await assistenciaExiste(params.id))) {
-    return NextResponse.json({ error: 'Assistencia nao encontrada.' }, { status: 404 })
-  }
+  const bloqueio = await validarEscopo(usuario, params.id)
+  if (bloqueio) return bloqueio
 
   const body = await req.json().catch(() => ({}))
   const nome = String(body?.nome || '').trim()
   const telefone = String(body?.telefone || '').trim() || null
-  const dias = Math.min(30, Math.max(1, Number(body?.diasValidade || 7)))
+  const diasBrutos = Number(body?.diasValidade || 7)
+  const dias = Number.isFinite(diasBrutos) ? Math.min(30, Math.max(1, diasBrutos)) : 7
 
   if (!nome) return NextResponse.json({ error: 'Informe o nome do tecnico.' }, { status: 400 })
 
@@ -89,6 +125,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+  const bloqueio = await validarEscopo(usuario, params.id)
+  if (bloqueio) return bloqueio
 
   const body = await req.json().catch(() => ({}))
   const acessoId = String(body?.acessoId || '')
