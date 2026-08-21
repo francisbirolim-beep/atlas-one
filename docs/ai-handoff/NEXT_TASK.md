@@ -1,14 +1,16 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar figuras SU289 e SU290 no Plano PC3
+## TAREFA ATUAL — validar tipo livre no Orçamento Rápido
 
-Após deploy da correção:
-1. abrir `Engenharia > Fórmulas de Corte`;
-2. gerar Porta de Correr 03 Folhas Suprema com combinação que resulte em SU289 interno e SU290 externo;
-3. conferir se os dois desenhos aparecem nítidos e correspondem às linhas SU289/SU290 do orientativo W.Vetro nº 994;
-4. conferir impressão/PDF A4;
-5. manter TMC como `—` até existir fonte técnica exata.
+Após deploy desta implementação:
+1. abrir `Orçamentos` e iniciar um novo pedido;
+2. em uma esquadria, preencher `Tipo de esquadria / descrição livre`, por exemplo `Porta de correr 3 folhas - Linha Suprema`;
+3. deixar Linha e Modelo / Tipologia vazios;
+4. preencher medidas, quantidade e demais campos obrigatórios do orçamento;
+5. confirmar que o pedido é enviado normalmente e que a descrição livre aparece no item salvo;
+6. testar também descrição livre + Linha opcional, sem Modelo;
+7. confirmar que, ao escolher uma Tipologia cadastrada, o texto livre é limpo e o fluxo técnico continua como antes.
 
-Se a validação visual passar, próxima etapa: ligar o plano à obra/medição final real e continuar enriquecendo somente dados técnicos comprovados.
+Não criar migration para esta tarefa. O fluxo usa os campos já existentes `tipo = outro` + `tipoOutroTexto`.
 
-Não inferir figura por semelhança. Não alterar fórmulas ou banco nesta tarefa.
+Pendência independente: localizar desenho técnico exato do TMC antes de exibi-lo no Plano de Corte.
