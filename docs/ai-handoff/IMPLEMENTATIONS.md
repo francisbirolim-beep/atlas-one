@@ -1,5 +1,16 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Tema claro completo nos painéis da Home — EM VALIDAÇÃO
+
+Implementado após validação visual da usuária Keila:
+- tema claro agora também cobre os painéis `Notificações e alertas`, `Minhas tarefas` e `Agenda / Calendário`;
+- painéis `bg-slate-950` passam para fundo branco no tema claro;
+- bordas, divisórias e superfícies internas recebem tons claros;
+- textos neutros internos passam para cores escuras com contraste adequado;
+- hovers neutros foram adaptados ao fundo claro;
+- cores semânticas de status permanecem preservadas;
+- sem alteração de banco e sem migration.
+
 ## 2026-08-21 — Home responsiva e tema claro por usuário — EM VALIDAÇÃO
 
 Implementado:
