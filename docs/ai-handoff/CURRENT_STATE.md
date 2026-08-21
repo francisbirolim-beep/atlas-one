@@ -1,5 +1,19 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — NAVEGAÇÃO ORGANIZADA + CENTRAL DE CADASTROS — 2026-08-21
+
+O Atlas ganhou uma camada de organização para reduzir a dificuldade de localizar funções sem remover nenhuma tela existente nem alterar regras de negócio.
+
+Estado atual desta implementação:
+- a sidebar passou a separar a navegação operacional pelos grupos `Geral`, `Comercial` e `Operações`;
+- foi adicionado o campo `Buscar no menu...`, que pesquisa módulos operacionais e também funções administrativas por palavras-chave;
+- a área `Administração` fica recolhida para reduzir poluição visual e é expandida automaticamente quando o Master entra em uma rota administrativa;
+- foi criada a rota `/administracao` como `Central de Administração`, funcionando como mapa para Empresa e Identidade, Usuários e Acesso, Setores e Permissões, Padrão do Orçamento, Central de Cadastros, Fórmulas de Corte, Campos adicionais e Configurações Avançadas;
+- foi criada a rota `/cadastros` como `Central de Cadastros`, com busca própria e atalhos separados para Produtos, Linhas, Materiais, Fornecedores, Produtos por Linha, Precificação, Unidades Pendentes, Receitas Técnicas, Fórmulas de Corte e Campos adicionais;
+- a tela antiga `/cadastro` foi preservada e aparece somente como `Cadastros Avançados`, para manter funções que ainda não foram separadas em páginas próprias;
+- nenhuma rota anterior foi removida;
+- nenhuma migration e nenhuma alteração de schema nesta etapa.
+
 ## EM VALIDAÇÃO — HOME CONFIGURÁVEL POR USUÁRIO + ASSISTÊNCIA COM OS — 2026-08-21
 
 A Home agora pode ser montada individualmente pelo usuário Master, permitindo escolher quais blocos cada pessoa verá ao entrar no Atlas One. A mesma implementação evolui o fluxo existente de Assistência Técnica para separar chamados por responsável e gerar Ordem de Serviço.

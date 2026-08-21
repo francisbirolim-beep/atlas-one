@@ -1,5 +1,17 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Navegação organizada + Central de Administração + Central de Cadastros — EM VALIDAÇÃO
+
+Implementado:
+- sidebar reorganizada em grupos operacionais (`Geral`, `Comercial` e `Operações`);
+- busca `Buscar no menu...` para localizar módulos e funções administrativas por palavras-chave;
+- bloco `Administração` recolhível para usuário Master;
+- nova `/administracao` como mapa das principais configurações do sistema;
+- nova `/cadastros` com pesquisa própria e atalhos separados para Produtos, Linhas, Materiais, Fornecedores, Produtos por Linha, Precificação, Unidades Pendentes, Receitas Técnicas, Fórmulas de Corte e Campos adicionais;
+- `/cadastro` antigo preservado como `Cadastros Avançados`, sem remover funcionalidades ainda não separadas;
+- nenhuma rota anterior removida;
+- sem migration e sem alteração de schema.
+
 ## 2026-08-21 — Assistência gera OS para impressão/PDF automaticamente — EM VALIDAÇÃO
 
 Implementado:
