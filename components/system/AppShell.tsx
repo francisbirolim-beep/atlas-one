@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar'
 import SidebarQuickSearch from '@/components/system/SidebarQuickSearch'
 import AppTopbar from '@/components/system/AppTopbar'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
+import HomeRecentQuotes from '@/components/system/HomeRecentQuotes'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeOperationsWorkspace from '@/components/system/HomeOperationsWorkspace'
 import MobileFavorites from '@/components/system/MobileFavorites'
@@ -44,6 +45,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <AppTopbar />
         <main className="min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0">
           {ehHome && <HomeExecutiveHero />}
+          {ehHome && <HomeRecentQuotes />}
           {ehHome && <HomeOperationsWorkspace />}
           <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehHome && <HomeManagementOverview />}
