@@ -1,5 +1,24 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Assistência em campo com rota, GPS e tempo — EM VALIDAÇÃO
+
+Implementado:
+- ações `WhatsApp`, `SMS` e `Copiar` logo após gerar o link do técnico;
+- mensagem de envio já inclui o link da assistência e o nome do técnico;
+- na tela externa, telefone do cliente com ação de ligação e WhatsApp;
+- endereço completo com `Abrir no Google Maps` e `Copiar endereço`;
+- botão explícito `Iniciar assistência` para check-in quando o técnico chega ao local;
+- solicitação de geolocalização pelo navegador no início, sempre dependente de permissão do técnico;
+- GPS opcional: negar a localização não bloqueia o atendimento;
+- início grava horário no servidor, técnico/data, status `em_atendimento` e move automaticamente o chamado para a coluna operacional de atendimento/andamento;
+- cronômetro ao vivo no celular do técnico, calculado a partir do horário persistido no servidor;
+- conclusão tenta capturar novamente o GPS, grava horário final, duração total, status `resolvido` e move automaticamente para a coluna final;
+- Kanban interno sincroniza as assistências a cada 12 segundos para refletir movimentações feitas pelo técnico sem refresh manual;
+- cards mostram `Em campo HH:MM:SS` durante execução e `Duração HH:MM:SS` após conclusão;
+- modal interno exibe técnico, início, fim, duração e links para o ponto de GPS de início/conclusão no Google Maps quando disponíveis;
+- não há rastreamento contínuo nem em segundo plano; localização é solicitada somente no início e no fim;
+- migration `assistencia_gps_tempo_execucao` aplicada em produção no Supabase, versão `20260821220855`, com campos nullable para horários, duração e coordenadas de início/fim.
+
 ## 2026-08-21 — Link do técnico + assinaturas digitais + PDF direto da OS — EM VALIDAÇÃO
 
 Implementado:
