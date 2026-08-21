@@ -1,5 +1,27 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — LINK DO TÉCNICO + ASSINATURAS + PDF DIRETO — 2026-08-21
+
+A Assistência Técnica passou a ter um fluxo externo para execução em campo e uma saída de PDF mais prática para envio ao cliente.
+
+Estado atual desta implementação:
+- o modal de cada chamado em `/assistencias` ganhou o bloco `Acesso do técnico`, onde um usuário autenticado pode informar o nome do técnico, telefone opcional e validade do acesso;
+- o Atlas gera um link individual por assistência; o token completo aparece somente no momento da geração e no banco fica armazenado apenas o hash SHA-256;
+- links podem expirar automaticamente e também podem ser revogados pelo Atlas;
+- a rota pública `/assistencia/acesso/[token]` abre sem login e dá acesso somente ao chamado vinculado ao token válido;
+- a tela externa já mostra empresa/logo, cliente, telefone, endereço, data de abertura, problema relatado e fotos do chamado;
+- o técnico pode preencher nome, data do atendimento, serviço realizado, materiais/peças e observações;
+- a tela externa possui assinatura digital em canvas para o técnico e para o cliente, utilizável com dedo ou mouse;
+- a conclusão exige as duas assinaturas e grava atendimento + assinaturas de volta na própria assistência;
+- a Ordem de Serviço passa a exibir automaticamente técnico, data, serviço, materiais, observações e as duas assinaturas salvas;
+- `/assistencias/[id]/os` ganhou ações separadas `Salvar PDF` e `Imprimir`;
+- `Salvar PDF` gera arquivo `.pdf` diretamente no navegador via jsPDF, facilitando salvar no computador e compartilhar pelo WhatsApp;
+- `Imprimir` continua usando o diálogo nativo do navegador;
+- a impressão da OS esconde controles fixos do Atlas, incluindo `Voltar`, `Início` e `Favoritos`, deixando a folha limpa;
+- `MobileNavigationControls` também recebeu `print:hidden` como proteção adicional;
+- a migration `assistencia_link_tecnico` foi aplicada no projeto Supabase de produção e cria os campos de atendimento/assinaturas em `assistencias` e a tabela `assistencia_acessos_externos`;
+- a versão local da migration de fórmulas de corte foi reconciliada com a versão já registrada no banco (`20260820160019`), corrigindo uma divergência anterior do histórico de migrations sem alterar o schema existente.
+
 ## EM VALIDAÇÃO — OS DE ASSISTÊNCIA A4 + DATA AJUSTÁVEL — 2026-08-21
 
 A Assistência Técnica recebeu dois ajustes pedidos após uso real: a Ordem de Serviço foi compactada para impressão em uma única folha A4 e a data da assistência passou a ser ajustável.

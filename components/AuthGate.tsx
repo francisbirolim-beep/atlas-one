@@ -13,6 +13,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const rotaPublica = pathname === '/login'
     || pathname === '/redefinir-senha'
     || pathname.startsWith('/medicao-final/acesso/')
+    || pathname.startsWith('/assistencia/acesso/')
 
   useEffect(() => {
     let ativo = true

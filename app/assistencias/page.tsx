@@ -16,6 +16,7 @@ import {
 import { usuarioAtual } from '@/lib/auth'
 import { lerHomeUsuarioConfig, type EscopoAssistencias } from '@/lib/homeUsuario'
 import { Usuario } from '@/lib/tipos'
+import AssistenciaExternalAccessPanel from '@/components/system/AssistenciaExternalAccessPanel'
 
 function dataParaInput(dataIso: string) {
   const data = new Date(dataIso)
@@ -235,8 +236,8 @@ export default function Assistencias() {
 
       {selecionado && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white"><h3 className="font-bold text-slate-800">Chamado de assistência</h3><button onClick={() => setSelecionado(null)} className="p-1 text-slate-400 hover:text-slate-600"><X size={18} /></button></div>
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[88vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white z-10"><h3 className="font-bold text-slate-800">Chamado de assistência</h3><button onClick={() => setSelecionado(null)} className="p-1 text-slate-400 hover:text-slate-600"><X size={18} /></button></div>
 
             <div className="p-5 space-y-4">
               <div><p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p><p className="text-lg font-bold text-slate-800">{selecionado.cliente_nome}</p></div>
@@ -264,7 +265,9 @@ export default function Assistencias() {
 
               <div><label className="block text-xs text-slate-500 mb-1">Etapa</label><select value={selecionado.coluna_id || colunas[0]?.id || ''} onChange={e => mudarColunaSelecionado(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">{colunas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
 
-              <Link href={`/assistencias/${selecionado.id}/os`} className="w-full py-2.5 flex items-center justify-center gap-2 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition"><FileText size={15}/> Imprimir / PDF da OS</Link>
+              <AssistenciaExternalAccessPanel assistenciaId={selecionado.id} />
+
+              <Link href={`/assistencias/${selecionado.id}/os`} className="w-full py-2.5 flex items-center justify-center gap-2 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition"><FileText size={15}/> Abrir Ordem de Serviço</Link>
 
               {usuario?.role === 'master' && <button onClick={excluirSelecionado} className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"><Trash2 size={13} /> Excluir este chamado</button>}
             </div>

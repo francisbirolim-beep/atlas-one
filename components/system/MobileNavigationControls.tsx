@@ -19,7 +19,7 @@ export default function MobileNavigationControls() {
   if (naHome) return null
 
   return (
-    <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-50 flex items-center gap-2 md:hidden">
+    <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-50 flex items-center gap-2 print:hidden md:hidden">
       <button
         type="button"
         onClick={voltar}
