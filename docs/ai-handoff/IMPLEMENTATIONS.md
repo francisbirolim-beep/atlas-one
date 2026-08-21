@@ -1,5 +1,23 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Link do técnico + assinaturas digitais + PDF direto da OS — EM VALIDAÇÃO
+
+Implementado:
+- painel `Acesso do técnico` no modal da assistência para gerar links individuais com nome do técnico, telefone opcional e validade configurável;
+- token de acesso externo gerado aleatoriamente e persistido somente como hash SHA-256;
+- links podem ser revogados e possuem expiração;
+- nova rota pública `/assistencia/acesso/[token]`, sem exigir login do Atlas, limitada ao chamado associado ao token válido;
+- tela externa mobile-first já mostra dados do cliente, endereço, problema e fotos;
+- técnico pode registrar data do atendimento, serviço realizado, materiais/peças e observações;
+- assinatura digital do técnico e do cliente em canvas, compatível com toque e mouse;
+- conclusão exige ambas as assinaturas e salva o atendimento de volta em `assistencias`;
+- Ordem de Serviço passa a exibir os dados preenchidos e as assinaturas reais;
+- ação `Salvar PDF` adicionada à OS usando jsPDF para gerar download direto de arquivo, separada da ação `Imprimir`;
+- impressão da OS oculta controles fixos do Atlas, inclusive `Voltar`, `Início` e `Favoritos`;
+- `MobileNavigationControls` também recebeu `print:hidden`;
+- migration de produção `assistencia_link_tecnico` aplicada no Supabase, com novos campos de atendimento/assinaturas e tabela `assistencia_acessos_externos`;
+- histórico local da migration `engenharia_formulas_corte_v1` reconciliado com a versão remota `20260820160019`, sem alteração funcional de schema.
+
 ## 2026-08-21 — OS de Assistência A4 + data ajustável — EM VALIDAÇÃO
 
 Implementado:
