@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, ExternalLink, Link2, Loader2, ShieldCheck, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Link2, Loader2, MessageCircle, MessageSquareText, ShieldCheck, Trash2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 
 type Acesso = {
@@ -14,6 +14,17 @@ type Acesso = {
   ultimo_acesso_em: string | null
   criado_por_nome: string | null
   created_at: string
+}
+
+function somenteNumeros(valor: string) {
+  return valor.replace(/\D/g, '')
+}
+
+function telefoneWhatsApp(valor: string) {
+  const digitos = somenteNumeros(valor)
+  if (!digitos) return ''
+  if (digitos.length === 10 || digitos.length === 11) return `55${digitos}`
+  return digitos
 }
 
 export default function AssistenciaExternalAccessPanel({ assistenciaId }: { assistenciaId: string }) {
@@ -72,15 +83,37 @@ export default function AssistenciaExternalAccessPanel({ assistenciaId }: { assi
     }
 
     setUrlNova(json.url || '')
-    setMensagem('Link gerado. Copie e envie para o técnico.')
+    setMensagem('Link gerado. Você já pode enviar por WhatsApp, SMS ou copiar.')
     await carregar()
+  }
+
+  function textoEnvio() {
+    return `Olá ${nome.trim() || 'técnico'}, você recebeu uma assistência técnica. Abra o link para ver os dados do cliente, endereço, iniciar o atendimento, registrar o serviço e coletar as assinaturas: ${urlNova}`
+  }
+
+  function enviarWhatsApp() {
+    if (!urlNova) return
+    const numero = telefoneWhatsApp(telefone)
+    const destino = numero
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(textoEnvio())}`
+      : `https://wa.me/?text=${encodeURIComponent(textoEnvio())}`
+    window.open(destino, '_blank', 'noopener,noreferrer')
+    setMensagem(numero ? 'WhatsApp aberto com o técnico e a mensagem pronta.' : 'WhatsApp aberto com a mensagem pronta. Escolha o contato do técnico.')
+  }
+
+  function enviarSms() {
+    if (!urlNova) return
+    const numero = somenteNumeros(telefone)
+    const destino = `sms:${numero}?body=${encodeURIComponent(textoEnvio())}`
+    window.location.href = destino
+    setMensagem(numero ? 'SMS aberto com o número e a mensagem prontos.' : 'SMS aberto com a mensagem pronta. Escolha o destinatário.')
   }
 
   async function copiar() {
     if (!urlNova) return
     try {
       await navigator.clipboard.writeText(urlNova)
-      setMensagem('Link copiado. Já pode enviar pelo WhatsApp.')
+      setMensagem('Link copiado.')
     } catch {
       setMensagem('Copie manualmente o endereço abaixo.')
     }
@@ -113,7 +146,7 @@ export default function AssistenciaExternalAccessPanel({ assistenciaId }: { assi
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">Acesso do técnico</p>
           <h4 className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-slate-900"><Link2 size={15}/> Link da assistência</h4>
-          <p className="mt-1 text-xs leading-5 text-slate-500">O técnico abre apenas este chamado, preenche o atendimento e coleta as duas assinaturas. Ao concluir, tudo volta para a OS do Atlas.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">O técnico abre apenas este chamado, vê cliente/endereço, inicia o atendimento com GPS opcional, registra o serviço e coleta as assinaturas.</p>
         </div>
         <ShieldCheck size={19} className="shrink-0 text-emerald-700" />
       </div>
@@ -121,7 +154,7 @@ export default function AssistenciaExternalAccessPanel({ assistenciaId }: { assi
       <div className="mt-3 grid gap-2">
         <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do técnico" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
         <div className="grid grid-cols-[1fr_92px] gap-2">
-          <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="Telefone (opcional)" inputMode="tel" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+          <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="Telefone do técnico" inputMode="tel" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
           <select value={dias} onChange={e => setDias(Number(e.target.value))} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm">
             <option value={1}>1 dia</option>
             <option value={3}>3 dias</option>
@@ -137,11 +170,14 @@ export default function AssistenciaExternalAccessPanel({ assistenciaId }: { assi
 
       {urlNova && (
         <div className="mt-3 rounded-lg border border-emerald-200 bg-white p-2.5">
-          <p className="mb-2 text-[11px] font-semibold text-emerald-800">Este endereço completo aparece somente agora.</p>
-          <div className="flex gap-2">
-            <input readOnly value={urlNova} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-2 text-[11px] text-slate-600" />
-            <button type="button" onClick={() => void copiar()} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white"><Copy size={13}/> Copiar</button>
+          <p className="mb-2 text-[11px] font-semibold text-emerald-800">O link completo aparece somente no momento da geração.</p>
+          <input readOnly value={urlNova} className="w-full rounded-lg border border-slate-200 px-2 py-2 text-[11px] text-slate-600" />
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <button type="button" onClick={enviarWhatsApp} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white"><MessageCircle size={13}/> WhatsApp</button>
+            <button type="button" onClick={enviarSms} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-2 text-xs font-semibold text-white"><MessageSquareText size={13}/> SMS</button>
+            <button type="button" onClick={() => void copiar()} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-2 py-2 text-xs font-semibold text-white"><Copy size={13}/> Copiar</button>
           </div>
+          <p className="mt-2 text-[10px] leading-4 text-slate-400">WhatsApp e SMS são abertos no aparelho com a mensagem pronta. O envio automático sem abrir o aplicativo exigirá integração com uma API de mensageria.</p>
         </div>
       )}
 
