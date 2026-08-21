@@ -1,5 +1,19 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — TEMA CLARO COMPLETO NA HOME — 2026-08-21
+
+Após validação visual real na tela da usuária Keila, foi identificado que a primeira versão do tema claro clareava a sidebar e o hero, mas mantinha os cards operacionais da Home escuros.
+
+Estado atual desta correção:
+- `app/atlas-theme.css` agora converte, no tema claro, os painéis baseados em `bg-slate-950` para superfície branca;
+- bordas `border-slate-800` / `border-white/10` e divisórias internas passam para tons claros;
+- superfícies internas `bg-white/[0.025]`, `bg-white/5` e `bg-white/10` recebem equivalentes claros;
+- textos brancos e cinzas usados dentro desses painéis passam para tipografia escura/legível;
+- hover de controles neutros também foi ajustado para o tema claro;
+- com isso, `Notificações e alertas`, `Minhas tarefas` e `Agenda / Calendário` ficam claros junto com o restante da Home;
+- cores semânticas de status (verde, azul, vermelho e violeta) continuam preservadas;
+- nenhuma migration e nenhuma alteração de banco nesta etapa.
+
 ## EM VALIDAÇÃO — HOME RESPONSIVA + TEMA CLARO POR USUÁRIO — 2026-08-21
 
 A tela inicial foi ajustada a partir do caso real da usuária Keila em largura intermediária de desktop, onde o bloco principal ficava comprimido e o título quebrava praticamente uma palavra por linha.
@@ -9,7 +23,7 @@ Estado atual desta implementação:
 - os três atalhos (`Novo orçamento`, `Nova tarefa`, `Novo compromisso`) permanecem lado a lado a partir de `sm`, mas abaixo do texto até `xl`;
 - `components/Sidebar.tsx` ganhou alternância `Tema claro` / `Tema escuro`;
 - a preferência é salva por usuário no navegador usando a chave `atlas-theme:<usuario.id>`;
-- o tema claro clareia a sidebar e o hero da Home, preservando o restante da interface profissional já clara;
+- o tema claro clareia a sidebar e o hero da Home;
 - o tema escuro mantém a identidade atual da sidebar e do hero;
 - `app/atlas-theme.css` também corrige contraste do título `Atlas One` e do nome do usuário na sidebar escura;
 - nenhuma migration e nenhuma alteração de banco nesta etapa.
