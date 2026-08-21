@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Printer, ShieldAlert, Wrench } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
@@ -14,12 +14,14 @@ type EmpresaOS = DadosEmpresa & IdentidadeEmpresa
 
 export default function OrdemServicoAssistenciaPage() {
   const params = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
   const id = params?.id
   const [assistencia, setAssistencia] = useState<Assistencia | null>(null)
   const [empresa, setEmpresa] = useState<EmpresaOS | null>(null)
   const [etapa, setEtapa] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [negado, setNegado] = useState(false)
+  const impressaoAutomaticaExecutada = useRef(false)
 
   useEffect(() => {
     let ativo = true
@@ -56,6 +58,15 @@ export default function OrdemServicoAssistenciaPage() {
     return () => { ativo = false }
   }, [id])
 
+  useEffect(() => {
+    if (carregando || !assistencia || negado) return
+    if (searchParams.get('print') !== '1' || impressaoAutomaticaExecutada.current) return
+
+    impressaoAutomaticaExecutada.current = true
+    const timer = window.setTimeout(() => window.print(), 350)
+    return () => window.clearTimeout(timer)
+  }, [assistencia, carregando, negado, searchParams])
+
   if (carregando) return <div className="min-h-[70vh] grid place-items-center text-slate-400"><Loader2 className="animate-spin" /></div>
 
   if (negado) {
@@ -67,6 +78,7 @@ export default function OrdemServicoAssistenciaPage() {
   const nomeEmpresa = empresa?.nomeFantasia?.trim() || empresa?.nome?.trim() || 'Esquadrifácio'
   const endereco = [assistencia.endereco, assistencia.numero, assistencia.bairro, assistencia.cidade].filter(Boolean).join(', ')
   const numeroOS = assistencia.id.replace(/-/g, '').slice(0, 8).toUpperCase()
+  const dadosEmpresaCabecalho = [empresa?.cnpj ? `CNPJ ${empresa.cnpj}` : null, empresa?.cidadeUf, empresa?.tel, empresa?.email].filter(Boolean).join(' · ')
 
   return (
     <div className="os-assistencia min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
@@ -81,7 +93,7 @@ export default function OrdemServicoAssistenciaPage() {
       `}</style>
 
       <div className="print-hide mx-auto mb-4 flex max-w-4xl items-center justify-between gap-3">
-        <Link href="/assistencias" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft size={16}/> Voltar</Link>
+        <Link href="/assistencias" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft size={16}/> Voltar ao Kanban</Link>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-navyDark"><Printer size={16}/> Imprimir / Salvar PDF</button>
       </div>
 
@@ -92,7 +104,7 @@ export default function OrdemServicoAssistenciaPage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={empresa.logoUrl} alt={nomeEmpresa} className="h-16 w-32 object-contain object-left" />
             ) : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white"><Wrench size={24}/></div>}
-            <div className="min-w-0"><h1 className="text-xl font-bold text-slate-950">{nomeEmpresa}</h1><p className="mt-1 text-xs text-slate-500">{[empresa?.cidadeUf, empresa?.tel, empresa?.email].filter(Boolean).join(' · ')}</p></div>
+            <div className="min-w-0"><h1 className="text-xl font-bold text-slate-950">{nomeEmpresa}</h1><p className="mt-1 max-w-md text-xs leading-5 text-slate-500">{dadosEmpresaCabecalho || 'Assistência técnica'}</p></div>
           </div>
           <div className="text-right"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Ordem de Serviço</p><p className="mt-1 text-2xl font-bold text-slate-950">OS {numeroOS}</p><p className="mt-1 text-xs text-slate-500">Assistência técnica</p></div>
         </header>
@@ -105,9 +117,12 @@ export default function OrdemServicoAssistenciaPage() {
         </section>
 
         <section className="mt-5 rounded-xl border border-slate-200 p-4">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Cliente</h2>
-          <p className="mt-2 text-lg font-bold text-slate-950">{assistencia.cliente_nome}</p>
-          <p className="mt-1 text-sm text-slate-600">{endereco || 'Endereço não informado'}</p>
+          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Dados do cliente</h2>
+          <div className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Nome</p><p className="mt-1 text-base font-bold text-slate-950">{assistencia.cliente_nome}</p></div>
+            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Telefone / WhatsApp</p><p className="mt-1 text-sm text-slate-700">{assistencia.cliente_whatsapp || 'Não informado'}</p></div>
+            <div className="sm:col-span-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Endereço</p><p className="mt-1 text-sm text-slate-700">{endereco || 'Endereço não informado'}</p></div>
+          </div>
         </section>
 
         <section className="mt-4 rounded-xl border border-slate-200 p-4">

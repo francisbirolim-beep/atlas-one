@@ -20,9 +20,12 @@ Estado atual desta implementação:
 - o formulário `/assistencia` agora exige apenas o `Nome do cliente`; descrição, telefone, cidade, endereço, número, bairro e fotos são opcionais;
 - ao digitar o nome na abertura da assistência, o Atlas pesquisa clientes já cadastrados e preenche automaticamente os dados encontrados;
 - o Kanban de Assistências existente foi preservado; criação/edição/exclusão das colunas fica restrita ao Master;
-- cada chamado possui ação `Gerar ordem de serviço`, abrindo `/assistencias/[id]/os`;
-- a OS usa os dados da empresa, logo, cliente, endereço, problema, fotos, etapa e responsável pela abertura e inclui áreas para técnico, serviço executado, materiais, observações e assinaturas;
-- a OS pode ser impressa ou salva como PDF pelo navegador;
+- cada chamado possui sua Ordem de Serviço em `/assistencias/[id]/os`;
+- quando uma assistência online é criada, `criarAssistenciaNoServidor` devolve o ID do chamado e o formulário abre automaticamente a OS com `?print=1`, acionando o diálogo de impressão/salvar PDF do navegador;
+- a OS usa os dados da empresa e logo no cabeçalho, incluindo CNPJ quando disponível, além de nome do cliente, telefone/WhatsApp, endereço completo, problema, fotos, etapa e responsável pela abertura;
+- a OS inclui áreas para técnico, data do atendimento, serviço executado, materiais/peças, observações e assinaturas;
+- no Kanban, ao abrir qualquer chamado, a ação `Imprimir / PDF da OS` permite abrir e imprimir/salvar novamente a mesma OS a qualquer momento;
+- se a assistência for criada offline, ela continua sendo guardada na fila local; após sincronizar, a OS pode ser aberta pelo Kanban para impressão;
 - nenhuma migration e nenhuma alteração de schema nesta etapa.
 
 ## EM VALIDAÇÃO — HOME WHITE-LABEL + LOGO DA EMPRESA + ÚLTIMOS ORÇAMENTOS — 2026-08-21
