@@ -1,0 +1,111 @@
+/* Atlas One — tema visual por usuário.
+ * O tema "escuro" preserva a identidade atual (sidebar + hero escuros).
+ * O tema "claro" clareia a casca principal sem alterar regras de negócio.
+ */
+
+/* Correções de contraste da sidebar no tema atual. */
+@media (min-width: 768px) {
+  .atlas-sidebar-shell > nav > div:first-child > p:first-child {
+    color: #f8fafc !important;
+  }
+
+  .atlas-sidebar-shell > nav > div:first-child > p:nth-child(2) {
+    color: #64748b !important;
+  }
+
+  .atlas-sidebar-shell nav [class*="text-slate-700"] {
+    color: #cbd5e1 !important;
+  }
+
+  .atlas-sidebar-shell .atlas-theme-toggle:hover {
+    background: rgb(255 255 255 / 0.06) !important;
+    color: #f8fafc !important;
+  }
+}
+
+html[data-atlas-theme="claro"] {
+  background: #f8fafc;
+}
+
+html[data-atlas-theme="claro"] .atlas-home-hero {
+  border-color: #e2e8f0 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06), 0 12px 28px rgb(15 23 42 / 0.035) !important;
+}
+
+html[data-atlas-theme="claro"] .atlas-home-hero-title {
+  color: #0f172a !important;
+}
+
+html[data-atlas-theme="claro"] .atlas-home-hero-muted {
+  color: #64748b !important;
+}
+
+html[data-atlas-theme="claro"] .atlas-home-hero-pill {
+  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
+  color: #475569 !important;
+}
+
+html[data-atlas-theme="claro"] .atlas-home-hero-secondary {
+  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
+  color: #334155 !important;
+}
+
+html[data-atlas-theme="claro"] .atlas-home-hero-secondary:hover {
+  border-color: #cbd5e1 !important;
+  background: #f1f5f9 !important;
+}
+
+@media (min-width: 768px) {
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell,
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav {
+    background: #ffffff !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav {
+    border-right-color: #e2e8f0 !important;
+    box-shadow: 8px 0 28px rgb(15 23 42 / 0.035) !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav > div:first-child > p:first-child {
+    color: #0f172a !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav > div:first-child > p:nth-child(2) {
+    color: #94a3b8 !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav a:not([class*="bg-brand-navy"]),
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav button:not([class*="bg-brand-navy"]) {
+    color: #64748b !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav a:not([class*="bg-brand-navy"]):hover,
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell .atlas-theme-toggle:hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav [class*="text-slate-700"] {
+    color: #334155 !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav [class*="text-slate-500"] {
+    color: #64748b !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav [class*="text-slate-400"] {
+    color: #94a3b8 !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav [class*="bg-slate-100"] {
+    background: #f1f5f9 !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav > div:last-of-type {
+    border-top-color: #e2e8f0 !important;
+  }
+}
