@@ -1,5 +1,19 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — HOME RESPONSIVA + TEMA CLARO POR USUÁRIO — 2026-08-21
+
+A tela inicial foi ajustada a partir do caso real da usuária Keila em largura intermediária de desktop, onde o bloco principal ficava comprimido e o título quebrava praticamente uma palavra por linha.
+
+Estado atual desta implementação:
+- `components/system/HomeExecutiveHero.tsx` só passa para o layout de duas colunas em `xl`; em larguras menores, texto e ações ficam empilhados e usam a largura disponível;
+- os três atalhos (`Novo orçamento`, `Nova tarefa`, `Novo compromisso`) permanecem lado a lado a partir de `sm`, mas abaixo do texto até `xl`;
+- `components/Sidebar.tsx` ganhou alternância `Tema claro` / `Tema escuro`;
+- a preferência é salva por usuário no navegador usando a chave `atlas-theme:<usuario.id>`;
+- o tema claro clareia a sidebar e o hero da Home, preservando o restante da interface profissional já clara;
+- o tema escuro mantém a identidade atual da sidebar e do hero;
+- `app/atlas-theme.css` também corrige contraste do título `Atlas One` e do nome do usuário na sidebar escura;
+- nenhuma migration e nenhuma alteração de banco nesta etapa.
+
 ## EM VALIDAÇÃO — ORÇAMENTO COM TIPO LIVRE — 2026-08-21
 
 O formulário de Orçamento Rápido agora permite cadastrar uma esquadria mesmo quando Linha / Modelo / Tipologia ainda não existem no catálogo técnico.
