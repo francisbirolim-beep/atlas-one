@@ -1,7 +1,8 @@
 /* Atlas One — tema visual por usuário.
- * O tema "escuro" preserva a identidade atual (sidebar + hero escuros).
- * O tema "claro" clareia toda a casca visual e também os painéis escuros
- * baseados em bg-slate-950, sem alterar regras de negócio.
+ * O tema "escuro" preserva a identidade atual da sidebar e dos painéis operacionais.
+ * O tema "claro" clareia toda a casca visual e os painéis escuros baseados em
+ * bg-slate-950. A faixa principal da Home permanece colorida nos dois temas
+ * porque representa a identidade visual da empresa que usa o Atlas.
  */
 
 /* Correções de contraste da sidebar no tema atual. */
@@ -33,25 +34,26 @@ html[data-atlas-theme="claro"] body {
   color: #0f172a;
 }
 
+/* A Home agora usa a faixa verde/white-label como elemento de marca.
+ * No tema claro ela continua colorida; apenas o restante da interface clareia. */
 html[data-atlas-theme="claro"] .atlas-home-hero {
-  border-color: #e2e8f0 !important;
-  background: #ffffff !important;
-  color: #0f172a !important;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06), 0 12px 28px rgb(15 23 42 / 0.035) !important;
+  border-color: rgb(6 95 70 / 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 12px 28px rgb(15 23 42 / 0.06) !important;
 }
 
 html[data-atlas-theme="claro"] .atlas-home-hero-title {
-  color: #0f172a !important;
+  color: #ffffff !important;
 }
 
 html[data-atlas-theme="claro"] .atlas-home-hero-muted {
-  color: #64748b !important;
+  color: rgb(236 253 245 / 0.88) !important;
 }
 
 html[data-atlas-theme="claro"] .atlas-home-hero-pill {
-  border-color: #e2e8f0 !important;
-  background: #f8fafc !important;
-  color: #475569 !important;
+  border-color: rgb(255 255 255 / 0.24) !important;
+  background: rgb(255 255 255 / 0.12) !important;
+  color: #ffffff !important;
 }
 
 html[data-atlas-theme="claro"] .atlas-home-hero-secondary {
@@ -67,8 +69,8 @@ html[data-atlas-theme="claro"] .atlas-home-hero-secondary:hover {
 
 /*
  * Painéis operacionais escuros.
- * A Home usa bg-slate-950 em Notificações, Minhas tarefas e Agenda.
- * No tema claro, qualquer painel com esse mesmo padrão passa a usar
+ * A Home usa bg-slate-950 em Notificações, Minhas tarefas, Agenda e agora
+ * também em Últimos orçamentos. No tema claro, esses painéis passam a usar
  * superfície branca, bordas claras e tipografia escura.
  */
 html[data-atlas-theme="claro"] .bg-slate-950 {
