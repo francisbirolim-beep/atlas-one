@@ -68,10 +68,10 @@ export async function carregarDadosExternosAssistencia(token: string) {
   const acesso = await buscarAcessoValidoAssistencia(token)
   if (!acesso) return null
 
-  const [assistenciaResp, empresaResp, colunaResp] = await Promise.all([
+  const [assistenciaResp, empresaResp] = await Promise.all([
     supabaseAdmin
       .from('assistencias')
-      .select('id, created_at, cliente_nome, cliente_whatsapp, cidade, endereco, numero, bairro, descricao_problema, fotos_urls, status, coluna_id, criado_por_nome, tecnico_nome, data_atendimento, servico_realizado, materiais_utilizados, observacoes_atendimento, assinatura_tecnico, assinatura_cliente, atendimento_concluido_em')
+      .select('id, created_at, cliente_nome, cliente_whatsapp, cidade, endereco, numero, bairro, descricao_problema, fotos_urls, status, coluna_id, criado_por_nome, tecnico_nome, data_atendimento, servico_realizado, materiais_utilizados, observacoes_atendimento, assinatura_tecnico, assinatura_cliente, atendimento_iniciado_em, atendimento_concluido_em, duracao_atendimento_segundos, gps_inicio_latitude, gps_inicio_longitude, gps_inicio_precisao_m, gps_inicio_capturado_em, gps_fim_latitude, gps_fim_longitude, gps_fim_precisao_m, gps_fim_capturado_em')
       .eq('id', acesso.assistencia_id)
       .maybeSingle(),
     supabaseAdmin
@@ -79,17 +79,12 @@ export async function carregarDadosExternosAssistencia(token: string) {
       .select('valor')
       .eq('chave', 'dados_empresa')
       .maybeSingle(),
-    supabaseAdmin
-      .from('assistencias')
-      .select('coluna_id')
-      .eq('id', acesso.assistencia_id)
-      .maybeSingle(),
   ])
 
   if (assistenciaResp.error || !assistenciaResp.data) return null
 
   let etapa = ''
-  const colunaId = colunaResp.data?.coluna_id
+  const colunaId = assistenciaResp.data.coluna_id
   if (colunaId) {
     const { data: coluna } = await supabaseAdmin
       .from('assistencia_colunas')

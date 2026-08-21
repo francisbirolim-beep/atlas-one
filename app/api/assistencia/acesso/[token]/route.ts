@@ -9,8 +9,53 @@ function texto(valor: unknown, limite = 10000) {
 function assinatura(valor: unknown) {
   const conteudo = String(valor || '')
   if (!conteudo.startsWith('data:image/png;base64,')) return ''
-  // Assinaturas desenhadas costumam ficar muito abaixo deste limite.
   return conteudo.slice(0, 500000)
+}
+
+function numeroFinito(valor: unknown) {
+  const n = Number(valor)
+  return Number.isFinite(n) ? n : null
+}
+
+function gpsDoBody(valor: unknown) {
+  if (!valor || typeof valor !== 'object') return null
+  const bruto = valor as Record<string, unknown>
+  const latitude = numeroFinito(bruto.latitude)
+  const longitude = numeroFinito(bruto.longitude)
+  const precisao = numeroFinito(bruto.precisao)
+  if (latitude === null || longitude === null) return null
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null
+  return {
+    latitude,
+    longitude,
+    precisao: precisao !== null && precisao >= 0 ? precisao : null,
+  }
+}
+
+function normalizarNome(valor: string) {
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+async function colunaPorFinalidade(finalidade: 'andamento' | 'resolvido') {
+  const { data } = await supabaseAdmin
+    .from('assistencia_colunas')
+    .select('id, nome, ordem')
+    .order('ordem', { ascending: true })
+
+  const colunas = data || []
+  if (!colunas.length) return null
+
+  if (finalidade === 'andamento') {
+    return colunas.find(c => {
+      const nome = normalizarNome(c.nome || '')
+      return nome.includes('atend') || nome.includes('andamento') || nome.includes('execucao')
+    }) || colunas[Math.min(1, colunas.length - 1)]
+  }
+
+  return colunas.find(c => {
+    const nome = normalizarNome(c.nome || '')
+    return nome.includes('resolv') || nome.includes('conclu') || nome.includes('finaliz')
+  }) || colunas[colunas.length - 1]
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
@@ -28,17 +73,94 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   }
 
   const body = await req.json().catch(() => ({}))
+  const acao = texto(body?.acao, 20) || 'concluir'
   const tecnicoNome = texto(body?.tecnicoNome, 180) || acesso.nome_tecnico || ''
   const dataAtendimento = texto(body?.dataAtendimento, 10)
+  const gps = gpsDoBody(body?.gps)
+
+  if (!tecnicoNome) {
+    return NextResponse.json({ error: 'Informe o nome do tecnico.' }, { status: 400 })
+  }
+
+  const { data: assistenciaAtual, error: erroAtual } = await supabaseAdmin
+    .from('assistencias')
+    .select('id, atendimento_iniciado_em, atendimento_concluido_em, gps_inicio_capturado_em, gps_fim_capturado_em')
+    .eq('id', acesso.assistencia_id)
+    .maybeSingle()
+
+  if (erroAtual || !assistenciaAtual) {
+    return NextResponse.json({ error: 'Assistencia nao encontrada.' }, { status: 404 })
+  }
+
+  const agora = new Date().toISOString()
+
+  if (acao === 'iniciar') {
+    if (assistenciaAtual.atendimento_concluido_em) {
+      return NextResponse.json({ error: 'Esta assistencia ja foi concluida.' }, { status: 409 })
+    }
+
+    if (assistenciaAtual.atendimento_iniciado_em) {
+      return NextResponse.json({
+        ok: true,
+        jaIniciada: true,
+        iniciadoEm: assistenciaAtual.atendimento_iniciado_em,
+      })
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAtendimento)) {
+      return NextResponse.json({ error: 'Informe a data do atendimento.' }, { status: 400 })
+    }
+
+    const coluna = await colunaPorFinalidade('andamento')
+    const atualizacao: Record<string, unknown> = {
+      tecnico_nome: tecnicoNome,
+      data_atendimento: dataAtendimento,
+      atendimento_iniciado_em: agora,
+      status: 'em_atendimento',
+      atualizado_em: agora,
+      coluna_atualizada_em: agora,
+    }
+    if (coluna?.id) atualizacao.coluna_id = coluna.id
+    if (gps) {
+      atualizacao.gps_inicio_latitude = gps.latitude
+      atualizacao.gps_inicio_longitude = gps.longitude
+      atualizacao.gps_inicio_precisao_m = gps.precisao
+      atualizacao.gps_inicio_capturado_em = agora
+    }
+
+    const { error } = await supabaseAdmin
+      .from('assistencias')
+      .update(atualizacao)
+      .eq('id', acesso.assistencia_id)
+
+    if (error) {
+      return NextResponse.json({ error: 'Nao foi possivel iniciar a assistencia.' }, { status: 500 })
+    }
+
+    await supabaseAdmin
+      .from('assistencia_acessos_externos')
+      .update({ ultimo_acesso_em: agora })
+      .eq('id', acesso.id)
+
+    return NextResponse.json({
+      ok: true,
+      iniciadoEm: agora,
+      etapa: coluna?.nome || 'Em atendimento',
+      gpsRegistrado: Boolean(gps),
+      precisaoGps: gps?.precisao ?? null,
+    })
+  }
+
+  if (acao !== 'concluir') {
+    return NextResponse.json({ error: 'Acao invalida.' }, { status: 400 })
+  }
+
   const servicoRealizado = texto(body?.servicoRealizado)
   const materiaisUtilizados = texto(body?.materiaisUtilizados)
   const observacoesAtendimento = texto(body?.observacoesAtendimento)
   const assinaturaTecnico = assinatura(body?.assinaturaTecnico)
   const assinaturaCliente = assinatura(body?.assinaturaCliente)
 
-  if (!tecnicoNome) {
-    return NextResponse.json({ error: 'Informe o nome do tecnico.' }, { status: 400 })
-  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAtendimento)) {
     return NextResponse.json({ error: 'Informe a data do atendimento.' }, { status: 400 })
   }
@@ -46,20 +168,37 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     return NextResponse.json({ error: 'As assinaturas do tecnico e do cliente sao obrigatorias para concluir.' }, { status: 400 })
   }
 
-  const agora = new Date().toISOString()
+  const iniciadoEm = assistenciaAtual.atendimento_iniciado_em || agora
+  const concluidoEm = assistenciaAtual.atendimento_concluido_em || agora
+  const duracaoSegundos = Math.max(0, Math.round((new Date(concluidoEm).getTime() - new Date(iniciadoEm).getTime()) / 1000))
+  const coluna = await colunaPorFinalidade('resolvido')
+
+  const atualizacao: Record<string, unknown> = {
+    tecnico_nome: tecnicoNome,
+    data_atendimento: dataAtendimento,
+    servico_realizado: servicoRealizado || null,
+    materiais_utilizados: materiaisUtilizados || null,
+    observacoes_atendimento: observacoesAtendimento || null,
+    assinatura_tecnico: assinaturaTecnico,
+    assinatura_cliente: assinaturaCliente,
+    atendimento_iniciado_em: iniciadoEm,
+    atendimento_concluido_em: concluidoEm,
+    duracao_atendimento_segundos: duracaoSegundos,
+    status: 'resolvido',
+    atualizado_em: agora,
+    coluna_atualizada_em: agora,
+  }
+  if (coluna?.id) atualizacao.coluna_id = coluna.id
+  if (gps && !assistenciaAtual.gps_fim_capturado_em) {
+    atualizacao.gps_fim_latitude = gps.latitude
+    atualizacao.gps_fim_longitude = gps.longitude
+    atualizacao.gps_fim_precisao_m = gps.precisao
+    atualizacao.gps_fim_capturado_em = agora
+  }
+
   const { error } = await supabaseAdmin
     .from('assistencias')
-    .update({
-      tecnico_nome: tecnicoNome,
-      data_atendimento: dataAtendimento,
-      servico_realizado: servicoRealizado || null,
-      materiais_utilizados: materiaisUtilizados || null,
-      observacoes_atendimento: observacoesAtendimento || null,
-      assinatura_tecnico: assinaturaTecnico,
-      assinatura_cliente: assinaturaCliente,
-      atendimento_concluido_em: agora,
-      atualizado_em: agora,
-    })
+    .update(atualizacao)
     .eq('id', acesso.assistencia_id)
 
   if (error) {
@@ -71,5 +210,11 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .update({ ultimo_acesso_em: agora })
     .eq('id', acesso.id)
 
-  return NextResponse.json({ ok: true, concluidoEm: agora })
+  return NextResponse.json({
+    ok: true,
+    concluidoEm,
+    duracaoSegundos,
+    etapa: coluna?.nome || 'Resolvido',
+    gpsRegistrado: Boolean(gps),
+  })
 }
