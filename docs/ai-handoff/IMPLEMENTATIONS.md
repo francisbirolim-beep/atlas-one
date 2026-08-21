@@ -1,5 +1,18 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Assistência gera OS para impressão/PDF automaticamente — EM VALIDAÇÃO
+
+Implementado:
+- `criarAssistenciaNoServidor` agora retorna também o ID da assistência recém-criada;
+- ao concluir uma nova assistência online, o Atlas abre automaticamente `/assistencias/[id]/os?print=1`;
+- a tela da OS detecta `print=1` e aciona o diálogo de impressão do navegador, permitindo imprimir em papel ou salvar em PDF;
+- cabeçalho da OS usa logo/nome da empresa e passa a exibir CNPJ quando configurado;
+- bloco de cliente destaca nome, telefone/WhatsApp e endereço completo;
+- problema relatado, fotos, etapa, abertura e responsável continuam registrados na OS;
+- no Kanban de Assistências, a ação do chamado foi renomeada para `Imprimir / PDF da OS`, deixando explícita a possibilidade de reimpressão a qualquer momento;
+- assistências criadas offline continuam na fila local e podem ter a OS impressa pelo Kanban após a sincronização;
+- sem migration e sem alteração de schema.
+
 ## 2026-08-21 — Home configurável por usuário + Assistência com OS — EM VALIDAÇÃO
 
 Implementado:
