@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { criarAssistenciaNoServidor, DadosAssistenciaForm } from '@/lib/assistencias'
 import { salvarPendente } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
@@ -16,6 +17,7 @@ interface FotoItem {
 }
 
 export default function Assistencia() {
+  const router = useRouter()
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -126,7 +128,11 @@ export default function Assistencia() {
     try {
       const resultado = await criarAssistenciaNoServidor(dadosForm)
       setSalvando(false)
-      if (resultado.ok) {
+      if (resultado.ok && resultado.id) {
+        // Assim que o chamado e criado, abre a Ordem de Servico e solicita a
+        // impressao. No dialogo do navegador o usuario tambem pode salvar em PDF.
+        router.push(`/assistencias/${resultado.id}/os?print=1`)
+      } else if (resultado.ok) {
         setSalvo(true)
       } else {
         setErro('Erro ao salvar: ' + resultado.error)
@@ -158,7 +164,7 @@ export default function Assistencia() {
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
           <WifiOff size={48} className="text-amber-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Salvo neste aparelho!</h2>
-          <p className="text-slate-500 mb-6">Sem internet agora. O chamado de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar.</p>
+          <p className="text-slate-500 mb-6">Sem internet agora. O chamado de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar. Depois da sincronização, a OS poderá ser impressa pelo Kanban de Assistências.</p>
           <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">Nova assistência</button>
         </div>
       </div>
@@ -188,7 +194,7 @@ export default function Assistencia() {
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition"><ArrowLeft size={20} /></Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
-          <div><h1 className="text-lg font-bold text-slate-800">Abrir assistência</h1><p className="text-sm text-slate-500">Somente o nome do cliente é obrigatório.</p></div>
+          <div><h1 className="text-lg font-bold text-slate-800">Abrir assistência</h1><p className="text-sm text-slate-500">Somente o nome do cliente é obrigatório. Ao salvar, a Ordem de Serviço será aberta para imprimir ou salvar em PDF.</p></div>
         </div>
       </header>
 
@@ -241,7 +247,7 @@ export default function Assistencia() {
 
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
 
-        <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-teal text-white rounded-xl font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : 'Abrir assistência'}</button>
+        <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-teal text-white rounded-xl font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : 'Abrir assistência e gerar OS'}</button>
       </main>
     </div>
   )
