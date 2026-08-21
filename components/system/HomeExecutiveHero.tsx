@@ -7,15 +7,19 @@ import {
   CalendarDays,
   CalendarPlus,
   CheckSquare,
+  Columns3,
   FilePlus2,
   ImageIcon,
   UserPlus,
+  Wrench,
 } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { lerDadosEmpresa, type IdentidadeEmpresa } from '@/lib/configGeral'
+import type { HomeModuloId } from '@/lib/homeUsuario'
 import type { DadosEmpresa, Usuario } from '@/lib/tipos'
 
 const COR_PADRAO = '#059669'
+const MODULOS_PADRAO: HomeModuloId[] = ['orcamentos', 'clientes', 'tarefas', 'calendario']
 
 function saudacao() {
   const hora = new Date().getHours()
@@ -34,7 +38,7 @@ function corSegura(cor?: string | null) {
 
 type DadosEmpresaHome = DadosEmpresa & IdentidadeEmpresa
 
-export default function HomeExecutiveHero() {
+export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulos?: HomeModuloId[] }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [empresa, setEmpresa] = useState<DadosEmpresaHome | null>(null)
 
@@ -54,6 +58,7 @@ export default function HomeExecutiveHero() {
 
   const nomeEmpresa = empresa?.nomeFantasia?.trim() || empresa?.nome?.trim() || 'Esquadrifácio'
   const corPrincipal = corSegura(empresa?.corPrincipal)
+  const tem = (modulo: HomeModuloId) => modulos.includes(modulo)
 
   function novaTarefa() {
     window.dispatchEvent(new Event('atlas:nova-tarefa'))
@@ -62,6 +67,9 @@ export default function HomeExecutiveHero() {
   function novoCompromisso() {
     window.dispatchEvent(new Event('atlas:novo-compromisso'))
   }
+
+  const classeAtalho = 'group flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md'
+  const classeIcone = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700'
 
   return (
     <section className="mx-auto w-full max-w-7xl px-4 pt-5 md:px-6 md:pt-7">
@@ -87,7 +95,7 @@ export default function HomeExecutiveHero() {
             </div>
             <p className="text-sm font-medium text-emerald-50">{saudacao()}, {primeiroNome(usuario?.nome)}.</p>
             <h1 className="atlas-home-hero-title mt-1 max-w-3xl text-2xl font-semibold tracking-tight text-white md:text-3xl">Bem-vindo ao Atlas One</h1>
-            <p className="atlas-home-hero-muted mt-2 max-w-2xl text-sm leading-6 text-emerald-50/85">Visão central da operação: acompanhe prioridades, agenda, tarefas, orçamentos e alertas em um único ambiente.</p>
+            <p className="atlas-home-hero-muted mt-2 max-w-2xl text-sm leading-6 text-emerald-50/85">Sua tela inicial mostra somente os módulos definidos para o seu trabalho.</p>
           </div>
 
           <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-white/45 bg-white/10 p-4 backdrop-blur-sm">
@@ -105,24 +113,46 @@ export default function HomeExecutiveHero() {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <Link href="/orcamento-rapido" className="group flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><FilePlus2 size={19} /></span>
-          <span><strong className="block text-sm text-slate-900">Novo orçamento</strong><span className="mt-0.5 block text-xs text-slate-400">Criar orçamento</span></span>
-        </Link>
-        <Link href="/clientes/novo" className="group flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><UserPlus size={19} /></span>
-          <span><strong className="block text-sm text-slate-900">Novo cliente</strong><span className="mt-0.5 block text-xs text-slate-400">Cadastrar cliente</span></span>
-        </Link>
-        <button type="button" onClick={novaTarefa} className="group flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><CheckSquare size={19} /></span>
-          <span><strong className="block text-sm text-slate-900">Nova tarefa</strong><span className="mt-0.5 block text-xs text-slate-400">Adicionar tarefa</span></span>
-        </button>
-        <button type="button" onClick={novoCompromisso} className="group flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><CalendarPlus size={19} /></span>
-          <span><strong className="block text-sm text-slate-900">Novo compromisso</strong><span className="mt-0.5 block text-xs text-slate-400">Agendar compromisso</span></span>
-        </button>
-      </div>
+      {modulos.length > 0 && (
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          {tem('orcamentos') && (
+            <Link href="/orcamento-rapido" className={classeAtalho}>
+              <span className={classeIcone}><FilePlus2 size={19} /></span>
+              <span><strong className="block text-sm text-slate-900">Novo orçamento</strong><span className="mt-0.5 block text-xs text-slate-400">Criar orçamento</span></span>
+            </Link>
+          )}
+          {tem('clientes') && (
+            <Link href="/clientes/novo" className={classeAtalho}>
+              <span className={classeIcone}><UserPlus size={19} /></span>
+              <span><strong className="block text-sm text-slate-900">Novo cliente</strong><span className="mt-0.5 block text-xs text-slate-400">Cadastrar cliente</span></span>
+            </Link>
+          )}
+          {tem('kanban') && (
+            <Link href="/kanban" className={classeAtalho}>
+              <span className={classeIcone}><Columns3 size={19} /></span>
+              <span><strong className="block text-sm text-slate-900">Kanban</strong><span className="mt-0.5 block text-xs text-slate-400">Abrir comercial</span></span>
+            </Link>
+          )}
+          {tem('assistencias') && (
+            <Link href="/assistencia" className={classeAtalho}>
+              <span className={classeIcone}><Wrench size={19} /></span>
+              <span><strong className="block text-sm text-slate-900">Nova assistência</strong><span className="mt-0.5 block text-xs text-slate-400">Abrir chamado</span></span>
+            </Link>
+          )}
+          {tem('tarefas') && (
+            <button type="button" onClick={novaTarefa} className={classeAtalho}>
+              <span className={classeIcone}><CheckSquare size={19} /></span>
+              <span><strong className="block text-sm text-slate-900">Nova tarefa</strong><span className="mt-0.5 block text-xs text-slate-400">Adicionar tarefa</span></span>
+            </button>
+          )}
+          {tem('calendario') && (
+            <button type="button" onClick={novoCompromisso} className={classeAtalho}>
+              <span className={classeIcone}><CalendarPlus size={19} /></span>
+              <span><strong className="block text-sm text-slate-900">Novo compromisso</strong><span className="mt-0.5 block text-xs text-slate-400">Agendar</span></span>
+            </button>
+          )}
+        </div>
+      )}
     </section>
   )
 }
