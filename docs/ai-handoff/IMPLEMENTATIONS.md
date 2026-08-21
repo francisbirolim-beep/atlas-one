@@ -1,14 +1,14 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-20 — Correção das figuras técnicas do Plano PC3 — EM VALIDAÇÃO
-
-A coluna FIG. do Plano de Corte PC3 foi corrigida após validação visual do usuário.
+## 2026-08-20 — Figuras exatas SU289 e SU290 no Plano PC3 — EM VALIDAÇÃO
 
 Implementado:
-- remoção dos SVGs manuais da etapa anterior;
-- inclusão de PNGs recortados diretamente do manual técnico Suprema e identificados por código para SU010, SU012, SU008, SU280, SU243, SU242, SU053, SU225 e SU102;
-- `lib/planoCortePerfis.ts` aponta somente para esses desenhos comprovados;
-- TMC e SU289 permanecem sem figura até existir fonte técnica identificada;
-- sem alteração de fórmulas, quantidades, posição, pesos ou banco.
+- extração dos desenhos de SU289 e SU290 diretamente da coluna `Figura` do orientativo W.Vetro nº 994 da configuração `*SUCB-PC3-01EF`;
+- inclusão de `public/perfis/plano-corte/SU289.png` e `SU290.png`;
+- `lib/planoCortePerfis.ts` passa a vincular os dois códigos aos respectivos recortes;
+- preservadas as figuras já validadas dos demais códigos;
+- TMC continua sem figura até existir fonte técnica exata;
+- sem alteração de fórmulas, cortes, quantidades, posições, pesos ou banco;
+- sem migration.
 
-Critério: nunca usar desenho semelhante ou aproximado; vínculo visual precisa ser exato por código.
+Critério: nunca usar desenho semelhante ou aproximado; o vínculo visual precisa ser exato por código e sustentado pela fonte técnica.

@@ -20,9 +20,10 @@ export type LinhaPlanoCorte = {
 
 const TIPOLOGIA_PC3_SUPREMA = 'dce9da1d-7e03-4c1c-ad1b-2f101b51a52e'
 
-// Figuras recortadas diretamente da seção técnica "Divisão dos Perfis"
-// do manual Suprema, sempre vinculadas por código exato. Códigos sem uma
-// figura identificada na fonte ficam sem imagem em vez de receber inferência.
+// Figuras recortadas diretamente de fontes técnicas identificadas por código.
+// SU289 e SU290 foram extraídos do orientativo W.Vetro nº 994 da própria
+// configuração PC3 validada. Códigos sem uma figura identificada na fonte
+// ficam sem imagem em vez de receber inferência por semelhança.
 const IMAGENS_TECNICAS_VALIDADAS: Record<string, string> = {
   SU010: '/perfis/plano-corte/SU010.png',
   SU012: '/perfis/plano-corte/SU012.png',
@@ -30,6 +31,8 @@ const IMAGENS_TECNICAS_VALIDADAS: Record<string, string> = {
   SU280: '/perfis/plano-corte/SU280.png',
   SU243: '/perfis/plano-corte/SU243.png',
   SU242: '/perfis/plano-corte/SU242.png',
+  SU289: '/perfis/plano-corte/SU289.png',
+  SU290: '/perfis/plano-corte/SU290.png',
   SU053: '/perfis/plano-corte/SU053.png',
   SU225: '/perfis/plano-corte/SU225.png',
   SU102: '/perfis/plano-corte/SU102.png',
