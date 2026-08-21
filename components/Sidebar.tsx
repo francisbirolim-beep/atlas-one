@@ -98,7 +98,7 @@ export default function Sidebar() {
               pathname.startsWith('/configuracoes/usuarios') ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
             }`}
           >
-            <KeyRound size={17} /> Usuários e Senhas
+            <KeyRound size={17} /> Usuários e Acesso
           </Link>
           <Link
             href="/configuracoes/orcamento"

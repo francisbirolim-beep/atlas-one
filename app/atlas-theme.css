@@ -5,6 +5,12 @@
  * porque representa a identidade visual da empresa que usa o Atlas.
  */
 
+/* O botão "Novo" da topbar duplicava o atalho "Novo orçamento" da Home.
+ * Mantemos a ação principal somente na tela configurável do usuário. */
+header.sticky a[href="/orcamento-rapido"] {
+  display: none !important;
+}
+
 /* Correções de contraste da sidebar no tema atual. */
 @media (min-width: 768px) {
   .atlas-sidebar-shell > nav > div:first-child > p:first-child {
