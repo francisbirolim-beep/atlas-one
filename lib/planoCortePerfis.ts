@@ -52,21 +52,27 @@ const QUANTIDADES_PC3: Record<string, number> = {
 }
 
 const EIXOS_PC3: Record<string, 'L' | 'H'> = {
-  SU010: 'L',
-  TMC: 'L',
-  SU012: 'H',
-  SU008: 'H',
-  SU280: 'H',
-  SU040: 'H',
-  SU041: 'H',
-  SU047: 'H',
-  SU049: 'H',
-  SU242: 'H',
-  SU243: 'H',
-  SU289: 'H',
-  SU290: 'H',
-  SU053: 'L',
-  SU225: 'L',
+  SU010: 'L', TMC: 'L', SU012: 'H', SU008: 'H', SU280: 'H',
+  SU040: 'H', SU041: 'H', SU047: 'H', SU049: 'H', SU242: 'H',
+  SU243: 'H', SU289: 'H', SU290: 'H', SU053: 'L', SU225: 'L',
+}
+
+const ORDEM_PC3: Record<string, number> = {
+  SU010: 10,
+  TMC: 20,
+  SU012: 30,
+  SU008: 40,
+  SU053: 50,
+  SU225: 60,
+  SU280: 70,
+  SU040: 80,
+  SU047: 80,
+  SU243: 80,
+  SU289: 80,
+  SU041: 90,
+  SU049: 90,
+  SU242: 90,
+  SU290: 90,
 }
 
 function codigoBase(codigo: string) {
@@ -89,10 +95,7 @@ function montarLinha(
   const base = codigoBase(codigo)
   const perfil = catalogo.get(base)
   const pesoMetro = perfil?.peso_kg_m ?? null
-  const peso = quantidade && pesoMetro != null
-    ? (tamanho / 1000) * quantidade * pesoMetro
-    : null
-
+  const peso = quantidade && pesoMetro != null ? (tamanho / 1000) * quantidade * pesoMetro : null
   return {
     codigo: base,
     descricao: descricaoCatalogo(perfil, descricao),
@@ -107,18 +110,15 @@ function montarLinha(
 export async function listarPerfisPlanoCorte(codigos: string[]): Promise<PerfilCatalogoPlano[]> {
   const unicos = Array.from(new Set(codigos.map(codigoBase).filter(Boolean)))
   if (unicos.length === 0) return []
-
   const { data, error } = await supabase
     .from('produtos')
     .select('codigo,nome,foto_url,peso_kg_m')
     .in('codigo', unicos)
     .eq('categoria', 'perfil')
-
   if (error) {
     console.error('Erro ao carregar perfis do plano de corte:', error)
     return []
   }
-
   return ((data as Array<{ codigo?: string | null; nome?: string | null; foto_url?: string | null; peso_kg_m?: number | string | null }>) || [])
     .filter(item => item.codigo && item.nome)
     .map(item => ({
@@ -144,20 +144,11 @@ export function montarLinhasPlanoCorte(params: {
   perfis: PerfilCatalogoPlano[]
 }): LinhaPlanoCorte[] {
   const catalogo = new Map(params.perfis.map(perfil => [perfil.codigo.toUpperCase(), perfil]))
-
   if (params.tipologiaId !== TIPOLOGIA_PC3_SUPREMA) {
-    return params.resultados.map(item => montarLinha(
-      item.codigo,
-      item.descricao || '—',
-      item.tamanho,
-      item.eixo || null,
-      null,
-      catalogo
-    ))
+    return params.resultados.map(item => montarLinha(item.codigo, item.descricao || '—', item.tamanho, item.eixo || null, null, catalogo))
   }
 
   const linhas: LinhaPlanoCorte[] = []
-
   for (const item of params.resultados) {
     if (item.codigo === 'travessas') {
       linhas.push(montarLinha('SU053', 'Travessa da folha', item.tamanho, 'L', 3, catalogo))
@@ -165,22 +156,17 @@ export function montarLinhasPlanoCorte(params: {
       linhas.push(montarLinha('SU102', 'Baguete', item.tamanho, 'L', 6, catalogo))
       continue
     }
-
     if (item.codigo === 'SU102(H)') {
       linhas.push(montarLinha('SU102', 'Baguete', item.tamanho, 'H', 6, catalogo))
       continue
     }
-
     const codigo = codigoBase(item.codigo)
-    linhas.push(montarLinha(
-      codigo,
-      item.descricao || '—',
-      item.tamanho,
-      item.eixo || EIXOS_PC3[codigo] || null,
-      QUANTIDADES_PC3[codigo] ?? null,
-      catalogo
-    ))
+    linhas.push(montarLinha(codigo, item.descricao || '—', item.tamanho, item.eixo || EIXOS_PC3[codigo] || null, QUANTIDADES_PC3[codigo] ?? null, catalogo))
   }
 
-  return linhas
+  return linhas.sort((a, b) => {
+    const ordemA = a.codigo === 'SU102' ? (a.eixo === 'L' ? 100 : 110) : (ORDEM_PC3[a.codigo] ?? 999)
+    const ordemB = b.codigo === 'SU102' ? (b.eixo === 'L' ? 100 : 110) : (ORDEM_PC3[b.codigo] ?? 999)
+    return ordemA - ordemB
+  })
 }
