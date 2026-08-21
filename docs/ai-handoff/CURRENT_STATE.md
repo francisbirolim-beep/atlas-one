@@ -1,5 +1,25 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — ASSISTÊNCIA EM CAMPO COM ROTA, GPS E TEMPO — 2026-08-21
+
+O link externo da Assistência evoluiu para um fluxo de execução em campo, com navegação até o cliente, check-in explícito do técnico, contagem de tempo e registro opcional de GPS no início e na conclusão.
+
+Estado atual desta implementação:
+- após gerar o link do técnico, o Atlas oferece ações `WhatsApp`, `SMS` e `Copiar`; WhatsApp/SMS abrem o aplicativo do aparelho com a mensagem e o link já preparados;
+- na tela externa o telefone do cliente pode ser tocado para ligar e também possui atalho para WhatsApp;
+- o endereço completo possui `Abrir no Google Maps` e `Copiar endereço`;
+- ao chegar ao local o técnico clica em `Iniciar assistência`;
+- no início, o navegador solicita permissão para localização; se autorizada, o Atlas grava latitude, longitude, precisão aproximada e horário do check-in;
+- negar ou não conseguir obter GPS não bloqueia o atendimento: a assistência inicia normalmente sem coordenadas;
+- `Iniciar assistência` grava horário no servidor, muda o status para `em_atendimento` e move o card automaticamente para a coluna operacional de atendimento/andamento;
+- a tela do técnico passa a mostrar cronômetro ao vivo baseado no horário de início persistido no servidor;
+- o Kanban interno atualiza as assistências silenciosamente a cada 12 segundos e mostra `Em campo HH:MM:SS` ou a duração final no card;
+- o modal interno da assistência exibe técnico, início, fim, duração e, quando disponíveis, links do GPS de início e conclusão para o Google Maps, incluindo a precisão aproximada;
+- na conclusão, o técnico mantém o preenchimento de serviço, materiais, observações e as duas assinaturas;
+- ao concluir, o Atlas tenta capturar novamente o GPS com autorização do aparelho, grava o horário final e a duração total, muda status para `resolvido` e move o card para a etapa final;
+- não existe rastreamento contínuo nem GPS em segundo plano: a localização é solicitada somente nos momentos explícitos de início e conclusão;
+- migration `assistencia_gps_tempo_execucao`, versão remota `20260821220855`, já foi aplicada no Supabase de produção e adiciona apenas campos nullable, mantendo compatibilidade com a versão anterior.
+
 ## EM VALIDAÇÃO — LINK DO TÉCNICO + ASSINATURAS + PDF DIRETO — 2026-08-21
 
 A Assistência Técnica passou a ter um fluxo externo para execução em campo e uma saída de PDF mais prática para envio ao cliente.
