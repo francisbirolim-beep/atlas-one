@@ -209,7 +209,7 @@ export default function Assistencias() {
 
               <div><label className="block text-xs text-slate-500 mb-1">Etapa</label><select value={selecionado.coluna_id || colunas[0]?.id || ''} onChange={e => mudarColunaSelecionado(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">{colunas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
 
-              <Link href={`/assistencias/${selecionado.id}/os`} className="w-full py-2.5 flex items-center justify-center gap-2 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition"><FileText size={15}/> Gerar ordem de serviço</Link>
+              <Link href={`/assistencias/${selecionado.id}/os`} className="w-full py-2.5 flex items-center justify-center gap-2 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition"><FileText size={15}/> Imprimir / PDF da OS</Link>
 
               {usuario?.role === 'master' && <button onClick={excluirSelecionado} className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"><Trash2 size={13} /> Excluir este chamado</button>}
             </div>
