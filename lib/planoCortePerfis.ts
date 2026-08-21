@@ -20,17 +20,19 @@ export type LinhaPlanoCorte = {
 
 const TIPOLOGIA_PC3_SUPREMA = 'dce9da1d-7e03-4c1c-ad1b-2f101b51a52e'
 
+// Figuras recortadas diretamente da seção técnica "Divisão dos Perfis"
+// do manual Suprema, sempre vinculadas por código exato. Códigos sem uma
+// figura identificada na fonte ficam sem imagem em vez de receber inferência.
 const IMAGENS_TECNICAS_VALIDADAS: Record<string, string> = {
-  SU010: '/perfis/plano-corte/SU010.svg',
-  TMC: '/perfis/plano-corte/TMC.svg',
-  SU012: '/perfis/plano-corte/SU012.svg',
-  SU008: '/perfis/plano-corte/SU008.svg',
-  SU280: '/perfis/plano-corte/SU280.svg',
-  SU243: '/perfis/plano-corte/SU243.svg',
-  SU242: '/perfis/plano-corte/SU242.svg',
-  SU053: '/perfis/plano-corte/SU053.svg',
-  SU225: '/perfis/plano-corte/SU225.svg',
-  SU102: '/perfis/plano-corte/SU102.svg',
+  SU010: '/perfis/plano-corte/SU010.png',
+  SU012: '/perfis/plano-corte/SU012.png',
+  SU008: '/perfis/plano-corte/SU008.png',
+  SU280: '/perfis/plano-corte/SU280.png',
+  SU243: '/perfis/plano-corte/SU243.png',
+  SU242: '/perfis/plano-corte/SU242.png',
+  SU053: '/perfis/plano-corte/SU053.png',
+  SU225: '/perfis/plano-corte/SU225.png',
+  SU102: '/perfis/plano-corte/SU102.png',
 }
 
 const QUANTIDADES_PC3: Record<string, number> = {
