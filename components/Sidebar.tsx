@@ -3,23 +3,41 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Boxes, Calculator, FileText, KeyRound, LayoutGrid, LogOut, Settings } from 'lucide-react'
+import { Boxes, Calculator, FileText, KeyRound, LayoutGrid, LogOut, Moon, Settings, Sun } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { GUIAS } from '@/lib/guias'
+
+type TemaAtlas = 'escuro' | 'claro'
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [tema, setTema] = useState<TemaAtlas>('escuro')
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
   }, [])
 
+  useEffect(() => {
+    if (!usuario?.id) return
+    const salvo = window.localStorage.getItem(`atlas-theme:${usuario.id}`)
+    const temaInicial: TemaAtlas = salvo === 'claro' ? 'claro' : 'escuro'
+    setTema(temaInicial)
+    document.documentElement.dataset.atlasTheme = temaInicial
+  }, [usuario?.id])
+
   async function sair() {
     await logout()
     router.replace('/login')
+  }
+
+  function alternarTema() {
+    const proximo: TemaAtlas = tema === 'escuro' ? 'claro' : 'escuro'
+    setTema(proximo)
+    document.documentElement.dataset.atlasTheme = proximo
+    if (usuario?.id) window.localStorage.setItem(`atlas-theme:${usuario.id}`, proximo)
   }
 
   function ativo(href: string) {
@@ -114,6 +132,15 @@ export default function Sidebar() {
           <p className="truncate text-xs font-semibold text-slate-700">{usuario?.nome || 'Usuário'}</p>
           <p className="text-[10px] uppercase tracking-wide text-slate-400">{usuario?.role || ''}</p>
         </div>
+        <button
+          type="button"
+          onClick={alternarTema}
+          className="atlas-theme-toggle mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+          title={tema === 'escuro' ? 'Usar tema claro' : 'Usar tema escuro'}
+        >
+          {tema === 'escuro' ? <Sun size={17} /> : <Moon size={17} />}
+          {tema === 'escuro' ? 'Tema claro' : 'Tema escuro'}
+        </button>
         <button
           type="button"
           onClick={sair}
