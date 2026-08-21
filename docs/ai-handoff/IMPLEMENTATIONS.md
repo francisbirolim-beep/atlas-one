@@ -1,5 +1,19 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — OS de Assistência A4 + data ajustável — EM VALIDAÇÃO
+
+Implementado:
+- impressão da OS compactada para A4 retrato com margem de 6 mm;
+- bordas dos quadros, campos internos, separadores e assinaturas escurecidas para melhorar a leitura no papel;
+- alturas e espaçamentos reduzidos especificamente em `@media print` para concentrar o documento em uma única folha;
+- até 6 fotos são reorganizadas em uma faixa horizontal compacta na impressão;
+- cabeçalho, resumo, dados do cliente, problema, técnico/data, serviço, materiais, observações e assinaturas preservados;
+- impressão automática atrasada para 650 ms, reduzindo o risco de abrir o diálogo antes do logo/fotos carregarem;
+- campo `Data da assistência` incluído na abertura de um novo chamado, preenchido inicialmente com o dia atual;
+- data pode ser alterada antes de salvar e também posteriormente no modal do chamado no Kanban, por `Salvar data`;
+- card e Ordem de Serviço passam a refletir a data ajustada;
+- sem migration e sem alteração de schema: a data reaproveita `assistencias.created_at`.
+
 ## 2026-08-21 — Navegação organizada + Central de Administração + Central de Cadastros — EM VALIDAÇÃO
 
 Implementado:

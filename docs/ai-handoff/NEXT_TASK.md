@@ -1,31 +1,28 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar navegação organizada e Central de Cadastros
+## TAREFA ATUAL — validar impressão A4 e data ajustável da Assistência
 
 Após deploy desta implementação:
-1. entrar como Master e confirmar que a sidebar está separada em `Geral`, `Comercial` e `Operações`;
-2. usar `Buscar no menu...` e procurar: `cliente`, `orçamento`, `assistência`, `logo`, `usuário`, `fornecedor`, `fórmula`, `backup`, `automação` e `precificação`;
-3. confirmar que `Administração` fica recolhida quando não está sendo usada e abre ao entrar em uma rota administrativa;
-4. abrir `Central de Administração` e validar se a organização por Empresa e equipe, Comercial, Engenharia e cadastros e Sistema ficou intuitiva;
-5. abrir `Central de Cadastros` e testar a busca por `produto`, `linha`, `fornecedor`, `unidade`, `receita` e `campo`;
-6. validar os atalhos de Produtos, Linhas, Materiais, Fornecedores, Produtos por Linha, Precificação, Unidades Pendentes, Receitas Técnicas, Fórmulas de Corte e Campos adicionais;
-7. confirmar que `Cadastros Avançados` ainda abre a tela antiga `/cadastro`, preservando funções que ainda não foram separadas;
-8. testar o mesmo menu em tema claro e tema escuro;
-9. entrar como funcionário e confirmar que as opções administrativas de Master não aparecem;
-10. confirmar que nenhuma rota operacional anterior deixou de funcionar.
+1. abrir uma nova assistência e confirmar que `Data da assistência` inicia no dia atual e pode ser alterada antes de salvar;
+2. salvar uma assistência com data anterior e confirmar que o card do Kanban mostra a data escolhida;
+3. abrir o chamado no Kanban, alterar `Data da assistência`, clicar em `Salvar data` e confirmar que o card é atualizado;
+4. abrir `Imprimir / PDF da OS` e confirmar que a data alterada aparece na Ordem de Serviço;
+5. imprimir uma OS sem fotos e confirmar que cabe integralmente em uma folha A4 retrato;
+6. imprimir uma OS com até 6 fotos e confirmar que as fotos ficam em faixa compacta e que o documento permanece em uma folha A4;
+7. conferir se os contornos dos quadros, campos de preenchimento e assinaturas estão suficientemente escuros e bem separados;
+8. confirmar que logo, cliente, problema, técnico, data, serviço, materiais, observações e assinaturas continuam legíveis;
+9. testar `Salvar como PDF` no diálogo nativo do navegador;
+10. confirmar que criação offline preserva a data escolhida para uso após sincronização.
 
-Depois dessa validação visual, a próxima etapa recomendada é separar gradualmente as funções ainda concentradas em `/configuracoes` e `/cadastro` em páginas próprias, sem apagar as telas antigas até cada função ser validada em seu novo local.
+Não há migration nem alteração de schema: a data ajustável reaproveita `assistencias.created_at`, e o novo layout altera apenas a apresentação da OS.
 
-## VALIDAÇÃO AINDA PENDENTE — Home por usuário + Assistência + Ordem de Serviço
+## VALIDAÇÃO AINDA PENDENTE — navegação organizada e Central de Cadastros
 
 Permanece necessário validar em produção:
-- composição da Home por usuário;
-- escopo de Assistências (`próprias` ou `todas`);
-- criação online de assistência com abertura automática da OS e diálogo de impressão;
-- impressão / Salvar como PDF da OS;
-- reimpressão pelo Kanban;
-- criação offline e sincronização posterior.
-
-Esta etapa de organização da navegação não exige migration nem alteração de schema.
+- sidebar separada em `Geral`, `Comercial` e `Operações`;
+- busca do menu;
+- Central de Administração;
+- Central de Cadastros e seus atalhos;
+- tema claro/escuro e acesso Master/funcionário.
 
 Pendência independente: localizar desenho técnico exato do TMC antes de exibi-lo no Plano de Corte.

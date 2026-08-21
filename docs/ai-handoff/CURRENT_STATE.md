@@ -1,5 +1,20 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — OS DE ASSISTÊNCIA A4 + DATA AJUSTÁVEL — 2026-08-21
+
+A Assistência Técnica recebeu dois ajustes pedidos após uso real: a Ordem de Serviço foi compactada para impressão em uma única folha A4 e a data da assistência passou a ser ajustável.
+
+Estado atual desta implementação:
+- `/assistencias/[id]/os` usa layout de impressão A4 retrato com margem de 6 mm;
+- quadros, campos internos, linhas de assinatura e separadores usam bordas mais escuras para leitura melhor no papel;
+- cabeçalho, resumo, cliente, problema, técnico/data, serviço, materiais, observações e assinaturas foram compactados na impressão;
+- até 6 fotos continuam disponíveis e, no papel, ficam organizadas em uma faixa horizontal compacta para economizar altura;
+- o atraso da impressão automática passou para 650 ms, dando mais tempo para logo e fotos carregarem antes do diálogo de impressão;
+- ao abrir uma nova assistência existe o campo `Data da assistência`, iniciado no dia atual e alterável antes de salvar;
+- no modal do chamado dentro do Kanban de Assistências existe `Data da assistência` + `Salvar data`, permitindo corrigir depois a data do chamado;
+- a data escolhida é a mesma exibida no card e na OS;
+- a implementação reaproveita `assistencias.created_at`, sem migration e sem alteração de schema.
+
 ## EM VALIDAÇÃO — NAVEGAÇÃO ORGANIZADA + CENTRAL DE CADASTROS — 2026-08-21
 
 O Atlas ganhou uma camada de organização para reduzir a dificuldade de localizar funções sem remover nenhuma tela existente nem alterar regras de negócio.

@@ -16,6 +16,17 @@ export interface DadosAssistenciaForm {
   bairro: string
   descricao: string
   fotos: File[]
+  dataAssistencia?: string
+}
+
+function dataAssistenciaParaIso(dataAssistencia?: string) {
+  if (!dataAssistencia) return new Date().toISOString()
+  const [ano, mes, dia] = dataAssistencia.split('-').map(Number)
+  if (!ano || !mes || !dia) return new Date().toISOString()
+
+  const agora = new Date()
+  agora.setFullYear(ano, mes - 1, dia)
+  return agora.toISOString()
 }
 
 // Faz de fato a gravacao no Supabase. Usada tanto pelo formulario (quando ha
@@ -23,7 +34,7 @@ export interface DadosAssistenciaForm {
 export async function criarAssistenciaNoServidor(
   dados: DadosAssistenciaForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const { clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos } = dados
+  const { clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
 
   const [clienteId, usuario, colunaAssistenciaId, colunaOrcamentoId] = await Promise.all([
     obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade }),
@@ -39,9 +50,11 @@ export async function criarAssistenciaNoServidor(
   }
 
   const novaAssistenciaId = uuidv4()
+  const criadaEm = dataAssistenciaParaIso(dataAssistencia)
 
   const { error } = await supabase.from('assistencias').insert({
     id: novaAssistenciaId,
+    created_at: criadaEm,
     cliente_id: clienteId,
     cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp || null,

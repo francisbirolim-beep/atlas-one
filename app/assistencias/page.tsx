@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench } from 'lucide-react'
+import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench, CalendarDays, Save } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { AssistenciaColuna, Assistencia } from '@/lib/tipos'
@@ -17,11 +17,21 @@ import { usuarioAtual } from '@/lib/auth'
 import { lerHomeUsuarioConfig, type EscopoAssistencias } from '@/lib/homeUsuario'
 import { Usuario } from '@/lib/tipos'
 
+function dataParaInput(dataIso: string) {
+  const data = new Date(dataIso)
+  if (Number.isNaN(data.getTime())) return ''
+  const local = new Date(data.getTime() - data.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 export default function Assistencias() {
   const [colunas, setColunas] = useState<AssistenciaColuna[]>([])
   const [cards, setCards] = useState<Assistencia[]>([])
   const [carregando, setCarregando] = useState(true)
   const [selecionado, setSelecionado] = useState<Assistencia | null>(null)
+  const [dataSelecionada, setDataSelecionada] = useState('')
+  const [salvandoData, setSalvandoData] = useState(false)
+  const [erroData, setErroData] = useState('')
   const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [escopo, setEscopo] = useState<EscopoAssistencias>('proprias')
@@ -70,6 +80,12 @@ export default function Assistencias() {
   function enderecoCompleto(a: Assistencia): string {
     const partes = [a.endereco, a.numero, a.bairro].filter(Boolean)
     return partes.join(', ')
+  }
+
+  function abrirAssistencia(card: Assistencia) {
+    setSelecionado(card)
+    setDataSelecionada(dataParaInput(card.created_at))
+    setErroData('')
   }
 
   async function handleDrop(e: React.DragEvent, colunaId: string) {
@@ -125,6 +141,35 @@ export default function Assistencias() {
     await moverCardAssistencia(selecionado.id, colunaId)
   }
 
+  async function salvarDataSelecionada() {
+    if (!selecionado || !dataSelecionada) return
+    setSalvandoData(true)
+    setErroData('')
+
+    const [ano, mes, dia] = dataSelecionada.split('-').map(Number)
+    const dataAtual = new Date(selecionado.created_at)
+    if (!ano || !mes || !dia || Number.isNaN(dataAtual.getTime())) {
+      setErroData('Data inválida.')
+      setSalvandoData(false)
+      return
+    }
+
+    dataAtual.setFullYear(ano, mes - 1, dia)
+    const novoCreatedAt = dataAtual.toISOString()
+    const { error } = await supabase.from('assistencias').update({ created_at: novoCreatedAt }).eq('id', selecionado.id)
+
+    if (error) {
+      setErroData('Não foi possível alterar a data.')
+      setSalvandoData(false)
+      return
+    }
+
+    const atualizado = { ...selecionado, created_at: novoCreatedAt }
+    setSelecionado(atualizado)
+    setCards(prev => prev.map(c => (c.id === atualizado.id ? atualizado : c)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+    setSalvandoData(false)
+  }
+
   async function excluirSelecionado() {
     if (!selecionado || usuario?.role !== 'master') return
     if (!window.confirm(`Excluir o chamado de ${selecionado.cliente_nome}? Essa ação não pode ser desfeita.`)) return
@@ -172,7 +217,7 @@ export default function Assistencias() {
 
                 <div className="space-y-2 min-h-[80px]">
                   {cardsColuna.map(card => (
-                    <div key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => setSelecionado(card)} className="rounded-xl border-2 border-slate-200 bg-white p-3 cursor-pointer hover:shadow-md transition">
+                    <div key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => abrirAssistencia(card)} className="rounded-xl border-2 border-slate-200 bg-white p-3 cursor-pointer hover:shadow-md transition">
                       <div className="flex items-center gap-2 mb-1"><div className="p-1 rounded bg-brand-tealLight"><Wrench size={12} className="text-brand-teal" /></div><p className="font-medium text-sm truncate flex-1 text-slate-800">{card.cliente_nome}</p></div>
                       <p className="text-xs mb-1 text-slate-500 truncate">{card.cidade ? `${card.cidade} — ` : ''}{new Date(card.created_at).toLocaleDateString('pt-BR')}</p>
                       <p className="text-xs line-clamp-2 text-slate-400">{card.descricao_problema || 'Sem descrição informada'}</p>
@@ -200,6 +245,16 @@ export default function Assistencias() {
                 {enderecoCompleto(selecionado) && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {enderecoCompleto(selecionado)}</span>}
               </div>
               {selecionado.criado_por_nome && <p className="text-xs text-slate-400 flex items-center gap-1.5"><User size={13} /> Registrado por {selecionado.criado_por_nome}</p>}
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500"><CalendarDays size={13}/> Data da assistência</label>
+                <div className="flex gap-2">
+                  <input type="date" value={dataSelecionada} onChange={e => setDataSelecionada(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  <button type="button" onClick={salvarDataSelecionada} disabled={salvandoData || !dataSelecionada} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-teal px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"><Save size={13}/>{salvandoData ? 'Salvando' : 'Salvar data'}</button>
+                </div>
+                {erroData && <p className="mt-2 text-xs text-red-500">{erroData}</p>}
+                <p className="mt-2 text-[11px] text-slate-400">A nova data também aparece no card e na Ordem de Serviço.</p>
+              </div>
 
               <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">{selecionado.descricao_problema || 'Sem descrição informada.'}</p>
 
