@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { criarAssistenciaNoServidor, DadosAssistenciaForm } from '@/lib/assistencias'
@@ -16,8 +16,15 @@ interface FotoItem {
   preview: string
 }
 
+function dataHojeParaInput() {
+  const agora = new Date()
+  const local = new Date(agora.getTime() - agora.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 export default function Assistencia() {
   const router = useRouter()
+  const [dataAssistencia, setDataAssistencia] = useState(dataHojeParaInput)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -103,11 +110,13 @@ export default function Assistencia() {
 
   async function salvar() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
+    if (!dataAssistencia) { setErro('Informe a data da assistência'); return }
 
     setErro('')
     setSalvando(true)
 
     const dadosForm: DadosAssistenciaForm = {
+      dataAssistencia,
       clienteNome: clienteNome.trim(),
       clienteWhatsapp,
       cidade,
@@ -129,8 +138,6 @@ export default function Assistencia() {
       const resultado = await criarAssistenciaNoServidor(dadosForm)
       setSalvando(false)
       if (resultado.ok && resultado.id) {
-        // Assim que o chamado e criado, abre a Ordem de Servico e solicita a
-        // impressao. No dialogo do navegador o usuario tambem pode salvar em PDF.
         router.push(`/assistencias/${resultado.id}/os?print=1`)
       } else if (resultado.ok) {
         setSalvo(true)
@@ -146,6 +153,7 @@ export default function Assistencia() {
     setSalvo(false)
     setSalvoOffline(false)
     setErro('')
+    setDataAssistencia(dataHojeParaInput())
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
@@ -194,11 +202,20 @@ export default function Assistencia() {
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition"><ArrowLeft size={20} /></Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
-          <div><h1 className="text-lg font-bold text-slate-800">Abrir assistência</h1><p className="text-sm text-slate-500">Somente o nome do cliente é obrigatório. Ao salvar, a Ordem de Serviço será aberta para imprimir ou salvar em PDF.</p></div>
+          <div><h1 className="text-lg font-bold text-slate-800">Abrir assistência</h1><p className="text-sm text-slate-500">Informe a data correta do atendimento/chamado. Ela poderá ser ajustada depois no Kanban.</p></div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Data da assistência</h3>
+          <div className="relative max-w-xs">
+            <CalendarDays size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input type="date" value={dataAssistencia} onChange={e => setDataAssistencia(e.target.value)} className="w-full border border-slate-300 rounded-xl py-3 pl-10 pr-3 text-sm" />
+          </div>
+          <p className="text-xs text-slate-400">A data inicia em hoje, mas pode ser alterada para registrar uma assistência de outro dia.</p>
+        </div>
+
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
           <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
           <div className="relative">
