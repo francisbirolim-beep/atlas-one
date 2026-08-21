@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench, CalendarDays, Save } from 'lucide-react'
+import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench, CalendarDays, Save, Timer, Navigation } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { AssistenciaColuna, Assistencia } from '@/lib/tipos'
@@ -18,6 +18,21 @@ import { lerHomeUsuarioConfig, type EscopoAssistencias } from '@/lib/homeUsuario
 import { Usuario } from '@/lib/tipos'
 import AssistenciaExternalAccessPanel from '@/components/system/AssistenciaExternalAccessPanel'
 
+type AssistenciaCampo = Assistencia & {
+  tecnico_nome?: string | null
+  atendimento_iniciado_em?: string | null
+  atendimento_concluido_em?: string | null
+  duracao_atendimento_segundos?: number | null
+  gps_inicio_latitude?: number | null
+  gps_inicio_longitude?: number | null
+  gps_inicio_precisao_m?: number | null
+  gps_inicio_capturado_em?: string | null
+  gps_fim_latitude?: number | null
+  gps_fim_longitude?: number | null
+  gps_fim_precisao_m?: number | null
+  gps_fim_capturado_em?: string | null
+}
+
 function dataParaInput(dataIso: string) {
   const data = new Date(dataIso)
   if (Number.isNaN(data.getTime())) return ''
@@ -25,11 +40,33 @@ function dataParaInput(dataIso: string) {
   return local.toISOString().slice(0, 10)
 }
 
+function formatarTempo(segundos: number) {
+  const total = Math.max(0, Math.floor(segundos))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return [h, m, s].map(v => String(v).padStart(2, '0')).join(':')
+}
+
+function tempoAssistencia(card: AssistenciaCampo, agoraMs: number) {
+  if (typeof card.duracao_atendimento_segundos === 'number') return card.duracao_atendimento_segundos
+  if (!card.atendimento_iniciado_em) return 0
+  const inicio = new Date(card.atendimento_iniciado_em).getTime()
+  const fim = card.atendimento_concluido_em ? new Date(card.atendimento_concluido_em).getTime() : agoraMs
+  if (Number.isNaN(inicio) || Number.isNaN(fim)) return 0
+  return Math.max(0, Math.round((fim - inicio) / 1000))
+}
+
+function urlGps(latitude?: number | null, longitude?: number | null) {
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') return ''
+  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
+}
+
 export default function Assistencias() {
   const [colunas, setColunas] = useState<AssistenciaColuna[]>([])
-  const [cards, setCards] = useState<Assistencia[]>([])
+  const [cards, setCards] = useState<AssistenciaCampo[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [selecionado, setSelecionado] = useState<Assistencia | null>(null)
+  const [selecionado, setSelecionado] = useState<AssistenciaCampo | null>(null)
   const [dataSelecionada, setDataSelecionada] = useState('')
   const [salvandoData, setSalvandoData] = useState(false)
   const [erroData, setErroData] = useState('')
@@ -37,8 +74,29 @@ export default function Assistencias() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [escopo, setEscopo] = useState<EscopoAssistencias>('proprias')
   const [busca, setBusca] = useState('')
+  const [agora, setAgora] = useState(Date.now())
 
   useEffect(() => { void carregar() }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setAgora(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!usuario) return
+    const sincronizar = async () => {
+      let query = supabase.from('assistencias').select('*').order('created_at', { ascending: false })
+      if (usuario.role !== 'master' && escopo !== 'todas') query = query.eq('criado_por_id', usuario.id)
+      const { data } = await query
+      if (!data) return
+      const atualizados = data as AssistenciaCampo[]
+      setCards(atualizados)
+      setSelecionado(prev => prev ? (atualizados.find(c => c.id === prev.id) || prev) : prev)
+    }
+    const timer = window.setInterval(() => void sincronizar(), 12000)
+    return () => window.clearInterval(timer)
+  }, [usuario, escopo])
 
   async function carregar() {
     setCarregando(true)
@@ -55,11 +113,11 @@ export default function Assistencias() {
     const { data } = await query
 
     setColunas(cols)
-    setCards((data as Assistencia[]) || [])
+    setCards((data as AssistenciaCampo[]) || [])
     setCarregando(false)
   }
 
-  function passaFiltro(c: Assistencia): boolean {
+  function passaFiltro(c: AssistenciaCampo): boolean {
     if (!busca.trim()) return true
     const alvo = busca.trim().toLowerCase()
     return (
@@ -68,7 +126,8 @@ export default function Assistencias() {
       (c.endereco || '').toLowerCase().includes(alvo) ||
       (c.bairro || '').toLowerCase().includes(alvo) ||
       (c.descricao_problema || '').toLowerCase().includes(alvo) ||
-      (c.criado_por_nome || '').toLowerCase().includes(alvo)
+      (c.criado_por_nome || '').toLowerCase().includes(alvo) ||
+      (c.tecnico_nome || '').toLowerCase().includes(alvo)
     )
   }
 
@@ -78,12 +137,12 @@ export default function Assistencias() {
       .filter(passaFiltro)
   }
 
-  function enderecoCompleto(a: Assistencia): string {
-    const partes = [a.endereco, a.numero, a.bairro].filter(Boolean)
+  function enderecoCompleto(a: AssistenciaCampo): string {
+    const partes = [a.endereco, a.numero, a.bairro, a.cidade].filter(Boolean)
     return partes.join(', ')
   }
 
-  function abrirAssistencia(card: Assistencia) {
+  function abrirAssistencia(card: AssistenciaCampo) {
     setSelecionado(card)
     setDataSelecionada(dataParaInput(card.created_at))
     setErroData('')
@@ -203,7 +262,7 @@ export default function Assistencias() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="relative mb-4 max-w-md">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por cliente, cidade, endereço..." className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white" />
+          <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por cliente, técnico, cidade, endereço..." className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white" />
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -223,6 +282,11 @@ export default function Assistencias() {
                       <p className="text-xs mb-1 text-slate-500 truncate">{card.cidade ? `${card.cidade} — ` : ''}{new Date(card.created_at).toLocaleDateString('pt-BR')}</p>
                       <p className="text-xs line-clamp-2 text-slate-400">{card.descricao_problema || 'Sem descrição informada'}</p>
                       {card.criado_por_nome && <p className="text-xs flex items-center gap-1 mt-1 text-slate-400"><User size={11} /> {card.criado_por_nome}</p>}
+                      {card.atendimento_iniciado_em && (
+                        <p className={`mt-2 flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold ${card.atendimento_concluido_em ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>
+                          <Timer size={12}/> {card.atendimento_concluido_em ? 'Duração' : 'Em campo'} {formatarTempo(tempoAssistencia(card, agora))}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -246,6 +310,27 @@ export default function Assistencias() {
                 {enderecoCompleto(selecionado) && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {enderecoCompleto(selecionado)}</span>}
               </div>
               {selecionado.criado_por_nome && <p className="text-xs text-slate-400 flex items-center gap-1.5"><User size={13} /> Registrado por {selecionado.criado_por_nome}</p>}
+
+              {selecionado.atendimento_iniciado_em && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-blue-700"><Timer size={13}/> Execução em campo</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{selecionado.tecnico_nome || 'Técnico não informado'}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-950 px-3 py-2 font-mono text-sm font-bold text-white">{formatarTempo(tempoAssistencia(selecionado, agora))}</div>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                    <p><strong>Início:</strong> {new Date(selecionado.atendimento_iniciado_em).toLocaleString('pt-BR')}</p>
+                    <p><strong>Fim:</strong> {selecionado.atendimento_concluido_em ? new Date(selecionado.atendimento_concluido_em).toLocaleString('pt-BR') : 'Em andamento'}</p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {urlGps(selecionado.gps_inicio_latitude, selecionado.gps_inicio_longitude) && <a href={urlGps(selecionado.gps_inicio_latitude, selecionado.gps_inicio_longitude)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><Navigation size={12}/> GPS do início{typeof selecionado.gps_inicio_precisao_m === 'number' ? ` · ±${Math.round(selecionado.gps_inicio_precisao_m)} m` : ''}</a>}
+                    {urlGps(selecionado.gps_fim_latitude, selecionado.gps_fim_longitude) && <a href={urlGps(selecionado.gps_fim_latitude, selecionado.gps_fim_longitude)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700"><Navigation size={12}/> GPS da conclusão{typeof selecionado.gps_fim_precisao_m === 'number' ? ` · ±${Math.round(selecionado.gps_fim_precisao_m)} m` : ''}</a>}
+                    {!selecionado.gps_inicio_capturado_em && <span className="text-[11px] text-slate-400">GPS não registrado no início.</span>}
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500"><CalendarDays size={13}/> Data da assistência</label>
