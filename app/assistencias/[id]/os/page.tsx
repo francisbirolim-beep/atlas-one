@@ -63,7 +63,7 @@ export default function OrdemServicoAssistenciaPage() {
     if (searchParams.get('print') !== '1' || impressaoAutomaticaExecutada.current) return
 
     impressaoAutomaticaExecutada.current = true
-    const timer = window.setTimeout(() => window.print(), 350)
+    const timer = window.setTimeout(() => window.print(), 650)
     return () => window.clearTimeout(timer)
   }, [assistencia, carregando, negado, searchParams])
 
@@ -85,70 +85,164 @@ export default function OrdemServicoAssistenciaPage() {
       <style jsx global>{`
         @media print {
           .atlas-sidebar-shell, header.sticky, .print-hide, [class*="MobileNavigationControls"], [class*="mobile-navigation"] { display: none !important; }
-          body, main { background: #fff !important; }
-          .os-assistencia { padding: 0 !important; }
-          .os-folha { box-shadow: none !important; border: 0 !important; max-width: none !important; }
-          @page { size: A4; margin: 12mm; }
+          html, body { width: 210mm; min-height: 297mm; background: #fff !important; }
+          body, main { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+          .os-assistencia { min-height: 0 !important; padding: 0 !important; background: #fff !important; }
+          .os-folha {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            color: #0f172a !important;
+          }
+          .os-folha, .os-folha * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-sizing: border-box !important;
+          }
+          .os-header { gap: 4mm !important; padding-bottom: 2.5mm !important; }
+          .os-header-logo { width: 28mm !important; height: 12mm !important; }
+          .os-header-fallback { width: 12mm !important; height: 12mm !important; border-radius: 2mm !important; }
+          .os-header-title { font-size: 13pt !important; line-height: 1.1 !important; }
+          .os-header-meta { margin-top: 0.8mm !important; font-size: 7pt !important; line-height: 1.3 !important; }
+          .os-number-label { font-size: 6.5pt !important; }
+          .os-number { margin-top: 0.5mm !important; font-size: 16pt !important; line-height: 1 !important; }
+          .os-summary {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 1.5mm !important;
+            margin-top: 2.5mm !important;
+          }
+          .os-box, .os-section {
+            border: 1.35px solid #475569 !important;
+            border-radius: 2mm !important;
+          }
+          .os-box { padding: 2mm !important; }
+          .os-section { margin-top: 2.2mm !important; padding: 2.2mm !important; break-inside: avoid !important; }
+          .os-label, .os-section-title { font-size: 6.8pt !important; line-height: 1.05 !important; }
+          .os-value { margin-top: 0.8mm !important; font-size: 8.5pt !important; line-height: 1.15 !important; }
+          .os-client-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            column-gap: 4mm !important;
+            row-gap: 1.5mm !important;
+            margin-top: 1.8mm !important;
+          }
+          .os-client-name { font-size: 10pt !important; }
+          .os-problema {
+            min-height: 10mm !important;
+            margin-top: 1.5mm !important;
+            font-size: 8.3pt !important;
+            line-height: 1.25 !important;
+          }
+          .os-fotos-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+            gap: 1mm !important;
+            margin-top: 1.5mm !important;
+          }
+          .os-foto {
+            height: 17mm !important;
+            aspect-ratio: auto !important;
+            border: 1px solid #64748b !important;
+            border-radius: 1.5mm !important;
+          }
+          .os-two-col {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 2mm !important;
+            margin-top: 2.2mm !important;
+          }
+          .os-line-field { margin-top: 4mm !important; border-color: #64748b !important; }
+          .os-write-area {
+            margin-top: 1.5mm !important;
+            border: 1px dashed #64748b !important;
+            border-radius: 1.5mm !important;
+          }
+          .os-write-service { height: 17mm !important; }
+          .os-write-small { height: 12mm !important; }
+          .os-signatures {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10mm !important;
+            margin-top: 4mm !important;
+          }
+          .os-signature { padding-top: 7mm !important; }
+          .os-signature-line { border-color: #475569 !important; }
+          .os-signature-label { margin-top: 1mm !important; font-size: 7pt !important; }
+          @page { size: A4 portrait; margin: 6mm; }
         }
       `}</style>
 
-      <div className="print-hide mx-auto mb-4 flex max-w-4xl items-center justify-between gap-3">
-        <Link href="/assistencias" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft size={16}/> Voltar ao Kanban</Link>
+      <div className="print-hide mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-3">
+        <Link href="/assistencias" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft size={16}/> Voltar ao Kanban</Link>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-navyDark"><Printer size={16}/> Imprimir / Salvar PDF</button>
       </div>
 
-      <article className="os-folha mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-7 shadow-sm print:rounded-none print:p-0">
-        <header className="flex items-start justify-between gap-6 border-b-2 border-slate-900 pb-5">
+      <article className="os-folha mx-auto max-w-[210mm] rounded-2xl border border-slate-300 bg-white p-6 shadow-sm print:rounded-none print:p-0">
+        <header className="os-header flex items-start justify-between gap-5 border-b-2 border-slate-900 pb-4">
           <div className="flex min-w-0 items-center gap-4">
             {empresa?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={empresa.logoUrl} alt={nomeEmpresa} className="h-16 w-32 object-contain object-left" />
-            ) : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white"><Wrench size={24}/></div>}
-            <div className="min-w-0"><h1 className="text-xl font-bold text-slate-950">{nomeEmpresa}</h1><p className="mt-1 max-w-md text-xs leading-5 text-slate-500">{dadosEmpresaCabecalho || 'Assistência técnica'}</p></div>
+              <img src={empresa.logoUrl} alt={nomeEmpresa} className="os-header-logo h-14 w-28 object-contain object-left" />
+            ) : <div className="os-header-fallback flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white"><Wrench size={22}/></div>}
+            <div className="min-w-0">
+              <h1 className="os-header-title text-xl font-bold text-slate-950">{nomeEmpresa}</h1>
+              <p className="os-header-meta mt-1 max-w-md text-xs leading-5 text-slate-500">{dadosEmpresaCabecalho || 'Assistência técnica'}</p>
+            </div>
           </div>
-          <div className="text-right"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Ordem de Serviço</p><p className="mt-1 text-2xl font-bold text-slate-950">OS {numeroOS}</p><p className="mt-1 text-xs text-slate-500">Assistência técnica</p></div>
+          <div className="text-right">
+            <p className="os-number-label text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ordem de Serviço</p>
+            <p className="os-number mt-1 text-2xl font-bold text-slate-950">OS {numeroOS}</p>
+            <p className="os-header-meta mt-1 text-xs text-slate-500">Assistência técnica</p>
+          </div>
         </header>
 
-        <section className="mt-5 grid gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Abertura</p><p className="mt-1 text-sm font-medium text-slate-800">{new Date(assistencia.created_at).toLocaleString('pt-BR')}</p></div>
-          <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Etapa</p><p className="mt-1 text-sm font-medium text-slate-800">{etapa || assistencia.status || 'Aberto'}</p></div>
-          <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Aberto por</p><p className="mt-1 text-sm font-medium text-slate-800">{assistencia.criado_por_nome || 'Não informado'}</p></div>
-          <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contato</p><p className="mt-1 text-sm font-medium text-slate-800">{assistencia.cliente_whatsapp || 'Não informado'}</p></div>
+        <section className="os-summary mt-4 grid gap-2 sm:grid-cols-4">
+          <div className="os-box rounded-xl border border-slate-500 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Abertura</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{new Date(assistencia.created_at).toLocaleString('pt-BR')}</p></div>
+          <div className="os-box rounded-xl border border-slate-500 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Etapa</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{etapa || assistencia.status || 'Aberto'}</p></div>
+          <div className="os-box rounded-xl border border-slate-500 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Aberto por</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{assistencia.criado_por_nome || 'Não informado'}</p></div>
+          <div className="os-box rounded-xl border border-slate-500 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Contato</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{assistencia.cliente_whatsapp || 'Não informado'}</p></div>
         </section>
 
-        <section className="mt-5 rounded-xl border border-slate-200 p-4">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Dados do cliente</h2>
-          <div className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Nome</p><p className="mt-1 text-base font-bold text-slate-950">{assistencia.cliente_nome}</p></div>
-            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Telefone / WhatsApp</p><p className="mt-1 text-sm text-slate-700">{assistencia.cliente_whatsapp || 'Não informado'}</p></div>
-            <div className="sm:col-span-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Endereço</p><p className="mt-1 text-sm text-slate-700">{endereco || 'Endereço não informado'}</p></div>
+        <section className="os-section mt-3 rounded-xl border border-slate-500 p-3">
+          <h2 className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Dados do cliente</h2>
+          <div className="os-client-grid mt-2 grid gap-x-5 gap-y-2 sm:grid-cols-2">
+            <div><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Nome</p><p className="os-client-name os-value mt-1 text-sm font-bold text-slate-950">{assistencia.cliente_nome}</p></div>
+            <div><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Telefone / WhatsApp</p><p className="os-value mt-1 text-sm text-slate-800">{assistencia.cliente_whatsapp || 'Não informado'}</p></div>
+            <div className="sm:col-span-2"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Endereço</p><p className="os-value mt-1 text-sm text-slate-800">{endereco || 'Endereço não informado'}</p></div>
           </div>
         </section>
 
-        <section className="mt-4 rounded-xl border border-slate-200 p-4">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Problema relatado</h2>
-          <p className="mt-2 min-h-16 whitespace-pre-wrap text-sm leading-6 text-slate-700">{assistencia.descricao_problema || 'Sem descrição informada.'}</p>
+        <section className="os-section mt-3 rounded-xl border border-slate-500 p-3">
+          <h2 className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Problema relatado</h2>
+          <p className="os-problema mt-2 min-h-12 whitespace-pre-wrap text-sm leading-5 text-slate-800">{assistencia.descricao_problema || 'Sem descrição informada.'}</p>
         </section>
 
         {assistencia.fotos_urls && assistencia.fotos_urls.length > 0 && (
-          <section className="mt-4 rounded-xl border border-slate-200 p-4 print:break-inside-avoid">
-            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">Fotos do chamado</h2>
-            <div className="mt-3 grid grid-cols-3 gap-2">{assistencia.fotos_urls.slice(0, 6).map((url, i) => <div key={i} className="aspect-[4/3] overflow-hidden rounded-lg border border-slate-200">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={url} alt={`Foto ${i + 1}`} className="h-full w-full object-cover" /></div>)}</div>
+          <section className="os-section mt-3 rounded-xl border border-slate-500 p-3 print:break-inside-avoid">
+            <h2 className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Fotos do chamado</h2>
+            <div className="os-fotos-grid mt-2 grid grid-cols-3 gap-2">
+              {assistencia.fotos_urls.slice(0, 6).map((url, i) => (
+                <div key={i} className="os-foto aspect-[4/3] overflow-hidden rounded-lg border border-slate-500">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`Foto ${i + 1}`} className="h-full w-full object-cover" />
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
-        <section className="mt-5 grid gap-4 sm:grid-cols-2 print:break-inside-avoid">
-          <div className="rounded-xl border border-slate-300 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Técnico responsável</p><div className="mt-8 border-b border-slate-400" /></div>
-          <div className="rounded-xl border border-slate-300 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Data do atendimento</p><div className="mt-8 border-b border-slate-400" /></div>
+        <section className="os-two-col mt-3 grid gap-3 sm:grid-cols-2 print:break-inside-avoid">
+          <div className="os-box rounded-xl border border-slate-500 p-3"><p className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Técnico responsável</p><div className="os-line-field mt-5 border-b border-slate-500" /></div>
+          <div className="os-box rounded-xl border border-slate-500 p-3"><p className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Data do atendimento</p><div className="os-line-field mt-5 border-b border-slate-500" /></div>
         </section>
 
-        <section className="mt-4 rounded-xl border border-slate-300 p-4 print:break-inside-avoid"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Serviço realizado</p><div className="mt-3 h-28 rounded-lg border border-dashed border-slate-300" /></section>
-        <section className="mt-4 rounded-xl border border-slate-300 p-4 print:break-inside-avoid"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Materiais / peças utilizados</p><div className="mt-3 h-20 rounded-lg border border-dashed border-slate-300" /></section>
-        <section className="mt-4 rounded-xl border border-slate-300 p-4 print:break-inside-avoid"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Observações</p><div className="mt-3 h-20 rounded-lg border border-dashed border-slate-300" /></section>
+        <section className="os-section mt-3 rounded-xl border border-slate-500 p-3 print:break-inside-avoid"><p className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Serviço realizado</p><div className="os-write-area os-write-service mt-2 h-20 rounded-lg border border-dashed border-slate-500" /></section>
+        <section className="os-section mt-3 rounded-xl border border-slate-500 p-3 print:break-inside-avoid"><p className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Materiais / peças utilizados</p><div className="os-write-area os-write-small mt-2 h-14 rounded-lg border border-dashed border-slate-500" /></section>
+        <section className="os-section mt-3 rounded-xl border border-slate-500 p-3 print:break-inside-avoid"><p className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Observações</p><div className="os-write-area os-write-small mt-2 h-14 rounded-lg border border-dashed border-slate-500" /></section>
 
-        <section className="mt-10 grid gap-8 sm:grid-cols-2 print:break-inside-avoid">
-          <div className="pt-10 text-center"><div className="border-t border-slate-500" /><p className="mt-2 text-xs text-slate-500">Assinatura do cliente</p></div>
-          <div className="pt-10 text-center"><div className="border-t border-slate-500" /><p className="mt-2 text-xs text-slate-500">Assinatura do técnico</p></div>
+        <section className="os-signatures mt-6 grid gap-8 sm:grid-cols-2 print:break-inside-avoid">
+          <div className="os-signature pt-8 text-center"><div className="os-signature-line border-t border-slate-600" /><p className="os-signature-label mt-2 text-xs text-slate-600">Assinatura do cliente</p></div>
+          <div className="os-signature pt-8 text-center"><div className="os-signature-line border-t border-slate-600" /><p className="os-signature-label mt-2 text-xs text-slate-600">Assinatura do técnico</p></div>
         </section>
       </article>
     </div>
