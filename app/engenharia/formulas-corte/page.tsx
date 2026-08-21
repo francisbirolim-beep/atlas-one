@@ -3,13 +3,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Calculator, FileText, Loader2, Printer } from 'lucide-react'
-import { calcularFormulasCorte, FormulaCorteError, type ResultadoPeca } from '@/lib/formulasCorteEngine'
+import { calcularFormulasCorte, FormulaCorteError } from '@/lib/formulasCorteEngine'
 import { listarFormulasCorteAtivas, type RegistroFormulaCorte } from '@/lib/engenhariaFormulasCorte'
+import {
+  codigosNecessariosPlanoCorte,
+  listarPerfisPlanoCorte,
+  montarLinhasPlanoCorte,
+  type LinhaPlanoCorte,
+} from '@/lib/planoCortePerfis'
 
 type ModoPlano = 'obra' | 'manual'
 
 function formatarMedida(valor: number) {
   return Number.isInteger(valor) ? String(valor) : valor.toFixed(2)
+}
+
+function formatarPeso(valor: number | null) {
+  return valor == null ? '—' : valor.toFixed(5).replace('.', ',')
 }
 
 function rotuloOpcao(valor: string) {
@@ -22,9 +32,10 @@ export default function FormulasCortePage() {
   const [largura, setLargura] = useState('3000')
   const [altura, setAltura] = useState('2500')
   const [opcoes, setOpcoes] = useState<Record<string, string>>({})
-  const [resultados, setResultados] = useState<ResultadoPeca[]>([])
+  const [linhasPlano, setLinhasPlano] = useState<LinhaPlanoCorte[]>([])
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [calculando, setCalculando] = useState(false)
   const [geradoEm, setGeradoEm] = useState('')
 
   const [modo, setModo] = useState<ModoPlano>('obra')
@@ -61,32 +72,43 @@ export default function FormulasCortePage() {
   useEffect(() => {
     if (!definicao) {
       setOpcoes({})
+      setLinhasPlano([])
       return
     }
     const defaults: Record<string, string> = {}
     for (const variavel of definicao.variaveis) defaults[variavel.chave] = variavel.opcoes[0] || ''
     setOpcoes(defaults)
-    setResultados([])
+    setLinhasPlano([])
     setErro('')
     setGeradoEm('')
   }, [definicao?.id])
 
-  function calcular() {
+  async function calcular() {
     if (!definicao) return
     setErro('')
+    setCalculando(true)
     try {
       const calculados = calcularFormulasCorte(definicao, Number(largura), Number(altura), opcoes)
-      setResultados(calculados)
+      const codigos = codigosNecessariosPlanoCorte(calculados)
+      const perfis = await listarPerfisPlanoCorte(codigos)
+      const linhas = montarLinhasPlanoCorte({
+        tipologiaId: definicao.tipologia_id,
+        resultados: calculados,
+        perfis,
+      })
+      setLinhasPlano(linhas)
       setGeradoEm(new Date().toLocaleString('pt-BR'))
     } catch (e) {
-      setResultados([])
+      setLinhasPlano([])
       setGeradoEm('')
       setErro(e instanceof FormulaCorteError || e instanceof Error ? e.message : 'Erro ao calcular fórmulas.')
+    } finally {
+      setCalculando(false)
     }
   }
 
   function imprimir() {
-    if (resultados.length === 0) return
+    if (linhasPlano.length === 0) return
     window.print()
   }
 
@@ -95,11 +117,16 @@ export default function FormulasCortePage() {
     ? (numeroOrcamento ? `Orçamento nº ${numeroOrcamento}` : 'Orçamento não informado')
     : (referenciaManual || 'Referência manual')
 
+  const pesoCompleto = linhasPlano.length > 0 && linhasPlano.every(item => item.peso_kg != null)
+  const pesoEsquadria = pesoCompleto
+    ? linhasPlano.reduce((total, item) => total + (item.peso_kg || 0), 0)
+    : null
+
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-8">
       <style jsx global>{`
         @media print {
-          @page { size: A4 portrait; margin: 10mm; }
+          @page { size: A4 portrait; margin: 8mm; }
           body { background: white !important; }
           body * { visibility: hidden !important; }
           .atlas-print-area, .atlas-print-area * { visibility: visible !important; }
@@ -117,6 +144,7 @@ export default function FormulasCortePage() {
           .atlas-no-print { display: none !important; }
           .atlas-print-area table { page-break-inside: auto; }
           .atlas-print-area tr { page-break-inside: avoid; page-break-after: auto; }
+          .atlas-profile-img { max-height: 11mm !important; }
         }
       `}</style>
 
@@ -127,7 +155,7 @@ export default function FormulasCortePage() {
               <ArrowLeft size={16} /> Engenharia
             </Link>
             <h1 className="text-2xl font-bold text-brand-navy">Fórmulas e Plano de Corte</h1>
-            <p className="mt-1 text-sm text-slate-500">Fluxo aprovado no protótipo v4: obra/medição final ou plano manual.</p>
+            <p className="mt-1 text-sm text-slate-500">Plano de corte baseado nas fórmulas e dados técnicos validados.</p>
           </div>
           <FileText className="text-brand-navy" size={30} />
         </div>
@@ -152,11 +180,11 @@ export default function FormulasCortePage() {
 
               {modo === 'obra' ? (
                 <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                  Nesta etapa os campos ainda são editáveis. A próxima integração fará o Atlas preencher automaticamente os dados do orçamento e da medição final vinculados ao item.
+                  Os campos continuam editáveis nesta fase. A integração automática com orçamento e medição final será a próxima etapa.
                 </div>
               ) : (
                 <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  Use este modo para gerar um plano sem orçamento/obra vinculada e preencher somente os campos necessários.
+                  Use este modo para um plano sem obra vinculada e preencha somente o necessário.
                 </div>
               )}
 
@@ -202,13 +230,15 @@ export default function FormulasCortePage() {
               )}
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <button type="button" onClick={calcular} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-5 py-3 text-sm font-semibold text-white hover:bg-brand-navyDark"><Calculator size={17} /> Gerar plano de corte</button>
-                {resultados.length > 0 && <button type="button" onClick={imprimir} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Printer size={17} /> Imprimir / Salvar PDF</button>}
+                <button type="button" disabled={calculando} onClick={() => void calcular()} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-5 py-3 text-sm font-semibold text-white hover:bg-brand-navyDark disabled:opacity-60">
+                  {calculando ? <Loader2 size={17} className="animate-spin" /> : <Calculator size={17} />} {calculando ? 'Calculando...' : 'Gerar plano de corte'}
+                </button>
+                {linhasPlano.length > 0 && <button type="button" onClick={imprimir} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Printer size={17} /> Imprimir / Salvar PDF</button>}
               </div>
               {erro && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
             </section>
 
-            {resultados.length > 0 && definicao && (
+            {linhasPlano.length > 0 && definicao && (
               <section className="atlas-print-area mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="bg-brand-navy p-5 text-white">
                   <div className="flex items-start justify-between gap-6">
@@ -236,16 +266,42 @@ export default function FormulasCortePage() {
 
                   <h3 className="mb-2 mt-6 text-center text-base font-bold text-slate-900">Perfis / Plano de Corte</h3>
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead><tr className="border-y border-slate-700 bg-slate-100 text-left uppercase tracking-wide text-slate-600"><th className="px-3 py-2">Fig.</th><th className="px-3 py-2">Código</th><th className="px-3 py-2">Descrição</th><th className="px-3 py-2 text-center">Pos.</th><th className="px-3 py-2 text-right">Corte (mm)</th></tr></thead>
-                      <tbody>{resultados.map((item, index) => <tr key={`${item.codigo}-${item.eixo || 'U'}-${index}`} className="border-b border-slate-200 even:bg-slate-50"><td className="px-3 py-2 text-slate-400">□</td><td className="px-3 py-2 font-bold text-slate-900">{item.codigo}</td><td className="px-3 py-2 text-slate-700">{item.descricao || '—'}</td><td className="px-3 py-2 text-center font-semibold text-slate-600">{item.eixo || '—'}</td><td className="px-3 py-2 text-right font-mono font-bold text-slate-900">{formatarMedida(item.tamanho)}</td></tr>)}</tbody>
+                    <table className="w-full border-collapse text-[11px]">
+                      <thead>
+                        <tr className="border-y border-slate-700 bg-slate-100 uppercase tracking-wide text-slate-600">
+                          <th className="w-24 px-2 py-2 text-center">Fig.</th>
+                          <th className="px-2 py-2 text-left">Código</th>
+                          <th className="px-2 py-2 text-left">Descrição</th>
+                          <th className="px-2 py-2 text-right">Corte</th>
+                          <th className="px-2 py-2 text-center">Qtde.</th>
+                          <th className="px-2 py-2 text-center">Pos.</th>
+                          <th className="px-2 py-2 text-right">Peso</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {linhasPlano.map((item, index) => (
+                          <tr key={`${item.codigo}-${item.eixo || 'U'}-${index}`} className="border-b border-slate-200 even:bg-slate-50">
+                            <td className="px-2 py-1 text-center">
+                              {item.imagem_url ? <img src={item.imagem_url} alt={`Perfil ${item.codigo}`} className="atlas-profile-img mx-auto h-12 w-20 object-contain" /> : <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-2 py-2 font-bold text-slate-900">{item.codigo}</td>
+                            <td className="px-2 py-2 text-slate-700">{item.descricao}</td>
+                            <td className="px-2 py-2 text-right font-mono font-bold text-slate-900">{formatarMedida(item.tamanho)}</td>
+                            <td className="px-2 py-2 text-center font-semibold">{item.quantidade ?? '—'}</td>
+                            <td className="px-2 py-2 text-center font-semibold text-slate-600">{item.eixo || '—'}</td>
+                            <td className="px-2 py-2 text-right font-mono">{formatarPeso(item.peso_kg)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
                     </table>
                   </div>
+
+                  <div className="mt-3 flex justify-end text-sm"><span className="mr-2 text-slate-500">Peso da esquadria:</span><strong>{pesoEsquadria == null ? '—' : `${formatarPeso(pesoEsquadria)} kg`}</strong></div>
 
                   {definicao.variaveis.length > 0 && <div className="mt-6"><h3 className="mb-2 text-center text-base font-bold text-slate-900">Variáveis da Configuração</h3><table className="w-full border-collapse text-xs"><thead><tr className="border-y border-slate-700 bg-slate-100 text-left uppercase tracking-wide text-slate-600"><th className="px-3 py-2">Descrição</th><th className="px-3 py-2">Valor</th></tr></thead><tbody>{definicao.variaveis.map(variavel => <tr key={variavel.chave} className="border-b border-slate-200"><td className="px-3 py-2 font-medium text-slate-700">{variavel.label}</td><td className="px-3 py-2 font-semibold uppercase text-slate-900">{rotuloOpcao(opcoes[variavel.chave] || '—')}</td></tr>)}</tbody></table></div>}
 
                   <div className="mt-6 rounded-xl bg-slate-50 p-4 text-xs text-slate-600"><span className="font-bold uppercase text-slate-700">Observações de produção:</span><div className="mt-1 whitespace-pre-wrap">{observacaoProducao || '—'}</div></div>
-                  <div className="mt-4 text-[11px] text-slate-400">Quantidades, peso, desenho técnico por perfil, vidro calculado e fotos da medição final serão incorporados somente quando suas regras/vínculos técnicos estiverem estruturados e validados.</div>
+                  <div className="mt-4 text-[11px] text-slate-400">Desenhos, quantidades e pesos aparecem somente quando houver vínculo técnico validado. Dados ausentes permanecem como “—”.</div>
                 </div>
               </section>
             )}
