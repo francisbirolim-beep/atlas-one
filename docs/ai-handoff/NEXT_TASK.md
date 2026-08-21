@@ -1,24 +1,29 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Home white-label + logo da empresa + tema + tipo livre
+## TAREFA ATUAL — validar Home por usuário + Assistência + Ordem de Serviço
 
 Após deploy desta implementação:
-1. entrar com usuário master e abrir `Configurações > Empresa e Identidade`;
-2. confirmar que a tela carrega o nome já salvo da empresa sem apagar CNPJ, endereço, telefones, e-mail ou condições comerciais existentes;
-3. preencher nome fantasia e enviar um logo PNG/JPG/WebP de até 5 MB;
-4. alterar a cor principal e confirmar que a prévia da faixa muda;
-5. salvar e voltar para a Home;
-6. confirmar que a faixa principal mostra o nome fantasia/nome da empresa e o logo enviado;
-7. confirmar que `Novo orçamento`, `Novo cliente`, `Nova tarefa` e `Novo compromisso` aparecem como quatro atalhos abaixo da faixa;
-8. confirmar que `Últimos orçamentos` mostra até 3 pedidos recentes com número, cliente, valor, status e data;
-9. alternar para `Tema claro` e confirmar que a faixa continua colorida, enquanto `Últimos orçamentos`, `Notificações e alertas`, `Minhas tarefas` e `Agenda / Calendário` ficam claros;
-10. atualizar a página e confirmar que tema, logo e identidade continuam persistidos;
-11. alternar para `Tema escuro` e confirmar legibilidade da faixa, do painel de últimos orçamentos e dos demais painéis;
-12. abrir `Orçamentos` e iniciar um novo pedido;
-13. preencher `Tipo de esquadria / descrição livre`, deixar Linha e Modelo / Tipologia vazios, completar os demais campos obrigatórios e confirmar envio normal;
-14. testar também descrição livre + Linha opcional, sem Modelo;
-15. confirmar que, ao escolher uma Tipologia cadastrada, o texto livre é limpo e o fluxo técnico continua como antes.
+1. confirmar que o botão verde `+ Novo` não aparece mais na barra superior e que o atalho `Novo orçamento` permanece na Home;
+2. como Master, abrir `Configurações > Usuários e Acesso`;
+3. criar um usuário de teste e marcar somente os módulos que deverão aparecer em sua Home;
+4. entrar com esse usuário e confirmar que a Home mostra somente os blocos escolhidos;
+5. voltar como Master, alterar a composição desse usuário e confirmar a mudança após atualizar a Home dele;
+6. configurar a usuária Keila com `Orçamentos`, `Kanban comercial`, `Minhas tarefas`, `Calendário`, `Notificações` e `Assistências`, selecionando `Todas as assistências` quando ela precisar acompanhar a operação completa;
+7. configurar um usuário de vendedor com Assistências em `Somente as assistências abertas por ele`;
+8. como vendedor, abrir `Assistências` e confirmar que só aparecem os chamados criados por esse vendedor;
+9. como Keila/Master ou usuário configurado com `Todas`, confirmar que aparecem todos os chamados;
+10. clicar em `Nova assistência` e testar a busca de cliente já cadastrado pelo nome;
+11. confirmar que selecionar um cliente preenche telefone/WhatsApp, cidade, endereço e bairro quando esses dados existirem;
+12. abrir uma assistência informando somente o nome do cliente e confirmar que o cadastro é aceito;
+13. testar também uma assistência completa com descrição e fotos;
+14. confirmar que o novo chamado entra no Kanban de Assistências;
+15. mover o chamado entre as etapas do Kanban e confirmar persistência após atualizar a página;
+16. abrir o chamado, clicar em `Gerar ordem de serviço` e validar dados da empresa, logo, cliente, endereço, problema, fotos, etapa e responsável pela abertura;
+17. usar `Imprimir / Salvar PDF` e confirmar que a OS sai limpa em A4 sem navegação do Atlas;
+18. validar os campos em branco da OS para técnico, data de atendimento, serviço realizado, materiais/peças, observações e assinaturas;
+19. alternar tema claro/escuro e confirmar que os novos blocos de Home permanecem legíveis;
+20. confirmar que a navegação lateral possui `Assistências` e que `Usuários e Acesso` substituiu o rótulo antigo `Usuários e Senhas`.
 
-Não criar migration para nenhuma dessas validações. A identidade da empresa usa a configuração JSON `dados_empresa` e o bucket `fotos` já existentes; o tema permanece salvo no navegador por usuário; o tipo livre usa `tipo = outro` + `tipoOutroTexto`.
+Esta implementação não exige migration: a composição da Home e o escopo de Assistências usam `configuracoes_gerais`; os chamados continuam na tabela `assistencias` e no Kanban de Assistências já existente.
 
 Pendência independente: localizar desenho técnico exato do TMC antes de exibi-lo no Plano de Corte.
