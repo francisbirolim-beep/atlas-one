@@ -5,10 +5,7 @@ import { usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import SidebarQuickSearch from '@/components/system/SidebarQuickSearch'
 import AppTopbar from '@/components/system/AppTopbar'
-import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
-import HomeRecentQuotes from '@/components/system/HomeRecentQuotes'
-import HomeManagementOverview from '@/components/system/HomeManagementOverview'
-import HomeOperationsWorkspace from '@/components/system/HomeOperationsWorkspace'
+import HomeDashboard from '@/components/system/HomeDashboard'
 import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
@@ -44,11 +41,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
         <main className="min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0">
-          {ehHome && <HomeExecutiveHero />}
-          {ehHome && <HomeRecentQuotes />}
-          {ehHome && <HomeOperationsWorkspace />}
+          {ehHome && <HomeDashboard />}
           <MobileFavorites mostrarAcessoRapido={ehHome} />
-          {ehHome && <HomeManagementOverview />}
           {ehProducao && <ProducaoEtapasBar />}
 
           {medicaoFinalId && (
