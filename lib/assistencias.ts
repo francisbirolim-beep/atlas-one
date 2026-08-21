@@ -22,7 +22,7 @@ export interface DadosAssistenciaForm {
 // internet na hora) quanto pelo sincronizador da fila offline.
 export async function criarAssistenciaNoServidor(
   dados: DadosAssistenciaForm
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; id?: string; error?: string }> {
   const { clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos } = dados
 
   const [clienteId, usuario, colunaAssistenciaId, colunaOrcamentoId] = await Promise.all([
@@ -97,5 +97,5 @@ export async function criarAssistenciaNoServidor(
     if (erroEspelho) console.error('Erro ao criar card espelho da assistencia:', erroEspelho)
   }
 
-  return { ok: true }
+  return { ok: true, id: novaAssistenciaId }
 }
