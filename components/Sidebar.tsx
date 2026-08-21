@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Boxes, Calculator, FileText, KeyRound, LayoutGrid, LogOut, Moon, Settings, Sun } from 'lucide-react'
+import { Boxes, Building2, Calculator, FileText, KeyRound, LayoutGrid, LogOut, Moon, Settings, Sun } from 'lucide-react'
 import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { GUIAS } from '@/lib/guias'
@@ -83,6 +83,14 @@ export default function Sidebar() {
             }`}
           >
             <Settings size={17} /> Configurações
+          </Link>
+          <Link
+            href="/configuracoes/empresa"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+              pathname.startsWith('/configuracoes/empresa') ? 'bg-slate-100 text-brand-navy' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            }`}
+          >
+            <Building2 size={17} /> Empresa e Identidade
           </Link>
           <Link
             href="/configuracoes/usuarios"
