@@ -1,13 +1,33 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Home configurável por usuário + Assistência com OS — EM VALIDAÇÃO
+
+Implementado:
+- remoção visual do botão `+ Novo` da topbar, mantendo `Novo orçamento` na Home;
+- nova configuração individual de Home em `Configurações > Usuários e Acesso`;
+- criação de usuário com seleção dos módulos que aparecerão na sua tela inicial;
+- edição posterior da Home para usuários existentes;
+- módulos configuráveis: Orçamentos, Clientes, Kanban comercial, Minhas tarefas, Calendário, Notificações, Assistências e Indicadores;
+- persistência sem migration em `configuracoes_gerais`, chave `home_usuario:<usuarioId>`;
+- novo `HomeDashboard` para montar a Home dinamicamente;
+- novos blocos de Home para Kanban, tarefas, calendário, notificações e assistências;
+- Assistências adicionadas à navegação operacional;
+- escopo de Assistências por usuário: `próprias` ou `todas`; Master sempre vê todas;
+- `/assistencias` passou a respeitar o escopo do usuário;
+- formulário de nova assistência exige apenas nome do cliente e pesquisa clientes existentes para autopreenchimento;
+- Kanban de Assistências preservado, com administração das etapas restrita ao Master;
+- geração de Ordem de Serviço por chamado em `/assistencias/[id]/os`;
+- OS imprimível/salvável em PDF, com dados da empresa, cliente, problema, fotos, etapa, técnico, serviço, materiais, observações e assinaturas;
+- sem migration e sem alteração de schema.
+
 ## 2026-08-21 — Home white-label, logo da empresa e últimos orçamentos — EM VALIDAÇÃO
 
 Implementado:
 - faixa principal da Home em verde/cor da empresa, inspirada nas referências avaliadas sem copiar a identidade de terceiros;
 - nome da empresa e logo dinâmicos na faixa principal;
 - placeholder orientativo quando ainda não existe logo configurado;
-- quatro atalhos abaixo da faixa: `Novo orçamento`, `Novo cliente`, `Nova tarefa` e `Novo compromisso`;
-- novo painel `Últimos orçamentos` com os 3 pedidos mais recentes, cliente, valor, status e data;
+- atalhos da Home agora seguem a configuração individual do usuário;
+- painel `Últimos orçamentos` com os 3 pedidos mais recentes, cliente, valor, status e data quando habilitado;
 - nova tela master `Configurações > Empresa e Identidade` para razão social/nome, nome fantasia, logo e cor principal;
 - upload do logo no bucket `fotos`, pasta `empresa`;
 - dados de identidade persistidos dentro de `dados_empresa` e preservados quando o cadastro tradicional da empresa é salvo;
@@ -17,7 +37,7 @@ Implementado:
 ## 2026-08-21 — Tema claro completo nos painéis da Home — EM VALIDAÇÃO
 
 Implementado após validação visual da usuária Keila:
-- tema claro agora também cobre os painéis `Notificações e alertas`, `Minhas tarefas` e `Agenda / Calendário`;
+- tema claro cobre os painéis operacionais da Home;
 - painéis `bg-slate-950` passam para fundo branco no tema claro;
 - bordas, divisórias e superfícies internas recebem tons claros;
 - textos neutros internos passam para cores escuras com contraste adequado;
