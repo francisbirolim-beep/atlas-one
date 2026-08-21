@@ -89,6 +89,12 @@ export async function uploadFotoProduto(file: File): Promise<string | null> {
   return subirComTentativas('produtos', file)
 }
 
+// Logo/identidade visual da empresa que usa o Atlas One. Mantém o arquivo
+// no bucket já existente para não exigir migration nem novo bucket.
+export async function uploadLogoEmpresa(file: File): Promise<string | null> {
+  return subirComTentativas('empresa', file)
+}
+
 // Desenho técnico/foto de uma configuração validada de orçamento.
 // Mantém cada imagem separada do cadastro genérico do produto porque duas
 // configurações da mesma tipologia podem ter composições visuais diferentes.

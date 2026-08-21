@@ -22,11 +22,17 @@ export async function salvarCorAssistencia(cor: string): Promise<boolean> {
 
 const CHAVE_DADOS_EMPRESA = 'dados_empresa'
 
-type DadosEmpresaPersistidos = DadosEmpresa & {
+export type IdentidadeEmpresa = {
+  nomeFantasia?: string
+  logoUrl?: string
+  corPrincipal?: string
+}
+
+type DadosEmpresaPersistidos = DadosEmpresa & IdentidadeEmpresa & {
   configuradoManualmente?: boolean
 }
 
-export async function lerDadosEmpresa(): Promise<DadosEmpresa | null> {
+async function lerDadosEmpresaPersistidos(): Promise<DadosEmpresaPersistidos | null> {
   const { data } = await supabase
     .from('configuracoes_gerais')
     .select('valor')
@@ -35,17 +41,46 @@ export async function lerDadosEmpresa(): Promise<DadosEmpresa | null> {
   if (!data?.valor) return null
 
   try {
-    const dados = JSON.parse(data.valor) as DadosEmpresaPersistidos
-    if (dados.configuradoManualmente !== true) return null
-    return dados
+    return JSON.parse(data.valor) as DadosEmpresaPersistidos
   } catch {
     return null
   }
 }
 
+export async function lerDadosEmpresa(): Promise<(DadosEmpresa & IdentidadeEmpresa) | null> {
+  const dados = await lerDadosEmpresaPersistidos()
+  if (!dados || dados.configuradoManualmente !== true) return null
+  return dados
+}
+
 export async function salvarDadosEmpresa(dados: DadosEmpresa): Promise<boolean> {
+  const atual = await lerDadosEmpresaPersistidos()
   const dadosPersistidos: DadosEmpresaPersistidos = {
+    ...(atual || {}),
     ...dados,
+    configuradoManualmente: true,
+  }
+
+  const { error } = await supabase
+    .from('configuracoes_gerais')
+    .upsert({
+      chave: CHAVE_DADOS_EMPRESA,
+      valor: JSON.stringify(dadosPersistidos),
+      updated_at: new Date().toISOString(),
+    })
+  return !error
+}
+
+export async function salvarIdentidadeEmpresa(
+  dados: IdentidadeEmpresa & { nome: string }
+): Promise<boolean> {
+  const atual = await lerDadosEmpresaPersistidos()
+  const dadosPersistidos: DadosEmpresaPersistidos = {
+    ...(atual || {}),
+    nome: dados.nome.trim(),
+    nomeFantasia: dados.nomeFantasia?.trim() || undefined,
+    logoUrl: dados.logoUrl?.trim() || undefined,
+    corPrincipal: dados.corPrincipal?.trim() || undefined,
     configuradoManualmente: true,
   }
 

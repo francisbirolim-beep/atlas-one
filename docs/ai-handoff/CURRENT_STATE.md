@@ -1,5 +1,22 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — HOME WHITE-LABEL + LOGO DA EMPRESA + ÚLTIMOS ORÇAMENTOS — 2026-08-21
+
+A Home foi redesenhada a partir das referências visuais avaliadas com o usuário (incluindo W.Vetro), preservando a identidade própria do Atlas One e criando a primeira fundação white-label real da interface.
+
+Estado atual desta implementação:
+- `components/system/HomeExecutiveHero.tsx` agora usa uma faixa principal colorida com identidade da empresa, mantendo o Atlas One como produto e exibindo o nome da empresa cliente dentro da Home;
+- o logo da empresa, quando configurado, aparece dentro da faixa principal; sem logo, a Home exibe um placeholder orientando a configuração;
+- a cor principal da empresa pode ser definida e passa a personalizar a faixa da Home;
+- a faixa permanece colorida tanto no tema claro quanto no tema escuro;
+- os atalhos principais ficam em quatro cards abaixo da faixa: `Novo orçamento`, `Novo cliente`, `Nova tarefa` e `Novo compromisso`;
+- novo painel `Últimos orçamentos` mostra os 3 pedidos mais recentes com número, cliente, valor, status e data;
+- foi criada a tela master `Configurações > Empresa e Identidade` (`/configuracoes/empresa`) para cadastrar razão social/nome, nome fantasia, logo e cor principal;
+- o upload do logo usa o bucket `fotos` já existente, pasta `empresa`, sem criar bucket novo;
+- a identidade visual é persistida dentro da configuração JSON `dados_empresa`, preservando CNPJ, endereço, telefones, e-mail e demais dados já existentes;
+- salvar os dados tradicionais da empresa também preserva `nomeFantasia`, `logoUrl` e `corPrincipal`, evitando que o cadastro atual apague a personalização;
+- nenhuma migration e nenhuma alteração de schema nesta etapa.
+
 ## EM VALIDAÇÃO — TEMA CLARO COMPLETO NA HOME — 2026-08-21
 
 Após validação visual real na tela da usuária Keila, foi identificado que a primeira versão do tema claro clareava a sidebar e o hero, mas mantinha os cards operacionais da Home escuros.
@@ -19,12 +36,11 @@ Estado atual desta correção:
 A tela inicial foi ajustada a partir do caso real da usuária Keila em largura intermediária de desktop, onde o bloco principal ficava comprimido e o título quebrava praticamente uma palavra por linha.
 
 Estado atual desta implementação:
-- `components/system/HomeExecutiveHero.tsx` só passa para o layout de duas colunas em `xl`; em larguras menores, texto e ações ficam empilhados e usam a largura disponível;
-- os três atalhos (`Novo orçamento`, `Nova tarefa`, `Novo compromisso`) permanecem lado a lado a partir de `sm`, mas abaixo do texto até `xl`;
-- `components/Sidebar.tsx` ganhou alternância `Tema claro` / `Tema escuro`;
+- `components/system/HomeExecutiveHero.tsx` é responsivo e evita o texto comprimido em larguras intermediárias;
+- `components/Sidebar.tsx` possui alternância `Tema claro` / `Tema escuro`;
 - a preferência é salva por usuário no navegador usando a chave `atlas-theme:<usuario.id>`;
-- o tema claro clareia a sidebar e o hero da Home;
-- o tema escuro mantém a identidade atual da sidebar e do hero;
+- o tema claro clareia a sidebar e os painéis operacionais, mantendo a faixa white-label colorida;
+- o tema escuro mantém a sidebar e os painéis operacionais escuros;
 - `app/atlas-theme.css` também corrige contraste do título `Atlas One` e do nome do usuário na sidebar escura;
 - nenhuma migration e nenhuma alteração de banco nesta etapa.
 

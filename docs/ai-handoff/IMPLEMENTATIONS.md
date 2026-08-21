@@ -1,5 +1,19 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Home white-label, logo da empresa e últimos orçamentos — EM VALIDAÇÃO
+
+Implementado:
+- faixa principal da Home em verde/cor da empresa, inspirada nas referências avaliadas sem copiar a identidade de terceiros;
+- nome da empresa e logo dinâmicos na faixa principal;
+- placeholder orientativo quando ainda não existe logo configurado;
+- quatro atalhos abaixo da faixa: `Novo orçamento`, `Novo cliente`, `Nova tarefa` e `Novo compromisso`;
+- novo painel `Últimos orçamentos` com os 3 pedidos mais recentes, cliente, valor, status e data;
+- nova tela master `Configurações > Empresa e Identidade` para razão social/nome, nome fantasia, logo e cor principal;
+- upload do logo no bucket `fotos`, pasta `empresa`;
+- dados de identidade persistidos dentro de `dados_empresa` e preservados quando o cadastro tradicional da empresa é salvo;
+- faixa colorida mantida no tema claro; demais painéis continuam seguindo a alternância claro/escuro;
+- sem migration e sem alteração de schema.
+
 ## 2026-08-21 — Tema claro completo nos painéis da Home — EM VALIDAÇÃO
 
 Implementado após validação visual da usuária Keila:
@@ -14,11 +28,10 @@ Implementado após validação visual da usuária Keila:
 ## 2026-08-21 — Home responsiva e tema claro por usuário — EM VALIDAÇÃO
 
 Implementado:
-- correção do hero da Home em larguras intermediárias de desktop: layout de duas colunas somente em `xl`, evitando texto comprimido ao lado dos atalhos;
-- os atalhos da Home permanecem em grade abaixo do texto quando não há largura suficiente;
+- correção do hero da Home em larguras intermediárias de desktop, evitando texto comprimido;
 - opção `Tema claro` / `Tema escuro` na sidebar;
 - preferência persistida por usuário no navegador (`atlas-theme:<usuario.id>`), sem migration;
-- novo `app/atlas-theme.css` com variação clara para sidebar e hero;
+- `app/atlas-theme.css` controla as variações visuais de sidebar e painéis;
 - correção de contraste do título `Atlas One` e do nome do usuário na sidebar escura.
 
 ## 2026-08-21 — Tipo de esquadria livre no Orçamento Rápido — EM VALIDAÇÃO
