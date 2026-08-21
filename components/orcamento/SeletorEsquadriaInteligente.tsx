@@ -143,8 +143,30 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
     }).slice(0, 8)
   }, [q, configuracoesCompativeis, catalogo.tipologias])
 
+  function mudarTipoLivre(texto: string) {
+    const preenchido = Boolean(texto.trim())
+    onChange({
+      tipo: preenchido ? 'outro' : '',
+      tipoOutroTexto: texto,
+      tipologiaId: null,
+      produtoId: null,
+      precoUnit: null,
+      configuracaoPresetId: null,
+      configuracaoNome: null,
+      configuracaoValidada: false,
+      configuracaoStatus: 'pendente',
+      modoConfiguracao: 'rapido',
+      variaveis: {},
+      folhas: '',
+      modoOrigem: 'manual',
+    })
+    setBusca('')
+    setFocoBusca(false)
+  }
+
   function selecionarLinha(id: string) {
     const novaLinha = catalogo.linhas.find(l => l.id === id) || null
+    const manterTipoLivre = value.tipo === 'outro' && Boolean(value.tipoOutroTexto.trim())
     onChange({
       linhaId: novaLinha?.id || null,
       linhaNome: novaLinha?.nome || null,
@@ -157,8 +179,8 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
       configuracaoStatus: 'pendente',
       variaveis: {},
       folhas: '',
-      tipo: '',
-      tipoOutroTexto: '',
+      tipo: manterTipoLivre ? 'outro' : '',
+      tipoOutroTexto: manterTipoLivre ? value.tipoOutroTexto : '',
       modoOrigem: 'manual',
     })
     setBusca('')
@@ -231,12 +253,24 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+        <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo de esquadria / descrição livre</label>
+        <input
+          type="text"
+          value={value.tipo === 'outro' ? value.tipoOutroTexto : ''}
+          onChange={e => mudarTipoLivre(e.target.value)}
+          placeholder="Ex.: Porta de correr 3 folhas - Linha Suprema"
+          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white"
+        />
+        <p className="mt-1.5 text-[11px] text-emerald-800">Use este campo quando a esquadria ainda não estiver cadastrada. Linha e Modelo abaixo são opcionais.</p>
+      </div>
+
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">1. Linha</label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">1. Linha <span className="font-normal text-slate-400">(opcional)</span></label>
           <div className="relative">
             <select value={value.linhaId || ''} onChange={e => selecionarLinha(e.target.value)} className="w-full appearance-none border border-slate-300 rounded-lg p-2.5 pr-8 text-sm bg-white">
-              <option value="">Selecione a linha</option>
+              <option value="">Selecione a linha (opcional)</option>
               {catalogo.linhas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
             </select>
             <ChevronDown size={15} className="pointer-events-none absolute right-2.5 top-3 text-slate-400" />
@@ -244,7 +278,7 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">2. Modelo / Tipologia</label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">2. Modelo / Tipologia <span className="font-normal text-slate-400">(opcional)</span></label>
           <div className="relative">
             <select
               value={value.tipologiaId || ''}
@@ -252,12 +286,12 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
               disabled={carregando || !linha || tipologiasCompativeis.length === 0}
               className="w-full appearance-none border border-slate-300 rounded-lg p-2.5 pr-8 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-400"
             >
-              <option value="">{carregando ? 'Carregando...' : !linha ? 'Selecione primeiro a linha' : tipologiasCompativeis.length ? 'Selecione o modelo' : 'Nenhum modelo disponível'}</option>
+              <option value="">{carregando ? 'Carregando...' : !linha ? 'Opcional - selecione uma linha para usar o cadastro' : tipologiasCompativeis.length ? 'Selecione o modelo (opcional)' : 'Nenhum modelo cadastrado - use a descrição livre'}</option>
               {tipologiasCompativeis.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
             <ChevronDown size={15} className="pointer-events-none absolute right-2.5 top-3 text-slate-400" />
           </div>
-          {linha && <p className="mt-1 text-[11px] text-slate-400">{tipologiasCompativeis.length} modelo(s) vinculados à linha {linha.nome}.</p>}
+          {linha && <p className="mt-1 text-[11px] text-slate-400">{tipologiasCompativeis.length} modelo(s) vinculados à linha {linha.nome}. Se não encontrar, use a descrição livre acima.</p>}
         </div>
       </div>
 
