@@ -1,6 +1,7 @@
 /* Atlas One — tema visual por usuário.
  * O tema "escuro" preserva a identidade atual (sidebar + hero escuros).
- * O tema "claro" clareia a casca principal sem alterar regras de negócio.
+ * O tema "claro" clareia toda a casca visual e também os painéis escuros
+ * baseados em bg-slate-950, sem alterar regras de negócio.
  */
 
 /* Correções de contraste da sidebar no tema atual. */
@@ -25,6 +26,11 @@
 
 html[data-atlas-theme="claro"] {
   background: #f8fafc;
+}
+
+html[data-atlas-theme="claro"] body {
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 html[data-atlas-theme="claro"] .atlas-home-hero {
@@ -57,6 +63,78 @@ html[data-atlas-theme="claro"] .atlas-home-hero-secondary {
 html[data-atlas-theme="claro"] .atlas-home-hero-secondary:hover {
   border-color: #cbd5e1 !important;
   background: #f1f5f9 !important;
+}
+
+/*
+ * Painéis operacionais escuros.
+ * A Home usa bg-slate-950 em Notificações, Minhas tarefas e Agenda.
+ * No tema claro, qualquer painel com esse mesmo padrão passa a usar
+ * superfície branca, bordas claras e tipografia escura.
+ */
+html[data-atlas-theme="claro"] .bg-slate-950 {
+  border-color: #e2e8f0 !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06), 0 10px 24px rgb(15 23 42 / 0.035) !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950.text-white {
+  color: #0f172a !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 .text-white,
+html[data-atlas-theme="claro"] .bg-slate-950 .text-slate-100 {
+  color: #0f172a !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 .text-slate-200 {
+  color: #334155 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 .text-slate-400,
+html[data-atlas-theme="claro"] .bg-slate-950 .text-slate-500 {
+  color: #64748b !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="border-white/10"] {
+  border-color: #e2e8f0 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="divide-white/10"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="bg-white/[0.025]"] {
+  background-color: #f8fafc !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="bg-white/5"] {
+  background-color: #f1f5f9 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="bg-white/10"] {
+  background-color: #e2e8f0 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="hover:bg-white/5"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="hover:bg-white/10"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-950 [class~="hover:text-white"]:hover {
+  color: #0f172a !important;
+}
+
+/* Mantém os tons semânticos (verde, azul, vermelho e violeta) para status,
+ * mas garante contraste adequado dos controles neutros no fundo claro. */
+html[data-atlas-theme="claro"] .bg-slate-950 button[class*="border-slate-500"] {
+  border-color: #94a3b8 !important;
 }
 
 @media (min-width: 768px) {
