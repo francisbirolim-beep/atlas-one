@@ -1,5 +1,15 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-21 — Home responsiva e tema claro por usuário — EM VALIDAÇÃO
+
+Implementado:
+- correção do hero da Home em larguras intermediárias de desktop: layout de duas colunas somente em `xl`, evitando texto comprimido ao lado dos atalhos;
+- os atalhos da Home permanecem em grade abaixo do texto quando não há largura suficiente;
+- opção `Tema claro` / `Tema escuro` na sidebar;
+- preferência persistida por usuário no navegador (`atlas-theme:<usuario.id>`), sem migration;
+- novo `app/atlas-theme.css` com variação clara para sidebar e hero;
+- correção de contraste do título `Atlas One` e do nome do usuário na sidebar escura.
+
 ## 2026-08-21 — Tipo de esquadria livre no Orçamento Rápido — EM VALIDAÇÃO
 
 Implementado:
