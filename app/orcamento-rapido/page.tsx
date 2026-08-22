@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard, Pencil } from 'lucide-react'
 import Link from 'next/link'
-import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead } from '@/lib/tipos'
+import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead, Cliente } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { salvarPendente } from '@/lib/offlineFila'
+import { supabase } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
@@ -89,6 +90,7 @@ function resumoMedidas(item: ItemForm, tipoMedida: 'comum' | 'final' | '') {
 
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
+  const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -111,6 +113,25 @@ export default function OrcamentoRapido() {
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
 
+  useEffect(() => {
+    const clienteId = new URLSearchParams(window.location.search).get('cliente')
+    if (!clienteId) return
+
+    supabase
+      .from('clientes')
+      .select('*')
+      .eq('id', clienteId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        const cliente = data as Cliente
+        setClienteIdOrigem(cliente.id)
+        setClienteNome(cliente.nome || '')
+        setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
+        setCidade(cliente.cidade || '')
+        if (cliente.origem) setOrigem(cliente.origem)
+      })
+  }, [])
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
     setItens(itens.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
@@ -119,7 +140,6 @@ export default function OrcamentoRapido() {
   function atualizarItemCampos(id: string, patch: Partial<ItemForm>) {
     setItens(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it)))
   }
-
 
   function adicionarFotoItem(id: string, files: FileList | null) {
     if (!files || files.length === 0) return
@@ -200,6 +220,7 @@ export default function OrcamentoRapido() {
     setSalvando(true)
 
     const dadosForm: DadosOrcamentoForm = {
+      clienteId: clienteIdOrigem,
       itens, clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
@@ -296,6 +317,7 @@ export default function OrcamentoRapido() {
     setErro('')
     setConferenciaAberta(false)
     setItens([novoItem()])
+    setClienteIdOrigem(null)
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
@@ -320,9 +342,7 @@ export default function OrcamentoRapido() {
           <p className="text-slate-500 mb-6">
             Sem internet agora. O pedido de {clienteNome} foi guardado e vai ser enviado sozinho assim que a internet voltar — não precisa reenviar.
           </p>
-          <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">
-            Novo pedido
-          </button>
+          <button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg hover:bg-brand-navyDark transition">Novo pedido</button>
         </div>
       </div>
     )
@@ -334,28 +354,15 @@ export default function OrcamentoRapido() {
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
           <CheckCircle size={48} className="text-brand-teal mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Pedido enviado!</h2>
-          <p className="text-slate-500 mb-2">
-            {clienteNome} entrou no painel de orçamentos. Um funcionário vai preparar o valor.
-          </p>
-          <p className="text-sm text-slate-500 mb-6">
-            Se lembrar de mais alguma esquadria ou precisar corrigir algo, você pode editar este mesmo pedido.
-          </p>
+          <p className="text-slate-500 mb-2">{clienteNome} entrou no painel de orçamentos. Um funcionário vai preparar o valor.</p>
+          <p className="text-sm text-slate-500 mb-6">Se lembrar de mais alguma esquadria ou precisar corrigir algo, você pode editar este mesmo pedido.</p>
           <div className="grid gap-3">
             {pedidoEnviadoId && (
-              <Link
-                href={`/kanban?orcamento=${pedidoEnviadoId}`}
-                className="w-full px-4 py-3 bg-brand-teal text-white rounded-xl hover:bg-brand-tealDark transition flex items-center justify-center gap-2 font-medium"
-              >
-                <Pencil size={17} /> Editar este pedido
-              </Link>
+              <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 bg-brand-teal text-white rounded-xl hover:bg-brand-tealDark transition flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> Editar este pedido</Link>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl hover:bg-brand-navyDark transition">
-                Novo pedido
-              </button>
-              <Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl hover:bg-slate-50 transition">
-                Ver painel
-              </Link>
+              <button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl hover:bg-brand-navyDark transition">Novo pedido</button>
+              <Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl hover:bg-slate-50 transition">Ver painel</Link>
             </div>
           </div>
         </div>
@@ -369,21 +376,17 @@ export default function OrcamentoRapido() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg transition">
-            <ArrowLeft size={20} />
-          </Link>
+          <Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg transition"><ArrowLeft size={20} /></Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">Orçamento</h1>
-            <p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p>
-          </div>
+          <div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
           <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
+          {clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}
           <input type="text" value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
           <input type="text" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
           <div className="grid grid-cols-2 gap-3">
@@ -448,28 +451,7 @@ export default function OrcamentoRapido() {
             <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
               <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>{itens.length > 1 && <button onClick={() => removerItem(item.id)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={16} /></button>}</div>
               <div><label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label><input type="text" value={item.ambiente} onChange={e => atualizarItem(item.id, 'ambiente', e.target.value)} placeholder="Ex: Sala, Quarto 1, Cozinha, Banheiro social..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
-              <SeletorEsquadriaInteligente
-                value={{
-                  modoOrigem: item.modoOrigem,
-                  produtoId: item.produtoId,
-                  precoUnit: item.precoUnit,
-                  tipo: item.tipo,
-                  tipoOutroTexto: item.tipoOutroTexto,
-                  folhas: item.folhas,
-                  largura: item.largura,
-                  altura: item.altura,
-                  linhaId: item.linhaId,
-                  linhaNome: item.linhaNome,
-                  tipologiaId: item.tipologiaId,
-                  configuracaoPresetId: item.configuracaoPresetId,
-                  configuracaoNome: item.configuracaoNome,
-                  configuracaoValidada: item.configuracaoValidada,
-                  modoConfiguracao: item.modoConfiguracao,
-                  configuracaoStatus: item.configuracaoStatus,
-                  variaveis: item.variaveis,
-                }}
-                onChange={patch => atualizarItemCampos(item.id, patch)}
-              />
+              <SeletorEsquadriaInteligente value={{ modoOrigem: item.modoOrigem, produtoId: item.produtoId, precoUnit: item.precoUnit, tipo: item.tipo, tipoOutroTexto: item.tipoOutroTexto, folhas: item.folhas, largura: item.largura, altura: item.altura, linhaId: item.linhaId, linhaNome: item.linhaNome, tipologiaId: item.tipologiaId, configuracaoPresetId: item.configuracaoPresetId, configuracaoNome: item.configuracaoNome, configuracaoValidada: item.configuracaoValidada, modoConfiguracao: item.modoConfiguracao, configuracaoStatus: item.configuracaoStatus, variaveis: item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} />
               {item.tipo && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input type="text" value={item.folhas} onChange={e => atualizarItem(item.id, 'folhas', e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
               {tipoMedida === 'final' ? (
                 <div className="space-y-3">
@@ -494,10 +476,7 @@ export default function OrcamentoRapido() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">Conferência final do orçamento</h2>
-                <p className="mt-1 text-sm text-slate-500">Confira as tipologias, quantidades e medidas antes de enviar para o Painel de Orçamentos.</p>
-              </div>
+              <div><h2 className="text-lg font-bold text-slate-800">Conferência final do orçamento</h2><p className="mt-1 text-sm text-slate-500">Confira as tipologias, quantidades e medidas antes de enviar para o Painel de Orçamentos.</p></div>
               <button type="button" onClick={() => setConferenciaAberta(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Fechar conferência"><X size={18} /></button>
             </div>
 
@@ -512,20 +491,15 @@ export default function OrcamentoRapido() {
                 {itens.map((item, idx) => (
                   <div key={item.id} className="rounded-xl border-2 border-slate-200 p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Item {idx + 1}</p>
-                        <p className="mt-1 text-base font-bold text-slate-800">{item.quantidade || '1'}x {nomeTipologia(item)}</p>
-                      </div>
+                      <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Item {idx + 1}</p><p className="mt-1 text-base font-bold text-slate-800">{item.quantidade || '1'}x {nomeTipologia(item)}</p></div>
                       {item.ambiente && <span className="shrink-0 rounded-full bg-brand-tealLight px-2.5 py-1 text-xs font-medium text-brand-teal">{item.ambiente}</span>}
                     </div>
-
                     <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                       <p><span className="font-semibold text-slate-700">Medidas:</span> {resumoMedidas(item, tipoMedida)}</p>
                       <p><span className="font-semibold text-slate-700">Linha:</span> {item.linhaNome || 'Não informada'}</p>
                       <p><span className="font-semibold text-slate-700">Folhas:</span> {item.folhas || 'Não informado'}</p>
                       <p><span className="font-semibold text-slate-700">Cor:</span> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p>
                     </div>
-
                     {item.configuracaoNome && <p className="mt-2 text-xs text-slate-500"><span className="font-semibold">Configuração:</span> {item.configuracaoNome}</p>}
                     {item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="font-semibold">Observação:</span> {item.descricao}</p>}
                   </div>
