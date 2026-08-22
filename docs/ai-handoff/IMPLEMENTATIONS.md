@@ -1,5 +1,18 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-22 — Lista de vidros e folgas no Plano de Corte — EM VALIDAÇÃO
+
+Implementado:
+- campo `Vidro / composição` na Engenharia com sugestões vindas de produtos ativos organizados como categoria/grupo `Vidro`, mantendo digitação livre como fallback;
+- campos independentes `Folga na largura do vidro (mm)` e `Folga na altura do vidro (mm)`, com suporte a valores decimais;
+- botão principal ajustado para `Gerar plano de corte + vidros`;
+- nova seção `Lista de Vidros` no relatório e na impressão/PDF, mostrando composição, medida-base, folga de cada eixo, medida de corte e quantidade;
+- helper `lib/planoCorteVidros.ts` para centralizar catálogo e cálculo do vidro;
+- na PC3 Suprema, a regra em validação usa os baguetes SU102 horizontal/vertical presentes no plano como medida-base e desconta as folgas informadas;
+- quantidade da PC3 inferida pelos pares de baguetes e multiplicada pela quantidade de esquadrias do plano;
+- tipologias sem referência técnica de vidro exibem aviso e não recebem medida inventada pela dimensão total da esquadria;
+- nenhuma migration e nenhuma alteração de schema.
+
 ## 2026-08-22 — Cadastro do cliente como central operacional — EM VALIDAÇÃO
 
 Implementado:
