@@ -45,6 +45,7 @@ export interface ItemOrcamentoForm {
 }
 
 export interface DadosOrcamentoForm {
+  clienteId?: string | null
   itens: ItemOrcamentoForm[]
   clienteNome: string
   clienteWhatsapp: string
@@ -65,13 +66,16 @@ export async function criarOrcamentoNoServidor(
   dados: DadosOrcamentoForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const {
+    clienteId: clienteIdInformado,
     itens, clienteNome, clienteWhatsapp, cidade, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
 
   const [clienteId, colunaId, usuario] = await Promise.all([
-    obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
+    clienteIdInformado
+      ? Promise.resolve(clienteIdInformado)
+      : obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
     primeiraColunaId(),
     usuarioAtual(),
   ])
