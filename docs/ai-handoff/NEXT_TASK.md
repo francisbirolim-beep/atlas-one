@@ -1,8 +1,22 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Assistência em campo com rota, GPS e tempo
+## TAREFA ATUAL — validar cadastro do cliente como central operacional
 
 Após deploy desta implementação:
+1. abrir um cliente existente em `/clientes/[id]` e confirmar a nova `Central do cliente`;
+2. confirmar que propostas/orçamentos continuam aparecendo normalmente e que cards espelho de Assistência não aparecem como proposta;
+3. em cliente com venda já confirmada, conferir a seção `Vendas confirmadas`, valor e acesso ao processo de Medição Final;
+4. em cliente com assistência já criada, conferir a seção `Assistências e manutenções`, data, status, técnico, duração e link da OS/PDF;
+5. dentro do cadastro, clicar em `Novo orçamento`, confirmar que nome/telefone/cidade são preenchidos e concluir o envio; depois voltar ao mesmo cliente e confirmar que o orçamento ficou no histórico correto;
+6. dentro do cadastro, clicar em `Nova assistência / manutenção`, confirmar autopreenchimento, criar o chamado e depois confirmar que ele aparece no histórico do mesmo cliente;
+7. repetir com cliente sem WhatsApp para validar que o `cliente_id` explícito impede criação de cadastro duplicado;
+8. validar também um cliente sem histórico: as seções devem ficar vazias sem erro;
+9. nenhuma migration é necessária nesta etapa.
+
+Regra para próximas evoluções: todo módulo operacional novo relacionado a uma pessoa/empresa cliente deve persistir `cliente_id` e ser acessível pelo cadastro central do cliente. Manutenção, enquanto não tiver tabela própria, usa o histórico de Assistências.
+
+## VALIDAÇÃO AINDA PENDENTE — Assistência em campo com rota, GPS e tempo
+
 1. abrir um chamado no Kanban, gerar um link com nome e telefone do técnico e testar os botões `WhatsApp`, `SMS` e `Copiar`;
 2. abrir o link no celular do técnico sem login e confirmar cliente, telefone, endereço, problema e fotos;
 3. tocar no telefone e confirmar abertura da ligação; testar também o WhatsApp do cliente;
