@@ -11,6 +11,11 @@ import {
   montarLinhasPlanoCorte,
   type LinhaPlanoCorte,
 } from '@/lib/planoCortePerfis'
+import {
+  gerarVidroPlanoCorte,
+  listarVidrosPlanoCorte,
+  type VidroCatalogoPlano,
+} from '@/lib/planoCorteVidros'
 
 type ModoPlano = 'obra' | 'manual'
 
@@ -50,14 +55,21 @@ export default function FormulasCortePage() {
   const [corPerfil, setCorPerfil] = useState('')
   const [corAcessorio, setCorAcessorio] = useState('')
   const [vidro, setVidro] = useState('')
+  const [vidrosCatalogo, setVidrosCatalogo] = useState<VidroCatalogoPlano[]>([])
+  const [folgaVidroLargura, setFolgaVidroLargura] = useState('')
+  const [folgaVidroAltura, setFolgaVidroAltura] = useState('')
   const [observacaoProducao, setObservacaoProducao] = useState('')
   const [referenciaManual, setReferenciaManual] = useState('')
 
   useEffect(() => {
     async function carregar() {
       setCarregando(true)
-      const dados = await listarFormulasCorteAtivas()
+      const [dados, vidros] = await Promise.all([
+        listarFormulasCorteAtivas(),
+        listarVidrosPlanoCorte(),
+      ])
       setDefinicoes(dados)
+      setVidrosCatalogo(vidros)
       if (dados[0]) setSelecionadaId(dados[0].id)
       setCarregando(false)
     }
@@ -121,6 +133,25 @@ export default function FormulasCortePage() {
   const pesoEsquadria = pesoCompleto
     ? linhasPlano.reduce((total, item) => total + (item.peso_kg || 0), 0)
     : null
+
+  const folgaLarguraNumero = folgaVidroLargura.trim() === '' ? null : Number(folgaVidroLargura)
+  const folgaAlturaNumero = folgaVidroAltura.trim() === '' ? null : Number(folgaVidroAltura)
+  const quantidadeEsquadrias = Math.max(1, Number.parseInt(quantidade || '1', 10) || 1)
+  const resultadoVidro = useMemo(() => gerarVidroPlanoCorte({
+    tipologiaId: definicao?.tipologia_id || '',
+    linhasPlano,
+    vidro,
+    folgaLarguraMm: folgaLarguraNumero != null && Number.isFinite(folgaLarguraNumero) ? folgaLarguraNumero : null,
+    folgaAlturaMm: folgaAlturaNumero != null && Number.isFinite(folgaAlturaNumero) ? folgaAlturaNumero : null,
+    quantidadeEsquadrias,
+  }), [
+    definicao?.tipologia_id,
+    linhasPlano,
+    vidro,
+    folgaLarguraNumero,
+    folgaAlturaNumero,
+    quantidadeEsquadrias,
+  ])
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-8">
@@ -217,8 +248,27 @@ export default function FormulasCortePage() {
                 <label className="text-sm font-medium text-slate-700">Altura final (mm)<input type="number" min="1" value={altura} onChange={e => setAltura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Cor perfil<input value={corPerfil} onChange={e => setCorPerfil(e.target.value)} placeholder="Ex.: PRETO" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Cor acessório<input value={corAcessorio} onChange={e => setCorAcessorio(e.target.value)} placeholder="Ex.: PRETO" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
-                <label className="text-sm font-medium text-slate-700 md:col-span-2">Vidro<input value={vidro} onChange={e => setVidro(e.target.value)} placeholder="Ex.: INCOLOR 06MM - T" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
-                <label className="text-sm font-medium text-slate-700 md:col-span-2">Observações de produção<textarea value={observacaoProducao} onChange={e => setObservacaoProducao(e.target.value)} placeholder="Observações importantes para a produção" rows={2} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
+
+                <label className="text-sm font-medium text-slate-700 md:col-span-2">
+                  Vidro / composição
+                  <input list="vidros-plano-corte" value={vidro} onChange={e => setVidro(e.target.value)} placeholder="Escolha um vidro cadastrado ou digite, ex.: INCOLOR 06MM - T" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                  <datalist id="vidros-plano-corte">
+                    {vidrosCatalogo.map(item => <option key={item.id} value={item.codigo ? `${item.codigo} - ${item.nome}` : item.nome} />)}
+                  </datalist>
+                  <span className="mt-1 block text-xs font-normal text-slate-400">{vidrosCatalogo.length > 0 ? `${vidrosCatalogo.length} vidro(s) do cadastro disponíveis para escolha.` : 'Você pode digitar o vidro agora; produtos organizados na categoria/grupo Vidro aparecerão aqui automaticamente.'}</span>
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  Folga na largura do vidro (mm)
+                  <input type="number" min="0" step="0.5" value={folgaVidroLargura} onChange={e => setFolgaVidroLargura(e.target.value)} placeholder="Ex.: 6" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  Folga na altura do vidro (mm)
+                  <input type="number" min="0" step="0.5" value={folgaVidroAltura} onChange={e => setFolgaVidroAltura(e.target.value)} placeholder="Ex.: 6" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                </label>
+                <div className="md:col-span-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-800">
+                  A folga informada é descontada da medida técnica validada do vão/baguete do vidro, e não da largura/altura total da esquadria. O Atlas só gera a medida automática quando essa referência técnica estiver validada para a tipologia.
+                </div>
+                <label className="text-sm font-medium text-slate-700 md:col-span-4">Observações de produção<textarea value={observacaoProducao} onChange={e => setObservacaoProducao(e.target.value)} placeholder="Observações importantes para a produção" rows={2} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
               </div>
 
               {definicao && definicao.variaveis.length > 0 && (
@@ -231,11 +281,12 @@ export default function FormulasCortePage() {
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <button type="button" disabled={calculando} onClick={() => void calcular()} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-5 py-3 text-sm font-semibold text-white hover:bg-brand-navyDark disabled:opacity-60">
-                  {calculando ? <Loader2 size={17} className="animate-spin" /> : <Calculator size={17} />} {calculando ? 'Calculando...' : 'Gerar plano de corte'}
+                  {calculando ? <Loader2 size={17} className="animate-spin" /> : <Calculator size={17} />} {calculando ? 'Calculando...' : 'Gerar plano de corte + vidros'}
                 </button>
                 {linhasPlano.length > 0 && <button type="button" onClick={imprimir} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Printer size={17} /> Imprimir / Salvar PDF</button>}
               </div>
               {erro && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+              {linhasPlano.length > 0 && resultadoVidro.aviso && <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Vidro: {resultadoVidro.aviso}</p>}
             </section>
 
             {linhasPlano.length > 0 && definicao && (
@@ -261,7 +312,8 @@ export default function FormulasCortePage() {
                     <div><span className="block text-[11px] uppercase text-slate-400">Medida final</span><strong>{largura} × {altura} mm</strong></div>
                     <div><span className="block text-[11px] uppercase text-slate-400">Cor Perfil</span><strong>{corPerfil || '—'}</strong></div>
                     <div><span className="block text-[11px] uppercase text-slate-400">Cor Acessório</span><strong>{corAcessorio || '—'}</strong></div>
-                    <div className="md:col-span-2"><span className="block text-[11px] uppercase text-slate-400">Vidro</span><strong>{vidro || '—'}</strong></div>
+                    <div><span className="block text-[11px] uppercase text-slate-400">Vidro</span><strong>{vidro || '—'}</strong></div>
+                    <div><span className="block text-[11px] uppercase text-slate-400">Folga do vidro</span><strong>L {folgaVidroLargura || '—'} mm · A {folgaVidroAltura || '—'} mm</strong></div>
                   </div>
 
                   <h3 className="mb-2 mt-6 text-center text-base font-bold text-slate-900">Perfis / Plano de Corte</h3>
@@ -298,10 +350,40 @@ export default function FormulasCortePage() {
 
                   <div className="mt-3 flex justify-end text-sm"><span className="mr-2 text-slate-500">Peso da esquadria:</span><strong>{pesoEsquadria == null ? '—' : `${formatarPeso(pesoEsquadria)} kg`}</strong></div>
 
+                  <h3 className="mb-2 mt-6 text-center text-base font-bold text-slate-900">Lista de Vidros</h3>
+                  {resultadoVidro.linha ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-[11px]">
+                        <thead>
+                          <tr className="border-y border-slate-700 bg-sky-50 uppercase tracking-wide text-slate-600">
+                            <th className="px-2 py-2 text-left">Vidro / composição</th>
+                            <th className="px-2 py-2 text-right">Medida base</th>
+                            <th className="px-2 py-2 text-center">Folga L</th>
+                            <th className="px-2 py-2 text-center">Folga A</th>
+                            <th className="px-2 py-2 text-right">Medida de corte</th>
+                            <th className="px-2 py-2 text-center">Qtde.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-slate-200">
+                            <td className="px-2 py-2"><strong className="text-slate-900">{resultadoVidro.linha.vidro}</strong><span className="mt-0.5 block text-[10px] text-slate-400">Base: {resultadoVidro.linha.referencia_tecnica}</span></td>
+                            <td className="px-2 py-2 text-right font-mono">{formatarMedida(resultadoVidro.linha.largura_base_mm)} × {formatarMedida(resultadoVidro.linha.altura_base_mm)}</td>
+                            <td className="px-2 py-2 text-center font-mono">{formatarMedida(resultadoVidro.linha.folga_largura_mm)} mm</td>
+                            <td className="px-2 py-2 text-center font-mono">{formatarMedida(resultadoVidro.linha.folga_altura_mm)} mm</td>
+                            <td className="px-2 py-2 text-right font-mono font-bold text-slate-900">{formatarMedida(resultadoVidro.linha.largura_corte_mm)} × {formatarMedida(resultadoVidro.linha.altura_corte_mm)} mm</td>
+                            <td className="px-2 py-2 text-center font-bold">{resultadoVidro.linha.quantidade}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{resultadoVidro.aviso || 'Vidro não gerado.'}</div>
+                  )}
+
                   {definicao.variaveis.length > 0 && <div className="mt-6"><h3 className="mb-2 text-center text-base font-bold text-slate-900">Variáveis da Configuração</h3><table className="w-full border-collapse text-xs"><thead><tr className="border-y border-slate-700 bg-slate-100 text-left uppercase tracking-wide text-slate-600"><th className="px-3 py-2">Descrição</th><th className="px-3 py-2">Valor</th></tr></thead><tbody>{definicao.variaveis.map(variavel => <tr key={variavel.chave} className="border-b border-slate-200"><td className="px-3 py-2 font-medium text-slate-700">{variavel.label}</td><td className="px-3 py-2 font-semibold uppercase text-slate-900">{rotuloOpcao(opcoes[variavel.chave] || '—')}</td></tr>)}</tbody></table></div>}
 
                   <div className="mt-6 rounded-xl bg-slate-50 p-4 text-xs text-slate-600"><span className="font-bold uppercase text-slate-700">Observações de produção:</span><div className="mt-1 whitespace-pre-wrap">{observacaoProducao || '—'}</div></div>
-                  <div className="mt-4 text-[11px] text-slate-400">Desenhos, quantidades e pesos aparecem somente quando houver vínculo técnico validado. Dados ausentes permanecem como “—”.</div>
+                  <div className="mt-4 text-[11px] text-slate-400">Desenhos, quantidades, pesos e medidas de vidro aparecem somente quando houver vínculo técnico validado. Dados ausentes permanecem como “—” e medidas de vidro não são inferidas pela dimensão total da esquadria.</div>
                 </div>
               </section>
             )}

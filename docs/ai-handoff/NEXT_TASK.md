@@ -1,8 +1,22 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar cadastro do cliente como central operacional
+## TAREFA ATUAL — validar lista de vidros e folgas no Plano de Corte
 
 Após deploy desta implementação:
+1. abrir `Engenharia > Fórmulas de Corte` e confirmar os campos `Vidro / composição`, `Folga na largura do vidro` e `Folga na altura do vidro`;
+2. confirmar que o vidro pode ser digitado livremente e que produtos organizados como categoria/grupo `Vidro` aparecem como sugestões;
+3. gerar um plano da Porta de Correr 03 Folhas Suprema e conferir se a seção `Lista de Vidros` aparece junto ao plano de perfis;
+4. informar folgas diferentes para largura e altura e conferir se a medida final do vidro é atualizada separadamente nos dois eixos;
+5. validar tecnicamente, antes de usar em produção, a referência atual da PC3 que utiliza os baguetes SU102 horizontal e vertical como medida-base do vidro;
+6. conferir se a quantidade de panos da PC3 está coerente com os baguetes (3 panos por esquadria na configuração atualmente validada) e com a quantidade de esquadrias informada no plano;
+7. imprimir/salvar PDF e conferir se a lista de vidros, tipo de vidro, medida-base, folgas, medida de corte e quantidade aparecem legíveis;
+8. testar uma tipologia sem regra de vidro e confirmar que o Atlas mostra aviso em vez de inventar a medida a partir da largura/altura total da esquadria;
+9. nenhuma migration e nenhuma alteração de schema são necessárias nesta etapa.
+
+Regra técnica: novas tipologias só devem ganhar geração automática de vidro depois que a referência/fórmula de vidro estiver validada. Não usar a dimensão total da esquadria como fallback automático.
+
+## VALIDAÇÃO AINDA PENDENTE — cadastro do cliente como central operacional
+
 1. abrir um cliente existente em `/clientes/[id]` e confirmar a nova `Central do cliente`;
 2. confirmar que propostas/orçamentos continuam aparecendo normalmente e que cards espelho de Assistência não aparecem como proposta;
 3. em cliente com venda já confirmada, conferir a seção `Vendas confirmadas`, valor e acesso ao processo de Medição Final;
@@ -10,8 +24,7 @@ Após deploy desta implementação:
 5. dentro do cadastro, clicar em `Novo orçamento`, confirmar que nome/telefone/cidade são preenchidos e concluir o envio; depois voltar ao mesmo cliente e confirmar que o orçamento ficou no histórico correto;
 6. dentro do cadastro, clicar em `Nova assistência / manutenção`, confirmar autopreenchimento, criar o chamado e depois confirmar que ele aparece no histórico do mesmo cliente;
 7. repetir com cliente sem WhatsApp para validar que o `cliente_id` explícito impede criação de cadastro duplicado;
-8. validar também um cliente sem histórico: as seções devem ficar vazias sem erro;
-9. nenhuma migration é necessária nesta etapa.
+8. validar também um cliente sem histórico: as seções devem ficar vazias sem erro.
 
 Regra para próximas evoluções: todo módulo operacional novo relacionado a uma pessoa/empresa cliente deve persistir `cliente_id` e ser acessível pelo cadastro central do cliente. Manutenção, enquanto não tiver tabela própria, usa o histórico de Assistências.
 

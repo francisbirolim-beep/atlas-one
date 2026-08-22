@@ -1,5 +1,23 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — LISTA DE VIDROS + FOLGAS NO PLANO DE CORTE — 2026-08-22
+
+O módulo `Engenharia > Fórmulas de Corte` passou a preparar, junto ao plano de perfis, uma lista de vidros com composição, folgas independentes de largura/altura e medida de corte quando existe uma referência técnica disponível.
+
+Estado atual desta implementação:
+- o campo de vidro passou a aceitar escolha por sugestões do cadastro e também digitação livre;
+- produtos ativos cuja categoria ou grupo contenha `Vidro` aparecem como sugestões sem exigir migration;
+- foram adicionados campos separados `Folga na largura do vidro (mm)` e `Folga na altura do vidro (mm)`, aceitando valores decimais;
+- o botão principal passou a indicar `Gerar plano de corte + vidros`;
+- o relatório gerado ganhou a seção `Lista de Vidros`, com tipo/composição, medida-base, folga de cada eixo, medida de corte e quantidade;
+- a impressão/PDF inclui a lista de vidros;
+- a medida do vidro não usa a largura/altura total da esquadria como fallback, evitando criar uma medida técnica sem validação;
+- na PC3 Suprema, a implementação em validação usa como referência os baguetes SU102 horizontal e vertical já presentes no plano e desconta as folgas informadas; essa relação deve ser conferida em uso real antes de liberar produção;
+- a quantidade de panos da PC3 é inferida pelos pares de baguetes horizontal/vertical e multiplicada pela quantidade de esquadrias informada;
+- tipologias sem referência de vidro reconhecida exibem aviso e não geram medida automática;
+- novo helper `lib/planoCorteVidros.ts` concentra a busca de vidros do cadastro e a regra de geração da lista;
+- nenhuma migration e nenhuma alteração de schema nesta etapa.
+
 ## EM VALIDAÇÃO — CADASTRO DO CLIENTE COMO CENTRAL OPERACIONAL — 2026-08-22
 
 O cadastro do cliente passa a ser o ponto central para consultar e iniciar operações relacionadas àquele cliente, sem duplicar registros quando o cliente já existe.
