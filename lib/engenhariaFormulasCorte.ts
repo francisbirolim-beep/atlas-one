@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { listarLinhasTecnicas } from '@/lib/linhasTecnicas'
 import type { PecaFormula, TipologiaFormulasCorte, VariavelTipologia } from '@/lib/formulasCorteEngine'
 
 export type StatusFormulaCorte = 'em_desenvolvimento' | 'em_validacao' | 'validada'
@@ -12,6 +13,8 @@ export type VidroFormulaCorte = {
   composicao_altura?: string
 }
 
+type TipologiaFormula = { id: string; label: string; chave: string; ativo: boolean }
+
 export type RegistroFormulaCorte = TipologiaFormulasCorte & {
   id: string
   ativo: boolean
@@ -21,7 +24,7 @@ export type RegistroFormulaCorte = TipologiaFormulasCorte & {
   versao: number
   observacoes?: string | null
   vidro: VidroFormulaCorte
-  tipologia?: { id: string; label: string; chave: string } | null
+  tipologia?: TipologiaFormula | null
 }
 
 type FormulaBanco = {
@@ -36,7 +39,7 @@ type FormulaBanco = {
   versao?: number | null
   observacoes?: string | null
   vidro?: unknown
-  tipologia?: { id: string; label: string; chave: string } | Array<{ id: string; label: string; chave: string }> | null
+  tipologia?: TipologiaFormula | TipologiaFormula[] | null
 }
 
 function normalizar(item: FormulaBanco): RegistroFormulaCorte {
@@ -64,21 +67,33 @@ function normalizar(item: FormulaBanco): RegistroFormulaCorte {
   }
 }
 
-const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, tipologia:tipologias(id,label,chave)'
+const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, tipologia:tipologias(id,label,chave,ativo)'
 
 export async function listarFormulasCorteAtivas(): Promise<RegistroFormulaCorte[]> {
-  const { data, error } = await supabase
-    .from('engenharia_tipologia_formulas_corte')
-    .select(CAMPOS)
-    .eq('ativo', true)
-    .order('created_at', { ascending: true })
+  const [formulasResp, linhas] = await Promise.all([
+    supabase
+      .from('engenharia_tipologia_formulas_corte')
+      .select(CAMPOS)
+      .eq('ativo', true)
+      .order('created_at', { ascending: true }),
+    listarLinhasTecnicas(),
+  ])
 
+  const { data, error } = formulasResp
   if (error) {
     console.error('Erro ao listar formulas de corte:', error)
     return []
   }
 
-  return ((data || []) as unknown as FormulaBanco[]).map(normalizar)
+  const tipologiasEmLinhasAtivas = new Set(
+    linhas
+      .filter(linha => linha.ativo)
+      .flatMap(linha => linha.tipologia_ids || [])
+  )
+
+  return ((data || []) as unknown as FormulaBanco[])
+    .map(normalizar)
+    .filter(item => item.tipologia?.ativo !== false && tipologiasEmLinhasAtivas.has(item.tipologia_id))
 }
 
 export async function listarTodasFormulasCorte(): Promise<RegistroFormulaCorte[]> {
