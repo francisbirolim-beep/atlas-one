@@ -4,6 +4,14 @@
 
 Implementado:
 - nova rota `Engenharia > Editor Técnico` (`/engenharia/editor-tecnico`) para editar a configuração técnica sem alterar código-fonte;
+- navegação do editor reorganizada em `Linha → Tipologia → Configuração`, eliminando a lista única de receitas;
+- seleção de Tipologia passa a respeitar os vínculos existentes em `linha_tipologias` da Linha escolhida;
+- Linha ganhou controle direto `Inativar linha / Liberar linha` usando `linhas_tecnicas.ativo`;
+- Tipologia ganhou controle direto `Inativar tipologia / Liberar tipologia`; migration adicionou `tipologias.ativo boolean default true`;
+- inativar Linha ou Tipologia não exclui fórmulas, receitas ou histórico; o cadastro continua visível no Editor Técnico com marca `INATIVA` e pode ser reativado;
+- `listarTipologias()` agora retorna somente tipologias ativas por padrão, enquanto o Editor Técnico solicita também as inativas para administração;
+- `listarFormulasCorteAtivas()` agora exige fórmula ativa + tipologia ativa + tipologia vinculada a uma linha ativa antes de oferecer a configuração no Plano de Corte;
+- Porta de Correr 08 e 09 Folhas Suprema foram vinculadas à Linha Suprema em `linha_tipologias`, corrigindo a associação ausente da primeira carga;
 - cada fórmula passa a ter `configuracao_chave`, nome de configuração, status (`em_desenvolvimento`, `em_validacao`, `validada`), versão, observações e fórmula própria de vidro;
 - a antiga restrição de uma fórmula por tipologia foi evoluída para uma fórmula por `tipologia + configuração`, permitindo manter, por exemplo, mão-amiga comum e larga como receitas separadas;
 - histórico automático em `engenharia_tipologia_formulas_corte_historico`: antes de uma alteração relevante o Atlas guarda snapshot da versão anterior e incrementa `versao`;
@@ -18,9 +26,8 @@ Implementado:
 - PC2 comum entrou como `Validada` e ativa, pois a fórmula já havia sido confirmada em duas medidas; demais sementes entram `Em validação` e inativas;
 - PC2 larga registra SU243 interno, SU242 externo e SU280 lateral, com teste 2000×2100 resultando em travessas/baguete horizontal 908 mm e vidro 902×1933 mm;
 - 7F/8F/9F recebem somente a matemática das folhas/vidros validada pelo usuário; marcos/trilhos compostos não são gerados automaticamente até validação estrutural específica;
-- criadas tipologias técnicas de 8 e 9 folhas, sem associação automática a uma linha comercial por existir inconsistência histórica em `linha_tipologias` que deve ser tratada separadamente;
 - o registro PC3 legado W.Vetro #994 foi preservado ativo por compatibilidade, mas rotulado `Em validação`;
-- migrations `engenharia_editor_formulas_suprema` e `formula_legacy_status` aplicadas no Supabase de produção;
+- migrations `engenharia_editor_formulas_suprema`, `formula_legacy_status` e `tipologias_ativo_editor_linhas` aplicadas no Supabase de produção;
 - preview da PR #232 compilou com sucesso na Vercel antes da liberação para teste.
 
 ## 2026-08-22 — Lista de vidros e folgas no Plano de Corte — EM VALIDAÇÃO
