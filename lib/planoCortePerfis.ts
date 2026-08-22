@@ -149,10 +149,22 @@ export function montarLinhasPlanoCorte(params: {
   perfis: PerfilCatalogoPlano[]
 }): LinhaPlanoCorte[] {
   const catalogo = new Map(params.perfis.map(perfil => [perfil.codigo.toUpperCase(), perfil]))
-  if (params.tipologiaId !== TIPOLOGIA_PC3_SUPREMA) {
-    return params.resultados.map(item => montarLinha(item.codigo, item.descricao || '—', item.tamanho, item.eixo || null, null, catalogo))
+
+  // Receitas novas já carregam quantidade e eixo na própria definição. Assim o
+  // plano deixa de depender de hardcode por tipologia e pode ser editado na Engenharia.
+  const declarativa = params.resultados.some(item => item.quantidade != null)
+  if (params.tipologiaId !== TIPOLOGIA_PC3_SUPREMA || declarativa) {
+    return params.resultados.map(item => montarLinha(
+      item.codigo,
+      item.descricao || '—',
+      item.tamanho,
+      item.eixo || null,
+      item.quantidade ?? null,
+      catalogo
+    ))
   }
 
+  // Compatibilidade com a definição PC3 legada, anterior às quantidades declarativas.
   const linhas: LinhaPlanoCorte[] = []
   for (const item of params.resultados) {
     if (item.codigo === 'travessas') {
