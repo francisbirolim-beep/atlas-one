@@ -1,5 +1,19 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-22 — Cadastro do cliente como central operacional — EM VALIDAÇÃO
+
+Implementado:
+- nova `Central do cliente` dentro de `/clientes/[id]`;
+- histórico de vendas confirmadas obtido por `medicoes_finais.cliente_id`, com referência ao orçamento e valor quando disponíveis;
+- histórico de assistências/manutenções obtido por `assistencias.cliente_id`, exibindo data, status, técnico, duração e links para OS/PDF e Kanban;
+- cards espelho de Assistência (`orcamentos.eh_assistencia`) removidos da lista de propostas do cadastro para não contar/mostrar o mesmo chamado como orçamento;
+- atalhos para `Novo orçamento` e `Nova assistência / manutenção` diretamente no cadastro do cliente;
+- Orçamento Rápido aceita `?cliente=<id>`, preenche os dados do cliente e envia o `cliente_id` explícito para garantir o vínculo correto;
+- Assistência aceita `?cliente=<id>`, preenche os dados do cliente e envia o `cliente_id` explícito para garantir o vínculo correto;
+- `DadosOrcamentoForm` e `DadosAssistenciaForm` receberam `clienteId` opcional, preservando compatibilidade com os fluxos antigos;
+- quando não há ID explícito, continua valendo a busca/criação existente de cliente;
+- sem migration e sem alteração de schema.
+
 ## 2026-08-21 — Assistência em campo com rota, GPS e tempo — EM VALIDAÇÃO
 
 Implementado:
