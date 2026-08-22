@@ -68,6 +68,25 @@ function novoItem(): ItemForm {
   }
 }
 
+function nomeTipologia(item: ItemForm) {
+  if (item.tipo === 'outro' && item.tipoOutroTexto.trim()) return item.tipoOutroTexto.trim()
+  const tipo = String(item.tipo || 'Esquadria').replace(/[_-]+/g, ' ').trim()
+  return tipo ? tipo.charAt(0).toUpperCase() + tipo.slice(1) : 'Esquadria'
+}
+
+function resumoMedidas(item: ItemForm, tipoMedida: 'comum' | 'final' | '') {
+  if (tipoMedida !== 'final') return `${item.largura} × ${item.altura} mm`
+
+  const larguras = item.modoLargura === 'foto'
+    ? 'Larguras por foto'
+    : `L ${item.larguraBaixo} / ${item.larguraMeio} / ${item.larguraCima} mm`
+  const alturas = item.modoAltura === 'foto'
+    ? 'Alturas por foto'
+    : `A ${item.alturaDireita} / ${item.alturaMeio} / ${item.alturaEsquerda} mm`
+
+  return `${larguras} • ${alturas}`
+}
+
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [clienteNome, setClienteNome] = useState('')
@@ -90,6 +109,7 @@ export default function OrcamentoRapido() {
   const [salvoOffline, setSalvoOffline] = useState(false)
   const [erro, setErro] = useState('')
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
+  const [conferenciaAberta, setConferenciaAberta] = useState(false)
 
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
@@ -173,6 +193,39 @@ export default function OrcamentoRapido() {
     setSalvoOffline(true)
   }
 
+  async function confirmarEnvio() {
+    if (salvando) return
+    setConferenciaAberta(false)
+    setErro('')
+    setSalvando(true)
+
+    const dadosForm: DadosOrcamentoForm = {
+      itens, clienteNome, clienteWhatsapp, cidade, origem,
+      temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
+      arquitetoNome, arquitetoContato, fotos, arquivos,
+    }
+
+    const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
+
+    if (semInternet) {
+      await salvarComoPendente(dadosForm)
+      return
+    }
+
+    try {
+      const resultado = await criarOrcamentoNoServidor(dadosForm)
+      setSalvando(false)
+      if (resultado.ok) {
+        setPedidoEnviadoId(resultado.id || null)
+        setSalvo(true)
+      } else {
+        setErro('Erro ao salvar: ' + resultado.error)
+      }
+    } catch (e) {
+      await salvarComoPendente(dadosForm)
+    }
+  }
+
   async function salvar() {
     if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
     if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
@@ -232,39 +285,8 @@ export default function OrcamentoRapido() {
       }
     }
 
-    const confirmou = window.confirm(
-      `Enviar o pedido de ${clienteNome.trim()} para o Painel de Orçamentos?\n\nConfira os dados antes de confirmar. Depois do envio, você ainda poderá abrir e editar este pedido para acrescentar ou corrigir itens.`
-    )
-    if (!confirmou) return
-
     setErro('')
-    setSalvando(true)
-
-    const dadosForm: DadosOrcamentoForm = {
-      itens, clienteNome, clienteWhatsapp, cidade, origem,
-      temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
-      arquitetoNome, arquitetoContato, fotos, arquivos,
-    }
-
-    const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
-
-    if (semInternet) {
-      await salvarComoPendente(dadosForm)
-      return
-    }
-
-    try {
-      const resultado = await criarOrcamentoNoServidor(dadosForm)
-      setSalvando(false)
-      if (resultado.ok) {
-        setPedidoEnviadoId(resultado.id || null)
-        setSalvo(true)
-      } else {
-        setErro('Erro ao salvar: ' + resultado.error)
-      }
-    } catch (e) {
-      await salvarComoPendente(dadosForm)
-    }
+    setConferenciaAberta(true)
   }
 
   function resetar() {
@@ -272,6 +294,7 @@ export default function OrcamentoRapido() {
     setPedidoEnviadoId(null)
     setSalvoOffline(false)
     setErro('')
+    setConferenciaAberta(false)
     setItens([novoItem()])
     setClienteNome('')
     setClienteWhatsapp('')
@@ -339,6 +362,8 @@ export default function OrcamentoRapido() {
       </div>
     )
   }
+
+  const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -464,6 +489,57 @@ export default function OrcamentoRapido() {
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
         <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : 'Enviar pedido'}</button>
       </main>
+
+      {conferenciaAberta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Conferência final do orçamento</h2>
+                <p className="mt-1 text-sm text-slate-500">Confira as tipologias, quantidades e medidas antes de enviar para o Painel de Orçamentos.</p>
+              </div>
+              <button type="button" onClick={() => setConferenciaAberta(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Fechar conferência"><X size={18} /></button>
+            </div>
+
+            <div className="max-h-[65vh] overflow-y-auto px-5 py-4">
+              <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+                <div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cliente</p><p className="mt-1 text-sm font-semibold text-slate-800">{clienteNome}</p></div>
+                <div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cidade</p><p className="mt-1 text-sm font-semibold text-slate-800">{cidade}</p></div>
+                <div><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Resumo</p><p className="mt-1 text-sm font-semibold text-slate-800">{itens.length} {itens.length === 1 ? 'item' : 'itens'} • {totalEsquadrias} {totalEsquadrias === 1 ? 'esquadria' : 'esquadrias'}</p></div>
+              </div>
+
+              <div className="space-y-3">
+                {itens.map((item, idx) => (
+                  <div key={item.id} className="rounded-xl border-2 border-slate-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Item {idx + 1}</p>
+                        <p className="mt-1 text-base font-bold text-slate-800">{item.quantidade || '1'}x {nomeTipologia(item)}</p>
+                      </div>
+                      {item.ambiente && <span className="shrink-0 rounded-full bg-brand-tealLight px-2.5 py-1 text-xs font-medium text-brand-teal">{item.ambiente}</span>}
+                    </div>
+
+                    <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                      <p><span className="font-semibold text-slate-700">Medidas:</span> {resumoMedidas(item, tipoMedida)}</p>
+                      <p><span className="font-semibold text-slate-700">Linha:</span> {item.linhaNome || 'Não informada'}</p>
+                      <p><span className="font-semibold text-slate-700">Folhas:</span> {item.folhas || 'Não informado'}</p>
+                      <p><span className="font-semibold text-slate-700">Cor:</span> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p>
+                    </div>
+
+                    {item.configuracaoNome && <p className="mt-2 text-xs text-slate-500"><span className="font-semibold">Configuração:</span> {item.configuracaoNome}</p>}
+                    {item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="font-semibold">Observação:</span> {item.descricao}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:grid-cols-2">
+              <button type="button" onClick={() => setConferenciaAberta(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Voltar e corrigir</button>
+              <button type="button" onClick={() => void confirmarEnvio()} disabled={salvando} className="flex items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-tealDark disabled:opacity-50"><Send size={17} /> {salvando ? 'Enviando...' : 'Confirmar e enviar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {fotoAmpliada && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setFotoAmpliada(null)}>
