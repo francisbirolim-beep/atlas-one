@@ -3,23 +3,31 @@
 ## TAREFA ATUAL — validar Editor Técnico + fórmulas Suprema
 
 Após o deploy/preview da PR #232:
-1. abrir `Engenharia > Editor Técnico` e confirmar que aparecem as configurações de Porta de Correr Suprema;
-2. selecionar `Porta De Correr 02 Folhas (L. Suprema) — Mão-amiga comum sem reforço`, testar `2000 x 2100` e conferir: SU053/SU225/SU102 horizontal = 917 mm, SU280/SU040/SU041 = 2066 mm, SU102 vertical = 1915 mm e vidro = 911 x 1933 mm;
-3. selecionar `Porta De Correr 02 Folhas (L. Suprema) — Mão-amiga larga sem reforço`, testar `2000 x 2100` e conferir: SU053/SU225/SU102 horizontal = 908 mm, SU280/SU243/SU242 = 2066 mm, SU102 vertical = 1915 mm e vidro = 902 x 1933 mm;
-4. confirmar que `CEIL()` arredonda qualquer resultado decimal sempre para cima;
-5. alterar temporariamente um código de perfil/fórmula/quantidade no editor, executar `Calcular teste` e confirmar que a simulação muda antes de salvar;
-6. conferir que o campo `Composição / origem do desconto` fica visível e que constantes sem decomposição física validada permanecem explicitamente como pendentes, sem inferência;
-7. confirmar que somente fórmulas com status `Validada` podem ser marcadas como `Liberar no Plano de Corte`;
-8. testar a configuração larga de 9 folhas em `2000 x 2100`: desconto estrutural 468, SU053/SU225/SU102 horizontal = 170 mm, vidro = 164 x 1933 mm, SU243/SU242 = 8 peças cada;
-9. não liberar automaticamente 3F–9F para produção até validar os marcos/trilhos específicos de cada quantidade; 7F/8F/9F continuam sem composição estrutural automática dos marcos;
-10. acessórios/reforços/variantes continuam editáveis em `Engenharia > Receitas Técnicas`; validar a navegação entre o Editor Técnico e Receitas.
+1. abrir `Engenharia > Editor Técnico` e confirmar a nova sequência `Linha → Tipologia → Configuração` no painel esquerdo;
+2. selecionar a linha `SUPREMA` e confirmar que a lista de Tipologias mostra somente modelos vinculados a essa linha, incluindo Porta de Correr 08 e 09 Folhas;
+3. selecionar `Porta De Correr 02 Folhas (L. Suprema)` e confirmar que aparecem separadamente as configurações de mão-amiga comum e mão-amiga larga;
+4. testar o botão `Inativar tipologia`, confirmar que ela fica identificada como `INATIVA` e deixa de ser oferecida nos fluxos normais; em seguida, **reativar a tipologia antes de encerrar o teste**;
+5. testar o botão `Inativar linha` na Suprema, confirmar que as fórmulas dessa linha deixam de ser oferecidas no Plano de Corte e, em seguida, **reativar a linha antes de encerrar o teste**;
+6. confirmar que inativar Linha/Tipologia não apaga fórmulas, configurações nem histórico e que o Editor Técnico continua permitindo editar/testar o cadastro inativo;
+7. selecionar `Porta De Correr 02 Folhas (L. Suprema) — Mão-amiga comum sem reforço`, testar `2000 x 2100` e conferir: SU053/SU225/SU102 horizontal = 917 mm, SU280/SU040/SU041 = 2066 mm, SU102 vertical = 1915 mm e vidro = 911 x 1933 mm;
+8. selecionar `Porta De Correr 02 Folhas (L. Suprema) — Mão-amiga larga sem reforço`, testar `2000 x 2100` e conferir: SU053/SU225/SU102 horizontal = 908 mm, SU280/SU243/SU242 = 2066 mm, SU102 vertical = 1915 mm e vidro = 902 x 1933 mm;
+9. confirmar que `CEIL()` arredonda qualquer resultado decimal sempre para cima;
+10. alterar temporariamente um código de perfil/fórmula/quantidade no editor, executar `Calcular teste` e confirmar que a simulação muda antes de salvar;
+11. conferir que o campo `Composição / origem do desconto` fica visível e que constantes sem decomposição física validada permanecem explicitamente como pendentes, sem inferência;
+12. confirmar que somente fórmulas com status `Validada` podem ser marcadas como `Liberar esta configuração no Plano de Corte`, e que Linha e Tipologia também precisam estar liberadas;
+13. testar a configuração larga de 9 folhas em `2000 x 2100`: desconto estrutural 468, SU053/SU225/SU102 horizontal = 170 mm, vidro = 164 x 1933 mm, SU243/SU242 = 8 peças cada;
+14. não liberar automaticamente 3F–9F para produção até validar os marcos/trilhos específicos de cada quantidade; 7F/8F/9F continuam sem composição estrutural automática dos marcos;
+15. acessórios/reforços/variantes continuam editáveis em `Engenharia > Receitas Técnicas`; validar a navegação entre o Editor Técnico e Receitas.
 
 Banco/segurança:
-- migrations `engenharia_editor_formulas_suprema` e `formula_legacy_status` já foram aplicadas no Supabase de produção;
+- migrations `engenharia_editor_formulas_suprema`, `formula_legacy_status` e `tipologias_ativo_editor_linhas` já foram aplicadas no Supabase de produção;
+- `tipologias.ativo` controla disponibilidade sem exclusão de dados; linhas continuam usando `linhas_tecnicas.ativo`;
+- PC8 e PC9 Suprema agora estão vinculadas à Linha Suprema em `linha_tipologias`;
 - fórmulas novas em validação ficam `ativo=false` por padrão;
 - PC2 comum/estreita foi cadastrada como `Validada` e ativa por ser a receita já confirmada em duas medidas;
 - o registro PC3 legado continua ativo por compatibilidade, mas está rotulado `Em validação`;
-- o histórico de alterações salva snapshots e incrementa a versão quando a fórmula/configuração é editada.
+- o histórico de alterações salva snapshots e incrementa a versão quando a fórmula/configuração é editada;
+- **não deixar Suprema ou uma tipologia de produção inativa após o teste**, pois o banco usado pelo preview é o banco real.
 
 ## VALIDAÇÃO AINDA PENDENTE — lista de vidros e folgas no Plano de Corte
 
