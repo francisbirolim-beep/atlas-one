@@ -1,5 +1,21 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — CADASTRO DO CLIENTE COMO CENTRAL OPERACIONAL — 2026-08-22
+
+O cadastro do cliente passa a ser o ponto central para consultar e iniciar operações relacionadas àquele cliente, sem duplicar registros quando o cliente já existe.
+
+Estado atual desta implementação:
+- `/clientes/[id]` mantém dados cadastrais, tarefas, interações de CRM e propostas e ganhou a `Central do cliente`;
+- a Central mostra vendas confirmadas a partir de `medicoes_finais.cliente_id`, vinculando a venda ao orçamento de origem quando disponível;
+- a Central mostra assistências/manutenções a partir de `assistencias.cliente_id`, com data, status, técnico, duração, acesso à OS/PDF e ao Kanban;
+- cards espelho de Assistência criados em `orcamentos` são excluídos da lista de propostas do cliente para evitar duplicidade visual;
+- existem atalhos `Novo orçamento` e `Nova assistência / manutenção` dentro do cadastro do cliente;
+- ao abrir Orçamento Rápido pelo cadastro, o formulário recebe `?cliente=<id>`, carrega nome, telefone/WhatsApp, cidade e origem e preserva o `cliente_id` exato no envio;
+- ao abrir Assistência pelo cadastro, o formulário recebe `?cliente=<id>`, carrega os dados existentes e preserva o `cliente_id` exato no chamado e no card espelho;
+- `DadosOrcamentoForm` e `DadosAssistenciaForm` aceitam `clienteId` opcional; quando não há ID explícito, os fluxos antigos continuam usando `obterOuCriarCliente`;
+- manutenção ainda usa o fluxo/tabela de Assistências; quando houver módulo próprio, deve seguir a mesma regra de vínculo por `cliente_id`;
+- nenhuma migration e nenhuma alteração de schema nesta etapa.
+
 ## EM VALIDAÇÃO — ASSISTÊNCIA EM CAMPO COM ROTA, GPS E TEMPO — 2026-08-21
 
 O link externo da Assistência evoluiu para um fluxo de execução em campo, com navegação até o cliente, check-in explícito do técnico, contagem de tempo e registro opcional de GPS no início e na conclusão.
