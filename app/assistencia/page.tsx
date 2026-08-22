@@ -42,6 +42,20 @@ export default function Assistencia() {
   const [clienteEscolhido, setClienteEscolhido] = useState<string | null>(null)
 
   useEffect(() => {
+    const clienteId = new URLSearchParams(window.location.search).get('cliente')
+    if (!clienteId) return
+
+    supabase
+      .from('clientes')
+      .select('*')
+      .eq('id', clienteId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) selecionarCliente(data as Cliente)
+      })
+  }, [])
+
+  useEffect(() => {
     const termo = clienteNome.trim()
     if (clienteEscolhido || termo.length < 2) {
       setSugestoes([])
@@ -116,6 +130,7 @@ export default function Assistencia() {
     setSalvando(true)
 
     const dadosForm: DadosAssistenciaForm = {
+      clienteId: clienteEscolhido,
       dataAssistencia,
       clienteNome: clienteNome.trim(),
       clienteWhatsapp,
@@ -235,7 +250,7 @@ export default function Assistencia() {
               </div>
             )}
           </div>
-          {clienteEscolhido && <p className="text-xs text-emerald-600">Cliente cadastrado selecionado. Os dados disponíveis foram preenchidos automaticamente.</p>}
+          {clienteEscolhido && <p className="text-xs text-emerald-600">Cliente cadastrado selecionado. Esta assistência ficará vinculada ao histórico deste cliente.</p>}
           <input type="text" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp / telefone (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
