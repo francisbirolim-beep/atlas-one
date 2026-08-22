@@ -2,7 +2,7 @@
 //
 // A definicao e lida de engenharia_tipologia_formulas_corte. O motor nao usa
 // eval nem Function(): somente numeros, identificadores conhecidos,
-// + - * /, parenteses e ROUND(expr) sao aceitos.
+// + - * /, parenteses, ROUND(expr) e CEIL(expr) sao aceitos.
 
 export type VariavelTipologia = {
   chave: string
@@ -27,6 +27,9 @@ export type PecaFormula = {
   variaveis_chave?: string[]
   mapa_codigo?: Record<string, string>
   formula_por_variavel?: Record<string, string>
+  quantidade?: number
+  eixo?: 'L' | 'H'
+  composicao_desconto?: string
 }
 
 export type TipologiaFormulasCorte = {
@@ -42,12 +45,14 @@ export type ResultadoPeca = {
   descricao?: string
   tamanho: number
   eixo?: 'L' | 'H'
+  quantidade?: number
+  composicao_desconto?: string
 }
 
 type Token =
   | { tipo: 'numero'; valor: string }
   | { tipo: 'identificador'; valor: string }
-  | { tipo: 'round'; valor: 'ROUND' }
+  | { tipo: 'funcao'; valor: 'ROUND' | 'CEIL' }
   | { tipo: 'operador'; valor: '+' | '-' | '*' | '/' | '(' | ')' }
 
 export class FormulaCorteError extends Error {
@@ -80,12 +85,13 @@ function tokenizar(formula: string): Token[] {
 
     const identificador = restante.match(/^[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*/)
     if (identificador) {
-      if (identificador[0] === 'ROUND') {
-        tokens.push({ tipo: 'round', valor: 'ROUND' })
+      const valor = identificador[0]
+      if (valor === 'ROUND' || valor === 'CEIL') {
+        tokens.push({ tipo: 'funcao', valor })
       } else {
-        tokens.push({ tipo: 'identificador', valor: identificador[0] })
+        tokens.push({ tipo: 'identificador', valor })
       }
-      i += identificador[0].length
+      i += valor.length
       continue
     }
 
@@ -176,18 +182,18 @@ function avaliarFormula(formula: string, contexto: Record<string, number>): numb
       return parseFactor()
     }
 
-    if (token.tipo === 'round') {
+    if (token.tipo === 'funcao') {
       next()
       const abertura = next()
       if (abertura?.tipo !== 'operador' || abertura.valor !== '(') {
-        throw new FormulaCorteError(`ROUND sem parenteses em "${formula}"`)
+        throw new FormulaCorteError(`${token.valor} sem parenteses em "${formula}"`)
       }
       const valor = parseExpr()
       const fechamento = next()
       if (fechamento?.tipo !== 'operador' || fechamento.valor !== ')') {
-        throw new FormulaCorteError(`ROUND sem fechamento em "${formula}"`)
+        throw new FormulaCorteError(`${token.valor} sem fechamento em "${formula}"`)
       }
-      return Math.round(valor)
+      return token.valor === 'CEIL' ? Math.ceil(valor) : Math.round(valor)
     }
 
     if (token.tipo === 'numero') {
@@ -224,6 +230,23 @@ function avaliarFormula(formula: string, contexto: Record<string, number>): numb
   return resultado
 }
 
+function contextoBase(largura: number, altura: number): Record<string, number> {
+  return {
+    Largura: largura,
+    Altura: altura,
+    // LF/HF representam a medida final de fabricacao apos a folga total de
+    // encaixe de 4 mm validada para estas receitas Suprema.
+    LF: largura - 4,
+    HF: altura - 4,
+  }
+}
+
+export function calcularFormulaCorteIsolada(formula: string, largura: number, altura: number): number {
+  if (!Number.isFinite(largura) || largura <= 0) throw new FormulaCorteError('Largura invalida')
+  if (!Number.isFinite(altura) || altura <= 0) throw new FormulaCorteError('Altura invalida')
+  return avaliarFormula(formula, contextoBase(largura, altura))
+}
+
 function condicaoBate(quando: Record<string, string[]>, opcoes: OpcoesEscolhidas): boolean {
   return Object.entries(quando).every(([chave, valoresAceitos]) => {
     const escolhido = opcoes[chave]
@@ -254,6 +277,17 @@ function formulaComCondicoes(peca: PecaFormula, opcoes: OpcoesEscolhidas): strin
   return formula
 }
 
+function enriquecerResultado(
+  peca: PecaFormula,
+  resultado: Omit<ResultadoPeca, 'quantidade' | 'composicao_desconto'>
+): ResultadoPeca {
+  return {
+    ...resultado,
+    quantidade: peca.quantidade,
+    composicao_desconto: peca.composicao_desconto,
+  }
+}
+
 function tentarResolverPeca(
   peca: PecaFormula,
   contexto: Record<string, number>,
@@ -267,26 +301,31 @@ function tentarResolverPeca(
     if (peca.codigo && peca.formula) {
       const tamanho = avaliarFormula(formulaComCondicoes(peca, opcoes), contexto)
       contexto[peca.codigo] = tamanho
-      return [{ codigo: peca.codigo, descricao: peca.descricao, tamanho }]
+      return [enriquecerResultado(peca, {
+        codigo: peca.codigo,
+        descricao: peca.descricao,
+        tamanho,
+        eixo: peca.eixo,
+      })]
     }
 
     if (peca.codigo && (peca.formula_L || peca.formula_H)) {
       const resultados: ResultadoPeca[] = []
       if (peca.formula_L) {
-        resultados.push({
+        resultados.push(enriquecerResultado(peca, {
           codigo: peca.codigo,
           descricao: peca.descricao,
           tamanho: avaliarFormula(peca.formula_L, contexto),
           eixo: 'L',
-        })
+        }))
       }
       if (peca.formula_H) {
-        resultados.push({
+        resultados.push(enriquecerResultado(peca, {
           codigo: peca.codigo,
           descricao: peca.descricao,
           tamanho: avaliarFormula(peca.formula_H, contexto),
           eixo: 'H',
-        })
+        }))
       }
       return resultados
     }
@@ -301,7 +340,12 @@ function tentarResolverPeca(
       }
       const tamanho = avaliarFormula(formulaComCondicoes(peca, opcoes), contexto)
       contexto[codigoResolvido] = tamanho
-      return [{ codigo: codigoResolvido, descricao: peca.descricao, tamanho }]
+      return [enriquecerResultado(peca, {
+        codigo: codigoResolvido,
+        descricao: peca.descricao,
+        tamanho,
+        eixo: peca.eixo,
+      })]
     }
 
     if (peca.grupo && peca.formula_por_variavel) {
@@ -314,7 +358,12 @@ function tentarResolverPeca(
         )
       }
       const tamanho = avaliarFormula(formula, contexto)
-      return [{ codigo: peca.grupo, descricao: peca.descricao, tamanho }]
+      return [enriquecerResultado(peca, {
+        codigo: peca.grupo,
+        descricao: peca.descricao,
+        tamanho,
+        eixo: peca.eixo,
+      })]
     }
 
     throw new FormulaCorteError(
@@ -352,7 +401,7 @@ export function calcularFormulasCorte(
 
   validarOpcoes(def, opcoes)
 
-  const contexto: Record<string, number> = { Largura: largura, Altura: altura }
+  const contexto = contextoBase(largura, altura)
   const resultados: ResultadoPeca[] = []
   let pendentes = [...def.pecas]
 

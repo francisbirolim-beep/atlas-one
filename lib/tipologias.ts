@@ -1,14 +1,19 @@
 import { supabase } from './supabase'
 import { Tipologia } from './tipos'
 
-export async function listarTipologias(): Promise<Tipologia[]> {
-  const { data, error } = await supabase
+export type TipologiaTecnica = Tipologia & { ativo: boolean }
+
+export async function listarTipologias(incluirInativas = false): Promise<TipologiaTecnica[]> {
+  let query = supabase
     .from('tipologias')
     .select('*')
     .order('ordem', { ascending: true })
 
+  if (!incluirInativas) query = query.eq('ativo', true)
+
+  const { data, error } = await query
   if (error || !data) return []
-  return data as Tipologia[]
+  return data as TipologiaTecnica[]
 }
 
 function slugTipologia(label: string): string {
@@ -21,7 +26,7 @@ function slugTipologia(label: string): string {
     .replace(/^_+|_+$/g, '')
 }
 
-export async function criarTipologia(label: string, categoria: 'porta' | 'janela'): Promise<Tipologia | null> {
+export async function criarTipologia(label: string, categoria: 'porta' | 'janela'): Promise<TipologiaTecnica | null> {
   const chave = slugTipologia(label) || ('tipologia_' + Date.now())
 
   const { data: maiorOrdem } = await supabase
@@ -35,7 +40,7 @@ export async function criarTipologia(label: string, categoria: 'porta' | 'janela
 
   const { data, error } = await supabase
     .from('tipologias')
-    .insert({ chave, label: label.trim(), categoria, ordem })
+    .insert({ chave, label: label.trim(), categoria, ordem, ativo: true })
     .select()
     .single()
 
@@ -43,5 +48,12 @@ export async function criarTipologia(label: string, categoria: 'porta' | 'janela
     console.error('Erro ao criar tipologia:', error)
     return null
   }
-  return data as Tipologia
+  return data as TipologiaTecnica
+}
+
+export async function alternarTipologiaTecnica(id: string, ativo: boolean) {
+  return supabase
+    .from('tipologias')
+    .update({ ativo })
+    .eq('id', id)
 }

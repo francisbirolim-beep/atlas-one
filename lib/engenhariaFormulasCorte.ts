@@ -1,30 +1,147 @@
 import { supabase } from '@/lib/supabase'
-import type { TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
+import { listarLinhasTecnicas } from '@/lib/linhasTecnicas'
+import type { PecaFormula, TipologiaFormulasCorte, VariavelTipologia } from '@/lib/formulasCorteEngine'
+
+export type StatusFormulaCorte = 'em_desenvolvimento' | 'em_validacao' | 'validada'
+
+export type VidroFormulaCorte = {
+  formula_largura?: string
+  formula_altura?: string
+  quantidade?: number
+  arredondamento?: string
+  composicao_largura?: string
+  composicao_altura?: string
+}
+
+type TipologiaFormula = { id: string; label: string; chave: string; ativo: boolean }
 
 export type RegistroFormulaCorte = TipologiaFormulasCorte & {
   id: string
   ativo: boolean
-  tipologia?: { id: string; label: string; chave: string } | null
+  configuracao_chave: string
+  configuracao_label: string
+  status: StatusFormulaCorte
+  versao: number
+  observacoes?: string | null
+  vidro: VidroFormulaCorte
+  tipologia?: TipologiaFormula | null
 }
 
-export async function listarFormulasCorteAtivas(): Promise<RegistroFormulaCorte[]> {
-  const { data, error } = await supabase
-    .from('engenharia_tipologia_formulas_corte')
-    .select('id, tipologia_id, variaveis, pecas, ativo, tipologia:tipologias(id,label,chave)')
-    .eq('ativo', true)
-    .order('created_at', { ascending: true })
+type FormulaBanco = {
+  id: string
+  tipologia_id: string
+  variaveis: unknown
+  pecas: unknown
+  ativo: boolean
+  configuracao_chave?: string | null
+  configuracao_label?: string | null
+  status?: string | null
+  versao?: number | null
+  observacoes?: string | null
+  vidro?: unknown
+  tipologia?: TipologiaFormula | TipologiaFormula[] | null
+}
 
+function normalizar(item: FormulaBanco): RegistroFormulaCorte {
+  const tipologiaBase = Array.isArray(item.tipologia) ? item.tipologia[0] || null : item.tipologia || null
+  const configuracaoLabel = item.configuracao_label || 'Padrão'
+  const tipologia = tipologiaBase
+    ? { ...tipologiaBase, label: `${tipologiaBase.label} — ${configuracaoLabel}` }
+    : null
+
+  return {
+    id: item.id,
+    tipologia_id: item.tipologia_id,
+    variaveis: Array.isArray(item.variaveis) ? item.variaveis as VariavelTipologia[] : [],
+    pecas: Array.isArray(item.pecas) ? item.pecas as PecaFormula[] : [],
+    ativo: Boolean(item.ativo),
+    configuracao_chave: item.configuracao_chave || 'padrao',
+    configuracao_label: configuracaoLabel,
+    status: (item.status || 'em_desenvolvimento') as StatusFormulaCorte,
+    versao: Number(item.versao || 1),
+    observacoes: item.observacoes || null,
+    vidro: item.vidro && typeof item.vidro === 'object' && !Array.isArray(item.vidro)
+      ? item.vidro as VidroFormulaCorte
+      : {},
+    tipologia,
+  }
+}
+
+const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, tipologia:tipologias(id,label,chave,ativo)'
+
+export async function listarFormulasCorteAtivas(): Promise<RegistroFormulaCorte[]> {
+  const [formulasResp, linhas] = await Promise.all([
+    supabase
+      .from('engenharia_tipologia_formulas_corte')
+      .select(CAMPOS)
+      .eq('ativo', true)
+      .order('created_at', { ascending: true }),
+    listarLinhasTecnicas(),
+  ])
+
+  const { data, error } = formulasResp
   if (error) {
     console.error('Erro ao listar formulas de corte:', error)
     return []
   }
 
-  return (data || []).map((item: any) => ({
-    id: item.id,
-    tipologia_id: item.tipologia_id,
-    variaveis: Array.isArray(item.variaveis) ? item.variaveis : [],
-    pecas: Array.isArray(item.pecas) ? item.pecas : [],
-    ativo: Boolean(item.ativo),
-    tipologia: Array.isArray(item.tipologia) ? item.tipologia[0] || null : item.tipologia || null,
-  }))
+  const tipologiasEmLinhasAtivas = new Set(
+    linhas
+      .filter(linha => linha.ativo)
+      .flatMap(linha => linha.tipologia_ids || [])
+  )
+
+  return ((data || []) as unknown as FormulaBanco[])
+    .map(normalizar)
+    .filter(item => item.tipologia?.ativo !== false && tipologiasEmLinhasAtivas.has(item.tipologia_id))
+}
+
+export async function listarTodasFormulasCorte(): Promise<RegistroFormulaCorte[]> {
+  const { data, error } = await supabase
+    .from('engenharia_tipologia_formulas_corte')
+    .select(CAMPOS)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Erro ao listar editor de formulas:', error)
+    return []
+  }
+
+  return ((data || []) as unknown as FormulaBanco[]).map(normalizar)
+}
+
+export async function salvarFormulaCorte(
+  id: string,
+  dados: {
+    configuracao_label: string
+    variaveis: VariavelTipologia[]
+    pecas: PecaFormula[]
+    vidro: VidroFormulaCorte
+    status: StatusFormulaCorte
+    ativo: boolean
+    observacoes?: string | null
+  }
+): Promise<RegistroFormulaCorte | null> {
+  const ativoSeguro = dados.status === 'validada' ? dados.ativo : false
+  const { data, error } = await supabase
+    .from('engenharia_tipologia_formulas_corte')
+    .update({
+      configuracao_label: dados.configuracao_label.trim() || 'Padrão',
+      variaveis: dados.variaveis,
+      pecas: dados.pecas,
+      vidro: dados.vidro,
+      status: dados.status,
+      ativo: ativoSeguro,
+      observacoes: dados.observacoes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select(CAMPOS)
+    .single()
+
+  if (error) {
+    console.error('Erro ao salvar formula de corte:', error)
+    return null
+  }
+  return normalizar(data as unknown as FormulaBanco)
 }

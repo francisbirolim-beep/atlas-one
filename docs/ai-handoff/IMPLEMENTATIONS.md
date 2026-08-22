@@ -1,5 +1,35 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-22 — Editor Técnico de tipologias + fórmulas Suprema 2F–9F — EM VALIDAÇÃO
+
+Implementado:
+- nova rota `Engenharia > Editor Técnico` (`/engenharia/editor-tecnico`) para editar a configuração técnica sem alterar código-fonte;
+- navegação do editor reorganizada em `Linha → Tipologia → Configuração`, eliminando a lista única de receitas;
+- seleção de Tipologia passa a respeitar os vínculos existentes em `linha_tipologias` da Linha escolhida;
+- Linha ganhou controle direto `Inativar linha / Liberar linha` usando `linhas_tecnicas.ativo`;
+- Tipologia ganhou controle direto `Inativar tipologia / Liberar tipologia`; migration adicionou `tipologias.ativo boolean default true`;
+- inativar Linha ou Tipologia não exclui fórmulas, receitas ou histórico; o cadastro continua visível no Editor Técnico com marca `INATIVA` e pode ser reativado;
+- `listarTipologias()` agora retorna somente tipologias ativas por padrão, enquanto o Editor Técnico solicita também as inativas para administração;
+- `listarFormulasCorteAtivas()` agora exige fórmula ativa + tipologia ativa + tipologia vinculada a uma linha ativa antes de oferecer a configuração no Plano de Corte;
+- Porta de Correr 08 e 09 Folhas Suprema foram vinculadas à Linha Suprema em `linha_tipologias`, corrigindo a associação ausente da primeira carga;
+- cada fórmula passa a ter `configuracao_chave`, nome de configuração, status (`em_desenvolvimento`, `em_validacao`, `validada`), versão, observações e fórmula própria de vidro;
+- a antiga restrição de uma fórmula por tipologia foi evoluída para uma fórmula por `tipologia + configuração`, permitindo manter, por exemplo, mão-amiga comum e larga como receitas separadas;
+- histórico automático em `engenharia_tipologia_formulas_corte_historico`: antes de uma alteração relevante o Atlas guarda snapshot da versão anterior e incrementa `versao`;
+- editor permite substituir código de perfil usando o catálogo, alterar descrição, fórmula, quantidade, eixo e composição/origem do desconto, além de adicionar/remover peças;
+- acessórios, reforços e variantes permanecem em `Engenharia > Receitas Técnicas`, com atalho direto a partir do novo editor;
+- vidro ganhou fórmula declarativa própria de largura/altura, quantidade e descrição da composição do desconto no Editor Técnico;
+- motor seguro de fórmulas ganhou `CEIL(expr)` para a regra validada de arredondar qualquer decimal sempre para cima;
+- motor ganhou aliases `LF = Largura - 4` e `HF = Altura - 4`, preservando separadamente a folga total de encaixe da esquadria;
+- resultados do motor agora podem carregar quantidade, eixo e composição do desconto; o Plano de Corte usa esses dados declarativos nas receitas novas, mantendo compatibilidade com o PC3 legado;
+- cadastrada família Suprema com mão-amiga comum sem reforço: 2F=162, 3F=180, 4F=198, 5F=216, 6F=234, progressão de +18 mm por folha; vidro = desconto estrutural + 6 mm por folha;
+- cadastrada família Suprema com mão-amiga larga sem reforço: 2F=181, 3F=222, 4F=263, 5F=304, 6F=345, 7F=386, 8F=427, 9F=468, progressão de +41 mm por folha; vidro = desconto estrutural + 6 mm por folha;
+- PC2 comum entrou como `Validada` e ativa, pois a fórmula já havia sido confirmada em duas medidas; demais sementes entram `Em validação` e inativas;
+- PC2 larga registra SU243 interno, SU242 externo e SU280 lateral, com teste 2000×2100 resultando em travessas/baguete horizontal 908 mm e vidro 902×1933 mm;
+- 7F/8F/9F recebem somente a matemática das folhas/vidros validada pelo usuário; marcos/trilhos compostos não são gerados automaticamente até validação estrutural específica;
+- o registro PC3 legado W.Vetro #994 foi preservado ativo por compatibilidade, mas rotulado `Em validação`;
+- migrations `engenharia_editor_formulas_suprema`, `formula_legacy_status` e `tipologias_ativo_editor_linhas` aplicadas no Supabase de produção;
+- preview da PR #232 compilou com sucesso na Vercel antes da liberação para teste.
+
 ## 2026-08-22 — Lista de vidros e folgas no Plano de Corte — EM VALIDAÇÃO
 
 Implementado:

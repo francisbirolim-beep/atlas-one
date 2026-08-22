@@ -1,5 +1,43 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — EDITOR TÉCNICO + FÓRMULAS SUPREMA 2F–9F — 2026-08-22
+
+A Engenharia ganhou uma camada editável para manter fórmulas, perfis, quantidades e vidro por configuração técnica, sem depender de alteração de código para ajustes de receita.
+
+Estado real desta implementação:
+- nova rota `/engenharia/editor-tecnico`, acessível pelo menu interno da Engenharia;
+- o Editor Técnico agora é organizado hierarquicamente em `Linha → Tipologia → Configuração`, substituindo a lista única de receitas;
+- o campo `Linha` usa os cadastros de `linhas_tecnicas` e o campo `Tipologia` mostra somente tipologias vinculadas à linha selecionada por `linha_tipologias`;
+- Linha e Tipologia podem ser `Inativadas` ou `Liberadas` diretamente no Editor Técnico; inativar preserva cadastro, fórmulas e histórico para futura reativação;
+- `linhas_tecnicas.ativo` continua sendo a fonte da disponibilidade da linha; foi adicionado `tipologias.ativo` para controlar a disponibilidade da tipologia;
+- o Editor Técnico continua exibindo linhas/tipologias inativas, identificadas como `INATIVA`, para permitir administração e reativação;
+- fluxos normais que usam `listarTipologias()` passam a receber apenas tipologias ativas; linhas já eram filtradas por `ativo` nos seletores comerciais;
+- `listarFormulasCorteAtivas()` agora exige simultaneamente fórmula ativa, tipologia ativa e vínculo da tipologia com pelo menos uma linha ativa, evitando liberar Plano de Corte de um cadastro inativado;
+- PC8 e PC9 Suprema, que haviam sido criadas sem associação comercial, agora estão vinculadas à Linha Suprema de forma idempotente;
+- o editor permite alterar código de perfil, descrição, fórmula, quantidade, eixo e `Composição / origem do desconto`;
+- perfis podem ser substituídos usando o catálogo de produtos; novas peças podem ser adicionadas e removidas;
+- acessórios, reforços e variantes continuam sendo mantidos em `Engenharia > Receitas Técnicas`, com atalho a partir do editor;
+- cada fórmula tem status `Em desenvolvimento`, `Em validação` ou `Validada`; somente `Validada` pode ser liberada no Plano de Corte pelo editor;
+- fórmulas passam a ter versão e histórico automático: alterações relevantes geram snapshot da versão anterior em `engenharia_tipologia_formulas_corte_historico`;
+- o banco permite mais de uma configuração para a mesma tipologia (`tipologia_id + configuracao_chave`), evitando misturar mão-amiga comum e larga em uma receita estrutural única;
+- o motor declarativo suporta `CEIL(expr)`, que implementa a regra técnica de arredondar resultados fracionários sempre para cima;
+- o contexto das receitas novas disponibiliza `LF = Largura - 4` e `HF = Altura - 4` para representar a folga total de encaixe da esquadria;
+- resultados declarativos podem carregar quantidade, eixo e composição do desconto; `planoCortePerfis` usa esses dados nas receitas novas e preserva o comportamento legado da PC3 antiga;
+- família Suprema mão-amiga comum sem reforço cadastrada de 2F a 6F com descontos 162/180/198/216/234 (+18 mm por folha); vidro usa o desconto estrutural + 6 mm por folha;
+- família Suprema mão-amiga larga sem reforço cadastrada de 2F a 9F com descontos 181/222/263/304/345/386/427/468 (+41 mm por folha); vidro usa o desconto estrutural + 6 mm por folha;
+- PC2 comum/estreita está `Validada` e ativa por já ter sido confirmada em duas medidas; as demais sementes novas ficam `Em validação` e inativas por segurança;
+- PC2 larga está cadastrada em validação com SU243 interno, SU242 externo e SU280 lateral; no teste 2000×2100 a fórmula retorna travessas/baguete horizontal 908 mm e vidro 902×1933 mm;
+- as regras de 7F/8F/9F registram a matemática das folhas, mas não inventam marcos/trilhos compostos: a composição estrutural continua pendente de validação específica;
+- o registro PC3 legado W.Vetro #994 permanece ativo por compatibilidade e foi marcado `Em validação`;
+- migrations `engenharia_editor_formulas_suprema`, `formula_legacy_status` e `tipologias_ativo_editor_linhas` já foram aplicadas no Supabase de produção;
+- a PR #232 possui preview Vercel compilado com sucesso; merge em `main` permanece manual conforme a governança do projeto.
+
+Pendente antes de considerar a família totalmente liberada para produção:
+- validação manual da nova navegação `Linha → Tipologia → Configuração` e dos controles Inativar/Liberar, sempre restaurando o cadastro após o teste porque o preview usa o banco real;
+- validação manual no novo Editor Técnico dos resultados PC2 comum/larga e PC9;
+- validação dos marcos/trilhos específicos das quantidades 3F–9F, principalmente composições acima de 6 planos;
+- integração futura das fórmulas diretas de vidro do Editor Técnico ao relatório oficial, sem confundir folga de encaixe da esquadria com folga técnica do vidro.
+
 ## EM VALIDAÇÃO — LISTA DE VIDROS + FOLGAS NO PLANO DE CORTE — 2026-08-22
 
 O módulo `Engenharia > Fórmulas de Corte` passou a preparar, junto ao plano de perfis, uma lista de vidros com composição, folgas independentes de largura/altura e medida de corte quando existe uma referência técnica disponível.
