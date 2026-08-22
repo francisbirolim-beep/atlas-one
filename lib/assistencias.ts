@@ -8,6 +8,7 @@ import { primeiraColunaId } from './kanban'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface DadosAssistenciaForm {
+  clienteId?: string | null
   clienteNome: string
   clienteWhatsapp: string
   cidade: string
@@ -34,10 +35,12 @@ function dataAssistenciaParaIso(dataAssistencia?: string) {
 export async function criarAssistenciaNoServidor(
   dados: DadosAssistenciaForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const { clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
+  const { clienteId: clienteIdInformado, clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
 
   const [clienteId, usuario, colunaAssistenciaId, colunaOrcamentoId] = await Promise.all([
-    obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade }),
+    clienteIdInformado
+      ? Promise.resolve(clienteIdInformado)
+      : obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade }),
     usuarioAtual(),
     primeiraColunaAssistenciaId(),
     primeiraColunaId(),
