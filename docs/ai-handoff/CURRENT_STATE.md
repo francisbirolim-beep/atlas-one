@@ -1,5 +1,30 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — INTEGRAÇÃO DIRETA API W.VETRO EM SOMENTE LEITURA — 2026-08-23
+
+A primeira camada de integração direta Atlas One ↔ W.Vetro foi implementada em branch isolada para consultar dados reais sem alterar automaticamente os cadastros existentes.
+
+Estado real desta implementação:
+- mapeamento oficial preservado em `docs/ai-handoff/WVETRO_API_MAPPING.md`, com base `https://api.wvetro.com.br/wvetro/rest/api/v2`;
+- novo cliente server-side `lib/wvetroApi.ts`, sem expor credenciais ao navegador;
+- autenticação usa `/Integracao/ValidarUsuario` e mantém token W.Vetro em cache temporário por até 23 horas, renovando com folga antes da validade documentada de 24 horas;
+- credenciais são lidas exclusivamente de `WVETRO_LICENSE_ID`, `WVETRO_USERNAME` e `WVETRO_PASSWORD`; valores reais não existem no repositório;
+- `.env.example` documenta apenas os nomes das variáveis e a URL base;
+- rota master `/api/integracoes/wvetro/preview` trabalha somente com GET e não executa insert/update/delete no Supabase;
+- recursos disponíveis na prévia: `status`, `linhas`, `produto`, `orcamentos` e `pedidos`;
+- consultas de pedidos/orçamentos são limitadas a janelas de até 90 dias por chamada;
+- a resposta de pedidos/orçamentos extrai pares únicos `Linha + Modelo`, preparando a identificação de tipologias sem promovê-las ao cadastro oficial;
+- nova tela `/configuracoes/integracoes/wvetro` mostra se as três credenciais estão presentes e oferece `Testar conexão e buscar linhas` usando a sessão real do usuário Master;
+- a tela considera a conexão validada somente quando a API autentica e `/Produtos/linhas` responde com sucesso;
+- as credenciais reais foram configuradas externamente na Vercel para Preview e Production em 2026-08-23;
+- PR #238 concentra a implementação; previews Vercel da branch compilaram com sucesso até a inclusão da tela de teste;
+- nenhuma migration, tabela de staging ou alteração de cadastro oficial foi feita nesta etapa.
+
+Pendente antes de iniciar importação:
+- validar a autenticação real pela nova tela master e confirmar retorno de linhas reais do W.Vetro;
+- após a conexão validada, projetar staging/dry-run para comparar linhas, perfis, acessórios, tipologias, custos e preços com o que já existe no Atlas;
+- qualquer promoção do staging para os cadastros oficiais deve exigir conferência explícita e nunca sobrescrever fórmulas/preços automaticamente.
+
 ## EM VALIDAÇÃO — EDITOR TÉCNICO + FÓRMULAS SUPREMA 2F–9F — 2026-08-22
 
 A Engenharia ganhou uma camada editável para manter fórmulas, perfis, quantidades e vidro por configuração técnica, sem depender de alteração de código para ajustes de receita.
