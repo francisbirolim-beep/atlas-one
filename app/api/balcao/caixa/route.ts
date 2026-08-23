@@ -15,12 +15,38 @@ async function carregarCaixa(usuarioId: string, role: string, id?: string | null
   return data
 }
 
+async function listarPontosCaixa() {
+  const { data, error } = await supabaseAdmin
+    .from('balcao_pontos_caixa')
+    .select('id,codigo,nome,tipo,unidade_id,local_estoque_id,unidades_operacionais(id,codigo,nome),estoque_locais(id,codigo,nome)')
+    .eq('ativo', true)
+    .order('codigo')
+  if (error) throw error
+  return (data || []).map((p: any) => ({
+    id: p.id,
+    codigo: p.codigo,
+    nome: p.nome,
+    tipo: p.tipo,
+    unidadeId: p.unidade_id,
+    localEstoqueId: p.local_estoque_id,
+    unidadeNome: p.unidades_operacionais?.nome || 'Unidade',
+    unidadeCodigo: p.unidades_operacionais?.codigo || '',
+    localNome: p.estoque_locais?.nome || 'Estoque',
+    localCodigo: p.estoque_locais?.codigo || '',
+  }))
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await autenticarBalcao(req, 'venda-balcao', 'consulta') || await autenticarBalcao(req, 'caixa-balcao', 'consulta')
   if (!usuario) return NextResponse.json({ error: 'Sem acesso ao caixa do balcão.' }, { status: 403 })
   try {
-    const caixa = await carregarCaixa(usuario.id, usuario.role, req.nextUrl.searchParams.get('id'))
-    if (!caixa) return NextResponse.json({ ok: true, caixa: null, movimentos: [], resumo: {} })
+    const [caixa, pontosCaixa] = await Promise.all([
+      carregarCaixa(usuario.id, usuario.role, req.nextUrl.searchParams.get('id')),
+      listarPontosCaixa(),
+    ])
+    if (!caixa) return NextResponse.json({ ok: true, caixa: null, pontosCaixa, movimentos: [], resumo: {} })
+
+    const ponto = pontosCaixa.find((p: any) => p.id === caixa.ponto_caixa_id) || null
     const { data: movimentos } = await supabaseAdmin
       .from('balcao_caixa_movimentos')
       .select('*')
@@ -37,7 +63,7 @@ export async function GET(req: NextRequest) {
     }
     const dinheiro = resumo.dinheiro || { entradas: 0, saidas: 0 }
     const saldoFisicoEsperado = Number(caixa.saldo_inicial || 0) + dinheiro.entradas - dinheiro.saidas
-    return NextResponse.json({ ok: true, caixa, movimentos: lista, resumo, saldoFisicoEsperado })
+    return NextResponse.json({ ok: true, caixa: { ...caixa, ponto }, pontosCaixa, movimentos: lista, resumo, saldoFisicoEsperado })
   } catch (e) {
     console.error('Erro ao carregar caixa balcão', e)
     return NextResponse.json({ error: 'Não foi possível carregar o caixa.' }, { status: 500 })
@@ -53,15 +79,43 @@ export async function POST(req: NextRequest) {
     if (acao === 'abrir') {
       const existente = await carregarCaixa(usuario.id, usuario.role)
       if (existente) return NextResponse.json({ error: 'Você já possui um caixa aberto.' }, { status: 409 })
+
+      const pontoCaixaId = String(body.pontoCaixaId || '').trim()
+      if (!pontoCaixaId) return NextResponse.json({ error: 'Selecione o caixa que será aberto.' }, { status: 400 })
+      const { data: ponto, error: erroPonto } = await supabaseAdmin
+        .from('balcao_pontos_caixa')
+        .select('id,codigo,nome,unidade_id,local_estoque_id,ativo')
+        .eq('id', pontoCaixaId)
+        .eq('ativo', true)
+        .maybeSingle()
+      if (erroPonto) throw erroPonto
+      if (!ponto) return NextResponse.json({ error: 'Caixa configurado não encontrado.' }, { status: 404 })
+
+      const { data: caixaNoPonto } = await supabaseAdmin
+        .from('balcao_caixas')
+        .select('id,operador_nome')
+        .eq('ponto_caixa_id', ponto.id)
+        .eq('status', 'aberto')
+        .limit(1)
+        .maybeSingle()
+      if (caixaNoPonto) {
+        return NextResponse.json({ error: `${ponto.nome} já está aberto por ${caixaNoPonto.operador_nome}.` }, { status: 409 })
+      }
+
       const saldoInicial = Math.max(0, parseNumero(body.saldoInicial))
       const { data: caixa, error } = await supabaseAdmin.from('balcao_caixas').insert({
-        operador_id: usuario.id, operador_nome: usuario.nome, saldo_inicial: saldoInicial,
+        ponto_caixa_id: ponto.id,
+        unidade_id: ponto.unidade_id,
+        local_estoque_id: ponto.local_estoque_id,
+        operador_id: usuario.id,
+        operador_nome: usuario.nome,
+        saldo_inicial: saldoInicial,
         observacoes: String(body.observacoes || '').trim() || null,
       }).select('*').single()
       if (error) throw error
       await supabaseAdmin.from('balcao_caixa_movimentos').insert({
         caixa_id: caixa.id, tipo: 'abertura', forma_pagamento: 'dinheiro', entrada: 0, saida: 0,
-        descricao: `Abertura do caixa • saldo inicial R$ ${saldoInicial.toFixed(2)}`,
+        descricao: `Abertura ${ponto.codigo} • ${ponto.nome} • saldo inicial R$ ${saldoInicial.toFixed(2)}`,
         criado_por_id: usuario.id, criado_por_nome: usuario.nome,
       })
       return NextResponse.json({ ok: true, caixa })
