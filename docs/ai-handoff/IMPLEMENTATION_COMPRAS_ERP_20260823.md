@@ -81,7 +81,7 @@ NF real 3128 da LCT Mazaro:
 
 ## Estado de build
 
-- preview Vercel do commit funcional `cbcfe918583e9b03766b5be07744303aefc6c9a2` ficou `READY` em 23/08/2026;
+- preview Vercel do último commit funcional `cbcfe918583e9b03766b5be07744303aefc6c9a2` ficou `READY` em 23/08/2026;
 - esse build compilou `/compras/entrada`, `/estoque`, `/financeiro/contas-pagar`, `/cadastro/produtos`, `/cadastro/produtos/precificacao` e `/orcamento/balcao/novo`;
 - commits posteriores foram somente documentação; confirmar o check Vercel do head final antes do merge manual.
 
