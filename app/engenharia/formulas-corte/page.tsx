@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Calculator, FileText, Loader2, Printer } from 'lucide-react'
 import { calcularFormulasCorte, FormulaCorteError } from '@/lib/formulasCorteEngine'
 import { listarFormulasCorteAtivas, type RegistroFormulaCorte } from '@/lib/engenhariaFormulasCorte'
+import { lerDadosEmpresa } from '@/lib/configGeral'
 import {
   codigosNecessariosPlanoCorte,
   listarPerfisPlanoCorte,
@@ -18,6 +19,12 @@ import {
 } from '@/lib/planoCorteVidros'
 
 type ModoPlano = 'obra' | 'manual'
+type EmpresaPlano = {
+  nome?: string
+  nomeFantasia?: string
+  logoUrl?: string
+  corPrincipal?: string
+}
 
 function formatarMedida(valor: number) {
   return Number.isInteger(valor) ? String(valor) : valor.toFixed(2)
@@ -31,6 +38,10 @@ function rotuloOpcao(valor: string) {
   return valor.replaceAll('_', ' ')
 }
 
+function corHexValida(valor?: string) {
+  return Boolean(valor && /^#[0-9a-fA-F]{6}$/.test(valor))
+}
+
 export default function FormulasCortePage() {
   const [definicoes, setDefinicoes] = useState<RegistroFormulaCorte[]>([])
   const [selecionadaId, setSelecionadaId] = useState('')
@@ -42,6 +53,7 @@ export default function FormulasCortePage() {
   const [carregando, setCarregando] = useState(true)
   const [calculando, setCalculando] = useState(false)
   const [geradoEm, setGeradoEm] = useState('')
+  const [empresa, setEmpresa] = useState<EmpresaPlano | null>(null)
 
   const [modo, setModo] = useState<ModoPlano>('obra')
   const [cliente, setCliente] = useState('')
@@ -64,12 +76,14 @@ export default function FormulasCortePage() {
   useEffect(() => {
     async function carregar() {
       setCarregando(true)
-      const [dados, vidros] = await Promise.all([
+      const [dados, vidros, identidadeEmpresa] = await Promise.all([
         listarFormulasCorteAtivas(),
         listarVidrosPlanoCorte(),
+        lerDadosEmpresa(),
       ])
       setDefinicoes(dados)
       setVidrosCatalogo(vidros)
+      setEmpresa(identidadeEmpresa)
       if (dados[0]) setSelecionadaId(dados[0].id)
       setCarregando(false)
     }
@@ -128,6 +142,8 @@ export default function FormulasCortePage() {
   const referenciaPlano = modo === 'obra'
     ? (numeroOrcamento ? `Orçamento nº ${numeroOrcamento}` : 'Orçamento não informado')
     : (referenciaManual || 'Referência manual')
+  const nomeEmpresa = empresa?.nomeFantasia?.trim() || empresa?.nome?.trim() || 'Atlas One'
+  const corEmpresa = corHexValida(empresa?.corPrincipal) ? empresa!.corPrincipal! : '#0f172a'
 
   const pesoCompleto = linhasPlano.length > 0 && linhasPlano.every(item => item.peso_kg != null)
   const pesoEsquadria = pesoCompleto
@@ -176,6 +192,7 @@ export default function FormulasCortePage() {
           .atlas-print-area table { page-break-inside: auto; }
           .atlas-print-area tr { page-break-inside: avoid; page-break-after: auto; }
           .atlas-profile-img { max-height: 11mm !important; }
+          .atlas-company-logo { max-height: 15mm !important; max-width: 38mm !important; }
         }
       `}</style>
 
@@ -223,7 +240,7 @@ export default function FormulasCortePage() {
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="text-sm font-medium text-slate-700">Cliente<input value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nome do cliente" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Obra<input value={obra} onChange={e => setObra(e.target.value)} placeholder="Nome / identificação da obra" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
-                <label className="text-sm font-medium text-slate-700">Localização / ambiente<input value={localizacao} onChange={e => setLocalizacao(e.target.value)} placeholder="Ex.: Sala, Quarto 01, Fachada" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
+                <label className="text-sm font-medium text-slate-700">Ambiente / localização<input value={localizacao} onChange={e => setLocalizacao(e.target.value)} placeholder="Ex.: Sala, Quarto 01, Fachada" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
               </div>
 
               {modo === 'obra' ? (
@@ -291,10 +308,19 @@ export default function FormulasCortePage() {
 
             {linhasPlano.length > 0 && definicao && (
               <section className="atlas-print-area mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="bg-brand-navy p-5 text-white">
+                <div className="p-5 text-white" style={{ backgroundColor: corEmpresa }}>
                   <div className="flex items-start justify-between gap-6">
-                    <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-300">ESQUADRIFÁCIO SOLUÇÕES EM ALUMÍNIO</p><h2 className="mt-1 text-xl font-bold">Plano de Corte</h2></div>
-                    <div className="text-right text-xs text-slate-300"><div>{referenciaPlano}</div><strong className="text-white">{geradoEm}</strong></div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      {empresa?.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={empresa.logoUrl} alt={`Logo ${nomeEmpresa}`} className="atlas-company-logo max-h-14 max-w-36 shrink-0 object-contain" />
+                      ) : null}
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold uppercase tracking-[0.18em] text-white/75">{nomeEmpresa}</p>
+                        <h2 className="mt-1 text-xl font-bold">Plano de Corte</h2>
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-white/70"><div>{referenciaPlano}</div><strong className="text-white">{geradoEm}</strong></div>
                   </div>
                 </div>
 
@@ -304,7 +330,7 @@ export default function FormulasCortePage() {
                   <div className="grid gap-x-6 gap-y-3 border-b border-slate-200 pb-5 text-sm md:grid-cols-4">
                     <div><span className="block text-[11px] uppercase text-slate-400">Cliente</span><strong>{cliente || '—'}</strong></div>
                     <div><span className="block text-[11px] uppercase text-slate-400">Obra</span><strong>{obra || '—'}</strong></div>
-                    <div><span className="block text-[11px] uppercase text-slate-400">Localização / ambiente</span><strong>{localizacao || '—'}</strong></div>
+                    <div><span className="block text-[11px] uppercase text-slate-400">Ambiente / localização</span><strong>{localizacao || '—'}</strong></div>
                     <div><span className="block text-[11px] uppercase text-slate-400">Item</span><strong>{modo === 'obra' ? (itemOrcamento || '—') : (referenciaManual || '—')}</strong></div>
                     <div><span className="block text-[11px] uppercase text-slate-400">Projeto / configuração</span><strong>{projeto || '—'}</strong></div>
                     <div><span className="block text-[11px] uppercase text-slate-400">Tipologia</span><strong>{definicao.tipologia?.label || definicao.tipologia_id}</strong></div>
