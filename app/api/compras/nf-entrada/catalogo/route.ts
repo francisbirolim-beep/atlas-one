@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
         id: p.id,
         codigo: p.codigo || p.codigo_origem || p.id_externo_wvetro || '',
         nome: p.nome,
+        unidade: p.unidade || null,
         custo: p.custo == null ? null : Number(p.custo),
       })),
     })
