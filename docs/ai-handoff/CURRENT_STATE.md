@@ -1,5 +1,41 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — COMPRAS / NF + CONFERÊNCIA DE RECEBIMENTO — 2026-08-23
+
+O Atlas passou a ser a fonte operacional para entrada e conferência das notas de compra, porque as NFs de entrada não são alimentadas no W.Vetro.
+
+Estado real desta implementação:
+- PR #247 já integrada em produção com `/compras/entrada` por XML NF-e, PDF/DANFE assistido ou lançamento manual;
+- a prévia de XML/PDF não grava dados e produtos não reconhecidos não são criados automaticamente;
+- itens tentam vínculo exato com o catálogo Atlas; estados possíveis: `vinculado`, `pendente` e `ambiguo`;
+- fornecedor é reconhecido por CNPJ e fornecedor novo só é criado na confirmação;
+- XML/PDF original é guardado no bucket privado `compras-nfs`;
+- atualização de custo é uma ação explícita, desligada por padrão e restrita aos itens vinculados;
+- migration `20260823155025_compras_nfe_entrada` criou `compras_nfs` e `compras_nf_itens` com RLS habilitado;
+- PR #248 já integrada em produção criou `/compras` como Central de Compras, `/compras/notas` como histórico, detalhe de NF com arquivo original por URL temporária e `/compras/vinculos` como fila de itens pendentes/ambíguos;
+- corrigir vínculo na fila não altera custo automaticamente;
+- PR #249 está em validação para conferência física em `/compras/recebimentos/[nfId]`;
+- a conferência aceita múltiplos recebimentos parciais para a mesma NF e acumula o que já foi recebido;
+- cada item compara `quantidade da NF`, `já recebido`, `saldo` e `recebido agora`, classificando `ok`, `falta`, `excesso` ou `avaria`;
+- recebimento guarda data/hora, responsável, observação geral e observação por item;
+- podem ser anexadas até 4 fotos por conferência; o navegador reduz as imagens antes do envio;
+- as fotos ficam no bucket privado `compras-recebimentos` e o histórico abre cada imagem por URL assinada temporária;
+- migration `20260823161555_compras_conferencia_recebimento` já foi aplicada no Supabase de produção e está alinhada ao nome do arquivo no repositório;
+- tabelas novas `compras_recebimentos`, `compras_recebimento_itens` e `compras_recebimento_fotos` possuem RLS habilitado, sem acesso direto do client; as rotas server-side operam por service role;
+- privilégios do `service_role` foram verificados nas três tabelas;
+- o bucket `compras-recebimentos` é privado;
+- preview da PR #249 passou em Next.js + TypeScript após correção do rollback server-side; o último commit ainda deve passar pelo preview final após documentação/fotos históricas;
+- **não existe movimentação automática de estoque nesta etapa**.
+
+Pendente antes de liberar Compras/Estoque como fluxo operacional completo:
+- testar uma NF real por XML com atualização de custo desligada;
+- validar dados fiscais, itens e vínculos e confirmar a primeira NF;
+- conferir histórico + arquivo original privado + fila de vínculos;
+- registrar uma conferência física real, incluindo entrega parcial/divergência e foto;
+- repetir teste com PDF/DANFE e Manual;
+- definir política de custo e modelar explicitamente unidade de compra, unidade operacional e fator de conversão;
+- somente depois liberar movimentação de estoque.
+
 ## EM VALIDAÇÃO — INTEGRAÇÃO DIRETA API W.VETRO EM SOMENTE LEITURA — 2026-08-23
 
 A primeira camada de integração direta Atlas One ↔ W.Vetro foi implementada em branch isolada para consultar dados reais sem alterar automaticamente os cadastros existentes.
@@ -250,4 +286,4 @@ Estado atual desta implementação:
 - ao escolher uma Tipologia cadastrada, o fluxo volta para o catálogo e limpa a descrição livre para evitar conflito;
 - nenhuma migration e nenhuma alteração de banco nesta etapa.
 
-Também permanece válido o estado anterior do Plano de Corte PC3: SU289/SU290 vinculados às figuras exatas do W.Vetro nº 994; TMC ainda precisa de figura técnica exata validada.
+Também permanece válido o estado anterior do Plano de Corte PC3: SU289/SU290 vinculados às figuras exatas do W.Vetro nº 994; TMC ainda precisa de figura técnica exata validada por código.
