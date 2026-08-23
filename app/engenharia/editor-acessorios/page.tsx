@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Beaker, Check, Loader2, PackageOpen, Plus, Save, Trash2, Wrench } from 'lucide-react'
+import { ArrowLeft, Beaker, Check, ChevronDown, Loader2, PackageOpen, Pencil, Plus, RefreshCw, Save, Trash2, Wrench } from 'lucide-react'
 import { calcularFormulasCorte, FormulaCorteError } from '@/lib/formulasCorteEngine'
 import { calcularAcessoriosTecnicos, FormulaAcessorioError, type ResultadoAcessorioFormula } from '@/lib/formulasAcessoriosEngine'
 import {
@@ -55,6 +55,8 @@ export default function EditorAcessoriosPage() {
   const [salvando, setSalvando] = useState(false)
   const [mensagem, setMensagem] = useState('')
   const [erro, setErro] = useState('')
+  const [acessorioAberto, setAcessorioAberto] = useState<number | null>(null)
+  const [substituindoIndex, setSubstituindoIndex] = useState<number | null>(null)
 
   useEffect(() => {
     async function carregar() {
@@ -95,7 +97,7 @@ export default function EditorAcessoriosPage() {
 
   useEffect(() => {
     setRascunho(selecionada ? clonar(selecionada) : null)
-    setResultados([]); setMensagem(''); setErro('')
+    setResultados([]); setMensagem(''); setErro(''); setAcessorioAberto(null); setSubstituindoIndex(null)
   }, [selecionada?.id])
 
   function escolherTipologia(id: string) {
@@ -131,12 +133,21 @@ export default function EditorAcessoriosPage() {
     })
   }
   function adicionar() {
+    const novoIndex = rascunho?.acessorios.length ?? 0
     setRascunho(prev => prev ? { ...prev, acessorios: [...prev.acessorios, {
       codigo: '', descricao: 'Novo acessório', cor: 'PRETO', unidade: 'UN', formula_quantidade: '', quantidade_referencia: 1,
       status: 'em_validacao', composicao_calculo: '', fonte: 'Cadastro manual Atlas',
     }] } : prev)
+    setAcessorioAberto(novoIndex)
+    setSubstituindoIndex(novoIndex)
   }
-  function remover(index: number) { setRascunho(prev => prev ? { ...prev, acessorios: prev.acessorios.filter((_, i) => i !== index) } : prev) }
+  function remover(index: number) {
+    const item = rascunho?.acessorios[index]
+    if (!window.confirm(`Apagar ${item?.codigo || 'este acessório'} desta tipologia?`)) return
+    setRascunho(prev => prev ? { ...prev, acessorios: prev.acessorios.filter((_, i) => i !== index) } : prev)
+    setAcessorioAberto(null)
+    setSubstituindoIndex(null)
+  }
 
   function testar() {
     if (!rascunho) return
@@ -186,25 +197,43 @@ export default function EditorAcessoriosPage() {
         <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-950"><strong>{tipologiaSelecionada?.label}</strong> · <strong>{rascunho.configuracao_label}</strong> · {folhas} folha(s) · {rascunho.acessorios.length} acessório(s). Fórmulas podem usar <strong>Largura, Altura, LF, HF, Folhas, Encontros</strong> e o código de um perfil calculado, por exemplo <strong>SU243</strong>.</div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Acessórios e fórmulas</h2><p className="text-xs text-slate-500">Se não houver fórmula comprovada, deixe o campo vazio e mantenha a quantidade como Referência do PDF.</p></div><div className="flex gap-2"><button type="button" onClick={adicionar} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold"><Plus size={15}/> Acrescentar</button><button type="button" disabled={salvando} onClick={() => void salvar()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{salvando ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Salvar alterações</button></div></div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Acessórios e fórmulas</h2><p className="text-xs text-slate-500">Clique no código ou no nome de qualquer acessório para abrir as ações Substituir, Alterar ou Apagar.</p></div><div className="flex gap-2"><button type="button" onClick={adicionar} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold"><Plus size={15}/> Acrescentar</button><button type="button" disabled={salvando} onClick={() => void salvar()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{salvando ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Salvar alterações</button></div></div>
           {rascunho.acessorios.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">Nenhum acessório cadastrado. Clique em Acrescentar.</div>}
-          <div className="space-y-3">{rascunho.acessorios.map((item, index) => <article key={`${index}-${item.codigo}`} className="rounded-xl border border-slate-200 p-4">
-            <div className="grid gap-3 md:grid-cols-12">
-              <label className="text-xs font-semibold text-slate-500 md:col-span-2">Código<input list="catalogo-acessorios-atlas" value={item.codigo} onChange={e => trocarCodigo(index, e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm font-semibold"/></label>
-              <label className="text-xs font-semibold text-slate-500 md:col-span-4">Descrição<input value={item.descricao || ''} onChange={e => atualizar(index, { descricao: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
-              <label className="text-xs font-semibold text-slate-500 md:col-span-2">Cor<input value={item.cor || ''} onChange={e => atualizar(index, { cor: e.target.value.toUpperCase() })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
-              <label className="text-xs font-semibold text-slate-500 md:col-span-1">UN<input value={item.unidade || ''} onChange={e => atualizar(index, { unidade: e.target.value.toUpperCase() })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
-              <label className="text-xs font-semibold text-slate-500 md:col-span-2">Status<select value={item.status || 'referencia'} onChange={e => atualizar(index, { status: e.target.value as StatusFormulaAcessorio })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">{STATUS_ACESSORIO.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
-              <button type="button" onClick={() => remover(index)} className="mt-5 grid h-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16}/></button>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <label className="text-xs font-semibold text-slate-500">Fórmula da quantidade / metragem<input value={item.formula_quantidade || ''} onChange={e => atualizar(index, { formula_quantidade: e.target.value })} placeholder="Ex.: Folhas * 2" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs"/></label>
-              <label className="text-xs font-semibold text-slate-500">Quantidade referência W.Vetro/PDF<input type="number" step="any" value={item.quantidade_referencia ?? ''} onChange={e => atualizar(index, { quantidade_referencia: e.target.value === '' ? undefined : Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
-              <div className="flex items-end"><span className={`mb-0.5 rounded-full px-3 py-2 text-xs font-semibold ${statusClass(item.status)}`}>{STATUS_ACESSORIO.find(s => s.value === (item.status || 'referencia'))?.label}</span></div>
-            </div>
-            <label className="mt-3 block text-xs font-semibold text-slate-500">Como chegou nessa quantidade / origem do cálculo<textarea rows={2} value={item.composicao_calculo || ''} onChange={e => atualizar(index, { composicao_calculo: e.target.value })} placeholder="Ex.: 2 roldanas por folha × número de folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
-            <label className="mt-3 block text-xs font-semibold text-slate-500">Fonte / observação<input value={item.fonte || ''} onChange={e => atualizar(index, { fonte: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs text-slate-600"/></label>
-          </article>)}</div>
+          <div className="space-y-3">{rascunho.acessorios.map((item, index) => {
+            const aberto = acessorioAberto === index
+            const substituindo = substituindoIndex === index
+            return <article key={`${index}-${item.codigo}`} className={`overflow-hidden rounded-xl border ${aberto ? 'border-orange-300 shadow-sm' : 'border-slate-200'}`}>
+              <button type="button" onClick={() => { setAcessorioAberto(aberto ? null : index); setSubstituindoIndex(null) }} className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-slate-50">
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white">{item.codigo || 'SEM CÓDIGO'}</span><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusClass(item.status)}`}>{STATUS_ACESSORIO.find(s => s.value === (item.status || 'referencia'))?.label}</span></div><div className="mt-1 truncate text-sm font-semibold text-slate-800">{item.descricao || 'Acessório sem descrição'}</div><div className="mt-0.5 text-xs text-slate-500">{item.quantidade_referencia ?? '—'} {item.unidade || ''} · {item.cor || 'SEM COR'}</div></div>
+                <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${aberto ? 'rotate-180' : ''}`}/>
+              </button>
+
+              {aberto && <div className="border-t border-slate-100 bg-white p-4">
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setSubstituindoIndex(index)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${substituindo ? 'border-orange-300 bg-orange-50 text-orange-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}><RefreshCw size={14}/> Substituir</button>
+                  <button type="button" onClick={() => setSubstituindoIndex(null)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={14}/> Alterar</button>
+                  <button type="button" onClick={() => remover(index)} className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"><Trash2 size={14}/> Apagar</button>
+                </div>
+
+                {substituindo && <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-900"><strong>Substituir acessório:</strong> escolha ou digite outro código no campo abaixo. Ao reconhecer um item do catálogo, o Atlas também atualiza a descrição e a unidade. A fórmula pode ser mantida ou alterada.</div>}
+
+                <div className="grid gap-3 md:grid-cols-12">
+                  <label className="text-xs font-semibold text-slate-500 md:col-span-2">Código<input list="catalogo-acessorios-atlas" value={item.codigo} onChange={e => trocarCodigo(index, e.target.value)} className={`mt-1 w-full rounded-lg border p-2 text-sm font-semibold ${substituindo ? 'border-orange-400 bg-orange-50 ring-2 ring-orange-100' : 'border-slate-300'}`}/></label>
+                  <label className="text-xs font-semibold text-slate-500 md:col-span-4">Descrição<input value={item.descricao || ''} onChange={e => atualizar(index, { descricao: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
+                  <label className="text-xs font-semibold text-slate-500 md:col-span-2">Cor<input value={item.cor || ''} onChange={e => atualizar(index, { cor: e.target.value.toUpperCase() })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
+                  <label className="text-xs font-semibold text-slate-500 md:col-span-1">UN<input value={item.unidade || ''} onChange={e => atualizar(index, { unidade: e.target.value.toUpperCase() })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
+                  <label className="text-xs font-semibold text-slate-500 md:col-span-3">Status<select value={item.status || 'referencia'} onChange={e => atualizar(index, { status: e.target.value as StatusFormulaAcessorio })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">{STATUS_ACESSORIO.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <label className="text-xs font-semibold text-slate-500">Fórmula da quantidade / metragem<input value={item.formula_quantidade || ''} onChange={e => atualizar(index, { formula_quantidade: e.target.value })} placeholder="Ex.: Folhas * 2" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs"/></label>
+                  <label className="text-xs font-semibold text-slate-500">Quantidade referência W.Vetro/PDF<input type="number" step="any" value={item.quantidade_referencia ?? ''} onChange={e => atualizar(index, { quantidade_referencia: e.target.value === '' ? undefined : Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
+                  <div className="flex items-end"><span className={`mb-0.5 rounded-full px-3 py-2 text-xs font-semibold ${statusClass(item.status)}`}>{STATUS_ACESSORIO.find(s => s.value === (item.status || 'referencia'))?.label}</span></div>
+                </div>
+                <label className="mt-3 block text-xs font-semibold text-slate-500">Como chegou nessa quantidade / origem do cálculo<textarea rows={2} value={item.composicao_calculo || ''} onChange={e => atualizar(index, { composicao_calculo: e.target.value })} placeholder="Ex.: 2 roldanas por folha × número de folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/></label>
+                <label className="mt-3 block text-xs font-semibold text-slate-500">Fonte / observação<input value={item.fonte || ''} onChange={e => atualizar(index, { fonte: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs text-slate-600"/></label>
+              </div>}
+            </article>
+          })}</div>
         </div>
 
         <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
