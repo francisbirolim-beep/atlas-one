@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { listarLinhasTecnicas } from '@/lib/linhasTecnicas'
 import type { PecaFormula, TipologiaFormulasCorte, VariavelTipologia } from '@/lib/formulasCorteEngine'
+import type { AcessorioFormulaCorte } from '@/lib/formulasAcessoriosEngine'
 
 export type StatusFormulaCorte = 'em_desenvolvimento' | 'em_validacao' | 'validada'
 
@@ -24,6 +25,7 @@ export type RegistroFormulaCorte = TipologiaFormulasCorte & {
   versao: number
   observacoes?: string | null
   vidro: VidroFormulaCorte
+  acessorios: AcessorioFormulaCorte[]
   tipologia?: TipologiaFormula | null
 }
 
@@ -39,6 +41,7 @@ type FormulaBanco = {
   versao?: number | null
   observacoes?: string | null
   vidro?: unknown
+  acessorios?: unknown
   tipologia?: TipologiaFormula | TipologiaFormula[] | null
 }
 
@@ -63,11 +66,12 @@ function normalizar(item: FormulaBanco): RegistroFormulaCorte {
     vidro: item.vidro && typeof item.vidro === 'object' && !Array.isArray(item.vidro)
       ? item.vidro as VidroFormulaCorte
       : {},
+    acessorios: Array.isArray(item.acessorios) ? item.acessorios as AcessorioFormulaCorte[] : [],
     tipologia,
   }
 }
 
-const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, tipologia:tipologias(id,label,chave,ativo)'
+const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, acessorios, tipologia:tipologias(id,label,chave,ativo)'
 
 export async function listarFormulasCorteAtivas(): Promise<RegistroFormulaCorte[]> {
   const [formulasResp, linhas] = await Promise.all([
@@ -117,6 +121,7 @@ export async function salvarFormulaCorte(
     variaveis: VariavelTipologia[]
     pecas: PecaFormula[]
     vidro: VidroFormulaCorte
+    acessorios: AcessorioFormulaCorte[]
     status: StatusFormulaCorte
     ativo: boolean
     observacoes?: string | null
@@ -130,6 +135,7 @@ export async function salvarFormulaCorte(
       variaveis: dados.variaveis,
       pecas: dados.pecas,
       vidro: dados.vidro,
+      acessorios: dados.acessorios,
       status: dados.status,
       ativo: ativoSeguro,
       observacoes: dados.observacoes?.trim() || null,
