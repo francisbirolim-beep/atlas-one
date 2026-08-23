@@ -24,6 +24,7 @@ declare
   v_disponivel_total numeric;
   v_restante numeric;
   v_alocar numeric;
+  v_reserva_id uuid;
   v_ids jsonb := '[]'::jsonb;
 begin
   if p_quantidade is null or p_quantidade <= 0 then raise exception 'Quantidade inválida'; end if;
@@ -44,7 +45,8 @@ begin
     if v_alocar>0 then
       insert into public.estoque_reservas(produto_id,local_id,endereco_id,quantidade,origem_tipo,origem_id,cliente_id,observacoes,reservado_ate,criado_por_id,criado_por_nome)
       values(p_produto_id,p_local_id,s.endereco_id,v_alocar,p_origem_tipo,p_origem_id,p_cliente_id,p_observacoes,p_reservado_ate,p_usuario_id,p_usuario_nome)
-      returning v_ids || jsonb_build_array(id) into v_ids;
+      returning id into v_reserva_id;
+      v_ids:=v_ids||jsonb_build_array(v_reserva_id);
       update public.estoque_saldos set quantidade_reservada=quantidade_reservada+v_alocar,updated_at=now() where id=s.id;
       v_restante:=v_restante-v_alocar;
     end if;
