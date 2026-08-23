@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { enriquecerVinculos, lerXmlNFe } from '@/lib/nfeEntradaServer'
-import { lerPdfDanfeAvancado } from '@/lib/danfePdfParser'
+import { lerPdfDanfeV2 } from '@/lib/danfePdfParserV2'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       nf = lerXmlNFe(texto)
     } else {
       const buffer = Buffer.from(await arquivo.arrayBuffer())
-      nf = await lerPdfDanfeAvancado(buffer)
+      nf = await lerPdfDanfeV2(buffer)
     }
 
     nf = await enriquecerVinculos(nf)
