@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarCompras } from '@/lib/comprasServer'
+import { arredondarMoeda, precoPorMargemReal } from '@/lib/precificacaoBalcao'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 function texto(v: unknown, max = 500) { return String(v ?? '').trim().slice(0, max) }
 function digitos(v: unknown) { return String(v ?? '').replace(/\D/g, '') }
-function numero(v: unknown) { const n = Number(v); return Number.isFinite(n) ? n : null }
+function numero(v: unknown) {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
 
 async function fornecedor(body: any, usuario: { id: string; nome: string }) {
   const id = texto(body.fornecedorId, 80)
@@ -44,8 +49,22 @@ export async function POST(req: NextRequest) {
     const unidadeEstoque = texto(body.unidadeEstoque, 30) || null
     const fator = numero(body.fatorConversao)
     const ncm = digitos(body.ncm).slice(0, 8) || null
+    const custoCompraUnitario = numero(body.custoCompraUnitario)
+    const margemBalcao = numero(body.margemBalcaoPercentual)
+    const precoMinimo = numero(body.precoMinimo)
+    const precoPromocional = numero(body.precoPromocional)
+
     if (!codigoFornecedor) return NextResponse.json({ error: 'Código do fornecedor é obrigatório.' }, { status: 400 })
     if (fator !== null && fator <= 0) return NextResponse.json({ error: 'Fator de conversão deve ser maior que zero.' }, { status: 400 })
+    if (margemBalcao !== null && (margemBalcao < 0 || margemBalcao >= 100)) {
+      return NextResponse.json({ error: 'A margem balcão deve estar entre 0% e menos de 100%.' }, { status: 400 })
+    }
+    if (precoMinimo !== null && precoMinimo < 0) return NextResponse.json({ error: 'Preço mínimo inválido.' }, { status: 400 })
+    if (precoPromocional !== null && precoPromocional < 0) return NextResponse.json({ error: 'Preço promocional inválido.' }, { status: 400 })
+
+    const fatorCusto = fator && fator > 0 ? fator : 1
+    const custoEstoque = custoCompraUnitario !== null ? arredondarMoeda(custoCompraUnitario / fatorCusto) : null
+    const precoSugerido = arredondarMoeda(precoPorMargemReal(custoEstoque, margemBalcao))
 
     let produtoId = texto(body.produtoId, 80)
     let criado = false
@@ -64,21 +83,46 @@ export async function POST(req: NextRequest) {
       if (duplicado) produtoId = duplicado.id
       else {
         const { data, error } = await supabaseAdmin.from('produtos').insert({
-          nome: descricao, descricao, categoria, preco: 0, custo: null, unidade: unidadeEstoque,
-          codigo: codigoFornecedor, codigo_origem: codigoFornecedor, origem: 'nf_compra', ativo: true,
-          unidade_origem: unidadeCompra, qtde_embalagem_origem: fator,
-          ncm, ncm_origem: ncm, ncm_status: ncm && ncm.length === 8 ? 'valido' : 'pendente',
-          status_validacao: 'revisado', fornecedor_id: f.id,
-          criado_por_id: usuario.id, criado_por_nome: usuario.nome,
-          dados_origem: { origem: 'nf_compra', codigoFornecedor, descricaoFornecedor: descricao, unidadeCompra, fatorConversao: fator },
-        }).select('id,codigo,nome,unidade').single()
+          nome: descricao,
+          descricao,
+          categoria,
+          preco: precoSugerido ?? 0,
+          preco_minimo: precoMinimo,
+          preco_promocional: precoPromocional,
+          custo: custoEstoque,
+          margem_percentual: margemBalcao,
+          unidade: unidadeEstoque,
+          codigo: codigoFornecedor,
+          codigo_origem: codigoFornecedor,
+          origem: 'nf_compra',
+          ativo: true,
+          unidade_origem: unidadeCompra,
+          qtde_embalagem_origem: fator,
+          ncm,
+          ncm_origem: ncm,
+          ncm_status: ncm && ncm.length === 8 ? 'valido' : 'pendente',
+          status_validacao: 'revisado',
+          fornecedor_id: f.id,
+          criado_por_id: usuario.id,
+          criado_por_nome: usuario.nome,
+          dados_origem: {
+            origem: 'nf_compra', codigoFornecedor, descricaoFornecedor: descricao,
+            unidadeCompra, fatorConversao: fator, custoCompraUnitario,
+            custoEstoqueInicial: custoEstoque, margemBalcaoPercentual: margemBalcao,
+          },
+        }).select('id,codigo,nome,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional').single()
         if (error) throw new Error(`Não foi possível cadastrar o produto: ${error.message}`)
         produtoId = data.id
         criado = true
       }
     }
 
-    const { data: produto } = await supabaseAdmin.from('produtos').select('id,codigo,nome,unidade').eq('id', produtoId).single()
+    const { data: produto } = await supabaseAdmin
+      .from('produtos')
+      .select('id,codigo,nome,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,ultimo_preco_vendido')
+      .eq('id', produtoId)
+      .single()
+
     const { error: mapError } = await supabaseAdmin.from('produto_fornecedores').upsert({
       produto_id: produtoId, fornecedor_id: f.id, codigo_fornecedor: codigoFornecedor,
       descricao_fornecedor: descricao || null, ncm_fornecedor: ncm, unidade_compra: unidadeCompra,
@@ -87,7 +131,22 @@ export async function POST(req: NextRequest) {
     }, { onConflict: 'fornecedor_id,codigo_fornecedor' })
     if (mapError) throw new Error(`Produto foi localizado, mas não foi possível salvar o código do fornecedor: ${mapError.message}`)
 
-    return NextResponse.json({ ok: true, criado, fornecedor: f, produto, fatorConversao: fator, unidadeCompra })
+    return NextResponse.json({
+      ok: true,
+      criado,
+      fornecedor: f,
+      produto,
+      fatorConversao: fator,
+      unidadeCompra,
+      precificacao: {
+        custoCompraUnitario,
+        custoEstoque,
+        margemBalcaoPercentual: margemBalcao,
+        precoSugerido,
+        precoMinimo,
+        precoPromocional,
+      },
+    })
   } catch (error) {
     console.error('Erro ao vincular produto da NF:', error)
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Erro ao vincular produto.' }, { status: 500 })
