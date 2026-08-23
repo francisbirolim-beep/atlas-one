@@ -47,6 +47,9 @@ export async function POST(req: NextRequest) {
     } else {
       const buffer = Buffer.from(await arquivo.arrayBuffer())
       nf = await lerPdfDanfeV2(buffer)
+      if (!nf.itens.length) {
+        console.info('[Compras][DANFE][diagnostico]', nf.diagnostico || 'sem diagnostico')
+      }
     }
 
     nf = await enriquecerVinculos(nf)
