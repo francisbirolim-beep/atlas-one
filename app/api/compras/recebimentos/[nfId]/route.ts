@@ -80,6 +80,8 @@ async function carregarBase(nfId: string) {
 
   const recebimentoIds = (recebimentos || []).map(r => r.id)
   const acumulado = new Map<string, { recebido: number; avariado: number }>()
+  const fotosPorRecebimento = new Map<string, Array<{ id: string; nome: string; url: string }>>()
+
   if (recebimentoIds.length) {
     const { data: anteriores, error } = await supabaseAdmin
       .from('compras_recebimento_itens')
@@ -92,6 +94,21 @@ async function carregarBase(nfId: string) {
       atual.avariado += numero(item.quantidade_avariada)
       acumulado.set(item.nf_item_id, atual)
     }
+
+    const { data: fotos, error: fotosError } = await supabaseAdmin
+      .from('compras_recebimento_fotos')
+      .select('id,recebimento_id,arquivo_nome,arquivo_path')
+      .in('recebimento_id', recebimentoIds)
+      .order('created_at', { ascending: true })
+    if (fotosError) throw new Error(fotosError.message)
+
+    await Promise.all((fotos || []).map(async foto => {
+      const { data } = await supabaseAdmin.storage.from('compras-recebimentos').createSignedUrl(foto.arquivo_path, 600)
+      if (!data?.signedUrl) return
+      const lista = fotosPorRecebimento.get(foto.recebimento_id) || []
+      lista.push({ id: foto.id, nome: foto.arquivo_nome, url: data.signedUrl })
+      fotosPorRecebimento.set(foto.recebimento_id, lista)
+    }))
   }
 
   return {
@@ -109,7 +126,7 @@ async function carregarBase(nfId: string) {
         statusAcumulado: statusItem(qtdNf, anterior.recebido, anterior.avariado),
       }
     }),
-    recebimentos: recebimentos || [],
+    recebimentos: (recebimentos || []).map(r => ({ ...r, fotos: fotosPorRecebimento.get(r.id) || [] })),
   }
 }
 
