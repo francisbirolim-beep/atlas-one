@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Loader2, PackageCheck, Save, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Camera, ExternalLink, Loader2, PackageCheck, Save, ShieldCheck } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 
 type ItemBase = {
@@ -43,6 +43,7 @@ type Dados = {
     data_recebimento: string
     observacoes: string | null
     recebido_por_nome: string | null
+    fotos?: Array<{ id: string; nome: string; url: string }>
   }>
 }
 
@@ -320,8 +321,23 @@ export default function ConferenciaRecebimentoPage() {
         {dados.recebimentos.length ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="font-bold text-slate-900">Histórico de conferências desta NF</h2>
-            <div className="mt-3 space-y-2">
-              {dados.recebimentos.map(r => <div key={r.id} className="rounded-xl border border-slate-200 p-3 text-sm"><strong>{dataBR(r.data_recebimento)}</strong> • {r.recebido_por_nome || 'Usuário'}{r.observacoes ? <div className="mt-1 text-slate-600">{r.observacoes}</div> : null}</div>)}
+            <p className="mt-1 text-xs text-slate-500">Links de fotos são temporários e expiram por segurança.</p>
+            <div className="mt-3 space-y-3">
+              {dados.recebimentos.map(r => (
+                <div key={r.id} className="rounded-xl border border-slate-200 p-3 text-sm">
+                  <strong>{dataBR(r.data_recebimento)}</strong> • {r.recebido_por_nome || 'Usuário'}
+                  {r.observacoes ? <div className="mt-1 text-slate-600">{r.observacoes}</div> : null}
+                  {r.fotos?.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {r.fotos.map((foto, i) => (
+                        <a key={foto.id} href={foto.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                          <ExternalLink size={14} /> Foto {i + 1}: {foto.nome}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
           </section>
         ) : null}
