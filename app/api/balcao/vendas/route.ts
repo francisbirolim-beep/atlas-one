@@ -59,7 +59,12 @@ export async function POST(req: NextRequest) {
       precoUnitario: parseNumero(i.precoUnitario),
     }))
     const payloadPagamentos = pagamentos.map((p: any) => ({
-      forma: String(p.forma || ''), valor: parseNumero(p.valor), parcelas: Math.max(1, Math.floor(parseNumero(p.parcelas, 1))), detalhes: String(p.detalhes || ''),
+      forma: String(p.forma || ''),
+      valor: parseNumero(p.valor),
+      parcelas: Math.max(1, Math.floor(parseNumero(p.parcelas, 1))),
+      detalhes: String(p.detalhes || ''),
+      primeiroVencimento: String(p.primeiroVencimento || ''),
+      intervaloDias: Math.max(1, Math.floor(parseNumero(p.intervaloDias, 30))),
     }))
 
     const { data, error } = await supabaseAdmin.rpc('finalizar_venda_balcao', {
