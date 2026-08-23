@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, FileText, Loader2 } from 'lucide-react'
+import { ArrowLeft, ExternalLink, FileText, Loader2, PackageCheck } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { tokenAtual } from '@/lib/auth'
 
@@ -75,7 +75,10 @@ export default function DetalheNotaPage() {
             <h1 className="mt-2 text-2xl font-bold text-slate-900">NF {nf.numero || 'sem número'} {nf.serie ? `• Série ${nf.serie}` : ''}</h1>
             <p className="mt-1 text-sm text-slate-600">{nf.fornecedor_nome || 'Fornecedor não informado'} {nf.fornecedor_cnpj ? `• ${nf.fornecedor_cnpj}` : ''}</p>
           </div>
-          {arquivoUrl ? <a href={arquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"><ExternalLink size={16} /> Abrir arquivo original</a> : null}
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/compras/recebimentos/${nf.id}`} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"><PackageCheck size={16} /> Conferir recebimento</Link>
+            {arquivoUrl ? <a href={arquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"><ExternalLink size={16} /> Abrir arquivo original</a> : null}
+          </div>
         </header>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -98,7 +101,10 @@ export default function DetalheNotaPage() {
           </div>
         </section>
 
-        {pendentes > 0 ? <Link href="/compras/vinculos" className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white"><FileText size={16} /> Resolver itens pendentes</Link> : null}
+        <div className="flex flex-wrap gap-3">
+          <Link href={`/compras/recebimentos/${nf.id}`} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"><PackageCheck size={16} /> Conferir mercadoria recebida</Link>
+          {pendentes > 0 ? <Link href="/compras/vinculos" className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white"><FileText size={16} /> Resolver itens pendentes</Link> : null}
+        </div>
       </div>
     </main>
   )
