@@ -249,8 +249,12 @@ export async function POST(req: NextRequest, { params }: { params: { nfId: strin
         : 'Recebimento conferido sem divergências. Nenhum estoque foi movimentado.',
     })
   } catch (error) {
-    if (arquivosGuardados.length) await supabaseAdmin.storage.from('compras-recebimentos').remove(arquivosGuardados).catch(() => undefined)
-    if (recebimentoId) await supabaseAdmin.from('compras_recebimentos').delete().eq('id', recebimentoId).catch(() => undefined)
+    if (arquivosGuardados.length) {
+      try { await supabaseAdmin.storage.from('compras-recebimentos').remove(arquivosGuardados) } catch {}
+    }
+    if (recebimentoId) {
+      try { await supabaseAdmin.from('compras_recebimentos').delete().eq('id', recebimentoId) } catch {}
+    }
     console.error('Erro ao registrar conferência de recebimento:', error)
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Erro ao registrar conferência.' }, { status: 500 })
   }
