@@ -22,7 +22,11 @@ export async function GET(req: NextRequest) {
     }
 
     const q = (req.nextUrl.searchParams.get('q') || '').trim()
-    let query = supabaseAdmin.from('balcao_vendas').select('id,numero,status,cliente_nome,vendedor_nome,subtotal,desconto,total,finalizada_em').order('finalizada_em', { ascending: false }).limit(150)
+    let query = supabaseAdmin
+      .from('balcao_vendas')
+      .select('id,numero,status,atendimento_status,cliente_nome,vendedor_nome,subtotal,desconto,total,finalizada_em')
+      .order('finalizada_em', { ascending: false })
+      .limit(150)
     if (q) {
       const numero = Number(q.replace(/\D/g, ''))
       query = Number.isFinite(numero) && numero > 0
@@ -53,15 +57,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
     }
 
-    const { data: caixa } = await supabaseAdmin.from('balcao_caixas')
-      .select('id,status,operador_id').eq('operador_id', usuario.id).eq('status', 'aberto')
-      .order('aberto_em', { ascending: false }).limit(1).maybeSingle()
+    const { data: caixa, error: erroCaixa } = await supabaseAdmin.from('balcao_caixas')
+      .select('id,status,operador_id,ponto_caixa_id,unidade_id,local_estoque_id')
+      .eq('operador_id', usuario.id)
+      .eq('status', 'aberto')
+      .order('aberto_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (erroCaixa) throw erroCaixa
     if (!caixa) return NextResponse.json({ error: 'Abra o caixa antes de finalizar a venda.' }, { status: 409 })
+    if (!caixa.local_estoque_id || !caixa.unidade_id || !caixa.ponto_caixa_id) {
+      return NextResponse.json({ error: 'O caixa aberto não está vinculado a uma unidade/local de estoque.' }, { status: 409 })
+    }
 
     const payloadItens = itens.map((i: any) => ({
       produtoId: String(i.produtoId || ''),
       quantidade: parseNumero(i.quantidade),
       precoUnitario: parseNumero(i.precoUnitario),
+      localOrigemId: String(i.localOrigemId || caixa.local_estoque_id),
+      atendimento: String(i.atendimento || (String(i.localOrigemId || caixa.local_estoque_id) === caixa.local_estoque_id ? 'imediato' : 'posterior')),
     }))
     const payloadPagamentos = pagamentos.map((p: any) => ({
       forma: String(p.forma || ''),
