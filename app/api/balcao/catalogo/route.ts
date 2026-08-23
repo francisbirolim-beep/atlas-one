@@ -5,6 +5,59 @@ import { autenticarBalcao, nivelBalcaoUsuario } from '@/lib/balcaoServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+type LinhaRede = {
+  produto_id: string
+  local_id: string
+  unidade_id: string
+  unidade_codigo: string
+  unidade_nome: string
+  local_codigo: string
+  local_nome: string
+  unidade: string | null
+  quantidade_fisica: number | string | null
+  quantidade_reservada: number | string | null
+  quantidade_disponivel: number | string | null
+  custo_medio: number | string | null
+}
+
+async function localPadrao(usuarioId: string, localSolicitado?: string | null) {
+  if (localSolicitado) {
+    const { data } = await supabaseAdmin
+      .from('estoque_locais')
+      .select('id,nome,codigo,unidade_id,unidades_operacionais(id,nome,codigo)')
+      .eq('id', localSolicitado)
+      .eq('ativo', true)
+      .maybeSingle()
+    if (data) return data as any
+  }
+
+  const { data: caixa } = await supabaseAdmin
+    .from('balcao_caixas')
+    .select('local_estoque_id')
+    .eq('operador_id', usuarioId)
+    .eq('status', 'aberto')
+    .order('aberto_em', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (caixa?.local_estoque_id) {
+    const { data } = await supabaseAdmin
+      .from('estoque_locais')
+      .select('id,nome,codigo,unidade_id,unidades_operacionais(id,nome,codigo)')
+      .eq('id', caixa.local_estoque_id)
+      .maybeSingle()
+    if (data) return data as any
+  }
+
+  const { data } = await supabaseAdmin
+    .from('estoque_locais')
+    .select('id,nome,codigo,unidade_id,unidades_operacionais!inner(id,nome,codigo)')
+    .eq('codigo', 'GERAL')
+    .eq('unidades_operacionais.codigo', 'MATRIZ')
+    .limit(1)
+    .maybeSingle()
+  return data as any
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await autenticarBalcao(req, 'venda-balcao', 'consulta')
   if (!usuario) return NextResponse.json({ error: 'Sem acesso à Venda Balcão.' }, { status: 403 })
@@ -20,6 +73,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, clientes: data || [] })
     }
 
+    const local = await localPadrao(usuario.id, req.nextUrl.searchParams.get('localId'))
+    if (!local?.id) return NextResponse.json({ error: 'Nenhum local de estoque foi configurado para o balcão.' }, { status: 409 })
+
     let query = supabaseAdmin
       .from('produtos')
       .select('id,codigo,nome,descricao,categoria,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,foto_url,ativo')
@@ -30,40 +86,86 @@ export async function GET(req: NextRequest) {
     if (q) query = query.or(`codigo.ilike.%${q}%,nome.ilike.%${q}%,descricao.ilike.%${q}%`)
     const { data: produtos, error } = await query
     if (error) throw error
+
     const ids = (produtos || []).map(p => p.id)
-    const { data: saldos } = ids.length
-      ? await supabaseAdmin.from('estoque_saldos').select('produto_id,quantidade,unidade,custo_medio').in('produto_id', ids)
-      : { data: [] as any[] }
-    const saldoMap = new Map((saldos || []).map(s => [s.produto_id, s]))
+    const { data: rede, error: erroRede } = ids.length
+      ? await supabaseAdmin
+          .from('estoque_disponibilidade_rede')
+          .select('produto_id,local_id,unidade_id,unidade_codigo,unidade_nome,local_codigo,local_nome,unidade,quantidade_fisica,quantidade_reservada,quantidade_disponivel,custo_medio')
+          .in('produto_id', ids)
+      : { data: [] as LinhaRede[], error: null }
+    if (erroRede) throw erroRede
+
+    const porProduto = new Map<string, LinhaRede[]>()
+    for (const linha of (rede || []) as LinhaRede[]) {
+      const atual = porProduto.get(linha.produto_id) || []
+      atual.push(linha)
+      porProduto.set(linha.produto_id, atual)
+    }
+
     const gestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
     const podeVerGestao = gestao !== 'oculto'
-
     const lista = (produtos || []).map(p => {
-      const saldo = saldoMap.get(p.id) as any
+      const linhas = porProduto.get(p.id) || []
+      const agrupados = new Map<string, {
+        localId: string; unidadeId: string; unidadeCodigo: string; unidadeNome: string;
+        localCodigo: string; localNome: string; fisico: number; reservado: number; disponivel: number;
+        custoValor: number; custoQtd: number; unidade: string
+      }>()
+      for (const r of linhas) {
+        const a = agrupados.get(r.local_id) || {
+          localId: r.local_id, unidadeId: r.unidade_id, unidadeCodigo: r.unidade_codigo, unidadeNome: r.unidade_nome,
+          localCodigo: r.local_codigo, localNome: r.local_nome, fisico: 0, reservado: 0, disponivel: 0,
+          custoValor: 0, custoQtd: 0, unidade: r.unidade || p.unidade || '',
+        }
+        const fisico = Number(r.quantidade_fisica || 0)
+        const reservado = Number(r.quantidade_reservada || 0)
+        const disponivel = Number(r.quantidade_disponivel || 0)
+        const custo = r.custo_medio == null ? null : Number(r.custo_medio)
+        a.fisico += fisico
+        a.reservado += reservado
+        a.disponivel += disponivel
+        if (custo != null && fisico > 0) { a.custoValor += custo * fisico; a.custoQtd += fisico }
+        agrupados.set(r.local_id, a)
+      }
+      const estoquesRede = Array.from(agrupados.values())
+        .map(a => ({
+          localId: a.localId, unidadeId: a.unidadeId, unidadeCodigo: a.unidadeCodigo, unidadeNome: a.unidadeNome,
+          localCodigo: a.localCodigo, localNome: a.localNome, fisico: a.fisico, reservado: a.reservado,
+          disponivel: a.disponivel, unidade: a.unidade,
+          custoMedio: a.custoQtd > 0 ? a.custoValor / a.custoQtd : null,
+        }))
+        .sort((a, b) => (a.localId === local.id ? -1 : b.localId === local.id ? 1 : b.disponivel - a.disponivel))
+      const atual = estoquesRede.find(e => e.localId === local.id)
+      const estoqueLocal = Number(atual?.disponivel || 0)
+      const estoqueRede = estoquesRede.reduce((s, e) => s + Number(e.disponivel || 0), 0)
       const precoNormal = Number(p.preco || 0)
       const promocional = p.preco_promocional == null ? null : Number(p.preco_promocional)
       const precoEfetivo = promocional != null && promocional >= 0 ? promocional : precoNormal
       return {
-        id: p.id,
-        codigo: p.codigo || '',
-        nome: p.nome,
-        descricao: p.descricao || null,
-        categoria: p.categoria,
-        unidade: p.unidade,
-        fotoUrl: p.foto_url || null,
-        estoque: Number(saldo?.quantidade || 0),
-        unidadeEstoque: saldo?.unidade || p.unidade,
-        preco: precoNormal,
-        precoPromocional: promocional,
-        precoEfetivo,
+        id: p.id, codigo: p.codigo || '', nome: p.nome, descricao: p.descricao || null, categoria: p.categoria,
+        unidade: p.unidade, fotoUrl: p.foto_url || null,
+        estoque: estoqueLocal, estoqueLocal, estoqueRede, estoquesRede,
+        unidadeEstoque: atual?.unidade || p.unidade,
+        preco: precoNormal, precoPromocional: promocional, precoEfetivo,
         ...(podeVerGestao ? {
-          custo: saldo?.custo_medio == null ? (p.custo == null ? null : Number(p.custo)) : Number(saldo.custo_medio),
+          custo: atual?.custoMedio == null ? (p.custo == null ? null : Number(p.custo)) : Number(atual.custoMedio),
           margem: p.margem_percentual == null ? null : Number(p.margem_percentual),
           precoMinimo: p.preco_minimo == null ? null : Number(p.preco_minimo),
         } : {}),
       }
     })
-    return NextResponse.json({ ok: true, produtos: lista, podeVerGestao })
+
+    return NextResponse.json({
+      ok: true,
+      produtos: lista,
+      podeVerGestao,
+      localAtual: {
+        id: local.id, nome: local.nome, codigo: local.codigo, unidadeId: local.unidade_id,
+        unidadeNome: (local.unidades_operacionais as any)?.nome || 'Unidade',
+        unidadeCodigo: (local.unidades_operacionais as any)?.codigo || '',
+      },
+    })
   } catch (e) {
     console.error('Erro catálogo balcão', e)
     return NextResponse.json({ error: 'Não foi possível carregar o catálogo.' }, { status: 500 })
