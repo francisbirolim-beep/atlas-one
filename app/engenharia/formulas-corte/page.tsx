@@ -102,6 +102,8 @@ export default function FormulasCortePage() {
   const [modo, setModo] = useState<ModoPlano>('obra')
   const [cliente, setCliente] = useState('')
   const [obra, setObra] = useState('')
+  const [vendedor, setVendedor] = useState('')
+  const [cidade, setCidade] = useState('')
   const [numeroOrcamento, setNumeroOrcamento] = useState('')
   const [itemOrcamento, setItemOrcamento] = useState('')
   const [localizacao, setLocalizacao] = useState('')
@@ -309,6 +311,8 @@ export default function FormulasCortePage() {
                 <label className="text-sm font-medium text-slate-700">Cliente<input value={cliente} onChange={e => setCliente(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Obra<input value={obra} onChange={e => setObra(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Ambiente / localização<input value={localizacao} onChange={e => setLocalizacao(e.target.value)} placeholder="Ex.: Área gourmet" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
+                <label className="text-sm font-medium text-slate-700">Vendedor<input value={vendedor} onChange={e => setVendedor(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
+                <label className="text-sm font-medium text-slate-700">Cidade<input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: José Bonifácio/SP" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
               </div>
 
               <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -385,8 +389,8 @@ export default function FormulasCortePage() {
                       ['Cliente', cliente || '—'],
                       ['Obra', obra || '—'],
                       ['Ambiente', localizacao || '—'],
-                      ['Item', modo === 'obra' ? (itemOrcamento || '—') : (referenciaManual || '—')],
-                      ['Cidade / referência', obra ? '—' : '—'],
+                      ['Vendedor', vendedor || '—'],
+                      ['Cidade', cidade || '—'],
                       ['Quantidade', quantidade || '1'],
                     ].map(([label, value]) => (
                       <div key={`${label}-${value}`} className="atlas-sheet-cell min-h-[35px] border-r border-t border-slate-200 px-3 py-2 last:border-r-0">
