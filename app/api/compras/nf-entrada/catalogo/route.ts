@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { buscarCatalogoProdutos } from '@/lib/nfeEntradaServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,7 +17,21 @@ export async function GET(req: NextRequest) {
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 
   try {
-    const produtos = await buscarCatalogoProdutos()
+    const produtos: any[] = []
+    const pagina = 1000
+    for (let inicio = 0; ; inicio += pagina) {
+      const { data, error } = await supabaseAdmin
+        .from('produtos')
+        .select('id,codigo,codigo_origem,id_externo_wvetro,nome,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,ultimo_preco_vendido')
+        .eq('ativo', true)
+        .order('nome')
+        .range(inicio, inicio + pagina - 1)
+      if (error) throw error
+      const lote = data || []
+      produtos.push(...lote)
+      if (lote.length < pagina) break
+    }
+
     return NextResponse.json({
       ok: true,
       produtos: produtos.map(p => ({
@@ -27,6 +40,11 @@ export async function GET(req: NextRequest) {
         nome: p.nome,
         unidade: p.unidade || null,
         custo: p.custo == null ? null : Number(p.custo),
+        preco: p.preco == null ? 0 : Number(p.preco),
+        margemPercentual: p.margem_percentual == null ? null : Number(p.margem_percentual),
+        precoMinimo: p.preco_minimo == null ? null : Number(p.preco_minimo),
+        precoPromocional: p.preco_promocional == null ? null : Number(p.preco_promocional),
+        ultimoPrecoVendido: p.ultimo_preco_vendido == null ? null : Number(p.ultimo_preco_vendido),
       })),
     })
   } catch (error) {
