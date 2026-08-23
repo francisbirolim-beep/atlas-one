@@ -20,7 +20,8 @@ function dataBrIso(valor: string) {
 function extrairPagamentos(texto: string): PagamentoNFe[] {
   const encontrados: PagamentoNFe[] = []
   const rx = /\b(\d{1,4})\s+(\d{2}\/\d{2}\/\d{4})\s+R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/g
-  for (const m of texto.matchAll(rx)) {
+  const matches = Array.from(texto.matchAll(rx))
+  for (const m of matches) {
     const valor = numeroBR(m[3] || '')
     if (valor === null) continue
     encontrados.push({ numero: m[1] || String(encontrados.length + 1), vencimento: dataBrIso(m[2] || ''), valor, forma: null })
