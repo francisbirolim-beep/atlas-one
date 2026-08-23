@@ -48,23 +48,64 @@ function credenciaisWVetro(): WVetroCredenciais {
   }
 }
 
-function extrairToken(payload: unknown): string | null {
+function tokenJwtDaString(valorBruto: string): string | null {
+  const valor = valorBruto
+    .trim()
+    .replace(/^"|"$/g, '')
+    .replace(/^Bearer\s+/i, '')
+    .trim()
+
+  // A documentação do W.Vetro informa JWT. Exigimos o formato de três segmentos
+  // para não confundir mensagens de erro longas com um token válido.
+  const jwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+  return jwt.test(valor) ? valor : null
+}
+
+function extrairToken(payload: unknown, profundidade = 0): string | null {
+  if (profundidade > 8) return null
+
   if (typeof payload === 'string') {
-    const valor = payload.trim().replace(/^"|"$/g, '')
-    return valor.length >= 20 ? valor : null
+    return tokenJwtDaString(payload)
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const token = extrairToken(item, profundidade + 1)
+      if (token) return token
+    }
+    return null
   }
 
   if (!payload || typeof payload !== 'object') return null
-  const obj = payload as Record<string, unknown>
-  const chaves = ['token', 'Token', 'access_token', 'AccessToken', 'jwt', 'Jwt', 'data', 'Data', 'result', 'Result']
 
-  for (const chave of chaves) {
-    if (!(chave in obj)) continue
-    const token = extrairToken(obj[chave])
+  const obj = payload as Record<string, unknown>
+  const chavesPrioritarias = Object.keys(obj).filter((chave) => /token|jwt|access|auth/i.test(chave))
+
+  // Primeiro tenta campos cujo nome sugere autenticação/token.
+  for (const chave of chavesPrioritarias) {
+    const token = extrairToken(obj[chave], profundidade + 1)
+    if (token) return token
+  }
+
+  // GeneXus/APIs legadas podem embrulhar o retorno em estruturas como
+  // Result/Data/Response/coleções. Percorrer todos os valores torna o parser
+  // compatível sem depender de um nome de campo específico.
+  for (const valor of Object.values(obj)) {
+    const token = extrairToken(valor, profundidade + 1)
     if (token) return token
   }
 
   return null
+}
+
+function descreverEstruturaAutenticacao(payload: unknown): string {
+  if (Array.isArray(payload)) return `array(${payload.length})`
+  if (payload && typeof payload === 'object') {
+    const chaves = Object.keys(payload as Record<string, unknown>).slice(0, 12)
+    return chaves.length ? `objeto com campos: ${chaves.join(', ')}` : 'objeto vazio'
+  }
+  if (typeof payload === 'string') return `texto (${payload.length} caracteres)`
+  return typeof payload
 }
 
 async function autenticarWVetro(force = false): Promise<string> {
@@ -92,7 +133,11 @@ async function autenticarWVetro(force = false): Promise<string> {
   }
 
   const token = extrairToken(payload)
-  if (!token) throw new Error('A API W.Vetro respondeu, mas não retornou um token reconhecível.')
+  if (!token) {
+    throw new Error(
+      `A API W.Vetro respondeu, mas não retornou um JWT reconhecível (${descreverEstruturaAutenticacao(payload)}).`,
+    )
+  }
 
   // A documentação informa validade de 24h. Guardamos por 23h para renovar com folga.
   tokenCache = { token, expiraEm: agora + 23 * 60 * 60 * 1000 }
