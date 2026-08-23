@@ -17,7 +17,7 @@ export const GUIAS: Guia[] = [
   { href: '/orcamento/pesquisar', label: 'Orçamentos', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Kanban', icon: Columns3, grupo: 'Comercial' },
   { href: '/producao/medicao-final', label: 'Medição Final', icon: Ruler, grupo: 'Operações' },
-  { href: '/compras/entrada', label: 'Compras / NF', icon: ShoppingCart, grupo: 'Operações' },
+  { href: '/compras', label: 'Compras / NF', icon: ShoppingCart, grupo: 'Operações' },
   { href: '/producao', label: 'Produção', icon: Factory, grupo: 'Operações' },
   { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Operações' },
   { href: '/engenharia', label: 'Engenharia', icon: Wrench, grupo: 'Operações' },
