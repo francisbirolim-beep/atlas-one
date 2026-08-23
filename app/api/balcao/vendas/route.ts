@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { autenticarBalcao, parseNumero } from '@/lib/balcaoServer'
+import { autenticarBalcao, nivelBalcaoUsuario, parseNumero } from '@/lib/balcaoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -48,6 +48,11 @@ export async function POST(req: NextRequest) {
     if (!itens.length) return NextResponse.json({ error: 'Adicione pelo menos um produto.' }, { status: 400 })
     if (!pagamentos.length) return NextResponse.json({ error: 'Informe a forma de pagamento.' }, { status: 400 })
 
+    const temPrazo = pagamentos.some((p: any) => ['boleto', 'a_prazo'].includes(String(p.forma || '')))
+    if (temPrazo && !body.clienteId) {
+      return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
+    }
+
     const { data: caixa } = await supabaseAdmin.from('balcao_caixas')
       .select('id,status,operador_id').eq('operador_id', usuario.id).eq('status', 'aberto')
       .order('aberto_em', { ascending: false }).limit(1).maybeSingle()
@@ -67,6 +72,24 @@ export async function POST(req: NextRequest) {
       intervaloDias: Math.max(1, Math.floor(parseNumero(p.intervaloDias, 30))),
     }))
 
+    const nivelGestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
+    const podeAutorizarAbaixoMinimo = nivelGestao === 'edicao'
+    const ids = [...new Set(payloadItens.map((i: any) => i.produtoId).filter(Boolean))]
+    const { data: produtos } = ids.length
+      ? await supabaseAdmin.from('produtos').select('id,nome,preco_minimo').in('id', ids)
+      : { data: [] as any[] }
+    const mapa = new Map((produtos || []).map((p: any) => [p.id, p]))
+    const subtotal = payloadItens.reduce((s: number, i: any) => s + i.quantidade * i.precoUnitario, 0)
+    const desconto = Math.max(0, parseNumero(body.desconto))
+    const total = subtotal - desconto
+    const totalMinimo = payloadItens.reduce((s: number, i: any) => {
+      const p: any = mapa.get(i.produtoId)
+      return s + (p?.preco_minimo == null ? 0 : Number(p.preco_minimo) * i.quantidade)
+    }, 0)
+    if (!podeAutorizarAbaixoMinimo && total + 0.01 < totalMinimo) {
+      return NextResponse.json({ error: `O desconto leva a venda abaixo do preço mínimo autorizado. Mínimo desta venda: R$ ${totalMinimo.toFixed(2)}.` }, { status: 403 })
+    }
+
     const { data, error } = await supabaseAdmin.rpc('finalizar_venda_balcao', {
       p_caixa_id: caixa.id,
       p_usuario_id: usuario.id,
@@ -76,9 +99,9 @@ export async function POST(req: NextRequest) {
       p_cliente_nome: String(body.clienteNome || '').trim() || null,
       p_itens: payloadItens,
       p_pagamentos: payloadPagamentos,
-      p_desconto: Math.max(0, parseNumero(body.desconto)),
+      p_desconto: desconto,
       p_observacoes: String(body.observacoes || '').trim() || null,
-      p_permitir_abaixo_minimo: usuario.role === 'master',
+      p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
     })
     if (error) throw error
     return NextResponse.json(data || { ok: true })
