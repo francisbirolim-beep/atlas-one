@@ -5,10 +5,10 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   Boxes,
+  Calculator,
   CheckCircle2,
   FileCode2,
   FileText,
-  Link2,
   Loader2,
   Plus,
   ReceiptText,
@@ -19,6 +19,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { arredondarMoeda, precoPorMargemReal } from '@/lib/precificacaoBalcao'
 
 type Modo = 'xml' | 'pdf' | 'manual'
 type StatusVinculo = 'vinculado' | 'pendente' | 'ambiguo'
@@ -86,8 +87,30 @@ type Nota = {
   avisos: string[]
 }
 
-type ProdutoCatalogo = { id: string; codigo: string; nome: string; unidade: string | null; custo: number | null }
-type CadastroNovo = { aberto: boolean; categoria: string; unidadeEstoque: string; fator: string; salvando: boolean; erro?: string }
+type ProdutoCatalogo = {
+  id: string
+  codigo: string
+  nome: string
+  unidade: string | null
+  custo: number | null
+  preco?: number
+  margemPercentual?: number | null
+  precoMinimo?: number | null
+  precoPromocional?: number | null
+  ultimoPrecoVendido?: number | null
+}
+
+type CadastroNovo = {
+  aberto: boolean
+  categoria: string
+  unidadeEstoque: string
+  fator: string
+  margemBalcao: string
+  precoMinimo: string
+  precoPromocional: string
+  salvando: boolean
+  erro?: string
+}
 
 const itemVazio = (): Item => ({
   codigoFornecedor: '', descricao: '', ncm: '', cfop: '', unidade: 'UN', quantidade: 1,
@@ -106,15 +129,20 @@ const notaManual = (): Nota => ({
 function normalizarCodigo(valor: string) {
   return valor.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '')
 }
+
 function numeroInput(valor: string): number | null {
-  if (!valor.trim()) return null
-  const n = Number(valor.replace(/\./g, '').replace(',', '.'))
+  const txt = valor.trim()
+  if (!txt) return null
+  const normalizado = txt.includes(',') ? txt.replace(/\./g, '').replace(',', '.') : txt
+  const n = Number(normalizado)
   return Number.isFinite(n) ? n : null
 }
+
 function moeda(valor: number | null | undefined) {
   if (valor == null) return '—'
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
+
 function dataInput(iso: string) {
   if (!iso) return ''
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
@@ -122,6 +150,7 @@ function dataInput(iso: string) {
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
 function sugerirConversao(item: Item) {
   const un = (item.unidade || '').toUpperCase()
   const desc = (item.descricao || '').toUpperCase()
@@ -130,7 +159,14 @@ function sugerirConversao(item: Item) {
     const m = desc.match(/(?:PACOTE|COM|C\/)?\s*(\d{1,4})\s*(?:PCS|PC|PECAS|PEÇAS)/i)
     if (m?.[1]) return { unidadeEstoque: 'UN', fator: Number(m[1]), motivo: `A descrição informa pacote com ${m[1]} peças.` }
   }
-  return { unidadeEstoque: un || 'UN', fator: un ? 1 : 1, motivo: 'Confirme a unidade e o fator antes de cadastrar.' }
+  return { unidadeEstoque: un || 'UN', fator: 1, motivo: 'Confirme a unidade e o fator antes de cadastrar.' }
+}
+
+function custoEstoqueInicial(item: Item, fatorTexto: string) {
+  const custoCompra = Number(item.valorUnitario)
+  const fator = numeroInput(fatorTexto) || 1
+  if (!Number.isFinite(custoCompra) || custoCompra < 0 || fator <= 0) return null
+  return arredondarMoeda(custoCompra / fator)
 }
 
 export default function EntradaComprasPage() {
@@ -194,13 +230,17 @@ export default function EntradaComprasPage() {
         const codigo = normalizarCodigo(String(valor || ''))
         const encontrados = catalogo.filter(p => normalizarCodigo(p.codigo) === codigo)
         if (encontrados.length === 1) {
-          const p = encontrados[0]; atual.produtoId = p.id; atual.produtoCodigo = p.codigo; atual.produtoNome = p.nome; atual.vinculoStatus = 'vinculado'; atual.unidadeEstoque = p.unidade
+          const p = encontrados[0]
+          atual.produtoId = p.id; atual.produtoCodigo = p.codigo; atual.produtoNome = p.nome
+          atual.vinculoStatus = 'vinculado'; atual.unidadeEstoque = p.unidade
           setBuscas(prev => ({ ...prev, [index]: `${p.codigo} — ${p.nome}` }))
         }
       }
-      itens[index] = atual; return { ...n, itens }
+      itens[index] = atual
+      return { ...n, itens }
     })
   }
+
   function atualizarPagamento(index: number, campo: keyof Pagamento, valor: string | number | null) {
     setNota(n => { if (!n) return n; const pagamentos = [...(n.pagamentos || [])]; pagamentos[index] = { ...pagamentos[index], [campo]: valor }; return { ...n, pagamentos } })
   }
@@ -216,20 +256,34 @@ export default function EntradaComprasPage() {
     setBuscas(prev => ({ ...prev, [index]: valor }))
     const produto = catalogo.find(p => `${p.codigo} — ${p.nome}` === valor) || catalogo.find(p => normalizarCodigo(p.codigo) === normalizarCodigo(valor))
     if (!produto) return
-    setNota(n => { if (!n) return n; const itens = [...n.itens]; itens[index] = { ...itens[index], produtoId: produto.id, produtoCodigo: produto.codigo, produtoNome: produto.nome, unidadeEstoque: produto.unidade, vinculoStatus: 'vinculado' }; return { ...n, itens } })
+    setNota(n => {
+      if (!n) return n
+      const itens = [...n.itens]
+      itens[index] = { ...itens[index], produtoId: produto.id, produtoCodigo: produto.codigo, produtoNome: produto.nome, unidadeEstoque: produto.unidade, vinculoStatus: 'vinculado' }
+      return { ...n, itens }
+    })
     setBuscas(prev => ({ ...prev, [index]: `${produto.codigo} — ${produto.nome}` }))
   }
+
   function desvincularProduto(index: number) {
     setNota(n => { if (!n) return n; const itens = [...n.itens]; itens[index] = { ...itens[index], produtoId: null, produtoCodigo: null, produtoNome: null, vinculoStatus: 'pendente', fatorConversao: null }; return { ...n, itens } })
     setBuscas(prev => ({ ...prev, [index]: '' }))
   }
 
+  function cadastroPadrao(item: Item): CadastroNovo {
+    const s = sugerirConversao(item)
+    return { aberto: true, categoria: 'acessorio', unidadeEstoque: s.unidadeEstoque, fator: String(s.fator), margemBalcao: '', precoMinimo: '', precoPromocional: '', salvando: false }
+  }
+
   function abrirCadastro(index: number) {
     if (!nota) return
-    const s = sugerirConversao(nota.itens[index])
-    setCadastros(prev => ({ ...prev, [index]: { aberto: true, categoria: 'acessorio', unidadeEstoque: s.unidadeEstoque, fator: String(s.fator), salvando: false } }))
+    setCadastros(prev => ({ ...prev, [index]: cadastroPadrao(nota.itens[index]) }))
   }
-  function mudarCadastro(index: number, patch: Partial<CadastroNovo>) { setCadastros(prev => ({ ...prev, [index]: { ...(prev[index] || { aberto: true, categoria: 'acessorio', unidadeEstoque: 'UN', fator: '1', salvando: false }), ...patch } })) }
+
+  function mudarCadastro(index: number, patch: Partial<CadastroNovo>) {
+    const base = nota?.itens[index] ? cadastroPadrao(nota.itens[index]) : { aberto: true, categoria: 'acessorio', unidadeEstoque: 'UN', fator: '1', margemBalcao: '', precoMinimo: '', precoPromocional: '', salvando: false }
+    setCadastros(prev => ({ ...prev, [index]: { ...(prev[index] || base), ...patch } }))
+  }
 
   async function cadastrarProdutoDaNf(index: number) {
     if (!nota) return
@@ -243,12 +297,26 @@ export default function EntradaComprasPage() {
           fornecedorId: nota.fornecedorId, fornecedorNome: nota.fornecedorNome, fornecedorCnpj: nota.fornecedorCnpj,
           codigoFornecedor: item.codigoFornecedor, descricao: item.descricao, ncm: item.ncm,
           unidadeCompra: item.unidade, unidadeEstoque: cfg.unidadeEstoque, fatorConversao: numeroInput(cfg.fator), categoria: cfg.categoria,
+          custoCompraUnitario: item.valorUnitario,
+          margemBalcaoPercentual: numeroInput(cfg.margemBalcao),
+          precoMinimo: numeroInput(cfg.precoMinimo),
+          precoPromocional: numeroInput(cfg.precoPromocional),
         }),
       })
       const json = await resp.json().catch(() => ({})); if (!resp.ok) throw new Error(json.error || 'Não foi possível cadastrar o produto.')
       const p = json.produto
-      setNota(n => { if (!n) return n; const itens = [...n.itens]; itens[index] = { ...itens[index], produtoId: p.id, produtoCodigo: p.codigo, produtoNome: p.nome, unidadeEstoque: p.unidade || cfg.unidadeEstoque, fatorConversao: numeroInput(cfg.fator), vinculoStatus: 'vinculado', sugestoes: [] }; return { ...n, fornecedorId: json.fornecedor?.id || n.fornecedorId, itens } })
-      setCatalogo(prev => prev.some(x => x.id === p.id) ? prev : [...prev, { id: p.id, codigo: p.codigo || item.codigoFornecedor, nome: p.nome, unidade: p.unidade || cfg.unidadeEstoque, custo: null }])
+      setNota(n => {
+        if (!n) return n
+        const itens = [...n.itens]
+        itens[index] = { ...itens[index], produtoId: p.id, produtoCodigo: p.codigo, produtoNome: p.nome, unidadeEstoque: p.unidade || cfg.unidadeEstoque, fatorConversao: numeroInput(cfg.fator), vinculoStatus: 'vinculado', sugestoes: [] }
+        return { ...n, fornecedorId: json.fornecedor?.id || n.fornecedorId, itens }
+      })
+      setCatalogo(prev => prev.some(x => x.id === p.id) ? prev : [...prev, {
+        id: p.id, codigo: p.codigo || item.codigoFornecedor, nome: p.nome, unidade: p.unidade || cfg.unidadeEstoque,
+        custo: p.custo == null ? json.precificacao?.custoEstoque ?? null : Number(p.custo),
+        preco: Number(p.preco || 0), margemPercentual: p.margem_percentual == null ? null : Number(p.margem_percentual),
+        precoMinimo: p.preco_minimo == null ? null : Number(p.preco_minimo), precoPromocional: p.preco_promocional == null ? null : Number(p.preco_promocional),
+      }])
       setBuscas(prev => ({ ...prev, [index]: `${p.codigo || item.codigoFornecedor} — ${p.nome}` }))
       mudarCadastro(index, { aberto: false, salvando: false })
     } catch (e) { mudarCadastro(index, { salvando: false, erro: e instanceof Error ? e.message : 'Erro ao cadastrar.' }) }
@@ -268,7 +336,9 @@ export default function EntradaComprasPage() {
   }
 
   const totais = useMemo(() => {
-    const itens = nota?.itens || []; const total = itens.reduce((s, i) => s + (Number(i.valorTotal) || 0), 0); const vinculados = itens.filter(i => i.produtoId).length
+    const itens = nota?.itens || []
+    const total = itens.reduce((s, i) => s + (Number(i.valorTotal) || 0), 0)
+    const vinculados = itens.filter(i => i.produtoId).length
     const parcelas = (nota?.pagamentos || []).reduce((s, p) => s + (Number(p.valor) || 0), 0)
     return { total, vinculados, pendentes: itens.length - vinculados, parcelas }
   }, [nota])
@@ -316,11 +386,23 @@ export default function EntradaComprasPage() {
 }
 
 function CadastroProduto({item,cfg,onChange,onConfirm,onCancel}:{item:Item;cfg:CadastroNovo;onChange:(p:Partial<CadastroNovo>)=>void;onConfirm:()=>void;onCancel:()=>void}){
- const s=sugerirConversao(item)
- return <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4"><div className="font-semibold text-indigo-950">Cadastrar novo produto</div><p className="mt-1 text-xs text-indigo-800">Código e descrição vêm da NF. Confirme categoria, unidade de estoque e conversão. Sugestão: {s.motivo}</p><div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-xs text-slate-600">Categoria<select value={cfg.categoria} onChange={e=>onChange({categoria:e.target.value})} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm"><option value="acessorio">Acessório</option><option value="perfil">Perfil</option><option value="produto">Produto</option><option value="outro">Outro</option></select></label><Campo label="Unidade de estoque" value={cfg.unidadeEstoque} onChange={v=>onChange({unidadeEstoque:v})}/><Campo label="Fator de conversão" type="number" value={cfg.fator} onChange={v=>onChange({fator:v})}/></div>{cfg.erro&&<div className="mt-2 text-xs font-medium text-red-700">{cfg.erro}</div>}<div className="mt-3 flex gap-2"><button disabled={cfg.salvando} onClick={onConfirm} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{cfg.salvando?'Salvando...':'Confirmar cadastro e vínculo'}</button><button onClick={onCancel} className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold">Cancelar</button></div></div>
+  const s = sugerirConversao(item)
+  const custoEstoque = custoEstoqueInicial(item, cfg.fator)
+  const margem = numeroInput(cfg.margemBalcao)
+  const precoSugerido = arredondarMoeda(precoPorMargemReal(custoEstoque, margem))
+  return <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+    <div className="font-semibold text-indigo-950">Cadastrar novo produto</div>
+    <p className="mt-1 text-xs text-indigo-800">Código e descrição vêm da NF. Confirme categoria, unidade e conversão. {s.motivo}</p>
+    <div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-xs text-slate-600">Categoria<select value={cfg.categoria} onChange={e=>onChange({categoria:e.target.value})} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm"><option value="acessorio">Acessório</option><option value="perfil">Perfil</option><option value="produto">Produto</option><option value="outro">Outro</option></select></label><Campo label="Unidade de estoque" value={cfg.unidadeEstoque} onChange={v=>onChange({unidadeEstoque:v})}/><Campo label="Fator de conversão" type="number" value={cfg.fator} onChange={v=>onChange({fator:v})}/></div>
+    <div className="mt-3 rounded-lg border border-indigo-100 bg-white p-3"><div className="flex items-center gap-2 text-xs font-semibold text-slate-700"><Calculator size={15}/>Precificação de venda balcão</div><div className="mt-2 grid gap-2 sm:grid-cols-5"><InfoPreco label="Custo compra" valor={item.valorUnitario}/><InfoPreco label={`Custo / ${cfg.unidadeEstoque || 'un.'}`} valor={custoEstoque}/><Campo label="Margem real (%)" type="number" value={cfg.margemBalcao} onChange={v=>onChange({margemBalcao:v})}/><InfoPreco label="Preço sugerido" valor={precoSugerido}/><Campo label="Preço mínimo" type="number" value={cfg.precoMinimo} onChange={v=>onChange({precoMinimo:v})}/></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><Campo label="Preço promocional (opcional)" type="number" value={cfg.precoPromocional} onChange={v=>onChange({precoPromocional:v})}/><div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-900"><strong>Tipologia:</strong> usa somente o custo técnico. <strong>Venda balcão:</strong> usa o preço sugerido/promocional.</div></div></div>
+    {cfg.erro&&<div className="mt-2 text-xs font-medium text-red-700">{cfg.erro}</div>}
+    <div className="mt-3 flex gap-2"><button disabled={cfg.salvando} onClick={onConfirm} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{cfg.salvando?'Salvando...':'Confirmar cadastro e vínculo'}</button><button onClick={onCancel} className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold">Cancelar</button></div>
+  </div>
 }
+
 function Campo({label,value,onChange,type='text'}:{label:string;value:string;onChange:(v:string)=>void;type?:string}){return <label className="block text-xs font-medium text-slate-500">{label}<input type={type} value={value} onChange={e=>onChange(e.target.value)} step={type==='number'?'any':undefined} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"/></label>}
 function CampoNumero({label,value,onChange}:{label:string;value:number|null|undefined;onChange:(v:number|null)=>void}){return <Campo label={label} type="number" value={value==null?'':String(value)} onChange={v=>onChange(numeroInput(v))}/>}
+function InfoPreco({label,valor}:{label:string;valor:number|null|undefined}){return <div className="rounded-lg border bg-slate-50 px-3 py-2"><div className="text-[11px] text-slate-500">{label}</div><div className="mt-1 text-sm font-bold text-slate-900">{moeda(valor)}</div></div>}
 function ModoCard({ativo,onClick,icon,titulo,descricao}:{ativo:boolean;onClick:()=>void;icon:React.ReactNode;titulo:string;descricao:string}){return <button onClick={onClick} className={`rounded-2xl border p-5 text-left transition ${ativo?'border-blue-400 bg-blue-50 ring-2 ring-blue-100':'border-slate-200 bg-white hover:border-slate-300'}`}><div className={ativo?'text-blue-700':'text-slate-500'}>{icon}</div><div className="mt-3 font-semibold">{titulo}</div><div className="mt-1 text-sm text-slate-500">{descricao}</div></button>}
 function StatusVinculo({status}:{status:StatusVinculo}){if(status==='vinculado')return <div className="mt-1 text-xs font-medium text-emerald-700">✓ Vinculado ao cadastro do Atlas</div>;if(status==='ambiguo')return <div className="mt-1 text-xs font-medium text-amber-700">⚠ Mais de um produto com o mesmo código — escolha o correto</div>;return <div className="mt-1 text-xs font-medium text-slate-500">Pendente — escolha uma sugestão ou cadastre o produto</div>}
 function Resumo({titulo,valor}:{titulo:string;valor:string|number}){return <div className="rounded-xl border bg-slate-50 p-3"><div className="text-xs text-slate-500">{titulo}</div><div className="mt-1 text-lg font-bold">{valor}</div></div>}
