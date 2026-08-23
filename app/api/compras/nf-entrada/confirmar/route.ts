@@ -135,6 +135,25 @@ export async function POST(req: NextRequest) {
       return { ...item, descricao, quantidade, valorUnitario, valorTotal }
     })
 
+    // Segurança específica para PDF/DANFE: uma leitura parcial não pode ser confirmada.
+    // Compara a soma dos itens com o Valor Total dos Produtos (não com o total geral da NF,
+    // pois frete/desconto/impostos podem fazer o valor total da nota ser diferente).
+    if (origem === 'pdf') {
+      const semValor = itensValidos.findIndex(item => item.valorTotal === null)
+      if (semValor >= 0) {
+        return NextResponse.json({ error: `Item ${semValor + 1}: informe o valor total antes de confirmar o PDF/DANFE.` }, { status: 400 })
+      }
+      const valorProdutos = numero(payload.valorProdutos)
+      if (valorProdutos !== null) {
+        const somaItens = itensValidos.reduce((s, item) => s + (item.valorTotal || 0), 0)
+        if (Math.abs(somaItens - valorProdutos) > 0.02) {
+          return NextResponse.json({
+            error: `A soma dos itens (${somaItens.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}) não fecha com o valor total dos produtos da NF (${valorProdutos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}). Revise a leitura antes de confirmar.`,
+          }, { status: 400 })
+        }
+      }
+    }
+
     const chave = somenteDigitos(payload.chaveAcesso).slice(0, 44)
     if (chave) {
       const { data: duplicada } = await supabaseAdmin.from('compras_nfs').select('id,numero').eq('chave_acesso', chave).maybeSingle()
