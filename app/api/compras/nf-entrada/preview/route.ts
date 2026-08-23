@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { enriquecerVinculos, lerXmlNFe } from '@/lib/nfeEntradaServer'
-import { lerPdfDanfeV3 } from '@/lib/danfePdfParserV3'
+import { lerPdfDanfeV4 } from '@/lib/danfePdfParserV4'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       nf = lerXmlNFe(texto)
     } else {
       const buffer = Buffer.from(await arquivo.arrayBuffer())
-      nf = await lerPdfDanfeV3(buffer)
+      nf = await lerPdfDanfeV4(buffer)
       if (!nf.itens.length) {
         console.info('[Compras][DANFE][diagnostico]', nf.diagnostico || 'sem diagnostico')
       }
