@@ -1,5 +1,38 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-23 — Compras: NF, histórico, vínculos e conferência de recebimento — EM VALIDAÇÃO
+
+Implementado:
+- PR #247 criou a entrada de NF em `/compras/entrada` por XML NF-e, PDF/DANFE assistido ou lançamento manual;
+- XML extrai dados fiscais e itens estruturados; PDF permanece assistido quando não houver estrutura segura;
+- prévia não grava dados e produto desconhecido nunca é criado automaticamente;
+- itens são reconciliados por código com o catálogo existente e podem ficar `vinculado`, `pendente` ou `ambiguo`;
+- fornecedor é reconhecido por CNPJ e fornecedor novo só é criado na confirmação;
+- XML/PDF original é salvo no bucket privado `compras-nfs`;
+- atualização de custo é opcional, desligada por padrão e restrita a produtos explicitamente vinculados;
+- migration `20260823155025_compras_nfe_entrada` criou `compras_nfs` e `compras_nf_itens` com RLS habilitado;
+- PR #248 criou `/compras` como Central de Compras, `/compras/notas` como histórico, detalhe `/compras/notas/[id]` com arquivo original por URL assinada e `/compras/vinculos` como fila de pendências;
+- corrigir um vínculo posteriormente não altera custo automaticamente;
+- PR #249 adiciona conferência física em `/compras/recebimentos/[nfId]`;
+- uma mesma NF pode ter múltiplos recebimentos parciais; o Atlas acumula quantidades anteriores e calcula saldo ainda esperado;
+- cada item da conferência é classificado como `ok`, `falta`, `excesso` ou `avaria`;
+- conferência registra data/hora, responsável, observação geral e observação por item;
+- permite até 4 fotos por conferência, com redução no navegador antes do upload e armazenamento privado no bucket `compras-recebimentos`;
+- fotos de conferências anteriores são abertas por URLs assinadas temporárias, sem tornar o bucket público;
+- migration `20260823161555_compras_conferencia_recebimento` aplicada no Supabase e alinhada ao arquivo do repositório;
+- tabelas `compras_recebimentos`, `compras_recebimento_itens` e `compras_recebimento_fotos` possuem RLS habilitado e são acessadas pelas rotas server-side com `service_role`;
+- permissões do `service_role` foram verificadas para SELECT/INSERT/UPDATE/DELETE nas três tabelas;
+- o preview da PR #249 passou em Next.js + TypeScript após corrigir o rollback da rota server-side;
+- **nenhuma movimentação automática de estoque foi implementada**; unidade de compra, unidade operacional e fatores de conversão permanecem pendentes de validação real.
+
+Pendente para considerar o módulo operacionalmente validado:
+- testar um XML real com `Atualizar custo` desligado;
+- confirmar a primeira NF e conferir os registros/bucket;
+- validar histórico, arquivo privado e resolução de vínculos;
+- executar uma conferência real, inclusive entrega parcial/divergência e foto;
+- repetir entrada por PDF e Manual;
+- somente depois definir política de custo e modelar conversões de unidade antes de liberar estoque.
+
 ## 2026-08-23 — Integração direta API W.Vetro em modo somente leitura — EM VALIDAÇÃO
 
 Implementado:
