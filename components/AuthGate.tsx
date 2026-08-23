@@ -15,7 +15,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     || pathname === '/redefinir-senha'
     || pathname.startsWith('/medicao-final/acesso/')
     || pathname.startsWith('/assistencia/acesso/')
-  const rotaBalcao = pathname === '/balcao' || pathname.startsWith('/balcao/')
+  const rotaBalcao = pathname === '/balcao'
+    || pathname.startsWith('/balcao/')
+    || pathname.startsWith('/orcamento/balcao/')
 
   useEffect(() => {
     let ativo = true
