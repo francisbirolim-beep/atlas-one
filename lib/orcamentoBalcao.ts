@@ -29,9 +29,9 @@ export interface ResultadoOrcamentoBalcao {
   numero?: number | null
 }
 
-// Cria um orçamento no modo "balcao": cliente só com nome obrigatório (resto
-// opcional), itens vindos do catálogo de produtos (lib/produtos.ts) com
-// preço já travado no momento da venda, e valor_estimado = soma dos itens.
+// Cria um orçamento no modo "balcao" e congela o preço unitário dentro dos
+// itens_balcao. Salvar uma proposta NÃO significa que ela foi vendida, então
+// ultimo_preco_vendido só poderá ser atualizado na confirmação real da venda.
 export async function criarOrcamentoBalcao(
   dados: DadosOrcamentoBalcaoForm
 ): Promise<ResultadoOrcamentoBalcao> {
@@ -61,6 +61,7 @@ export async function criarOrcamentoBalcao(
 
   const valorTotal = dados.itens.reduce((soma, it) => soma + it.preco_total, 0)
   const novoId = uuidv4()
+  const agora = new Date().toISOString()
 
   const { data: inserido, error } = await supabase
     .from('orcamentos')
@@ -80,7 +81,7 @@ export async function criarOrcamentoBalcao(
       valor_estimado: valorTotal,
       status: 'rascunho',
       coluna_id: colunaId,
-      coluna_atualizada_em: new Date().toISOString(),
+      coluna_atualizada_em: agora,
       criado_por_nome: usuario?.nome || null,
       criado_por_id: usuario?.id || null,
     })
@@ -90,6 +91,7 @@ export async function criarOrcamentoBalcao(
   if (error) {
     return { ok: false, error: error.message }
   }
+
   if (colunaId) {
     executarAutomacoesColuna(colunaId, { cliente_nome: dados.clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
   }

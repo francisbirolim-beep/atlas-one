@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { enriquecerVinculos, lerXmlNFe } from '@/lib/nfeEntradaServer'
-import { lerPdfDanfeV6 } from '@/lib/danfePdfParserV6'
+import { lerPdfDanfeV7 } from '@/lib/danfePdfParserV7'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,21 +24,13 @@ export async function POST(req: NextRequest) {
     const arquivo = form.get('arquivo')
     const modo = String(form.get('modo') || '').toLowerCase()
 
-    if (!(arquivo instanceof File)) {
-      return NextResponse.json({ error: 'Selecione um arquivo XML ou PDF.' }, { status: 400 })
-    }
-
-    if (arquivo.size > 15 * 1024 * 1024) {
-      return NextResponse.json({ error: 'O arquivo excede o limite de 15 MB.' }, { status: 413 })
-    }
+    if (!(arquivo instanceof File)) return NextResponse.json({ error: 'Selecione um arquivo XML ou PDF.' }, { status: 400 })
+    if (arquivo.size > 15 * 1024 * 1024) return NextResponse.json({ error: 'O arquivo excede o limite de 15 MB.' }, { status: 413 })
 
     const nome = arquivo.name.toLowerCase()
     const ehXml = modo === 'xml' || nome.endsWith('.xml') || /xml/i.test(arquivo.type)
     const ehPdf = modo === 'pdf' || nome.endsWith('.pdf') || arquivo.type === 'application/pdf'
-
-    if (!ehXml && !ehPdf) {
-      return NextResponse.json({ error: 'Formato não suportado. Envie XML da NF-e ou PDF/DANFE.' }, { status: 400 })
-    }
+    if (!ehXml && !ehPdf) return NextResponse.json({ error: 'Formato não suportado. Envie XML da NF-e ou PDF/DANFE.' }, { status: 400 })
 
     let nf
     if (ehXml) {
@@ -46,19 +38,18 @@ export async function POST(req: NextRequest) {
       nf = lerXmlNFe(texto)
     } else {
       const buffer = Buffer.from(await arquivo.arrayBuffer())
-      nf = await lerPdfDanfeV6(buffer)
+      nf = await lerPdfDanfeV7(buffer)
       console.info('[Compras][DANFE][diagnostico]', nf.diagnostico || 'sem diagnostico')
     }
 
     nf = await enriquecerVinculos(nf)
-
     return NextResponse.json({
       ok: true,
       arquivo: { nome: arquivo.name, tamanho: arquivo.size, tipo: arquivo.type || (ehXml ? 'application/xml' : 'application/pdf') },
       nf,
       seguranca: {
         nenhumaGravacao: true,
-        observacao: 'Prévia somente leitura. A NF, os itens e os custos só serão gravados após confirmação explícita.',
+        observacao: 'Prévia somente leitura. Fiscal, vínculo, financeiro, custo e estoque só são gravados após ações explícitas.',
       },
     })
   } catch (error) {
