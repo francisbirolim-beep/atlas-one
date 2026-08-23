@@ -16,8 +16,8 @@ async function carregarCaixa(usuarioId: string, role: string, id?: string | null
 }
 
 export async function GET(req: NextRequest) {
-  const usuario = await autenticarBalcao(req, 'venda-balcao', 'consulta')
-  if (!usuario) return NextResponse.json({ error: 'Sem acesso ao balcão.' }, { status: 403 })
+  const usuario = await autenticarBalcao(req, 'venda-balcao', 'consulta') || await autenticarBalcao(req, 'caixa-balcao', 'consulta')
+  if (!usuario) return NextResponse.json({ error: 'Sem acesso ao caixa do balcão.' }, { status: 403 })
   try {
     const caixa = await carregarCaixa(usuario.id, usuario.role, req.nextUrl.searchParams.get('id'))
     if (!caixa) return NextResponse.json({ ok: true, caixa: null, movimentos: [], resumo: {} })
