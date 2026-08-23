@@ -59,6 +59,8 @@ Evoluir a entrada de NF já existente para um fluxo integrado e auditável:
 - `ultimo_preco_vendido`: reservado a venda efetivamente confirmada; orçamento em rascunho não preenche.
 - Tipologias nunca devem consumir `produtos.preco` para formar custo.
 - Venda balcão nunca deve aplicar novamente a margem global da tipologia.
+- O cadastro principal de Produtos e a Central de Precificação usam a mesma fórmula de margem real.
+- A Venda Balcão permite preço unitário por linha, mostra a margem real resultante e bloqueia preço abaixo do mínimo.
 
 ## Migrações remotas
 
