@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Plus, Pencil, Package, ShieldAlert, Image as ImageIcon, ChevronDown, ChevronUp, Receipt, Tag } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, ChevronDown, ChevronUp, Image as ImageIcon, Package, Pencil, Plus, Receipt, ShieldAlert, Tag, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import {
@@ -12,31 +12,14 @@ import {
   excluirProduto,
   labelCategoriaProduto,
   listarCategoriasProduto,
-  CategoriaProdutoConfig,
+  type CategoriaProdutoConfig,
 } from '@/lib/produtos'
 import { listarFornecedores } from '@/lib/fornecedores'
 import { listarLinhas } from '@/lib/linhas'
 import { listarCores } from '@/lib/cores'
 import { uploadFotoProduto } from '@/lib/upload'
 import { Produto, CategoriaProduto, Fornecedor, Linha, Cor } from '@/lib/tipos'
-
-// Margem calculada sobre o custo: preço = custo * (1 + margem / 100).
-// As duas contas abaixo são usadas nos dois sentidos (digitou margem -> sai
-// preço; digitou preço -> sai margem), como pedido: sempre dá pra editar
-// qualquer um dos dois na mão.
-function precoAPartirDaMargem(custoTexto: string, margemTexto: string): string {
-  const custo = parseFloat(custoTexto.replace(',', '.'))
-  const margem = parseFloat(margemTexto.replace(',', '.'))
-  if (isNaN(custo) || isNaN(margem)) return ''
-  return (custo * (1 + margem / 100)).toFixed(2)
-}
-
-function margemAPartirDoPreco(custoTexto: string, precoTexto: string): string {
-  const custo = parseFloat(custoTexto.replace(',', '.'))
-  const preco = parseFloat(precoTexto.replace(',', '.'))
-  if (isNaN(custo) || isNaN(preco) || custo <= 0) return ''
-  return (((preco - custo) / custo) * 100).toFixed(2)
-}
+import { arredondarMoeda, margemRealPorPreco, precoPorMargemReal } from '@/lib/precificacaoBalcao'
 
 interface FormProduto {
   nome: string
@@ -62,44 +45,70 @@ interface FormProduto {
 }
 
 const FORM_VAZIO: FormProduto = {
-  nome: '',
-  categoria: 'produto',
-  custo: '',
-  margem: '',
-  preco: '',
-  unidade: 'unidade',
-  grupo: '',
-  marca: '',
-  peso_kg: '',
-  fornecedor_id: '',
-  linha_id: '',
-  cor_id: '',
-  largura_mm: '',
-  altura_mm: '',
-  descricao: '',
-  ncm: '',
-  icms_percentual: '',
-  ipi_percentual: '',
-  pis_percentual: '',
-  cofins_percentual: '',
+  nome: '', categoria: 'produto', custo: '', margem: '', preco: '', unidade: 'unidade',
+  grupo: '', marca: '', peso_kg: '', fornecedor_id: '', linha_id: '', cor_id: '',
+  largura_mm: '', altura_mm: '', descricao: '', ncm: '', icms_percentual: '',
+  ipi_percentual: '', pis_percentual: '', cofins_percentual: '',
+}
+
+function numeroTexto(v: string): number | null {
+  const txt = v.trim()
+  if (!txt) return null
+  const n = Number(txt.replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
+function precoAPartirDaMargem(custoTexto: string, margemTexto: string): string {
+  const valor = arredondarMoeda(precoPorMargemReal(numeroTexto(custoTexto), numeroTexto(margemTexto)))
+  return valor == null ? '' : valor.toFixed(2)
+}
+
+function margemAPartirDoPreco(custoTexto: string, precoTexto: string): string {
+  const valor = margemRealPorPreco(numeroTexto(custoTexto), numeroTexto(precoTexto))
+  return valor == null ? '' : valor.toFixed(2)
+}
+
+function formDoProduto(p: Produto): FormProduto {
+  return {
+    nome: p.nome,
+    categoria: p.categoria,
+    custo: p.custo != null ? String(p.custo) : '',
+    margem: p.margem_percentual != null ? String(p.margem_percentual) : '',
+    preco: String(p.preco ?? 0),
+    unidade: p.unidade || '',
+    grupo: p.grupo || '',
+    marca: p.marca || '',
+    peso_kg: p.peso_kg != null ? String(p.peso_kg) : '',
+    fornecedor_id: p.fornecedor_id || '',
+    linha_id: p.linha_id || '',
+    cor_id: p.cor_id || '',
+    largura_mm: p.largura_mm != null ? String(p.largura_mm) : '',
+    altura_mm: p.altura_mm != null ? String(p.altura_mm) : '',
+    descricao: p.descricao || '',
+    ncm: p.ncm || '',
+    icms_percentual: p.icms_percentual != null ? String(p.icms_percentual) : '',
+    ipi_percentual: p.ipi_percentual != null ? String(p.ipi_percentual) : '',
+    pis_percentual: p.pis_percentual != null ? String(p.pis_percentual) : '',
+    cofins_percentual: p.cofins_percentual != null ? String(p.cofins_percentual) : '',
+  }
 }
 
 export default function Produtos() {
   const [carregando, setCarregando] = useState(true)
   const [euSouMaster, setEuSouMaster] = useState<boolean | null>(null)
   const [produtos, setProdutos] = useState<Produto[]>([])
-  const [busca, setBusca] = useState('')
-  const [filtroLinha, setFiltroLinha] = useState('')
-  const [filtroCategoria, setFiltroCategoria] = useState('')
   const [categorias, setCategorias] = useState<CategoriaProdutoConfig[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [cores, setCores] = useState<Cor[]>([])
+  const [busca, setBusca] = useState('')
+  const [filtroLinha, setFiltroLinha] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
 
   const [novoAberto, setNovoAberto] = useState(false)
-  const [impostosNovoAberto, setImpostosNovoAberto] = useState(false)
   const [form, setForm] = useState<FormProduto>(FORM_VAZIO)
   const [fotoNovo, setFotoNovo] = useState<File | null>(null)
+  const [impostosNovoAberto, setImpostosNovoAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
@@ -110,9 +119,7 @@ export default function Produtos() {
   const [impostosEditAberto, setImpostosEditAberto] = useState<Record<string, boolean>>({})
   const [salvandoEdicaoId, setSalvandoEdicaoId] = useState<string | null>(null)
 
-  useEffect(() => {
-    carregar()
-  }, [])
+  useEffect(() => { carregar() }, [])
 
   async function carregar() {
     setCarregando(true)
@@ -120,849 +127,199 @@ export default function Produtos() {
     setEuSouMaster(me?.role === 'master')
     if (me?.role === 'master') {
       const [listaProdutos, listaFornecedores, listaLinhas, listaCores, listaCategorias] = await Promise.all([
-        listarProdutos(),
-        listarFornecedores(),
-        listarLinhas(),
-        listarCores(),
-        listarCategoriasProduto(),
+        listarProdutos(), listarFornecedores(), listarLinhas(), listarCores(), listarCategoriasProduto(),
       ])
       setProdutos(listaProdutos)
-      setCategorias(listaCategorias)
-      const categoriaUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('categoria') || '' : ''
-      setFiltroCategoria(categoriaUrl)
       setFornecedores(listaFornecedores)
       setLinhas(listaLinhas)
       setCores(listaCores)
+      setCategorias(listaCategorias)
+      const categoriaUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('categoria') || '' : ''
+      setFiltroCategoria(categoriaUrl)
     }
     setCarregando(false)
   }
 
-  function nomeFornecedor(id?: string | null): string | null {
+  const filtrados = useMemo(() => produtos.filter(p => {
+    if (filtroCategoria && p.categoria !== filtroCategoria) return false
+    if (filtroLinha && p.linha_id !== filtroLinha) return false
+    const q = busca.trim().toLowerCase()
+    if (!q) return true
+    return `${p.codigo || ''} ${p.nome} ${p.descricao || ''}`.toLowerCase().includes(q)
+  }), [produtos, filtroCategoria, filtroLinha, busca])
+
+  function nomeFornecedor(id?: string | null) {
     if (!id) return null
     return fornecedores.find(f => f.id === id)?.nome || null
   }
 
-  // --- form de cadastro novo ---
-
-  function mudarCampo(campo: keyof FormProduto, valor: string) {
-    setForm(prev => ({ ...prev, [campo]: valor }))
-  }
-
+  function mudarCampo(campo: keyof FormProduto, valor: string) { setForm(prev => ({ ...prev, [campo]: valor })) }
   function mudarCusto(valor: string) {
-    setForm(prev => ({
-      ...prev,
-      custo: valor,
-      preco: prev.margem.trim() ? precoAPartirDaMargem(valor, prev.margem) || prev.preco : prev.preco,
-    }))
+    setForm(prev => ({ ...prev, custo: valor, preco: prev.margem.trim() ? precoAPartirDaMargem(valor, prev.margem) || prev.preco : prev.preco }))
   }
-
+  function mudarMargem(valor: string) {
+    setForm(prev => ({ ...prev, margem: valor, preco: precoAPartirDaMargem(prev.custo, valor) || prev.preco }))
+  }
   function mudarPreco(valor: string) {
     setForm(prev => ({ ...prev, preco: valor, margem: margemAPartirDoPreco(prev.custo, valor) || prev.margem }))
   }
 
-  function mudarMargem(valor: string) {
-    setForm(prev => ({ ...prev, margem: valor, preco: precoAPartirDaMargem(prev.custo, valor) || prev.preco }))
+  function validarPrecificacao(dados: FormProduto) {
+    const preco = numeroTexto(dados.preco)
+    const margem = numeroTexto(dados.margem)
+    if (preco == null || preco < 0) return 'Preço de venda inválido.'
+    if (margem != null && (margem < 0 || margem >= 100)) return 'A margem real deve estar entre 0% e menos de 100%.'
+    return ''
   }
 
   async function cadastrarProduto(e: React.FormEvent) {
     e.preventDefault()
-    setErro('')
-    setSucesso('')
-    if (!form.nome.trim()) {
-      setErro('Preencha o nome do produto')
-      return
-    }
-    const preco = parseFloat(form.preco.replace(',', '.'))
-    if (isNaN(preco) || preco < 0) {
-      setErro('Preço inválido')
-      return
-    }
+    setErro(''); setSucesso('')
+    if (!form.nome.trim()) return setErro('Preencha o nome do produto.')
+    const erroPreco = validarPrecificacao(form)
+    if (erroPreco) return setErro(erroPreco)
+
     setSalvando(true)
     const me = await usuarioAtual()
     let fotoUrl: string | null = null
-    if (fotoNovo) {
-      fotoUrl = await uploadFotoProduto(fotoNovo)
-    }
+    if (fotoNovo) fotoUrl = await uploadFotoProduto(fotoNovo)
     const { error } = await criarProduto({
-      nome: form.nome.trim(),
-      categoria: form.categoria,
-      preco,
+      nome: form.nome.trim(), categoria: form.categoria, preco: numeroTexto(form.preco) || 0,
       unidade: form.unidade.trim() || 'unidade',
       largura_mm: form.largura_mm.trim() ? parseInt(form.largura_mm) : null,
       altura_mm: form.altura_mm.trim() ? parseInt(form.altura_mm) : null,
-      descricao: form.descricao.trim() || null,
-      foto_url: fotoUrl,
-      criado_por_id: me?.id || null,
-      criado_por_nome: me?.nome || null,
-      custo: form.custo.trim() ? parseFloat(form.custo.replace(',', '.')) : null,
-      margem_percentual: form.margem.trim() ? parseFloat(form.margem.replace(',', '.')) : null,
-      grupo: form.grupo.trim() || null,
-      marca: form.marca.trim() || null,
-      peso_kg: form.peso_kg.trim() ? parseFloat(form.peso_kg.replace(',', '.')) : null,
-      fornecedor_id: form.fornecedor_id || null,
-      linha_id: form.linha_id || null,
-      cor_id: form.cor_id || null,
-      ncm: form.ncm.trim() || null,
-      icms_percentual: form.icms_percentual.trim() ? parseFloat(form.icms_percentual.replace(',', '.')) : null,
-      ipi_percentual: form.ipi_percentual.trim() ? parseFloat(form.ipi_percentual.replace(',', '.')) : null,
-      pis_percentual: form.pis_percentual.trim() ? parseFloat(form.pis_percentual.replace(',', '.')) : null,
-      cofins_percentual: form.cofins_percentual.trim() ? parseFloat(form.cofins_percentual.replace(',', '.')) : null,
+      descricao: form.descricao.trim() || null, foto_url: fotoUrl,
+      criado_por_id: me?.id || null, criado_por_nome: me?.nome || null,
+      custo: numeroTexto(form.custo), margem_percentual: numeroTexto(form.margem),
+      grupo: form.grupo.trim() || null, marca: form.marca.trim() || null,
+      peso_kg: numeroTexto(form.peso_kg), fornecedor_id: form.fornecedor_id || null,
+      linha_id: form.linha_id || null, cor_id: form.cor_id || null, ncm: form.ncm.trim() || null,
+      icms_percentual: numeroTexto(form.icms_percentual), ipi_percentual: numeroTexto(form.ipi_percentual),
+      pis_percentual: numeroTexto(form.pis_percentual), cofins_percentual: numeroTexto(form.cofins_percentual),
     })
     setSalvando(false)
-    if (error) {
-      setErro('Erro ao cadastrar produto')
-      return
-    }
+    if (error) return setErro('Erro ao cadastrar produto.')
     setSucesso(`Produto ${form.nome} cadastrado com sucesso.`)
     setForm({ ...FORM_VAZIO, categoria: (filtroCategoria || 'produto') as CategoriaProduto })
-    setFotoNovo(null)
-    setImpostosNovoAberto(false)
+    setFotoNovo(null); setImpostosNovoAberto(false); setNovoAberto(false)
     setProdutos(await listarProdutos())
   }
 
-  // --- edição ---
-
   function iniciarEdicao(p: Produto) {
     setEditandoId(p.id)
-    setEditForm(prev => ({
-      ...prev,
-      [p.id]: {
-        nome: p.nome,
-        categoria: p.categoria,
-        custo: p.custo != null ? String(p.custo) : '',
-        margem: p.margem_percentual != null ? String(p.margem_percentual) : '',
-        preco: String(p.preco),
-        unidade: p.unidade || '',
-        grupo: p.grupo || '',
-        marca: p.marca || '',
-        peso_kg: p.peso_kg != null ? String(p.peso_kg) : '',
-        fornecedor_id: p.fornecedor_id || '',
-        linha_id: p.linha_id || '',
-        cor_id: p.cor_id || '',
-        largura_mm: p.largura_mm != null ? String(p.largura_mm) : '',
-        altura_mm: p.altura_mm != null ? String(p.altura_mm) : '',
-        descricao: p.descricao || '',
-        ncm: p.ncm || '',
-        icms_percentual: p.icms_percentual != null ? String(p.icms_percentual) : '',
-        ipi_percentual: p.ipi_percentual != null ? String(p.ipi_percentual) : '',
-        pis_percentual: p.pis_percentual != null ? String(p.pis_percentual) : '',
-        cofins_percentual: p.cofins_percentual != null ? String(p.cofins_percentual) : '',
-      },
-    }))
+    setEditForm(prev => ({ ...prev, [p.id]: formDoProduto(p) }))
   }
-
-  function cancelarEdicao() {
-    setEditandoId(null)
-  }
-
   function mudarCampoEdicao(id: string, campo: keyof FormProduto, valor: string) {
     setEditForm(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }))
   }
-
   function mudarCustoEdicao(id: string, valor: string) {
     setEditForm(prev => {
       const atual = prev[id]
-      return {
-        ...prev,
-        [id]: {
-          ...atual,
-          custo: valor,
-          preco: atual.margem.trim() ? precoAPartirDaMargem(valor, atual.margem) || atual.preco : atual.preco,
-        },
-      }
+      if (!atual) return prev
+      return { ...prev, [id]: { ...atual, custo: valor, preco: atual.margem.trim() ? precoAPartirDaMargem(valor, atual.margem) || atual.preco : atual.preco } }
     })
   }
-
-  function mudarPrecoEdicao(id: string, valor: string) {
-    setEditForm(prev => {
-      const atual = prev[id]
-      return { ...prev, [id]: { ...atual, preco: valor, margem: margemAPartirDoPreco(atual.custo, valor) || atual.margem } }
-    })
-  }
-
   function mudarMargemEdicao(id: string, valor: string) {
     setEditForm(prev => {
       const atual = prev[id]
+      if (!atual) return prev
       return { ...prev, [id]: { ...atual, margem: valor, preco: precoAPartirDaMargem(atual.custo, valor) || atual.preco } }
+    })
+  }
+  function mudarPrecoEdicao(id: string, valor: string) {
+    setEditForm(prev => {
+      const atual = prev[id]
+      if (!atual) return prev
+      return { ...prev, [id]: { ...atual, preco: valor, margem: margemAPartirDoPreco(atual.custo, valor) || atual.margem } }
     })
   }
 
   async function salvarEdicao(id: string) {
     const dados = editForm[id]
-    if (!dados) return
-    if (!dados.nome.trim()) return
-    const preco = parseFloat(dados.preco.replace(',', '.'))
-    if (isNaN(preco) || preco < 0) return
-    setSalvandoEdicaoId(id)
+    if (!dados?.nome.trim()) return
+    const erroPreco = validarPrecificacao(dados)
+    if (erroPreco) return setErro(erroPreco)
+    setErro(''); setSalvandoEdicaoId(id)
     let fotoUrl: string | undefined
     const arquivo = fotoEditFile[id]
     if (arquivo) {
       const url = await uploadFotoProduto(arquivo)
       if (url) fotoUrl = url
     }
-    await atualizarProduto(id, {
-      nome: dados.nome.trim(),
-      categoria: dados.categoria,
-      preco,
+    const { error } = await atualizarProduto(id, {
+      nome: dados.nome.trim(), categoria: dados.categoria, preco: numeroTexto(dados.preco) || 0,
       unidade: dados.unidade.trim() || null,
       status_validacao: dados.unidade.trim() ? (produtos.find(p => p.id === id)?.status_validacao || 'importado') : 'importado',
       largura_mm: dados.largura_mm.trim() ? parseInt(dados.largura_mm) : null,
       altura_mm: dados.altura_mm.trim() ? parseInt(dados.altura_mm) : null,
-      descricao: dados.descricao.trim() || null,
-      custo: dados.custo.trim() ? parseFloat(dados.custo.replace(',', '.')) : null,
-      margem_percentual: dados.margem.trim() ? parseFloat(dados.margem.replace(',', '.')) : null,
-      grupo: dados.grupo.trim() || null,
-      marca: dados.marca.trim() || null,
-      peso_kg: dados.peso_kg.trim() ? parseFloat(dados.peso_kg.replace(',', '.')) : null,
-      fornecedor_id: dados.fornecedor_id || null,
-      linha_id: dados.linha_id || null,
-      cor_id: dados.cor_id || null,
-      ncm: dados.ncm.trim() || null,
-      icms_percentual: dados.icms_percentual.trim() ? parseFloat(dados.icms_percentual.replace(',', '.')) : null,
-      ipi_percentual: dados.ipi_percentual.trim() ? parseFloat(dados.ipi_percentual.replace(',', '.')) : null,
-      pis_percentual: dados.pis_percentual.trim() ? parseFloat(dados.pis_percentual.replace(',', '.')) : null,
-      cofins_percentual: dados.cofins_percentual.trim() ? parseFloat(dados.cofins_percentual.replace(',', '.')) : null,
+      descricao: dados.descricao.trim() || null, custo: numeroTexto(dados.custo),
+      margem_percentual: numeroTexto(dados.margem), grupo: dados.grupo.trim() || null,
+      marca: dados.marca.trim() || null, peso_kg: numeroTexto(dados.peso_kg),
+      fornecedor_id: dados.fornecedor_id || null, linha_id: dados.linha_id || null,
+      cor_id: dados.cor_id || null, ncm: dados.ncm.trim() || null,
+      icms_percentual: numeroTexto(dados.icms_percentual), ipi_percentual: numeroTexto(dados.ipi_percentual),
+      pis_percentual: numeroTexto(dados.pis_percentual), cofins_percentual: numeroTexto(dados.cofins_percentual),
       ...(fotoUrl ? { foto_url: fotoUrl } : {}),
     })
+    setSalvandoEdicaoId(null)
+    if (error) return setErro('Não foi possível salvar o produto.')
     setProdutos(await listarProdutos())
     setFotoEditFile(prev => ({ ...prev, [id]: null }))
-    setSalvandoEdicaoId(null)
     setEditandoId(null)
   }
 
-  async function alternarAtivoAcao(p: Produto) {
-    await alternarAtivoProduto(p.id, !p.ativo)
-    setProdutos(await listarProdutos())
-  }
-
+  async function alternarAtivoAcao(p: Produto) { await alternarAtivoProduto(p.id, !p.ativo); setProdutos(await listarProdutos()) }
   async function excluirComConfirmacao(p: Produto) {
-    const confirmar = window.confirm(`Excluir o produto "${p.nome}"? Essa ação não pode ser desfeita.`)
-    if (!confirmar) return
-    await excluirProduto(p.id)
-    setProdutos(await listarProdutos())
+    if (!window.confirm(`Excluir o produto "${p.nome}"? Essa ação não pode ser desfeita.`)) return
+    await excluirProduto(p.id); setProdutos(await listarProdutos())
   }
 
   const unidadesPendentes = produtos.filter(p => p.categoria === 'acessorio' && !p.unidade).length
 
-  if (carregando) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
-  }
+  if (carregando) return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
+  if (!euSouMaster) return <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 gap-3"><ShieldAlert size={40} className="text-slate-300"/><p className="text-slate-500">Só o usuário master pode acessar Produtos.</p><Link href="/cadastro" className="text-brand-navy text-sm hover:underline">Voltar ao Cadastro</Link></div>
 
-  if (!euSouMaster) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 gap-3">
-        <ShieldAlert size={40} className="text-slate-300" />
-        <p className="text-slate-500">Só o usuário master pode acessar Produtos.</p>
-        <Link href="/cadastro" className="text-brand-navy text-sm hover:underline">Voltar ao Cadastro</Link>
-      </div>
-    )
-  }
+  return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
+    <header className="bg-white border-b border-slate-200"><div className="max-w-5xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
+      <Link href="/cadastro" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20}/></Link><Package size={22} className="text-brand-navy"/>
+      <div className="flex-1"><h1 className="text-lg font-bold text-slate-800">Produtos</h1><p className="text-sm text-slate-500">Custo técnico, cadastro e dados fiscais. Preço balcão usa margem real.</p></div>
+      {unidadesPendentes>0&&<Link href="/cadastro/produtos/unidades-pendentes" className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-3 py-1.5"><ShieldAlert size={14}/>{unidadesPendentes} unidades pendentes</Link>}
+      <Link href="/cadastro/produtos/precificacao" className="flex items-center gap-1.5 text-xs font-medium text-brand-navy border border-brand-navy rounded-lg px-3 py-1.5"><Tag size={14}/>Precificação balcão</Link>
+    </div></header>
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href="/cadastro" className="p-2 hover:bg-slate-100 rounded-lg transition">
-            <ArrowLeft size={20} />
-          </Link>
-          <Package size={22} className="text-brand-navy" />
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-slate-800">Produtos</h1>
-            <p className="text-sm text-slate-500">Catálogo, custo, margem e impostos</p>
-          </div>
-          {unidadesPendentes > 0 && (
-            <Link href="/cadastro/produtos/unidades-pendentes" className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-3 py-1.5 hover:bg-amber-100 transition">
-              <ShieldAlert size={14} /> {unidadesPendentes} unidades pendentes
-            </Link>
-          )}
-          <Link href="/cadastro/produtos/precificacao" className="flex items-center gap-1.5 text-xs font-medium text-brand-navy border border-brand-navy rounded-lg px-3 py-1.5 hover:bg-brand-navyLight transition">
-            <Tag size={14} /> Precificar em lote
-          </Link>
-        </div>
-      </header>
+    <main className="max-w-5xl mx-auto px-4 py-8 space-y-5">
+      <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><strong>Regra de preço:</strong> custo é técnico e entra nas tipologias. A margem desta tela é margem real de venda balcão: preço = custo ÷ (1 − margem).</section>
+      {erro&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}{sucesso&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{sucesso}</div>}
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        <section className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="mb-8">
-            {!novoAberto ? (
-              <button
-                onClick={() => {
-                  setForm({ ...FORM_VAZIO, categoria: (filtroCategoria || 'produto') as CategoriaProduto })
-                  setNovoAberto(true)
-                }}
-                className="flex items-center gap-2 text-sm font-medium text-brand-navy hover:underline"
-              >
-                <Plus size={16} /> Cadastrar produto novo
-              </button>
-            ) : (
-              <div className="border border-slate-200 rounded-xl p-4">
-                <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
-                  <Package size={16} /> Cadastrar produto novo
-                </h3>
-                <form onSubmit={cadastrarProduto} className="space-y-3">
-                  <input
-                    type="text"
-                    value={form.nome}
-                    onChange={e => mudarCampo('nome', e.target.value)}
-                    placeholder="Nome do produto"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <select
-                    value={form.categoria}
-                    onChange={e => mudarCampo('categoria', e.target.value as CategoriaProduto)}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  >
-                    {categorias.map(c => (
-                      <option key={c.valor} value={c.valor}>{c.label}</option>
-                    ))}
-                  </select>
+      <section className="bg-white rounded-2xl border border-slate-200 p-5">
+        {!novoAberto?<button onClick={()=>{setForm({...FORM_VAZIO,categoria:(filtroCategoria||'produto') as CategoriaProduto});setNovoAberto(true)}} className="flex items-center gap-2 text-sm font-semibold text-brand-navy"><Plus size={16}/>Cadastrar produto novo</button>:
+        <form onSubmit={cadastrarProduto} className="space-y-3"><h2 className="font-semibold text-slate-800">Novo produto</h2><ProdutoForm dados={form} categorias={categorias} fornecedores={fornecedores} linhas={linhas} cores={cores} impostosAberto={impostosNovoAberto} onToggleImpostos={()=>setImpostosNovoAberto(v=>!v)} onCampo={mudarCampo} onCusto={mudarCusto} onMargem={mudarMargem} onPreco={mudarPreco} fotoInput={f=>setFotoNovo(f)}/><div className="flex gap-2"><button type="submit" disabled={salvando} className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium disabled:opacity-50">{salvando?'Cadastrando...':'Cadastrar produto'}</button><button type="button" onClick={()=>setNovoAberto(false)} className="px-4 border rounded-xl text-sm">Cancelar</button></div></form>}
+      </section>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      value={form.custo}
-                      onChange={e => mudarCusto(e.target.value)}
-                      placeholder="Custo (R$) — opcional"
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={form.margem}
-                      onChange={e => mudarMargem(e.target.value)}
-                      placeholder="Margem (%) — opcional"
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={form.preco}
-                      onChange={e => mudarPreco(e.target.value)}
-                      placeholder="Preço de venda (R$) *"
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 -mt-2">
-                    Preencha custo + margem que o preço sai sozinho, ou digite o preço direto que a margem calcula sozinha.
-                  </p>
+      <section className="bg-white rounded-2xl border border-slate-200 p-5">
+        <h2 className="font-semibold text-slate-800 mb-4">Produtos cadastrados</h2>
+        <div className="grid gap-2 sm:grid-cols-3 mb-3"><select value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)} className="border rounded-lg px-3 py-2 text-sm"><option value="">Todas as categorias</option>{categorias.map(c=><option key={c.valor} value={c.valor}>{c.label}</option>)}</select><select value={filtroLinha} onChange={e=>setFiltroLinha(e.target.value)} className="border rounded-lg px-3 py-2 text-sm"><option value="">Todas as linhas</option>{linhas.filter(l=>l.ativo).map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar código, nome ou descrição" className="border rounded-lg px-3 py-2 text-sm"/></div>
+        <div className="space-y-2">{filtrados.map(p=><div key={p.id} className="border border-slate-100 rounded-xl p-3">
+          <div className="flex items-start gap-3">{p.foto_url?<img src={p.foto_url} alt="" className="w-11 h-11 rounded-lg object-cover border"/>:<div className="w-11 h-11 rounded-lg bg-slate-100 flex items-center justify-center"><ImageIcon size={15} className="text-slate-300"/></div>}<div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-[11px] bg-slate-100 rounded px-1.5 py-0.5">{p.codigo||'sem código'}</span><strong className={p.ativo?'text-slate-800':'text-slate-400 line-through'}>{p.nome}</strong><span className="text-xs text-slate-400">{labelCategoriaProduto(p.categoria)}</span></div><p className="mt-1 text-xs text-slate-500">Preço balcão {numeroTexto(String(p.preco))!=null?`R$ ${Number(p.preco).toFixed(2)}`:'—'} / {p.unidade||`unidade pendente (${p.unidade_origem||'origem n/d'})`}{p.custo!=null?` • custo R$ ${Number(p.custo).toFixed(2)}`:''}{p.margem_percentual!=null?` • margem real ${Number(p.margem_percentual).toFixed(2)}%`:''}</p><p className="text-xs text-slate-400">{[p.grupo,p.marca,nomeFornecedor(p.fornecedor_id)].filter(Boolean).join(' • ')}</p></div><span className={`text-xs px-2 py-1 rounded-full ${p.ativo?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500'}`}>{p.ativo?'Ativo':'Inativo'}</span></div>
+          {editandoId===p.id?<div className="mt-3 border-t pt-3 space-y-3"><ProdutoForm dados={editForm[p.id]||formDoProduto(p)} categorias={categorias} fornecedores={fornecedores} linhas={linhas} cores={cores} impostosAberto={Boolean(impostosEditAberto[p.id])} onToggleImpostos={()=>setImpostosEditAberto(prev=>({...prev,[p.id]:!prev[p.id]}))} onCampo={(c,v)=>mudarCampoEdicao(p.id,c,v)} onCusto={v=>mudarCustoEdicao(p.id,v)} onMargem={v=>mudarMargemEdicao(p.id,v)} onPreco={v=>mudarPrecoEdicao(p.id,v)} unidadeBloqueada={!p.unidade} unidadeOrigem={p.unidade_origem} qtdeEmbalagem={p.qtde_embalagem_origem} fotoInput={f=>setFotoEditFile(prev=>({...prev,[p.id]:f}))}/>{!p.unidade&&<Link href={`/cadastro/produtos/unidades-pendentes?q=${encodeURIComponent(p.codigo||p.nome)}`} className="text-xs font-semibold text-amber-700 underline">Validar unidade operacional</Link>}<div className="flex gap-2"><button onClick={()=>salvarEdicao(p.id)} disabled={salvandoEdicaoId===p.id} className="flex-1 rounded-lg bg-brand-navy text-white py-2 text-xs font-semibold">{salvandoEdicaoId===p.id?'Salvando...':'Salvar'}</button><button onClick={()=>setEditandoId(null)} className="px-3 border rounded-lg text-xs">Cancelar</button></div></div>:
+          <div className="mt-3 flex gap-4 text-xs"><button onClick={()=>iniciarEdicao(p)} className="flex items-center gap-1 text-brand-navy"><Pencil size={13}/>Editar</button><button onClick={()=>alternarAtivoAcao(p)} className="text-slate-500">{p.ativo?'Desativar':'Ativar'}</button><button onClick={()=>excluirComConfirmacao(p)} className="flex items-center gap-1 text-red-500"><Trash2 size={13}/>Excluir</button></div>}
+        </div>)}{!filtrados.length&&<p className="text-sm text-slate-400 text-center py-6">Nenhum produto encontrado.</p>}</div>
+      </section>
+    </main>
+  </div>
+}
 
-                  <input
-                    type="text"
-                    value={form.unidade}
-                    onChange={e => mudarCampo('unidade', e.target.value)}
-                    placeholder="Unidade (ex: unidade, metro, kg)"
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
+function ProdutoForm({dados,categorias,fornecedores,linhas,cores,impostosAberto,onToggleImpostos,onCampo,onCusto,onMargem,onPreco,fotoInput,unidadeBloqueada=false,unidadeOrigem,qtdeEmbalagem}:{dados:FormProduto;categorias:CategoriaProdutoConfig[];fornecedores:Fornecedor[];linhas:Linha[];cores:Cor[];impostosAberto:boolean;onToggleImpostos:()=>void;onCampo:(c:keyof FormProduto,v:string)=>void;onCusto:(v:string)=>void;onMargem:(v:string)=>void;onPreco:(v:string)=>void;fotoInput:(f:File|null)=>void;unidadeBloqueada?:boolean;unidadeOrigem?:string|null;qtdeEmbalagem?:number|null}){
+  return <div className="space-y-3"><div className="grid gap-2 sm:grid-cols-2"><Campo label="Nome" value={dados.nome} onChange={v=>onCampo('nome',v)}/><label className="text-xs text-slate-500">Categoria<select value={dados.categoria} onChange={e=>onCampo('categoria',e.target.value)} className="mt-1 w-full border rounded-xl p-2.5 text-sm">{categorias.map(c=><option key={c.valor} value={c.valor}>{c.label}</option>)}</select></label></div>
+    <div className="grid gap-2 sm:grid-cols-3"><Campo label="Custo técnico (R$)" value={dados.custo} onChange={onCusto}/><Campo label="Margem real balcão (%)" value={dados.margem} onChange={onMargem}/><Campo label="Preço balcão (R$)" value={dados.preco} onChange={onPreco}/></div><p className="text-xs text-slate-400">Custo + margem calcula o preço. Ao digitar o preço, o Atlas calcula a margem real: (preço − custo) ÷ preço.</p>
+    <div className="grid gap-2 sm:grid-cols-3"><Campo label="Unidade operacional" value={dados.unidade} onChange={v=>onCampo('unidade',v)} disabled={unidadeBloqueada}/><Campo label="Grupo" value={dados.grupo} onChange={v=>onCampo('grupo',v)}/><Campo label="Marca" value={dados.marca} onChange={v=>onCampo('marca',v)}/></div>{unidadeBloqueada&&<p className="text-xs text-amber-700">Origem: {unidadeOrigem||'não informada'}{qtdeEmbalagem!=null?` • embalagem ${qtdeEmbalagem}`:''}. Valide a unidade no fluxo auditado.</p>}
+    <div className="grid gap-2 sm:grid-cols-3"><Campo label="Peso (kg)" value={dados.peso_kg} onChange={v=>onCampo('peso_kg',v)}/><label className="text-xs text-slate-500">Fornecedor<select value={dados.fornecedor_id} onChange={e=>onCampo('fornecedor_id',e.target.value)} className="mt-1 w-full border rounded-xl p-2.5 text-sm"><option value="">Sem fornecedor</option>{fornecedores.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}</select></label><label className="text-xs text-slate-500">Linha<select value={dados.linha_id} onChange={e=>onCampo('linha_id',e.target.value)} className="mt-1 w-full border rounded-xl p-2.5 text-sm"><option value="">Sem linha</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></label></div>
+    <div className="grid gap-2 sm:grid-cols-3"><label className="text-xs text-slate-500">Cor<select value={dados.cor_id} onChange={e=>onCampo('cor_id',e.target.value)} className="mt-1 w-full border rounded-xl p-2.5 text-sm"><option value="">Sem cor</option>{cores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label><Campo label="Largura (mm)" value={dados.largura_mm} onChange={v=>onCampo('largura_mm',v)}/><Campo label="Altura (mm)" value={dados.altura_mm} onChange={v=>onCampo('altura_mm',v)}/></div>
+    <label className="block text-xs text-slate-500">Descrição<textarea value={dados.descricao} onChange={e=>onCampo('descricao',e.target.value)} rows={2} className="mt-1 w-full border rounded-xl p-2.5 text-sm"/></label><label className="block text-xs text-slate-500"><span className="flex items-center gap-1"><ImageIcon size={13}/>Foto</span><input type="file" accept="image/*" onChange={e=>fotoInput(e.target.files?.[0]||null)} className="mt-1 w-full border rounded-xl p-2 text-xs"/></label>
+    <div><button type="button" onClick={onToggleImpostos} className="flex items-center gap-1 text-xs font-semibold text-brand-navy"><Receipt size={13}/>Dados fiscais {impostosAberto?<ChevronUp size={13}/>:<ChevronDown size={13}/>}</button>{impostosAberto&&<div className="mt-2 grid gap-2 sm:grid-cols-5 border rounded-xl p-3"><Campo label="NCM" value={dados.ncm} onChange={v=>onCampo('ncm',v)}/><Campo label="ICMS %" value={dados.icms_percentual} onChange={v=>onCampo('icms_percentual',v)}/><Campo label="IPI %" value={dados.ipi_percentual} onChange={v=>onCampo('ipi_percentual',v)}/><Campo label="PIS %" value={dados.pis_percentual} onChange={v=>onCampo('pis_percentual',v)}/><Campo label="COFINS %" value={dados.cofins_percentual} onChange={v=>onCampo('cofins_percentual',v)}/></div>}</div>
+  </div>
+}
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={form.grupo}
-                      onChange={e => mudarCampo('grupo', e.target.value)}
-                      placeholder="Grupo — opcional"
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={form.marca}
-                      onChange={e => mudarCampo('marca', e.target.value)}
-                      placeholder="Marca — opcional"
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={form.peso_kg}
-                      onChange={e => mudarCampo('peso_kg', e.target.value)}
-                      placeholder="Peso (kg) — opcional"
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <select
-                      value={form.fornecedor_id}
-                      onChange={e => mudarCampo('fornecedor_id', e.target.value)}
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    >
-                      <option value="">Fornecedor — opcional</option>
-                      {fornecedores.map(f => (
-                        <option key={f.id} value={f.id}>{f.nome}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={form.linha_id}
-                      onChange={e => mudarCampo('linha_id', e.target.value)}
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    >
-                      <option value="">Linha — opcional</option>
-                      {linhas.map(l => (
-                        <option key={l.id} value={l.id}>{l.nome}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={form.cor_id}
-                      onChange={e => mudarCampo('cor_id', e.target.value)}
-                      className="border border-slate-300 rounded-xl p-3 text-sm"
-                    >
-                      <option value="">Cor — opcional</option>
-                      {cores.map(c => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={form.largura_mm}
-                      onChange={e => mudarCampo('largura_mm', e.target.value)}
-                      placeholder="Largura (mm) — opcional"
-                      className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={form.altura_mm}
-                      onChange={e => mudarCampo('altura_mm', e.target.value)}
-                      placeholder="Altura (mm) — opcional"
-                      className="flex-1 border border-slate-300 rounded-xl p-3 text-sm"
-                    />
-                  </div>
-                  <textarea
-                    value={form.descricao}
-                    onChange={e => mudarCampo('descricao', e.target.value)}
-                    placeholder="Descrição — opcional"
-                    rows={2}
-                    className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-                  />
-                  <div>
-                    <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
-                      <ImageIcon size={13} /> Foto do produto — opcional
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={e => setFotoNovo(e.target.files?.[0] || null)}
-                      className="w-full border border-slate-300 rounded-xl p-2.5 text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => setImpostosNovoAberto(v => !v)}
-                      className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                    >
-                      <Receipt size={13} />
-                      Impostos — opcional
-                      {impostosNovoAberto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                    </button>
-                    {impostosNovoAberto && (
-                      <div className="mt-2 border border-slate-100 rounded-lg p-3 space-y-2">
-                        <input
-                          type="text"
-                          value={form.ncm}
-                          onChange={e => mudarCampo('ncm', e.target.value)}
-                          placeholder="NCM"
-                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            value={form.icms_percentual}
-                            onChange={e => mudarCampo('icms_percentual', e.target.value)}
-                            placeholder="ICMS (%)"
-                            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          />
-                          <input
-                            type="text"
-                            value={form.ipi_percentual}
-                            onChange={e => mudarCampo('ipi_percentual', e.target.value)}
-                            placeholder="IPI (%)"
-                            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          />
-                          <input
-                            type="text"
-                            value={form.pis_percentual}
-                            onChange={e => mudarCampo('pis_percentual', e.target.value)}
-                            placeholder="PIS (%)"
-                            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          />
-                          <input
-                            type="text"
-                            value={form.cofins_percentual}
-                            onChange={e => mudarCampo('cofins_percentual', e.target.value)}
-                            placeholder="COFINS (%)"
-                            className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {erro && <p className="text-red-500 text-sm">{erro}</p>}
-                  {sucesso && <p className="text-brand-teal text-sm">{sucesso}</p>}
-
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={salvando}
-                      className="flex-1 py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                    >
-                      {salvando ? 'Cadastrando...' : 'Cadastrar produto'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNovoAberto(false)}
-                      className="px-4 py-3 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">
-            <Package size={16} /> Produtos cadastrados
-          </h2>
-
-          <select
-            value={filtroCategoria}
-            onChange={e => setFiltroCategoria(e.target.value)}
-            className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
-          >
-            <option value="">Todas as categorias</option>
-            {categorias.map(c => (
-              <option key={c.valor} value={c.valor}>{c.label}</option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por codigo, nome ou descricao (ex.: SU010)"
-            className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
-          />
-
-          <select
-            value={filtroLinha}
-            onChange={e => setFiltroLinha(e.target.value)}
-            className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/40"
-          >
-            <option value="">Todas as linhas</option>
-            {linhas.filter(l => l.ativo).map(l => (
-              <option key={l.id} value={l.id}>{l.nome}</option>
-            ))}
-          </select>
-          {produtos.filter(p => {
-            if (filtroCategoria && p.categoria !== filtroCategoria) return false
-            if (filtroLinha && p.linha_id !== filtroLinha) return false
-            const q = busca.trim().toLowerCase()
-            if (!q) return true
-            const codigo = (p.codigo || p.nome.split(' - ')[0] || '').toLowerCase()
-            return p.nome.toLowerCase().includes(q) || codigo.includes(q) || (p.descricao || '').toLowerCase().includes(q)
-          }).length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhum produto encontrado nesta categoria ou com estes filtros.</p>
-          ) : (
-            <div className="space-y-2">
-              {produtos.filter(p => {
-                if (filtroCategoria && p.categoria !== filtroCategoria) return false
-                if (filtroLinha && p.linha_id !== filtroLinha) return false
-                const q = busca.trim().toLowerCase()
-                if (!q) return true
-                const codigo = (p.codigo || p.nome.split(' - ')[0] || '').toLowerCase()
-                return p.nome.toLowerCase().includes(q) || codigo.includes(q) || (p.descricao || '').toLowerCase().includes(q)
-              }).map(p => (
-                <div key={p.id} className="border border-slate-100 rounded-lg px-3 py-2 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {p.foto_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.foto_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-slate-200" />
-                      ) : (
-                        <span className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                          <ImageIcon size={14} className="text-slate-300" />
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <p className={`font-medium truncate ${p.ativo ? 'text-slate-800' : 'text-slate-400 line-through'}`}><span className="inline-block px-1.5 py-0.5 mr-1.5 rounded bg-slate-100 text-slate-600 text-[10px] font-mono align-middle">{p.codigo || p.nome.split(' - ')[0]}</span>{p.nome}</p>
-                        <p className="text-slate-400 text-xs">
-                          {labelCategoriaProduto(p.categoria)} · R$ {p.preco.toFixed(2)} / {p.unidade || `pendente — origem ${p.unidade_origem || 'não informada'}`}{p.qtde_embalagem_origem != null ? ` · Qtde Emb. ${p.qtde_embalagem_origem}` : ''}
-                          {p.custo != null ? ` · custo R$ ${p.custo.toFixed(2)}` : ''}
-                          {p.margem_percentual != null ? ` · margem ${p.margem_percentual.toFixed(1)}%` : ''}
-                        </p>
-                        <p className="text-slate-400 text-xs">
-                          {[p.grupo, p.marca, nomeFornecedor(p.fornecedor_id), (p.largura_mm || p.altura_mm) ? `${p.largura_mm || '?'} x ${p.altura_mm || '?'} mm` : null]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </p>
-                        {p.descricao && <p className="text-slate-400 text-xs">{p.descricao}</p>}
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${p.ativo ? 'bg-brand-navyLight text-brand-navyDark' : 'bg-slate-100 text-slate-500'}`}>
-                      {p.ativo ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </div>
-
-                  {editandoId === p.id ? (
-                    <div className="border border-slate-100 rounded-lg p-3 space-y-2">
-                      <input
-                        type="text"
-                        value={editForm[p.id]?.nome ?? ''}
-                        onChange={e => mudarCampoEdicao(p.id, 'nome', e.target.value)}
-                        placeholder="Nome"
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                      />
-                      <select
-                        value={editForm[p.id]?.categoria ?? 'outro'}
-                        onChange={e => mudarCampoEdicao(p.id, 'categoria', e.target.value as CategoriaProduto)}
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                      >
-                        {categorias.map(c => (
-                          <option key={c.valor} value={c.valor}>{c.label}</option>
-                        ))}
-                      </select>
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.custo ?? ''}
-                          onChange={e => mudarCustoEdicao(p.id, e.target.value)}
-                          placeholder="Custo (R$)"
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.margem ?? ''}
-                          onChange={e => mudarMargemEdicao(p.id, e.target.value)}
-                          placeholder="Margem (%)"
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.preco ?? ''}
-                          onChange={e => mudarPrecoEdicao(p.id, e.target.value)}
-                          placeholder="Preço (R$)"
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-
-                      <input
-                        type="text"
-                        value={editForm[p.id]?.unidade ?? ''}
-                        onChange={e => mudarCampoEdicao(p.id, 'unidade', e.target.value)}
-                        disabled={!p.unidade}
-                        placeholder={p.unidade ? 'Unidade operacional' : 'Unidade pendente — use a validação auditada'}
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs disabled:bg-amber-50 disabled:text-amber-800 disabled:border-amber-200"
-                      />
-                      {!p.unidade && (
-                        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-                          <span>Origem {p.unidade_origem || 'não informada'}{p.qtde_embalagem_origem != null ? ` · Qtde Emb. ${p.qtde_embalagem_origem}` : ''}. Não preencher por inferência.</span>
-                          <Link
-                            href={`/cadastro/produtos/unidades-pendentes?q=${encodeURIComponent(p.codigo || p.nome.split(' - ')[0] || '')}`}
-                            className="font-semibold underline whitespace-nowrap"
-                          >
-                            Validar unidade
-                          </Link>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.grupo ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'grupo', e.target.value)}
-                          placeholder="Grupo"
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.marca ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'marca', e.target.value)}
-                          placeholder="Marca"
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.peso_kg ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'peso_kg', e.target.value)}
-                          placeholder="Peso (kg)"
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                        <select
-                          value={editForm[p.id]?.fornecedor_id ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'fornecedor_id', e.target.value)}
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        >
-                          <option value="">Sem fornecedor</option>
-                          {fornecedores.map(f => (
-                            <option key={f.id} value={f.id}>{f.nome}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={editForm[p.id]?.linha_id ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'linha_id', e.target.value)}
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        >
-                          <option value="">Sem linha</option>
-                          {linhas.map(l => (
-                            <option key={l.id} value={l.id}>{l.nome}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={editForm[p.id]?.cor_id ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'cor_id', e.target.value)}
-                          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        >
-                          <option value="">Sem cor</option>
-                          {cores.map(c => (
-                            <option key={c.id} value={c.id}>{c.nome}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.largura_mm ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'largura_mm', e.target.value)}
-                          placeholder="Largura (mm)"
-                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={editForm[p.id]?.altura_mm ?? ''}
-                          onChange={e => mudarCampoEdicao(p.id, 'altura_mm', e.target.value)}
-                          placeholder="Altura (mm)"
-                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-                      <textarea
-                        value={editForm[p.id]?.descricao ?? ''}
-                        onChange={e => mudarCampoEdicao(p.id, 'descricao', e.target.value)}
-                        placeholder="Descrição"
-                        rows={2}
-                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                      />
-                      <div>
-                        <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
-                          <ImageIcon size={13} /> Trocar foto — opcional
-                        </label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={e => setFotoEditFile(prev => ({ ...prev, [p.id]: e.target.files?.[0] || null }))}
-                          className="w-full border border-slate-200 rounded-lg p-2 text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setImpostosEditAberto(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
-                          className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                        >
-                          <Receipt size={13} />
-                          Impostos — opcional
-                          {impostosEditAberto[p.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                        </button>
-                        {impostosEditAberto[p.id] && (
-                          <div className="mt-2 border border-slate-100 rounded-lg p-3 space-y-2">
-                            <input
-                              type="text"
-                              value={editForm[p.id]?.ncm ?? ''}
-                              onChange={e => mudarCampoEdicao(p.id, 'ncm', e.target.value)}
-                              placeholder="NCM"
-                              className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                            />
-                            <div className="grid grid-cols-2 gap-2">
-                              <input
-                                type="text"
-                                value={editForm[p.id]?.icms_percentual ?? ''}
-                                onChange={e => mudarCampoEdicao(p.id, 'icms_percentual', e.target.value)}
-                                placeholder="ICMS (%)"
-                                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                              />
-                              <input
-                                type="text"
-                                value={editForm[p.id]?.ipi_percentual ?? ''}
-                                onChange={e => mudarCampoEdicao(p.id, 'ipi_percentual', e.target.value)}
-                                placeholder="IPI (%)"
-                                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                              />
-                              <input
-                                type="text"
-                                value={editForm[p.id]?.pis_percentual ?? ''}
-                                onChange={e => mudarCampoEdicao(p.id, 'pis_percentual', e.target.value)}
-                                placeholder="PIS (%)"
-                                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                              />
-                              <input
-                                type="text"
-                                value={editForm[p.id]?.cofins_percentual ?? ''}
-                                onChange={e => mudarCampoEdicao(p.id, 'cofins_percentual', e.target.value)}
-                                placeholder="COFINS (%)"
-                                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => salvarEdicao(p.id)}
-                          disabled={salvandoEdicaoId === p.id}
-                          className="flex-1 py-1.5 bg-brand-navy text-white rounded-lg text-xs font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
-                        >
-                          {salvandoEdicaoId === p.id ? 'Salvando...' : 'Salvar'}
-                        </button>
-                        <button
-                          onClick={cancelarEdicao}
-                          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => iniciarEdicao(p)}
-                        className="flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
-                      >
-                        <Pencil size={13} />
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => alternarAtivoAcao(p)}
-                        className="text-xs text-slate-500 hover:underline"
-                      >
-                        {p.ativo ? 'Desativar' : 'Ativar'}
-                      </button>
-                      <button
-                        onClick={() => excluirComConfirmacao(p)}
-                        className="text-xs text-red-500 hover:underline"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
-  )
+function Campo({label,value,onChange,disabled=false}:{label:string;value:string;onChange:(v:string)=>void;disabled?:boolean}){
+  return <label className="block text-xs text-slate-500">{label}<input value={value} onChange={e=>onChange(e.target.value)} disabled={disabled} className="mt-1 w-full border rounded-xl p-2.5 text-sm disabled:bg-amber-50 disabled:text-amber-800"/></label>
 }
