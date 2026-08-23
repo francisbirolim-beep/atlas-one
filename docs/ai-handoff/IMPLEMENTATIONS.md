@@ -1,5 +1,25 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-23 — Integração direta API W.Vetro em modo somente leitura — EM VALIDAÇÃO
+
+Implementado:
+- cliente server-side `lib/wvetroApi.ts` para comunicação com a API v2 do W.Vetro;
+- autenticação por `/Integracao/ValidarUsuario` usando `WVETRO_LICENSE_ID`, `WVETRO_USERNAME` e `WVETRO_PASSWORD` somente no ambiente do servidor;
+- cache temporário do JWT W.Vetro por 23 horas, com renovação automática em 401/403;
+- nenhuma credencial real adicionada ao GitHub; `.env.example` contém apenas nomes das variáveis e URL base;
+- rota `/api/integracoes/wvetro/preview`, restrita a sessão Atlas válida e usuário `master`;
+- prévia read-only de `status`, linhas, produto por tipo/código, orçamentos e pedidos;
+- consultas históricas limitadas a 90 dias por chamada;
+- extração genérica dos pares únicos `Linha + Modelo` presentes em pedidos/orçamentos para preparar tipologias futuras;
+- nova tela `/configuracoes/integracoes/wvetro` para verificar presença das credenciais e executar teste real de autenticação + consulta `/Produtos/linhas`;
+- credenciais reais configuradas externamente na Vercel em Preview e Production;
+- nenhuma escrita no Supabase, migration ou alteração dos cadastros oficiais nesta primeira fase;
+- PR #238 criada para a integração e previews Vercel compilados com sucesso durante a implementação.
+
+Próxima etapa após validar a conexão real:
+- criar staging/dry-run para comparar dados do W.Vetro com linhas, perfis, acessórios, tipologias, custos e preços já existentes no Atlas;
+- qualquer promoção para cadastro oficial deverá exigir conferência explícita, sem sobrescrita automática de regras técnicas.
+
 ## 2026-08-22 — Editor Técnico de tipologias + fórmulas Suprema 2F–9F — EM VALIDAÇÃO
 
 Implementado:
