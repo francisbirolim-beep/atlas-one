@@ -16,9 +16,9 @@ export async function GET(req:NextRequest){
    supabaseAdmin.from('balcao_pagamentos').select('venda_id,forma,valor').in('venda_id',ids),
   ]):[{data:[]},{data:[]}]
   const faturamento=(vendas||[]).reduce((s,v)=>s+Number(v.total||0),0);const ticket=(vendas||[]).length?faturamento/(vendas||[]).length:0
-  let lucro=0,custo=0;const produtos=new Map<string,{codigo:string;nome:string;qtd:number;faturamento:number}>();
-  for(const i of itens||[]){const q=Number(i.quantidade||0),c=Number(i.custo_unitario_snapshot||0),t=Number(i.total_item||0);custo+=q*c;lucro+=t-q*c;const k=i.produto_id;const a=produtos.get(k)||{codigo:i.produto_codigo||'',nome:i.produto_nome,qtd:0,faturamento:0};a.qtd+=q;a.faturamento+=t;produtos.set(k,a)}
-  const margem=faturamento>0?lucro/faturamento*100:0
+  let custo=0;const produtos=new Map<string,{codigo:string;nome:string;qtd:number;faturamento:number}>();
+  for(const i of itens||[]){const q=Number(i.quantidade||0),c=Number(i.custo_unitario_snapshot||0),t=Number(i.total_item||0);custo+=q*c;const k=i.produto_id;const a=produtos.get(k)||{codigo:i.produto_codigo||'',nome:i.produto_nome,qtd:0,faturamento:0};a.qtd+=q;a.faturamento+=t;produtos.set(k,a)}
+  const lucro=faturamento-custo;const margem=faturamento>0?lucro/faturamento*100:0
   const porPagamento:Record<string,number>={};for(const p of pagamentos||[])porPagamento[p.forma]=(porPagamento[p.forma]||0)+Number(p.valor||0)
   const porDia:Record<string,number>={};for(const v of vendas||[]){const d=String(v.finalizada_em).slice(0,10);porDia[d]=(porDia[d]||0)+Number(v.total||0)}
   const porVendedor:Record<string,{vendas:number;faturamento:number}>={};for(const v of vendas||[]){const k=v.vendedor_nome||'Sem vendedor';const a=porVendedor[k]||{vendas:0,faturamento:0};a.vendas++;a.faturamento+=Number(v.total||0);porVendedor[k]=a}
