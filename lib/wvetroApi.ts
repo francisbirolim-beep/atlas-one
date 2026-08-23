@@ -203,3 +203,16 @@ export async function listarPedidosWVetro<T = unknown>(inicio: string, fim: stri
     Dtvendafinal: fim,
   })
 }
+
+export async function listarNotasEntradaWVetro<T = unknown>(inicio: string, fim: string): Promise<T> {
+  return requisicaoWVetro<T>('/compras/nf', {
+    Dtentradainicio: inicio,
+    Dtentradafinal: fim,
+  })
+}
+
+export async function listarItensNotaEntradaWVetro<T = unknown>(nfId: string | number): Promise<T> {
+  return requisicaoWVetro<T>('/compras/itemNf', {
+    Nfid: nfId,
+  })
+}
