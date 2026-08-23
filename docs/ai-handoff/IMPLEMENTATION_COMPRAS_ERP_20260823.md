@@ -76,4 +76,10 @@ NF real 3128 da LCT Mazaro:
 - total R$ 1.403,00;
 - parcelas 31/03/2026 e 14/04/2026, R$ 701,50 cada.
 
+## Estado de build
+
+- preview Vercel do commit `cbcfe918583e9b03766b5be07744303aefc6c9a2` ficou `READY` em 23/08/2026;
+- esse build compilou `/compras/entrada`, `/estoque`, `/financeiro/contas-pagar`, `/cadastro/produtos`, `/cadastro/produtos/precificacao` e `/orcamento/balcao/novo`;
+- commits posteriores nesse branch foram documentação; antes do merge manual, confirmar o status do head final.
+
 Essa nota é o caso de teste principal antes do merge/produção da PR #255.
