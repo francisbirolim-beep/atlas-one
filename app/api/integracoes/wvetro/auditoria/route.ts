@@ -31,6 +31,23 @@ function dataOk(valor: unknown): valor is string {
   return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor) && !Number.isNaN(Date.parse(`${valor}T00:00:00Z`))
 }
 
+function obsObjeto(valor: unknown): Record<string, any> {
+  return valor && typeof valor === 'object' && !Array.isArray(valor) ? { ...(valor as Record<string, any>) } : {}
+}
+
+async function execucaoRetomavel(periodoInicio?: string, periodoFim?: string) {
+  let q = supabaseAdmin
+    .from('wvetro_auditoria_execucoes')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (periodoInicio) q = q.eq('periodo_inicio', periodoInicio)
+  if (periodoFim) q = q.eq('periodo_fim', periodoFim)
+  const { data } = await q.maybeSingle()
+  if (!data || !['em_execucao', 'erro'].includes(String(data.status))) return null
+  return data
+}
+
 async function reconstruirVariaveisExplicitas() {
   const { error } = await supabaseAdmin.rpc('fn_wvetro_reconstruir_variaveis_explicitas')
   if (error) throw error
@@ -39,7 +56,11 @@ async function reconstruirVariaveisExplicitas() {
 export async function GET(req: NextRequest) {
   if (!await master(req)) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
   try {
-    return NextResponse.json({ ok: true, resumo: await resumoAuditoriaWVetro() })
+    const [resumo, retomavel] = await Promise.all([
+      resumoAuditoriaWVetro(),
+      execucaoRetomavel(),
+    ])
+    return NextResponse.json({ ok: true, resumo, execucaoRetomavel: retomavel })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha ao resumir auditoria.' }, { status: 500 })
   }
@@ -59,15 +80,25 @@ export async function POST(req: NextRequest) {
       const periodoFim = dataOk(body.periodoFim) ? body.periodoFim : new Date().toISOString().slice(0, 10)
       if (periodoInicio > periodoFim) return NextResponse.json({ error: 'Período inicial maior que o final.' }, { status: 400 })
 
+      const existente = await execucaoRetomavel(periodoInicio, periodoFim)
+      if (existente) {
+        await supabaseAdmin
+          .from('wvetro_auditoria_execucoes')
+          .update({ status: 'em_execucao', erro: null })
+          .eq('id', existente.id)
+        return NextResponse.json({ ok: true, execucao: { ...existente, status: 'em_execucao', erro: null }, retomada: true, descobertaCatalogo: null })
+      }
+
       const { data: execucao, error } = await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
         .insert({
           status: 'em_execucao',
           periodo_inicio: periodoInicio,
           periodo_fim: periodoFim,
-          cursor_data: periodoInicio,
+          cursor_data: null,
           iniciado_por_id: usuario.id,
           iniciado_por_nome: usuario.nome,
+          observacoes: { pendencias: [] },
         })
         .select('*')
         .single()
@@ -79,7 +110,7 @@ export async function POST(req: NextRequest) {
         descobrirEImportarCatalogoWVetro('A'),
       ])
 
-      return NextResponse.json({ ok: true, execucao, linhas, descobertaCatalogo: { perfis: descobertaP, acessorios: descobertaA } })
+      return NextResponse.json({ ok: true, execucao, retomada: false, linhas, descobertaCatalogo: { perfis: descobertaP, acessorios: descobertaA } })
     }
 
     if (acao === 'periodo') {
@@ -90,21 +121,44 @@ export async function POST(req: NextRequest) {
       if (inicio !== fim) return NextResponse.json({ error: 'Cada chamada histórica deve processar exatamente 1 dia.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
-      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, erro: null }).eq('id', execucaoId)
+      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, status: 'em_execucao', erro: null }).eq('id', execucaoId)
       return NextResponse.json({ ok: true, resultado })
+    }
+
+    if (acao === 'avancar_pendente') {
+      const execucaoId = String(body.execucaoId || '')
+      const data = body.data
+      const motivo = String(body.motivo || 'Timeout W.Vetro')
+      if (!execucaoId || !dataOk(data)) return NextResponse.json({ error: 'Execução e data são obrigatórias.' }, { status: 400 })
+
+      const { data: execucao } = await supabaseAdmin
+        .from('wvetro_auditoria_execucoes')
+        .select('observacoes')
+        .eq('id', execucaoId)
+        .maybeSingle()
+      const observacoes = obsObjeto(execucao?.observacoes)
+      const pendencias = Array.isArray(observacoes.pendencias) ? [...observacoes.pendencias] : []
+      if (!pendencias.some((p: any) => p?.data === data)) {
+        pendencias.push({ data, motivo, registrado_em: new Date().toISOString() })
+      }
+      observacoes.pendencias = pendencias
+
+      await supabaseAdmin
+        .from('wvetro_auditoria_execucoes')
+        .update({ cursor_data: data, status: 'em_execucao', erro: null, observacoes })
+        .eq('id', execucaoId)
+      return NextResponse.json({ ok: true, pendencias: pendencias.length })
     }
 
     if (acao === 'produtos') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = 1
-      const resultado = await processarLoteProdutosWVetro(offset, limite)
+      const resultado = await processarLoteProdutosWVetro(offset, 1)
       return NextResponse.json({ ok: true, resultado })
     }
 
     if (acao === 'imagens') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = 1
-      const resultado = await processarLoteImagensWVetro(offset, limite)
+      const resultado = await processarLoteImagensWVetro(offset, 1)
       return NextResponse.json({ ok: true, resultado })
     }
 
@@ -113,19 +167,30 @@ export async function POST(req: NextRequest) {
       if (!execucaoId) return NextResponse.json({ error: 'Execução não informada.' }, { status: 400 })
       await reconstruirVariaveisExplicitas()
       const resumo = await resumoAuditoriaWVetro()
+      const { data: execucao } = await supabaseAdmin
+        .from('wvetro_auditoria_execucoes')
+        .select('observacoes')
+        .eq('id', execucaoId)
+        .maybeSingle()
+      const observacoes = obsObjeto(execucao?.observacoes)
+      const pendencias = Array.isArray(observacoes.pendencias) ? observacoes.pendencias : []
       await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
-        .update({ status: 'concluida', totais: resumo, erro: null, finalizado_em: new Date().toISOString() })
+        .update({ status: 'concluida', totais: resumo, erro: null, finalizado_em: new Date().toISOString(), observacoes })
         .eq('id', execucaoId)
-      return NextResponse.json({ ok: true, resumo })
+      return NextResponse.json({ ok: true, resumo, pendencias })
     }
 
     return NextResponse.json({ error: 'Ação de auditoria inválida.' }, { status: 400 })
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : 'Falha na auditoria W.Vetro.'
+    const timeoutWvetro = /Timeout W\.Vetro/i.test(mensagem)
     if (body?.execucaoId) {
-      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ status: 'erro', erro: mensagem }).eq('id', String(body.execucaoId))
+      await supabaseAdmin
+        .from('wvetro_auditoria_execucoes')
+        .update({ status: timeoutWvetro ? 'em_execucao' : 'erro', erro: mensagem })
+        .eq('id', String(body.execucaoId))
     }
-    return NextResponse.json({ error: mensagem }, { status: 500 })
+    return NextResponse.json({ error: mensagem }, { status: timeoutWvetro ? 504 : 500 })
   }
 }
