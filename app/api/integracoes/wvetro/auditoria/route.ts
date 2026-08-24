@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       if (periodoInicio > periodoFim) return NextResponse.json({ error: 'Período inicial maior que o final.' }, { status: 400 })
 
       const existente = await execucaoRetomavel(periodoInicio, periodoFim)
-      if (existente && existente.cursor_data && String(existente.cursor_data) >= periodoInicio && String(existente.cursor_data) < periodoFim) {
+      if (existente) {
         await supabaseAdmin
           .from('wvetro_auditoria_execucoes')
           .update({ status: 'em_execucao', erro: null })
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
           status: 'em_execucao',
           periodo_inicio: periodoInicio,
           periodo_fim: periodoFim,
-          cursor_data: periodoInicio,
+          cursor_data: null,
           iniciado_por_id: usuario.id,
           iniciado_por_nome: usuario.nome,
           observacoes: { pendencias: [] },
