@@ -66,6 +66,8 @@ W.Vetro é referência. Fórmula/receita/configuração Atlas validada sempre te
 6. merge manual;
 7. confirmar deploy de produção `READY`.
 
+> Checkpoint final de 23/08/2026: a `main` já contém #255, #257 e #256, mas o domínio de produção ainda estava publicado no commit da #253. Este commit de documentação também serve para disparar uma nova validação de preview da cabeça da #258 antes do merge, sem alterar regra de negócio.
+
 ### Depois do deploy
 
 Usuário Master deve abrir `/configuracoes/integracoes/wvetro/auditoria` e clicar `Executar auditoria completa`.
