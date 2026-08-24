@@ -7,6 +7,7 @@ import {
   sincronizarLinhasApiWVetro,
 } from '@/lib/wvetroAuditoriaServer'
 import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
+import { processarLoteImagensWVetro } from '@/lib/wvetroImagensServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -96,6 +97,13 @@ export async function POST(req: NextRequest) {
       const offset = Math.max(0, Number(body.offset || 0))
       const limite = Math.min(25, Math.max(1, Number(body.limite || 12)))
       const resultado = await processarLoteProdutosWVetro(offset, limite)
+      return NextResponse.json({ ok: true, resultado })
+    }
+
+    if (acao === 'imagens') {
+      const offset = Math.max(0, Number(body.offset || 0))
+      const limite = Math.min(15, Math.max(1, Number(body.limite || 10)))
+      const resultado = await processarLoteImagensWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
 
