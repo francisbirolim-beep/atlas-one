@@ -1,0 +1,1 @@
+Checkpoint complementar: a alteração funcional está nos commits da branch `fix/wvetro-auditoria-lotes-7d`. Validar Build Validation e preview Vercel antes do merge. Após merge, limpar apenas agregados históricos incompletos e repetir a auditoria completa a partir de uma base limpa.
