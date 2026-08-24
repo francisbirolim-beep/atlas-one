@@ -1,86 +1,94 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — concluir PR #258 e executar auditoria viva W.Vetro
+## TAREFA ATUAL — validar e concluir PR #260: Orçamento visual + variáveis W.Vetro
 
 ### Base concluída
 
-- PR #255 integrada: Compras/Financeiro/Estoque/custo médio + precificação balcão.
-- PR #257 integrada: estoque multiunidade, endereçamento, reservas e transferências.
-- PR #256 integrada: Venda Balcão multiunidade, caixas por unidade, estoque da rede e atendimento entre lojas.
-- PR #258 (`feat/wvetro-auditoria-completa`) implementa referência completa W.Vetro e está na validação final.
+- PR #255 integrada: Compras/Financeiro/Estoque/custo médio + precificação balcão;
+- PR #257 integrada: estoque multiunidade, endereçamento, reservas e transferências;
+- PR #256 integrada: Venda Balcão multiunidade, caixas por unidade, estoque da rede e atendimento entre lojas;
+- PR #258 integrada na `main`: referência/auditoria completa W.Vetro;
+- PR #259 é somente especificação da evolução visual/W.Vetro;
+- PR #260 contém a implementação operacional atual.
 
-### Estado real da PR #258
+## PR #260 — estado
 
-Migrations já aplicadas no Supabase e alinhadas aos números remotos:
-- `20260824012830_wvetro_referencia_completa_v1`;
-- `20260824012851_wvetro_staging_tipologias_componentes_v1`;
-- `20260824012908_wvetro_snapshots_api_v1`;
-- `20260824012923_wvetro_imagens_snapshot_v1`;
-- `20260824014055_wvetro_referencias_indices_v1`.
+Branch: `feat/orcamento-tipologias-visuais`
 
-Pós-carga validada:
-- 1.307 perfis W.Vetro;
-- 1.174 acessórios W.Vetro + 3 exclusivos Atlas;
-- 109 tipologias W.Vetro;
-- 109/109 vinculadas formalmente a Linha;
-- 60 linhas técnicas no total;
-- 29 linhas ativas;
-- 64 referências brutas de Linha preservadas;
-- 109 referências de tipologia no staging;
-- vidros = 0 antes da auditoria viva;
-- os 5 alertas de FK sem índice criados pela camada W.Vetro foram tratados em `20260824014055_wvetro_referencias_indices_v1`;
-- advisor de segurança não apontou ERROR novo específico da camada W.Vetro; erros críticos remanescentes são legados da Engenharia.
+Implementado:
 
-Nova tela Master:
+1. cards visuais de tipologia por Linha;
+2. busca e filtros;
+3. prioridade de imagens Atlas → configuração/produto Atlas → W.Vetro → placeholder;
+4. lightbox de imagem;
+5. endpoint server-side autenticado `/api/orcamento/wvetro-referencias`;
+6. staging `wvetro_referencias_variaveis` protegido por RLS/service_role;
+7. extração somente de dados explicitamente escritos no Modelo W.Vetro;
+8. normalização de número de folhas;
+9. base atual: 57 referências explícitas de folhas, valores 1..8;
+10. botão `Configurar variáveis` unifica Atlas + W.Vetro com procedência visível;
+11. valores W.Vetro só preenchem campos vazios;
+12. configuração Atlas validada sempre tem prioridade;
+13. snapshot do orçamento preserva referência W.Vetro e evidência efetivamente usada;
+14. auditoria W.Vetro reconstrói referências explícitas após lote de período e ao finalizar.
+
+Migrations já aplicadas e versionadas:
+
+- `20260824022150_wvetro_variaveis_orcamento_v1`;
+- `20260824022234_wvetro_variaveis_folhas_normalizacao_v1`.
+
+## Antes do merge #260
+
+1. confirmar `Build Validation` verde no HEAD final;
+2. confirmar `Supabase Database Control` verde no HEAD final;
+3. confirmar preview Vercel `READY` no HEAD final;
+4. se build falhar, corrigir TypeScript sem contornar checagens;
+5. testar no preview `/orcamento-rapido`:
+   - selecionar Linha Suprema;
+   - confirmar cards visuais;
+   - testar busca/filtros;
+   - selecionar tipologia com status W.Vetro;
+   - abrir `Configurar variáveis`;
+   - confirmar pré-carga de `folhas` quando explícita;
+   - alterar valor e confirmar mudança de procedência visual;
+   - confirmar que configuração Atlas validada não é substituída;
+   - testar descrição livre;
+   - testar mobile;
+6. confirmar PR mergeable e HEAD estável;
+7. merge manual somente depois dos gates.
+
+## Imagens W.Vetro
+
+A base histórica inicial possui `imagem_url` nula para várias/maioria das referências de tipologia. Portanto os cards podem mostrar placeholder até a auditoria viva ser executada.
+
+Usuário Master deve executar:
+
 `/configuracoes/integracoes/wvetro/auditoria`
 
-Ela deve:
-1. consultar `/Produtos/linhas`;
-2. tentar descobrir catálogo completo P/A;
-3. percorrer pedidos + orçamentos em lotes de até 90 dias;
-4. extrair Linha+Modelo, perfis, acessórios e vidros;
-5. consultar `produtoByKey` para produtos conhecidos;
-6. guardar LinhaId/LinhaNome, unidade/NCM de origem, payload e URL de imagem;
-7. copiar imagem para Atlas quando possível sem sobrescrever foto existente;
-8. importar eventual código novo apenas como `importado`, `unidade=NULL`, `preco=0`, sem custo/margem inventados;
-9. fechar totais e pendências.
+A auditoria percorre pedidos/orçamentos atuais e preserva URLs/imagens encontradas. Imagem Atlas existente nunca deve ser sobrescrita automaticamente.
 
-### Regra de procedência no orçamento
+## Depois da PR #260
 
-Mostrar:
-- `REFERÊNCIA WVETRO`;
-- `WVETRO · EM VALIDAÇÃO ATLAS`;
-- `WVETRO · VALIDADA ATLAS`;
-- `VALIDADA ATLAS`;
-- `CADASTRADA ATLAS`.
+Próxima evolução recomendada, mantendo PR pequena:
 
-W.Vetro é referência. Fórmula/receita/configuração Atlas validada sempre tem prioridade.
+1. criar tela de revisão de referências W.Vetro para Engenharia;
+2. permitir validar/promover mapeamentos de variável/opção individualmente;
+3. cadastrar regras Atlas determinísticas para inferências a partir de componentes, sempre com revisão humana antes de uso técnico;
+4. mostrar histórico/ocorrência dos componentes por Linha+Modelo;
+5. ampliar biblioteca oficial de imagens de tipologias;
+6. validar tipologia por tipologia, priorizando Suprema mais usada;
+7. retomar validação operacional da NF real 3128;
+8. validar Plano de Corte A4 PC2/PC3/PC4 Suprema;
+9. continuar validação estrutural Suprema 3F–9F;
+10. validar Central do Cliente e Assistência em campo;
+11. definir permissões específicas de Compras/Financeiro;
+12. tratar hardening legado da Engenharia isoladamente.
 
-### Antes do merge #258
+## Regras invioláveis
 
-1. confirmar `Build Validation` verde no head limpo;
-2. confirmar `Supabase Database Control` verde no head limpo;
-3. confirmar preview Vercel `READY` no head limpo;
-4. revalidar advisor de desempenho sem FKs W.Vetro pendentes;
-5. confirmar PR mergeable/head estável;
-6. merge manual;
-7. confirmar deploy de produção `READY`.
-
-> Checkpoint final de 23/08/2026: a `main` já contém #255, #257 e #256, mas o domínio de produção ainda estava publicado no commit da #253. Este commit de documentação também serve para disparar uma nova validação de preview da cabeça da #258 antes do merge, sem alterar regra de negócio.
-
-### Depois do deploy
-
-Usuário Master deve abrir `/configuracoes/integracoes/wvetro/auditoria` e clicar `Executar auditoria completa`.
-
-A execução viva é necessária para fechar os números atuais da API: linhas retornadas, eventuais produtos novos desde os exports, referências de vidro e imagens. Ela não foi disparada pelo agente porque a rota exige sessão Master e o preview Vercel exige SSO/cookie persistente; nenhuma proteção deve ser reduzida para contornar isso.
-
-Depois da execução, revisar os totais e iniciar validação técnica tipologia por tipologia, priorizando as mais usadas. Nunca promover custo/preço/unidade operacional automaticamente.
-
-## DEPOIS
-
-- retomar validação operacional da NF real 3128;
-- validar Plano de Corte A4 PC2/PC3/PC4 Suprema;
-- continuar validação estrutural Suprema 3F–9F;
-- validar Central do Cliente e Assistência em campo;
-- definir permissões específicas de Compras/Financeiro;
-- tratar hardening legado da Engenharia em tarefa isolada, sem habilitar RLS às cegas.
+- W.Vetro é referência; Atlas validado é fonte técnica oficial.
+- Sem fuzzy como vínculo automático.
+- Sem adivinhar variável ausente.
+- Sem promover custo/preço/unidade/fórmula automaticamente.
+- Valor inferido só pode ser usado quando existir regra Atlas determinística validada.
+- Imagem W.Vetro nunca substitui foto Atlas validada automaticamente.
