@@ -35,6 +35,11 @@ function dias(inicio: string, fim: string) {
   return Math.floor((Date.parse(`${fim}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`)) / 86_400_000)
 }
 
+async function reconstruirVariaveisExplicitas() {
+  const { error } = await supabaseAdmin.rpc('fn_wvetro_reconstruir_variaveis_explicitas')
+  if (error) throw error
+}
+
 export async function GET(req: NextRequest) {
   if (!await master(req)) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
   try {
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
       if (inicio > fim || dias(inicio, fim) > 89) return NextResponse.json({ error: 'Cada lote deve ter no máximo 90 dias.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
+      await reconstruirVariaveisExplicitas()
       await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim }).eq('id', execucaoId)
       return NextResponse.json({ ok: true, resultado })
     }
@@ -110,6 +116,7 @@ export async function POST(req: NextRequest) {
     if (acao === 'finalizar') {
       const execucaoId = String(body.execucaoId || '')
       if (!execucaoId) return NextResponse.json({ error: 'Execução não informada.' }, { status: 400 })
+      await reconstruirVariaveisExplicitas()
       const resumo = await resumoAuditoriaWVetro()
       await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
