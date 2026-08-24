@@ -15,7 +15,8 @@ Migrations já aplicadas no Supabase e alinhadas aos números remotos:
 - `20260824012830_wvetro_referencia_completa_v1`;
 - `20260824012851_wvetro_staging_tipologias_componentes_v1`;
 - `20260824012908_wvetro_snapshots_api_v1`;
-- `20260824012923_wvetro_imagens_snapshot_v1`.
+- `20260824012923_wvetro_imagens_snapshot_v1`;
+- `20260824014055_wvetro_referencias_indices_v1`.
 
 Pós-carga validada:
 - 1.307 perfis W.Vetro;
@@ -26,7 +27,9 @@ Pós-carga validada:
 - 29 linhas ativas;
 - 64 referências brutas de Linha preservadas;
 - 109 referências de tipologia no staging;
-- vidros = 0 antes da auditoria viva.
+- vidros = 0 antes da auditoria viva;
+- os 5 alertas de FK sem índice criados pela camada W.Vetro foram tratados em `20260824014055_wvetro_referencias_indices_v1`;
+- advisor de segurança não apontou ERROR novo específico da camada W.Vetro; erros críticos remanescentes são legados da Engenharia.
 
 Nova tela Master:
 `/configuracoes/integracoes/wvetro/auditoria`
@@ -58,7 +61,7 @@ W.Vetro é referência. Fórmula/receita/configuração Atlas validada sempre te
 1. confirmar `Build Validation` verde no head limpo;
 2. confirmar `Supabase Database Control` verde no head limpo;
 3. confirmar preview Vercel `READY` no head limpo;
-4. rodar advisors Supabase e separar alertas novos de achados antigos da Engenharia;
+4. revalidar advisor de desempenho sem FKs W.Vetro pendentes;
 5. confirmar PR mergeable/head estável;
 6. merge manual;
 7. confirmar deploy de produção `READY`.

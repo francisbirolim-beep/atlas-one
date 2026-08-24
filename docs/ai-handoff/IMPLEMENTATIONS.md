@@ -17,7 +17,9 @@ Implementada a camada de referência completa W.Vetro sem substituir o conhecime
   - `20260824012830_wvetro_referencia_completa_v1`;
   - `20260824012851_wvetro_staging_tipologias_componentes_v1`;
   - `20260824012908_wvetro_snapshots_api_v1`;
-  - `20260824012923_wvetro_imagens_snapshot_v1`.
+  - `20260824012923_wvetro_imagens_snapshot_v1`;
+  - `20260824014055_wvetro_referencias_indices_v1`;
+- cinco FKs novas da camada W.Vetro apontadas pelo advisor de desempenho foram indexadas pela última migration.
 
 ### Auditoria viva
 - criada tela Master `/configuracoes/integracoes/wvetro/auditoria`;
@@ -38,6 +40,8 @@ Implementada a camada de referência completa W.Vetro sem substituir o conhecime
 
 ### Segurança / validação
 - tabelas novas com RLS e acesso operacional server-side/service-role;
+- advisor de segurança não apontou ERROR novo específico da camada W.Vetro; `RLS enabled no policy` é intencional para essas tabelas server-side;
+- os ERRORs críticos de RLS continuam sendo os três antigos da Engenharia e permanecem fora do escopo;
 - executor temporário de preview usado apenas como tentativa de automação foi removido antes do merge;
 - credenciais W.Vetro permanecem somente no ambiente Vercel;
 - nenhuma atualização automática de custo/preço/unidade operacional foi adicionada;

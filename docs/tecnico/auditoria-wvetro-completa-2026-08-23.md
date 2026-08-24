@@ -83,12 +83,13 @@ Não é prometida imagem onde a API W.Vetro não fornecer URL/imagem válida.
 
 ## Resultado aplicado no Supabase — 2026-08-23
 
-As quatro migrations da PR #258 foram aplicadas com sucesso e alinhadas aos números reais do histórico do Supabase:
+As cinco migrations da PR #258 foram aplicadas com sucesso e alinhadas aos números reais do histórico do Supabase:
 
 - `20260824012830_wvetro_referencia_completa_v1`;
 - `20260824012851_wvetro_staging_tipologias_componentes_v1`;
 - `20260824012908_wvetro_snapshots_api_v1`;
-- `20260824012923_wvetro_imagens_snapshot_v1`.
+- `20260824012923_wvetro_imagens_snapshot_v1`;
+- `20260824014055_wvetro_referencias_indices_v1`.
 
 Os pós-checks obrigatórios da primeira migration passaram. Estado medido depois da aplicação:
 
@@ -105,6 +106,8 @@ Os pós-checks obrigatórios da primeira migration passaram. Estado medido depoi
 - referências de vidro continuam em **0 antes da execução viva**, pois não são inventadas a partir de cadastro inexistente.
 
 Portanto, a lacuna histórica de 46/109 vínculos foi eliminada sem alterar fórmulas/receitas validadas.
+
+O advisor de desempenho identificou cinco FKs novas da camada W.Vetro sem índice. A migration `20260824014055_wvetro_referencias_indices_v1` adicionou índices parciais para os vínculos Atlas de snapshots, componentes, linhas, tipologias e vidros. Alertas antigos de outras áreas permanecem fora do escopo desta PR.
 
 ## Auditoria viva implementada
 

@@ -12,11 +12,12 @@ Estado real:
 - PR #256 já integrada: Venda Balcão multiunidade, caixas por unidade, consulta de estoque da rede e atendimento de venda reservada;
 - PR #258 aberta em `feat/wvetro-auditoria-completa`;
 - Build Validation da implementação funcional passou antes da aplicação das migrations; migrations depois foram alinhadas ao histórico real do Supabase;
-- quatro migrations W.Vetro já aplicadas no Supabase e renomeadas no repositório para os números remotos reais:
+- cinco migrations W.Vetro já aplicadas no Supabase e alinhadas no repositório aos números remotos reais:
   - `20260824012830_wvetro_referencia_completa_v1`;
   - `20260824012851_wvetro_staging_tipologias_componentes_v1`;
   - `20260824012908_wvetro_snapshots_api_v1`;
   - `20260824012923_wvetro_imagens_snapshot_v1`;
+  - `20260824014055_wvetro_referencias_indices_v1`;
 - catálogo conhecido preservado: 1.307 perfis W.Vetro e 1.174 acessórios W.Vetro + 3 acessórios exclusivos Atlas;
 - 109 tipologias da extração histórica W.Vetro foram formalizadas sem alterar suas fórmulas/receitas;
 - antes da PR apenas 46/109 tinham vínculo formal com linha; depois das migrations: 109/109;
@@ -29,7 +30,9 @@ Estado real:
 - imagens W.Vetro são preservadas no snapshot e copiadas para o bucket `fotos` somente quando possível; foto Atlas existente não é sobrescrita;
 - vínculos de Linha usam somente Linha explícita da API ou igualdade exata; nunca fuzzy;
 - no orçamento, tipologias passam a exibir selo de procedência/validação: `REFERÊNCIA WVETRO`, `WVETRO · EM VALIDAÇÃO ATLAS`, `WVETRO · VALIDADA ATLAS`, `VALIDADA ATLAS` ou `CADASTRADA ATLAS`;
-- configuração/fórmula/receita validada no Atlas sempre tem prioridade sobre a referência W.Vetro.
+- configuração/fórmula/receita validada no Atlas sempre tem prioridade sobre a referência W.Vetro;
+- advisor de desempenho apontou cinco FKs novas W.Vetro sem índice; todas foram indexadas em `20260824014055_wvetro_referencias_indices_v1`;
+- advisor de segurança não apontou ERROR novo da camada W.Vetro: as tabelas novas aparecem somente como RLS habilitado sem policy, intencional para acesso server-side/service-role; os três ERRORs de RLS continuam sendo os antigos da Engenharia.
 
 ### Limitação ainda aberta
 
