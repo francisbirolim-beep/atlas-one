@@ -91,24 +91,23 @@ export async function POST(req: NextRequest) {
       const inicio = body.inicio
       const fim = body.fim
       if (!execucaoId || !dataOk(inicio) || !dataOk(fim)) return NextResponse.json({ error: 'Execução e período são obrigatórios.' }, { status: 400 })
-      if (inicio > fim || dias(inicio, fim) > 89) return NextResponse.json({ error: 'Cada lote deve ter no máximo 90 dias.' }, { status: 400 })
+      if (inicio > fim || dias(inicio, fim) > 29) return NextResponse.json({ error: 'Cada lote da auditoria deve ter no máximo 30 dias.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
-      await reconstruirVariaveisExplicitas()
-      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim }).eq('id', execucaoId)
+      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, erro: null }).eq('id', execucaoId)
       return NextResponse.json({ ok: true, resultado })
     }
 
     if (acao === 'produtos') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = Math.min(25, Math.max(1, Number(body.limite || 12)))
+      const limite = Math.min(12, Math.max(1, Number(body.limite || 6)))
       const resultado = await processarLoteProdutosWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
 
     if (acao === 'imagens') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = Math.min(15, Math.max(1, Number(body.limite || 10)))
+      const limite = Math.min(10, Math.max(1, Number(body.limite || 5)))
       const resultado = await processarLoteImagensWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
@@ -120,7 +119,7 @@ export async function POST(req: NextRequest) {
       const resumo = await resumoAuditoriaWVetro()
       await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
-        .update({ status: 'concluida', totais: resumo, finalizado_em: new Date().toISOString() })
+        .update({ status: 'concluida', totais: resumo, erro: null, finalizado_em: new Date().toISOString() })
         .eq('id', execucaoId)
       return NextResponse.json({ ok: true, resumo })
     }

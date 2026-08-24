@@ -11,6 +11,14 @@ type Resumo = {
   apiProdutos: { snapshots: number; comImagem: number; comLinha: number; erros: number }
 }
 
+class ErroAuditoriaApi extends Error {
+  status: number
+  constructor(status: number, mensagem: string) {
+    super(mensagem)
+    this.status = status
+  }
+}
+
 async function api(body?: any) {
   const token = await tokenAtual()
   if (!token) throw new Error('Sessão do Atlas não encontrada. Entre novamente.')
@@ -21,7 +29,7 @@ async function api(body?: any) {
     cache: 'no-store',
   })
   const json = await resp.json().catch(() => ({}))
-  if (!resp.ok) throw new Error(json.error || `Falha na auditoria (${resp.status}).`)
+  if (!resp.ok) throw new ErroAuditoriaApi(resp.status, json.error || `Falha na auditoria (${resp.status}).`)
   return json
 }
 
@@ -79,7 +87,7 @@ export default function AuditoriaWVetroPage() {
       const periodos: Array<{ inicio: string; fim: string }> = []
       let cursor = inicio
       while (cursor <= fim) {
-        const loteFim = menor(adicionarDias(cursor, 89), fim)
+        const loteFim = menor(adicionarDias(cursor, 29), fim)
         periodos.push({ inicio: cursor, fim: loteFim })
         cursor = adicionarDias(loteFim, 1)
       }
@@ -87,9 +95,9 @@ export default function AuditoriaWVetroPage() {
       for (let i = 0; i < periodos.length; i++) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
         const p = periodos[i]
-        setEtapa(`Histórico W.Vetro ${p.inicio} até ${p.fim} (${i + 1}/${periodos.length})`)
+        setEtapa(`Histórico W.Vetro ${p.inicio} até ${p.fim} (${i + 1}/${periodos.length}) · lotes de até 30 dias`)
         await api({ acao: 'periodo', execucaoId, inicio: p.inicio, fim: p.fim })
-        setProgresso(Math.round(((i + 1) / (periodos.length + 1)) * 30))
+        setProgresso(Math.round(((i + 1) / Math.max(1, periodos.length)) * 35))
       }
 
       let offset = 0
@@ -97,11 +105,11 @@ export default function AuditoriaWVetroPage() {
       while (offset < total) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
         setEtapa(`Catálogo: Linha, dados e URL de cada produto (${offset}/${total === 1 ? '...' : total})`)
-        const json = await api({ acao: 'produtos', offset, limite: 12 })
+        const json = await api({ acao: 'produtos', offset, limite: 6 })
         const r = json.resultado
         total = Number(r.total || 0)
-        offset = Number(r.proximoOffset || offset + 12)
-        setProgresso(total ? 30 + Math.round(Math.min(1, offset / total) * 45) : 75)
+        offset = Number(r.proximoOffset || offset + 6)
+        setProgresso(total ? 35 + Math.round(Math.min(1, offset / total) * 40) : 75)
         if (!r.processados) break
       }
 
@@ -110,21 +118,25 @@ export default function AuditoriaWVetroPage() {
       while (offsetImagem < totalImagem) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
         setEtapa(`Copiando imagens W.Vetro para o Atlas (${offsetImagem}/${totalImagem === 1 ? '...' : totalImagem})`)
-        const json = await api({ acao: 'imagens', offset: offsetImagem, limite: 10 })
+        const json = await api({ acao: 'imagens', offset: offsetImagem, limite: 5 })
         const r = json.resultado
         totalImagem = Number(r.total || 0)
-        offsetImagem = Number(r.proximoOffset || offsetImagem + 10)
+        offsetImagem = Number(r.proximoOffset || offsetImagem + 5)
         setProgresso(totalImagem ? 75 + Math.round(Math.min(1, offsetImagem / totalImagem) * 23) : 98)
         if (!r.processados) break
       }
 
-      setEtapa('Fechando conferência e calculando totais...')
+      setEtapa('Fechando conferência, reconstruindo variáveis e calculando totais...')
       const final = await api({ acao: 'finalizar', execucaoId })
       setResumo(final.resumo)
       setProgresso(100)
       setEtapa('Auditoria concluída.')
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Falha na auditoria completa.')
+      if (e instanceof ErroAuditoriaApi && e.status === 504) {
+        setErro('Um lote ainda excedeu o tempo do servidor (504). Não clique novamente até o Atlas indicar o próximo ponto seguro; os lotes concluídos foram preservados.')
+      } else {
+        setErro(e instanceof Error ? e.message : 'Falha na auditoria completa.')
+      }
     } finally {
       setRodando(false)
       await carregarResumo()
@@ -140,7 +152,7 @@ export default function AuditoriaWVetroPage() {
           <div>
             <Link href="/configuracoes/integracoes/wvetro" className="mb-2 inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={16}/> Integração W.Vetro</Link>
             <h1 className="text-2xl font-bold text-slate-900">Auditoria completa W.Vetro → Atlas</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">Confere Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens. A referência W.Vetro é preservada; receitas validadas do Atlas nunca são substituídas automaticamente.</p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">Confere Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens. O histórico é processado em lotes menores para evitar timeout. A referência W.Vetro é preservada; receitas validadas do Atlas nunca são substituídas automaticamente.</p>
           </div>
           <ShieldCheck className="text-emerald-600" size={28}/>
         </header>
