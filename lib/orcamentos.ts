@@ -62,6 +62,43 @@ export interface DadosOrcamentoForm {
   arquivos: File[]
 }
 
+type ReferenciaVariavelSnapshot = {
+  id: string
+  chave: string
+  valor: string
+  valorRaw?: string | null
+  origemTipo?: string | null
+  evidencia?: string | null
+}
+
+type ReferenciaTipologiaSnapshot = {
+  referenciaId: string
+  tipologiaId: string
+  linha: string
+  modelo: string
+  imagemUrl?: string | null
+  ocorrencias?: number
+  variaveis?: ReferenciaVariavelSnapshot[]
+}
+
+async function carregarReferenciasWvetroSnapshot(): Promise<Record<string, ReferenciaTipologiaSnapshot>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return {}
+  try {
+    const resposta = await fetch('/api/orcamento/wvetro-referencias', {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    if (!resposta.ok) return {}
+    const json = await resposta.json().catch(() => ({}))
+    return (json?.referencias || {}) as Record<string, ReferenciaTipologiaSnapshot>
+  } catch {
+    // Falha de procedência não pode impedir o salvamento do orçamento.
+    return {}
+  }
+}
+
 export async function criarOrcamentoNoServidor(
   dados: DadosOrcamentoForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
@@ -72,12 +109,13 @@ export async function criarOrcamentoNoServidor(
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
 
-  const [clienteId, colunaId, usuario] = await Promise.all([
+  const [clienteId, colunaId, usuario, referenciasWvetro] = await Promise.all([
     clienteIdInformado
       ? Promise.resolve(clienteIdInformado)
       : obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
     primeiraColunaId(),
     usuarioAtual(),
+    carregarReferenciasWvetroSnapshot(),
   ])
 
   let itensSalvos: ItemEsquadria[] = []
@@ -98,6 +136,34 @@ export async function criarOrcamentoNoServidor(
     const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
     const quantidadeNum = parseInt(it.quantidade) || 1
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
+
+    const referencia = it.tipologiaId ? referenciasWvetro[it.tipologiaId] || null : null
+    const variaveisUsadasWvetro = !it.configuracaoValidada && referencia
+      ? (referencia.variaveis || []).filter(ref => {
+          const valorSelecionado = it.variaveis?.[ref.chave]
+          if (valorSelecionado) return valorSelecionado === ref.valor
+          return ref.chave === 'folhas' && Boolean(it.folhas) && it.folhas === ref.valor
+        })
+      : []
+
+    const referenciaWvetroSnapshot = referencia ? {
+      referencia_id: referencia.referenciaId,
+      tipologia_id: referencia.tipologiaId,
+      linha: referencia.linha,
+      modelo: referencia.modelo,
+      imagem_url: referencia.imagemUrl || null,
+      ocorrencias: Number(referencia.ocorrencias || 0),
+      utilizada_como_base: !it.configuracaoValidada && variaveisUsadasWvetro.length > 0,
+      variaveis_usadas: variaveisUsadasWvetro.map(ref => ({
+        referencia_variavel_id: ref.id,
+        chave: ref.chave,
+        valor: ref.valor,
+        valor_raw: ref.valorRaw || null,
+        origem_tipo: ref.origemTipo || 'explicita_wvetro',
+        evidencia: ref.evidencia || null,
+      })),
+    } : null
+
     const snapshotConfiguracao = {
       linha_id: it.linhaId || null,
       linha_nome: it.linhaNome || null,
@@ -108,6 +174,7 @@ export async function criarOrcamentoNoServidor(
       modo_configuracao: it.modoConfiguracao || 'rapido',
       configuracao_status: it.configuracaoStatus || (it.configuracaoValidada ? 'validada' : 'pendente'),
       variaveis: it.variaveis || {},
+      referencia_wvetro: referenciaWvetroSnapshot,
     }
 
     if (tipoMedida === 'final') {
