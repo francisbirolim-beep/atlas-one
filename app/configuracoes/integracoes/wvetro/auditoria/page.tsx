@@ -40,6 +40,16 @@ function adicionarDias(data: string, dias: number) {
   return iso(d)
 }
 
+function montarDias(inicio: string, fim: string) {
+  const dias: string[] = []
+  let cursor = inicio
+  while (cursor <= fim) {
+    dias.push(cursor)
+    cursor = adicionarDias(cursor, 1)
+  }
+  return dias
+}
+
 export default function AuditoriaWVetroPage() {
   const [master, setMaster] = useState<boolean | null>(null)
   const [inicio, setInicio] = useState('2023-01-01')
@@ -48,14 +58,17 @@ export default function AuditoriaWVetroPage() {
   const [etapa, setEtapa] = useState('')
   const [progresso, setProgresso] = useState(0)
   const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
   const [resumo, setResumo] = useState<Resumo | null>(null)
   const [descoberta, setDescoberta] = useState<any>(null)
+  const [execucaoRetomavel, setExecucaoRetomavel] = useState<any>(null)
   const parar = useRef(false)
 
   async function carregarResumo() {
     try {
       const json = await api()
       setResumo(json.resumo || null)
+      setExecucaoRetomavel(json.execucaoRetomavel || null)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar auditoria.')
     }
@@ -76,26 +89,47 @@ export default function AuditoriaWVetroPage() {
     parar.current = false
     setRodando(true)
     setErro('')
+    setAviso('')
     setProgresso(0)
-    setEtapa('Conferindo linhas e catálogo geral...')
+    setEtapa('Conferindo execução e catálogo geral...')
     try {
       const inicial = await api({ acao: 'iniciar', periodoInicio: inicio, periodoFim: fim })
       const execucaoId = inicial.execucao.id as string
-      setDescoberta(inicial.descobertaCatalogo)
+      if (inicial.descobertaCatalogo) setDescoberta(inicial.descobertaCatalogo)
 
-      const dias: string[] = []
-      let cursor = inicio
-      while (cursor <= fim) {
-        dias.push(cursor)
-        cursor = adicionarDias(cursor, 1)
+      const todosDias = montarDias(inicio, fim)
+      const cursorConcluido = inicial.execucao.cursor_data ? String(inicial.execucao.cursor_data) : null
+      let primeiroIndice = 0
+      if (inicial.retomada && cursorConcluido) {
+        const idx = todosDias.findIndex(d => d > cursorConcluido)
+        primeiroIndice = idx === -1 ? todosDias.length : idx
+        setAviso(`Execução retomada do ponto seguro: dias até ${cursorConcluido} não serão repetidos.`)
       }
 
-      for (let i = 0; i < dias.length; i++) {
+      let pendenciasDurante = Array.isArray(inicial.execucao?.observacoes?.pendencias)
+        ? inicial.execucao.observacoes.pendencias.length
+        : 0
+
+      if (todosDias.length > 0 && primeiroIndice > 0) {
+        setProgresso(Math.round((primeiroIndice / todosDias.length) * 35))
+      }
+
+      for (let i = primeiroIndice; i < todosDias.length; i++) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
-        const data = dias[i]
-        setEtapa(`Histórico W.Vetro ${data} (${i + 1}/${dias.length}) · 1 dia por chamada`)
-        await api({ acao: 'periodo', execucaoId, inicio: data, fim: data })
-        setProgresso(Math.round(((i + 1) / Math.max(1, dias.length)) * 35))
+        const data = todosDias[i]
+        setEtapa(`Histórico W.Vetro ${data} (${i + 1}/${todosDias.length}) · 1 dia por chamada`)
+        try {
+          await api({ acao: 'periodo', execucaoId, inicio: data, fim: data })
+        } catch (e) {
+          if (e instanceof ErroAuditoriaApi && e.status === 504) {
+            const p = await api({ acao: 'avancar_pendente', execucaoId, data, motivo: e.message })
+            pendenciasDurante = Number(p.pendencias || pendenciasDurante + 1)
+            setAviso(`O dia ${data} respondeu lentamente no W.Vetro e foi isolado como pendência. A auditoria continuou sem repetir os dias anteriores.`)
+          } else {
+            throw e
+          }
+        }
+        setProgresso(Math.round(((i + 1) / Math.max(1, todosDias.length)) * 35))
       }
 
       let offset = 0
@@ -127,11 +161,18 @@ export default function AuditoriaWVetroPage() {
       setEtapa('Fechando conferência, reconstruindo variáveis e calculando totais...')
       const final = await api({ acao: 'finalizar', execucaoId })
       setResumo(final.resumo)
+      const pendenciasFinais = Array.isArray(final.pendencias) ? final.pendencias.length : pendenciasDurante
       setProgresso(100)
-      setEtapa('Auditoria concluída.')
+      if (pendenciasFinais > 0) {
+        setEtapa(`Auditoria concluída com ${pendenciasFinais} pendência(s) histórica(s) isolada(s). Catálogo e imagens foram processados.`)
+        setAviso(`${pendenciasFinais} dia(s) ficaram separados para reprocessamento específico; eles não bloquearam catálogo, imagens nem o restante da auditoria.`)
+      } else {
+        setEtapa('Auditoria concluída.')
+        setAviso('')
+      }
     } catch (e) {
       if (e instanceof ErroAuditoriaApi && e.status === 504) {
-        setErro('Uma consulta de apenas 1 dia ainda excedeu o tempo do W.Vetro (504). Não reinicie. Esse dia específico será isolado para diagnóstico sem repetir os dias concluídos.')
+        setErro('Uma etapa externa do W.Vetro excedeu 45 segundos. O ponto já concluído foi preservado; atualize a tela para retomar.')
       } else {
         setErro(e instanceof Error ? e.message : 'Falha na auditoria completa.')
       }
@@ -140,6 +181,13 @@ export default function AuditoriaWVetroPage() {
       await carregarResumo()
     }
   }
+
+  const proximoRetomavel = execucaoRetomavel?.cursor_data
+    ? adicionarDias(String(execucaoRetomavel.cursor_data), 1)
+    : execucaoRetomavel?.periodo_inicio
+  const mesmaFaixa = execucaoRetomavel
+    && String(execucaoRetomavel.periodo_inicio) === inicio
+    && String(execucaoRetomavel.periodo_fim) === fim
 
   if (master === false) return <main className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white p-6"><h1 className="text-xl font-semibold">Auditoria W.Vetro</h1><p className="mt-2 text-sm text-slate-600">Área restrita ao usuário Master.</p></div></main>
 
@@ -150,7 +198,7 @@ export default function AuditoriaWVetroPage() {
           <div>
             <Link href="/configuracoes/integracoes/wvetro" className="mb-2 inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={16}/> Integração W.Vetro</Link>
             <h1 className="text-2xl font-bold text-slate-900">Auditoria completa W.Vetro → Atlas</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">Confere Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens. O histórico agora é processado dia a dia para reduzir timeout. A referência W.Vetro é preservada; receitas validadas do Atlas nunca são substituídas automaticamente.</p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">Confere Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens. A execução é retomável: dias lentos podem ser isolados sem reiniciar todo o histórico. A referência W.Vetro é preservada; receitas validadas do Atlas nunca são substituídas automaticamente.</p>
           </div>
           <ShieldCheck className="text-emerald-600" size={28}/>
         </header>
@@ -160,12 +208,14 @@ export default function AuditoriaWVetroPage() {
             <label className="text-sm text-slate-600">Histórico desde<input type="date" value={inicio} onChange={e => setInicio(e.target.value)} disabled={rodando} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <label className="text-sm text-slate-600">Até<input type="date" value={fim} onChange={e => setFim(e.target.value)} disabled={rodando} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <div className="flex items-end gap-2">
-              <button onClick={executar} disabled={rodando || master !== true} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{rodando ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>} {rodando ? 'Auditando...' : 'Executar auditoria completa'}</button>
+              <button onClick={executar} disabled={rodando || master !== true} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{rodando ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>} {rodando ? 'Auditando...' : mesmaFaixa ? 'Retomar auditoria' : 'Executar auditoria completa'}</button>
               {rodando && <button onClick={() => { parar.current = true; setEtapa('Pausando após a chamada atual...') }} className="rounded-lg border border-slate-300 p-2.5 text-slate-700" title="Pausar"><PauseCircle size={18}/></button>}
             </div>
           </div>
+          {mesmaFaixa && proximoRetomavel && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Execução salva.</strong> O próximo clique continua a partir de {proximoRetomavel}; os dias anteriores não serão consultados novamente.</div>}
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-slate-900 transition-all" style={{ width: `${progresso}%` }}/></div>
           {etapa && <p className="mt-2 text-sm text-slate-600">{etapa} {progresso > 0 && <strong>{progresso}%</strong>}</p>}
+          {aviso && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{aviso}</div>}
           {erro && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
         </section>
 
