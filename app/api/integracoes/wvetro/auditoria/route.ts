@@ -39,13 +39,13 @@ async function execucaoRetomavel(periodoInicio?: string, periodoFim?: string) {
   let q = supabaseAdmin
     .from('wvetro_auditoria_execucoes')
     .select('*')
-    .in('status', ['em_execucao', 'erro'])
     .order('created_at', { ascending: false })
     .limit(1)
   if (periodoInicio) q = q.eq('periodo_inicio', periodoInicio)
   if (periodoFim) q = q.eq('periodo_fim', periodoFim)
   const { data } = await q.maybeSingle()
-  return data || null
+  if (!data || !['em_execucao', 'erro'].includes(String(data.status))) return null
+  return data
 }
 
 async function reconstruirVariaveisExplicitas() {
