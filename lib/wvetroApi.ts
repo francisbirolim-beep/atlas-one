@@ -100,6 +100,21 @@ function descreverEstruturaAutenticacao(payload: unknown): string {
   return typeof payload
 }
 
+async function fetchWVetro(url: URL, init: RequestInit, contexto: string) {
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(45_000),
+    })
+  } catch (e) {
+    const nome = e instanceof Error ? e.name : ''
+    if (nome === 'TimeoutError' || nome === 'AbortError') {
+      throw new Error(`Timeout W.Vetro em ${contexto} após 45s.`)
+    }
+    throw e
+  }
+}
+
 async function autenticarWVetro(force = false): Promise<string> {
   const agora = Date.now()
   if (!force && tokenCache && tokenCache.expiraEm > agora + 60_000) return tokenCache.token
@@ -110,7 +125,7 @@ async function autenticarWVetro(force = false): Promise<string> {
   url.searchParams.set('Secusername', cfg.username)
   url.searchParams.set('Secuserpassword', cfg.password)
 
-  const resposta = await fetch(url, { method: 'GET', cache: 'no-store' })
+  const resposta = await fetchWVetro(url, { method: 'GET', cache: 'no-store' }, '/Integracao/ValidarUsuario')
   const texto = await resposta.text()
 
   if (!resposta.ok) throw new Error(`W.Vetro recusou a autenticação (${resposta.status}).`)
@@ -142,11 +157,11 @@ async function requisicaoWVetro<T>(caminho: string, query?: Record<string, strin
   })
 
   async function executar(token: string) {
-    return fetch(url, {
+    return fetchWVetro(url, {
       method: 'GET',
       cache: 'no-store',
       headers: { token, Accept: 'application/json' },
-    })
+    }, caminho)
   }
 
   let resposta = await executar(await autenticarWVetro())
