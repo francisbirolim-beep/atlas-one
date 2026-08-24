@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       const inicio = body.inicio
       const fim = body.fim
       if (!execucaoId || !dataOk(inicio) || !dataOk(fim)) return NextResponse.json({ error: 'Execução e período são obrigatórios.' }, { status: 400 })
-      if (inicio > fim || dias(inicio, fim) > 29) return NextResponse.json({ error: 'Cada lote da auditoria deve ter no máximo 30 dias.' }, { status: 400 })
+      if (inicio > fim || dias(inicio, fim) > 6) return NextResponse.json({ error: 'Cada lote da auditoria deve ter no máximo 7 dias.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
       await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, erro: null }).eq('id', execucaoId)
@@ -100,14 +100,14 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'produtos') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = Math.min(12, Math.max(1, Number(body.limite || 6)))
+      const limite = Math.min(6, Math.max(1, Number(body.limite || 3)))
       const resultado = await processarLoteProdutosWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
 
     if (acao === 'imagens') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = Math.min(10, Math.max(1, Number(body.limite || 5)))
+      const limite = Math.min(6, Math.max(1, Number(body.limite || 3)))
       const resultado = await processarLoteImagensWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
