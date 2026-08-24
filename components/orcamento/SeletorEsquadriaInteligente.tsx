@@ -12,6 +12,7 @@ import {
   type TipologiaVariavelComVariavel,
 } from '@/lib/engenhariaVariaveis'
 import { listarConfiguracoesValidadasOrcamento, type ConfiguracaoOrcamento } from '@/lib/orcamentoConfiguracoes'
+import { listarStatusTipologiasOrcamento, rotuloStatusTipologia, type StatusTipologiaOrcamento } from '@/lib/statusTipologiasOrcamento'
 import type { Produto, Tipologia } from '@/lib/tipos'
 
 export type StatusConfiguracaoOrcamento = 'pendente' | 'preenchida' | 'validada'
@@ -64,8 +65,16 @@ function imagemPadraoConfiguracao(nome: string) {
   return IMAGENS_PC3_VALIDADAS[nome.trim()] || null
 }
 
+function classeStatus(status?: StatusTipologiaOrcamento | null) {
+  if (status?.status === 'validada_atlas') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (status?.status === 'em_validacao_atlas') return 'border-amber-200 bg-amber-50 text-amber-800'
+  if (status?.status === 'referencia_wvetro') return 'border-blue-200 bg-blue-50 text-blue-700'
+  return 'border-slate-200 bg-slate-50 text-slate-600'
+}
+
 export default function SeletorEsquadriaInteligente({ value, onChange }: Props) {
   const [catalogo, setCatalogo] = useState<Catalogo>({ linhas: [], tipologias: [], produtos: [], configuracoes: [], opcoes: [] })
+  const [statusTipologias, setStatusTipologias] = useState<Record<string, StatusTipologiaOrcamento>>({})
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [focoBusca, setFocoBusca] = useState(false)
@@ -73,12 +82,13 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
 
   async function carregarCatalogo() {
     setCarregando(true)
-    const [linhas, tipologias, produtos, configuracoes, opcoes] = await Promise.all([
+    const [linhas, tipologias, produtos, configuracoes, opcoes, statuses] = await Promise.all([
       listarLinhasTecnicas(),
       listarTipologias(),
       listarProdutos(true),
       listarConfiguracoesValidadasOrcamento(),
       listarTodasOpcoes(),
+      listarStatusTipologiasOrcamento(),
     ])
     setCatalogo({
       linhas: linhas.filter(l => l.ativo),
@@ -87,6 +97,7 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
       configuracoes,
       opcoes,
     })
+    setStatusTipologias(statuses)
     setCarregando(false)
   }
 
@@ -107,6 +118,7 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
   const linha = catalogo.linhas.find(l => l.id === value.linhaId) || null
   const tipologiaAtual = catalogo.tipologias.find(t => t.id === value.tipologiaId) || null
   const produtoAtual = catalogo.produtos.find(p => p.id === value.produtoId) || null
+  const statusTipologiaAtual = value.tipologiaId ? statusTipologias[value.tipologiaId] || null : null
 
   const tipologiasCompativeis = useMemo(() => {
     if (!linha) return []
@@ -271,7 +283,7 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
           <div className="relative">
             <select value={value.linhaId || ''} onChange={e => selecionarLinha(e.target.value)} className="w-full appearance-none border border-slate-300 rounded-lg p-2.5 pr-8 text-sm bg-white">
               <option value="">Selecione a linha (opcional)</option>
-              {catalogo.linhas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+              {catalogo.linhas.map(l => <option key={l.id} value={l.id}>{l.nome}{(l as any).origem_referencia === 'wvetro' ? ' · WVETRO' : ''}</option>)}
             </select>
             <ChevronDown size={15} className="pointer-events-none absolute right-2.5 top-3 text-slate-400" />
           </div>
@@ -287,13 +299,20 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
               className="w-full appearance-none border border-slate-300 rounded-lg p-2.5 pr-8 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-400"
             >
               <option value="">{carregando ? 'Carregando...' : !linha ? 'Opcional - selecione uma linha para usar o cadastro' : tipologiasCompativeis.length ? 'Selecione o modelo (opcional)' : 'Nenhum modelo cadastrado - use a descrição livre'}</option>
-              {tipologiasCompativeis.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              {tipologiasCompativeis.map(t => <option key={t.id} value={t.id}>{t.label} — {rotuloStatusTipologia(statusTipologias[t.id])}</option>)}
             </select>
             <ChevronDown size={15} className="pointer-events-none absolute right-2.5 top-3 text-slate-400" />
           </div>
           {linha && <p className="mt-1 text-[11px] text-slate-400">{tipologiasCompativeis.length} modelo(s) vinculados à linha {linha.nome}. Se não encontrar, use a descrição livre acima.</p>}
         </div>
       </div>
+
+      {tipologiaAtual && (
+        <div className={`flex flex-wrap items-center gap-2 rounded-xl border p-3 text-xs ${classeStatus(statusTipologiaAtual)}`}>
+          <span className="font-bold">{rotuloStatusTipologia(statusTipologiaAtual)}</span>
+          <span className="opacity-80">{statusTipologiaAtual?.status === 'validada_atlas' ? 'A configuração técnica validada do Atlas tem prioridade.' : statusTipologiaAtual?.status === 'em_validacao_atlas' ? 'Já está sendo tratada no Atlas, mas ainda exige validação técnica.' : statusTipologiaAtual?.status === 'referencia_wvetro' ? 'Modelo trazido do W.Vetro; pode ser usado como referência enquanto tratamos a receita no Atlas.' : 'Tipologia cadastrada no Atlas.'}</span>
+        </div>
+      )}
 
       {linha && (
         <div className="relative">
@@ -310,7 +329,7 @@ export default function SeletorEsquadriaInteligente({ value, onChange }: Props) 
             <div className="absolute z-30 mt-1 w-full max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl p-2 space-y-2">
               {tipologiasEncontradas.map(t => (
                 <button key={t.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarTipologia(t.id)} className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50">
-                  <span className="text-sm font-medium text-slate-700">{t.label}</span>
+                  <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-700">{t.label}<span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${classeStatus(statusTipologias[t.id])}`}>{rotuloStatusTipologia(statusTipologias[t.id])}</span></span>
                 </button>
               ))}
               {configuracoesEncontradas.map(c => (

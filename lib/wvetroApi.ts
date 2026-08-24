@@ -55,8 +55,6 @@ function tokenJwtDaString(valorBruto: string): string | null {
     .replace(/^Bearer\s+/i, '')
     .trim()
 
-  // A documentação do W.Vetro informa JWT. Exigimos o formato de três segmentos
-  // para não confundir mensagens de erro longas com um token válido.
   const jwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
   return jwt.test(valor) ? valor : null
 }
@@ -64,9 +62,7 @@ function tokenJwtDaString(valorBruto: string): string | null {
 function extrairToken(payload: unknown, profundidade = 0): string | null {
   if (profundidade > 8) return null
 
-  if (typeof payload === 'string') {
-    return tokenJwtDaString(payload)
-  }
+  if (typeof payload === 'string') return tokenJwtDaString(payload)
 
   if (Array.isArray(payload)) {
     for (const item of payload) {
@@ -81,15 +77,11 @@ function extrairToken(payload: unknown, profundidade = 0): string | null {
   const obj = payload as Record<string, unknown>
   const chavesPrioritarias = Object.keys(obj).filter((chave) => /token|jwt|access|auth/i.test(chave))
 
-  // Primeiro tenta campos cujo nome sugere autenticação/token.
   for (const chave of chavesPrioritarias) {
     const token = extrairToken(obj[chave], profundidade + 1)
     if (token) return token
   }
 
-  // GeneXus/APIs legadas podem embrulhar o retorno em estruturas como
-  // Result/Data/Response/coleções. Percorrer todos os valores torna o parser
-  // compatível sem depender de um nome de campo específico.
   for (const valor of Object.values(obj)) {
     const token = extrairToken(valor, profundidade + 1)
     if (token) return token
@@ -121,9 +113,7 @@ async function autenticarWVetro(force = false): Promise<string> {
   const resposta = await fetch(url, { method: 'GET', cache: 'no-store' })
   const texto = await resposta.text()
 
-  if (!resposta.ok) {
-    throw new Error(`W.Vetro recusou a autenticação (${resposta.status}).`)
-  }
+  if (!resposta.ok) throw new Error(`W.Vetro recusou a autenticação (${resposta.status}).`)
 
   let payload: unknown = texto
   try {
@@ -139,7 +129,6 @@ async function autenticarWVetro(force = false): Promise<string> {
     )
   }
 
-  // A documentação informa validade de 24h. Guardamos por 23h para renovar com folga.
   tokenCache = { token, expiraEm: agora + 23 * 60 * 60 * 1000 }
   return token
 }
@@ -183,11 +172,23 @@ export async function listarLinhasWVetro<T = unknown>(): Promise<T> {
   return requisicaoWVetro<T>('/Produtos/linhas')
 }
 
+export async function listarCoresWVetro<T = unknown>(): Promise<T> {
+  return requisicaoWVetro<T>('/Produtos/cores')
+}
+
 export async function buscarProdutoWVetro<T = unknown>(tipo: WVetroProdutoTipo, codigo: string): Promise<T> {
   return requisicaoWVetro<T>('/Produtos/produtoByKey', {
     Produtotipo: tipo,
     Produtocodigo: codigo,
   })
+}
+
+// A documentação chama o recurso de produtoByKey. Algumas instalações GeneXus
+// retornam a coleção do tipo quando Produtocodigo é omitido; outras exigem o código.
+// A auditoria tenta este modo apenas como descoberta. Se a instalação recusar,
+// o Atlas usa os códigos já preservados nos exports + códigos encontrados nas vendas.
+export async function listarProdutosWVetroPorTipo<T = unknown>(tipo: WVetroProdutoTipo): Promise<T> {
+  return requisicaoWVetro<T>('/Produtos/produtoByKey', { Produtotipo: tipo })
 }
 
 export async function listarOrcamentosWVetro<T = unknown>(inicio: string, fim: string): Promise<T> {
@@ -212,7 +213,5 @@ export async function listarNotasEntradaWVetro<T = unknown>(inicio: string, fim:
 }
 
 export async function listarItensNotaEntradaWVetro<T = unknown>(nfId: string | number): Promise<T> {
-  return requisicaoWVetro<T>('/compras/itemNf', {
-    Nfid: nfId,
-  })
+  return requisicaoWVetro<T>('/compras/itemNf', { Nfid: nfId })
 }
