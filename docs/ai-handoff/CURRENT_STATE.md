@@ -1,289 +1,57 @@
 # CURRENT_STATE.md — Atlas One
 
-## EM VALIDAÇÃO — COMPRAS / NF + CONFERÊNCIA DE RECEBIMENTO — 2026-08-23
+> Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
-O Atlas passou a ser a fonte operacional para entrada e conferência das notas de compra, porque as NFs de entrada não são alimentadas no W.Vetro.
+## EM VALIDAÇÃO FINAL — AUDITORIA COMPLETA W.VETRO / PR #258 — 2026-08-23
 
-Estado real desta implementação:
-- PR #247 já integrada em produção com `/compras/entrada` por XML NF-e, PDF/DANFE assistido ou lançamento manual;
-- a prévia de XML/PDF não grava dados e produtos não reconhecidos não são criados automaticamente;
-- itens tentam vínculo exato com o catálogo Atlas; estados possíveis: `vinculado`, `pendente` e `ambiguo`;
-- fornecedor é reconhecido por CNPJ e fornecedor novo só é criado na confirmação;
-- XML/PDF original é guardado no bucket privado `compras-nfs`;
-- atualização de custo é uma ação explícita, desligada por padrão e restrita aos itens vinculados;
-- migration `20260823155025_compras_nfe_entrada` criou `compras_nfs` e `compras_nf_itens` com RLS habilitado;
-- PR #248 já integrada em produção criou `/compras` como Central de Compras, `/compras/notas` como histórico, detalhe de NF com arquivo original por URL temporária e `/compras/vinculos` como fila de itens pendentes/ambíguos;
-- corrigir vínculo na fila não altera custo automaticamente;
-- PR #249 está em validação para conferência física em `/compras/recebimentos/[nfId]`;
-- a conferência aceita múltiplos recebimentos parciais para a mesma NF e acumula o que já foi recebido;
-- cada item compara `quantidade da NF`, `já recebido`, `saldo` e `recebido agora`, classificando `ok`, `falta`, `excesso` ou `avaria`;
-- recebimento guarda data/hora, responsável, observação geral e observação por item;
-- podem ser anexadas até 4 fotos por conferência; o navegador reduz as imagens antes do envio;
-- as fotos ficam no bucket privado `compras-recebimentos` e o histórico abre cada imagem por URL assinada temporária;
-- migration `20260823161555_compras_conferencia_recebimento` já foi aplicada no Supabase de produção e está alinhada ao nome do arquivo no repositório;
-- tabelas novas `compras_recebimentos`, `compras_recebimento_itens` e `compras_recebimento_fotos` possuem RLS habilitado, sem acesso direto do client; as rotas server-side operam por service role;
-- privilégios do `service_role` foram verificados nas três tabelas;
-- o bucket `compras-recebimentos` é privado;
-- preview da PR #249 passou em Next.js + TypeScript após correção do rollback server-side; o último commit ainda deve passar pelo preview final após documentação/fotos históricas;
-- **não existe movimentação automática de estoque nesta etapa**.
+Objetivo atual: usar o W.Vetro como referência integral de Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens, mantendo o Atlas como fonte técnica oficial depois de validação.
 
-Pendente antes de liberar Compras/Estoque como fluxo operacional completo:
-- testar uma NF real por XML com atualização de custo desligada;
-- validar dados fiscais, itens e vínculos e confirmar a primeira NF;
-- conferir histórico + arquivo original privado + fila de vínculos;
-- registrar uma conferência física real, incluindo entrega parcial/divergência e foto;
-- repetir teste com PDF/DANFE e Manual;
-- definir política de custo e modelar explicitamente unidade de compra, unidade operacional e fator de conversão;
-- somente depois liberar movimentação de estoque.
+Estado real:
+- PR #255 já integrada: Compras → fiscal → fornecedores → Contas a Pagar → recebimento → estoque → custo médio + precificação balcão separada do custo técnico;
+- PR #257 já integrada: estoque multiunidade, endereçamento, reservas e transferências;
+- PR #256 já integrada: Venda Balcão multiunidade, caixas por unidade, consulta de estoque da rede e atendimento de venda reservada;
+- PR #258 aberta em `feat/wvetro-auditoria-completa`;
+- Build Validation da implementação funcional passou antes da aplicação das migrations; migrations depois foram alinhadas ao histórico real do Supabase;
+- quatro migrations W.Vetro já aplicadas no Supabase e renomeadas no repositório para os números remotos reais:
+  - `20260824012830_wvetro_referencia_completa_v1`;
+  - `20260824012851_wvetro_staging_tipologias_componentes_v1`;
+  - `20260824012908_wvetro_snapshots_api_v1`;
+  - `20260824012923_wvetro_imagens_snapshot_v1`;
+- catálogo conhecido preservado: 1.307 perfis W.Vetro e 1.174 acessórios W.Vetro + 3 acessórios exclusivos Atlas;
+- 109 tipologias da extração histórica W.Vetro foram formalizadas sem alterar suas fórmulas/receitas;
+- antes da PR apenas 46/109 tinham vínculo formal com linha; depois das migrations: 109/109;
+- depois da carga existem 60 linhas técnicas no total, 29 ativas, 55 de origem exclusivamente W.Vetro e 4 de origem mista Atlas+W.Vetro;
+- `wvetro_referencias_linhas` preserva 64 valores brutos de linha; diferenças de grafia/capitalização não são descartadas;
+- staging inicial contém 109 referências de tipologia;
+- referência de vidro continua zerada antes da execução viva, porque vidro não é inventado a partir de cadastro inexistente;
+- nova tela Master `/configuracoes/integracoes/wvetro/auditoria` executa a auditoria viva em lotes, consultando `/Produtos/linhas`, catálogo P/A quando suportado, pedidos/orçamentos, `produtoByKey`, vidros e imagens;
+- a auditoria pode importar código novo encontrado na API somente como `origem=wvetro`, `status_validacao=importado`, `unidade=NULL`, `preco=0`, sem custo/margem inventados;
+- imagens W.Vetro são preservadas no snapshot e copiadas para o bucket `fotos` somente quando possível; foto Atlas existente não é sobrescrita;
+- vínculos de Linha usam somente Linha explícita da API ou igualdade exata; nunca fuzzy;
+- no orçamento, tipologias passam a exibir selo de procedência/validação: `REFERÊNCIA WVETRO`, `WVETRO · EM VALIDAÇÃO ATLAS`, `WVETRO · VALIDADA ATLAS`, `VALIDADA ATLAS` ou `CADASTRADA ATLAS`;
+- configuração/fórmula/receita validada no Atlas sempre tem prioridade sobre a referência W.Vetro.
 
-## EM VALIDAÇÃO — INTEGRAÇÃO DIRETA API W.VETRO EM SOMENTE LEITURA — 2026-08-23
+### Limitação ainda aberta
 
-A primeira camada de integração direta Atlas One ↔ W.Vetro foi implementada em branch isolada para consultar dados reais sem alterar automaticamente os cadastros existentes.
+A execução viva da API não foi disparada pelo agente porque a rota é protegida por sessão Atlas Master e o preview Vercel exige SSO/cookie persistente. Um executor temporário restrito ao preview foi criado para teste, mas a ferramenta externa não conseguiu manter a sessão; ele foi removido antes do merge. A execução deve ser iniciada pela própria tela Master autenticada. Nenhuma credencial foi exposta ou proteção reduzida.
 
-Estado real desta implementação:
-- mapeamento oficial preservado em `docs/ai-handoff/WVETRO_API_MAPPING.md`, com base `https://api.wvetro.com.br/wvetro/rest/api/v2`;
-- novo cliente server-side `lib/wvetroApi.ts`, sem expor credenciais ao navegador;
-- autenticação usa `/Integracao/ValidarUsuario` e mantém token W.Vetro em cache temporário por até 23 horas, renovando com folga antes da validade documentada de 24 horas;
-- credenciais são lidas exclusivamente de `WVETRO_LICENSE_ID`, `WVETRO_USERNAME` e `WVETRO_PASSWORD`; valores reais não existem no repositório;
-- `.env.example` documenta apenas os nomes das variáveis e a URL base;
-- rota master `/api/integracoes/wvetro/preview` trabalha somente com GET e não executa insert/update/delete no Supabase;
-- recursos disponíveis na prévia: `status`, `linhas`, `produto`, `orcamentos` e `pedidos`;
-- consultas de pedidos/orçamentos são limitadas a janelas de até 90 dias por chamada;
-- a resposta de pedidos/orçamentos extrai pares únicos `Linha + Modelo`, preparando a identificação de tipologias sem promovê-las ao cadastro oficial;
-- nova tela `/configuracoes/integracoes/wvetro` mostra se as três credenciais estão presentes e oferece `Testar conexão e buscar linhas` usando a sessão real do usuário Master;
-- a tela considera a conexão validada somente quando a API autentica e `/Produtos/linhas` responde com sucesso;
-- as credenciais reais foram configuradas externamente na Vercel para Preview e Production em 2026-08-23;
-- PR #238 concentra a implementação; previews Vercel da branch compilaram com sucesso até a inclusão da tela de teste;
-- nenhuma migration, tabela de staging ou alteração de cadastro oficial foi feita nesta etapa.
+A execução viva deve fechar os números finais de:
+- linhas retornadas por `/Produtos/linhas`;
+- eventuais perfis/acessórios criados depois dos exports históricos;
+- Linha+Modelo em todo o período auditado;
+- referências de vidro;
+- URLs/imagens encontradas e efetivamente copiadas;
+- divergências que ainda precisam de validação humana.
 
-Pendente antes de iniciar importação:
-- validar a autenticação real pela nova tela master e confirmar retorno de linhas reais do W.Vetro;
-- após a conexão validada, projetar staging/dry-run para comparar linhas, perfis, acessórios, tipologias, custos e preços com o que já existe no Atlas;
-- qualquer promoção do staging para os cadastros oficiais deve exigir conferência explícita e nunca sobrescrever fórmulas/preços automaticamente.
+Relatório detalhado: `docs/tecnico/auditoria-wvetro-completa-2026-08-23.md`.
 
-## EM VALIDAÇÃO — EDITOR TÉCNICO + FÓRMULAS SUPREMA 2F–9F — 2026-08-22
+## REGRAS TÉCNICAS A PRESERVAR
 
-A Engenharia ganhou uma camada editável para manter fórmulas, perfis, quantidades e vidro por configuração técnica, sem depender de alteração de código para ajustes de receita.
-
-Estado real desta implementação:
-- nova rota `/engenharia/editor-tecnico`, acessível pelo menu interno da Engenharia;
-- o Editor Técnico agora é organizado hierarquicamente em `Linha → Tipologia → Configuração`, substituindo a lista única de receitas;
-- o campo `Linha` usa os cadastros de `linhas_tecnicas` e o campo `Tipologia` mostra somente tipologias vinculadas à linha selecionada por `linha_tipologias`;
-- Linha e Tipologia podem ser `Inativadas` ou `Liberadas` diretamente no Editor Técnico; inativar preserva cadastro, fórmulas e histórico para futura reativação;
-- `linhas_tecnicas.ativo` continua sendo a fonte da disponibilidade da linha; foi adicionado `tipologias.ativo` para controlar a disponibilidade da tipologia;
-- o Editor Técnico continua exibindo linhas/tipologias inativas, identificadas como `INATIVA`, para permitir administração e reativação;
-- fluxos normais que usam `listarTipologias()` passam a receber apenas tipologias ativas; linhas já eram filtradas por `ativo` nos seletores comerciais;
-- `listarFormulasCorteAtivas()` agora exige simultaneamente fórmula ativa, tipologia ativa e vínculo da tipologia com pelo menos uma linha ativa, evitando liberar Plano de Corte de um cadastro inativado;
-- PC8 e PC9 Suprema, que haviam sido criadas sem associação comercial, agora estão vinculadas à Linha Suprema de forma idempotente;
-- o editor permite alterar código de perfil, descrição, fórmula, quantidade, eixo e `Composição / origem do desconto`;
-- perfis podem ser substituídos usando o catálogo de produtos; novas peças podem ser adicionadas e removidas;
-- acessórios, reforços e variantes continuam sendo mantidos em `Engenharia > Receitas Técnicas`, com atalho a partir do editor;
-- cada fórmula tem status `Em desenvolvimento`, `Em validação` ou `Validada`; somente `Validada` pode ser liberada no Plano de Corte pelo editor;
-- fórmulas passam a ter versão e histórico automático: alterações relevantes geram snapshot da versão anterior em `engenharia_tipologia_formulas_corte_historico`;
-- o banco permite mais de uma configuração para a mesma tipologia (`tipologia_id + configuracao_chave`), evitando misturar mão-amiga comum e larga em uma receita estrutural única;
-- o motor declarativo suporta `CEIL(expr)`, que implementa a regra técnica de arredondar resultados fracionários sempre para cima;
-- o contexto das receitas novas disponibiliza `LF = Largura - 4` e `HF = Altura - 4` para representar a folga total de encaixe da esquadria;
-- resultados declarativos podem carregar quantidade, eixo e composição do desconto; `planoCortePerfis` usa esses dados nas receitas novas e preserva o comportamento legado da PC3 antiga;
-- família Suprema mão-amiga comum sem reforço cadastrada de 2F a 6F com descontos 162/180/198/216/234 (+18 mm por folha); vidro usa o desconto estrutural + 6 mm por folha;
-- família Suprema mão-amiga larga sem reforço cadastrada de 2F a 9F com descontos 181/222/263/304/345/386/427/468 (+41 mm por folha); vidro usa o desconto estrutural + 6 mm por folha;
-- PC2 comum/estreita está `Validada` e ativa por já ter sido confirmada em duas medidas; as demais sementes novas ficam `Em validação` e inativas por segurança;
-- PC2 larga está cadastrada em validação com SU243 interno, SU242 externo e SU280 lateral; no teste 2000×2100 a fórmula retorna travessas/baguete horizontal 908 mm e vidro 902×1933 mm;
-- as regras de 7F/8F/9F registram a matemática das folhas, mas não inventam marcos/trilhos compostos: a composição estrutural continua pendente de validação específica;
-- o registro PC3 legado W.Vetro #994 permanece ativo por compatibilidade e foi marcado `Em validação`;
-- migrations `engenharia_editor_formulas_suprema`, `formula_legacy_status` e `tipologias_ativo_editor_linhas` já foram aplicadas no Supabase de produção;
-- a PR #232 possui preview Vercel compilado com sucesso; merge em `main` permanece manual conforme a governança do projeto.
-
-Pendente antes de considerar a família totalmente liberada para produção:
-- validação manual da nova navegação `Linha → Tipologia → Configuração` e dos controles Inativar/Liberar, sempre restaurando o cadastro após o teste porque o preview usa o banco real;
-- validação manual no novo Editor Técnico dos resultados PC2 comum/larga e PC9;
-- validação dos marcos/trilhos específicos das quantidades 3F–9F, principalmente composições acima de 6 planos;
-- integração futura das fórmulas diretas de vidro do Editor Técnico ao relatório oficial, sem confundir folga de encaixe da esquadria com folga técnica do vidro.
-
-## EM VALIDAÇÃO — LISTA DE VIDROS + FOLGAS NO PLANO DE CORTE — 2026-08-22
-
-O módulo `Engenharia > Fórmulas de Corte` passou a preparar, junto ao plano de perfis, uma lista de vidros com composição, folgas independentes de largura/altura e medida de corte quando existe uma referência técnica disponível.
-
-Estado atual desta implementação:
-- o campo de vidro passou a aceitar escolha por sugestões do cadastro e também digitação livre;
-- produtos ativos cuja categoria ou grupo contenha `Vidro` aparecem como sugestões sem exigir migration;
-- foram adicionados campos separados `Folga na largura do vidro (mm)` e `Folga na altura do vidro (mm)`, aceitando valores decimais;
-- o botão principal passou a indicar `Gerar plano de corte + vidros`;
-- o relatório gerado ganhou a seção `Lista de Vidros`, com tipo/composição, medida-base, folga de cada eixo, medida de corte e quantidade;
-- a impressão/PDF inclui a lista de vidros;
-- a medida do vidro não usa a largura/altura total da esquadria como fallback, evitando criar uma medida técnica sem validação;
-- na PC3 Suprema, a implementação em validação usa como referência os baguetes SU102 horizontal e vertical já presentes no plano e desconta as folgas informadas; essa relação deve ser conferida em uso real antes de liberar produção;
-- a quantidade de panos da PC3 é inferida pelos pares de baguetes horizontal/vertical e multiplicada pela quantidade de esquadrias informada;
-- tipologias sem referência de vidro reconhecida exibem aviso e não geram medida automática;
-- novo helper `lib/planoCorteVidros.ts` concentra a busca de vidros do cadastro e a regra de geração da lista;
-- nenhuma migration e nenhuma alteração de schema nesta etapa.
-
-## EM VALIDAÇÃO — CADASTRO DO CLIENTE COMO CENTRAL OPERACIONAL — 2026-08-22
-
-O cadastro do cliente passa a ser o ponto central para consultar e iniciar operações relacionadas àquele cliente, sem duplicar registros quando o cliente já existe.
-
-Estado atual desta implementação:
-- `/clientes/[id]` mantém dados cadastrais, tarefas, interações de CRM e propostas e ganhou a `Central do cliente`;
-- a Central mostra vendas confirmadas a partir de `medicoes_finais.cliente_id`, vinculando a venda ao orçamento de origem quando disponível;
-- a Central mostra assistências/manutenções a partir de `assistencias.cliente_id`, com data, status, técnico, duração, acesso à OS/PDF e ao Kanban;
-- cards espelho de Assistência criados em `orcamentos` são excluídos da lista de propostas do cliente para evitar duplicidade visual;
-- existem atalhos `Novo orçamento` e `Nova assistência / manutenção` dentro do cadastro do cliente;
-- ao abrir Orçamento Rápido pelo cadastro, o formulário recebe `?cliente=<id>`, carrega nome, telefone/WhatsApp, cidade e origem e preserva o `cliente_id` exato no envio;
-- ao abrir Assistência pelo cadastro, o formulário recebe `?cliente=<id>`, carrega os dados existentes e preserva o `cliente_id` exato no chamado e no card espelho;
-- `DadosOrcamentoForm` e `DadosAssistenciaForm` aceitam `clienteId` opcional; quando não há ID explícito, os fluxos antigos continuam usando `obterOuCriarCliente`;
-- manutenção ainda usa o fluxo/tabela de Assistências; quando houver módulo próprio, deve seguir a mesma regra de vínculo por `cliente_id`;
-- nenhuma migration e nenhuma alteração de schema nesta etapa.
-
-## EM VALIDAÇÃO — ASSISTÊNCIA EM CAMPO COM ROTA, GPS E TEMPO — 2026-08-21
-
-O link externo da Assistência evoluiu para um fluxo de execução em campo, com navegação até o cliente, check-in explícito do técnico, contagem de tempo e registro opcional de GPS no início e na conclusão.
-
-Estado atual desta implementação:
-- após gerar o link do técnico, o Atlas oferece ações `WhatsApp`, `SMS` e `Copiar`; WhatsApp/SMS abrem o aplicativo do aparelho com a mensagem e o link já preparados;
-- na tela externa o telefone do cliente pode ser tocado para ligar e também possui atalho para WhatsApp;
-- o endereço completo possui `Abrir no Google Maps` e `Copiar endereço`;
-- ao chegar ao local o técnico clica em `Iniciar assistência`;
-- no início, o navegador solicita permissão para localização; se autorizada, o Atlas grava latitude, longitude, precisão aproximada e horário do check-in;
-- negar ou não conseguir obter GPS não bloqueia o atendimento: a assistência inicia normalmente sem coordenadas;
-- `Iniciar assistência` grava horário no servidor, muda o status para `em_atendimento` e move o card automaticamente para a coluna operacional de atendimento/andamento;
-- a tela do técnico passa a mostrar cronômetro ao vivo baseado no horário de início persistido no servidor;
-- o Kanban interno atualiza as assistências silenciosamente a cada 12 segundos e mostra `Em campo HH:MM:SS` ou a duração final no card;
-- o modal interno da assistência exibe técnico, início, fim, duração e, quando disponíveis, links do GPS de início e conclusão para o Google Maps, incluindo a precisão aproximada;
-- na conclusão, o técnico mantém o preenchimento de serviço, materiais, observações e as duas assinaturas;
-- ao concluir, o Atlas tenta capturar novamente o GPS com autorização do aparelho, grava o horário final e a duração total, muda status para `resolvido` e move o card para a etapa final;
-- não existe rastreamento contínuo nem GPS em segundo plano: a localização é solicitada somente nos momentos explícitos de início e conclusão;
-- migration `assistencia_gps_tempo_execucao`, versão remota `20260821220855`, já foi aplicada no Supabase de produção e adiciona apenas campos nullable, mantendo compatibilidade com a versão anterior.
-
-## EM VALIDAÇÃO — LINK DO TÉCNICO + ASSINATURAS + PDF DIRETO — 2026-08-21
-
-A Assistência Técnica passou a ter um fluxo externo para execução em campo e uma saída de PDF mais prática para envio ao cliente.
-
-Estado atual desta implementação:
-- o modal de cada chamado em `/assistencias` ganhou o bloco `Acesso do técnico`, onde um usuário autenticado pode informar o nome do técnico, telefone opcional e validade do acesso;
-- o Atlas gera um link individual por assistência; o token completo aparece somente no momento da geração e no banco fica armazenado apenas o hash SHA-256;
-- links podem expirar automaticamente e também podem ser revogados pelo Atlas;
-- a rota pública `/assistencia/acesso/[token]` abre sem login e dá acesso somente ao chamado vinculado ao token válido;
-- a tela externa já mostra empresa/logo, cliente, telefone, endereço, data de abertura, problema relatado e fotos do chamado;
-- o técnico pode preencher nome, data do atendimento, serviço realizado, materiais/peças e observações;
-- a tela externa possui assinatura digital em canvas para o técnico e para o cliente, utilizável com dedo ou mouse;
-- a conclusão exige as duas assinaturas e grava atendimento + assinaturas de volta na própria assistência;
-- a Ordem de Serviço passa a exibir automaticamente técnico, data, serviço, materiais, observações e as duas assinaturas salvas;
-- `/assistencias/[id]/os` ganhou ações separadas `Salvar PDF` e `Imprimir`;
-- `Salvar PDF` gera arquivo `.pdf` diretamente no navegador via jsPDF, facilitando salvar no computador e compartilhar pelo WhatsApp;
-- `Imprimir` continua usando o diálogo nativo do navegador;
-- a impressão da OS esconde controles fixos do Atlas, incluindo `Voltar`, `Início` e `Favoritos`, deixando a folha limpa;
-- `MobileNavigationControls` também recebeu `print:hidden` como proteção adicional;
-- a migration `assistencia_link_tecnico` foi aplicada no projeto Supabase de produção e cria os campos de atendimento/assinaturas em `assistencias` e a tabela `assistencia_acessos_externos`;
-- a versão local da migration de fórmulas de corte foi reconciliada com a versão já registrada no banco (`20260820160019`), corrigindo uma divergência anterior do histórico de migrations sem alterar o schema existente.
-
-## EM VALIDAÇÃO — OS DE ASSISTÊNCIA A4 + DATA AJUSTÁVEL — 2026-08-21
-
-A Assistência Técnica recebeu dois ajustes pedidos após uso real: a Ordem de Serviço foi compactada para impressão em uma única folha A4 e a data da assistência passou a ser ajustável.
-
-Estado atual desta implementação:
-- `/assistencias/[id]/os` usa layout de impressão A4 retrato com margem de 6 mm;
-- quadros, campos internos, linhas de assinatura e separadores usam bordas mais escuras para leitura melhor no papel;
-- cabeçalho, resumo, cliente, problema, técnico/data, serviço, materiais, observações e assinaturas foram compactados na impressão;
-- até 6 fotos continuam disponíveis e, no papel, ficam organizadas em uma faixa horizontal compacta para economizar altura;
-- o atraso da impressão automática passou para 650 ms, dando mais tempo para logo e fotos carregarem antes do diálogo de impressão;
-- ao abrir uma nova assistência existe o campo `Data da assistência`, iniciado no dia atual e alterável antes de salvar;
-- no modal do chamado dentro do Kanban de Assistências existe `Data da assistência` + `Salvar data`, permitindo corrigir depois a data do chamado;
-- a data escolhida é a mesma exibida no card e na OS;
-- a implementação reaproveita `assistencias.created_at`, sem migration e sem alteração de schema.
-
-## EM VALIDAÇÃO — NAVEGAÇÃO ORGANIZADA + CENTRAL DE CADASTROS — 2026-08-21
-
-O Atlas ganhou uma camada de organização para reduzir a dificuldade de localizar funções sem remover nenhuma tela existente nem alterar regras de negócio.
-
-Estado atual desta implementação:
-- a sidebar passou a separar a navegação operacional pelos grupos `Geral`, `Comercial` e `Operações`;
-- foi adicionado o campo `Buscar no menu...`, que pesquisa módulos operacionais e também funções administrativas por palavras-chave;
-- a área `Administração` fica recolhida para reduzir poluição visual e é expandida automaticamente quando o Master entra em uma rota administrativa;
-- foi criada a rota `/administracao` como `Central de Administração`, funcionando como mapa para Empresa e Identidade, Usuários e Acesso, Setores e Permissões, Padrão do Orçamento, Central de Cadastros, Fórmulas de Corte, Campos adicionais e Configurações Avançadas;
-- foi criada a rota `/cadastros` como `Central de Cadastros`, com busca própria e atalhos separados para Produtos, Linhas, Materiais, Fornecedores, Produtos por Linha, Precificação, Unidades Pendentes, Receitas Técnicas, Fórmulas de Corte e Campos adicionais;
-- a tela antiga `/cadastro` foi preservada e aparece somente como `Cadastros Avançados`, para manter funções que ainda não foram separadas em páginas próprias;
-- nenhuma rota anterior foi removida;
-- nenhuma migration e nenhuma alteração de schema nesta etapa.
-
-## EM VALIDAÇÃO — HOME CONFIGURÁVEL POR USUÁRIO + ASSISTÊNCIA COM OS — 2026-08-21
-
-A Home agora pode ser montada individualmente pelo usuário Master, permitindo escolher quais blocos cada pessoa verá ao entrar no Atlas One. A mesma implementação evolui o fluxo existente de Assistência Técnica para separar chamados por responsável e gerar Ordem de Serviço.
-
-Estado atual desta implementação:
-- o botão verde `+ Novo` da barra superior foi ocultado para eliminar a duplicidade com o atalho `Novo orçamento` da Home;
-- `Configurações > Usuários e Acesso` permite criar um usuário e, no mesmo formulário, escolher os módulos da sua Home;
-- usuários existentes também podem ter a Home reconfigurada posteriormente nessa mesma tela;
-- módulos disponíveis: `Orçamentos`, `Clientes`, `Kanban comercial`, `Minhas tarefas`, `Calendário`, `Notificações`, `Assistências` e `Indicadores`;
-- a configuração é persistida em `configuracoes_gerais` com chave `home_usuario:<usuarioId>`, sem criar tabela ou migration nova;
-- a Home passou a ser composta dinamicamente por `components/system/HomeDashboard.tsx`;
-- os atalhos da faixa principal acompanham os módulos habilitados para o usuário;
-- `Kanban comercial`, `Minhas tarefas`, `Calendário`, `Notificações` e `Assistências` possuem blocos próprios e independentes na Home;
-- o menu operacional ganhou acesso direto a `Assistências`;
-- ao habilitar Assistências para um funcionário, o Master pode definir `Somente as assistências abertas por ele` ou `Todas as assistências da empresa`;
-- usuários Master sempre visualizam todas as assistências;
-- a página `/assistencias` aplica o mesmo escopo, portanto um vendedor configurado como `próprias` não vê os chamados de outros usuários;
-- o formulário `/assistencia` agora exige apenas o `Nome do cliente`; descrição, telefone, cidade, endereço, número, bairro e fotos são opcionais;
-- ao digitar o nome na abertura da assistência, o Atlas pesquisa clientes já cadastrados e preenche automaticamente os dados encontrados;
-- o Kanban de Assistências existente foi preservado; criação/edição/exclusão das colunas fica restrita ao Master;
-- cada chamado possui sua Ordem de Serviço em `/assistencias/[id]/os`;
-- quando uma assistência online é criada, `criarAssistenciaNoServidor` devolve o ID do chamado e o formulário abre automaticamente a OS com `?print=1`, acionando o diálogo de impressão/salvar PDF do navegador;
-- a OS usa os dados da empresa e logo no cabeçalho, incluindo CNPJ quando disponível, além de nome do cliente, telefone/WhatsApp, endereço completo, problema, fotos, etapa e responsável pela abertura;
-- a OS inclui áreas para técnico, data do atendimento, serviço executado, materiais/peças, observações e assinaturas;
-- no Kanban, ao abrir qualquer chamado, a ação `Imprimir / PDF da OS` permite abrir e imprimir/salvar novamente a mesma OS a qualquer momento;
-- se a assistência for criada offline, ela continua sendo guardada na fila local; após sincronizar, a OS pode ser aberta pelo Kanban para impressão;
-- nenhuma migration e nenhuma alteração de schema nesta etapa.
-
-## EM VALIDAÇÃO — HOME WHITE-LABEL + LOGO DA EMPRESA + ÚLTIMOS ORÇAMENTOS — 2026-08-21
-
-A Home foi redesenhada a partir das referências visuais avaliadas com o usuário (incluindo W.Vetro), preservando a identidade própria do Atlas One e criando a primeira fundação white-label real da interface.
-
-Estado atual desta implementação:
-- `components/system/HomeExecutiveHero.tsx` agora usa uma faixa principal colorida com identidade da empresa, mantendo o Atlas One como produto e exibindo o nome da empresa cliente dentro da Home;
-- o logo da empresa, quando configurado, aparece dentro da faixa principal; sem logo, a Home exibe um placeholder orientando a configuração;
-- a cor principal da empresa pode ser definida e passa a personalizar a faixa da Home;
-- a faixa permanece colorida tanto no tema claro quanto no tema escuro;
-- os atalhos principais agora acompanham a configuração da Home por usuário;
-- painel `Últimos orçamentos` mostra os 3 pedidos mais recentes com número, cliente, valor, status e data quando o módulo `Orçamentos` está habilitado;
-- foi criada a tela master `Configurações > Empresa e Identidade` (`/configuracoes/empresa`) para cadastrar razão social/nome, nome fantasia, logo e cor principal;
-- o upload do logo usa o bucket `fotos` já existente, pasta `empresa`, sem criar bucket novo;
-- a identidade visual é persistida dentro da configuração JSON `dados_empresa`, preservando CNPJ, endereço, telefones, e-mail e demais dados já existentes;
-- salvar os dados tradicionais da empresa também preserva `nomeFantasia`, `logoUrl` e `corPrincipal`, evitando que o cadastro atual apague a personalização;
-- nenhuma migration e nenhuma alteração de schema nesta etapa.
-
-## EM VALIDAÇÃO — TEMA CLARO COMPLETO NA HOME — 2026-08-21
-
-Após validação visual real na tela da usuária Keila, foi identificado que a primeira versão do tema claro clareava a sidebar e o hero, mas mantinha os cards operacionais da Home escuros.
-
-Estado atual desta correção:
-- `app/atlas-theme.css` converte, no tema claro, os painéis baseados em `bg-slate-950` para superfície branca;
-- bordas `border-slate-800` / `border-white/10` e divisórias internas passam para tons claros;
-- superfícies internas `bg-white/[0.025]`, `bg-white/5` e `bg-white/10` recebem equivalentes claros;
-- textos brancos e cinzas usados dentro desses painéis passam para tipografia escura/legível;
-- hover de controles neutros também foi ajustado para o tema claro;
-- cores semânticas de status (verde, azul, vermelho e violeta) continuam preservadas;
-- nenhuma migration e nenhuma alteração de banco nesta etapa.
-
-## EM VALIDAÇÃO — HOME RESPONSIVA + TEMA CLARO POR USUÁRIO — 2026-08-21
-
-Estado atual desta implementação:
-- `components/system/HomeExecutiveHero.tsx` é responsivo e evita o texto comprimido em larguras intermediárias;
-- `components/Sidebar.tsx` possui alternância `Tema claro` / `Tema escuro`;
-- a preferência é salva por usuário no navegador usando a chave `atlas-theme:<usuario.id>`;
-- o tema claro clareia a sidebar e os painéis operacionais, mantendo a faixa white-label colorida;
-- o tema escuro mantém a sidebar e os painéis operacionais escuros;
-- `app/atlas-theme.css` também corrige contraste do título `Atlas One` e do nome do usuário na sidebar escura;
-- nenhuma migration e nenhuma alteração de banco nesta etapa.
-
-## EM VALIDAÇÃO — ORÇAMENTO COM TIPO LIVRE — 2026-08-21
-
-O formulário de Orçamento Rápido agora permite cadastrar uma esquadria mesmo quando Linha / Modelo / Tipologia ainda não existem no catálogo técnico.
-
-Estado atual desta implementação:
-- `components/orcamento/SeletorEsquadriaInteligente.tsx` ganhou o campo **Tipo de esquadria / descrição livre**;
-- ao preencher esse campo, o item passa a usar `tipo = outro` e grava a descrição em `tipoOutroTexto`, estrutura que já existia no orçamento;
-- Linha e Modelo / Tipologia aparecem explicitamente como opcionais;
-- o vendedor pode deixar Linha e Modelo vazios e enviar o orçamento usando apenas a descrição livre + demais campos obrigatórios do pedido;
-- se o vendedor quiser informar uma Linha conhecida junto com a descrição livre, a troca da Linha preserva o texto digitado;
-- ao escolher uma Tipologia cadastrada, o fluxo volta para o catálogo e limpa a descrição livre para evitar conflito;
-- nenhuma migration e nenhuma alteração de banco nesta etapa.
-
-Também permanece válido o estado anterior do Plano de Corte PC3: SU289/SU290 vinculados às figuras exatas do W.Vetro nº 994; TMC ainda precisa de figura técnica exata validada por código.
+- GitHub é a única fonte da verdade do código.
+- Nunca commitar direto em `main`; branch → PR → Build/Preview → merge manual.
+- W.Vetro é referência/origem; Atlas validado é a versão técnica oficial.
+- Nunca sobrescrever automaticamente fórmula, receita, custo, preço, margem ou unidade operacional Atlas com valor histórico W.Vetro.
+- `produtos.unidade` é unidade operacional; `unidade_origem`/`qtde_embalagem_origem` são proveniência.
+- Tipologia = custo técnico. Venda Balcão = preço de venda próprio; nunca aplicar margem de balcão dentro da tipologia.
+- Associação externa somente por identidade segura/exata; sem fuzzy como vínculo automático.
+- Hardening antigo da Engenharia continua tarefa separada; não habilitar RLS às cegas em tabelas legadas.
