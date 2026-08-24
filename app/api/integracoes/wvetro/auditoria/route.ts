@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
-  descobrirCatalogoPorTipoWVetro,
   processarLoteProdutosWVetro,
   processarPeriodoWVetro,
   resumoAuditoriaWVetro,
   sincronizarLinhasApiWVetro,
 } from '@/lib/wvetroAuditoriaServer'
+import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -73,8 +73,8 @@ export async function POST(req: NextRequest) {
 
       const linhas = await sincronizarLinhasApiWVetro()
       const [descobertaP, descobertaA] = await Promise.all([
-        descobrirCatalogoPorTipoWVetro('P'),
-        descobrirCatalogoPorTipoWVetro('A'),
+        descobrirEImportarCatalogoWVetro('P'),
+        descobrirEImportarCatalogoWVetro('A'),
       ])
 
       return NextResponse.json({ ok: true, execucao, linhas, descobertaCatalogo: { perfis: descobertaP, acessorios: descobertaA } })
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       if (inicio > fim || dias(inicio, fim) > 89) return NextResponse.json({ error: 'Cada lote deve ter no máximo 90 dias.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
-      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, updated_at: new Date().toISOString() } as any).eq('id', execucaoId)
+      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim }).eq('id', execucaoId)
       return NextResponse.json({ ok: true, resultado })
     }
 
