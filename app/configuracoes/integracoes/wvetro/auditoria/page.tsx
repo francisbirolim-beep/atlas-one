@@ -89,20 +89,32 @@ export default function AuditoriaWVetroPage() {
         const p = periodos[i]
         setEtapa(`Histórico W.Vetro ${p.inicio} até ${p.fim} (${i + 1}/${periodos.length})`)
         await api({ acao: 'periodo', execucaoId, inicio: p.inicio, fim: p.fim })
-        setProgresso(Math.round(((i + 1) / (periodos.length + 1)) * 35))
+        setProgresso(Math.round(((i + 1) / (periodos.length + 1)) * 30))
       }
 
       let offset = 0
       let total = 1
       while (offset < total) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
-        setEtapa(`Catálogo: imagens, Linha e dados de cada produto (${offset}/${total === 1 ? '...' : total})`)
+        setEtapa(`Catálogo: Linha, dados e URL de cada produto (${offset}/${total === 1 ? '...' : total})`)
         const json = await api({ acao: 'produtos', offset, limite: 12 })
         const r = json.resultado
         total = Number(r.total || 0)
         offset = Number(r.proximoOffset || offset + 12)
-        const pct = total ? 35 + Math.round(Math.min(1, offset / total) * 63) : 98
-        setProgresso(pct)
+        setProgresso(total ? 30 + Math.round(Math.min(1, offset / total) * 45) : 75)
+        if (!r.processados) break
+      }
+
+      let offsetImagem = 0
+      let totalImagem = 1
+      while (offsetImagem < totalImagem) {
+        if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
+        setEtapa(`Copiando imagens W.Vetro para o Atlas (${offsetImagem}/${totalImagem === 1 ? '...' : totalImagem})`)
+        const json = await api({ acao: 'imagens', offset: offsetImagem, limite: 10 })
+        const r = json.resultado
+        totalImagem = Number(r.total || 0)
+        offsetImagem = Number(r.proximoOffset || offsetImagem + 10)
+        setProgresso(totalImagem ? 75 + Math.round(Math.min(1, offsetImagem / totalImagem) * 23) : 98)
         if (!r.processados) break
       }
 
@@ -161,7 +173,7 @@ export default function AuditoriaWVetroPage() {
               <Card titulo="Perfis usados no histórico" valor={resumo.referencias.perfisHistoricos} detalhe="Códigos únicos observados" />
               <Card titulo="Acessórios usados no histórico" valor={resumo.referencias.acessoriosHistoricos} detalhe="Códigos únicos observados" />
               <Card titulo="Vidros referência" valor={resumo.referencias.vidros} detalhe={`${resumo.referencias.vidrosComImagem} com imagem de origem`} />
-              <Card titulo="Produtos com imagem" valor={resumo.apiProdutos.comImagem} detalhe={`${resumo.apiProdutos.snapshots} consultados na API`} icone="imagem" />
+              <Card titulo="Produtos com imagem W.Vetro" valor={resumo.apiProdutos.comImagem} detalhe={`${resumo.apiProdutos.snapshots} consultados na API`} icone="imagem" />
             </section>
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18}/> Regra de validação preservada</div><p className="mt-1">W.Vetro fornece a referência. Fórmula, composição, custo técnico e configuração já validados no Atlas têm prioridade e não são sobrescritos.</p></section>
           </>
