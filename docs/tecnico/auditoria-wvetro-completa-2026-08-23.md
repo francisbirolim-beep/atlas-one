@@ -81,6 +81,31 @@ A PR cria `wvetro_referencias_vidros` para guardar todas as referências únicas
 
 Não é prometida imagem onde a API W.Vetro não fornecer URL/imagem válida.
 
+## Resultado aplicado no Supabase — 2026-08-23
+
+As quatro migrations da PR #258 foram aplicadas com sucesso e alinhadas aos números reais do histórico do Supabase:
+
+- `20260824012830_wvetro_referencia_completa_v1`;
+- `20260824012851_wvetro_staging_tipologias_componentes_v1`;
+- `20260824012908_wvetro_snapshots_api_v1`;
+- `20260824012923_wvetro_imagens_snapshot_v1`.
+
+Os pós-checks obrigatórios da primeira migration passaram. Estado medido depois da aplicação:
+
+- **60 linhas técnicas** no total;
+- **29 linhas ativas** para uso/tratamento;
+- **55 linhas com origem exclusivamente W.Vetro**;
+- **4 linhas com origem mista Atlas + W.Vetro**;
+- **64 referências brutas de linha** preservadas no staging (diferenças de grafia/capitalização da origem não são apagadas);
+- **109 tipologias W.Vetro** formalizadas;
+- **109/109 tipologias W.Vetro vinculadas a linha**;
+- **109 referências de tipologia** no staging inicial;
+- **1.307 perfis W.Vetro** preservados;
+- **1.174 acessórios W.Vetro** preservados;
+- referências de vidro continuam em **0 antes da execução viva**, pois não são inventadas a partir de cadastro inexistente.
+
+Portanto, a lacuna histórica de 46/109 vínculos foi eliminada sem alterar fórmulas/receitas validadas.
+
 ## Auditoria viva implementada
 
 Nova tela Master:
@@ -95,11 +120,13 @@ Fluxo:
 4. se a API listar códigos novos, cria os faltantes com `origem=wvetro`, `status_validacao=importado`, `unidade=NULL`, `preco=0`, sem custo/margem inventados;
 5. percorre pedidos + orçamentos em janelas de até 90 dias;
 6. agrega Linha+Modelo, perfis, acessórios e vidros;
-7. percorre todos os produtos W.Vetro conhecidos e consulta `produtoByKey` por código;
+7. percorre os produtos W.Vetro conhecidos e consulta `produtoByKey` por código;
 8. preserva payload, LinhaId/LinhaNome, NCM/unidade de origem e URL;
 9. vincula `linha_produtos` somente a partir de Linha explícita da API;
 10. copia imagens possíveis para Storage Atlas;
 11. fecha a execução com totais auditáveis.
+
+A rota da auditoria viva permanece protegida por sessão Atlas Master. Foi tentado um executor temporário exclusivo do preview para automatizar essa chamada sem login, mas a Vercel mantém o preview atrás de SSO/cookie e o ambiente técnico externo não possui sessão persistente. O executor temporário foi removido antes do merge. Portanto, a execução viva deve ser disparada na própria tela Master autenticada; nenhuma credencial é exposta ou enfraquecida.
 
 ## Status mostrado no orçamento
 
@@ -113,16 +140,18 @@ O seletor `components/orcamento/SeletorEsquadriaInteligente.tsx` passa a informa
 
 Assim o vendedor/orçamentista sabe imediatamente se está seguindo somente a referência do W.Vetro ou uma regra efetivamente validada no Atlas.
 
-## O que a execução ao vivo ainda precisa responder
+## O que a execução viva ainda precisa responder
 
-Depois das migrations + código entrarem em ambiente utilizável, a execução completa deve fechar com números reais para:
+Ao clicar `Executar auditoria completa` na tela Master, o Atlas deve fechar com números reais para:
 
 - quantidade exata retornada por `/Produtos/linhas`;
-- se `produtoByKey` sem código suporta listar todo o catálogo na licença real;
+- se a API real suporta listar todo o catálogo P/A sem código;
 - número final de perfis e acessórios depois de detectar eventuais itens criados após os exports;
-- quantidade final de pares Linha+Modelo em todo o período auditado;
+- quantidade final de pares Linha+Modelo no período auditado;
 - quantidade final de perfis/acessórios usados no histórico;
 - quantidade final de referências de vidro;
 - número de produtos com URL de imagem;
 - número de imagens efetivamente copiadas para o Atlas;
 - divergências/ambiguidades que exigem validação humana.
+
+A execução é incremental/auditável: referências já importadas permanecem no staging e dados Atlas validados não são rebaixados nem substituídos.
