@@ -39,7 +39,6 @@ function adicionarDias(data: string, dias: number) {
   d.setUTCDate(d.getUTCDate() + dias)
   return iso(d)
 }
-function menor(a: string, b: string) { return a < b ? a : b }
 
 export default function AuditoriaWVetroPage() {
   const [master, setMaster] = useState<boolean | null>(null)
@@ -84,31 +83,30 @@ export default function AuditoriaWVetroPage() {
       const execucaoId = inicial.execucao.id as string
       setDescoberta(inicial.descobertaCatalogo)
 
-      const periodos: Array<{ inicio: string; fim: string }> = []
+      const dias: string[] = []
       let cursor = inicio
       while (cursor <= fim) {
-        const loteFim = menor(adicionarDias(cursor, 6), fim)
-        periodos.push({ inicio: cursor, fim: loteFim })
-        cursor = adicionarDias(loteFim, 1)
+        dias.push(cursor)
+        cursor = adicionarDias(cursor, 1)
       }
 
-      for (let i = 0; i < periodos.length; i++) {
+      for (let i = 0; i < dias.length; i++) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
-        const p = periodos[i]
-        setEtapa(`Histórico W.Vetro ${p.inicio} até ${p.fim} (${i + 1}/${periodos.length}) · lotes de até 7 dias`)
-        await api({ acao: 'periodo', execucaoId, inicio: p.inicio, fim: p.fim })
-        setProgresso(Math.round(((i + 1) / Math.max(1, periodos.length)) * 35))
+        const data = dias[i]
+        setEtapa(`Histórico W.Vetro ${data} (${i + 1}/${dias.length}) · 1 dia por chamada`)
+        await api({ acao: 'periodo', execucaoId, inicio: data, fim: data })
+        setProgresso(Math.round(((i + 1) / Math.max(1, dias.length)) * 35))
       }
 
       let offset = 0
       let total = 1
       while (offset < total) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
-        setEtapa(`Catálogo: Linha, dados e URL de cada produto (${offset}/${total === 1 ? '...' : total})`)
-        const json = await api({ acao: 'produtos', offset, limite: 3 })
+        setEtapa(`Catálogo: Linha, dados e URL de cada produto (${offset}/${total === 1 ? '...' : total}) · 1 por chamada`)
+        const json = await api({ acao: 'produtos', offset, limite: 1 })
         const r = json.resultado
         total = Number(r.total || 0)
-        offset = Number(r.proximoOffset || offset + 3)
+        offset = Number(r.proximoOffset || offset + 1)
         setProgresso(total ? 35 + Math.round(Math.min(1, offset / total) * 40) : 75)
         if (!r.processados) break
       }
@@ -117,11 +115,11 @@ export default function AuditoriaWVetroPage() {
       let totalImagem = 1
       while (offsetImagem < totalImagem) {
         if (parar.current) throw new Error('Auditoria pausada pelo usuário. Os dados já auditados foram preservados.')
-        setEtapa(`Copiando imagens W.Vetro para o Atlas (${offsetImagem}/${totalImagem === 1 ? '...' : totalImagem})`)
-        const json = await api({ acao: 'imagens', offset: offsetImagem, limite: 3 })
+        setEtapa(`Copiando imagens W.Vetro para o Atlas (${offsetImagem}/${totalImagem === 1 ? '...' : totalImagem}) · 1 por chamada`)
+        const json = await api({ acao: 'imagens', offset: offsetImagem, limite: 1 })
         const r = json.resultado
         totalImagem = Number(r.total || 0)
-        offsetImagem = Number(r.proximoOffset || offsetImagem + 3)
+        offsetImagem = Number(r.proximoOffset || offsetImagem + 1)
         setProgresso(totalImagem ? 75 + Math.round(Math.min(1, offsetImagem / totalImagem) * 23) : 98)
         if (!r.processados) break
       }
@@ -133,7 +131,7 @@ export default function AuditoriaWVetroPage() {
       setEtapa('Auditoria concluída.')
     } catch (e) {
       if (e instanceof ErroAuditoriaApi && e.status === 504) {
-        setErro('Mesmo um lote curto excedeu o tempo do servidor (504). Não reinicie: o Atlas precisa reduzir esse intervalo específico antes de continuar.')
+        setErro('Uma consulta de apenas 1 dia ainda excedeu o tempo do W.Vetro (504). Não reinicie. Esse dia específico será isolado para diagnóstico sem repetir os dias concluídos.')
       } else {
         setErro(e instanceof Error ? e.message : 'Falha na auditoria completa.')
       }
@@ -152,7 +150,7 @@ export default function AuditoriaWVetroPage() {
           <div>
             <Link href="/configuracoes/integracoes/wvetro" className="mb-2 inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={16}/> Integração W.Vetro</Link>
             <h1 className="text-2xl font-bold text-slate-900">Auditoria completa W.Vetro → Atlas</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">Confere Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens. O histórico é processado em lotes de até 7 dias para evitar timeout. A referência W.Vetro é preservada; receitas validadas do Atlas nunca são substituídas automaticamente.</p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">Confere Linhas, Tipologias, Perfis, Acessórios, Vidros e imagens. O histórico agora é processado dia a dia para reduzir timeout. A referência W.Vetro é preservada; receitas validadas do Atlas nunca são substituídas automaticamente.</p>
           </div>
           <ShieldCheck className="text-emerald-600" size={28}/>
         </header>
@@ -163,7 +161,7 @@ export default function AuditoriaWVetroPage() {
             <label className="text-sm text-slate-600">Até<input type="date" value={fim} onChange={e => setFim(e.target.value)} disabled={rodando} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <div className="flex items-end gap-2">
               <button onClick={executar} disabled={rodando || master !== true} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{rodando ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>} {rodando ? 'Auditando...' : 'Executar auditoria completa'}</button>
-              {rodando && <button onClick={() => { parar.current = true; setEtapa('Pausando após o lote atual...') }} className="rounded-lg border border-slate-300 p-2.5 text-slate-700" title="Pausar"><PauseCircle size={18}/></button>}
+              {rodando && <button onClick={() => { parar.current = true; setEtapa('Pausando após a chamada atual...') }} className="rounded-lg border border-slate-300 p-2.5 text-slate-700" title="Pausar"><PauseCircle size={18}/></button>}
             </div>
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-slate-900 transition-all" style={{ width: `${progresso}%` }}/></div>
