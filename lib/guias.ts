@@ -1,4 +1,4 @@
-import { Home, Users, FileText, Columns3, Ruler, Factory, Wrench, ShoppingCart } from 'lucide-react'
+import { Home, Users, FileText, Columns3, Ruler, Factory, Wrench, ShoppingCart, Store } from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -16,6 +16,7 @@ export const GUIAS: Guia[] = [
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/orcamento/pesquisar', label: 'Orçamentos', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Kanban', icon: Columns3, grupo: 'Comercial' },
+  { href: '/balcao', label: 'Venda Balcão', icon: Store, grupo: 'Comercial' },
   { href: '/producao/medicao-final', label: 'Medição Final', icon: Ruler, grupo: 'Operações' },
   { href: '/compras', label: 'Compras / NF', icon: ShoppingCart, grupo: 'Operações' },
   { href: '/producao', label: 'Produção', icon: Factory, grupo: 'Operações' },
