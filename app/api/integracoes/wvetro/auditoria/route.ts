@@ -31,10 +31,6 @@ function dataOk(valor: unknown): valor is string {
   return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor) && !Number.isNaN(Date.parse(`${valor}T00:00:00Z`))
 }
 
-function dias(inicio: string, fim: string) {
-  return Math.floor((Date.parse(`${fim}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`)) / 86_400_000)
-}
-
 async function reconstruirVariaveisExplicitas() {
   const { error } = await supabaseAdmin.rpc('fn_wvetro_reconstruir_variaveis_explicitas')
   if (error) throw error
@@ -91,7 +87,7 @@ export async function POST(req: NextRequest) {
       const inicio = body.inicio
       const fim = body.fim
       if (!execucaoId || !dataOk(inicio) || !dataOk(fim)) return NextResponse.json({ error: 'Execução e período são obrigatórios.' }, { status: 400 })
-      if (inicio > fim || dias(inicio, fim) > 6) return NextResponse.json({ error: 'Cada lote da auditoria deve ter no máximo 7 dias.' }, { status: 400 })
+      if (inicio !== fim) return NextResponse.json({ error: 'Cada chamada histórica deve processar exatamente 1 dia.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
       await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, erro: null }).eq('id', execucaoId)
@@ -100,14 +96,14 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'produtos') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = Math.min(6, Math.max(1, Number(body.limite || 3)))
+      const limite = 1
       const resultado = await processarLoteProdutosWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
 
     if (acao === 'imagens') {
       const offset = Math.max(0, Number(body.offset || 0))
-      const limite = Math.min(6, Math.max(1, Number(body.limite || 3)))
+      const limite = 1
       const resultado = await processarLoteImagensWVetro(offset, limite)
       return NextResponse.json({ ok: true, resultado })
     }
