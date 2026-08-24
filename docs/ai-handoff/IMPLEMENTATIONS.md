@@ -2,6 +2,52 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
+## 2026-08-23 — PR #260 — Orçamento visual + variáveis W.Vetro
+
+### Seleção visual de tipologias
+- criado `SeletorEsquadriaInteligenteV2.tsx` e ativado por compatibilidade pelo componente existente;
+- tipologias da Linha passam a aparecer em cards visuais;
+- mantido select textual como fallback/lista rápida;
+- adicionados busca, filtros de status/origem/imagem e ordenação por prioridade técnica;
+- cards exibem status Atlas/W.Vetro, número de configurações validadas, ocorrência histórica e origem da imagem;
+- precedência de imagem: Atlas tipologia → configuração/produto Atlas → W.Vetro → placeholder;
+- lightbox para ampliar imagem sem depender de hover.
+
+### Referência segura de variáveis
+- criada tabela `wvetro_referencias_variaveis` com RLS fechado para cliente e operação server-side;
+- migrations:
+  - `20260824022150_wvetro_variaveis_orcamento_v1`;
+  - `20260824022234_wvetro_variaveis_folhas_normalizacao_v1`;
+- função `fn_wvetro_reconstruir_variaveis_explicitas()` extrai apenas fatos escritos explicitamente no Modelo W.Vetro;
+- nenhum fuzzy/inferência livre é promovido automaticamente;
+- base histórica atual gerou 57 referências explícitas de número de folhas, normalizadas de 1 a 8;
+- catálogo global de opção `folhas` passou a representar 1..8 quando esses valores apareceram explicitamente na origem, sem validar receitas.
+
+### Configurar variáveis
+- criado endpoint autenticado `/api/orcamento/wvetro-referencias` para expor somente referências seguras;
+- UI unifica variáveis Atlas e referências W.Vetro;
+- valor Atlas existente nunca é sobrescrito pela referência;
+- W.Vetro preenche somente valor ainda vazio ao abrir modo assistido;
+- selo distingue `ATLAS`, `WVETRO REFERÊNCIA` e valor `AJUSTADA`;
+- evidência de origem fica visível;
+- ausência de dado permanece `A definir`.
+
+### Procedência do orçamento
+- `lib/orcamentos.ts` passa a guardar no snapshot de cada item a referência W.Vetro realmente utilizada;
+- snapshot inclui Linha/Modelo, IDs, variáveis usadas, valor bruto, origem e evidência;
+- referência só é marcada `utilizada_como_base` se não houver configuração Atlas validada e algum valor W.Vetro tiver sido efetivamente usado;
+- falha ao obter metadados de procedência não bloqueia criação do orçamento.
+
+### Auditoria
+- após cada lote histórico da auditoria W.Vetro e ao finalizar, referências explícitas são reconstruídas;
+- futuras imagens/modelos encontrados pela auditoria passam a alimentar o mesmo fluxo visual, sem sobrescrever conhecimento Atlas validado.
+
+### Validação
+- banco aplicado com sucesso;
+- PR #260 aberta aguardando Build Validation + preview Vercel antes de merge.
+
+---
+
 ## 2026-08-23 — PR #258 — Auditoria completa W.Vetro → Atlas
 
 Implementada a camada de referência completa W.Vetro sem substituir o conhecimento técnico validado no Atlas.
@@ -30,7 +76,7 @@ Implementada a camada de referência completa W.Vetro sem substituir o conhecime
 - vínculo produto↔linha somente por campo explícito/igualdade exata; fuzzy continua proibido.
 
 ### Orçamento
-- seletor de tipologia passa a mostrar procedência/estado técnico:
+- seletor de tipologia passou a mostrar procedência/estado técnico:
   - `REFERÊNCIA WVETRO`;
   - `WVETRO · EM VALIDAÇÃO ATLAS`;
   - `WVETRO · VALIDADA ATLAS`;
@@ -40,12 +86,9 @@ Implementada a camada de referência completa W.Vetro sem substituir o conhecime
 
 ### Segurança / validação
 - tabelas novas com RLS e acesso operacional server-side/service-role;
-- advisor de segurança não apontou ERROR novo específico da camada W.Vetro; `RLS enabled no policy` é intencional para essas tabelas server-side;
-- os ERRORs críticos de RLS continuam sendo os três antigos da Engenharia e permanecem fora do escopo;
-- executor temporário de preview usado apenas como tentativa de automação foi removido antes do merge;
-- credenciais W.Vetro permanecem somente no ambiente Vercel;
+- advisor de segurança não apontou ERROR novo específico da camada W.Vetro;
 - nenhuma atualização automática de custo/preço/unidade operacional foi adicionada;
-- execução viva final da API permanece para ser disparada por usuário Master autenticado, pois o preview Vercel exige SSO/cookie persistente.
+- execução viva final da API permanece para ser disparada por usuário Master autenticado.
 
 Relatório: `docs/tecnico/auditoria-wvetro-completa-2026-08-23.md`.
 
