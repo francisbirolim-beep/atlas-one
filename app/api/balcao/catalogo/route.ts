@@ -20,6 +20,86 @@ type LinhaRede = {
   custo_medio: number | string | null
 }
 
+type ProdutoCatalogo = {
+  id: string
+  codigo: string | null
+  nome: string
+  descricao: string | null
+  categoria: string | null
+  unidade: string | null
+  custo: number | string | null
+  preco: number | string | null
+  margem_percentual: number | string | null
+  preco_minimo: number | string | null
+  preco_promocional: number | string | null
+  foto_url: string | null
+  ativo: boolean
+}
+
+const CAMPOS_PRODUTO = 'id,codigo,nome,descricao,categoria,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,foto_url,ativo'
+
+function termosBusca(valor: string) {
+  return [...new Set(
+    valor
+      .trim()
+      .split(/\s+/)
+      .map(t => t.replace(/[,()%.'"\\]/g, '').trim())
+      .filter(t => t.length >= 2)
+  )].slice(0, 8)
+}
+
+function textoNormalizado(valor: unknown) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function textoProduto(p: ProdutoCatalogo) {
+  return textoNormalizado(`${p.codigo || ''} ${p.nome || ''} ${p.descricao || ''} ${p.categoria || ''}`)
+}
+
+async function buscarProdutos(q: string): Promise<ProdutoCatalogo[]> {
+  const termos = termosBusca(q)
+  if (!termos.length) return []
+
+  // Escolhe o termo mais seletivo para reduzir o conjunto no banco e depois
+  // exige todos os termos no texto agregado do produto. Assim "SUPREMA ROLDANA"
+  // funciona independentemente da ordem ou do campo em que cada palavra aparece.
+  const contagens = await Promise.all(termos.map(async termo => {
+    const filtro = `codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%,categoria.ilike.%${termo}%`
+    const { count, error } = await supabaseAdmin
+      .from('produtos')
+      .select('id', { count: 'exact', head: true })
+      .eq('ativo', true)
+      .not('unidade', 'is', null)
+      .or(filtro)
+    if (error) throw error
+    return { termo, count: count ?? Number.MAX_SAFE_INTEGER }
+  }))
+
+  contagens.sort((a, b) => a.count - b.count)
+  const termoBase = contagens[0]?.termo || termos[0]
+  const filtroBase = `codigo.ilike.%${termoBase}%,nome.ilike.%${termoBase}%,descricao.ilike.%${termoBase}%,categoria.ilike.%${termoBase}%`
+  const { data, error } = await supabaseAdmin
+    .from('produtos')
+    .select(CAMPOS_PRODUTO)
+    .eq('ativo', true)
+    .not('unidade', 'is', null)
+    .or(filtroBase)
+    .order('nome')
+    .limit(800)
+  if (error) throw error
+
+  const termosNorm = termos.map(textoNormalizado)
+  return ((data || []) as ProdutoCatalogo[])
+    .filter(p => {
+      const texto = textoProduto(p)
+      return termosNorm.every(termo => texto.includes(termo))
+    })
+    .slice(0, 120)
+}
+
 async function localPadrao(usuarioId: string, localSolicitado?: string | null) {
   if (localSolicitado) {
     const { data } = await supabaseAdmin
@@ -76,18 +156,8 @@ export async function GET(req: NextRequest) {
     const local = await localPadrao(usuario.id, req.nextUrl.searchParams.get('localId'))
     if (!local?.id) return NextResponse.json({ error: 'Nenhum local de estoque foi configurado para o balcão.' }, { status: 409 })
 
-    let query = supabaseAdmin
-      .from('produtos')
-      .select('id,codigo,nome,descricao,categoria,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,foto_url,ativo')
-      .eq('ativo', true)
-      .not('unidade', 'is', null)
-      .order('nome')
-      .limit(q ? 120 : 80)
-    if (q) query = query.or(`codigo.ilike.%${q}%,nome.ilike.%${q}%,descricao.ilike.%${q}%`)
-    const { data: produtos, error } = await query
-    if (error) throw error
-
-    const ids = (produtos || []).map(p => p.id)
+    const produtos = await buscarProdutos(q)
+    const ids = produtos.map(p => p.id)
     const { data: rede, error: erroRede } = ids.length
       ? await supabaseAdmin
           .from('estoque_disponibilidade_rede')
@@ -105,7 +175,7 @@ export async function GET(req: NextRequest) {
 
     const gestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
     const podeVerGestao = gestao !== 'oculto'
-    const lista = (produtos || []).map(p => {
+    const lista = produtos.map(p => {
       const linhas = porProduto.get(p.id) || []
       const agrupados = new Map<string, {
         localId: string; unidadeId: string; unidadeCodigo: string; unidadeNome: string;
