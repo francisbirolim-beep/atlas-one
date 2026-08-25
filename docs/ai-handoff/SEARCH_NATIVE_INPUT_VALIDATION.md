@@ -1,1 +1,0 @@
-Validação específica da Consulta de preço: o campo passa a usar evento nativo `onInput` e `onCompositionUpdate` para capturar cada tecla sem depender de espaço/Enter. Após validação em produção, replicar o padrão no campo de busca de produtos da tela principal da Venda Balcão.
