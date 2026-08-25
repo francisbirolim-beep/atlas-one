@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { criarAssistenciaNoServidor, DadosAssistenciaForm } from '@/lib/assistencias'
 import { salvarPendente } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
+import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import type { Cliente } from '@/lib/tipos'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -15,6 +16,8 @@ interface FotoItem {
   file: File
   preview: string
 }
+
+type ClienteBusca = Cliente & { apelido?: string | null }
 
 function dataHojeParaInput() {
   const agora = new Date()
@@ -37,7 +40,7 @@ export default function Assistencia() {
   const [salvo, setSalvo] = useState(false)
   const [salvoOffline, setSalvoOffline] = useState(false)
   const [erro, setErro] = useState('')
-  const [sugestoes, setSugestoes] = useState<Cliente[]>([])
+  const [sugestoes, setSugestoes] = useState<ClienteBusca[]>([])
   const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [clienteEscolhido, setClienteEscolhido] = useState<string | null>(null)
 
@@ -51,7 +54,7 @@ export default function Assistencia() {
       .eq('id', clienteId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) selecionarCliente(data as Cliente)
+        if (data) selecionarCliente(data as ClienteBusca)
       })
   }, [])
 
@@ -68,11 +71,26 @@ export default function Assistencia() {
       const { data } = await supabase
         .from('clientes')
         .select('*')
-        .ilike('nome', `%${termo}%`)
         .order('nome')
-        .limit(6)
+        .limit(1000)
       if (!ativo) return
-      setSugestoes((data as Cliente[]) || [])
+      const encontrados = ((data as ClienteBusca[]) || [])
+        .filter(cliente => correspondeBuscaAtlas(
+          termo,
+          cliente.nome,
+          cliente.apelido,
+          cliente.cpf_cnpj,
+          cliente.whatsapp,
+          cliente.telefone,
+          cliente.email,
+          cliente.cidade,
+          cliente.bairro,
+          cliente.endereco,
+          cliente.cep,
+          cliente.observacoes,
+        ))
+        .slice(0, 8)
+      setSugestoes(encontrados)
       setBuscandoCliente(false)
     }, 180)
 
@@ -82,7 +100,7 @@ export default function Assistencia() {
     }
   }, [clienteNome, clienteEscolhido])
 
-  function selecionarCliente(cliente: Cliente) {
+  function selecionarCliente(cliente: ClienteBusca) {
     setClienteEscolhido(cliente.id)
     setClienteNome(cliente.nome || '')
     setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
@@ -236,15 +254,15 @@ export default function Assistencia() {
           <div className="relative">
             <div className="relative">
               <UserRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" value={clienteNome} onChange={e => alterarNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl py-3 pl-10 pr-3 text-sm" />
+              <input type="text" value={clienteNome} onChange={e => alterarNome(e.target.value)} placeholder="Buscar cliente por nome, apelido, CPF/CNPJ, telefone, cidade ou bairro..." className="w-full border border-slate-300 rounded-xl py-3 pl-10 pr-3 text-sm" />
             </div>
             {(buscandoCliente || sugestoes.length > 0) && (
               <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 {buscandoCliente && <p className="px-3 py-2 text-xs text-slate-400"><Search size={12} className="mr-1 inline"/>Buscando clientes...</p>}
                 {!buscandoCliente && sugestoes.map(cliente => (
                   <button key={cliente.id} type="button" onClick={() => selecionarCliente(cliente)} className="block w-full border-t border-slate-100 px-3 py-2.5 text-left first:border-t-0 hover:bg-slate-50">
-                    <p className="text-sm font-medium text-slate-800">{cliente.nome}</p>
-                    <p className="text-[11px] text-slate-500">{[cliente.cidade, cliente.whatsapp || cliente.telefone].filter(Boolean).join(' · ') || 'Cliente cadastrado'}</p>
+                    <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium text-slate-800">{cliente.nome}</p>{cliente.apelido&&<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{cliente.apelido}</span>}</div>
+                    <p className="text-[11px] text-slate-500">{[cliente.cidade, cliente.bairro, cliente.whatsapp || cliente.telefone, cliente.cpf_cnpj].filter(Boolean).join(' · ') || 'Cliente cadastrado'}</p>
                   </button>
                 ))}
               </div>
