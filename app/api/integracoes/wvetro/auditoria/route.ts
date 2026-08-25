@@ -48,6 +48,36 @@ async function execucaoRetomavel(periodoInicio?: string, periodoFim?: string) {
   return data
 }
 
+async function observacoesDaExecucao(execucaoId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('wvetro_auditoria_execucoes')
+    .select('observacoes')
+    .eq('id', execucaoId)
+    .maybeSingle()
+  if (error) throw error
+  return obsObjeto(data?.observacoes)
+}
+
+async function salvarCheckpoint(
+  execucaoId: string,
+  patch: Record<string, unknown>,
+  extras: Record<string, unknown> = {},
+) {
+  const observacoes = await observacoesDaExecucao(execucaoId)
+  const atual = obsObjeto(observacoes.checkpoint)
+  observacoes.checkpoint = {
+    ...atual,
+    ...patch,
+    atualizado_em: new Date().toISOString(),
+  }
+  const { error } = await supabaseAdmin
+    .from('wvetro_auditoria_execucoes')
+    .update({ ...extras, observacoes })
+    .eq('id', execucaoId)
+  if (error) throw error
+  return observacoes
+}
+
 async function reconstruirVariaveisExplicitas() {
   const { error } = await supabaseAdmin.rpc('fn_wvetro_reconstruir_variaveis_explicitas')
   if (error) throw error
@@ -98,7 +128,16 @@ export async function POST(req: NextRequest) {
           cursor_data: null,
           iniciado_por_id: usuario.id,
           iniciado_por_nome: usuario.nome,
-          observacoes: { pendencias: [] },
+          observacoes: {
+            pendencias: [],
+            checkpoint: {
+              etapa: 'historico',
+              produto_offset: 0,
+              produto_total: 0,
+              imagem_offset: 0,
+              imagem_total: 0,
+            },
+          },
         })
         .select('*')
         .single()
@@ -121,7 +160,11 @@ export async function POST(req: NextRequest) {
       if (inicio !== fim) return NextResponse.json({ error: 'Cada chamada histórica deve processar exatamente 1 dia.' }, { status: 400 })
 
       const resultado = await processarPeriodoWVetro(inicio, fim)
-      await supabaseAdmin.from('wvetro_auditoria_execucoes').update({ cursor_data: fim, status: 'em_execucao', erro: null }).eq('id', execucaoId)
+      await salvarCheckpoint(
+        execucaoId,
+        { etapa: 'historico', historico_ultimo_dia: fim },
+        { cursor_data: fim, status: 'em_execucao', erro: null },
+      )
       return NextResponse.json({ ok: true, resultado })
     }
 
@@ -131,17 +174,18 @@ export async function POST(req: NextRequest) {
       const motivo = String(body.motivo || 'Timeout W.Vetro')
       if (!execucaoId || !dataOk(data)) return NextResponse.json({ error: 'Execução e data são obrigatórias.' }, { status: 400 })
 
-      const { data: execucao } = await supabaseAdmin
-        .from('wvetro_auditoria_execucoes')
-        .select('observacoes')
-        .eq('id', execucaoId)
-        .maybeSingle()
-      const observacoes = obsObjeto(execucao?.observacoes)
+      const observacoes = await observacoesDaExecucao(execucaoId)
       const pendencias = Array.isArray(observacoes.pendencias) ? [...observacoes.pendencias] : []
       if (!pendencias.some((p: any) => p?.data === data)) {
         pendencias.push({ data, motivo, registrado_em: new Date().toISOString() })
       }
       observacoes.pendencias = pendencias
+      observacoes.checkpoint = {
+        ...obsObjeto(observacoes.checkpoint),
+        etapa: 'historico',
+        historico_ultimo_dia: data,
+        atualizado_em: new Date().toISOString(),
+      }
 
       await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
@@ -151,14 +195,38 @@ export async function POST(req: NextRequest) {
     }
 
     if (acao === 'produtos') {
+      const execucaoId = String(body.execucaoId || '')
       const offset = Math.max(0, Number(body.offset || 0))
       const resultado = await processarLoteProdutosWVetro(offset, 1)
+      if (execucaoId) {
+        await salvarCheckpoint(
+          execucaoId,
+          {
+            etapa: 'produtos',
+            produto_offset: Number(resultado.proximoOffset || offset),
+            produto_total: Number(resultado.total || 0),
+          },
+          { status: 'em_execucao', erro: null },
+        )
+      }
       return NextResponse.json({ ok: true, resultado })
     }
 
     if (acao === 'imagens') {
+      const execucaoId = String(body.execucaoId || '')
       const offset = Math.max(0, Number(body.offset || 0))
       const resultado = await processarLoteImagensWVetro(offset, 1)
+      if (execucaoId) {
+        await salvarCheckpoint(
+          execucaoId,
+          {
+            etapa: 'imagens',
+            imagem_offset: Number(resultado.proximoOffset || offset),
+            imagem_total: Number(resultado.total || 0),
+          },
+          { status: 'em_execucao', erro: null },
+        )
+      }
       return NextResponse.json({ ok: true, resultado })
     }
 
@@ -167,13 +235,13 @@ export async function POST(req: NextRequest) {
       if (!execucaoId) return NextResponse.json({ error: 'Execução não informada.' }, { status: 400 })
       await reconstruirVariaveisExplicitas()
       const resumo = await resumoAuditoriaWVetroExato()
-      const { data: execucao } = await supabaseAdmin
-        .from('wvetro_auditoria_execucoes')
-        .select('observacoes')
-        .eq('id', execucaoId)
-        .maybeSingle()
-      const observacoes = obsObjeto(execucao?.observacoes)
+      const observacoes = await observacoesDaExecucao(execucaoId)
       const pendencias = Array.isArray(observacoes.pendencias) ? observacoes.pendencias : []
+      observacoes.checkpoint = {
+        ...obsObjeto(observacoes.checkpoint),
+        etapa: 'concluida',
+        atualizado_em: new Date().toISOString(),
+      }
       await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
         .update({ status: 'concluida', totais: resumo, erro: null, finalizado_em: new Date().toISOString(), observacoes })
