@@ -1,39 +1,40 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Modo Venda Balcão integrado ao Atlas
+## TAREFA ATUAL — validar busca incremental de clientes da Venda Balcão
 
-Branch: `feat/balcao-modo-integrado-atlas`
+PR: `#276`
+Branch: `fix/balcao-busca-cliente-incremental`
 
-Objetivo aprovado pelo usuário: manter **um único Atlas One** e tratar a Venda Balcão como um ambiente operacional próprio dentro dele.
+Objetivo: fazer a seleção de cliente na tela `/balcao` usar o cadastro compartilhado do Atlas de forma rápida e tolerante à digitação real do usuário.
 
-### Implementado nesta branch
+### Implementado
 
-1. `BalcaoShell` identificado como `Modo Venda Balcão`;
-2. botão desktop `Voltar ao Atlas` → `/`;
-3. botão `Atlas` no menu móvel;
-4. menu operacional do balcão continua independente e compacto;
-5. seção `Gestão compartilhada` aponta para as telas existentes do mesmo Atlas:
-   - Clientes `/clientes`;
-   - Produtos / Cadastros `/cadastros`;
-   - Estoque `/estoque`;
-   - Compras / NF `/compras`;
-6. não foi criado segundo cadastro, segundo estoque ou segundo banco.
+1. busca por nome, CPF/CNPJ, telefone, WhatsApp e cidade;
+2. normalização de acentos no servidor (`JOAO` encontra `João`);
+3. documentos/telefones pesquisáveis sem pontuação;
+4. captura nativa `onInput` + `onCompositionUpdate`;
+5. debounce de 70 ms;
+6. cancelamento da requisição anterior e proteção contra resposta fora de ordem;
+7. spinner pequeno enquanto a lista de clientes está sendo atualizada;
+8. busca de produtos da tela principal também usa captura nativa;
+9. seleção continua usando o mesmo `clientes.id` do Atlas — sem duplicação de cadastro.
 
-### Gates antes do merge
+### Validação funcional depois do merge
 
-- Build Validation verde no HEAD final;
-- preview Vercel `READY`;
-- PR mergeable;
-- validar visualmente `/balcao` no desktop e mobile;
-- confirmar que `Voltar ao Atlas` retorna ao shell completo;
-- confirmar que os links da gestão compartilhada abrem os módulos corretos do Atlas.
+Em `/balcao`:
 
-## Depois do merge
+- digitar `JU` e confirmar sugestões como Julio/Juliano/Juliane;
+- digitar `JOAO` sem acento e confirmar João paulo/João Vitor;
+- digitar parte de telefone/WhatsApp e confirmar cliente correspondente;
+- clicar em uma sugestão e confirmar que o nome fica selecionado para a venda;
+- continuar digitando no campo de produto e confirmar filtro letra por letra.
+
+## Depois desta validação
 
 Próximas evoluções do PDV, mantendo sempre a mesma base do Atlas:
 
-1. decidir e implementar administração de pontos de caixa por unidade;
-2. completar fluxo de estoque/cadastro necessário para operação de balcão sem duplicação;
+1. completar fluxo de cadastro/estoque necessário para operação de balcão sem duplicação;
+2. decidir e implementar administração de pontos de caixa por unidade;
 3. definir provedor fiscal e regras para NFC-e/NF-e/cancelamento fiscal;
 4. adicionar módulo Fiscal ao menu do balcão apenas quando existir fluxo real funcional;
 5. avaliar empacotamento comercial futuro em que clientes possam contratar só o Modo PDV, ocultando módulos do ERP, sem separar o backend.
@@ -58,6 +59,7 @@ Resumo preservado:
 - GitHub é a fonte da verdade.
 - Branch → PR → build/preview → merge; nunca commit direto em main.
 - Venda Balcão e Atlas completo compartilham produtos, clientes, estoque, compras e financeiro.
+- Busca operacional deve ser tolerante à ausência de acentos quando possível.
 - Não apagar venda, pagamento, movimento ou histórico para efetuar estorno.
 - Estoque, caixa e financeiro devem ser movimentados por transação auditável e idempotente.
 - W.Vetro é referência; regra técnica Atlas validada sempre tem prioridade.

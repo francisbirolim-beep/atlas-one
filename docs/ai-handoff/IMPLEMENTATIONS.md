@@ -2,6 +2,21 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
+## 2026-08-25 — Busca incremental de clientes da Venda Balcão — PR #276
+
+- corrigida a busca de cliente na tela principal `/balcao`;
+- busca considera nome, CPF/CNPJ, telefone, WhatsApp e cidade;
+- comparação server-side normaliza acentos, então `JOAO` encontra registros cadastrados como `João`;
+- documentos e telefones também são comparados sem pontuação;
+- campo de cliente usa `onInput` e `onCompositionUpdate` para receber a digitação durante composição do teclado;
+- debounce reduzido de 300 ms para 70 ms;
+- requisição anterior é abortada e respostas fora de ordem são descartadas;
+- indicador de carregamento aparece no próprio campo;
+- campo de produto da tela principal também passa a usar captura nativa;
+- clientes continuam vindo da tabela compartilhada `clientes`; nenhum cadastro paralelo foi criado.
+
+---
+
 ## 2026-08-25 — Modo Venda Balcão integrado ao Atlas
 
 - consolidada a decisão de manter **um único Atlas One**, com o PDV como modo operacional e não como sistema/banco separado;
