@@ -14,11 +14,29 @@ export async function GET(req: NextRequest) {
       const { data: venda, error } = await supabaseAdmin.from('balcao_vendas').select('*').eq('id', id).maybeSingle()
       if (error) throw error
       if (!venda) return NextResponse.json({ error: 'Venda não encontrada.' }, { status: 404 })
-      const [{ data: itens }, { data: pagamentos }] = await Promise.all([
+      const [{ data: itens }, { data: pagamentos }, { data: eventos }, { data: locais }, nivelGestao, { data: caixaAberto }] = await Promise.all([
         supabaseAdmin.from('balcao_venda_itens').select('*').eq('venda_id', id).order('created_at'),
         supabaseAdmin.from('balcao_pagamentos').select('*').eq('venda_id', id).order('created_at'),
+        supabaseAdmin.from('balcao_venda_eventos').select('*').eq('venda_id', id).order('created_at', { ascending: false }),
+        supabaseAdmin.from('estoque_locais').select('id,codigo,nome,unidade_id').eq('ativo', true).order('nome'),
+        nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao'),
+        supabaseAdmin.from('balcao_caixas').select('id').eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle(),
       ])
-      return NextResponse.json({ ok: true, venda, itens: itens || [], pagamentos: pagamentos || [] })
+      const eventoIds = (eventos || []).map((e: any) => e.id)
+      const { data: eventoItens } = eventoIds.length
+        ? await supabaseAdmin.from('balcao_venda_evento_itens').select('*').in('evento_id', eventoIds).order('created_at')
+        : { data: [] as any[] }
+      return NextResponse.json({
+        ok: true,
+        venda,
+        itens: itens || [],
+        pagamentos: pagamentos || [],
+        eventos: eventos || [],
+        eventoItens: eventoItens || [],
+        locaisRetorno: locais || [],
+        podeGerenciar: nivelGestao === 'edicao',
+        caixaAbertoId: caixaAberto?.id || null,
+      })
     }
 
     const q = (req.nextUrl.searchParams.get('q') || '').trim()
@@ -53,45 +71,29 @@ export async function POST(req: NextRequest) {
     if (!pagamentos.length) return NextResponse.json({ error: 'Informe a forma de pagamento.' }, { status: 400 })
 
     const temPrazo = pagamentos.some((p: any) => ['boleto', 'a_prazo'].includes(String(p.forma || '')))
-    if (temPrazo && !body.clienteId) {
-      return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
-    }
+    if (temPrazo && !body.clienteId) return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
 
     const { data: caixa, error: erroCaixa } = await supabaseAdmin.from('balcao_caixas')
       .select('id,status,operador_id,ponto_caixa_id,unidade_id,local_estoque_id')
-      .eq('operador_id', usuario.id)
-      .eq('status', 'aberto')
-      .order('aberto_em', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
     if (erroCaixa) throw erroCaixa
     if (!caixa) return NextResponse.json({ error: 'Abra o caixa antes de finalizar a venda.' }, { status: 409 })
-    if (!caixa.local_estoque_id || !caixa.unidade_id || !caixa.ponto_caixa_id) {
-      return NextResponse.json({ error: 'O caixa aberto não está vinculado a uma unidade/local de estoque.' }, { status: 409 })
-    }
+    if (!caixa.local_estoque_id || !caixa.unidade_id || !caixa.ponto_caixa_id) return NextResponse.json({ error: 'O caixa aberto não está vinculado a uma unidade/local de estoque.' }, { status: 409 })
 
     const payloadItens = itens.map((i: any) => ({
-      produtoId: String(i.produtoId || ''),
-      quantidade: parseNumero(i.quantidade),
-      precoUnitario: parseNumero(i.precoUnitario),
+      produtoId: String(i.produtoId || ''), quantidade: parseNumero(i.quantidade), precoUnitario: parseNumero(i.precoUnitario),
       localOrigemId: String(i.localOrigemId || caixa.local_estoque_id),
       atendimento: String(i.atendimento || (String(i.localOrigemId || caixa.local_estoque_id) === caixa.local_estoque_id ? 'imediato' : 'posterior')),
     }))
     const payloadPagamentos = pagamentos.map((p: any) => ({
-      forma: String(p.forma || ''),
-      valor: parseNumero(p.valor),
-      parcelas: Math.max(1, Math.floor(parseNumero(p.parcelas, 1))),
-      detalhes: String(p.detalhes || ''),
-      primeiroVencimento: String(p.primeiroVencimento || ''),
-      intervaloDias: Math.max(1, Math.floor(parseNumero(p.intervaloDias, 30))),
+      forma: String(p.forma || ''), valor: parseNumero(p.valor), parcelas: Math.max(1, Math.floor(parseNumero(p.parcelas, 1))),
+      detalhes: String(p.detalhes || ''), primeiroVencimento: String(p.primeiroVencimento || ''), intervaloDias: Math.max(1, Math.floor(parseNumero(p.intervaloDias, 30))),
     }))
 
     const nivelGestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
     const podeAutorizarAbaixoMinimo = nivelGestao === 'edicao'
     const ids = [...new Set(payloadItens.map((i: any) => i.produtoId).filter(Boolean))]
-    const { data: produtos } = ids.length
-      ? await supabaseAdmin.from('produtos').select('id,nome,preco_minimo').in('id', ids)
-      : { data: [] as any[] }
+    const { data: produtos } = ids.length ? await supabaseAdmin.from('produtos').select('id,nome,preco_minimo').in('id', ids) : { data: [] as any[] }
     const mapa = new Map((produtos || []).map((p: any) => [p.id, p]))
     const subtotal = payloadItens.reduce((s: number, i: any) => s + i.quantidade * i.precoUnitario, 0)
     const desconto = Math.max(0, parseNumero(body.desconto))
@@ -105,17 +107,10 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, error } = await supabaseAdmin.rpc('finalizar_venda_balcao', {
-      p_caixa_id: caixa.id,
-      p_usuario_id: usuario.id,
-      p_usuario_nome: usuario.nome,
-      p_usuario_role: usuario.role,
-      p_cliente_id: body.clienteId || null,
-      p_cliente_nome: String(body.clienteNome || '').trim() || null,
-      p_itens: payloadItens,
-      p_pagamentos: payloadPagamentos,
-      p_desconto: desconto,
-      p_observacoes: String(body.observacoes || '').trim() || null,
-      p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
+      p_caixa_id: caixa.id, p_usuario_id: usuario.id, p_usuario_nome: usuario.nome, p_usuario_role: usuario.role,
+      p_cliente_id: body.clienteId || null, p_cliente_nome: String(body.clienteNome || '').trim() || null,
+      p_itens: payloadItens, p_pagamentos: payloadPagamentos, p_desconto: desconto,
+      p_observacoes: String(body.observacoes || '').trim() || null, p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
     })
     if (error) throw error
     return NextResponse.json(data || { ok: true })
