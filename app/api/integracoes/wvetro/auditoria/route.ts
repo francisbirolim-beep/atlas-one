@@ -80,7 +80,9 @@ export async function POST(req: NextRequest) {
       const periodoFim = dataOk(body.periodoFim) ? body.periodoFim : new Date().toISOString().slice(0, 10)
       if (periodoInicio > periodoFim) return NextResponse.json({ error: 'Período inicial maior que o final.' }, { status: 400 })
 
-      const existente = await execucaoRetomavel(periodoInicio, periodoFim)
+      // Uma execução aberta tem prioridade sobre as datas atuais da tela.
+      // Isso evita criar outra auditoria do zero quando o dia vira e o campo "Até" muda automaticamente.
+      const existente = await execucaoRetomavel()
       if (existente) {
         await supabaseAdmin
           .from('wvetro_auditoria_execucoes')

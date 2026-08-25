@@ -68,7 +68,14 @@ export default function AuditoriaWVetroPage() {
     try {
       const json = await api()
       setResumo(json.resumo || null)
-      setExecucaoRetomavel(json.execucaoRetomavel || null)
+      const salva = json.execucaoRetomavel || null
+      setExecucaoRetomavel(salva)
+      if (salva?.periodo_inicio && salva?.periodo_fim) {
+        setInicio(String(salva.periodo_inicio))
+        setFim(String(salva.periodo_fim))
+        const proxima = salva.cursor_data ? adicionarDias(String(salva.cursor_data), 1) : String(salva.periodo_inicio)
+        setAviso(`Execução salva encontrada. O Atlas vai retomar a partir de ${proxima}; os dias anteriores não serão repetidos.`)
+      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar auditoria.')
     }
@@ -89,7 +96,6 @@ export default function AuditoriaWVetroPage() {
     parar.current = false
     setRodando(true)
     setErro('')
-    setAviso('')
     setProgresso(0)
     setEtapa('Conferindo execução e catálogo geral...')
     try {
@@ -97,7 +103,14 @@ export default function AuditoriaWVetroPage() {
       const execucaoId = inicial.execucao.id as string
       if (inicial.descobertaCatalogo) setDescoberta(inicial.descobertaCatalogo)
 
-      const todosDias = montarDias(inicio, fim)
+      const periodoExecInicio = String(inicial.execucao.periodo_inicio || inicio)
+      const periodoExecFim = String(inicial.execucao.periodo_fim || fim)
+      if (inicial.retomada) {
+        setInicio(periodoExecInicio)
+        setFim(periodoExecFim)
+      }
+
+      const todosDias = montarDias(periodoExecInicio, periodoExecFim)
       const cursorConcluido = inicial.execucao.cursor_data ? String(inicial.execucao.cursor_data) : null
       let primeiroIndice = 0
       if (inicial.retomada && cursorConcluido) {
@@ -161,6 +174,7 @@ export default function AuditoriaWVetroPage() {
       setEtapa('Fechando conferência, reconstruindo variáveis e calculando totais...')
       const final = await api({ acao: 'finalizar', execucaoId })
       setResumo(final.resumo)
+      setExecucaoRetomavel(null)
       const pendenciasFinais = Array.isArray(final.pendencias) ? final.pendencias.length : pendenciasDurante
       setProgresso(100)
       if (pendenciasFinais > 0) {
@@ -182,12 +196,10 @@ export default function AuditoriaWVetroPage() {
     }
   }
 
+  const temExecucaoSalva = Boolean(execucaoRetomavel)
   const proximoRetomavel = execucaoRetomavel?.cursor_data
     ? adicionarDias(String(execucaoRetomavel.cursor_data), 1)
     : execucaoRetomavel?.periodo_inicio
-  const mesmaFaixa = execucaoRetomavel
-    && String(execucaoRetomavel.periodo_inicio) === inicio
-    && String(execucaoRetomavel.periodo_fim) === fim
 
   if (master === false) return <main className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white p-6"><h1 className="text-xl font-semibold">Auditoria W.Vetro</h1><p className="mt-2 text-sm text-slate-600">Área restrita ao usuário Master.</p></div></main>
 
@@ -205,14 +217,14 @@ export default function AuditoriaWVetroPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-sm text-slate-600">Histórico desde<input type="date" value={inicio} onChange={e => setInicio(e.target.value)} disabled={rodando} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="text-sm text-slate-600">Até<input type="date" value={fim} onChange={e => setFim(e.target.value)} disabled={rodando} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            <label className="text-sm text-slate-600">Histórico desde<input type="date" value={inicio} onChange={e => setInicio(e.target.value)} disabled={rodando || temExecucaoSalva} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-50"/></label>
+            <label className="text-sm text-slate-600">Até<input type="date" value={fim} onChange={e => setFim(e.target.value)} disabled={rodando || temExecucaoSalva} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-50"/></label>
             <div className="flex items-end gap-2">
-              <button onClick={executar} disabled={rodando || master !== true} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{rodando ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>} {rodando ? 'Auditando...' : mesmaFaixa ? 'Retomar auditoria' : 'Executar auditoria completa'}</button>
+              <button onClick={executar} disabled={rodando || master !== true} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{rodando ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>} {rodando ? 'Auditando...' : temExecucaoSalva ? 'Retomar auditoria' : 'Executar auditoria completa'}</button>
               {rodando && <button onClick={() => { parar.current = true; setEtapa('Pausando após a chamada atual...') }} className="rounded-lg border border-slate-300 p-2.5 text-slate-700" title="Pausar"><PauseCircle size={18}/></button>}
             </div>
           </div>
-          {mesmaFaixa && proximoRetomavel && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Execução salva.</strong> O próximo clique continua a partir de {proximoRetomavel}; os dias anteriores não serão consultados novamente.</div>}
+          {temExecucaoSalva && proximoRetomavel && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Execução salva.</strong> Período original: {String(execucaoRetomavel.periodo_inicio)} até {String(execucaoRetomavel.periodo_fim)}. O próximo clique continua a partir de {proximoRetomavel}; os dias anteriores não serão consultados novamente.</div>}
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-slate-900 transition-all" style={{ width: `${progresso}%` }}/></div>
           {etapa && <p className="mt-2 text-sm text-slate-600">{etapa} {progresso > 0 && <strong>{progresso}%</strong>}</p>}
           {aviso && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{aviso}</div>}
