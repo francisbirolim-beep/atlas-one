@@ -1,0 +1,1 @@
+Teste manual: abrir /balcao/consulta-preco, digitar SUPREMA ROLDANA sem Enter e sem adicionar espaço ao final. A lista deve reagir durante a digitação.
