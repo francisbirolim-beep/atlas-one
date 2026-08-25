@@ -49,7 +49,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function () {
-                  navigator.serviceWorker.register('/sw.js').catch(function () {})
+                  var hadController = !!navigator.serviceWorker.controller
+                  var reloading = false
+
+                  navigator.serviceWorker.addEventListener('controllerchange', function () {
+                    if (!hadController || reloading) return
+                    reloading = true
+                    window.location.reload()
+                  })
+
+                  navigator.serviceWorker
+                    .register('/sw.js', { updateViaCache: 'none' })
+                    .then(function (registration) {
+                      registration.update().catch(function () {})
+                    })
+                    .catch(function () {})
                 })
               }
             `,
