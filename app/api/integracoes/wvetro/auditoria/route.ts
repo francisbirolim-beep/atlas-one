@@ -3,9 +3,9 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   processarLoteProdutosWVetro,
   processarPeriodoWVetro,
-  resumoAuditoriaWVetro,
   sincronizarLinhasApiWVetro,
 } from '@/lib/wvetroAuditoriaServer'
+import { resumoAuditoriaWVetroExato } from '@/lib/wvetroResumoExatoServer'
 import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
 import { processarLoteImagensWVetro } from '@/lib/wvetroImagensServer'
 
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   if (!await master(req)) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
   try {
     const [resumo, retomavel] = await Promise.all([
-      resumoAuditoriaWVetro(),
+      resumoAuditoriaWVetroExato(),
       execucaoRetomavel(),
     ])
     return NextResponse.json({ ok: true, resumo, execucaoRetomavel: retomavel })
@@ -80,8 +80,6 @@ export async function POST(req: NextRequest) {
       const periodoFim = dataOk(body.periodoFim) ? body.periodoFim : new Date().toISOString().slice(0, 10)
       if (periodoInicio > periodoFim) return NextResponse.json({ error: 'Período inicial maior que o final.' }, { status: 400 })
 
-      // Uma execução aberta tem prioridade sobre as datas atuais da tela.
-      // Isso evita criar outra auditoria do zero quando o dia vira e o campo "Até" muda automaticamente.
       const existente = await execucaoRetomavel()
       if (existente) {
         await supabaseAdmin
@@ -168,7 +166,7 @@ export async function POST(req: NextRequest) {
       const execucaoId = String(body.execucaoId || '')
       if (!execucaoId) return NextResponse.json({ error: 'Execução não informada.' }, { status: 400 })
       await reconstruirVariaveisExplicitas()
-      const resumo = await resumoAuditoriaWVetro()
+      const resumo = await resumoAuditoriaWVetroExato()
       const { data: execucao } = await supabaseAdmin
         .from('wvetro_auditoria_execucoes')
         .select('observacoes')
