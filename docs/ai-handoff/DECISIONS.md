@@ -2,6 +2,21 @@
 
 Decisoes tecnicas ja adotadas. Nao reverter/alterar sem necessidade real e sem entender o motivo abaixo.
 
+## Venda Balcão é um modo do Atlas, não um sistema separado
+
+O Atlas One possui um ambiente operacional próprio de Venda Balcão (`/balcao`), mas ele pertence ao mesmo produto, autenticação e base de dados do Atlas completo.
+
+Regras permanentes:
+- não criar banco, cadastro de produto, cadastro de cliente ou estoque duplicado para o PDV;
+- Venda Balcão usa os mesmos produtos, clientes, unidades, locais de estoque, compras e financeiro do Atlas;
+- `/balcao` usa interface/shell próprio, compacto e focado na operação de balcão;
+- deve existir acesso claro `Voltar ao Atlas` para retornar ao ERP completo;
+- cadastros e gestões compartilhadas podem abrir as telas completas do Atlas, preservando a mesma fonte de verdade;
+- no futuro, planos comerciais podem ocultar módulos do ERP e expor apenas o ambiente PDV, sem duplicar o backend;
+- emissão NFC-e/NF-e e demais recursos fiscais devem ser adicionados a esse mesmo núcleo, após definição de provedor e regras fiscais.
+
+Motivo: a Esquadrifácio usa simultaneamente o ERP completo e vendas de balcão. Separar as bases criaria divergência de estoque, preço, cliente, compra e financeiro.
+
 ## Workflow de deploy
 Nunca commitar direto em main. Sempre: branch nova -> PR -> aguardar build da Vercel no PR (preview) -> merge manual. Motivo: evitar quebrar producao com erro de TypeScript so descoberto no deploy.
 
