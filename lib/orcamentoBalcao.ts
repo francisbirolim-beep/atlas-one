@@ -8,7 +8,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { OrigemCliente, ItemBalcao } from './tipos'
 
 export interface DadosOrcamentoBalcaoForm {
+  clienteId?: string
   clienteNome: string
+  clienteApelido?: string
   clienteWhatsapp?: string
   clienteTelefone?: string
   clienteEmail?: string
@@ -29,32 +31,30 @@ export interface ResultadoOrcamentoBalcao {
   numero?: number | null
 }
 
-// Cria um orçamento no modo "balcao" e congela o preço unitário dentro dos
-// itens_balcao. Salvar uma proposta NÃO significa que ela foi vendida, então
-// ultimo_preco_vendido só poderá ser atualizado na confirmação real da venda.
+// Cria um orçamento no modo "balcao" e congela o preço unitário dentro dos itens.
+// Se um cliente do cadastro compartilhado foi selecionado, usa o mesmo id e não cria duplicata.
 export async function criarOrcamentoBalcao(
   dados: DadosOrcamentoBalcaoForm
 ): Promise<ResultadoOrcamentoBalcao> {
-  if (!dados.clienteNome.trim()) {
-    return { ok: false, error: 'Informe o nome do cliente' }
-  }
-  if (!dados.itens || dados.itens.length === 0) {
-    return { ok: false, error: 'Adicione ao menos um produto' }
-  }
+  if (!dados.clienteNome.trim()) return { ok: false, error: 'Informe o nome do cliente' }
+  if (!dados.itens || dados.itens.length === 0) return { ok: false, error: 'Adicione ao menos um produto' }
 
-  const [clienteId, colunaId, usuario] = await Promise.all([
-    obterOuCriarCliente({
-      nome: dados.clienteNome,
-      whatsapp: dados.clienteWhatsapp,
-      telefone: dados.clienteTelefone,
-      email: dados.clienteEmail,
-      cpf_cnpj: dados.clienteCpfCnpj,
-      endereco: dados.clienteEndereco,
-      bairro: dados.clienteBairro,
-      cep: dados.clienteCep,
-      cidade: dados.cidade,
-      origem: dados.origem,
-    }),
+  const [clienteIdResolvido, colunaId, usuario] = await Promise.all([
+    dados.clienteId
+      ? Promise.resolve(dados.clienteId)
+      : obterOuCriarCliente({
+          nome: dados.clienteNome,
+          apelido: dados.clienteApelido,
+          whatsapp: dados.clienteWhatsapp,
+          telefone: dados.clienteTelefone,
+          email: dados.clienteEmail,
+          cpf_cnpj: dados.clienteCpfCnpj,
+          endereco: dados.clienteEndereco,
+          bairro: dados.clienteBairro,
+          cep: dados.clienteCep,
+          cidade: dados.cidade,
+          origem: dados.origem,
+        }),
     primeiraColunaId(),
     usuarioAtual(),
   ])
@@ -67,7 +67,7 @@ export async function criarOrcamentoBalcao(
     .from('orcamentos')
     .insert({
       id: novoId,
-      cliente_id: clienteId,
+      cliente_id: clienteIdResolvido,
       cliente_nome: dados.clienteNome,
       cliente_whatsapp: dados.clienteWhatsapp || null,
       cidade: dados.cidade || null,
@@ -88,9 +88,7 @@ export async function criarOrcamentoBalcao(
     .select('id, numero')
     .single()
 
-  if (error) {
-    return { ok: false, error: error.message }
-  }
+  if (error) return { ok: false, error: error.message }
 
   if (colunaId) {
     executarAutomacoesColuna(colunaId, { cliente_nome: dados.clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
