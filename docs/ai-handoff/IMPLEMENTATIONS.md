@@ -2,6 +2,22 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
+## 2026-08-25 — Modo Venda Balcão integrado ao Atlas
+
+- consolidada a decisão de manter **um único Atlas One**, com o PDV como modo operacional e não como sistema/banco separado;
+- `BalcaoShell` passa a identificar explicitamente `Modo Venda Balcão`;
+- adicionado botão `Voltar ao Atlas`, retornando ao ERP completo pela rota `/`;
+- menu móvel também recebe acesso direto `Atlas`;
+- adicionada seção `Gestão compartilhada` no menu do balcão, apontando para as telas existentes do Atlas:
+  - Clientes (`/clientes`);
+  - Produtos / Cadastros (`/cadastros`);
+  - Estoque (`/estoque`);
+  - Compras / NF (`/compras`);
+- esses acessos usam os mesmos produtos, clientes, unidades, estoque, compras e financeiro já existentes; não foi criado dado duplicado;
+- fiscal/NFC-e/NF-e continua evolução posterior, após definição do provedor e das regras fiscais.
+
+---
+
 ## 2026-08-23 — PR #260 — Orçamento visual + variáveis W.Vetro
 
 ### Seleção visual de tipologias
