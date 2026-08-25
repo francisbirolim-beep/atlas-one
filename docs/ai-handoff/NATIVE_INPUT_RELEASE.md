@@ -1,1 +1,0 @@
-Release notes: correção isolada para validar busca letra a letra na Consulta de preço antes de replicar na Venda Balcão.
