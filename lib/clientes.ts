@@ -3,11 +3,10 @@ import { OrigemCliente } from './tipos'
 
 interface DadosCliente {
   nome: string
+  apelido?: string
   whatsapp?: string
   cidade?: string
   origem?: OrigemCliente
-  // Campos opcionais extras (usados pelo Orçamento Balcão) — só nome é
-  // obrigatório, o resto só é gravado se vier preenchido.
   endereco?: string
   cpf_cnpj?: string
   email?: string
@@ -18,14 +17,14 @@ interface DadosCliente {
 
 /**
  * Busca um cliente existente pelo WhatsApp. Se não existir, cria um novo.
- * Se existir, atualiza nome/cidade (e os campos extras informados) com os
- * dados mais recentes. Retorna o id do cliente (ou null se não houver
- * WhatsApp nem nome pra identificar).
+ * O Orçamento Balcão pode informar clienteId diretamente e não precisa passar
+ * por esta função quando o cliente já foi selecionado no cadastro compartilhado.
  */
 export async function obterOuCriarCliente(dados: DadosCliente): Promise<string | null> {
   const whatsapp = dados.whatsapp?.trim() || undefined
 
   const extras: Record<string, string> = {}
+  if (dados.apelido?.trim()) extras.apelido = dados.apelido.trim()
   if (dados.endereco?.trim()) extras.endereco = dados.endereco.trim()
   if (dados.cpf_cnpj?.trim()) extras.cpf_cnpj = dados.cpf_cnpj.trim()
   if (dados.email?.trim()) extras.email = dados.email.trim()
@@ -59,6 +58,7 @@ export async function obterOuCriarCliente(dados: DadosCliente): Promise<string |
     .from('clientes')
     .insert({
       nome: dados.nome,
+      apelido: dados.apelido?.trim() || null,
       whatsapp,
       cidade: dados.cidade || null,
       origem: dados.origem || 'outros',
