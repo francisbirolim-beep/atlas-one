@@ -21,10 +21,10 @@ function num(v:string|number){const n=Number(String(v).replace(',','.'));return 
 export default function VendaBalcaoPage(){
  const [produtos,setProdutos]=useState<Produto[]>([]),[busca,setBusca]=useState(''),[carregando,setCarregando]=useState(false),[podeVerGestao,setPodeVerGestao]=useState(false),[localAtual,setLocalAtual]=useState<LocalAtual|null>(null)
  const [origemPorProduto,setOrigemPorProduto]=useState<Record<string,string>>({}),[carrinho,setCarrinho]=useState<Record<string,ItemCarrinho>>({})
- const [clienteBusca,setClienteBusca]=useState(''),[clientes,setClientes]=useState<Cliente[]>([]),[cliente,setCliente]=useState<Cliente|null>(null)
+ const [clienteBusca,setClienteBusca]=useState(''),[clientes,setClientes]=useState<Cliente[]>([]),[cliente,setCliente]=useState<Cliente|null>(null),[carregandoClientes,setCarregandoClientes]=useState(false)
  const [desconto,setDesconto]=useState('0'),[pagamentos,setPagamentos]=useState<Pagamento[]>([novoPagamento()]),[caixa,setCaixa]=useState<Caixa|null>(null)
  const [salvando,setSalvando]=useState(false),[erro,setErro]=useState(''),[sucesso,setSucesso]=useState<{numero:number;total:number;atendimentoStatus?:string;reservasPendentes?:number}|null>(null)
- const buscaAbort=useRef<AbortController|null>(null),buscaSeq=useRef(0)
+ const buscaAbort=useRef<AbortController|null>(null),buscaSeq=useRef(0),clienteAbort=useRef<AbortController|null>(null),clienteSeq=useRef(0)
 
  async function api(url:string,init?:RequestInit){const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.');return fetch(url,{...init,headers:{...(init?.headers||{}),Authorization:`Bearer ${token}`},cache:'no-store'})}
  async function carregarProdutos(q=''){
@@ -45,6 +45,23 @@ export default function VendaBalcaoPage(){
    if(seq===buscaSeq.current)setCarregando(false)
   }
  }
+ async function carregarClientes(q:string){
+  const seq=++clienteSeq.current
+  clienteAbort.current?.abort()
+  const controller=new AbortController()
+  clienteAbort.current=controller
+  setCarregandoClientes(true)
+  try{
+   const r=await api(`/api/balcao/catalogo?tipo=clientes&q=${encodeURIComponent(q)}`,{signal:controller.signal})
+   const j=await r.json();if(!r.ok)throw new Error(j.error)
+   if(seq!==clienteSeq.current)return
+   setClientes(j.clientes||[])
+  }catch(e){
+   if((e as {name?:string})?.name==='AbortError')return
+  }finally{
+   if(seq===clienteSeq.current)setCarregandoClientes(false)
+  }
+ }
  async function carregarCaixa(){try{const resp=await api('/api/balcao/caixa');const json=await resp.json();if(resp.ok)setCaixa(json.caixa||null)}catch{}}
  useEffect(()=>{carregarCaixa()},[])
  useEffect(()=>{
@@ -56,7 +73,15 @@ export default function VendaBalcaoPage(){
   const h=setTimeout(()=>carregarProdutos(termo),70)
   return()=>clearTimeout(h)
  },[busca])
- useEffect(()=>{if(!clienteBusca.trim()||cliente){setClientes([]);return}const h=setTimeout(async()=>{try{const r=await api(`/api/balcao/catalogo?tipo=clientes&q=${encodeURIComponent(clienteBusca)}`);const j=await r.json();if(r.ok)setClientes(j.clientes||[])}catch{}},300);return()=>clearTimeout(h)},[clienteBusca,cliente])
+ useEffect(()=>{
+  const termo=clienteBusca.trim()
+  clienteAbort.current?.abort()
+  clienteSeq.current++
+  if(termo.length<2||cliente){setClientes([]);setCarregandoClientes(false);return}
+  setCarregandoClientes(true)
+  const h=setTimeout(()=>carregarClientes(termo),70)
+  return()=>clearTimeout(h)
+ },[clienteBusca,cliente])
 
  const itens=Object.values(carrinho),subtotal=itens.reduce((s,i)=>s+i.quantidade*i.precoUnitario,0),descontoN=Math.min(subtotal,Math.max(0,num(desconto))),total=Math.max(0,subtotal-descontoN),pagos=pagamentos.reduce((s,p)=>s+num(p.valor),0),falta=Math.round((total-pagos)*100)/100
  const pesquisou=busca.trim().length>=2
@@ -69,6 +94,7 @@ export default function VendaBalcaoPage(){
  function remover(chave:string){setCarrinho(atual=>{const n={...atual};delete n[chave];return n})}
  function mudarPagamento(index:number,patch:Partial<Pagamento>){setPagamentos(lista=>lista.map((p,i)=>i===index?{...p,...patch}:p))}
  function preencherRestante(index:number){setPagamentos(lista=>{const outros=lista.reduce((s,p,i)=>i===index?s:s+num(p.valor),0);return lista.map((p,i)=>i===index?{...p,valor:String(Math.max(0,Math.round((total-outros)*100)/100))}:p)})}
+ function atualizarClienteBusca(valor:string){setCliente(null);setClienteBusca(valor)}
 
  async function finalizar(){setErro('');setSucesso(null);if(!caixa)return setErro('Abra o caixa antes de finalizar a venda.');if(!itens.length)return setErro('Adicione pelo menos um produto.');if(Math.abs(falta)>0.01)return setErro(`Os pagamentos precisam fechar o total. Diferença: ${moeda(falta)}`);for(const p of pagamentos)if((p.forma==='boleto'||p.forma==='a_prazo')&&!p.primeiroVencimento)return setErro('Informe o primeiro vencimento do boleto/venda a prazo.');setSalvando(true);try{const resp=await api('/api/balcao/vendas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clienteId:cliente?.id||null,clienteNome:cliente?.nome||null,desconto:descontoN,itens:itens.map(i=>({produtoId:i.id,quantidade:i.quantidade,precoUnitario:i.precoUnitario,localOrigemId:i.localOrigemId,atendimento:i.atendimento})),pagamentos:pagamentos.map(p=>({forma:p.forma,valor:num(p.valor),parcelas:p.parcelas,primeiroVencimento:p.primeiroVencimento,intervaloDias:p.intervaloDias}))})});const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Não foi possível finalizar.');setSucesso({numero:Number(json.numero),total:Number(json.total),atendimentoStatus:json.atendimentoStatus,reservasPendentes:Number(json.reservasPendentes||0)});setCarrinho({});setDesconto('0');setPagamentos([novoPagamento()]);setCliente(null);setClienteBusca('');if(busca.trim())await carregarProdutos(busca);await carregarCaixa()}catch(e){setErro(e instanceof Error?e.message:'Erro ao finalizar a venda.')}finally{setSalvando(false)}}
 
@@ -78,10 +104,10 @@ export default function VendaBalcaoPage(){
   {erro&&<div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</div>}
   {sucesso&&<div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Venda #{sucesso.numero} finalizada • {moeda(sucesso.total)}{sucesso.reservasPendentes?` • ${sucesso.reservasPendentes} item(ns) reservado(s) em outra unidade.`:' • estoque local atendido.'}</div>}
 
-  <section className="rounded-xl border bg-white p-2.5"><div className="grid gap-2 lg:grid-cols-[1fr_auto]"><div className="relative"><Search size={15} className="absolute left-3 top-2.5 text-slate-400"/><input value={cliente?cliente.nome:clienteBusca} onChange={e=>{setCliente(null);setClienteBusca(e.target.value)}} placeholder="Cliente opcional — nome, CPF/CNPJ ou telefone" className="w-full rounded-lg border py-2 pl-9 pr-3 text-xs"/>{!cliente&&clientes.length>0&&<div className="absolute z-20 mt-1 max-h-44 w-full overflow-auto rounded-lg border bg-white shadow-lg">{clientes.map(c=><button key={c.id} onClick={()=>{setCliente(c);setClienteBusca(c.nome);setClientes([])}} className="block w-full border-b px-3 py-2 text-left text-xs hover:bg-slate-50"><strong>{c.nome}</strong><div className="text-[10px] text-slate-400">{c.cpf_cnpj||c.whatsapp||c.telefone||c.cidade||''}</div></button>)}</div>}</div><Link href="/balcao/clientes/novo" className="inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold"><UserPlus size={14}/>Novo cliente</Link></div></section>
+  <section className="rounded-xl border bg-white p-2.5"><div className="grid gap-2 lg:grid-cols-[1fr_auto]"><div className="relative"><Search size={15} className="absolute left-3 top-2.5 text-slate-400"/><input value={cliente?cliente.nome:clienteBusca} onInput={e=>atualizarClienteBusca(e.currentTarget.value)} onCompositionUpdate={e=>atualizarClienteBusca(e.currentTarget.value)} placeholder="Cliente opcional — nome, CPF/CNPJ ou telefone" className="w-full rounded-lg border py-2 pl-9 pr-3 text-xs"/>{!cliente&&carregandoClientes&&clienteBusca.trim().length>=2&&<Loader2 size={13} className="absolute right-3 top-2.5 animate-spin text-slate-400"/>}{!cliente&&clientes.length>0&&<div className="absolute z-20 mt-1 max-h-44 w-full overflow-auto rounded-lg border bg-white shadow-lg">{clientes.map(c=><button key={c.id} onClick={()=>{setCliente(c);setClienteBusca(c.nome);setClientes([])}} className="block w-full border-b px-3 py-2 text-left text-xs hover:bg-slate-50"><strong>{c.nome}</strong><div className="text-[10px] text-slate-400">{[c.cpf_cnpj,c.whatsapp||c.telefone,c.cidade].filter(Boolean).join(' • ')}</div></button>)}</div>}</div><Link href="/balcao/clientes/novo" className="inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold"><UserPlus size={14}/>Novo cliente</Link></div></section>
 
   <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_390px]">
-   <section className="min-w-0 rounded-xl border bg-white p-3"><div className="flex items-end justify-between gap-2"><div><h2 className="text-sm font-semibold">Adicionar produtos</h2><p className="text-[10px] text-slate-500">A lista filtra enquanto você digita. Use várias palavras: <strong>suprema roldana</strong>, <strong>puxador preto</strong>, código etc.</p></div>{pesquisou&&<span className="text-[10px] text-slate-400">{carregando?'filtrando...':`${produtos.length} resultado(s)`}</span>}</div><div className="relative mt-2"><Search size={15} className="absolute left-3 top-2.5 text-slate-400"/><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar produto... Ex.: SUPREMA ROLDANA" className="w-full rounded-lg border py-2 pl-9 pr-3 text-xs"/></div>
+   <section className="min-w-0 rounded-xl border bg-white p-3"><div className="flex items-end justify-between gap-2"><div><h2 className="text-sm font-semibold">Adicionar produtos</h2><p className="text-[10px] text-slate-500">A lista filtra enquanto você digita. Use várias palavras: <strong>suprema roldana</strong>, <strong>puxador preto</strong>, código etc.</p></div>{pesquisou&&<span className="text-[10px] text-slate-400">{carregando?'filtrando...':`${produtos.length} resultado(s)`}</span>}</div><div className="relative mt-2"><Search size={15} className="absolute left-3 top-2.5 text-slate-400"/><input value={busca} onInput={e=>setBusca(e.currentTarget.value)} onCompositionUpdate={e=>setBusca(e.currentTarget.value)} placeholder="Buscar produto... Ex.: SUPREMA ROLDANA" className="w-full rounded-lg border py-2 pl-9 pr-3 text-xs"/></div>
     {!pesquisou?<div className="py-10 text-center text-xs text-slate-400">Pesquise para exibir os produtos. A lista não fica mais carregada o tempo todo.</div>:produtos.length===0&&carregando?<div className="py-10 text-center"><Loader2 className="mx-auto animate-spin text-slate-400" size={20}/></div>:produtos.length===0?<div className="py-10 text-center text-xs text-slate-400">Nenhum produto encontrado com todos os termos.</div>:<div className="mt-2 max-h-[calc(100vh-245px)] space-y-1.5 overflow-auto pr-1">{produtos.map(p=>{const remoto=p.estoquesRede.filter(e=>e.localId!==localAtual?.id&&e.disponivel>0);const selecionada=origemSelecionada(p);return <div key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border px-2.5 py-2 text-xs"><div className="min-w-0"><div className="truncate font-semibold">{p.codigo||'—'} <span className="font-normal text-slate-700">— {p.nome}</span></div>{p.descricao&&<div className="truncate text-[10px] text-slate-400">{p.descricao}</div>}<div className="mt-1 flex flex-wrap items-center gap-1.5"><span className={`rounded px-1.5 py-0.5 text-[10px] ${p.estoqueLocal>0?'bg-emerald-50 text-emerald-700':'bg-red-50 text-red-600'}`}>Local {p.estoqueLocal} {p.unidadeEstoque}</span><span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">Rede {p.estoqueRede} {p.unidadeEstoque}</span>{p.estoqueLocal<=0&&remoto.length>0&&<select value={origemPorProduto[p.id]||''} onChange={e=>setOrigemPorProduto(a=>({...a,[p.id]:e.target.value}))} className="max-w-[280px] rounded border bg-amber-50 px-1.5 py-1 text-[10px]"><option value="">Escolha a origem...</option>{remoto.map(e=><option key={e.localId} value={e.localId}>{e.unidadeNome} • {e.localNome} — {e.disponivel} {e.unidade}</option>)}</select>}{p.estoqueRede<=0&&<span className="text-[10px] text-red-500">Sem estoque na rede</span>}{selecionada&&selecionada.localId!==localAtual?.id&&<span className="font-medium text-[10px] text-amber-700"><Truck size={11} className="mr-0.5 inline"/>atendimento posterior</span>}</div></div><div className="flex min-w-[104px] flex-col items-end justify-center gap-1"><strong className="text-emerald-700">{moeda(p.precoEfetivo)}</strong>{podeVerGestao&&p.custo!=null&&<span className="text-[9px] text-slate-400">custo {moeda(p.custo)}</span>}<button disabled={p.estoqueRede<=0} onClick={()=>adicionar(p)} className="rounded-md border border-emerald-300 px-2 py-1 text-[10px] font-semibold text-emerald-700 disabled:opacity-30"><Plus size={11} className="mr-0.5 inline"/>Adicionar</button></div></div>})}</div>}
    </section>
 
