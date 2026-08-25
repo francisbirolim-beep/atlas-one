@@ -2,218 +2,27 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import {
-  ArrowRight,
-  Boxes,
-  Calculator,
-  CircleDollarSign,
-  FileSliders,
-  Layers3,
-  PackageSearch,
-  Ruler,
-  Search,
-  Settings,
-  Truck,
-  Wrench,
-} from 'lucide-react'
+import { ArrowRight, Boxes, Calculator, CircleDollarSign, FileSliders, Layers3, PackageSearch, Ruler, Settings, Truck, Wrench } from 'lucide-react'
+import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
+import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
-type ItemCadastro = {
-  href: string
-  titulo: string
-  descricao: string
-  grupo: 'Cadastros principais' | 'Produtos e precificação' | 'Engenharia' | 'Avançado'
-  icon: typeof Boxes
-  palavras: string
-}
+type ItemCadastro = {href:string;titulo:string;descricao:string;grupo:'Cadastros principais'|'Produtos e precificação'|'Engenharia'|'Avançado';icon:typeof Boxes;palavras:string}
+const ITENS:ItemCadastro[]=[
+{href:'/cadastro/produtos',titulo:'Produtos',descricao:'Perfis, acessórios e demais itens usados no Atlas.',grupo:'Cadastros principais',icon:Boxes,palavras:'produto perfil acessorio codigo ncm unidade item'},
+{href:'/cadastro/linhas',titulo:'Linhas',descricao:'Linhas de esquadrias e associação com tipologias.',grupo:'Cadastros principais',icon:Layers3,palavras:'linha suprema gold 30 42 fachada pele vidro tipologia'},
+{href:'/cadastro/materiais',titulo:'Materiais',descricao:'Base de materiais utilizados em orçamento e produção.',grupo:'Cadastros principais',icon:PackageSearch,palavras:'material vidro aluminio silicone borracha'},
+{href:'/cadastro/fornecedores',titulo:'Fornecedores',descricao:'Empresas fornecedoras de perfis, acessórios e serviços.',grupo:'Cadastros principais',icon:Truck,palavras:'fornecedor compra perfil pintura beneficiamento vidro'},
+{href:'/cadastro/produtos/por-linha',titulo:'Produtos por Linha',descricao:'Visualizar e organizar produtos vinculados a cada linha.',grupo:'Produtos e precificação',icon:Layers3,palavras:'produto linha associacao catalogo suprema gold'},
+{href:'/cadastro/produtos/precificacao',titulo:'Precificação',descricao:'Custos, preços e parâmetros comerciais dos produtos.',grupo:'Produtos e precificação',icon:CircleDollarSign,palavras:'preco custo margem precificacao valor kg metro unidade'},
+{href:'/cadastro/produtos/unidades-pendentes',titulo:'Unidades Pendentes',descricao:'Revisar produtos que ainda não têm unidade operacional validada.',grupo:'Produtos e precificação',icon:FileSliders,palavras:'unidade pendente un mt pc kg embalagem origem'},
+{href:'/engenharia/receitas',titulo:'Receitas Técnicas',descricao:'Componentes e regras técnicas vinculados às tipologias e produtos.',grupo:'Engenharia',icon:Wrench,palavras:'receita componente perfil acessorio tipologia engenharia produto'},
+{href:'/engenharia/formulas-corte',titulo:'Fórmulas de Corte',descricao:'Fórmulas e regras usadas para gerar medidas de produção.',grupo:'Engenharia',icon:Calculator,palavras:'formula corte plano corte medida folga perfil engenharia'},
+{href:'/configuracoes/campos',titulo:'Campos adicionais',descricao:'Campos personalizados usados em medições e outras rotinas.',grupo:'Engenharia',icon:Ruler,palavras:'campo adicional medicao checklist personalizado tipologia'},
+{href:'/cadastro',titulo:'Cadastros Avançados',descricao:'Tela antiga com ajustes administrativos ainda não separados em páginas próprias.',grupo:'Avançado',icon:Settings,palavras:'cadastro antigo legado empresa categoria usuario backup setor sla avançado'}]
+const ORDEM_GRUPOS:ItemCadastro['grupo'][]=['Cadastros principais','Produtos e precificação','Engenharia','Avançado']
 
-const ITENS: ItemCadastro[] = [
-  {
-    href: '/cadastro/produtos',
-    titulo: 'Produtos',
-    descricao: 'Perfis, acessórios e demais itens usados no Atlas.',
-    grupo: 'Cadastros principais',
-    icon: Boxes,
-    palavras: 'produto perfil acessorio codigo ncm unidade item',
-  },
-  {
-    href: '/cadastro/linhas',
-    titulo: 'Linhas',
-    descricao: 'Linhas de esquadrias e associação com tipologias.',
-    grupo: 'Cadastros principais',
-    icon: Layers3,
-    palavras: 'linha suprema gold 30 42 fachada pele vidro tipologia',
-  },
-  {
-    href: '/cadastro/materiais',
-    titulo: 'Materiais',
-    descricao: 'Base de materiais utilizados em orçamento e produção.',
-    grupo: 'Cadastros principais',
-    icon: PackageSearch,
-    palavras: 'material vidro aluminio silicone borracha',
-  },
-  {
-    href: '/cadastro/fornecedores',
-    titulo: 'Fornecedores',
-    descricao: 'Empresas fornecedoras de perfis, acessórios e serviços.',
-    grupo: 'Cadastros principais',
-    icon: Truck,
-    palavras: 'fornecedor compra perfil pintura beneficiamento vidro',
-  },
-  {
-    href: '/cadastro/produtos/por-linha',
-    titulo: 'Produtos por Linha',
-    descricao: 'Visualizar e organizar produtos vinculados a cada linha.',
-    grupo: 'Produtos e precificação',
-    icon: Layers3,
-    palavras: 'produto linha associacao catalogo suprema gold',
-  },
-  {
-    href: '/cadastro/produtos/precificacao',
-    titulo: 'Precificação',
-    descricao: 'Custos, preços e parâmetros comerciais dos produtos.',
-    grupo: 'Produtos e precificação',
-    icon: CircleDollarSign,
-    palavras: 'preco custo margem precificacao valor kg metro unidade',
-  },
-  {
-    href: '/cadastro/produtos/unidades-pendentes',
-    titulo: 'Unidades Pendentes',
-    descricao: 'Revisar produtos que ainda não têm unidade operacional validada.',
-    grupo: 'Produtos e precificação',
-    icon: FileSliders,
-    palavras: 'unidade pendente un mt pc kg embalagem origem',
-  },
-  {
-    href: '/engenharia/receitas',
-    titulo: 'Receitas Técnicas',
-    descricao: 'Componentes e regras técnicas vinculados às tipologias e produtos.',
-    grupo: 'Engenharia',
-    icon: Wrench,
-    palavras: 'receita componente perfil acessorio tipologia engenharia produto',
-  },
-  {
-    href: '/engenharia/formulas-corte',
-    titulo: 'Fórmulas de Corte',
-    descricao: 'Fórmulas e regras usadas para gerar medidas de produção.',
-    grupo: 'Engenharia',
-    icon: Calculator,
-    palavras: 'formula corte plano corte medida folga perfil engenharia',
-  },
-  {
-    href: '/configuracoes/campos',
-    titulo: 'Campos adicionais',
-    descricao: 'Campos personalizados usados em medições e outras rotinas.',
-    grupo: 'Engenharia',
-    icon: Ruler,
-    palavras: 'campo adicional medicao checklist personalizado tipologia',
-  },
-  {
-    href: '/cadastro',
-    titulo: 'Cadastros Avançados',
-    descricao: 'Tela antiga com ajustes administrativos ainda não separados em páginas próprias.',
-    grupo: 'Avançado',
-    icon: Settings,
-    palavras: 'cadastro antigo legado empresa categoria usuario backup setor sla avançado',
-  },
-]
-
-const ORDEM_GRUPOS: ItemCadastro['grupo'][] = [
-  'Cadastros principais',
-  'Produtos e precificação',
-  'Engenharia',
-  'Avançado',
-]
-
-function normalizar(texto: string) {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-}
-
-export default function CentralCadastrosPage() {
-  const [busca, setBusca] = useState('')
-  const termo = normalizar(busca.trim())
-
-  const grupos = useMemo(() => {
-    const filtrados = termo
-      ? ITENS.filter(item => normalizar(`${item.titulo} ${item.descricao} ${item.palavras}`).includes(termo))
-      : ITENS
-
-    return ORDEM_GRUPOS
-      .map(grupo => ({ grupo, itens: filtrados.filter(item => item.grupo === grupo) }))
-      .filter(grupo => grupo.itens.length > 0)
-  }, [termo])
-
-  return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
-      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">Base do sistema</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Central de Cadastros</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Em vez de procurar em várias telas, escolha aqui o tipo de cadastro que deseja alterar.
-            </p>
-          </div>
-
-          <div className="relative w-full lg:max-w-sm">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar produto, linha, fornecedor..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100"
-            />
-          </div>
-        </div>
-      </div>
-
-      {grupos.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          Nenhum cadastro encontrado para “{busca}”.
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {grupos.map(({ grupo, itens }) => (
-            <section key={grupo}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-slate-900">{grupo}</h2>
-                <span className="text-[11px] text-slate-400">{itens.length} {itens.length === 1 ? 'opção' : 'opções'}</span>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {itens.map(item => {
-                  const Icon = item.icon
-                  const avancado = item.grupo === 'Avançado'
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`group flex min-h-32 items-start gap-4 rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                        avancado ? 'border-amber-200 hover:border-amber-300' : 'border-slate-200 hover:border-emerald-200'
-                      }`}
-                    >
-                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                        avancado ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-                      }`}>
-                        <Icon size={20} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <strong className="block text-sm font-semibold text-slate-900">{item.titulo}</strong>
-                        <span className="mt-1 block text-xs leading-5 text-slate-500">{item.descricao}</span>
-                        <span className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold ${avancado ? 'text-amber-700' : 'text-emerald-700'}`}>
-                          Abrir <ArrowRight size={13} className="transition group-hover:translate-x-0.5" />
-                        </span>
-                      </span>
-                    </Link>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
-    </main>
-  )
+export default function CentralCadastrosPage(){
+ const [busca,setBusca]=useState('')
+ const grupos=useMemo(()=>{const filtrados=busca.trim()?ITENS.filter(item=>correspondeBuscaAtlas(busca,item.titulo,item.descricao,item.palavras,item.grupo)):ITENS;return ORDEM_GRUPOS.map(grupo=>({grupo,itens:filtrados.filter(item=>item.grupo===grupo)})).filter(grupo=>grupo.itens.length>0)},[busca])
+ return <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8"><div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">Base do sistema</p><h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Central de Cadastros</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Digite uma ou várias palavras em qualquer ordem para localizar o cadastro.</p></div><BuscaAtlasInput value={busca} onValueChange={setBusca} placeholder="Ex.: produto suprema, fornecedor vidro..." containerClassName="w-full lg:max-w-sm" inputClassName="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100"/></div></div>{grupos.length===0?<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Nenhum cadastro encontrado para “{busca}”.</div>:<div className="space-y-6">{grupos.map(({grupo,itens})=><section key={grupo}><div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-semibold text-slate-900">{grupo}</h2><span className="text-[11px] text-slate-400">{itens.length} {itens.length===1?'opção':'opções'}</span></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{itens.map(item=>{const Icon=item.icon,avancado=item.grupo==='Avançado';return <Link key={item.href} href={item.href} className={`group flex min-h-32 items-start gap-4 rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${avancado?'border-amber-200 hover:border-amber-300':'border-slate-200 hover:border-emerald-200'}`}><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${avancado?'bg-amber-50 text-amber-700':'bg-emerald-50 text-emerald-700'}`}><Icon size={20}/></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-slate-900">{item.titulo}</strong><span className="mt-1 block text-xs leading-5 text-slate-500">{item.descricao}</span><span className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold ${avancado?'text-amber-700':'text-emerald-700'}`}>Abrir <ArrowRight size={13} className="transition group-hover:translate-x-0.5"/></span></span></Link>})}</div></section>)}</div>}</main>
 }
