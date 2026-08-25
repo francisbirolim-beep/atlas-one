@@ -2,6 +2,50 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
+## 2026-08-25 — Busca Padrão Atlas V1
+
+### Núcleo compartilhado
+- criado `lib/buscaAtlas.ts` como regra comum de pesquisa operacional;
+- criado `components/system/BuscaAtlasInput.tsx` como campo reutilizável;
+- pesquisa ignora maiúsculas/minúsculas e acentos;
+- aceita várias palavras em qualquer ordem e permite que cada termo seja encontrado em um campo diferente;
+- CPF/CNPJ e telefones podem ser localizados mesmo quando a consulta não contém a pontuação do cadastro;
+- filtros específicos continuam combináveis com a pesquisa geral.
+
+### Clientes e atendimento
+- `/clientes` passou a pesquisar nome, apelido, CPF/CNPJ, WhatsApp, telefone, e-mail, cidade, bairro, endereço, CEP, observações, responsável e origem;
+- adicionados filtros específicos por cidade, bairro, CPF/CNPJ, telefone/WhatsApp e apelido;
+- `/assistencia` usa o mesmo padrão ao selecionar cliente existente e preserva o vínculo ao `clientes.id`;
+- seleção de cliente na assistência preenche os dados já cadastrados sem criar cadastro paralelo.
+
+### Venda e Orçamento Balcão
+- `/orcamento/balcao/novo` ganhou fluxo em cascata `Categoria → Linha → Pesquisa`;
+- produto pode ser localizado por código, código de origem, nome, descrição, categoria, grupo, marca, NCM e dados da linha associada;
+- busca de cliente considera nome, apelido, CPF/CNPJ, WhatsApp, telefone, e-mail, cidade, bairro, endereço e CEP;
+- ao escolher cliente existente, o orçamento mantém o mesmo `clientes.id`, evitando duplicidade;
+- `lib/orcamentoBalcao.ts` aceita `clienteId` existente e só cria/resolve cliente quando nenhum cadastro foi selecionado;
+- API compartilhada `/api/balcao/catalogo` ampliou a busca de clientes para os mesmos campos, preservando o estoque multiunidade e as regras de preço da Venda Balcão.
+
+### Cadastros, estoque e compras
+- pesquisa padronizada em Produtos, Linhas, Produtos por Linha, Precificação, Unidades Pendentes, Materiais e Fornecedores;
+- Estoque da Rede pesquisa produto, código, unidade, local e endereço;
+- Endereçamento pesquisa produto/código, loja/unidade, local e endereço;
+- Transferências pesquisam produtos disponíveis na origem e o histórico por número, status, origem, destino, motivo e produtos;
+- Histórico de NFs usa a regra compartilhada para NF, fornecedor, CNPJ e arquivo;
+- Vínculos de Compra receberam pesquisa dos itens pendentes e uma pesquisa real do catálogo Atlas antes de confirmar o vínculo;
+- Pesquisa e Histórico de Orçamentos usam o mesmo comportamento sem remover filtros existentes de número, data ou status;
+- Central de Cadastros usa a mesma normalização.
+
+### Preservação das regras existentes
+- nenhuma migration nova foi necessária nesta implementação;
+- `clientes.apelido` e `clientes.bairro` já existiam no banco e foram apenas integrados às buscas/fluxos;
+- nenhuma regra de custo, margem, preço mínimo, estoque, reserva, caixa ou financeiro foi alterada;
+- vínculo de NF continua sem alterar custo nessa tela;
+- W.Vetro continua apenas como referência/origem e não ganhou precedência sobre dados Atlas validados;
+- previews sucessivos da branch foram compilados como `READY` na Vercel durante a implementação.
+
+---
+
 ## 2026-08-25 — Busca incremental de clientes da Venda Balcão — PR #276
 
 - corrigida a busca de cliente na tela principal `/balcao`;
