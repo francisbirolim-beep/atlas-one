@@ -1,1 +1,0 @@
-Objetivo: resolver especificamente o caso em que o navegador só atualiza a busca ao pressionar espaço. A implementação usa `onInput` + `onCompositionUpdate` na Consulta de preço. Não altera API, estoque, caixa ou financeiro.
