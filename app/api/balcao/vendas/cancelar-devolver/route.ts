@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarBalcao, nivelBalcaoUsuario } from '@/lib/balcaoServer'
@@ -41,11 +42,11 @@ export async function POST(req: NextRequest) {
     const vendaId = String(body.vendaId || '')
     const tipo = String(body.tipo || '')
     const motivo = String(body.motivo || '').trim()
-    const chave = String(body.chaveIdempotencia || '').trim()
+    const recebida = String(body.chaveIdempotencia || '').trim()
+    const chave = /^[0-9a-f-]{36}$/i.test(recebida) ? recebida : randomUUID()
     if (!vendaId) return NextResponse.json({ error: 'Venda não informada.' }, { status: 400 })
     if (!['cancelamento_total', 'devolucao_parcial'].includes(tipo)) return NextResponse.json({ error: 'Escolha cancelamento total ou devolução parcial.' }, { status: 400 })
     if (!motivo) return NextResponse.json({ error: 'O motivo é obrigatório.' }, { status: 400 })
-    if (!/^[0-9a-f-]{36}$/i.test(chave)) return NextResponse.json({ error: 'Chave de segurança da operação inválida. Reabra a operação.' }, { status: 400 })
 
     const reembolsarCaixa = Boolean(body.reembolsarCaixa)
     const caixaId = reembolsarCaixa ? (String(body.caixaId || '') || await caixaAbertoDoUsuario(usuario.id)) : null
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
       p_reembolsar_caixa: reembolsarCaixa, p_caixa_id: caixaId, p_chave_idempotencia: chave,
     })
     if (error) throw error
-    return NextResponse.json(data || { ok: true })
+    return NextResponse.json({ ...(data || { ok: true }), chaveIdempotencia: chave })
   } catch (e: any) {
     console.error('Erro cancelamento/devolução Venda Balcão', e)
     return NextResponse.json({ error: e?.message || 'Não foi possível processar a operação.' }, { status: 400 })
