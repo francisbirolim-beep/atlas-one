@@ -2,11 +2,28 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
-## EM VALIDAÇÃO — MODO VENDA BALCÃO INTEGRADO AO ATLAS — 2026-08-25
+## EM VALIDAÇÃO — BUSCA DE CLIENTES DA VENDA BALCÃO — PR #276 — 2026-08-25
+
+Correção implementada na tela principal `/balcao`:
+
+- busca de cliente por nome, CPF/CNPJ, telefone, WhatsApp e cidade;
+- comparação sem acento: `JOAO` encontra `João`;
+- CPF/CNPJ e telefone também podem ser pesquisados sem pontuação;
+- campo usa captura nativa `onInput` + `onCompositionUpdate` para reagir letra por letra;
+- debounce reduzido para 70 ms;
+- requisição anterior é abortada e resposta fora de ordem é ignorada;
+- busca de produto da tela principal também passou a usar captura nativa;
+- nenhum dado de cliente é duplicado: seleção continua apontando para o cadastro compartilhado do Atlas.
+
+Base conferida no banco antes da correção: 92 clientes, incluindo `João paulo Missiagia`, `João Vitor Cunha`, `Julio`, `Juliano` e outros nomes iniciados por J.
+
+Validação esperada após produção: digitar `JU` deve sugerir Julio/Juliano/Juliane; digitar `JOAO` sem acento deve sugerir os clientes cadastrados como `João`.
+
+## MODO VENDA BALCÃO INTEGRADO AO ATLAS — 2026-08-25
 
 Decisão consolidada: **Venda Balcão é um modo operacional do Atlas One, não um sistema separado**.
 
-Estado desta branch:
+Estado integrado:
 - `components/system/BalcaoShell.tsx` identifica explicitamente `Modo Venda Balcão`;
 - botão `Voltar ao Atlas` retorna ao ERP completo (`/`);
 - no mobile existe acesso direto `Atlas` no cabeçalho do balcão;
@@ -30,7 +47,8 @@ Regra arquitetural: o mesmo produto, cliente, estoque, unidade, compra e finance
 - PR #271: cancelamento/devolução transacional da Venda Balcão;
 - PR #272: busca combinada + layout compacto do balcão;
 - PR #273: busca incremental;
-- PR #274: captura nativa de digitação na Consulta de preço.
+- PR #274: captura nativa de digitação na Consulta de preço;
+- PR #275: Modo Venda Balcão integrado ao mesmo Atlas.
 
 ### Referência W.Vetro disponível
 
@@ -50,6 +68,7 @@ Regra arquitetural: o mesmo produto, cliente, estoque, unidade, compra e finance
 - GitHub é a única fonte da verdade do código.
 - Nunca commitar direto em `main`; branch → PR → Build/Preview → merge manual.
 - Venda Balcão e Atlas completo compartilham a mesma base e os mesmos cadastros; não duplicar backend.
+- Busca operacional deve ser tolerante a acentos quando o usuário digita sem acentuação.
 - W.Vetro é referência/origem; Atlas validado é a versão técnica oficial.
 - Nunca sobrescrever automaticamente fórmula, receita, custo, preço, margem ou unidade operacional Atlas com valor histórico W.Vetro.
 - Variável inferida sem regra Atlas validada deve permanecer `A definir`.
