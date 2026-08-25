@@ -1,94 +1,107 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar e concluir PR #260: Orçamento visual + variáveis W.Vetro
+## TAREFA ATUAL — concluir PR #271: Cancelamento e Devolução da Venda Balcão
 
-### Base concluída
+### Base já integrada
 
-- PR #255 integrada: Compras/Financeiro/Estoque/custo médio + precificação balcão;
-- PR #257 integrada: estoque multiunidade, endereçamento, reservas e transferências;
-- PR #256 integrada: Venda Balcão multiunidade, caixas por unidade, estoque da rede e atendimento entre lojas;
-- PR #258 integrada na `main`: referência/auditoria completa W.Vetro;
-- PR #259 é somente especificação da evolução visual/W.Vetro;
-- PR #260 contém a implementação operacional atual.
+- Compras + Estoque + Financeiro de entrada e custo médio;
+- estoque multiunidade, endereçamento, reservas e transferências;
+- Venda Balcão V1 com venda, orçamento, consulta, histórico, caixa, contas a receber, relatórios e atendimento entre unidades;
+- integração/auditoria W.Vetro;
+- orçamento visual com tipologias e referências de variáveis W.Vetro;
+- correção do Service Worker para não cachear APIs nem manter bundles antigos após deploy.
 
-## PR #260 — estado
+### W.Vetro — estado validado em 25/08/2026
 
-Branch: `feat/orcamento-tipologias-visuais`
+A auditoria completa já foi encerrada. **Não executar novamente a auditoria inteira sem necessidade.**
+
+Resumo atual no banco:
+
+- 1.307 perfis W.Vetro;
+- 1.174 acessórios W.Vetro;
+- 111 tipologias referência, 109 mapeadas;
+- 119 linhas referência;
+- 1.529 códigos de perfil observados no histórico;
+- 1.294 códigos de acessório observados no histórico;
+- 14 vidros referência;
+- 2.481 produtos consultados na API;
+- 1.287 imagens copiadas para o Atlas.
+
+As imagens de produtos/perfis/acessórios foram copiadas quando disponíveis. Imagens visuais de tipologias continuam sendo tratadas separadamente; não inventar croquis para substituir imagem oficial.
+
+## PR #271 — Venda Balcão: cancelamento e devolução
+
+Branch: `feat/balcao-cancelamento-devolucao-v3`
 
 Implementado:
 
-1. cards visuais de tipologia por Linha;
-2. busca e filtros;
-3. prioridade de imagens Atlas → configuração/produto Atlas → W.Vetro → placeholder;
-4. lightbox de imagem;
-5. endpoint server-side autenticado `/api/orcamento/wvetro-referencias`;
-6. staging `wvetro_referencias_variaveis` protegido por RLS/service_role;
-7. extração somente de dados explicitamente escritos no Modelo W.Vetro;
-8. normalização de número de folhas;
-9. base atual: 57 referências explícitas de folhas, valores 1..8;
-10. botão `Configurar variáveis` unifica Atlas + W.Vetro com procedência visível;
-11. valores W.Vetro só preenchem campos vazios;
-12. configuração Atlas validada sempre tem prioridade;
-13. snapshot do orçamento preserva referência W.Vetro e evidência efetivamente usada;
-14. auditoria W.Vetro reconstrói referências explícitas após lote de período e ao finalizar.
+1. cancelamento total sem apagar a venda original;
+2. devolução parcial por item e quantidade;
+3. cálculo do valor líquido devolvido com desconto global rateado;
+4. item físico devolvido gera entrada de estoque no local de retorno;
+5. item apenas reservado/separando libera reserva sem alterar estoque físico;
+6. saldo devolvível considera devoluções anteriores;
+7. contas a receber abertas/vencidas são reduzidas/canceladas antes de criar reembolso;
+8. valores já recebidos podem ser reembolsados pelo caixa quando elegíveis;
+9. saldo não reembolsado imediatamente vira `reembolso_pendente`;
+10. reembolso pendente pode ser confirmado depois como externo ou pelo caixa;
+11. eventos e itens de auditoria preservam usuário, data, motivo, valor e impacto;
+12. proteção idempotente por chave evita duplicar estoque/financeiro/caixa em repetição da mesma operação;
+13. ação restrita à gestão (`relatorios-balcao = edicao`; Master tem edição);
+14. Histórico mostra status, saldo líquido, eventos e botão `Cancelar / Devolver`;
+15. UI mostra impacto previsto antes da confirmação.
 
-Migrations já aplicadas e versionadas:
+Migrations já aplicadas e alinhadas ao histórico do Supabase:
 
-- `20260824022150_wvetro_variaveis_orcamento_v1`;
-- `20260824022234_wvetro_variaveis_folhas_normalizacao_v1`.
+- `20260825174254_balcao_cancelamento_devolucao_v1.sql`;
+- `20260825174749_balcao_cancelamento_idempotencia.sql`.
 
-## Antes do merge #260
+### Testes transacionais já aprovados com ROLLBACK
 
-1. confirmar `Build Validation` verde no HEAD final;
-2. confirmar `Supabase Database Control` verde no HEAD final;
-3. confirmar preview Vercel `READY` no HEAD final;
-4. se build falhar, corrigir TypeScript sem contornar checagens;
-5. testar no preview `/orcamento-rapido`:
-   - selecionar Linha Suprema;
-   - confirmar cards visuais;
-   - testar busca/filtros;
-   - selecionar tipologia com status W.Vetro;
-   - abrir `Configurar variáveis`;
-   - confirmar pré-carga de `folhas` quando explícita;
-   - alterar valor e confirmar mudança de procedência visual;
-   - confirmar que configuração Atlas validada não é substituída;
-   - testar descrição livre;
-   - testar mobile;
-6. confirmar PR mergeable e HEAD estável;
-7. merge manual somente depois dos gates.
+- devolução 2 de 5: estoque retorna exatamente 2 e venda vira `devolvida_parcial`;
+- repetição com a mesma chave: estoque não movimenta novamente;
+- cancelamento do saldo restante: estoque total restaurado e venda vira `cancelada`;
+- cancelamento de item reservado em outra unidade: reserva liberada e estoque físico inalterado;
+- conta a receber aberta: cancelada/reduzida sem apagar histórico.
 
-## Imagens W.Vetro
+Nenhum dado fictício desses testes permaneceu no banco.
 
-A base histórica inicial possui `imagem_url` nula para várias/maioria das referências de tipologia. Portanto os cards podem mostrar placeholder até a auditoria viva ser executada.
+## Gates antes do merge #271
 
-Usuário Master deve executar:
+1. `Build Validation` verde no HEAD final;
+2. `Supabase Database Control` verde no HEAD final;
+3. preview Vercel `READY` no HEAD final;
+4. confirmar PR mergeable;
+5. merge somente após os três gates.
 
-`/configuracoes/integracoes/wvetro/auditoria`
+## Teste funcional depois do merge
 
-A auditoria percorre pedidos/orçamentos atuais e preserva URLs/imagens encontradas. Imagem Atlas existente nunca deve ser sobrescrita automaticamente.
+Em `Venda Balcão > Histórico`:
 
-## Depois da PR #260
+1. abrir uma venda real/controlada;
+2. conferir botão `Cancelar / Devolver` para usuário gerencial;
+3. conferir saldo devolvível por item;
+4. testar devolução parcial apenas quando houver uma venda apropriada para teste;
+5. validar movimento correspondente no estoque e evento no histórico;
+6. validar título financeiro/reembolso conforme a forma de pagamento;
+7. confirmar que uma venda cancelada continua consultável e auditável.
 
-Próxima evolução recomendada, mantendo PR pequena:
+## Próximas evoluções já conhecidas da Venda Balcão
 
-1. criar tela de revisão de referências W.Vetro para Engenharia;
-2. permitir validar/promover mapeamentos de variável/opção individualmente;
-3. cadastrar regras Atlas determinísticas para inferências a partir de componentes, sempre com revisão humana antes de uso técnico;
-4. mostrar histórico/ocorrência dos componentes por Linha+Modelo;
-5. ampliar biblioteca oficial de imagens de tipologias;
-6. validar tipologia por tipologia, priorizando Suprema mais usada;
-7. retomar validação operacional da NF real 3128;
-8. validar Plano de Corte A4 PC2/PC3/PC4 Suprema;
-9. continuar validação estrutural Suprema 3F–9F;
-10. validar Central do Cliente e Assistência em campo;
-11. definir permissões específicas de Compras/Financeiro;
-12. tratar hardening legado da Engenharia isoladamente.
+Após a PR #271 e validação do usuário:
+
+1. administração de pontos de caixa/caixas por unidade;
+2. transferência física opcional entre unidades antes da retirada;
+3. NFC-e/fiscal após definição do provedor e regras fiscais.
+
+O usuário informou que apresentará uma nova ideia após a conclusão desta etapa; avaliar a ideia contra o código real antes de alterar o backlog.
 
 ## Regras invioláveis
 
-- W.Vetro é referência; Atlas validado é fonte técnica oficial.
-- Sem fuzzy como vínculo automático.
-- Sem adivinhar variável ausente.
-- Sem promover custo/preço/unidade/fórmula automaticamente.
-- Valor inferido só pode ser usado quando existir regra Atlas determinística validada.
-- Imagem W.Vetro nunca substitui foto Atlas validada automaticamente.
+- GitHub é a fonte da verdade do código.
+- Não apagar venda, pagamento, movimento ou histórico para efetuar estorno.
+- Estoque, caixa e financeiro devem ser movimentados por transação auditável.
+- Operações críticas devem ser idempotentes.
+- Venda original preserva preço, custo e margem históricos.
+- Cartão não pode ser marcado como estornado externamente sem confirmação real.
+- W.Vetro é referência; regra técnica Atlas validada sempre tem prioridade.
