@@ -36,7 +36,17 @@ type ProdutoCatalogo = {
   ativo: boolean
 }
 
+type ClienteCatalogo = {
+  id: string
+  nome: string
+  cpf_cnpj: string | null
+  telefone: string | null
+  whatsapp: string | null
+  cidade: string | null
+}
+
 const CAMPOS_PRODUTO = 'id,codigo,nome,descricao,categoria,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,foto_url,ativo'
+const CAMPOS_CLIENTE = 'id,nome,cpf_cnpj,telefone,whatsapp,cidade'
 
 function termosBusca(valor: string) {
   return [...new Set(
@@ -57,6 +67,41 @@ function textoNormalizado(valor: unknown) {
 
 function textoProduto(p: ProdutoCatalogo) {
   return textoNormalizado(`${p.codigo || ''} ${p.nome || ''} ${p.descricao || ''} ${p.categoria || ''}`)
+}
+
+function textoCliente(c: ClienteCatalogo) {
+  return textoNormalizado(`${c.nome || ''} ${c.cpf_cnpj || ''} ${c.telefone || ''} ${c.whatsapp || ''} ${c.cidade || ''}`)
+}
+
+function digitosCliente(c: ClienteCatalogo) {
+  return `${c.cpf_cnpj || ''}${c.telefone || ''}${c.whatsapp || ''}`.replace(/\D/g, '')
+}
+
+async function buscarClientes(q: string): Promise<ClienteCatalogo[]> {
+  const termos = termosBusca(q)
+  if (!termos.length) return []
+
+  // A base atual de clientes é pequena e compartilhada com todo o Atlas.
+  // Filtrar em memória permite busca sem acento (JOAO encontra JOÃO),
+  // várias palavras e documentos/telefones independentemente de pontuação.
+  const { data, error } = await supabaseAdmin
+    .from('clientes')
+    .select(CAMPOS_CLIENTE)
+    .order('nome')
+    .limit(500)
+  if (error) throw error
+
+  return ((data || []) as ClienteCatalogo[])
+    .filter(c => {
+      const texto = textoCliente(c)
+      const digitos = digitosCliente(c)
+      return termos.every(termo => {
+        const normalizado = textoNormalizado(termo)
+        const somenteDigitos = termo.replace(/\D/g, '')
+        return texto.includes(normalizado) || (somenteDigitos.length >= 2 && digitos.includes(somenteDigitos))
+      })
+    })
+    .slice(0, 30)
 }
 
 async function buscarProdutos(q: string): Promise<ProdutoCatalogo[]> {
@@ -146,11 +191,8 @@ export async function GET(req: NextRequest) {
 
   try {
     if (tipo === 'clientes') {
-      let query = supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,telefone,whatsapp,cidade').order('nome').limit(30)
-      if (q) query = query.or(`nome.ilike.%${q}%,cpf_cnpj.ilike.%${q}%,telefone.ilike.%${q}%,whatsapp.ilike.%${q}%`)
-      const { data, error } = await query
-      if (error) throw error
-      return NextResponse.json({ ok: true, clientes: data || [] })
+      const clientes = await buscarClientes(q)
+      return NextResponse.json({ ok: true, clientes })
     }
 
     const local = await localPadrao(usuario.id, req.nextUrl.searchParams.get('localId'))
