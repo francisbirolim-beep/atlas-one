@@ -46,6 +46,7 @@ export interface ItemOrcamentoForm {
 
 export interface DadosOrcamentoForm {
   clienteId?: string | null
+  obraId?: string | null
   itens: ItemOrcamentoForm[]
   clienteNome: string
   clienteWhatsapp: string
@@ -108,6 +109,7 @@ export async function criarOrcamentoNoServidor(
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
+  const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
 
   const [clienteId, colunaId, usuario, referenciasWvetro] = await Promise.all([
     clienteIdInformado
@@ -242,6 +244,7 @@ export async function criarOrcamentoNoServidor(
   const { error } = await supabase.from('orcamentos').insert({
     id: novoId,
     cliente_id: clienteId,
+    obra_id: obraId || null,
     cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp,
     cidade,
