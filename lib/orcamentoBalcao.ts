@@ -21,6 +21,9 @@ export interface DadosOrcamentoBalcaoForm {
   cidade?: string
   origem?: OrigemCliente
   itens: ItemBalcao[]
+  desconto?: number
+  formaPagamento?: string
+  prazoEntregaDias?: number | null
   condicoes?: string
 }
 
@@ -29,15 +32,27 @@ export interface ResultadoOrcamentoBalcao {
   error?: string
   id?: string
   numero?: number | null
+  subtotal?: number
+  desconto?: number
+  total?: number
 }
 
-// Cria um orçamento no modo "balcao" e congela o preço unitário dentro dos itens.
-// Se um cliente do cadastro compartilhado foi selecionado, usa o mesmo id e não cria duplicata.
+// Cria um orçamento no modo "balcao" e congela os dados comerciais dos itens.
+// Orçamento não movimenta estoque nem caixa. Se o cliente existente foi selecionado,
+// reutiliza o mesmo cadastro e evita duplicidade.
 export async function criarOrcamentoBalcao(
   dados: DadosOrcamentoBalcaoForm
 ): Promise<ResultadoOrcamentoBalcao> {
   if (!dados.clienteNome.trim()) return { ok: false, error: 'Informe o nome do cliente' }
   if (!dados.itens || dados.itens.length === 0) return { ok: false, error: 'Adicione ao menos um produto' }
+
+  const subtotal = dados.itens.reduce((soma, it) => soma + Number(it.preco_total || 0), 0)
+  const desconto = Math.max(0, Number(dados.desconto || 0))
+  if (desconto > subtotal) return { ok: false, error: 'O desconto não pode ser maior que o subtotal.' }
+  const total = Math.max(0, subtotal - desconto)
+  const prazoEntregaDias = dados.prazoEntregaDias == null || dados.prazoEntregaDias === undefined
+    ? null
+    : Math.max(0, Math.round(Number(dados.prazoEntregaDias) || 0))
 
   const [clienteIdResolvido, colunaId, usuario] = await Promise.all([
     dados.clienteId
@@ -59,7 +74,6 @@ export async function criarOrcamentoBalcao(
     usuarioAtual(),
   ])
 
-  const valorTotal = dados.itens.reduce((soma, it) => soma + it.preco_total, 0)
   const novoId = uuidv4()
   const agora = new Date().toISOString()
 
@@ -73,12 +87,15 @@ export async function criarOrcamentoBalcao(
       cidade: dados.cidade || null,
       origem: dados.origem || null,
       tipo_esquadria: 'outro',
-      quantidade: dados.itens.reduce((soma, it) => soma + it.quantidade, 0) || 1,
+      quantidade: dados.itens.reduce((soma, it) => soma + Number(it.quantidade || 0), 0) || 1,
       itens_balcao: dados.itens,
       itens: [],
       modo_entrada: 'balcao',
       condicoes: dados.condicoes || null,
-      valor_estimado: valorTotal,
+      desconto,
+      forma_pagamento: dados.formaPagamento?.trim() || null,
+      prazo_entrega_dias: prazoEntregaDias,
+      valor_estimado: total,
       status: 'rascunho',
       coluna_id: colunaId,
       coluna_atualizada_em: agora,
@@ -95,5 +112,5 @@ export async function criarOrcamentoBalcao(
   }
 
   await registrarHistorico(novoId, usuario, 'Criou o orçamento balcão')
-  return { ok: true, id: novoId, numero: inserido?.numero ?? null }
+  return { ok: true, id: novoId, numero: inserido?.numero ?? null, subtotal, desconto, total }
 }
