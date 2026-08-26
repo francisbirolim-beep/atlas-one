@@ -20,6 +20,13 @@ export interface DadosOrcamentoBalcaoForm {
   clienteCep?: string
   cidade?: string
   origem?: OrigemCliente
+  obraEndereco?: string
+  obraNumero?: string
+  obraComplemento?: string
+  obraBairro?: string
+  obraCidade?: string
+  obraUf?: string
+  obraCep?: string
   itens: ItemBalcao[]
   desconto?: number
   formaPagamento?: string
@@ -37,12 +44,7 @@ export interface ResultadoOrcamentoBalcao {
   total?: number
 }
 
-// Cria um orçamento no modo "balcao" e congela os dados comerciais dos itens.
-// Orçamento não movimenta estoque nem caixa. Se o cliente existente foi selecionado,
-// reutiliza o mesmo cadastro e evita duplicidade.
-export async function criarOrcamentoBalcao(
-  dados: DadosOrcamentoBalcaoForm
-): Promise<ResultadoOrcamentoBalcao> {
+export async function criarOrcamentoBalcao(dados: DadosOrcamentoBalcaoForm): Promise<ResultadoOrcamentoBalcao> {
   if (!dados.clienteNome.trim()) return { ok: false, error: 'Informe o nome do cliente' }
   if (!dados.itens || dados.itens.length === 0) return { ok: false, error: 'Adicione ao menos um produto' }
 
@@ -86,6 +88,13 @@ export async function criarOrcamentoBalcao(
       cliente_whatsapp: dados.clienteWhatsapp || null,
       cidade: dados.cidade || null,
       origem: dados.origem || null,
+      obra_endereco: dados.obraEndereco?.trim() || null,
+      obra_numero: dados.obraNumero?.trim() || null,
+      obra_complemento: dados.obraComplemento?.trim() || null,
+      obra_bairro: dados.obraBairro?.trim() || null,
+      obra_cidade: dados.obraCidade?.trim() || null,
+      obra_uf: dados.obraUf?.trim().toUpperCase() || null,
+      obra_cep: dados.obraCep?.trim() || null,
       tipo_esquadria: 'outro',
       quantidade: dados.itens.reduce((soma, it) => soma + Number(it.quantidade || 0), 0) || 1,
       itens_balcao: dados.itens,
@@ -106,11 +115,7 @@ export async function criarOrcamentoBalcao(
     .single()
 
   if (error) return { ok: false, error: error.message }
-
-  if (colunaId) {
-    executarAutomacoesColuna(colunaId, { cliente_nome: dados.clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
-  }
-
+  if (colunaId) executarAutomacoesColuna(colunaId, { cliente_nome: dados.clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
   await registrarHistorico(novoId, usuario, 'Criou o orçamento balcão')
   return { ok: true, id: novoId, numero: inserido?.numero ?? null, subtotal, desconto, total }
 }
