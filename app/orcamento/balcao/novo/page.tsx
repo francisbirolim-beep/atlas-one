@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowLeft, FileDown, Loader2, Minus, Plus, Printer, Search, Trash2, UserCheck, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, FileDown, ImageIcon, Loader2, Minus, Plus, Printer, Search, Text, Trash2, UserCheck, X } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import CatalogoFiltros from '@/components/balcao/CatalogoFiltros'
 import { criarOrcamentoBalcao } from '@/lib/orcamentoBalcao'
@@ -10,6 +10,7 @@ import { abrirPdfParaImpressao, gerarPdfOrcamentoBalcao, type ItemPdfBalcao } fr
 import { lerConfiguracaoOrcamento, lerDadosEmpresa, type ConfiguracaoOrcamento, type DadosEmpresaCompleta } from '@/lib/configGeral'
 
 type Categoria = { valor: string; label: string }
+type ModoImpressao = 'imagem' | 'descricao'
 type Produto = {
   id: string
   codigo: string
@@ -90,6 +91,7 @@ export default function NovoOrcamentoBalcao() {
   const [formaPagamento, setFormaPagamento] = useState('A combinar')
   const [prazoEntrega, setPrazoEntrega] = useState('')
   const [condicoes, setCondicoes] = useState('')
+  const [modoImpressao, setModoImpressao] = useState<ModoImpressao>('imagem')
   const [empresa, setEmpresa] = useState<DadosEmpresaCompleta | null>(null)
   const [config, setConfig] = useState<ConfiguracaoOrcamento | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -215,7 +217,7 @@ export default function NovoOrcamentoBalcao() {
         numero: resultado.numero ?? null, emissao: new Date().toLocaleDateString('pt-BR'), vendedorNome: usuario?.nome || '', clienteNome: clienteNome.trim(), clienteTelefone: clienteTelefone || null, clienteWhatsapp: clienteWhatsapp || null, clienteEmail: clienteEmail || null, clienteCpfCnpj: clienteCpfCnpj || null, clienteEndereco: [clienteEndereco, clienteBairro, clienteCep].filter(Boolean).join(' · ') || null, clienteCidade: clienteCidade || null,
         obraEndereco: obraEndereco || null, obraNumero: obraNumero || null, obraComplemento: obraComplemento || null, obraBairro: obraBairro || null, obraCidade: obraCidade || null, obraUf: obraUf || null, obraCep: obraCep || null,
         itens: itensPdf, desconto: descontoN, formaPagamento, prazoEntregaDias: prazo, condicoes,
-      }, { ...cfg, mostrarFoto: true })
+      }, { ...cfg, mostrarFoto: modoImpressao === 'imagem' })
 
       documentoRef.current = doc; arquivoRef.current = `orcamento-${resultado.numero || 'balcao'}.pdf`; setSalvo({ id: resultado.id, numero: resultado.numero, total: resultado.total ?? total })
       if (acao === 'pdf') doc.save(arquivoRef.current); else abrirPdfParaImpressao(doc)
@@ -247,6 +249,8 @@ export default function NovoOrcamentoBalcao() {
         <section className="rounded-xl border bg-white p-3"><div className="mb-2 flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">Local da obra / entrega</h2><button type="button" onClick={usarEnderecoCliente} className="text-[10px] font-semibold text-emerald-700 hover:underline">Usar endereço do cliente</button></div><div className="grid grid-cols-6 gap-2"><input value={obraEndereco} onChange={e=>setObraEndereco(e.target.value)} placeholder="Logradouro" className="col-span-4 rounded border px-2 py-1.5 text-xs"/><input value={obraNumero} onChange={e=>setObraNumero(e.target.value)} placeholder="Número" className="col-span-2 rounded border px-2 py-1.5 text-xs"/><input value={obraComplemento} onChange={e=>setObraComplemento(e.target.value)} placeholder="Complemento" className="col-span-3 rounded border px-2 py-1.5 text-xs"/><input value={obraBairro} onChange={e=>setObraBairro(e.target.value)} placeholder="Bairro" className="col-span-3 rounded border px-2 py-1.5 text-xs"/><input value={obraCidade} onChange={e=>setObraCidade(e.target.value)} placeholder="Cidade" className="col-span-3 rounded border px-2 py-1.5 text-xs"/><input value={obraUf} onChange={e=>setObraUf(e.target.value.toUpperCase())} placeholder="UF" maxLength={2} className="col-span-1 rounded border px-2 py-1.5 text-xs"/><input value={obraCep} onChange={e=>setObraCep(e.target.value)} placeholder="CEP" className="col-span-2 rounded border px-2 py-1.5 text-xs"/></div></section>
 
         <section className="rounded-xl border bg-white p-3 space-y-2"><h2 className="text-sm font-semibold">Condições comerciais</h2><label className="block text-[10px] font-medium text-slate-500">Forma de pagamento<input list="formas-pagamento" value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs"/><datalist id="formas-pagamento"><option value="A combinar"/><option value="PIX"/><option value="Dinheiro"/><option value="Cartão"/><option value="Boleto"/><option value="À vista"/><option value="50% entrada + 50% entrega"/><option value="70% entrada + 30% entrega"/><option value="50% entrada + 20% produção + 30% entrega"/></datalist></label><label className="block text-[10px] font-medium text-slate-500">Prazo de entrega (dias)<input type="number" min="0" value={prazoEntrega} onChange={e => setPrazoEntrega(e.target.value)} placeholder="A combinar" className="mt-1 w-full rounded border px-2 py-1.5 text-xs"/></label><label className="block text-[10px] font-medium text-slate-500">Observações<textarea value={condicoes} onChange={e => setCondicoes(e.target.value)} rows={3} className="mt-1 w-full resize-none rounded border p-2 text-xs"/></label></section>
+
+        <section className="rounded-xl border bg-white p-3"><h2 className="text-sm font-semibold">Modelo de impressão</h2><p className="mt-0.5 text-[10px] text-slate-500">Escolha antes de salvar. O modelo compacto usa melhor a folha inteira.</p><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" disabled={Boolean(salvo)} onClick={()=>setModoImpressao('imagem')} className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${modoImpressao==='imagem'?'border-emerald-500 bg-emerald-50 text-emerald-800':'bg-white text-slate-600'} disabled:opacity-60`}><ImageIcon size={14}/>Com desenho/imagem</button><button type="button" disabled={Boolean(salvo)} onClick={()=>setModoImpressao('descricao')} className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${modoImpressao==='descricao'?'border-emerald-500 bg-emerald-50 text-emerald-800':'bg-white text-slate-600'} disabled:opacity-60`}><Text size={14}/>Só descrição</button></div></section>
 
         {!salvo ? <div className="grid grid-cols-2 gap-2"><button onClick={() => salvar('pdf')} disabled={salvando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"><FileDown size={16}/>{salvando ? 'Salvando...' : 'Salvar PDF'}</button><button onClick={() => salvar('imprimir')} disabled={salvando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"><Printer size={16}/>Imprimir</button></div> : <div className="grid grid-cols-2 gap-2"><button onClick={() => documentoRef.current?.save(arquivoRef.current)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-3 py-3 text-sm font-semibold text-white"><FileDown size={16}/>Baixar PDF</button><button onClick={() => documentoRef.current && abrirPdfParaImpressao(documentoRef.current)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white"><Printer size={16}/>Imprimir</button></div>}
       </aside>
