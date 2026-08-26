@@ -1,167 +1,164 @@
 # CURRENT_STATE.md — Atlas One
 
-> Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
+> Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
-## EM VALIDAÇÃO — BALCÃO FORA DO KANBAN + DATA DE ENTRADA — 2026-08-26
+## EM VALIDAÇÃO — CLIENTE 360 + OBRAS + FLUXO OPERACIONAL DA VENDA — 2026-08-26
 
-Branch: `fix/balcao-fora-kanban`
+Branch: `feat/cliente-360-obras-financeiro-v1`
+PR: #280 — draft, não fazer merge antes da validação visual do usuário.
 
-### Regra operacional consolidada
+### Cliente 360
 
-- **Venda Balcão e Orçamento Balcão rápido não entram no Kanban de orçamentos/obras**;
-- o Kanban fica reservado para orçamento sob medida/obra e demais fluxos operacionais que realmente precisam percorrer etapas;
-- balcão continua compartilhando clientes, produtos, preços, estoque, compras e financeiro com o mesmo Atlas/Supabase, sem duplicar os cadastros mestres;
-- os orçamentos rápidos de balcão agora são persistidos em `balcao_orcamentos`, tabela transacional própria, e não em `orcamentos`, que é a fonte do Kanban.
+Implementado:
+- `/clientes/[id]/central` como central do relacionamento com o cliente;
+- múltiplas Obras por cliente;
+- `/obras` e `/obras/[id]`;
+- vínculo opcional `obra_id` em orçamento, orçamento/venda balcão, assistência, medição e financeiro;
+- Financeiro consolidado por cliente e filtrável por obra;
+- recebimento geral do cliente, recebimento direto por obra e alocação de um mesmo recebimento entre várias obras;
+- baixa parcial usando `valor_pago`, mantendo a conta aberta até quitação;
+- documentos, histórico, relatórios e resumo inteligente;
+- contexto Cliente + Obra preservado também na fila offline.
 
-### Data fixa de entrada no Kanban
+### Andamento do cliente
 
-- criada `orcamentos.kanban_entrada_em`;
-- trigger `trg_definir_kanban_entrada_em` preenche a data automaticamente para registros não-balcão;
-- a data não muda ao arrastar o card entre colunas; `coluna_atualizada_em` continua registrando a movimentação/SLA separadamente;
-- os cards exibem `📅 Entrada: DD/MM/AAAA` entre a descrição da esquadria e os demais dados do card;
-- o campo de calendário do Kanban é identificado como filtro da **data de entrada no Kanban**;
-- backfill validado no banco: 49 cards de Kanban e 49 com `kanban_entrada_em` preenchido;
-- validação do isolamento: 0 registros `modo_entrada='balcao'` permanecem em `orcamentos`.
+Nova visão:
+- `/clientes/[id]/central?aba=andamento`;
+- lê os mesmos cards dos setores, sem duplicar estado;
+- agrupa por obra e mostra cadeia macro:
+  `Venda → Conferir Projeto → Medição Final → Engenharia final → Materiais → Produção → Instalação`;
+- mostra Perfis, Vidros, Acessórios e Outros em paralelo;
+- exibe o status real de cada fluxo e um `Bloqueio atual`;
+- filtro por obra.
 
-### Banco / migrations
+### Fluxo oficial da venda sob medida
 
-- `20260826135831_kanban_data_entrada_v1.sql`;
-- `20260826140437_balcao_orcamentos_separado_v1.sql`;
-- `20260826140909_kanban_data_entrada_search_path_v1.sql`;
-- `balcao_orcamentos` possui RLS e policies compatíveis com o padrão operacional atual do Atlas;
-- advisor de segurança não apontou problema novo da tabela; o warning de `search_path` da função nova foi corrigido.
+**Venda confirmada** gera apenas:
+1. snapshot da venda em `vendas_obras`;
+2. Financeiro / pré-lançamento em `financeiro_contas_receber`;
+3. card `Engenharia — Conferir Projeto` em `A conferir`.
 
-### Validação pendente antes do merge
+Não criar Medição Final, Instalação ou materiais diretamente em `Vendido`.
 
-- Build Validation / TypeScript no PR;
-- Preview Vercel `READY`;
-- abrir `/kanban` e confirmar visualmente a data na posição combinada;
-- mover um card de coluna e confirmar que `Entrada` permanece a mesma;
-- filtrar pelo calendário e confirmar o dia de entrada;
-- criar um Orçamento Balcão e confirmar que aparece apenas em `/balcao/orcamentos`, nunca no `/kanban`.
+**Engenharia — Conferir Projeto**:
+`A conferir → Em conferência → Aguardando ajuste → Projeto conferido`.
 
-## EM VALIDAÇÃO — FILTROS DO CATÁLOGO DO ORÇAMENTO BALCÃO — 2026-08-25
+Ao entrar em **Projeto conferido**:
+- cria/garante Medição Final;
+- cria/garante Perfis;
+- cria/garante Acessórios;
+- cria/garante Outros;
+- não cria Vidros.
 
-Branch: `fix/balcao-filtros-catalogo-v2`
+Fluxo de materiais:
+`Pendente → Em compra → Comprado → Aguardando entrega → Recebido → Separado → Liberado`.
 
-Objetivo: preservar o filtro visual do catálogo do Orçamento Balcão e adicionar **Vidro** como categoria comercial explícita, sem transformar referência técnica W.Vetro em preço/estoque automaticamente.
+**Vidros só nascem depois que a Medição Final muda para `aprovado`.**
 
-### Estado confirmado no código e na base
+Quando a Medição Final é aprovada, o Atlas também mantém a etapa técnica pós-medição no setor `mee`, que trabalha com as peças/medidas finais. O trigger foi corrigido para apontar explicitamente para `mee`, sem busca fuzzy pelo nome Engenharia.
 
-- `/balcao/orcamentos/novo` reutiliza `app/orcamento/balcao/novo/page.tsx`;
-- a tela mantém a faixa visual `Todas | Produto | Acessório | Perfil | Vidro | Produto pronto | PU | Outro`;
-- ao escolher uma categoria, a lista de produtos é filtrada por `produtos.categoria`;
-- a tela já possui segundo nível de filtro por Linha através de `linha_produtos`/`linhas_tecnicas`;
-- base atual confirmada: 1.174 acessórios vinculados a 36 linhas e 1.307 perfis vinculados a 53 linhas;
-- `Vidro` foi adicionado a `CATEGORIAS_PRODUTO_PRINCIPAIS` e passa a ser categoria oficial do catálogo comercial;
-- no momento não existem produtos comerciais com `categoria='vidro'`; as 14 referências de vidro do W.Vetro permanecem apenas como referência técnica até cadastro/validação comercial real;
-- nenhum preço, custo, estoque, unidade ou margem de vidro foi criado automaticamente.
+Detalhamento permanente: `docs/ai-handoff/CLIENTE360_FLUXO_VENDA.md`.
 
-### Validação
+### Venda e revisões
 
-- preview Vercel do commit inicial da branch compilou como `READY`;
-- validar visualmente em `/balcao/orcamentos/novo` após produção:
-  - faixa de categorias visível;
-  - botão `Vidro` entre `Perfil` e `Produto pronto`;
-  - selecionar `Acessório` e confirmar as linhas vinculadas;
-  - selecionar `Perfil` e confirmar as linhas vinculadas;
-  - selecionar uma Linha e confirmar o refinamento da lista;
-  - busca textual deve continuar combinando com Categoria + Linha.
+Criada `vendas_obras` para preservar snapshot do orçamento vendido:
+- valor da venda;
+- custo previsto;
+- condições e forma de pagamento;
+- itens do momento da confirmação;
+- cliente e obra.
 
-## BUSCA PADRÃO ATLAS V1 — INTEGRADA NA MAIN — PR #277
+Criada `venda_obra_revisoes` com justificativa obrigatória para suportar a próxima evolução de alterações pós-venda sem sobrescrever histórico.
 
-Objetivo: substituir buscas isoladas/inconsistentes por um comportamento operacional único, sem criar base paralela e sem alterar as regras técnicas/comerciais dos módulos.
+### Financeiro
 
-### Regra oficial de busca
+- continua sendo uma base única;
+- cliente e obra são dimensões da mesma base, não financeiros paralelos;
+- confirmação da venda cria um pré-lançamento idempotente vinculado a `venda_obra_id`, `orcamento_id`, `cliente_id` e `obra_id`;
+- Financeiro poderá ajustar condição, parcelas e vencimentos posteriormente sem apagar o snapshot da venda;
+- recebimento geral pode ser distribuído entre várias obras.
 
-Criados `lib/buscaAtlas.ts` e `components/system/BuscaAtlasInput.tsx`.
+### Balcão
 
-O padrão V1:
-- ignora diferença entre maiúsculas/minúsculas;
-- ignora acentos (`JOAO` encontra `João`);
-- aceita várias palavras em qualquer ordem;
-- cada palavra pode existir em um campo diferente do cadastro;
-- CPF/CNPJ/telefone podem ser pesquisados sem a pontuação usada no cadastro;
-- filtros específicos podem ser combinados com a pesquisa geral.
+Regras preservadas:
+- Venda/Orçamento Balcão rápido não entra no Kanban de obras;
+- `balcao_orcamentos` é a tabela transacional própria do orçamento rápido;
+- clientes, produtos, preços, estoque, compras e financeiro continuam compartilhados com o Atlas;
+- venda balcão pode ter cliente/obra para relatório, mas não gera fluxo operacional de obra automaticamente.
 
-### Fluxos padronizados
+### Banco / migrations desta evolução
 
-- Clientes: nome, apelido, CPF/CNPJ, WhatsApp, telefone, e-mail, cidade, bairro, endereço, CEP, observação, responsável e origem; filtros específicos de cidade, bairro, CPF/CNPJ, telefone e apelido.
-- Orçamento Balcão: `Categoria → Linha → Pesquisa`; produto por código, código de origem, nome, descrição, categoria, grupo, marca, NCM e dados das linhas; seleção do cliente cadastrado sem duplicar `clientes.id`.
-- Venda Balcão: a API compartilhada do catálogo reconhece também apelido, e-mail, bairro, endereço e CEP do cliente; pesquisa de produtos continua integrada ao estoque da rede.
-- Assistência: seleção de cliente usa o mesmo critério amplo do Atlas e preenche cidade/endereço/bairro/telefone do cadastro escolhido.
-- Produtos: pesquisa geral combinada aos filtros de categoria e linha.
-- Linhas técnicas e catálogo por linha: busca por nome, fabricante, descrição, apelidos, produtos e tipologias associados.
-- Precificação e unidades pendentes: busca de produto usando o padrão Atlas.
-- Fornecedores e Materiais: pesquisa ampla pelos dados exibidos/cadastrados.
-- Estoque: pesquisa por produto/código/unidade/local/endereço.
-- Endereçamento: pesquisa por produto, unidade, local e endereço.
-- Transferências: busca de produtos na origem e pesquisa do histórico por nº, status, origem, destino, motivo e produtos.
-- Compras/NFs: histórico de notas por NF, fornecedor, CNPJ e arquivo.
-- Vínculos de compra: pesquisa dos itens pendentes e pesquisa real do produto Atlas antes do vínculo.
-- Pesquisa/Histórico de Orçamentos: busca ampliada preservando filtros de número/data/status.
-- Central de Cadastros: usa o mesmo mecanismo de normalização.
+Cliente 360:
+- `20260826185419_cliente_360_obras_financeiro_v1.sql`;
+- `20260826190418_cliente_360_propagacao_obra_v1.sql`;
+- `20260826192848_cliente360_recebimento_multiobra_v1.sql`;
+- `20260826193046_cliente360_recebimento_status_compativel_v1.sql`.
 
-### Segurança funcional
+Fluxo da venda:
+- `20260826212725_fluxo_venda_conferir_projeto_materiais_v1.sql`;
+- `20260826213310_fluxo_engenharia_separar_projeto_mee_v1.sql`.
 
-- nenhuma migration nova foi necessária;
-- `clientes.apelido` e `clientes.bairro` já existiam e foram reutilizados;
-- cliente selecionado em Venda/Orçamento/Assistência continua apontando para o mesmo cadastro compartilhado;
-- regras de preço, margem, estoque, reserva, caixa, vínculo de NF e precedência técnica Atlas/W.Vetro não foram alteradas.
+### Validações já concluídas
 
-## MODO VENDA BALCÃO INTEGRADO AO ATLAS — 2026-08-25
+Financeiro Cliente 360, em transação com ROLLBACK:
+- R$ 10.000 de recebimento geral alocados em R$ 6.000 numa obra + R$ 4.000 em outra;
+- baixa integral e parcial;
+- crédito excedente por obra;
+- recebimento geral permaneceu sem `obra_id`;
+- bloqueado redirecionamento de recebimento direto de uma obra para outra;
+- Medição Final/conta herdaram obra;
+- 0 registros de teste restantes.
 
-Decisão consolidada: **Venda Balcão é um modo operacional do Atlas One, não um sistema separado**.
+Fluxo operacional, em transação com ROLLBACK:
+- venda criada = 1;
+- financeiro criado = 1;
+- projeto conferido = 1;
+- Medição Final aprovada = 1;
+- Perfis = 1;
+- Acessórios = 1;
+- Outros = 1;
+- Vidros = 1 somente após a aprovação da medição;
+- MEE pós-medição = 1;
+- 7 cards do fluxo com o mesmo contexto cliente/obra;
+- 0 registros de teste restantes após rollback.
 
-Estado integrado:
-- `components/system/BalcaoShell.tsx` identifica explicitamente `Modo Venda Balcão`;
-- botão `Voltar ao Atlas` retorna ao ERP completo (`/`);
-- no mobile existe acesso direto `Atlas` no cabeçalho do balcão;
-- menu do balcão continua focado em Venda, Orçamento, Consulta, Atendimentos, Histórico, Caixa, Contas a Receber e Relatórios;
-- seção `Gestão compartilhada` aponta para Clientes, Cadastros, Estoque e Compras do próprio Atlas;
-- nenhum cadastro mestre/banco/estoque foi duplicado; tabelas transacionais próprias do PDV podem existir dentro do mesmo banco quando o fluxo exige isolamento operacional;
-- fiscal/NFC-e/NF-e permanece evolução posterior, dependente de provedor e regras fiscais.
+CI do commit funcional `bd4ebb084807235c22d9c5fd0934bbc4904d399e`:
+- Supabase Database Control: success;
+- Build Validation / Next.js: success;
+- Vercel Preview: READY;
+- rota Cliente 360 Andamento respondeu HTTP 200 no Preview.
 
-## Base já integrada na `main`
+### Segurança
 
-- PR #255: Compras → fiscal → fornecedores → Contas a Pagar → recebimento → estoque → custo médio + precificação balcão;
-- PR #257: estoque multiunidade, endereçamento, reservas e transferências;
-- PR #256: Venda Balcão multiunidade, caixas por unidade, estoque da rede e atendimento reservado;
-- PR #258: auditoria completa W.Vetro integrada na `main`;
-- PR #271: cancelamento/devolução transacional da Venda Balcão;
-- PR #272: busca combinada + layout compacto do balcão;
-- PR #273: busca incremental;
-- PR #274: captura nativa de digitação na Consulta de preço;
-- PR #275: Modo Venda Balcão integrado ao mesmo Atlas;
-- PR #276: busca incremental de clientes na Venda Balcão;
-- PR #277: Busca Padrão Atlas V1 em clientes, balcão, cadastros, estoque, compras e orçamentos.
+- tabelas novas `vendas_obras`, `venda_obra_revisoes` e `setor_kanban_movimentos` têm RLS/policies no padrão atual do Atlas;
+- helpers/triggers internos tiveram execução pública revogada;
+- `fn_iniciar_fluxo_venda_v2` e `fn_concluir_conferencia_projeto_v1` são RPCs autenticadas e intencionalmente `SECURITY DEFINER`, pois representam ações de negócio do usuário autenticado;
+- advisors continuam apontando hardening legado já existente em Engenharia, Estoque, Compras, Financeiro e outras tabelas; tratar em PR separado, sem ampliar este escopo.
 
-### Referência W.Vetro disponível
+### Pendente antes do merge
 
-- 1.307 perfis W.Vetro preservados;
-- 1.174 acessórios W.Vetro;
-- 111 tipologias de referência, 109 mapeadas;
-- 119 linhas de referência;
-- 1.529 códigos de perfil observados no histórico;
-- 1.294 códigos de acessório observados no histórico;
-- 14 vidros referência;
-- 2.481 produtos consultados na API;
-- 1.287 imagens copiadas para o Atlas;
-- configuração/fórmula/receita validada Atlas sempre tem prioridade sobre W.Vetro.
+- validar visualmente Cliente 360 e a aba Andamento no Preview;
+- validar manualmente uma venda real/controlada: `Vendido → Confirmar venda → Conferir Projeto`;
+- conferir o Financeiro criado;
+- mover o projeto entre as etapas e confirmar que apenas `Projeto conferido` cria Medição/Perfis/Acessórios/Outros;
+- aprovar uma Medição Final controlada e confirmar que só então Vidros + MEE aparecem;
+- definir com o usuário os gates exatos para Produção e Instalação antes de automatizar essas etapas;
+- não fazer merge do PR #280 até essa validação.
 
 ## REGRAS TÉCNICAS A PRESERVAR
 
 - GitHub é a única fonte da verdade do código.
 - Nunca commitar direto em `main`; branch → PR → Build/Preview → merge manual.
-- Venda Balcão e Atlas completo compartilham a mesma base e os mesmos cadastros mestres; não duplicar clientes/produtos/estoque.
-- Orçamento/Venda Balcão não alimenta o Kanban; somente orçamento sob medida/obra entra nesse fluxo.
-- `kanban_entrada_em` é a data fixa de entrada do card; `coluna_atualizada_em` continua sendo data de movimentação/SLA.
-- Busca operacional deve seguir o padrão Atlas V1 sempre que a tela pesquisar cadastros/listagens.
-- W.Vetro é referência/origem; Atlas validado é a versão técnica oficial.
-- Nunca sobrescrever automaticamente fórmula, receita, custo, preço, margem ou unidade operacional Atlas com valor histórico W.Vetro.
-- Variável inferida sem regra Atlas validada deve permanecer `A definir`.
-- Associação externa automática somente por identidade segura/exata; sem fuzzy.
-- Imagem W.Vetro nunca substitui automaticamente imagem Atlas existente.
-- `produtos.unidade` é unidade operacional; `unidade_origem`/`qtde_embalagem_origem` são proveniência.
-- Tipologia = custo técnico. Venda Balcão = preço comercial próprio.
-- Hardening legado da Engenharia continua tarefa separada; não habilitar RLS às cegas.
+- Cliente é o centro do relacionamento; Obra é o centro da execução.
+- Cliente obrigatório e Obra opcional para transações simples; operações de uma obra devem carregar `cliente_id + obra_id`.
+- Financeiro é único; cliente/obra são dimensões do mesmo financeiro.
+- Cliente 360 Andamento deve derivar status dos cards reais dos setores, nunca manter uma cópia manual divergente.
+- Venda confirmada = Financeiro + Conferir Projeto; não liberar o operacional completo diretamente em `Vendido`.
+- Perfis/Acessórios/Outros só após Projeto conferido.
+- Vidros só após Medição Final aprovada.
+- MEE permanece a etapa técnica pós-medição enquanto depender de `medicao_itens` e conferências técnicas.
+- Venda fechada deve preservar snapshot; alterações posteriores relevantes devem ter justificativa e histórico antes/depois.
+- Venda/Orçamento Balcão rápido não alimenta o Kanban de obras.
+- `kanban_entrada_em` é fixa; `coluna_atualizada_em` é movimentação/SLA.
+- W.Vetro é referência/origem; regra técnica Atlas validada tem prioridade.
+- Não inventar custo, preço, margem, fórmula ou unidade operacional a partir de referência histórica.
