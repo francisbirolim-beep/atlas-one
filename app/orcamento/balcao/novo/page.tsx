@@ -13,7 +13,7 @@ import { usuarioAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { Produto, CategoriaProduto, ItemBalcao, DadosEmpresa } from '@/lib/tipos'
 import { abaixoDoPrecoMinimo, margemRealPorPreco, precoVendaBalcao } from '@/lib/precificacaoBalcao'
-import { correspondeBuscaAtlas, normalizarBuscaAtlas } from '@/lib/buscaAtlas'
+import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
 
 type ProdutoBalcao = Produto & {
@@ -383,7 +383,7 @@ export default function NovoOrcamentoBalcao() {
                       {produto.custo != null ? <span>Margem: <strong>{margemTexto(produto.custo, precoInicial)}</strong></span> : null}
                     </div>
                   </div>
-                  <button disabled={precoInicial <= 0} onClick={() => adicionar(produto)} className="rounded-lg bg-brand-navyLight p-2 text-brand-navy transition hover:bg-brand-navy hover:text-white disabled:opacity-30"><Plus size={16} /></button>
+                  <button type="button" onClick={() => adicionar(produto)} title={precoInicial <= 0 ? 'Adicionar e informar preço no orçamento' : 'Adicionar ao orçamento'} className="rounded-lg bg-brand-navyLight p-2 text-brand-navy transition hover:bg-brand-navy hover:text-white"><Plus size={16} /></button>
                 </div>
               })}
               {!produtosFiltrados.length ? <p className="py-6 text-center text-sm text-slate-400">Nenhum produto encontrado com todos os filtros.</p> : null}
@@ -392,7 +392,7 @@ export default function NovoOrcamentoBalcao() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Itens da venda</h2>
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">Itens do orçamento</h2>
           {!itensCarrinho.length ? <p className="text-sm text-slate-400">Nenhum produto adicionado.</p> : <div className="space-y-3">
             {itensCarrinho.map(({ produto, quantidade, precoUnit }) => {
               const abaixo = abaixoDoPrecoMinimo(produto, precoUnit)
@@ -404,6 +404,7 @@ export default function NovoOrcamentoBalcao() {
                   <strong className="w-28 text-right text-sm">{moeda(precoUnit * quantidade)}</strong>
                   <button onClick={() => remover(produto.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>
                 </div>
+                {precoUnit <= 0 ? <p className="mt-2 flex items-center gap-1 text-xs font-medium text-amber-700"><AlertTriangle size={13}/>Informe o preço antes de salvar o orçamento.</p> : null}
                 {abaixo ? <p className="mt-2 flex items-center gap-1 text-xs font-medium text-red-600"><AlertTriangle size={13}/>Preço abaixo do mínimo permitido.</p> : null}
               </div>
             })}
