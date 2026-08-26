@@ -2,6 +2,61 @@
 
 > Histórico anterior a 2026-08-23 preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`. Implementações intermediárias de 23–26/08 permanecem também no histórico Git deste arquivo.
 
+## 2026-08-26 — Motor de Automações do Fluxo — PR #280
+
+### Central configurável
+- criada rota master `/configuracoes/automacoes-fluxo`;
+- criada `workflow_automacoes` para configurar evento → ação → setor/coluna → responsável → tarefa → notificação;
+- criada `workflow_execucoes` para auditoria e idempotência;
+- regra permite responsável, usuários adicionais para aviso, tarefa opcional, prazo, prioridade, mensagem, ordem e ativo/inativo;
+- mensagens suportam `{cliente}`, `{numero}`, `{valor}`, `{obra}` e `{evento}`;
+- cards setoriais guardam responsável e origem da automação;
+- tarefas do workflow guardam orçamento, cliente e obra;
+- reaproveitado o sistema existente de `tarefas` e `notificacoes`, sem criar caixa paralela.
+
+### Fluxo padrão cadastrado
+Ativas:
+- Venda confirmada → Financeiro;
+- Venda confirmada → Conferir Projeto;
+- Projeto conferido → Medição Final;
+- Projeto conferido → Perfis;
+- Projeto conferido → Acessórios;
+- Projeto conferido → Outros materiais;
+- Medição aprovada → Vidros;
+- Medição aprovada → MEE.
+
+Cadastradas porém inativas até definição do gate:
+- Materiais liberados → Produção;
+- Produção concluída → Instalação.
+
+`Venda confirmada → Financeiro` está inicialmente configurada com Gabrielle como responsável e cria tarefa + aviso no sino. Os demais responsáveis ficam configuráveis na tela.
+
+### Teste transacional
+Com `ROLLBACK`, Venda confirmada resultou em:
+- 1 venda;
+- 1 conta a receber;
+- 1 card Financeiro;
+- 1 card Conferir Projeto;
+- 1 tarefa para Gabrielle;
+- 1 nova notificação para Gabrielle;
+- 2 execuções do workflow;
+- 0 etapas posteriores.
+
+Teste encadeado confirmou 8 execuções no fluxo completo até a Medição aprovada: 2 da venda + 4 de Projeto conferido + 2 de Medição aprovada, com Vidros + MEE somente no último gate.
+
+### Segurança
+- RLS de `workflow_automacoes`: escrita apenas por master;
+- helpers internos do workflow não são executáveis diretamente por `anon`/`authenticated`;
+- RPCs de negócio permanecem como entrada controlada do usuário;
+- corrigida notificação duplicada: quando a tarefa atribuída já gera sino, o workflow não manda um segundo alerta para o mesmo responsável.
+
+Migrations:
+- `20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql`;
+- `20260826233029_workflow_evitar_notificacao_duplicada_v1.sql`;
+- `20260826233648_workflow_restringir_funcoes_internas_v1.sql`.
+
+---
+
 ## 2026-08-26 — Cliente 360 + Obras + Financeiro por cliente/obra — PR #280
 
 ### Central do Cliente
