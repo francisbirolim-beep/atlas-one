@@ -2,7 +2,20 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
-## 2026-08-25 — Busca Padrão Atlas V1
+## 2026-08-25 — Filtros do catálogo do Orçamento Balcão
+
+- conferida a rota `/balcao/orcamentos/novo`, que reutiliza `app/orcamento/balcao/novo/page.tsx`;
+- preservada a faixa de categorias do catálogo: Todas, Produto, Acessório, Perfil, Produto pronto, PU e Outro;
+- adicionada a categoria comercial **Vidro** em `CATEGORIAS_PRODUTO_PRINCIPAIS`, posicionada entre Perfil e Produto pronto;
+- o segundo nível por Linha continua baseado em `linhas_tecnicas` + `linha_produtos` e é compatível com Acessórios e Perfis;
+- base atual verificada: 1.174 acessórios vinculados a 36 linhas e 1.307 perfis vinculados a 53 linhas;
+- atualmente não há produtos comerciais com `categoria='vidro'`;
+- as 14 referências de vidro do W.Vetro permanecem apenas como referência técnica: não foram convertidas automaticamente em produto, custo, preço, margem, unidade ou estoque;
+- preview Vercel da branch compilou como `READY`.
+
+---
+
+## 2026-08-25 — Busca Padrão Atlas V1 — PR #277
 
 ### Núcleo compartilhado
 - criado `lib/buscaAtlas.ts` como regra comum de pesquisa operacional;
