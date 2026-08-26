@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { usuarioAtual } from './auth'
 import { SetorKanbanColuna, SetorKanbanItem } from './tipos'
 
 const COLUNA_PADRAO = 'A Fazer'
@@ -51,10 +52,29 @@ export async function criarItemSetor(colunaId: string, titulo: string, descricao
 }
 
 export async function moverItemSetor(id: string, novaColunaId: string): Promise<boolean> {
-  const { data: destino } = await supabase.from('setor_kanban_colunas').select('nome').eq('id', novaColunaId).maybeSingle()
-  if (destino?.nome?.toLowerCase().includes('liberad') && destino.nome.toLowerCase().includes('produ')) {
-    const { usuarioAtual } = await import('./auth')
-    const usuario = await usuarioAtual()
+  const [{ data: destino }, usuario] = await Promise.all([
+    supabase.from('setor_kanban_colunas').select('nome,setor_id').eq('id', novaColunaId).maybeSingle(),
+    usuarioAtual(),
+  ])
+
+  const destinoNome = String(destino?.nome || '').toLowerCase()
+
+  // A conferência do projeto é o portão do fluxo operacional da venda.
+  // Somente ao entrar em "Projeto conferido" nascem Medição Final e os
+  // fluxos de Perfis/Acessórios/Outros. Vidros continuam bloqueados até a
+  // aprovação da Medição Final.
+  if (destino?.setor_id === 'engenharia-projeto' && destinoNome === 'projeto conferido') {
+    const { error } = await supabase.rpc('fn_concluir_conferencia_projeto_v1', {
+      p_card_id: id,
+      p_coluna_id: novaColunaId,
+      p_usuario_id: usuario?.id || null,
+      p_usuario_nome: usuario?.nome || null,
+    })
+    if (error) console.error('Erro ao concluir conferência do projeto:', error)
+    return !error
+  }
+
+  if (destinoNome.includes('liberad') && destinoNome.includes('produ')) {
     const { error } = await supabase.rpc('fn_engenharia_liberar_para_producao', {
       p_card_id: id,
       p_coluna_id: novaColunaId,
@@ -65,12 +85,23 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
     return !error
   }
 
-  const { error } = await supabase.from('setor_kanban_itens').update({ coluna_id: novaColunaId, atualizado_em: new Date().toISOString() }).eq('id', id)
+  const { error } = await supabase.from('setor_kanban_itens').update({
+    coluna_id: novaColunaId,
+    atualizado_em: new Date().toISOString(),
+    atualizado_por_id: usuario?.id || null,
+    atualizado_por_nome: usuario?.nome || null,
+  }).eq('id', id)
   return !error
 }
 
 export async function editarItemSetor(id: string, campos: { titulo?: string; descricao?: string | null; coluna_id?: string }): Promise<boolean> {
-  const { error } = await supabase.from('setor_kanban_itens').update({ ...campos, atualizado_em: new Date().toISOString() }).eq('id', id)
+  const usuario = await usuarioAtual()
+  const { error } = await supabase.from('setor_kanban_itens').update({
+    ...campos,
+    atualizado_em: new Date().toISOString(),
+    atualizado_por_id: usuario?.id || null,
+    atualizado_por_nome: usuario?.nome || null,
+  }).eq('id', id)
   return !error
 }
 
