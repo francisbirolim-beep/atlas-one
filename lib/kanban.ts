@@ -3,10 +3,13 @@ import { KanbanColuna } from './tipos'
 import { executarAutomacoesColuna } from './automacoes'
 import { executarAutomacoesSetor } from './automacoesSetor'
 
+const COLUNA_INTERNA_BALCAO = '__BALCAO_INTERNO__'
+
 export async function listarColunas(): Promise<KanbanColuna[]> {
   const { data, error } = await supabase
     .from('kanban_colunas')
     .select('*')
+    .neq('nome', COLUNA_INTERNA_BALCAO)
     .order('ordem', { ascending: true })
 
   if (error || !data) {
@@ -20,6 +23,7 @@ export async function primeiraColunaId(): Promise<string | null> {
   const { data } = await supabase
     .from('kanban_colunas')
     .select('id')
+    .neq('nome', COLUNA_INTERNA_BALCAO)
     .order('ordem', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -27,10 +31,39 @@ export async function primeiraColunaId(): Promise<string | null> {
   return data?.id || null
 }
 
+export async function colunaInternaBalcaoId(): Promise<string | null> {
+  const { data: existente } = await supabase
+    .from('kanban_colunas')
+    .select('id')
+    .eq('nome', COLUNA_INTERNA_BALCAO)
+    .limit(1)
+    .maybeSingle()
+
+  if (existente?.id) return existente.id
+
+  const { data, error } = await supabase
+    .from('kanban_colunas')
+    .insert({
+      nome: COLUNA_INTERNA_BALCAO,
+      ordem: 999999,
+      cor: '#64748b',
+      gera_medicao_final: false,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('Erro ao garantir coluna interna da Venda Balcão:', error)
+    return null
+  }
+  return data?.id || null
+}
+
 export async function criarColuna(nome: string): Promise<KanbanColuna | null> {
   const { data: colunas } = await supabase
     .from('kanban_colunas')
     .select('ordem')
+    .neq('nome', COLUNA_INTERNA_BALCAO)
     .order('ordem', { ascending: false })
     .limit(1)
 
@@ -83,10 +116,6 @@ export async function moverCard(
 
   if (error) return false
 
-  // Colunas marcadas como gera_medicao_final agora representam o inicio da
-  // CONFIRMACAO DE VENDA. Nenhuma automacao operacional nasce apenas porque
-  // o card entrou em Vendido. O usuario completa o cadastro, escolhe a
-  // proposta fechada e confirma explicitamente o inicio do processo.
   const { data: colunaDestino, error: erroColuna } = await supabase
     .from('kanban_colunas')
     .select('gera_medicao_final')
