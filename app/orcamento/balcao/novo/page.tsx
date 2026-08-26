@@ -100,7 +100,13 @@ export default function NovoOrcamentoBalcao() {
       ])
       setProdutos((listaProdutos as ProdutoBalcao[]).filter(p => Boolean(p.unidade?.trim()) && p.ativo))
       setLinhas(listaLinhas.filter(l => l.ativo))
-      setClientes((clientesResp.data || []) as ClienteBusca[])
+      const listaClientes = (clientesResp.data || []) as ClienteBusca[]
+      setClientes(listaClientes)
+      const clienteContextoId = new URLSearchParams(window.location.search).get('cliente')
+      if (clienteContextoId) {
+        const clienteContexto = listaClientes.find(c => c.id === clienteContextoId)
+        if (clienteContexto) selecionarCliente(clienteContexto)
+      }
       setEmpresa(dadosEmpresa)
       setConfigOrcamento(config)
       setMostrarFoto(config.mostrarFoto)
@@ -270,8 +276,10 @@ export default function NovoOrcamentoBalcao() {
       preco_total: precoUnit * quantidade,
     }))
 
+    const params = new URLSearchParams(window.location.search)
     const resultado = await criarOrcamentoBalcao({
       clienteId: clienteSelecionadoId || undefined,
+      obraId: params.get('obra'),
       clienteNome,
       clienteApelido: clienteApelido || undefined,
       clienteWhatsapp: clienteWhatsapp || undefined,
@@ -326,7 +334,8 @@ export default function NovoOrcamentoBalcao() {
     }
 
     setMensagem({ tipo: 'ok', texto: 'Orçamento balcão salvo com o cadastro compartilhado do Atlas.' })
-    setTimeout(() => router.push('/balcao/orcamentos'), 1400)
+    const clienteContexto = params.get('cliente')
+    setTimeout(() => router.push(clienteContexto ? `/clientes/${clienteContexto}/central` : '/balcao/orcamentos'), 1400)
   }
 
   return (
