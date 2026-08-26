@@ -5,6 +5,11 @@ import { autenticarBalcao, nivelBalcaoUsuario, parseNumero } from '@/lib/balcaoS
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+function valorBooleano(valor: string | null | undefined, padrao: boolean) {
+  if (valor == null || valor === '') return padrao
+  return ['1','true','sim','yes','on'].includes(String(valor).trim().toLowerCase())
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await autenticarBalcao(req, 'venda-balcao', 'consulta')
   if (!usuario) return NextResponse.json({ error: 'Sem acesso à Venda Balcão.' }, { status: 403 })
@@ -73,21 +78,37 @@ export async function POST(req: NextRequest) {
     const temPrazo = pagamentos.some((p: any) => ['boleto', 'a_prazo'].includes(String(p.forma || '')))
     if (temPrazo && !body.clienteId) return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
 
-    const { data: caixa, error: erroCaixa } = await supabaseAdmin.from('balcao_caixas')
-      .select('id,status,operador_id,ponto_caixa_id,unidade_id,local_estoque_id')
-      .eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
+    const [{ data: caixa, error: erroCaixa }, { data: caixaCfg, error: erroCfg }] = await Promise.all([
+      supabaseAdmin.from('balcao_caixas')
+        .select('id,status,operador_id,ponto_caixa_id,unidade_id,local_estoque_id')
+        .eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave','balcao_exigir_caixa_aberto').maybeSingle(),
+    ])
     if (erroCaixa) throw erroCaixa
-    if (!caixa) return NextResponse.json({ error: 'Abra o caixa antes de finalizar a venda.' }, { status: 409 })
-    if (!caixa.local_estoque_id || !caixa.unidade_id || !caixa.ponto_caixa_id) return NextResponse.json({ error: 'O caixa aberto não está vinculado a uma unidade/local de estoque.' }, { status: 409 })
+    if (erroCfg) throw erroCfg
+    const exigirCaixa = valorBooleano(caixaCfg?.valor, false)
+    if (exigirCaixa && !caixa) return NextResponse.json({ error: 'Abra o caixa antes de finalizar a venda.' }, { status: 409 })
+    if (caixa && (!caixa.local_estoque_id || !caixa.unidade_id || !caixa.ponto_caixa_id)) {
+      return NextResponse.json({ error: 'O caixa aberto não está vinculado a uma unidade/local de estoque.' }, { status: 409 })
+    }
+
+    const localPadrao = caixa?.local_estoque_id || String(itens[0]?.localOrigemId || '')
+    if (!localPadrao) return NextResponse.json({ error: 'Nenhum local de estoque foi definido para a venda.' }, { status: 409 })
 
     const payloadItens = itens.map((i: any) => ({
-      produtoId: String(i.produtoId || ''), quantidade: parseNumero(i.quantidade), precoUnitario: parseNumero(i.precoUnitario),
-      localOrigemId: String(i.localOrigemId || caixa.local_estoque_id),
-      atendimento: String(i.atendimento || (String(i.localOrigemId || caixa.local_estoque_id) === caixa.local_estoque_id ? 'imediato' : 'posterior')),
+      produtoId: String(i.produtoId || ''),
+      quantidade: parseNumero(i.quantidade),
+      precoUnitario: parseNumero(i.precoUnitario),
+      localOrigemId: String(i.localOrigemId || localPadrao),
+      atendimento: String(i.atendimento || (String(i.localOrigemId || localPadrao) === localPadrao ? 'imediato' : 'posterior')),
     }))
     const payloadPagamentos = pagamentos.map((p: any) => ({
-      forma: String(p.forma || ''), valor: parseNumero(p.valor), parcelas: Math.max(1, Math.floor(parseNumero(p.parcelas, 1))),
-      detalhes: String(p.detalhes || ''), primeiroVencimento: String(p.primeiroVencimento || ''), intervaloDias: Math.max(1, Math.floor(parseNumero(p.intervaloDias, 30))),
+      forma: String(p.forma || ''),
+      valor: parseNumero(p.valor),
+      parcelas: Math.max(1, Math.floor(parseNumero(p.parcelas, 1))),
+      detalhes: String(p.detalhes || ''),
+      primeiroVencimento: String(p.primeiroVencimento || ''),
+      intervaloDias: Math.max(1, Math.floor(parseNumero(p.intervaloDias, 30))),
     }))
 
     const nivelGestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
@@ -106,14 +127,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `O desconto leva a venda abaixo do preço mínimo autorizado. Mínimo desta venda: R$ ${totalMinimo.toFixed(2)}.` }, { status: 403 })
     }
 
-    const { data, error } = await supabaseAdmin.rpc('finalizar_venda_balcao', {
-      p_caixa_id: caixa.id, p_usuario_id: usuario.id, p_usuario_nome: usuario.nome, p_usuario_role: usuario.role,
-      p_cliente_id: body.clienteId || null, p_cliente_nome: String(body.clienteNome || '').trim() || null,
-      p_itens: payloadItens, p_pagamentos: payloadPagamentos, p_desconto: desconto,
-      p_observacoes: String(body.observacoes || '').trim() || null, p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
-    })
+    const rpc = caixa ? 'finalizar_venda_balcao' : 'finalizar_venda_balcao_sem_caixa'
+    const args = caixa
+      ? {
+          p_caixa_id: caixa.id,
+          p_usuario_id: usuario.id,
+          p_usuario_nome: usuario.nome,
+          p_usuario_role: usuario.role,
+          p_cliente_id: body.clienteId || null,
+          p_cliente_nome: String(body.clienteNome || '').trim() || null,
+          p_itens: payloadItens,
+          p_pagamentos: payloadPagamentos,
+          p_desconto: desconto,
+          p_observacoes: String(body.observacoes || '').trim() || null,
+          p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
+        }
+      : {
+          p_usuario_id: usuario.id,
+          p_usuario_nome: usuario.nome,
+          p_usuario_role: usuario.role,
+          p_cliente_id: body.clienteId || null,
+          p_cliente_nome: String(body.clienteNome || '').trim() || null,
+          p_itens: payloadItens,
+          p_pagamentos: payloadPagamentos,
+          p_desconto: desconto,
+          p_observacoes: String(body.observacoes || '').trim() || null,
+          p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
+        }
+
+    const { data, error } = await supabaseAdmin.rpc(rpc, args)
     if (error) throw error
-    return NextResponse.json(data || { ok: true })
+    return NextResponse.json(data || { ok: true, semCaixa: !caixa })
   } catch (e: any) {
     console.error('Erro finalização venda balcão', e)
     return NextResponse.json({ error: e?.message || 'Não foi possível finalizar a venda.' }, { status: 400 })
