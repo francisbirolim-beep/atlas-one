@@ -50,8 +50,8 @@ function moeda(valor: number | null | undefined) {
 }
 
 function margemTexto(custo: number | null | undefined, preco: number) {
-  const m = margemRealPorPreco(custo, preco)
-  return m == null ? '—' : `${m.toFixed(2)}%`
+  const margem = margemRealPorPreco(custo, preco)
+  return margem == null ? '—' : `${margem.toFixed(2)}%`
 }
 
 export default function NovoOrcamentoBalcao() {
@@ -64,7 +64,7 @@ export default function NovoOrcamentoBalcao() {
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [categoria, setCategoria] = useState<CategoriaProduto | 'todas'>('todas')
-  const [linhaId, setLinhaId] = useState<string>('')
+  const [linhaId, setLinhaId] = useState('')
   const [carrinho, setCarrinho] = useState<Record<string, LinhaCarrinho>>({})
 
   const [clienteBusca, setClienteBusca] = useState('')
@@ -92,11 +92,7 @@ export default function NovoOrcamentoBalcao() {
         listarLinhasTecnicas(),
         lerDadosEmpresa(),
         lerConfiguracaoOrcamento(),
-        supabase
-          .from('clientes')
-          .select('id,nome,apelido,whatsapp,telefone,email,cpf_cnpj,cidade,bairro,endereco,cep')
-          .order('nome')
-          .limit(1000),
+        supabase.from('clientes').select('id,nome,apelido,whatsapp,telefone,email,cpf_cnpj,cidade,bairro,endereco,cep').order('nome').limit(1000),
       ])
       setProdutos((listaProdutos as ProdutoBalcao[]).filter(p => Boolean(p.unidade?.trim()) && p.ativo))
       setLinhas(listaLinhas.filter(l => l.ativo))
@@ -124,12 +120,8 @@ export default function NovoOrcamentoBalcao() {
   }, [linhas])
 
   const linhasDisponiveis = useMemo(() => {
-    const idsCategoria = new Set(
-      produtos
-        .filter(p => categoria === 'todas' || p.categoria === categoria)
-        .map(p => p.id)
-    )
-    return linhas.filter(l => (l.produto_ids || []).some(id => idsCategoria.has(id)))
+    const ids = new Set(produtos.filter(p => categoria === 'todas' || p.categoria === categoria).map(p => p.id))
+    return linhas.filter(l => (l.produto_ids || []).some(id => ids.has(id)))
   }, [linhas, produtos, categoria])
 
   const produtosFiltrados = useMemo(() => produtos.filter(p => {
@@ -153,21 +145,19 @@ export default function NovoOrcamentoBalcao() {
 
   const clientesEncontrados = useMemo(() => {
     if (clienteSelecionadoId || clienteBusca.trim().length < 2) return []
-    return clientes
-      .filter(c => correspondeBuscaAtlas(
-        clienteBusca,
-        c.nome,
-        c.apelido,
-        c.cpf_cnpj,
-        c.whatsapp,
-        c.telefone,
-        c.email,
-        c.cidade,
-        c.bairro,
-        c.endereco,
-        c.cep
-      ))
-      .slice(0, 12)
+    return clientes.filter(c => correspondeBuscaAtlas(
+      clienteBusca,
+      c.nome,
+      c.apelido,
+      c.cpf_cnpj,
+      c.whatsapp,
+      c.telefone,
+      c.email,
+      c.cidade,
+      c.bairro,
+      c.endereco,
+      c.cep
+    )).slice(0, 12)
   }, [clientes, clienteBusca, clienteSelecionadoId])
 
   const itensCarrinho = useMemo(() => Object.entries(carrinho)
@@ -183,6 +173,12 @@ export default function NovoOrcamentoBalcao() {
   function trocarCategoria(valor: CategoriaProduto | 'todas') {
     setCategoria(valor)
     setLinhaId('')
+  }
+
+  function digitarCliente(valor: string) {
+    if (clienteSelecionadoId) setClienteSelecionadoId(null)
+    setClienteBusca(valor)
+    setClienteNome(valor)
   }
 
   function selecionarCliente(c: ClienteBusca) {
@@ -251,7 +247,6 @@ export default function NovoOrcamentoBalcao() {
     setMensagem(null)
     if (!clienteNome.trim()) return setMensagem({ tipo: 'erro', texto: 'Informe ou selecione o cliente.' })
     if (!itensCarrinho.length) return setMensagem({ tipo: 'erro', texto: 'Adicione ao menos um produto.' })
-
     const invalido = itensCarrinho.find(it => it.precoUnit <= 0)
     if (invalido) return setMensagem({ tipo: 'erro', texto: `Informe um preço válido para ${invalido.produto.nome}.` })
     const abaixo = itensCarrinho.find(it => abaixoDoPrecoMinimo(it.produto, it.precoUnit))
@@ -353,15 +348,15 @@ export default function NovoOrcamentoBalcao() {
           </div>
           <BuscaAtlasInput value={busca} onValueChange={setBusca} placeholder="Ex.: SUPREMA ROLDANA, ROLDANA SUPREMA, código, descrição..." inputClassName="w-full rounded-lg border border-slate-200 py-2 pr-3 text-sm" />
           <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => trocarCategoria('todas')} className={`rounded-full px-3 py-1.5 text-xs font-medium ${categoria === 'todas' ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}>Todas</button>
-            {CATEGORIAS_PRODUTO.map(cat => <button key={cat.valor} onClick={() => trocarCategoria(cat.valor)} className={`rounded-full px-3 py-1.5 text-xs font-medium ${categoria === cat.valor ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}>{cat.label}</button>)}
+            <button type="button" onClick={() => trocarCategoria('todas')} className={`rounded-full px-3 py-1.5 text-xs font-medium ${categoria === 'todas' ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}>Todas</button>
+            {CATEGORIAS_PRODUTO.map(cat => <button type="button" key={cat.valor} onClick={() => trocarCategoria(cat.valor)} className={`rounded-full px-3 py-1.5 text-xs font-medium ${categoria === cat.valor ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}>{cat.label}</button>)}
           </div>
           {linhasDisponiveis.length > 0 && (
             <div className="mt-3 border-t border-slate-100 pt-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Filter size={13}/>Linha</div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Filter size={13}/>Linha / grupo</div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => setLinhaId('')} className={`rounded-full border px-3 py-1 text-xs ${!linhaId ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800' : 'border-slate-200 text-slate-600'}`}>Todas as linhas</button>
-                {linhasDisponiveis.map(l => <button key={l.id} onClick={() => setLinhaId(l.id)} className={`rounded-full border px-3 py-1 text-xs ${linhaId === l.id ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800' : 'border-slate-200 text-slate-600'}`}>{l.nome}</button>)}
+                <button type="button" onClick={() => setLinhaId('')} className={`rounded-full border px-3 py-1 text-xs ${!linhaId ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800' : 'border-slate-200 text-slate-600'}`}>Todas</button>
+                {linhasDisponiveis.map(l => <button type="button" key={l.id} onClick={() => setLinhaId(l.id)} className={`rounded-full border px-3 py-1 text-xs ${linhaId === l.id ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800' : 'border-slate-200 text-slate-600'}`}>{l.nome}</button>)}
               </div>
             </div>
           )}
@@ -400,9 +395,9 @@ export default function NovoOrcamentoBalcao() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-[220px] flex-1"><p className="text-sm font-semibold text-slate-800">{produto.codigo ? `${produto.codigo} — ` : ''}{produto.nome}</p><p className="mt-1 text-xs text-slate-500">Custo: {moeda(produto.custo)} • Margem: <strong>{margemTexto(produto.custo, precoUnit)}</strong>{produto.preco_minimo != null ? ` • Mínimo: ${moeda(produto.preco_minimo)}` : ''}</p></div>
                   <label className="text-xs text-slate-500">Preço unitário<input type="number" step="any" min="0" value={precoUnit} onChange={e => mudarPreco(produto.id, e.target.value)} className="mt-1 block w-32 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm" /></label>
-                  <div className="flex items-center gap-2"><button onClick={() => decrementar(produto.id)} className="rounded-lg border border-slate-200 p-2"><Minus size={14}/></button><span className="w-8 text-center text-sm font-semibold">{quantidade}</span><button onClick={() => adicionar(produto)} className="rounded-lg border border-slate-200 p-2"><Plus size={14}/></button></div>
+                  <div className="flex items-center gap-2"><button type="button" onClick={() => decrementar(produto.id)} className="rounded-lg border border-slate-200 p-2"><Minus size={14}/></button><span className="w-8 text-center text-sm font-semibold">{quantidade}</span><button type="button" onClick={() => adicionar(produto)} className="rounded-lg border border-slate-200 p-2"><Plus size={14}/></button></div>
                   <strong className="w-28 text-right text-sm">{moeda(precoUnit * quantidade)}</strong>
-                  <button onClick={() => remover(produto.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>
+                  <button type="button" onClick={() => remover(produto.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>
                 </div>
                 {precoUnit <= 0 ? <p className="mt-2 flex items-center gap-1 text-xs font-medium text-amber-700"><AlertTriangle size={13}/>Informe o preço antes de salvar o orçamento.</p> : null}
                 {abaixo ? <p className="mt-2 flex items-center gap-1 text-xs font-medium text-red-600"><AlertTriangle size={13}/>Preço abaixo do mínimo permitido.</p> : null}
@@ -413,14 +408,32 @@ export default function NovoOrcamentoBalcao() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-slate-800">Dados do cliente</h2><p className="text-xs text-slate-500">Encontre um cliente existente por nome, apelido, cidade, bairro, telefone, CPF/CNPJ ou endereço.</p></div>{clienteSelecionadoId ? <button onClick={limparCliente} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500"><X size={13}/>Trocar cliente</button> : null}</div>
-          <div className="relative mb-4">
-            <BuscaAtlasInput value={clienteBusca} onValueChange={valor => { setClienteBusca(valor); if (clienteSelecionadoId) setClienteSelecionadoId(null) }} placeholder="Buscar cliente em todo o cadastro..." inputClassName="w-full rounded-lg border border-slate-200 py-2.5 pr-3 text-sm" />
-            {!clienteSelecionadoId && clientesEncontrados.length > 0 && <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-xl border bg-white shadow-xl">{clientesEncontrados.map(c => <button key={c.id} type="button" onClick={() => selecionarCliente(c)} className="block w-full border-b px-3 py-2.5 text-left hover:bg-slate-50"><div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UserCheck size={14}/>{c.nome}{c.apelido ? <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">{c.apelido}</span> : null}</div><div className="mt-0.5 text-xs text-slate-500">{[c.cidade,c.bairro,c.whatsapp||c.telefone,c.cpf_cnpj].filter(Boolean).join(' • ')}</div></button>)}</div>}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Dados do cliente</h2>
+              <p className="text-xs text-slate-500">Digite no campo Nome qualquer dado do cliente: nome, apelido, CPF/CNPJ, telefone, cidade, bairro ou endereço.</p>
+            </div>
+            {clienteSelecionadoId ? <button type="button" onClick={limparCliente} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500"><X size={13}/>Trocar cliente</button> : null}
           </div>
-          {clienteSelecionadoId ? <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Cliente existente selecionado. O orçamento será vinculado ao mesmo cadastro do Atlas.</div> : clienteBusca.trim().length >= 2 && clientesEncontrados.length === 0 ? <div className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cliente encontrado. Preencha os dados abaixo para cadastrar junto com o orçamento.</div> : null}
+
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-slate-600">Nome *<input value={clienteNome} onChange={e => setClienteNome(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
+            <div className="relative sm:col-span-2">
+              <label className="text-xs text-slate-600">Nome / buscar cliente *</label>
+              <BuscaAtlasInput
+                value={clienteBusca}
+                onValueChange={digitarCliente}
+                placeholder="Ex.: FRANCIS, apelido, telefone, CPF/CNPJ, cidade, bairro..."
+                inputClassName="mt-1 w-full rounded-lg border border-slate-200 py-2.5 pr-3 text-sm"
+              />
+              {!clienteSelecionadoId && clientesEncontrados.length > 0 && <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-xl border bg-white shadow-xl">
+                {clientesEncontrados.map(c => <button key={c.id} type="button" onClick={() => selecionarCliente(c)} className="block w-full border-b px-3 py-2.5 text-left hover:bg-slate-50">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UserCheck size={14}/>{c.nome}{c.apelido ? <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">{c.apelido}</span> : null}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">{[c.cidade, c.bairro, c.whatsapp || c.telefone, c.cpf_cnpj].filter(Boolean).join(' • ')}</div>
+                </button>)}
+              </div>}
+              {clienteSelecionadoId ? <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Cliente existente selecionado. O orçamento será vinculado ao mesmo cadastro do Atlas.</div> : clienteBusca.trim().length >= 2 && clientesEncontrados.length === 0 ? <div className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cliente encontrado. Se for um cliente novo, continue preenchendo os dados abaixo.</div> : null}
+            </div>
+
             <label className="text-xs text-slate-600">Apelido<input value={clienteApelido} onChange={e => setClienteApelido(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Nome pelo qual é conhecido" /></label>
             <label className="text-xs text-slate-600">Cidade<input value={clienteCidade} onChange={e => setClienteCidade(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
             <label className="text-xs text-slate-600">Bairro<input value={clienteBairro} onChange={e => setClienteBairro(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
@@ -439,7 +452,7 @@ export default function NovoOrcamentoBalcao() {
         </section>
 
         {mensagem ? <div className={`rounded-xl border p-3 text-sm ${mensagem.tipo === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>{mensagem.texto}</div> : null}
-        <button onClick={salvarEGerarPdf} disabled={salvando} className="w-full rounded-xl bg-brand-navy px-4 py-3 font-semibold text-white disabled:opacity-50">{salvando ? 'Salvando...' : 'Salvar orçamento e gerar PDF'}</button>
+        <button type="button" onClick={salvarEGerarPdf} disabled={salvando} className="w-full rounded-xl bg-brand-navy px-4 py-3 font-semibold text-white disabled:opacity-50">{salvando ? 'Salvando...' : 'Salvar orçamento e gerar PDF'}</button>
       </main>
     </div>
   )
