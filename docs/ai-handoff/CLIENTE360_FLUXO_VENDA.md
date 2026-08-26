@@ -11,14 +11,17 @@ O Cliente 360 é a visão consolidada da relação com o cliente. A Obra é o ag
 
 ### 1. Venda confirmada
 
-Ao confirmar a venda do orçamento sob medida:
+Ao arrastar para **Vendido**, o orçamento NÃO é persistido nessa coluna imediatamente. Primeiro abre `/vendas/confirmar`. Somente quando a confirmação termina com sucesso, no mesmo fluxo:
 
 - cria/garante uma `vendas_obras` com snapshot do orçamento vendido;
 - congela `valor_venda`, `custo_previsto`, condições, forma de pagamento e itens do momento da venda;
 - cria/garante um pré-lançamento em `financeiro_contas_receber`, vinculado à venda, cliente, obra e orçamento;
 - cria/garante um card no setor `financeiro`;
 - cria/garante um card em `engenharia-projeto`, na coluna inicial **A conferir**;
+- move o orçamento para **Vendido** e marca `status='vendido'`;
 - NÃO cria Medição Final, Perfis, Acessórios, Vidros, Outros, Produção ou Instalação neste momento.
+
+Regra permanente: **um card não pode parecer Vendido se ainda não existir a venda confirmada e seu lançamento financeiro**.
 
 A operação é idempotente por orçamento: reprocessar não deve duplicar venda, conta ou card.
 
@@ -56,6 +59,8 @@ Ao concluir a conferência:
 - cria/garante o fluxo de Acessórios;
 - cria/garante o fluxo de Outros materiais;
 - NÃO cria Vidros ainda.
+
+A conclusão funciona tanto para venda já vinculada a uma `obra_id` quanto para venda ainda em **Sem obra definida**. Quando não houver obra cadastrada, a Medição usa os dados disponíveis do cliente/orçamento sem bloquear o fluxo.
 
 Perfis/Acessórios/Outros usam inicialmente:
 
@@ -95,12 +100,16 @@ A tela lê diretamente os mesmos registros dos setores e apresenta por obra:
 
 `Venda → Conferir Projeto → Medição Final → Engenharia final → Materiais → Produção → Instalação`.
 
+Os gates da tela são rígidos. Cards legados criados cedo demais não podem fazer uma etapa futura parecer liberada antes de seu evento de negócio.
+
 Materiais aparecem em paralelo:
 
 - Perfis;
 - Vidros;
 - Acessórios;
 - Outros.
+
+Antes do gate correspondente, o card aparece bloqueado e não abre o setor. Depois da liberação, ao abrir Perfis/Vidros/Acessórios/Outros pelo Andamento, a rota recebe `voltar` e mostra uma seta **Voltar** para retornar exatamente ao Cliente 360 → Andamento.
 
 A tela deve responder rapidamente:
 
@@ -114,6 +123,8 @@ Nunca criar uma segunda tabela manual de status para o Cliente 360 quando o stat
 ## Financeiro
 
 O Financeiro nasce em paralelo imediatamente após a venda confirmada. O pré-lançamento pode ser ajustado depois pelo Financeiro para refletir condição real, parcelas, vencimentos, recebimentos, abatimentos e demais ajustes.
+
+A aba Cliente 360 lê `financeiro_contas_receber` e exibe o valor real a receber. A tabela mantém RLS e possui policy de **SELECT apenas para usuário autenticado**; a criação da conta continua centralizada no fluxo/RPC de confirmação da venda.
 
 A venda original deve permanecer rastreável. Alterações posteriores relevantes devem usar revisão/ajuste com justificativa, mantendo antes/depois e impacto de valor/custo.
 
@@ -139,21 +150,35 @@ Antes de automatizar, definir explicitamente:
 
 ## Validação transacional feita
 
-Teste executado dentro de transação e revertido com `ROLLBACK`:
+Teste de **somente Venda confirmada**, revertido sem deixar dados:
 
-- venda criada: 1;
-- financeiro criado: 1;
-- projeto conferido: 1;
-- Medição Final aprovada: 1;
-- Perfis criado: 1;
-- Acessórios criado: 1;
-- Outros criado: 1;
-- Vidros criado somente após aprovação da medição: 1;
-- MEE/Engenharia pós-medição criado: 1;
-- todos os cards herdaram o mesmo cliente/obra;
-- confirmação posterior: 0 registros temporários de teste restantes.
+- venda: 1;
+- conta a receber com o valor do orçamento: 1;
+- card Financeiro: 1;
+- card Conferir Projeto: 1;
+- orçamento passa para `status='vendido'` e coluna `Vendido`;
+- Medição Final: 0;
+- Perfis: 0;
+- Acessórios: 0;
+- Outros: 0;
+- Vidros: 0;
+- Produção: 0;
+- Instalação: 0.
+
+Teste de **Projeto conferido** sem obra cadastrada:
+
+- Medição Final: 1;
+- Perfis: 1;
+- Acessórios: 1;
+- Outros: 1;
+- Vidros continua 0 até a aprovação da medição.
+
+Teste completo anterior também validou Medição Final aprovada → Vidros + MEE. Confirmação posterior: 0 registros temporários de teste restantes.
 
 ## Migrations
 
 - `20260826212725_fluxo_venda_conferir_projeto_materiais_v1.sql`;
-- `20260826213310_fluxo_engenharia_separar_projeto_mee_v1.sql`.
+- `20260826213310_fluxo_engenharia_separar_projeto_mee_v1.sql`;
+- `20260826221809_fluxo_vendido_confirmacao_atomica_v1.sql`;
+- `20260826222110_conferir_projeto_sem_obra_v1.sql`;
+- `20260826222310_financeiro_contas_receber_cliente360_leitura_v1.sql`.
