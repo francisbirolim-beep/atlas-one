@@ -42,7 +42,7 @@ Vidros:
 ## Validação manual no Preview antes do merge
 
 1. Abrir um cliente controlado em `/clientes/[id]/central`.
-2. Abrir `Andamento` e conferir agrupamento por obra.
+2. Abrir `Andamento` e conferir agrupamento por obra, inclusive orçamentos legados com `modo_entrada` nulo.
 3. Usar um orçamento sob medida com itens estruturados e mover para `Vendido`.
 4. Na confirmação da venda, conferir o orçamento aprovado e clicar `Confirmar venda`.
 5. Confirmar:
@@ -79,7 +79,7 @@ Teste transacional com `ROLLBACK` passou:
 - todos os cards com cliente + obra;
 - 0 registros de teste restantes.
 
-Build Validation, Supabase Database Control e Preview Vercel do código funcional ficaram verdes/READY.
+O commit funcional `bd4ebb084807235c22d9c5fd0934bbc4904d399e` passou Build Validation, Supabase Database Control e Preview Vercel. Como houve commits posteriores de documentação/compatibilidade da tela Andamento, **confirmar novamente os checks do HEAD final antes de qualquer merge**.
 
 ## Próxima definição funcional com o usuário
 
