@@ -2,9 +2,35 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
-## EM VALIDAÇÃO — BUSCA PADRÃO ATLAS V1 — 2026-08-25
+## EM VALIDAÇÃO — FILTROS DO CATÁLOGO DO ORÇAMENTO BALCÃO — 2026-08-25
 
-Branch: `feat/busca-atlas-unificada-v1`
+Branch: `fix/balcao-filtros-catalogo-v2`
+
+Objetivo: preservar o filtro visual do catálogo do Orçamento Balcão e adicionar **Vidro** como categoria comercial explícita, sem transformar referência técnica W.Vetro em preço/estoque automaticamente.
+
+### Estado confirmado no código e na base
+
+- `/balcao/orcamentos/novo` reutiliza `app/orcamento/balcao/novo/page.tsx`;
+- a tela mantém a faixa visual `Todas | Produto | Acessório | Perfil | Vidro | Produto pronto | PU | Outro`;
+- ao escolher uma categoria, a lista de produtos é filtrada por `produtos.categoria`;
+- a tela já possui segundo nível de filtro por Linha através de `linha_produtos`/`linhas_tecnicas`;
+- base atual confirmada: 1.174 acessórios vinculados a 36 linhas e 1.307 perfis vinculados a 53 linhas;
+- `Vidro` foi adicionado a `CATEGORIAS_PRODUTO_PRINCIPAIS` e passa a ser categoria oficial do catálogo comercial;
+- no momento não existem produtos comerciais com `categoria='vidro'`; as 14 referências de vidro do W.Vetro permanecem apenas como referência técnica até cadastro/validação comercial real;
+- nenhum preço, custo, estoque, unidade ou margem de vidro foi criado automaticamente.
+
+### Validação
+
+- preview Vercel do commit inicial da branch compilou como `READY`;
+- validar visualmente em `/balcao/orcamentos/novo` após produção:
+  - faixa de categorias visível;
+  - botão `Vidro` entre `Perfil` e `Produto pronto`;
+  - selecionar `Acessório` e confirmar as linhas vinculadas;
+  - selecionar `Perfil` e confirmar as linhas vinculadas;
+  - selecionar uma Linha e confirmar o refinamento da lista;
+  - busca textual deve continuar combinando com Categoria + Linha.
+
+## BUSCA PADRÃO ATLAS V1 — INTEGRADA NA MAIN — PR #277
 
 Objetivo: substituir buscas isoladas/inconsistentes por um comportamento operacional único, sem criar base paralela e sem alterar as regras técnicas/comerciais dos módulos.
 
@@ -20,11 +46,11 @@ O padrão V1:
 - CPF/CNPJ/telefone podem ser pesquisados sem a pontuação usada no cadastro;
 - filtros específicos podem ser combinados com a pesquisa geral.
 
-### Fluxos já padronizados nesta branch
+### Fluxos padronizados
 
 - Clientes: nome, apelido, CPF/CNPJ, WhatsApp, telefone, e-mail, cidade, bairro, endereço, CEP, observação, responsável e origem; filtros específicos de cidade, bairro, CPF/CNPJ, telefone e apelido.
 - Orçamento Balcão: `Categoria → Linha → Pesquisa`; produto por código, código de origem, nome, descrição, categoria, grupo, marca, NCM e dados das linhas; seleção do cliente cadastrado sem duplicar `clientes.id`.
-- Venda Balcão: a API compartilhada do catálogo passou a reconhecer também apelido, e-mail, bairro, endereço e CEP do cliente; pesquisa de produtos continua integrada ao estoque da rede.
+- Venda Balcão: a API compartilhada do catálogo reconhece também apelido, e-mail, bairro, endereço e CEP do cliente; pesquisa de produtos continua integrada ao estoque da rede.
 - Assistência: seleção de cliente usa o mesmo critério amplo do Atlas e preenche cidade/endereço/bairro/telefone do cadastro escolhido.
 - Produtos: pesquisa geral combinada aos filtros de categoria e linha.
 - Linhas técnicas e catálogo por linha: busca por nome, fabricante, descrição, apelidos, produtos e tipologias associados.
@@ -43,8 +69,7 @@ O padrão V1:
 - nenhuma migration nova foi necessária;
 - `clientes.apelido` e `clientes.bairro` já existiam e foram reutilizados;
 - cliente selecionado em Venda/Orçamento/Assistência continua apontando para o mesmo cadastro compartilhado;
-- regras de preço, margem, estoque, reserva, caixa, vínculo de NF e precedência técnica Atlas/W.Vetro não foram alteradas;
-- previews Vercel dos commits da branch vêm compilando como `READY`.
+- regras de preço, margem, estoque, reserva, caixa, vínculo de NF e precedência técnica Atlas/W.Vetro não foram alteradas.
 
 ## MODO VENDA BALCÃO INTEGRADO AO ATLAS — 2026-08-25
 
@@ -70,7 +95,8 @@ Estado integrado:
 - PR #273: busca incremental;
 - PR #274: captura nativa de digitação na Consulta de preço;
 - PR #275: Modo Venda Balcão integrado ao mesmo Atlas;
-- PR #276: busca incremental de clientes na Venda Balcão.
+- PR #276: busca incremental de clientes na Venda Balcão;
+- PR #277: Busca Padrão Atlas V1 em clientes, balcão, cadastros, estoque, compras e orçamentos.
 
 ### Referência W.Vetro disponível
 
