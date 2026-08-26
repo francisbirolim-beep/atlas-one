@@ -1,134 +1,147 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Cliente 360 + gates da venda
+## TAREFA ATUAL — validar Cliente 360 + Motor de Automações
 
 Branch: `feat/cliente-360-obras-financeiro-v1`
 PR: #280 — draft. **Não fazer merge ainda.**
 
 Referência detalhada: `docs/ai-handoff/CLIENTE360_FLUXO_VENDA.md`.
 
+## Motor de workflow implementado
+
+Rota master: `/configuracoes/automacoes-fluxo`.
+
+Cada automação pode configurar:
+- gatilho/evento;
+- ação;
+- setor e coluna de destino;
+- responsável;
+- criar ou não tarefa;
+- prazo e prioridade;
+- avisar responsável;
+- usuários adicionais em `Notificar também`;
+- mensagem;
+- ordem;
+- evitar duplicidade;
+- ativo/inativo.
+
+O motor usa `workflow_automacoes` + `workflow_execucoes` e reaproveita `tarefas`/`notificacoes` existentes.
+
+Regras padrão já cadastradas:
+- Venda confirmada → Financeiro: ativa, Gabrielle responsável, tarefa + aviso;
+- Venda confirmada → Conferir Projeto: ativa;
+- Projeto conferido → Medição Final: ativa;
+- Projeto conferido → Perfis: ativa;
+- Projeto conferido → Acessórios: ativa;
+- Projeto conferido → Outros: ativa;
+- Medição aprovada → Vidros: ativa;
+- Medição aprovada → MEE: ativa;
+- Materiais liberados → Produção: inativa;
+- Produção concluída → Instalação: inativa.
+
 ## Fluxo que deve ser preservado
 
 ### Arrastar para Vendido
-
 - abre `/vendas/confirmar`;
-- NÃO persiste o card em `Vendido` antes da confirmação;
-- isso evita o estado antigo “parece vendido, mas não existe venda nem financeiro”.
+- NÃO persiste em `Vendido` antes da confirmação.
 
 ### Venda confirmada
-
-Cria somente:
-1. snapshot em `vendas_obras`;
-2. conta em `financeiro_contas_receber` com o valor vendido + card Financeiro;
-3. card `Engenharia — Conferir Projeto` em `A conferir`;
-4. somente depois marca o orçamento `status='vendido'` e move para a coluna `Vendido`.
-
-Não criar Medição Final, materiais, Produção ou Instalação diretamente em `Vendido`.
+- snapshot em `vendas_obras`;
+- conta real em `financeiro_contas_receber` se a regra Financeiro estiver ativa;
+- dispara `venda_confirmada`;
+- regras padrão criam somente Financeiro + Conferir Projeto;
+- só então `status='vendido'`.
 
 ### Projeto conferido
-
-Ao mover o card para `Projeto conferido`:
-- criar/garantir Medição Final;
-- criar/garantir Perfis;
-- criar/garantir Acessórios;
-- criar/garantir Outros;
+Dispara `projeto_conferido` e, pelas regras ativas:
+- Medição Final;
+- Perfis;
+- Acessórios;
+- Outros;
 - Vidros ainda não.
 
-O fluxo deve funcionar também quando o orçamento ainda estiver em **Sem obra definida**.
-
 ### Medição Final aprovada
+Dispara `medicao_aprovada` e, pelas regras ativas:
+- Vidros;
+- MEE/Engenharia técnica pós-medição.
 
-Somente aqui:
-- criar/garantir Vidros;
-- criar/atualizar MEE/Engenharia técnica pós-medição.
+## Validações automáticas concluídas
 
-## Cliente 360 → Andamento
-
-- usar `vendas_obras` como gate real da venda;
-- cards legados criados cedo demais não podem liberar/mostrar etapas futuras antes de seu gate;
-- Financeiro deve mostrar o saldo real de `financeiro_contas_receber`;
-- antes de Projeto conferido, Perfis/Acessórios/Outros ficam bloqueados;
-- Vidros fica bloqueado até Medição Final aprovada;
-- abrir Perfis/Vidros/Acessórios/Outros pelo Andamento deve oferecer seta **Voltar** para a mesma aba do Cliente 360.
-
-## Caso real diagnosticado — orçamento #60
-
-Cliente: MAURICIO JOSE MOTTA CORREIA LIMA.
-
-Estado encontrado:
-- orçamento #60 = R$ 1.477,75;
-- coluna histórica = `Vendido`;
-- `status='enviado'`;
-- não existe `vendas_obras`;
-- não existe `financeiro_contas_receber`;
-- cards antigos de Medição/Instalação/Financeiro foram criados cedo demais pelo fluxo legado.
-
-Conclusão: o fluxo antigo movia visualmente para `Vendido` antes de concluir a confirmação. **Não criar conta real automaticamente** sem confirmação de que essa venda é válida. No novo Andamento, usar **Confirmar venda e gerar Financeiro** para regularizar com segurança.
-
-## Validação automática concluída
-
-Teste isolado de Venda confirmada:
+Venda confirmada, com `ROLLBACK`:
 - venda = 1;
-- conta a receber = 1, com o valor do orçamento;
+- conta a receber = 1;
 - Financeiro = 1;
 - Conferir Projeto = 1;
-- Medição = 0;
-- Perfis = 0;
-- Acessórios = 0;
-- Outros = 0;
-- Vidros = 0;
-- Produção = 0;
-- Instalação = 0.
+- tarefa Gabrielle = 1;
+- notificação Gabrielle = 1;
+- workflow execuções = 2;
+- downstream = 0.
 
-Teste Projeto conferido sem `obra_id`:
+Projeto conferido:
 - Medição = 1;
 - Perfis = 1;
 - Acessórios = 1;
 - Outros = 1;
 - Vidros = 0.
 
-Teste completo anterior validou Medição aprovada → Vidros + MEE.
-Todos os testes temporários foram revertidos/abortados de forma controlada; 0 registros de teste restantes.
+Medição aprovada:
+- Vidros = 1;
+- MEE = 1;
+- cenário completo = 8 execuções (2 venda + 4 projeto + 2 medição).
 
-## Migrations finais desta correção
+Nenhum dado temporário ficou no banco.
 
-- `20260826221809_fluxo_vendido_confirmacao_atomica_v1.sql`;
-- `20260826222110_conferir_projeto_sem_obra_v1.sql`;
-- `20260826222310_financeiro_contas_receber_cliente360_leitura_v1.sql`.
+## Segurança já validada
 
-O histórico local foi alinhado às versões reais já registradas no Supabase; não reaplicar essas migrations só para mudar versão.
+- configuração do workflow: escrita somente master;
+- `fn_iniciar_fluxo_venda_v2` e `fn_concluir_conferencia_projeto_v1` continuam executáveis por usuário autenticado;
+- helpers `fn_workflow_disparar_evento_v1`, `fn_workflow_executar_automacao_v1`, `fn_workflow_renderizar_v1` e `fn_workflow_coluna_tarefa_v1` NÃO são executáveis diretamente por authenticated/anon;
+- advisories restantes são legados de outras áreas e não devem ampliar o escopo deste PR.
+
+## Migrations novas do motor
+
+- `20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql`;
+- `20260826233029_workflow_evitar_notificacao_duplicada_v1.sql`;
+- `20260826233648_workflow_restringir_funcoes_internas_v1.sql`.
 
 ## Validação manual no Preview antes do merge
 
-1. Abrir Cliente 360 → Andamento.
-2. Confirmar que um orçamento sem venda real mostra `Confirmar venda e gerar Financeiro` e não libera downstream.
-3. Confirmar uma venda controlada e conferir Financeiro + Conferir Projeto.
-4. Conferir o valor real em Financeiro.
-5. Antes de Projeto conferido, conferir materiais bloqueados.
-6. Mover Projeto para `Projeto conferido` e conferir Medição + Perfis + Acessórios + Outros, sem Vidros.
-7. Aprovar uma Medição Final controlada e conferir Vidros + MEE.
-8. Abrir os setores de materiais e testar a seta Voltar.
-9. Reprocessar eventos e confirmar que não há duplicidade.
-10. Somente após aprovação do usuário considerar merge.
+1. Abrir `/configuracoes/automacoes-fluxo` como master.
+2. Conferir as regras agrupadas por gatilho.
+3. Abrir `Venda confirmada → Financeiro` e confirmar Gabrielle como responsável, criação de tarefa e aviso.
+4. Testar edição de responsável, `Notificar também`, prazo, prioridade e mensagem sem ativar regras de Produção/Instalação.
+5. Confirmar uma venda controlada.
+6. Conferir: Financeiro + Conferir Projeto e tarefa/sino do responsável; nenhum downstream.
+7. Mover para Projeto conferido e conferir Medição + Perfis + Acessórios + Outros.
+8. Aprovar Medição Final e conferir Vidros + MEE.
+9. Abrir Cliente 360 → Andamento e conferir os mesmos estados.
+10. Confirmar que reprocessamento não duplica cards, tarefas ou notificações.
+11. Somente após aprovação do usuário considerar merge.
 
-## Próxima definição funcional com o usuário
+## Caso legado #60
 
-Depois desta validação, detalhar:
-- gate de Produção;
-- produção parcial por item/tipologia;
-- gate e agendamento de Instalação;
-- Compras geral versus Kanbans específicos;
-- reabertura após revisão de venda/projeto;
-- custo `Previsto → Otimizado → Comprado → Realizado` por cliente/obra/item.
+O orçamento #60 continua sem venda real/conta real confirmada. Não regularizar automaticamente. Se for uma venda válida, usar a confirmação consciente pelo fluxo novo.
+
+## Próximas definições funcionais
+
+- quem será responsável por Conferir Projeto;
+- responsável por Medição Final;
+- responsável por Perfis, Acessórios, Outros e Vidros;
+- responsável pelo MEE;
+- gate exato de Produção e possibilidade de produção parcial;
+- gate/agendamento de Instalação;
+- reabertura após revisão da venda/projeto;
+- custos `Previsto → Otimizado → Comprado → Realizado`.
 
 ## Regras invioláveis
 
 - GitHub é fonte da verdade.
 - Branch → PR → build/preview → merge manual; nunca commit direto em `main`.
+- Workflow é configurável, auditável e idempotente.
+- Usuário responsável e usuários notificados são conceitos separados.
+- Não criar um segundo sistema de tarefas/notificações.
 - Cliente 360 consolida registros reais; não duplicar status.
-- Financeiro é único, filtrado/vinculado por cliente e obra.
-- Venda fechada preserva snapshot; alteração posterior exige justificativa/histórico.
-- Venda/Orçamento Balcão rápido não entra no Kanban de obras.
-- Vidro nunca é liberado antes da Medição Final aprovada.
-- MEE pós-medição permanece enquanto depender de `medicao_itens`.
-- W.Vetro é referência; conhecimento Atlas validado tem prioridade.
+- Venda confirmada não libera downstream completo.
+- Vidro nunca nasce antes da Medição Final aprovada.
+- Produção e Instalação permanecem inativas até gates definidos.
+- Venda/Orçamento Balcão rápido não entra no workflow de obra.
