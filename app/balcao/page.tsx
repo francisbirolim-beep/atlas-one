@@ -1,124 +1,25 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { History, Loader2, Plus, Search, ShoppingCart, Trash2, Truck, UserPlus, WalletCards } from 'lucide-react'
+import { History, Plus, Search, ShoppingCart, WalletCards } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
+import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
-type EstoqueRede={localId:string;unidadeId:string;unidadeCodigo:string;unidadeNome:string;localCodigo:string;localNome:string;fisico:number;reservado:number;disponivel:number;unidade:string}
-type Produto={id:string;codigo:string;nome:string;descricao?:string|null;unidade:string;estoque:number;estoqueLocal:number;estoqueRede:number;estoquesRede:EstoqueRede[];unidadeEstoque:string;preco:number;precoPromocional?:number|null;precoEfetivo:number;fotoUrl?:string|null;custo?:number|null;margem?:number|null;precoMinimo?:number|null}
-type Cliente={id:string;nome:string;cpf_cnpj?:string|null;telefone?:string|null;whatsapp?:string|null;cidade?:string|null}
-type ItemCarrinho=Produto&{chave:string;quantidade:number;precoUnitario:number;localOrigemId:string;origemLabel:string;atendimento:'imediato'|'posterior';disponivelOrigem:number}
-type Pagamento={forma:string;valor:string;parcelas:number;primeiroVencimento:string;intervaloDias:number}
-type LocalAtual={id:string;nome:string;codigo:string;unidadeId:string;unidadeNome:string;unidadeCodigo:string}
-type Caixa={id:string;status:string;aberto_em:string;saldo_inicial:number;operador_nome:string;local_estoque_id?:string;ponto?:{codigo:string;nome:string;unidadeNome:string;localNome:string}|null}
-
-const FORMAS=[['pix','PIX'],['dinheiro','Dinheiro'],['cartao_debito','Cartão débito'],['cartao_credito','Cartão crédito'],['boleto','Boleto'],['a_prazo','A prazo'],['outros','Outros']]
-const novoPagamento=():Pagamento=>({forma:'pix',valor:'',parcelas:1,primeiroVencimento:'',intervaloDias:30})
+type Venda={id:string;numero:number;status:string;atendimento_status?:string|null;cliente_nome?:string|null;vendedor_nome?:string|null;subtotal:number;desconto:number;total:number;finalizada_em:string}
 function moeda(n:number){return Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function num(v:string|number){const n=Number(String(v).replace(',','.'));return Number.isFinite(n)?n:0}
+function data(v:string){return new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}
+function statusTexto(v:string){const mapa:Record<string,string>={finalizada:'Finalizada',cancelada:'Cancelada',devolvida_parcial:'Parcialmente devolvida',entregue:'Entregue',aguardando_separacao:'Aguardando separação',aguardando_estoque:'Aguardando estoque',parcial:'Parcial'};return mapa[v]||v}
 
-export default function VendaBalcaoPage(){
- const [produtos,setProdutos]=useState<Produto[]>([]),[busca,setBusca]=useState(''),[carregando,setCarregando]=useState(false),[podeVerGestao,setPodeVerGestao]=useState(false),[localAtual,setLocalAtual]=useState<LocalAtual|null>(null)
- const [origemPorProduto,setOrigemPorProduto]=useState<Record<string,string>>({}),[carrinho,setCarrinho]=useState<Record<string,ItemCarrinho>>({})
- const [clienteBusca,setClienteBusca]=useState(''),[clientes,setClientes]=useState<Cliente[]>([]),[cliente,setCliente]=useState<Cliente|null>(null),[carregandoClientes,setCarregandoClientes]=useState(false)
- const [desconto,setDesconto]=useState('0'),[pagamentos,setPagamentos]=useState<Pagamento[]>([novoPagamento()]),[caixa,setCaixa]=useState<Caixa|null>(null)
- const [salvando,setSalvando]=useState(false),[erro,setErro]=useState(''),[sucesso,setSucesso]=useState<{numero:number;total:number;atendimentoStatus?:string;reservasPendentes?:number}|null>(null)
- const buscaAbort=useRef<AbortController|null>(null),buscaSeq=useRef(0),clienteAbort=useRef<AbortController|null>(null),clienteSeq=useRef(0)
-
- async function api(url:string,init?:RequestInit){const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.');return fetch(url,{...init,headers:{...(init?.headers||{}),Authorization:`Bearer ${token}`},cache:'no-store'})}
- async function carregarProdutos(q=''){
-  const seq=++buscaSeq.current
-  buscaAbort.current?.abort()
-  const controller=new AbortController()
-  buscaAbort.current=controller
-  setCarregando(true)
-  try{
-   const resp=await api(`/api/balcao/catalogo?tipo=produtos&q=${encodeURIComponent(q)}`,{signal:controller.signal})
-   const json=await resp.json();if(!resp.ok)throw new Error(json.error)
-   if(seq!==buscaSeq.current)return
-   setProdutos(json.produtos||[]);setPodeVerGestao(Boolean(json.podeVerGestao));setLocalAtual(json.localAtual||null)
-  }catch(e){
-   if((e as {name?:string})?.name==='AbortError')return
-   if(seq===buscaSeq.current)setErro(e instanceof Error?e.message:'Erro ao carregar produtos.')
-  }finally{
-   if(seq===buscaSeq.current)setCarregando(false)
-  }
- }
- async function carregarClientes(q:string){
-  const seq=++clienteSeq.current
-  clienteAbort.current?.abort()
-  const controller=new AbortController()
-  clienteAbort.current=controller
-  setCarregandoClientes(true)
-  try{
-   const r=await api(`/api/balcao/catalogo?tipo=clientes&q=${encodeURIComponent(q)}`,{signal:controller.signal})
-   const j=await r.json();if(!r.ok)throw new Error(j.error)
-   if(seq!==clienteSeq.current)return
-   setClientes(j.clientes||[])
-  }catch(e){
-   if((e as {name?:string})?.name==='AbortError')return
-  }finally{
-   if(seq===clienteSeq.current)setCarregandoClientes(false)
-  }
- }
- async function carregarCaixa(){try{const resp=await api('/api/balcao/caixa');const json=await resp.json();if(resp.ok)setCaixa(json.caixa||null)}catch{}}
- useEffect(()=>{carregarCaixa()},[])
- useEffect(()=>{
-  const termo=busca.trim()
-  buscaAbort.current?.abort()
-  buscaSeq.current++
-  if(termo.length<2){setProdutos([]);setCarregando(false);return}
-  setCarregando(true)
-  const h=setTimeout(()=>carregarProdutos(termo),70)
-  return()=>clearTimeout(h)
- },[busca])
- useEffect(()=>{
-  const termo=clienteBusca.trim()
-  clienteAbort.current?.abort()
-  clienteSeq.current++
-  if(termo.length<2||cliente){setClientes([]);setCarregandoClientes(false);return}
-  setCarregandoClientes(true)
-  const h=setTimeout(()=>carregarClientes(termo),70)
-  return()=>clearTimeout(h)
- },[clienteBusca,cliente])
-
- const itens=Object.values(carrinho),subtotal=itens.reduce((s,i)=>s+i.quantidade*i.precoUnitario,0),descontoN=Math.min(subtotal,Math.max(0,num(desconto))),total=Math.max(0,subtotal-descontoN),pagos=pagamentos.reduce((s,p)=>s+num(p.valor),0),falta=Math.round((total-pagos)*100)/100
- const pesquisou=busca.trim().length>=2
-
- function origemSelecionada(p:Produto){const id=origemPorProduto[p.id]||'';return p.estoquesRede.find(e=>e.localId===id)||null}
- function escolherPadraoLocal(p:Produto){if(localAtual&&p.estoqueLocal>0)return p.estoquesRede.find(e=>e.localId===localAtual.id)||null;return null}
- function adicionar(p:Produto){setErro('');const origem=origemSelecionada(p)||escolherPadraoLocal(p);if(!origem||origem.disponivel<=0){setErro(p.estoqueRede>0?'Escolha a unidade/estoque de origem antes de adicionar.':'Produto sem estoque disponível na rede.');return}const atendimento:ItemCarrinho['atendimento']=localAtual&&origem.localId===localAtual.id?'imediato':'posterior';const chave=`${p.id}|${origem.localId}`;setCarrinho(atual=>{const existente=atual[chave];const qtd=Math.min(origem.disponivel,(existente?.quantidade||0)+1);return{...atual,[chave]:existente?{...existente,quantidade:qtd}:{...p,chave,quantidade:1,precoUnitario:p.precoEfetivo,localOrigemId:origem.localId,origemLabel:`${origem.unidadeNome} • ${origem.localNome}`,atendimento,disponivelOrigem:origem.disponivel}}})}
- function mudarQuantidade(chave:string,q:number){setCarrinho(atual=>{const item=atual[chave];if(!item)return atual;if(q<=0){const n={...atual};delete n[chave];return n}return{...atual,[chave]:{...item,quantidade:Math.min(item.disponivelOrigem,q)}}})}
- function mudarPreco(chave:string,v:string){setCarrinho(atual=>atual[chave]?{...atual,[chave]:{...atual[chave],precoUnitario:Math.max(0,num(v))}}:atual)}
- function remover(chave:string){setCarrinho(atual=>{const n={...atual};delete n[chave];return n})}
- function mudarPagamento(index:number,patch:Partial<Pagamento>){setPagamentos(lista=>lista.map((p,i)=>i===index?{...p,...patch}:p))}
- function preencherRestante(index:number){setPagamentos(lista=>{const outros=lista.reduce((s,p,i)=>i===index?s:s+num(p.valor),0);return lista.map((p,i)=>i===index?{...p,valor:String(Math.max(0,Math.round((total-outros)*100)/100))}:p)})}
- function atualizarClienteBusca(valor:string){setCliente(null);setClienteBusca(valor)}
-
- async function finalizar(){setErro('');setSucesso(null);if(!caixa)return setErro('Abra o caixa antes de finalizar a venda.');if(!itens.length)return setErro('Adicione pelo menos um produto.');if(Math.abs(falta)>0.01)return setErro(`Os pagamentos precisam fechar o total. Diferença: ${moeda(falta)}`);for(const p of pagamentos)if((p.forma==='boleto'||p.forma==='a_prazo')&&!p.primeiroVencimento)return setErro('Informe o primeiro vencimento do boleto/venda a prazo.');setSalvando(true);try{const resp=await api('/api/balcao/vendas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clienteId:cliente?.id||null,clienteNome:cliente?.nome||null,desconto:descontoN,itens:itens.map(i=>({produtoId:i.id,quantidade:i.quantidade,precoUnitario:i.precoUnitario,localOrigemId:i.localOrigemId,atendimento:i.atendimento})),pagamentos:pagamentos.map(p=>({forma:p.forma,valor:num(p.valor),parcelas:p.parcelas,primeiroVencimento:p.primeiroVencimento,intervaloDias:p.intervaloDias}))})});const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Não foi possível finalizar.');setSucesso({numero:Number(json.numero),total:Number(json.total),atendimentoStatus:json.atendimentoStatus,reservasPendentes:Number(json.reservasPendentes||0)});setCarrinho({});setDesconto('0');setPagamentos([novoPagamento()]);setCliente(null);setClienteBusca('');if(busca.trim())await carregarProdutos(busca);await carregarCaixa()}catch(e){setErro(e instanceof Error?e.message:'Erro ao finalizar a venda.')}finally{setSalvando(false)}}
-
- return <main className="min-h-screen bg-slate-50 p-3"><div className="mx-auto max-w-[1540px] space-y-2.5">
-  <header className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-slate-400">Venda Balcão</p><div className="flex items-baseline gap-2"><h1 className="text-xl font-bold">Venda</h1>{localAtual&&<span className="text-[11px] text-slate-500">{localAtual.unidadeNome} • {localAtual.nome}</span>}</div></div><div className="flex flex-wrap gap-1.5"><Link href="/balcao/consulta-preco" className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold">Consulta de preço</Link><Link href="/balcao/historico" className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold"><History size={13} className="mr-1 inline"/>Histórico</Link><Link href="/balcao/caixa" className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${caixa?'border border-emerald-300 bg-emerald-50 text-emerald-800':'bg-amber-500 text-white'}`}><WalletCards size={13} className="mr-1 inline"/>{caixa?`${caixa.ponto?.codigo||'Caixa'} aberto`:'Abrir caixa'}</Link></div></header>
-
+export default function VendasBalcao(){
+ const [vendas,setVendas]=useState<Venda[]>([]),[busca,setBusca]=useState(''),[carregando,setCarregando]=useState(true),[erro,setErro]=useState('')
+ async function carregar(){setCarregando(true);try{const t=await tokenAtual();if(!t)throw new Error('Sessão expirada.');const r=await fetch('/api/balcao/vendas',{headers:{Authorization:`Bearer ${t}`},cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error);setVendas(j.vendas||[])}catch(e){setErro(e instanceof Error?e.message:'Não foi possível carregar as vendas.')}finally{setCarregando(false)}}
+ useEffect(()=>{carregar()},[])
+ const filtradas=busca.trim()?vendas.filter(v=>correspondeBuscaAtlas(busca,v.numero,v.cliente_nome,v.vendedor_nome,v.status,v.atendimento_status)):vendas
+ return <main className="min-h-screen bg-slate-50 p-4"><div className="mx-auto max-w-7xl space-y-4">
+  <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-slate-400">Venda Balcão</p><h1 className="text-2xl font-bold text-slate-900">Vendas</h1><p className="mt-1 text-xs text-slate-500">Inicie uma nova venda ou consulte as vendas recentes.</p></div><div className="flex flex-wrap gap-2"><Link href="/balcao/consulta-preco" className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold">Consulta de preço</Link><Link href="/balcao/caixa" className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-semibold"><WalletCards size={14}/>Caixa</Link><Link href="/balcao/vendas/nova" className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm"><Plus size={15}/>Nova venda</Link></div></header>
   {erro&&<div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</div>}
-  {sucesso&&<div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Venda #{sucesso.numero} finalizada • {moeda(sucesso.total)}{sucesso.reservasPendentes?` • ${sucesso.reservasPendentes} item(ns) reservado(s) em outra unidade.`:' • estoque local atendido.'}</div>}
-
-  <section className="rounded-xl border bg-white p-2.5"><div className="grid gap-2 lg:grid-cols-[1fr_auto]"><div className="relative"><Search size={15} className="absolute left-3 top-2.5 text-slate-400"/><input value={cliente?cliente.nome:clienteBusca} onInput={e=>atualizarClienteBusca(e.currentTarget.value)} onCompositionUpdate={e=>atualizarClienteBusca(e.currentTarget.value)} placeholder="Cliente opcional — nome, CPF/CNPJ ou telefone" className="w-full rounded-lg border py-2 pl-9 pr-3 text-xs"/>{!cliente&&carregandoClientes&&clienteBusca.trim().length>=2&&<Loader2 size={13} className="absolute right-3 top-2.5 animate-spin text-slate-400"/>}{!cliente&&clientes.length>0&&<div className="absolute z-20 mt-1 max-h-44 w-full overflow-auto rounded-lg border bg-white shadow-lg">{clientes.map(c=><button key={c.id} onClick={()=>{setCliente(c);setClienteBusca(c.nome);setClientes([])}} className="block w-full border-b px-3 py-2 text-left text-xs hover:bg-slate-50"><strong>{c.nome}</strong><div className="text-[10px] text-slate-400">{[c.cpf_cnpj,c.whatsapp||c.telefone,c.cidade].filter(Boolean).join(' • ')}</div></button>)}</div>}</div><Link href="/balcao/clientes/novo" className="inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold"><UserPlus size={14}/>Novo cliente</Link></div></section>
-
-  <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_390px]">
-   <section className="min-w-0 rounded-xl border bg-white p-3"><div className="flex items-end justify-between gap-2"><div><h2 className="text-sm font-semibold">Adicionar produtos</h2><p className="text-[10px] text-slate-500">A lista filtra enquanto você digita. Use várias palavras: <strong>suprema roldana</strong>, <strong>puxador preto</strong>, código etc.</p></div>{pesquisou&&<span className="text-[10px] text-slate-400">{carregando?'filtrando...':`${produtos.length} resultado(s)`}</span>}</div><div className="relative mt-2"><Search size={15} className="absolute left-3 top-2.5 text-slate-400"/><input value={busca} onInput={e=>setBusca(e.currentTarget.value)} onCompositionUpdate={e=>setBusca(e.currentTarget.value)} placeholder="Buscar produto... Ex.: SUPREMA ROLDANA" className="w-full rounded-lg border py-2 pl-9 pr-3 text-xs"/></div>
-    {!pesquisou?<div className="py-10 text-center text-xs text-slate-400">Pesquise para exibir os produtos. A lista não fica mais carregada o tempo todo.</div>:produtos.length===0&&carregando?<div className="py-10 text-center"><Loader2 className="mx-auto animate-spin text-slate-400" size={20}/></div>:produtos.length===0?<div className="py-10 text-center text-xs text-slate-400">Nenhum produto encontrado com todos os termos.</div>:<div className="mt-2 max-h-[calc(100vh-245px)] space-y-1.5 overflow-auto pr-1">{produtos.map(p=>{const remoto=p.estoquesRede.filter(e=>e.localId!==localAtual?.id&&e.disponivel>0);const selecionada=origemSelecionada(p);return <div key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border px-2.5 py-2 text-xs"><div className="min-w-0"><div className="truncate font-semibold">{p.codigo||'—'} <span className="font-normal text-slate-700">— {p.nome}</span></div>{p.descricao&&<div className="truncate text-[10px] text-slate-400">{p.descricao}</div>}<div className="mt-1 flex flex-wrap items-center gap-1.5"><span className={`rounded px-1.5 py-0.5 text-[10px] ${p.estoqueLocal>0?'bg-emerald-50 text-emerald-700':'bg-red-50 text-red-600'}`}>Local {p.estoqueLocal} {p.unidadeEstoque}</span><span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">Rede {p.estoqueRede} {p.unidadeEstoque}</span>{p.estoqueLocal<=0&&remoto.length>0&&<select value={origemPorProduto[p.id]||''} onChange={e=>setOrigemPorProduto(a=>({...a,[p.id]:e.target.value}))} className="max-w-[280px] rounded border bg-amber-50 px-1.5 py-1 text-[10px]"><option value="">Escolha a origem...</option>{remoto.map(e=><option key={e.localId} value={e.localId}>{e.unidadeNome} • {e.localNome} — {e.disponivel} {e.unidade}</option>)}</select>}{p.estoqueRede<=0&&<span className="text-[10px] text-red-500">Sem estoque na rede</span>}{selecionada&&selecionada.localId!==localAtual?.id&&<span className="font-medium text-[10px] text-amber-700"><Truck size={11} className="mr-0.5 inline"/>atendimento posterior</span>}</div></div><div className="flex min-w-[104px] flex-col items-end justify-center gap-1"><strong className="text-emerald-700">{moeda(p.precoEfetivo)}</strong>{podeVerGestao&&p.custo!=null&&<span className="text-[9px] text-slate-400">custo {moeda(p.custo)}</span>}<button disabled={p.estoqueRede<=0} onClick={()=>adicionar(p)} className="rounded-md border border-emerald-300 px-2 py-1 text-[10px] font-semibold text-emerald-700 disabled:opacity-30"><Plus size={11} className="mr-0.5 inline"/>Adicionar</button></div></div>})}</div>}
-   </section>
-
-   <aside className="self-start rounded-xl border bg-white p-3 xl:sticky xl:top-3"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Itens ({itens.length})</h2>{itens.length>0&&<button onClick={()=>setCarrinho({})} className="text-[10px] font-semibold text-red-500">Limpar</button>}</div><div className="mt-2 max-h-[210px] space-y-1.5 overflow-auto">{!itens.length&&<div className="rounded-lg bg-slate-50 p-4 text-center text-xs text-slate-400">Nenhum item.</div>}{itens.map(i=><div key={i.chave} className={`rounded-lg border p-2 ${i.atendimento==='posterior'?'border-amber-200 bg-amber-50/40':'bg-white'}`}><div className="flex items-start justify-between gap-1"><div className="min-w-0"><div className="truncate text-[11px] font-semibold">{i.codigo} — {i.nome}</div><div className="truncate text-[9px] text-slate-400">{i.origemLabel}</div></div><button onClick={()=>remover(i.chave)} className="text-red-500"><Trash2 size={13}/></button></div><div className="mt-1.5 grid grid-cols-[64px_1fr_auto] items-end gap-1.5"><label className="text-[9px] text-slate-500">Qtd<input type="number" min="1" max={i.disponivelOrigem} step="1" value={i.quantidade} onChange={e=>mudarQuantidade(i.chave,num(e.target.value))} className="mt-0.5 w-full rounded border px-1.5 py-1 text-xs"/></label><label className="text-[9px] text-slate-500">Preço<input type="number" min="0" step="0.01" value={i.precoUnitario} onChange={e=>mudarPreco(i.chave,e.target.value)} className="mt-0.5 w-full rounded border px-1.5 py-1 text-xs"/></label><strong className="pb-1 text-[11px]">{moeda(i.quantidade*i.precoUnitario)}</strong></div></div>)}</div>
-
-    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t pt-2 text-xs"><span>Subtotal</span><strong className="text-right">{moeda(subtotal)}</strong><label>Desconto</label><input type="number" min="0" step="0.01" value={desconto} onChange={e=>setDesconto(e.target.value)} className="w-full rounded border px-2 py-1 text-right text-xs"/><strong className="border-t pt-1.5">Total</strong><strong className="border-t pt-1.5 text-right text-base text-emerald-700">{moeda(total)}</strong></div>
-
-    <div className="mt-2 border-t pt-2"><div className="flex items-center justify-between"><h3 className="text-xs font-semibold">Pagamento</h3><button onClick={()=>setPagamentos(p=>[...p,novoPagamento()])} className="text-[10px] font-semibold text-emerald-700">+ Forma</button></div><div className="mt-1.5 space-y-1.5">{pagamentos.map((p,idx)=><div key={idx} className="rounded-lg bg-slate-50 p-2"><div className="grid grid-cols-[1fr_116px] gap-1.5"><select value={p.forma} onChange={e=>mudarPagamento(idx,{forma:e.target.value})} className="rounded border bg-white px-1.5 py-1.5 text-xs">{FORMAS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><div className="flex gap-1"><input type="number" step="0.01" value={p.valor} onChange={e=>mudarPagamento(idx,{valor:e.target.value})} placeholder="Valor" className="min-w-0 flex-1 rounded border px-1.5 py-1.5 text-xs"/><button onClick={()=>preencherRestante(idx)} className="rounded border bg-white px-1.5 text-[9px]">resto</button></div></div>{['boleto','a_prazo','cartao_credito'].includes(p.forma)&&<div className="mt-1.5 grid grid-cols-2 gap-1.5"><label className="text-[9px] text-slate-500">Parcelas<input type="number" min="1" value={p.parcelas} onChange={e=>mudarPagamento(idx,{parcelas:Math.max(1,Math.floor(num(e.target.value)))})} className="mt-0.5 w-full rounded border px-1.5 py-1 text-xs"/></label>{['boleto','a_prazo'].includes(p.forma)&&<label className="text-[9px] text-slate-500">1º vencimento<input type="date" value={p.primeiroVencimento} onChange={e=>mudarPagamento(idx,{primeiroVencimento:e.target.value})} className="mt-0.5 w-full rounded border px-1.5 py-1 text-xs"/></label>}</div>}{pagamentos.length>1&&<button onClick={()=>setPagamentos(l=>l.filter((_,i)=>i!==idx))} className="mt-1 text-[9px] font-semibold text-red-500">Remover</button>}</div>)}</div><div className={`mt-1 text-right text-[10px] font-semibold ${Math.abs(falta)<=0.01?'text-emerald-700':'text-amber-600'}`}>{Math.abs(falta)<=0.01?'Pagamento confere':falta>0?`Falta ${moeda(falta)}`:`Excesso ${moeda(-falta)}`}</div></div>
-
-    <button disabled={salvando||!caixa||!itens.length} onClick={finalizar} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2.5 text-sm font-bold text-white disabled:opacity-40">{salvando?<Loader2 className="animate-spin" size={16}/>:<ShoppingCart size={16}/>}Finalizar venda</button>{!caixa&&<p className="mt-1 text-center text-[10px] text-amber-600">Abra o caixa para finalizar.</p>}
-   </aside>
-  </div>
+  <section className="rounded-2xl border bg-white p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><ShoppingCart size={18} className="text-emerald-700"/><h2 className="font-semibold text-slate-800">Vendas recentes</h2></div><div className="w-full sm:w-96"><BuscaAtlasInput value={busca} onValueChange={setBusca} placeholder="Número, cliente, vendedor ou status..." inputClassName="w-full rounded-lg border py-2 pr-3 text-xs"/></div></div>{carregando?<div className="py-12 text-center text-sm text-slate-400">Carregando...</div>:filtradas.length===0?<div className="py-12 text-center text-sm text-slate-400">Nenhuma venda encontrada. Clique em <strong>Nova venda</strong> para começar.</div>:<div className="overflow-auto"><table className="w-full min-w-[820px] text-xs"><thead className="bg-slate-50 text-left text-[11px] text-slate-500"><tr><th className="p-2">Venda</th><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Status</th><th>Atendimento</th><th className="text-right">Total</th><th/></tr></thead><tbody>{filtradas.map(v=><tr key={v.id} className="border-t"><td className="p-2 font-semibold">#{v.numero}</td><td>{data(v.finalizada_em)}</td><td>{v.cliente_nome||'Consumidor'}</td><td>{v.vendedor_nome||'—'}</td><td>{statusTexto(v.status)}</td><td><span className={v.atendimento_status==='aguardando_estoque'?'font-semibold text-amber-700':''}>{statusTexto(v.atendimento_status||'')}</span></td><td className="text-right font-semibold">{moeda(v.total)}</td><td className="text-right"><Link href={`/balcao/historico?id=${v.id}`} className="inline-flex items-center gap-1 text-emerald-700 hover:underline"><History size={12}/>Detalhes</Link></td></tr>)}</tbody></table></div>}</section>
  </div></main>
 }
