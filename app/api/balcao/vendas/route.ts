@@ -60,18 +60,54 @@ export async function GET(req: NextRequest) {
   }
 }
 
+function contextoCliente360(req: NextRequest) {
+  let clienteId: string | null = null
+  let obraId: string | null = null
+  try {
+    const referer = req.headers.get('referer')
+    if (referer) {
+      const url = new URL(referer)
+      clienteId = url.searchParams.get('cliente')
+      obraId = url.searchParams.get('obra')
+    }
+  } catch {}
+  return { clienteId, obraId }
+}
+
 export async function POST(req: NextRequest) {
   const usuario = await autenticarBalcao(req, 'venda-balcao', 'edicao')
   if (!usuario) return NextResponse.json({ error: 'Sem permissão para finalizar venda.' }, { status: 403 })
   try {
     const body = await req.json()
+    const contexto = contextoCliente360(req)
+    let clienteId = String(body.clienteId || contexto.clienteId || '').trim() || null
+    const obraId = String(body.obraId || contexto.obraId || '').trim() || null
+    let clienteNome = String(body.clienteNome || '').trim() || null
+
+    if (obraId) {
+      const { data: obra, error: erroObra } = await supabaseAdmin
+        .from('obras')
+        .select('id,cliente_id,nome')
+        .eq('id', obraId)
+        .maybeSingle()
+      if (erroObra) throw erroObra
+      if (!obra) return NextResponse.json({ error: 'Obra informada não foi encontrada.' }, { status: 400 })
+      if (clienteId && obra.cliente_id !== clienteId) return NextResponse.json({ error: 'A obra não pertence ao cliente selecionado.' }, { status: 400 })
+      clienteId = obra.cliente_id
+    }
+
+    if (clienteId && !clienteNome) {
+      const { data: clienteCadastro } = await supabaseAdmin.from('clientes').select('nome').eq('id', clienteId).maybeSingle()
+      clienteNome = clienteCadastro?.nome || null
+    }
+
     const itens = Array.isArray(body.itens) ? body.itens : []
     const pagamentos = Array.isArray(body.pagamentos) ? body.pagamentos : []
     if (!itens.length) return NextResponse.json({ error: 'Adicione pelo menos um produto.' }, { status: 400 })
     if (!pagamentos.length) return NextResponse.json({ error: 'Informe a forma de pagamento.' }, { status: 400 })
 
     const temPrazo = pagamentos.some((p: any) => ['boleto', 'a_prazo'].includes(String(p.forma || '')))
-    if (temPrazo && !body.clienteId) return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
+    if (temPrazo && !clienteId) return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
 
     const { data: caixa, error: erroCaixa } = await supabaseAdmin.from('balcao_caixas')
       .select('id,status,operador_id,ponto_caixa_id,unidade_id,local_estoque_id')
@@ -108,12 +144,22 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabaseAdmin.rpc('finalizar_venda_balcao', {
       p_caixa_id: caixa.id, p_usuario_id: usuario.id, p_usuario_nome: usuario.nome, p_usuario_role: usuario.role,
-      p_cliente_id: body.clienteId || null, p_cliente_nome: String(body.clienteNome || '').trim() || null,
+      p_cliente_id: clienteId, p_cliente_nome: clienteNome,
       p_itens: payloadItens, p_pagamentos: payloadPagamentos, p_desconto: desconto,
       p_observacoes: String(body.observacoes || '').trim() || null, p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
     })
     if (error) throw error
-    return NextResponse.json(data || { ok: true })
+
+    const retorno = (data || { ok: true }) as Record<string, any>
+    const vendaId = String(retorno.vendaId || retorno.venda_id || '').trim()
+    if (obraId && vendaId) {
+      const { error: erroVinculo } = await supabaseAdmin.from('balcao_vendas').update({ obra_id: obraId }).eq('id', vendaId)
+      if (erroVinculo) throw erroVinculo
+      const { error: erroFinanceiro } = await supabaseAdmin.from('financeiro_contas_receber').update({ obra_id: obraId }).eq('venda_balcao_id', vendaId)
+      if (erroFinanceiro) throw erroFinanceiro
+    }
+
+    return NextResponse.json({ ...retorno, clienteId, clienteNome, obraId })
   } catch (e: any) {
     console.error('Erro finalização venda balcão', e)
     return NextResponse.json({ error: e?.message || 'Não foi possível finalizar a venda.' }, { status: 400 })
