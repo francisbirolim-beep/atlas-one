@@ -65,9 +65,7 @@ function lerListaConfig(valor: string | null | undefined): string[] {
     const parsed = JSON.parse(valor)
     if (!Array.isArray(parsed)) return []
     return parsed.map(v => typeof v === 'string' ? v.trim() : '').filter(Boolean)
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 function lerCategoriasConfig(valor: string | null | undefined) {
@@ -79,9 +77,7 @@ function lerCategoriasConfig(valor: string | null | undefined) {
       .filter(v => v && typeof v.valor === 'string' && typeof v.label === 'string')
       .map((v, i) => ({ valor: v.valor.trim(), label: v.label.trim(), ordem: Number(v.ordem) || 200 + i * 10 }))
       .filter(v => v.valor && v.label)
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 function valorBooleano(valor: string | null | undefined, padrao: boolean) {
@@ -113,13 +109,14 @@ export async function GET(req: NextRequest) {
   const deveListar = q.length >= 2 || Boolean(categoria) || Boolean(grupo) || req.nextUrl.searchParams.get('listar') === '1'
 
   try {
-    const [prodResp, linhasResp, vincResp, catCfgResp, grupoCfgResp, estoqueCfgResp] = await Promise.all([
+    const [prodResp, linhasResp, vincResp, catCfgResp, grupoCfgResp, estoqueCfgResp, caixaCfgResp] = await Promise.all([
       supabaseAdmin.from('produtos').select(CAMPOS_PRODUTO).eq('ativo', true).not('unidade', 'is', null).order('nome').limit(5000),
       supabaseAdmin.from('linhas_tecnicas').select('id,nome,ativo').eq('ativo', true).order('ordem').order('nome'),
       supabaseAdmin.from('linha_produtos').select('produto_id,linha_id').limit(10000),
       supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave', 'categorias_produto_dinamicas').maybeSingle(),
       supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave', 'catalogo_grupos_dinamicos').maybeSingle(),
       supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave', 'balcao_permitir_venda_sem_estoque').maybeSingle(),
+      supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave', 'balcao_exigir_caixa_aberto').maybeSingle(),
     ])
     if (prodResp.error) throw prodResp.error
     if (linhasResp.error) throw linhasResp.error
@@ -169,27 +166,10 @@ export async function GET(req: NextRequest) {
 
     let filtrados = produtosDaCategoria
     if (grupo) {
-      filtrados = filtrados.filter(p => correspondeBuscaAtlas(
-        grupo,
-        p.grupo,
-        p.nome,
-        p.descricao,
-        ...(linhasPorProduto.get(p.id) || []).map(l => l.nome)
-      ))
+      filtrados = filtrados.filter(p => correspondeBuscaAtlas(grupo,p.grupo,p.nome,p.descricao,...(linhasPorProduto.get(p.id) || []).map(l => l.nome)))
     }
     if (q.length >= 2) {
-      filtrados = filtrados.filter(p => correspondeBuscaAtlas(
-        q,
-        p.codigo,
-        p.codigo_origem,
-        p.nome,
-        p.descricao,
-        p.categoria,
-        p.grupo,
-        p.marca,
-        p.ncm,
-        ...(linhasPorProduto.get(p.id) || []).map(l => l.nome)
-      ))
+      filtrados = filtrados.filter(p => correspondeBuscaAtlas(q,p.codigo,p.codigo_origem,p.nome,p.descricao,p.categoria,p.grupo,p.marca,p.ncm,...(linhasPorProduto.get(p.id) || []).map(l => l.nome)))
     }
     if (!deveListar) filtrados = []
     filtrados = filtrados.slice(0, 250)
@@ -213,6 +193,7 @@ export async function GET(req: NextRequest) {
     const nivelGestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
     const podeVerGestao = nivelGestao !== 'oculto'
     const vendaSemEstoqueGlobal = valorBooleano(estoqueCfgResp.data?.valor, true)
+    const exigirCaixaAberto = valorBooleano(caixaCfgResp.data?.valor, false)
 
     const lista = filtrados.map(p => {
       const linhasRede = redePorProduto.get(p.id) || []
@@ -257,6 +238,7 @@ export async function GET(req: NextRequest) {
       categorias,
       grupos,
       vendaSemEstoqueGlobal,
+      exigirCaixaAberto,
       podeVerGestao,
       localAtual:{id:local.id,nome:local.nome,codigo:local.codigo,unidadeId:local.unidade_id,unidadeNome:(local.unidades_operacionais as any)?.nome||'Unidade',unidadeCodigo:(local.unidades_operacionais as any)?.codigo||''},
     })
