@@ -1,9 +1,7 @@
 import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
-import { primeiraColunaId } from './kanban'
 import { usuarioAtual } from './auth'
 import { registrarHistorico } from './historico'
-import { executarAutomacoesColuna } from './automacoes'
 import { v4 as uuidv4 } from 'uuid'
 import { OrigemCliente, ItemBalcao } from './tipos'
 
@@ -31,7 +29,9 @@ export interface ResultadoOrcamentoBalcao {
   numero?: number | null
 }
 
-// Cria um orçamento no modo "balcao" e congela o preço unitário dentro dos itens.
+// Cria um orçamento rápido do modo Balcão e congela o preço unitário nos itens.
+// Venda/Orçamento Balcão é um fluxo próprio e NÃO deve criar card no Kanban comercial.
+// O Kanban fica reservado para orçamento sob medida/obra, criado pelo fluxo normal do Atlas.
 // Se um cliente do cadastro compartilhado foi selecionado, usa o mesmo id e não cria duplicata.
 export async function criarOrcamentoBalcao(
   dados: DadosOrcamentoBalcaoForm
@@ -39,7 +39,7 @@ export async function criarOrcamentoBalcao(
   if (!dados.clienteNome.trim()) return { ok: false, error: 'Informe o nome do cliente' }
   if (!dados.itens || dados.itens.length === 0) return { ok: false, error: 'Adicione ao menos um produto' }
 
-  const [clienteIdResolvido, colunaId, usuario] = await Promise.all([
+  const [clienteIdResolvido, usuario] = await Promise.all([
     dados.clienteId
       ? Promise.resolve(dados.clienteId)
       : obterOuCriarCliente({
@@ -55,13 +55,11 @@ export async function criarOrcamentoBalcao(
           cidade: dados.cidade,
           origem: dados.origem,
         }),
-    primeiraColunaId(),
     usuarioAtual(),
   ])
 
   const valorTotal = dados.itens.reduce((soma, it) => soma + it.preco_total, 0)
   const novoId = uuidv4()
-  const agora = new Date().toISOString()
 
   const { data: inserido, error } = await supabase
     .from('orcamentos')
@@ -80,8 +78,8 @@ export async function criarOrcamentoBalcao(
       condicoes: dados.condicoes || null,
       valor_estimado: valorTotal,
       status: 'rascunho',
-      coluna_id: colunaId,
-      coluna_atualizada_em: agora,
+      coluna_id: null,
+      coluna_atualizada_em: null,
       criado_por_nome: usuario?.nome || null,
       criado_por_id: usuario?.id || null,
     })
@@ -89,10 +87,6 @@ export async function criarOrcamentoBalcao(
     .single()
 
   if (error) return { ok: false, error: error.message }
-
-  if (colunaId) {
-    executarAutomacoesColuna(colunaId, { cliente_nome: dados.clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
-  }
 
   await registrarHistorico(novoId, usuario, 'Criou o orçamento balcão')
   return { ok: true, id: novoId, numero: inserido?.numero ?? null }
