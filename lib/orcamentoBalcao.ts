@@ -1,9 +1,8 @@
 import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
-import { primeiraColunaId } from './kanban'
+import { colunaInternaBalcaoId } from './kanban'
 import { usuarioAtual } from './auth'
 import { registrarHistorico } from './historico'
-import { executarAutomacoesColuna } from './automacoes'
 import { v4 as uuidv4 } from 'uuid'
 import { OrigemCliente, ItemBalcao } from './tipos'
 
@@ -56,7 +55,7 @@ export async function criarOrcamentoBalcao(dados: DadosOrcamentoBalcaoForm): Pro
     ? null
     : Math.max(0, Math.round(Number(dados.prazoEntregaDias) || 0))
 
-  const [clienteIdResolvido, colunaId, usuario] = await Promise.all([
+  const [clienteIdResolvido, colunaInternaId, usuario] = await Promise.all([
     dados.clienteId
       ? Promise.resolve(dados.clienteId)
       : obterOuCriarCliente({
@@ -72,12 +71,15 @@ export async function criarOrcamentoBalcao(dados: DadosOrcamentoBalcaoForm): Pro
           cidade: dados.cidade,
           origem: dados.origem,
         }),
-    primeiraColunaId(),
+    colunaInternaBalcaoId(),
     usuarioAtual(),
   ])
 
+  if (!colunaInternaId) {
+    return { ok: false, error: 'Não foi possível isolar o orçamento balcão do Kanban. Tente novamente.' }
+  }
+
   const novoId = uuidv4()
-  const agora = new Date().toISOString()
 
   const { data: inserido, error } = await supabase
     .from('orcamentos')
@@ -106,8 +108,8 @@ export async function criarOrcamentoBalcao(dados: DadosOrcamentoBalcaoForm): Pro
       prazo_entrega_dias: prazoEntregaDias,
       valor_estimado: total,
       status: 'rascunho',
-      coluna_id: colunaId,
-      coluna_atualizada_em: agora,
+      coluna_id: colunaInternaId,
+      coluna_atualizada_em: null,
       criado_por_nome: usuario?.nome || null,
       criado_por_id: usuario?.id || null,
     })
@@ -115,7 +117,9 @@ export async function criarOrcamentoBalcao(dados: DadosOrcamentoBalcaoForm): Pro
     .single()
 
   if (error) return { ok: false, error: error.message }
-  if (colunaId) executarAutomacoesColuna(colunaId, { cliente_nome: dados.clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
+
+  // Venda/Orçamento Balcão fica apenas no módulo do Balcão.
+  // Não dispara automações de coluna, setor, medição ou obra.
   await registrarHistorico(novoId, usuario, 'Criou o orçamento balcão')
   return { ok: true, id: novoId, numero: inserido?.numero ?? null, subtotal, desconto, total }
 }
