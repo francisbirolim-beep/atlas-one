@@ -29,7 +29,8 @@ Nova visão:
   `Venda → Conferir Projeto → Medição Final → Engenharia final → Materiais → Produção → Instalação`;
 - mostra Perfis, Vidros, Acessórios e Outros em paralelo;
 - exibe o status real de cada fluxo e um `Bloqueio atual`;
-- filtro por obra.
+- filtro por obra;
+- lê a tabela normal `orcamentos` sem depender de `modo_entrada`, preservando orçamentos legados com modo nulo; Balcão já está isolado em `balcao_orcamentos`.
 
 ### Fluxo oficial da venda sob medida
 
@@ -127,6 +128,8 @@ CI do commit funcional `bd4ebb084807235c22d9c5fd0934bbc4904d399e`:
 - Build Validation / Next.js: success;
 - Vercel Preview: READY;
 - rota Cliente 360 Andamento respondeu HTTP 200 no Preview.
+
+Após ajustes/documentação posteriores, validar novamente o HEAD final do PR antes do merge.
 
 ### Segurança
 
