@@ -27,8 +27,9 @@ function chave(texto: string) {
   return texto.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')
 }
 
-function bool(valor: string | null | undefined) {
-  return valor == null ? true : ['1','true','sim','yes','on'].includes(valor.trim().toLowerCase())
+function bool(valor: string | null | undefined, padrao = true) {
+  if (valor == null) return padrao
+  return ['1','true','sim','yes','on'].includes(valor.trim().toLowerCase())
 }
 
 async function exigirGestao(req: NextRequest) {
@@ -43,8 +44,9 @@ export async function GET(req: NextRequest) {
   if (!usuario) return NextResponse.json({ error:'Somente gestão pode alterar as configurações do balcão.' }, { status:403 })
   const q = (req.nextUrl.searchParams.get('q') || '').trim()
   try {
-    const [estoqueCfg, gruposCfg, categoriasCfg, produtosResp] = await Promise.all([
+    const [estoqueCfg, caixaCfg, gruposCfg, categoriasCfg, produtosResp] = await Promise.all([
       supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave','balcao_permitir_venda_sem_estoque').maybeSingle(),
+      supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave','balcao_exigir_caixa_aberto').maybeSingle(),
       supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave','catalogo_grupos_dinamicos').maybeSingle(),
       supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave','categorias_produto_dinamicas').maybeSingle(),
       q.length >= 2
@@ -53,7 +55,14 @@ export async function GET(req: NextRequest) {
     ])
     if (produtosResp.error) throw produtosResp.error
     const produtos = (produtosResp.data || []).filter((p:any) => correspondeBuscaAtlas(q,p.codigo,p.nome,p.descricao,p.categoria,p.grupo)).slice(0,40)
-    return NextResponse.json({ ok:true, permitirVendaSemEstoque:bool(estoqueCfg.data?.valor), grupos:lerLista(gruposCfg.data?.valor), categorias:lerCategorias(categoriasCfg.data?.valor), produtos })
+    return NextResponse.json({
+      ok:true,
+      permitirVendaSemEstoque:bool(estoqueCfg.data?.valor,true),
+      exigirCaixaAberto:bool(caixaCfg.data?.valor,false),
+      grupos:lerLista(gruposCfg.data?.valor),
+      categorias:lerCategorias(categoriasCfg.data?.valor),
+      produtos,
+    })
   } catch (e) {
     console.error('Erro configurações balcão',e)
     return NextResponse.json({ error:'Não foi possível carregar as configurações.' }, { status:500 })
@@ -72,6 +81,13 @@ export async function POST(req: NextRequest) {
       const { error } = await supabaseAdmin.from('configuracoes_gerais').upsert({ chave:'balcao_permitir_venda_sem_estoque', valor:String(valor), updated_at:new Date().toISOString() })
       if (error) throw error
       return NextResponse.json({ ok:true, permitir:valor })
+    }
+
+    if (acao === 'caixa-obrigatorio') {
+      const valor = Boolean(body.exigir)
+      const { error } = await supabaseAdmin.from('configuracoes_gerais').upsert({ chave:'balcao_exigir_caixa_aberto', valor:String(valor), updated_at:new Date().toISOString() })
+      if (error) throw error
+      return NextResponse.json({ ok:true, exigir:valor })
     }
 
     if (acao === 'produto-estoque') {
