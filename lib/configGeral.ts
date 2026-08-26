@@ -28,7 +28,22 @@ export type IdentidadeEmpresa = {
   corPrincipal?: string
 }
 
-type DadosEmpresaPersistidos = DadosEmpresa & IdentidadeEmpresa & {
+export type DadosEmpresaCompleta = DadosEmpresa & IdentidadeEmpresa & {
+  inscricaoMunicipal?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  uf?: string
+  whatsapp?: string
+  site?: string
+  instagram?: string
+  responsavelComercial?: string
+  slogan?: string
+}
+
+type DadosEmpresaPersistidos = DadosEmpresaCompleta & {
   configuradoManualmente?: boolean
 }
 
@@ -47,13 +62,13 @@ async function lerDadosEmpresaPersistidos(): Promise<DadosEmpresaPersistidos | n
   }
 }
 
-export async function lerDadosEmpresa(): Promise<(DadosEmpresa & IdentidadeEmpresa) | null> {
+export async function lerDadosEmpresa(): Promise<DadosEmpresaCompleta | null> {
   const dados = await lerDadosEmpresaPersistidos()
   if (!dados || dados.configuradoManualmente !== true) return null
   return dados
 }
 
-export async function salvarDadosEmpresa(dados: DadosEmpresa): Promise<boolean> {
+export async function salvarDadosEmpresa(dados: DadosEmpresaCompleta): Promise<boolean> {
   const atual = await lerDadosEmpresaPersistidos()
   const dadosPersistidos: DadosEmpresaPersistidos = {
     ...(atual || {}),
