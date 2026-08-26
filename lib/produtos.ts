@@ -13,7 +13,8 @@ export const CATEGORIAS_PRODUTO_PRINCIPAIS: CategoriaProdutoConfig[] = [
   { valor: 'produto', label: 'Produto', ordem: 10 },
   { valor: 'acessorio', label: 'Acessório', ordem: 20 },
   { valor: 'perfil', label: 'Perfil', ordem: 30 },
-  { valor: 'porta_janela_padrao', label: 'Produto pronto', ordem: 40 },
+  { valor: 'vidro', label: 'Vidro', ordem: 40 },
+  { valor: 'porta_janela_padrao', label: 'Produto pronto', ordem: 50 },
 ]
 
 // Mantido por compatibilidade com telas antigas. A listagem nova deve usar
@@ -29,6 +30,7 @@ let categoriasProdutoCache: CategoriaProdutoConfig[] = [...CATEGORIAS_PRODUTO]
 function humanizarCategoria(valor: string): string {
   if (valor === 'porta_janela_padrao') return 'Produto pronto'
   if (valor === 'pu') return 'PU'
+  if (valor === 'vidro') return 'Vidro'
   return valor
     .replace(/_/g, ' ')
     .replace(/\b\w/g, letra => letra.toUpperCase())
