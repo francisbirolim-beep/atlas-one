@@ -1,85 +1,105 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Balcão fora do Kanban + data fixa de entrada
+## TAREFA ATUAL — validar Cliente 360 + fluxo Venda → Conferir Projeto
 
-Branch: `fix/balcao-fora-kanban`
+Branch: `feat/cliente-360-obras-financeiro-v1`
+PR: #280 — draft. **Não fazer merge ainda.**
 
-Objetivo: manter Venda/Orçamento Balcão fora do Kanban de obras e registrar/exibir uma data fixa para quando cada card entra no Kanban.
+Referência detalhada: `docs/ai-handoff/CLIENTE360_FLUXO_VENDA.md`.
 
-### Implementado
+## Fluxo que deve ser preservado
 
-1. criado `balcao_orcamentos` como tabela transacional própria para o orçamento rápido do PDV, mantendo os mesmos clientes/produtos/cadastros mestres do Atlas;
-2. `lib/orcamentoBalcao.ts` passou a salvar em `balcao_orcamentos`, não em `orcamentos`;
-3. `/api/balcao/orcamentos` passou a consultar `balcao_orcamentos`;
-4. registros de balcão existentes foram migrados da fonte do Kanban para a tabela própria e removidos de `orcamentos`;
-5. criada `orcamentos.kanban_entrada_em` como data fixa de entrada no Kanban;
-6. trigger preenche `kanban_entrada_em` automaticamente para todo registro não-balcão sem alterar essa data quando o card muda de coluna;
-7. `coluna_atualizada_em` continua separada e representa a última movimentação de coluna/SLA;
-8. `/kanban` exibe `📅 Entrada: DD/MM/AAAA` dentro do card, na posição combinada abaixo da descrição da esquadria e antes dos demais dados;
-9. o campo de calendário do painel é identificado como filtro da data de entrada no Kanban;
-10. banco validado: 49 cards de Kanban, 49 com data de entrada preenchida e 0 registros de balcão na fonte `orcamentos`.
+### Venda confirmada
 
-### Migrations aplicadas e versionadas
+Cria somente:
+1. snapshot em `vendas_obras`;
+2. Financeiro / pré-lançamento em `financeiro_contas_receber`;
+3. card `Engenharia — Conferir Projeto` em `A conferir`.
 
-- `20260826135831_kanban_data_entrada_v1.sql`;
-- `20260826140437_balcao_orcamentos_separado_v1.sql`;
-- `20260826140909_kanban_data_entrada_search_path_v1.sql`.
+Não criar Medição Final, materiais, Produção ou Instalação diretamente em `Vendido`.
 
-### Validação técnica antes do merge
+### Projeto conferido
 
-- abrir PR para `main`;
-- confirmar Build Validation / TypeScript;
-- confirmar Preview Vercel `READY`;
-- revisar o diff final;
-- somente então fazer merge manual e confirmar produção `READY`.
+Ao mover o card para `Projeto conferido`:
+- criar/garantir Medição Final;
+- criar/garantir Perfis;
+- criar/garantir Acessórios;
+- criar/garantir Outros;
+- Vidros ainda não.
 
-### Validação funcional depois do build
+Perfis/Acessórios/Outros:
+`Pendente → Em compra → Comprado → Aguardando entrega → Recebido → Separado → Liberado`.
 
-Em `/kanban`:
+### Medição Final aprovada
 
-- confirmar a data visível dentro do card na posição combinada;
-- arrastar um card para outra coluna e confirmar que a data `Entrada` não muda;
-- confirmar que o histórico/SLA continua usando a movimentação da coluna separadamente;
-- usar o calendário e confirmar o filtro pelo dia de entrada;
-- conferir que cards antigos continuam aparecendo com a data preenchida pelo backfill.
+Somente aqui:
+- criar/garantir Vidros;
+- criar/atualizar MEE/Engenharia técnica pós-medição.
 
-Em `/balcao/orcamentos/novo`:
+Vidros:
+`Pendente → Em compra → Comprado → Aguardando entrega → Recebido → Separado → Liberado`.
 
-- criar um orçamento rápido de balcão;
-- confirmar que ele aparece em `/balcao/orcamentos`;
-- confirmar que ele não aparece em `/kanban`.
+## Validação manual no Preview antes do merge
 
-No fluxo sob medida:
+1. Abrir um cliente controlado em `/clientes/[id]/central`.
+2. Abrir `Andamento` e conferir agrupamento por obra.
+3. Usar um orçamento sob medida com itens estruturados e mover para `Vendido`.
+4. Na confirmação da venda, conferir o orçamento aprovado e clicar `Confirmar venda`.
+5. Confirmar:
+   - existe Financeiro;
+   - existe uma única venda em `vendas_obras`;
+   - abriu card em `Engenharia — Conferir Projeto / A conferir`;
+   - Medição Final ainda não nasceu;
+   - Perfis/Acessórios/Outros/Vidros ainda não nasceram.
+6. Mover projeto para `Em conferência` e `Aguardando ajuste`: nenhum downstream deve nascer.
+7. Mover para `Projeto conferido` e confirmar:
+   - Medição Final criada;
+   - Perfis em `Pendente`;
+   - Acessórios em `Pendente`;
+   - Outros em `Pendente`;
+   - Vidros ainda ausente.
+8. Aprovar Medição Final e confirmar:
+   - Vidros em `Pendente`;
+   - MEE/Engenharia técnica recebe a obra.
+9. Reabrir Cliente 360 → Andamento e verificar que os mesmos estados aparecem consolidados por obra.
+10. Confirmar que reprocessar os eventos não duplica venda/conta/cards.
 
-- criar/solicitar um orçamento sob medida pelo fluxo normal do Atlas;
-- confirmar que esse fluxo continua entrando no Kanban normalmente e recebe `kanban_entrada_em`.
+## Já validado automaticamente
 
-## Próximo passo depois desta validação
+Teste transacional com `ROLLBACK` passou:
+- venda 1;
+- financeiro 1;
+- projeto conferido 1;
+- medição aprovada 1;
+- perfis 1;
+- acessórios 1;
+- outros 1;
+- vidros 1 somente pós-medição;
+- MEE 1;
+- todos os cards com cliente + obra;
+- 0 registros de teste restantes.
 
-Evoluir os filtros do Kanban para intervalo de datas (`De` / `Até`) e, se necessário, permitir escolher entre **data de entrada** e **data da última movimentação**, preservando as duas informações separadas.
+Build Validation, Supabase Database Control e Preview Vercel do código funcional ficaram verdes/READY.
 
-## W.Vetro
+## Próxima definição funcional com o usuário
 
-Auditoria histórica completa encerrada. **Não executar novamente a auditoria inteira sem necessidade.**
+Depois da validação deste fluxo, detalhar os gates de:
 
-Resumo preservado:
-- 1.307 perfis;
-- 1.174 acessórios;
-- 111 tipologias referência, 109 mapeadas;
-- 119 linhas referência;
-- 1.529 perfis históricos;
-- 1.294 acessórios históricos;
-- 14 vidros referência;
-- 2.481 produtos consultados;
-- 1.287 imagens copiadas.
+- Produção: quando nasce e quais materiais precisam estar liberados;
+- Produção parcial por item/tipologia;
+- Instalação: quando o card nasce e como funciona agendamento;
+- Compras geral versus Kanbans específicos de Perfis/Vidros/Acessórios/Outros;
+- reabertura/reprocessamento após revisão da venda ou alteração de projeto;
+- controle completo de custo `Previsto → Otimizado → Comprado → Realizado` por cliente/obra/item.
 
 ## Regras invioláveis
 
-- GitHub é a fonte da verdade.
-- Branch → PR → build/preview → merge; nunca commit direto em `main`.
-- Venda Balcão e Atlas completo compartilham produtos, clientes, estoque, compras e financeiro; tabelas transacionais próprias do PDV podem existir no mesmo banco para isolar fluxos.
-- Venda/Orçamento Balcão rápido não alimenta o Kanban; orçamento sob medida/obra alimenta.
-- `kanban_entrada_em` é fixa; `coluna_atualizada_em` é movimentação/SLA.
-- Busca operacional dos principais cadastros deve seguir o padrão Atlas V1.
-- Não inventar custo, preço, margem ou unidade comercial a partir de referência W.Vetro.
-- W.Vetro é referência; regra técnica Atlas validada sempre tem prioridade.
+- GitHub é fonte da verdade.
+- Branch → PR → build/preview → merge manual; nunca commit direto em `main`.
+- Cliente 360 consolida os mesmos registros dos setores; não duplicar status.
+- Financeiro é único, filtrado/vinculado por cliente e obra.
+- Venda fechada preserva snapshot; alteração posterior exige justificativa/histórico.
+- Venda/Orçamento Balcão rápido não entra no Kanban de obras.
+- Vidro nunca é liberado antes da Medição Final aprovada.
+- MEE pós-medição não deve ser removido enquanto a conferência técnica depender de `medicao_itens`.
+- W.Vetro é referência; conhecimento Atlas validado tem prioridade.
