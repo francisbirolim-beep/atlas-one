@@ -143,8 +143,7 @@ export default function ConfirmarVendaPage() {
       return
     }
 
-    if (resultado.medicaoId) router.push(`/producao/medicao-final/${resultado.medicaoId}`)
-    else router.push('/producao/medicao-final')
+    router.push('/setor/engenharia-projeto')
   }
 
   async function importarItensDoPdf() {
@@ -236,7 +235,7 @@ export default function ConfirmarVendaPage() {
           </button>
           <div>
             <h1 className="text-lg font-bold text-brand-navy">Confirmar venda</h1>
-            <p className="text-xs text-slate-500">Nenhum processo operacional será criado antes desta confirmação.</p>
+            <p className="text-xs text-slate-500">A confirmação cria o Financeiro e envia a obra para Conferir Projeto. Os demais fluxos só nascem depois da conferência.</p>
           </div>
         </div>
       </header>
@@ -318,7 +317,7 @@ export default function ConfirmarVendaPage() {
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h2 className="font-semibold text-slate-800">3. Conferência do orçamento vendido</h2>
-              <p className="text-xs text-slate-500">Esses dados serão a base da Medição Final e dos demais setores.</p>
+              <p className="text-xs text-slate-500">Esses itens serão congelados na venda e enviados para a conferência do projeto.</p>
             </div>
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${prontoItens ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
               {prontoItens ? `${itens.length} item(ns) prontos` : itens.length > 0 ? `${itensInvalidos.length} item(ns) precisam revisão` : 'Itens ainda não estruturados'}
@@ -387,11 +386,11 @@ export default function ConfirmarVendaPage() {
 
         <section className="bg-brand-navy text-white rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} /> 4. Iniciar processo da venda</div>
-            <p className="text-xs text-white/70 mt-1">Somente agora serão criadas Medição Final e automações dos setores.</p>
+            <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} /> 4. Confirmar venda e iniciar Engenharia</div>
+            <p className="text-xs text-white/70 mt-1">Agora nascem o Financeiro e o card Conferir Projeto. Medição Final, Perfis, Acessórios e Outros só serão liberados quando o projeto for conferido; Vidros somente após a Medição Final aprovada.</p>
           </div>
           <button onClick={iniciar} disabled={!prontoCadastro || !prontoItens || iniciando} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40">
-            <Play size={16} /> {iniciando ? 'Iniciando...' : 'Iniciar processo da venda'}
+            <Play size={16} /> {iniciando ? 'Confirmando...' : 'Confirmar venda'}
           </button>
         </section>
 
