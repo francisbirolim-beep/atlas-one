@@ -145,10 +145,10 @@ export async function gerarPdfOrcamentoBalcao(
     doc.setFont('helvetica', 'bold'); doc.setFontSize(5.7); doc.setTextColor(71, 85, 105); doc.text(t.toUpperCase(), x, yy)
   }
   const campo = (label: string, conteudo: string, x: number, yy: number, w: number) => {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.7); doc.setTextColor(51, 65, 85); doc.text(`${label}:`, x, yy)
-    const dx = Math.min(28, Math.max(11, doc.getTextWidth(`${label}:`) + 1.5))
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.15); doc.setTextColor(51, 65, 85); doc.text(`${label}:`, x, yy)
+    const dx = Math.min(25, Math.max(9, doc.getTextWidth(`${label}:`) + 1.2))
     doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 23, 42)
-    doc.text(doc.splitTextToSize(conteudo || ' ', Math.max(8, w - dx)).slice(0, 1), x + dx, yy)
+    doc.text(doc.splitTextToSize(conteudo || ' ', Math.max(7, w - dx)).slice(0, 1), x + dx, yy)
   }
   const novaPagina = () => {
     doc.addPage(); y = M
@@ -158,47 +158,56 @@ export async function gerarPdfOrcamentoBalcao(
     y += 6
   }
 
-  // Cabeçalho compacto — padrão do exemplo 2.
-  const headerH = 27
+  // Cabeçalho compacto: logo à esquerda, cadastro da empresa ao centro e documento à direita.
+  const headerH = 24
   box(M, y, UTIL, headerH)
-  const logoW = 30
-  if (logo) {
-    try { doc.addImage(logo, 'JPEG', M + 2, y + 4, 25, 15, undefined, 'FAST') } catch {}
-  }
-  const empresaX = M + logoW + 1
-  const docW = 43
+  const logoAreaW = 28
+  const docW = 39
   const docX = PW - M - docW
-  const empresaW = docX - empresaX - 3
-  doc.setDrawColor(203, 213, 225); doc.line(docX - 2, y + 2, docX - 2, y + headerH - 2)
+  const empresaX = M + logoAreaW + 1
+  const empresaW = docX - empresaX - 4
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9.8); doc.setTextColor(15, 23, 42)
-  doc.text(nomeEmpresa, empresaX, y + 4.5)
-  let ey = y + 8.5
+  if (logo) {
+    try { doc.addImage(logo, 'JPEG', M + 2, y + 4.2, 23, 13.8, undefined, 'FAST') } catch {}
+  }
+
+  doc.setDrawColor(203, 213, 225)
+  doc.line(docX - 2.2, y + 2, docX - 2.2, y + headerH - 2)
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9.4); doc.setTextColor(15, 23, 42)
+  doc.text(nomeEmpresa, empresaX, y + 4.1)
+
   const endereco = [valor(empresa.logradouro || empresa.endereco), valor(empresa.numero), valor(empresa.complemento), valor(empresa.bairro)].filter(Boolean).join(', ')
   const cidadeUf = [valor(empresa.cidade || empresa.cidadeUf), valor(empresa.uf)].filter(Boolean).join(' - ')
   const telefone = [valor(empresa.tel), valor(empresa.tel2)].filter(Boolean).join(' / ')
-  campo('Razão social', valor(empresa.nome), empresaX, ey, empresaW); ey += 3.1
-  campo('CNPJ', valor(empresa.cnpj), empresaX, ey, empresaW / 2)
-  campo('IE', valor(empresa.ie), empresaX + empresaW / 2, ey, empresaW / 2); ey += 3.1
-  campo('Endereço', endereco, empresaX, ey, empresaW); ey += 3.1
-  campo('Cidade/UF', cidadeUf, empresaX, ey, empresaW / 1.65)
-  campo('CEP', valor(empresa.cep), empresaX + empresaW / 1.65, ey, empresaW / 2.6); ey += 3.1
-  campo('Telefone', telefone, empresaX, ey, empresaW / 1.55)
-  campo('WhatsApp', valor(empresa.whatsapp), empresaX + empresaW / 1.55, ey, empresaW / 2.8); ey += 3.1
-  campo('E-mail', valor(empresa.email), empresaX, ey, empresaW / 1.55)
-  campo('Site', valor(empresa.site), empresaX + empresaW / 1.55, ey, empresaW / 2.8)
+  const colA = empresaW * 0.61
+  const colB = empresaW - colA - 2
+  const bx = empresaX + colA + 2
+  let ey = y + 7.2
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(5.7); doc.setTextColor(71, 85, 105)
-  doc.text(titulo.toUpperCase(), docX + docW, y + 4.5, { align: 'right' })
-  doc.setFontSize(14); doc.setTextColor(15, 23, 42)
-  doc.text(dados.numero ? `Nº ${dados.numero}` : 'NOVO', docX + docW, y + 10, { align: 'right' })
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(71, 85, 105)
-  doc.text(`Emissão: ${dados.emissao}`, docX + docW, y + 14.5, { align: 'right' })
-  doc.text(`Vendedor: ${valor(dados.vendedorNome) || valor(empresa.responsavelComercial)}`, docX + docW, y + 18, { align: 'right' })
-  doc.text(`Validade: ${validade} dias`, docX + docW, y + 21.5, { align: 'right' })
-  y += headerH + 2.5
+  campo('Razão social', valor(empresa.nome), empresaX, ey, empresaW); ey += 2.8
+  campo('CNPJ', valor(empresa.cnpj), empresaX, ey, colA)
+  campo('IE', valor(empresa.ie), bx, ey, colB); ey += 2.8
+  campo('Endereço', endereco, empresaX, ey, empresaW); ey += 2.8
+  campo('Cidade/UF', cidadeUf, empresaX, ey, colA)
+  campo('CEP', valor(empresa.cep), bx, ey, colB); ey += 2.8
+  campo('Telefone', telefone, empresaX, ey, colA)
+  campo('WhatsApp', valor(empresa.whatsapp), bx, ey, colB); ey += 2.8
+  campo('E-mail', valor(empresa.email), empresaX, ey, colA)
+  campo('Site', valor(empresa.site), bx, ey, colB)
 
-  doc.setDrawColor(...cor); doc.setLineWidth(0.6); doc.line(M, y, PW - M, y); y += 2.5
+  const docRight = PW - M - 2
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(5.4); doc.setTextColor(71, 85, 105)
+  doc.text(titulo.toUpperCase(), docRight, y + 4.2, { align: 'right' })
+  doc.setFontSize(13.5); doc.setTextColor(15, 23, 42)
+  doc.text(dados.numero ? `Nº ${dados.numero}` : 'NOVO', docRight, y + 9, { align: 'right' })
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.4); doc.setTextColor(71, 85, 105)
+  doc.text(`Emissão: ${dados.emissao}`, docRight, y + 13, { align: 'right' })
+  doc.text(`Vendedor: ${valor(dados.vendedorNome) || valor(empresa.responsavelComercial)}`, docRight, y + 16.2, { align: 'right' })
+  doc.text(`Validade: ${validade} dias`, docRight, y + 19.4, { align: 'right' })
+
+  y += headerH + 1.6
+  doc.setDrawColor(...cor); doc.setLineWidth(0.55); doc.line(M, y, PW - M, y); y += 2
 
   // Cliente / faturamento.
   const clienteH = 16
