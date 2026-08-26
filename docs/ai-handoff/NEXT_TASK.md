@@ -1,44 +1,62 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar filtros do catálogo do Orçamento Balcão
+## TAREFA ATUAL — validar Balcão fora do Kanban + data fixa de entrada
 
-Branch: `fix/balcao-filtros-catalogo-v2`
+Branch: `fix/balcao-fora-kanban`
 
-Objetivo: garantir que o catálogo de `/balcao/orcamentos/novo` mantenha a navegação visual por categoria e por Linha, incluindo a nova categoria comercial **Vidro**.
+Objetivo: manter Venda/Orçamento Balcão fora do Kanban de obras e registrar/exibir uma data fixa para quando cada card entra no Kanban.
 
 ### Implementado
 
-1. `Vidro` adicionado a `CATEGORIAS_PRODUTO_PRINCIPAIS`;
-2. ordem esperada da faixa: `Todas | Produto | Acessório | Perfil | Vidro | Produto pronto | PU | Outro`;
-3. segundo nível de Linha preservado pelo vínculo `linha_produtos`;
-4. base confirmada: 1.174 acessórios em 36 linhas e 1.307 perfis em 53 linhas;
-5. busca textual continua combinável com Categoria + Linha;
-6. nenhuma referência W.Vetro de vidro foi convertida automaticamente em produto comercial;
-7. nenhuma migration e nenhuma alteração de preço/custo/estoque/margem/unidade.
+1. criado `balcao_orcamentos` como tabela transacional própria para o orçamento rápido do PDV, mantendo os mesmos clientes/produtos/cadastros mestres do Atlas;
+2. `lib/orcamentoBalcao.ts` passou a salvar em `balcao_orcamentos`, não em `orcamentos`;
+3. `/api/balcao/orcamentos` passou a consultar `balcao_orcamentos`;
+4. registros de balcão existentes foram migrados da fonte do Kanban para a tabela própria e removidos de `orcamentos`;
+5. criada `orcamentos.kanban_entrada_em` como data fixa de entrada no Kanban;
+6. trigger preenche `kanban_entrada_em` automaticamente para todo registro não-balcão sem alterar essa data quando o card muda de coluna;
+7. `coluna_atualizada_em` continua separada e representa a última movimentação de coluna/SLA;
+8. `/kanban` exibe `📅 Entrada: DD/MM/AAAA` dentro do card, na posição combinada abaixo da descrição da esquadria e antes dos demais dados;
+9. o campo de calendário do painel é identificado como filtro da data de entrada no Kanban;
+10. banco validado: 49 cards de Kanban, 49 com data de entrada preenchida e 0 registros de balcão na fonte `orcamentos`.
+
+### Migrations aplicadas e versionadas
+
+- `20260826135831_kanban_data_entrada_v1.sql`;
+- `20260826140437_balcao_orcamentos_separado_v1.sql`;
+- `20260826140909_kanban_data_entrada_search_path_v1.sql`.
 
 ### Validação técnica antes do merge
 
-- confirmar preview Vercel `READY` no HEAD final;
 - abrir PR para `main`;
-- confirmar Build Validation do GitHub Actions;
-- revisar diff final;
-- somente então fazer merge e confirmar produção `READY`.
+- confirmar Build Validation / TypeScript;
+- confirmar Preview Vercel `READY`;
+- revisar o diff final;
+- somente então fazer merge manual e confirmar produção `READY`.
 
-### Validação funcional depois do merge
+### Validação funcional depois do build
+
+Em `/kanban`:
+
+- confirmar a data visível dentro do card na posição combinada;
+- arrastar um card para outra coluna e confirmar que a data `Entrada` não muda;
+- confirmar que o histórico/SLA continua usando a movimentação da coluna separadamente;
+- usar o calendário e confirmar o filtro pelo dia de entrada;
+- conferir que cards antigos continuam aparecendo com a data preenchida pelo backfill.
 
 Em `/balcao/orcamentos/novo`:
 
-- confirmar que os botões de categoria estão visíveis;
-- confirmar `Vidro` entre `Perfil` e `Produto pronto`;
-- clicar `Acessório` e confirmar que a faixa de Linhas aparece e filtra os acessórios;
-- clicar `Perfil` e confirmar que a faixa de Linhas aparece e filtra os perfis;
-- escolher uma Linha e depois pesquisar por código/nome/descrição;
-- voltar para `Todas` e confirmar que o filtro de Linha é limpo;
-- clicar em `Vidro`: enquanto não houver vidro comercial cadastrado, resultado vazio é esperado.
+- criar um orçamento rápido de balcão;
+- confirmar que ele aparece em `/balcao/orcamentos`;
+- confirmar que ele não aparece em `/kanban`.
 
-## Próximo passo depois da validação
+No fluxo sob medida:
 
-Definir o cadastro comercial de Vidros separado da referência técnica W.Vetro, incluindo campos mínimos de tipo, cor, espessura/composição, unidade operacional, custo e preço, antes de permitir venda/estoque real de vidro no balcão.
+- criar/solicitar um orçamento sob medida pelo fluxo normal do Atlas;
+- confirmar que esse fluxo continua entrando no Kanban normalmente e recebe `kanban_entrada_em`.
+
+## Próximo passo depois desta validação
+
+Evoluir os filtros do Kanban para intervalo de datas (`De` / `Até`) e, se necessário, permitir escolher entre **data de entrada** e **data da última movimentação**, preservando as duas informações separadas.
 
 ## W.Vetro
 
@@ -59,7 +77,9 @@ Resumo preservado:
 
 - GitHub é a fonte da verdade.
 - Branch → PR → build/preview → merge; nunca commit direto em `main`.
-- Venda Balcão e Atlas completo compartilham produtos, clientes, estoque, compras e financeiro.
+- Venda Balcão e Atlas completo compartilham produtos, clientes, estoque, compras e financeiro; tabelas transacionais próprias do PDV podem existir no mesmo banco para isolar fluxos.
+- Venda/Orçamento Balcão rápido não alimenta o Kanban; orçamento sob medida/obra alimenta.
+- `kanban_entrada_em` é fixa; `coluna_atualizada_em` é movimentação/SLA.
 - Busca operacional dos principais cadastros deve seguir o padrão Atlas V1.
 - Não inventar custo, preço, margem ou unidade comercial a partir de referência W.Vetro.
 - W.Vetro é referência; regra técnica Atlas validada sempre tem prioridade.

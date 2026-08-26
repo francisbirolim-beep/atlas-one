@@ -2,6 +2,37 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
+## 2026-08-26 — Balcão fora do Kanban + data fixa de entrada
+
+### Isolamento operacional do balcão
+- confirmada a causa do card indevido: `lib/orcamentoBalcao.ts` gravava o orçamento rápido na tabela geral `orcamentos`, que alimenta o Kanban;
+- apenas remover `coluna_id` não resolveria, porque o Kanban legado trata orçamento sem coluna como pertencente à primeira coluna;
+- criada a tabela transacional `balcao_orcamentos` no mesmo Supabase do Atlas, mantendo `clientes`, produtos, preços, estoque, compras e financeiro compartilhados;
+- `lib/orcamentoBalcao.ts` passou a salvar orçamento rápido de balcão em `balcao_orcamentos`;
+- `/api/balcao/orcamentos` passou a consultar a tabela própria;
+- registros históricos com `modo_entrada='balcao'` foram migrados para a tabela própria e removidos de `orcamentos`;
+- regra consolidada: Venda/Orçamento Balcão rápido não alimenta Kanban; orçamento sob medida/obra continua usando o fluxo comercial normal.
+
+### Data de entrada no Kanban
+- adicionada `orcamentos.kanban_entrada_em timestamptz`;
+- feito backfill dos cards existentes usando a melhor data histórica disponível (`coluna_atualizada_em`/`created_at`);
+- criado trigger para preencher automaticamente a data de entrada em novos cards não-balcão;
+- a data é imutável durante movimentações: `kanban_entrada_em` representa entrada no painel e `coluna_atualizada_em` continua representando movimentação/SLA;
+- `/kanban` exibe `📅 Entrada: DD/MM/AAAA` dentro do card, abaixo da descrição da esquadria e antes de criador/valor, conforme validação visual solicitada;
+- o campo de calendário foi identificado como filtro da data de entrada;
+- wrapper do Kanban mantém compatibilidade com as melhorias existentes de W.Vetro/PDF e atualiza a data após mudanças visuais dos cards.
+
+### Banco e segurança
+- migrations aplicadas e versionadas:
+  - `20260826135831_kanban_data_entrada_v1.sql`;
+  - `20260826140437_balcao_orcamentos_separado_v1.sql`;
+  - `20260826140909_kanban_data_entrada_search_path_v1.sql`;
+- `balcao_orcamentos` recebeu RLS/policies e grants compatíveis com o padrão atual do cliente Atlas;
+- `definir_kanban_entrada_em()` recebeu `search_path=public` após advisor apontar o warning;
+- validação final do banco: **49 cards do Kanban, 49 com data de entrada e 0 registros de balcão em `orcamentos`**.
+
+---
+
 ## 2026-08-25 — Filtros do catálogo do Orçamento Balcão
 
 - conferida a rota `/balcao/orcamentos/novo`, que reutiliza `app/orcamento/balcao/novo/page.tsx`;
