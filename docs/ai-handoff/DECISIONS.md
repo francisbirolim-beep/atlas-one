@@ -1,6 +1,23 @@
 # DECISIONS.md — Atlas One
 
-Decisoes tecnicas ja adotadas. Nao reverter/alterar sem necessidade real e sem entender o motivo abaixo.
+Decisões técnicas já adotadas. Não reverter/alterar sem necessidade real e sem entender o motivo abaixo.
+
+## Cliente 360 e fluxo operacional da venda — 2026-08-26
+
+O Cliente 360 consolida relacionamento, obras, financeiro, andamento e histórico sem criar uma segunda fonte de estado. O status operacional mostrado no cliente deve ser derivado dos cards reais dos setores por `cliente_id` e `obra_id`.
+
+Fluxo oficial da venda sob medida:
+- **Venda confirmada** cria apenas snapshot da venda, Financeiro e `Engenharia — Conferir Projeto`;
+- `Conferir Projeto` é o portão técnico pré-medição para revisar tipologia, montagem, perfis, acessórios e demais definições;
+- **Projeto conferido** cria Medição Final + Perfis + Acessórios + Outros;
+- **Vidros só nascem depois da Medição Final aprovada**;
+- a Medição Final aprovada também mantém o MEE/Engenharia técnica pós-medição, que trabalha com as peças/medidas finais;
+- não criar Produção ou Instalação diretamente em `Vendido`; seus gates serão definidos separadamente;
+- automações do fluxo devem ser idempotentes, sem duplicar venda, conta ou cards.
+
+A venda fechada deve preservar snapshot (`vendas_obras`). Alterações posteriores relevantes não sobrescrevem silenciosamente o original: devem evoluir por revisão/ajuste com justificativa e antes/depois.
+
+Detalhamento: `docs/ai-handoff/CLIENTE360_FLUXO_VENDA.md`.
 
 ## Venda Balcão é um modo do Atlas, não um sistema separado
 
@@ -18,87 +35,73 @@ Regras permanentes:
 Motivo: a Esquadrifácio usa simultaneamente o ERP completo e vendas de balcão. Separar as bases criaria divergência de estoque, preço, cliente, compra e financeiro.
 
 ## Workflow de deploy
-Nunca commitar direto em main. Sempre: branch nova -> PR -> aguardar build da Vercel no PR (preview) -> merge manual. Motivo: evitar quebrar producao com erro de TypeScript so descoberto no deploy.
+Nunca commitar direto em main. Sempre: branch nova -> PR -> aguardar build da Vercel no PR (preview) -> merge manual. Motivo: evitar quebrar produção com erro de TypeScript só descoberto no deploy.
 
-## TipoEsquadria: union fixo -> string dinamica
-TipoEsquadria era um union type fixo ('porta_correr' | 'porta_pivotante' | ... | 'outro'). Foi convertido para "export type TipoEsquadria = string" (lib/tipos.ts) para permitir tipologias criadas pelo usuario, SEM reescrever todas as comparacoes/atribuicoes existentes com os valores historicos abaixo. Os valores historicos ficaram documentados em comentario no proprio arquivo. Nao voltar a um union fixo — isso quebraria a feature de tipologias dinamicas (PR #28).
+## TipoEsquadria: union fixo -> string dinâmica
+TipoEsquadria era um union type fixo ('porta_correr' | 'porta_pivotante' | ... | 'outro'). Foi convertido para `export type TipoEsquadria = string` (`lib/tipos.ts`) para permitir tipologias criadas pelo usuário, sem reescrever comparações/atribuições existentes. Não voltar a union fixo.
 
 ## Tabela tipologias como fonte da verdade
-A lista de tipos de esquadria (antes hardcoded em ~5 arquivos diferentes) agora vive na tabela tipologias (chave, label, categoria, ordem), lida via lib/tipologias.ts (listarTipologias, criarTipologia). Cada tela que precisa da lista busca dinamicamente — nao reintroduzir arrays hardcoded de tipos nas telas.
+A lista de tipos de esquadria vive na tabela `tipologias` (`chave`, `label`, `categoria`, `ordem`) e é lida por `lib/tipologias.ts`. Não reintroduzir arrays hardcoded de tipos nas telas.
 
-## Campo categoria (porta/janela) em tipologias — deliberadamente NAO conectado ao calculo
-Ao criar uma tipologia nova, o usuario escolhe categoria: 'porta' | 'janela'. Essa categoria e salva no banco mas lib/calculos.ts (formula de area/perimetro do orcamento) NAO le esse campo ainda — decisao deliberada por ser codigo sensivel de precificacao, para evitar quebrar calculo de orcamentos existentes sem validacao cuidadosa. Ver CURRENT_STATE.md e NEXT_TASK.md. Antes de conectar isso, entender bem lib/calculos.ts e testar com casos reais de porta vs janela.
+## Campo categoria em tipologias ainda não altera cálculo automaticamente
+A categoria `porta | janela` é salva, mas não deve ser conectada incidentalmente ao cálculo sensível em `lib/calculos.ts` sem validação técnica e casos reais.
 
-## Criacao de Medicao Final e manual, nao automatica (ate o momento)
-Apesar de existir a flag kanban_colunas.gera_medicao_final e uma tela dedicada de Medicao Final, a criacao do registro em medicoes_finais e feita sob demanda (botao "+ Nova" em /producao/medicao-final, que lista orcamentos "sem medicao" via listarOrcamentosSemMedicao). NAO ha trigger automatico hoje ao mover card no Kanban — isso e uma tarefa em aberto, ver NEXT_TASK.md. Se for implementado, deve ser fire-and-forget (nao bloquear a UI de mover o card) e idempotente (nao duplicar).
+## Medição Final no fluxo de venda
 
-## Padrao "cache de modulo + estado do componente" para listas dinamicas
-Quando uma pagina tem uma funcao helper fora do componente React (ex.: labelTipo(valor)) que precisa ler dados buscados de forma assincrona (ex.: tipologias do banco), o padrao usado e: variavel de modulo (let tiposCache: Tipologia[] = []) atualizada de forma sincrona no mesmo momento que o setState. Isso evita ter que mover a funcao helper para dentro do componente. Usar esse mesmo padrao em casos semelhantes, em vez de reescrever a estrutura da pagina.
-
-## RLS aberto (using true / with check true)
-As tabelas tem RLS habilitado mas com policy permissiva total. Isso foi uma decisao pragmatica do estagio atual do projeto (app interno, poucos usuarios). Nao assumir que RLS protege dados — se for necessario reforcar seguranca, isso e uma mudanca deliberada a ser discutida, nao um "conserto" incidental.
-
-## Migrations aplicadas direto no banco (sem arquivo .sql commitado)
-A partir da v16, varias migrations foram aplicadas diretamente via ferramenta MCP do Supabase (apply_migration) sem gerar um arquivo supabase-migration-v*.sql correspondente no repo. Isso e uma divida tecnica conhecida (ver CURRENT_STATE.md), nao uma recomendacao — idealmente, migrations futuras deveriam voltar a ser commitadas como arquivo .sql no repo para manter o historico completo e permitir recriar o schema do zero se necessario.
-
-## Plano de Corte: produto + receita mestre + variaveis + snapshot
-O Plano de Corte nao pode ser tratado como uma formula unica por tipologia generica. O produto cadastrado e o ponto de entrada operacional (ex.: Porta de Correr 03 Folhas Moveis | Suprema), e a receita deve considerar as variaveis que alteram geometria e componentes: linha, folhas, montagem, trilho, contramarco, arremate, fechadura, puxador, mao-de-amigo/reforcos, travessas e roldanas.
-
-Regras permanentes:
-- pesquisar/selecionar o produto cadastrado primeiro;
-- receita mestre define componentes, variantes e formulas validadas;
-- variaveis escolhem a variante correta da receita;
-- o plano de producao e um snapshot editavel da receita naquele momento;
-- alterar perfil, acessorio, folga ou corte no snapshot nao altera silenciosamente a receita mestre;
-- somente Master ou usuario com permissao de edicao em Producao pode alterar o plano; consulta apenas visualiza;
-- formula sem evidencia tecnica suficiente deve permanecer pendente, nunca gerar medida inventada.
-
-Motivo: relatorios reais do W.Vetro da Porta de Correr 03 Folhas Suprema mostraram que duas configuracoes com o mesmo vao podem gerar larguras de folha diferentes quando muda o tipo de mao-de-amigo/reforco. Portanto, uma receita apenas por `tipologia_id` e insuficiente como modelo final. A evolucao do schema deve permitir receitas/variantes orientadas ao produto e suas variaveis, preservando fallback generico quando fizer sentido.
-
-## Identidade tecnica de Produto: dados_origem como jsonb na propria tabela
-Para preservar proveniencia sem criar uma camada historica complexa agora, foi escolhido um campo `produtos.dados_origem jsonb` em vez de uma tabela `produto_origens` separada.
-
-A reconciliacao de acessorios em 2026-08-16/17 corrigiu uma premissa importante: **nao e permitido rotular automaticamente o snapshot dos produtos preexistentes como "o que veio exatamente do W.Vetro"**. Os 392 acessorios atuais estavam todos com `unidade = UN`, mas a fonte completa mostrou 93 correspondencias com unidade MT/PR/TB/BR/PT/PC; alem disso, 3 codigos atuais nao aparecem na fonte completa.
+A decisão antiga de manter criação exclusivamente manual foi substituída pelo fluxo validado em 2026-08-26.
 
 Regra atual:
-- importacao externa nova/reconciliada: `dados_origem` deve guardar os valores crus reais da fonte;
-- produto tecnico preexistente ainda nao reconciliado: pode guardar snapshot do estado legado do Atlas, mas deve identificar explicitamente `snapshot_tipo = atlas_legacy_pre_reconciliacao`;
-- nunca fingir que um valor legado/default/placeholder e dado cru W.Vetro;
-- se no futuro for necessario manter multiplas versoes/importacoes por produto, evoluir para tabela dedicada.
+- entrar em `Vendido`/confirmar venda **não cria** Medição Final;
+- mover `Engenharia — Conferir Projeto` para **Projeto conferido** cria/garante a Medição Final de forma idempotente;
+- a tela de Medição Final continua permitindo gestão operacional própria;
+- aprovação da Medição Final é o gatilho para Vidros e para a Engenharia/MEE pós-medição.
 
-## Identidade tecnica de Produto: origem legado ate confirmacao
-O padrao visual `CODIGO - DESCRICAO` nao prova a origem externa do registro. A reconciliacao encontrou `TELA-1000-GALV`, `TELA-132` e `TELA-254` no Atlas sem correspondencia na base completa de acessorios W.Vetro.
+Não reintroduzir criação de Medição Final diretamente ao entrar em `Vendido`.
 
-Portanto:
-- `codigo` pode ser inferido do nome legado quando o formato for inequívoco;
-- `codigo_origem` pode preservar o codigo legado conhecido;
-- produtos tecnicos preexistentes ficam com `origem = legado` ate a origem externa ser confirmada;
-- somente uma correspondencia/source real permite mudar para `origem = wvetro`;
-- `id_externo_wvetro` so recebe uma chave externa real, nunca o codigo tecnico usado como substituto.
+## Padrão "cache de módulo + estado do componente" para listas dinâmicas
+Quando uma página tem helper fora do componente React que precisa ler dados buscados de forma assíncrona, o padrão pode usar variável de módulo atualizada junto do estado, preservando comportamento existente.
+
+## RLS aberto (`using true / with check true`)
+As tabelas operacionais usam atualmente RLS permissiva para usuários autenticados em vários pontos. É decisão pragmática do estágio atual do app interno. Não assumir que isso representa isolamento forte por usuário; hardening deve ser mudança deliberada em PR separado.
+
+## Migrations devem ser versionadas no repositório
+Há dívida técnica histórica de migrations antigas aplicadas direto no banco. Para mudanças novas, preferir sempre `apply_migration` + arquivo correspondente em `supabase/migrations/` no mesmo PR.
+
+## Plano de Corte: produto + receita mestre + variáveis + snapshot
+O Plano de Corte não pode ser tratado como fórmula única por tipologia genérica. O produto cadastrado é o ponto de entrada operacional e a receita considera variáveis que alteram geometria/componentes.
+
+Regras permanentes:
+- selecionar produto cadastrado primeiro;
+- receita mestre define componentes, variantes e fórmulas validadas;
+- variáveis escolhem a variante correta;
+- plano de produção é snapshot editável da receita naquele momento;
+- alterar snapshot não altera silenciosamente receita mestre;
+- somente usuário autorizado altera plano;
+- fórmula sem evidência suficiente permanece pendente, nunca inventada.
+
+## Identidade técnica de Produto: `dados_origem` como jsonb
+`produtos.dados_origem` preserva proveniência sem tabela histórica complexa nesta fase. Nunca rotular valor legado/default como dado cru W.Vetro.
+
+Regras:
+- importação externa nova/reconciliada guarda valores crus reais;
+- legado não reconciliado deve identificar explicitamente que é snapshot Atlas legado;
+- não fingir proveniência W.Vetro;
+- evoluir para tabela dedicada se múltiplas versões por produto forem necessárias.
+
+## Identidade técnica de Produto: origem legado até confirmação
+Formato `CÓDIGO - DESCRIÇÃO` não prova origem externa. `origem = wvetro` só pode ser usado com correspondência real de fonte. `id_externo_wvetro` recebe chave externa real, nunca substituto inventado.
 
 ## Unidade operacional x unidade de origem
-`produtos.unidade` e um campo operacional do Atlas. A Engenharia copia `produto.unidade` para a unidade do componente quando o usuario seleciona um produto numa receita; por isso uma alteracao em lote pode se propagar para receitas e Plano de Corte.
+`produtos.unidade` é unidade operacional/canônica. `unidade_origem` e `qtde_embalagem_origem` preservam proveniência e não sobrescrevem automaticamente a unidade operacional.
 
-A fonte `ExportWWAcessorios.xlsx` possui `UN` e tambem `Qtde Emb.`. Entre os 93 divergentes de unidade, ha exemplos com `PT` e Qtde Emb. 121/89, `PC` e Qtde Emb. 8, e `MT` com Qtde Emb. 50/1. A semantica exata de embalagem/compra/consumo nao deve ser inventada.
+## Identidade técnica de Produto: código não substitui nome
+`produtos.codigo`/`codigo_origem` complementam, mas `nome` continua fonte visual usada em várias telas. Não remover código do nome legado sem refatorar todas as dependências.
 
-Decisao:
-- `produtos.unidade` permanece unidade operacional/canonica do Atlas ate validacao;
-- `produtos.unidade_origem` guarda exatamente a unidade da fonte externa;
-- `produtos.qtde_embalagem_origem` guarda exatamente `Qtde Emb.`;
-- esses campos de origem nao sobrescrevem automaticamente `produtos.unidade`;
-- se Compras/Estoque exigirem unidade de compra, unidade de estoque e fator de conversao, esses conceitos devem ser modelados explicitamente depois de validacao operacional.
+## Identidade técnica de Produto: unique index em código só com auditoria
+A unicidade case-insensitive de código foi criada depois de auditoria de duplicidades. Futuras colisões devem ser revisadas como dado, não contornadas silenciosamente.
 
-## Identidade tecnica de Produto: codigo nao substitui nome
-`produtos.codigo`/`codigo_origem` foram adicionados como colunas novas. `nome` continua sendo a fonte visual usada em todo o app (selects de Engenharia/Plano de Corte, cards de Cadastro). Nao remover o codigo de dentro de `nome` -- isso quebraria a exibicao em varias telas que hoje dependem apenas de `produto.nome`.
+## NCM: nunca inferir "válido" automaticamente
+NCM só é marcado inválido quando inequivocamente placeholder. O fato de ter oito dígitos não prova validade fiscal. Peso fora de faixa plausível é sinalizado, não apagado.
 
-## Identidade tecnica de Produto: unique index em codigo so depois de auditar
-Antes de criar `uq_produtos_codigo_upper`, foi rodada uma auditoria completa confirmando 0 duplicidade de `codigo` (case-insensitive) nos 1.700 produtos existentes, inclusive sem colisao entre categorias diferentes (perfil vs acessorio). Se uma futura importacao (ex.: `ExportWWAcessorios`) revelar colisao, tratar como dado a revisar antes de forcar o insert -- nao relaxar o unique index sem entender a causa.
-
-## NCM: nunca inferir "valido" automaticamente
-`ncm_status` so e marcado `invalido` quando o valor e inequivocamente placeholder (`0`, vazio, `12345678`, `12345667`). Nunca e marcado `valido` automaticamente so por ter 8 digitos numericos -- isso nao prova correcao fiscal. Todo NCM que nao e claramente placeholder fica `pendente` ate revisao humana. Mesma logica se aplica a peso de perfil fora de faixa plausivel (> 50 kg): o valor nunca e alterado ou zerado, so sinalizado via `observacao_validacao`.
-
-## PRODUTOS — UNIDADE OPERACIONAL PENDENTE — 2026-08-17
-
-`produtos.unidade = NULL` significa unidade operacional ainda não definida. Não significa `UN` e não autoriza copiar `unidade_origem`.
-
-Produtos sem unidade operacional não devem participar de fluxos técnicos/comerciais que exijam unidade. `unidade_origem` e `qtde_embalagem_origem` permanecem dados de proveniência; conversão só pode ser criada após validação operacional.
+## Produtos — unidade operacional pendente
+`produtos.unidade = NULL` significa unidade operacional ainda não definida. Não significa `UN` e não autoriza copiar `unidade_origem`. Produtos sem unidade operacional validada não devem entrar em fluxos que exijam unidade definida.
