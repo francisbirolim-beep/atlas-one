@@ -106,7 +106,7 @@ jobs:
           echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
           echo "Session Pooler IPv4 configurado."
 
-      - name: TEMP reconcile remote migrations into branch
+      - name: TEMP reconcile remote migrations and Kanban date filter
         if: ${{ github.event_name == 'pull_request' }}
         shell: bash
         run: |
@@ -128,6 +128,31 @@ jobs:
           recover 20260826014745 20260826014745_orcamento_balcao_local_obra_v1.sql
           recover 20260826040819 20260826040819_balcao_venda_sem_caixa_configuravel_v1.sql
           recover 20260826134514 20260826134514_isolar_balcao_do_kanban_v1.sql
+
+          python - <<'PY'
+          from pathlib import Path
+
+          kanban = Path('components/system/KanbanPageFixed.tsx')
+          text = kanban.read_text()
+          old = 'const d = new Date(c.created_at)'
+          new = 'const d = new Date(c.kanban_entrada_em || c.created_at)'
+          if old in text:
+              text = text.replace(old, new, 1)
+              kanban.write_text(text)
+          elif new not in text:
+              raise SystemExit('Linha do filtro de data do Kanban não encontrada')
+
+          tipos = Path('lib/tipos.ts')
+          text = tipos.read_text()
+          marker = '      coluna_atualizada_em?: string | null\n'
+          addition = marker + '      kanban_entrada_em?: string | null\n'
+          if '      kanban_entrada_em?: string | null\n' not in text:
+              if marker not in text:
+                  raise SystemExit('Ponto para kanban_entrada_em não encontrado em lib/tipos.ts')
+              text = text.replace(marker, addition, 1)
+              tipos.write_text(text)
+          PY
+
           git diff --check
           git config user.name "atlas-migration-reconcile"
           git config user.email "actions@users.noreply.github.com"
@@ -135,9 +160,10 @@ jobs:
                   supabase/migrations/20260826013513_orcamento_balcao_condicoes_comerciais_v1.sql \
                   supabase/migrations/20260826014745_orcamento_balcao_local_obra_v1.sql \
                   supabase/migrations/20260826040819_balcao_venda_sem_caixa_configuravel_v1.sql \
-                  supabase/migrations/20260826134514_isolar_balcao_do_kanban_v1.sql
+                  supabase/migrations/20260826134514_isolar_balcao_do_kanban_v1.sql \
+                  components/system/KanbanPageFixed.tsx lib/tipos.ts
           if ! git diff --cached --quiet; then
-            git commit -m "db: recuperar migrations aplicadas no Supabase"
+            git commit -m "fix: alinhar migrations e filtro de data do Kanban"
             git push origin HEAD:${{ github.head_ref }}
           fi
 
