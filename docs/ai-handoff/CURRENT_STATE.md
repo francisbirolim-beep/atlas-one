@@ -2,6 +2,44 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — BALCÃO FORA DO KANBAN + DATA DE ENTRADA — 2026-08-26
+
+Branch: `fix/balcao-fora-kanban`
+
+### Regra operacional consolidada
+
+- **Venda Balcão e Orçamento Balcão rápido não entram no Kanban de orçamentos/obras**;
+- o Kanban fica reservado para orçamento sob medida/obra e demais fluxos operacionais que realmente precisam percorrer etapas;
+- balcão continua compartilhando clientes, produtos, preços, estoque, compras e financeiro com o mesmo Atlas/Supabase, sem duplicar os cadastros mestres;
+- os orçamentos rápidos de balcão agora são persistidos em `balcao_orcamentos`, tabela transacional própria, e não em `orcamentos`, que é a fonte do Kanban.
+
+### Data fixa de entrada no Kanban
+
+- criada `orcamentos.kanban_entrada_em`;
+- trigger `trg_definir_kanban_entrada_em` preenche a data automaticamente para registros não-balcão;
+- a data não muda ao arrastar o card entre colunas; `coluna_atualizada_em` continua registrando a movimentação/SLA separadamente;
+- os cards exibem `📅 Entrada: DD/MM/AAAA` entre a descrição da esquadria e os demais dados do card;
+- o campo de calendário do Kanban é identificado como filtro da **data de entrada no Kanban**;
+- backfill validado no banco: 49 cards de Kanban e 49 com `kanban_entrada_em` preenchido;
+- validação do isolamento: 0 registros `modo_entrada='balcao'` permanecem em `orcamentos`.
+
+### Banco / migrations
+
+- `20260826135831_kanban_data_entrada_v1.sql`;
+- `20260826140437_balcao_orcamentos_separado_v1.sql`;
+- `20260826140909_kanban_data_entrada_search_path_v1.sql`;
+- `balcao_orcamentos` possui RLS e policies compatíveis com o padrão operacional atual do Atlas;
+- advisor de segurança não apontou problema novo da tabela; o warning de `search_path` da função nova foi corrigido.
+
+### Validação pendente antes do merge
+
+- Build Validation / TypeScript no PR;
+- Preview Vercel `READY`;
+- abrir `/kanban` e confirmar visualmente a data na posição combinada;
+- mover um card de coluna e confirmar que `Entrada` permanece a mesma;
+- filtrar pelo calendário e confirmar o dia de entrada;
+- criar um Orçamento Balcão e confirmar que aparece apenas em `/balcao/orcamentos`, nunca no `/kanban`.
+
 ## EM VALIDAÇÃO — FILTROS DO CATÁLOGO DO ORÇAMENTO BALCÃO — 2026-08-25
 
 Branch: `fix/balcao-filtros-catalogo-v2`
@@ -81,7 +119,7 @@ Estado integrado:
 - no mobile existe acesso direto `Atlas` no cabeçalho do balcão;
 - menu do balcão continua focado em Venda, Orçamento, Consulta, Atendimentos, Histórico, Caixa, Contas a Receber e Relatórios;
 - seção `Gestão compartilhada` aponta para Clientes, Cadastros, Estoque e Compras do próprio Atlas;
-- nenhum cadastro/banco/estoque foi duplicado;
+- nenhum cadastro mestre/banco/estoque foi duplicado; tabelas transacionais próprias do PDV podem existir dentro do mesmo banco quando o fluxo exige isolamento operacional;
 - fiscal/NFC-e/NF-e permanece evolução posterior, dependente de provedor e regras fiscais.
 
 ## Base já integrada na `main`
@@ -115,7 +153,9 @@ Estado integrado:
 
 - GitHub é a única fonte da verdade do código.
 - Nunca commitar direto em `main`; branch → PR → Build/Preview → merge manual.
-- Venda Balcão e Atlas completo compartilham a mesma base e os mesmos cadastros; não duplicar backend.
+- Venda Balcão e Atlas completo compartilham a mesma base e os mesmos cadastros mestres; não duplicar clientes/produtos/estoque.
+- Orçamento/Venda Balcão não alimenta o Kanban; somente orçamento sob medida/obra entra nesse fluxo.
+- `kanban_entrada_em` é a data fixa de entrada do card; `coluna_atualizada_em` continua sendo data de movimentação/SLA.
 - Busca operacional deve seguir o padrão Atlas V1 sempre que a tela pesquisar cadastros/listagens.
 - W.Vetro é referência/origem; Atlas validado é a versão técnica oficial.
 - Nunca sobrescrever automaticamente fórmula, receita, custo, preço, margem ou unidade operacional Atlas com valor histórico W.Vetro.
