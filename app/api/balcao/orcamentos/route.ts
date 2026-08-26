@@ -13,9 +13,8 @@ export async function GET(req: NextRequest) {
   try {
     const q = (req.nextUrl.searchParams.get('q') || '').trim()
     const { data, error } = await supabaseAdmin
-      .from('orcamentos')
+      .from('balcao_orcamentos')
       .select('id,numero,cliente_id,cliente_nome,cliente_whatsapp,cidade,valor_estimado,status,created_at,condicoes,clientes(id,nome,apelido,cpf_cnpj,telefone,whatsapp,email,cidade,bairro,endereco,cep)')
-      .eq('modo_entrada', 'balcao')
       .order('created_at', { ascending: false })
       .limit(400)
 
