@@ -23,6 +23,8 @@ type ProdutoCatalogo = {
   preco_minimo: number | string | null
   preco_promocional: number | string | null
   foto_url: string | null
+  peso_kg_m: number | string | null
+  tamanho_barra_mm: number | string | null
   ativo: boolean
   permite_venda_sem_estoque: boolean | null
 }
@@ -55,7 +57,7 @@ const CATEGORIAS_BASE = [
   { valor: 'outro', label: 'Outro', ordem: 100 },
 ]
 
-const CAMPOS_PRODUTO = 'id,codigo,codigo_origem,nome,descricao,categoria,grupo,marca,ncm,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,foto_url,ativo,permite_venda_sem_estoque'
+const CAMPOS_PRODUTO = 'id,codigo,codigo_origem,nome,descricao,categoria,grupo,marca,ncm,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,foto_url,peso_kg_m,tamanho_barra_mm,ativo,permite_venda_sem_estoque'
 
 function lerListaConfig(valor: string | null | undefined): string[] {
   if (!valor) return []
@@ -237,9 +239,10 @@ export async function GET(req: NextRequest) {
       const permiteVendaSemEstoque = p.permite_venda_sem_estoque == null ? vendaSemEstoqueGlobal : Boolean(p.permite_venda_sem_estoque)
       return {
         id:p.id, codigo:p.codigo||'', nome:p.nome, descricao:p.descricao||null, categoria:p.categoria, grupo:p.grupo,
-        grupos:gruposProduto, unidade:p.unidade, fotoUrl:p.foto_url||null, estoque:estoqueLocal, estoqueLocal, estoqueRede,
-        estoquesRede, unidadeEstoque:atual?.unidade||p.unidade, preco:precoNormal, precoPromocional:promocional, precoEfetivo,
-        permiteVendaSemEstoque,
+        grupos:gruposProduto, unidade:p.unidade, fotoUrl:p.foto_url||null,
+        pesoKgM:p.peso_kg_m==null?null:Number(p.peso_kg_m), tamanhoBarraMm:p.tamanho_barra_mm==null?null:Number(p.tamanho_barra_mm),
+        estoque:estoqueLocal, estoqueLocal, estoqueRede, estoquesRede, unidadeEstoque:atual?.unidade||p.unidade,
+        preco:precoNormal, precoPromocional:promocional, precoEfetivo, permiteVendaSemEstoque,
         ...(podeVerGestao ? {
           custo:atual?.custoMedio==null?(p.custo==null?null:Number(p.custo)):Number(atual.custoMedio),
           margem:p.margem_percentual==null?null:Number(p.margem_percentual),
