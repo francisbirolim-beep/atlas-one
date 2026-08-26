@@ -38,6 +38,8 @@ export interface DadosPdfBalcao {
   clienteCpfCnpj?: string | null
   clienteEndereco?: string | null
   clienteCidade?: string | null
+  obraNome?: string | null
+  obraResponsavel?: string | null
   obraEndereco?: string | null
   obraNumero?: string | null
   obraComplemento?: string | null
@@ -118,6 +120,10 @@ function tituloProduto(item: ItemPdfBalcao) {
   return nome.toLowerCase().includes(codigo.toLowerCase()) ? nome : `${codigo} — ${nome}`
 }
 
+function valor(v?: string | null) {
+  return String(v || '').trim()
+}
+
 const PAGINA_W = 210
 const PAGINA_H = 297
 const MARGEM = 8
@@ -142,55 +148,84 @@ export async function gerarPdfOrcamentoBalcao(empresaBase: DadosEmpresa, dados: 
   const novaPagina = () => { doc.addPage(); y = MARGEM; setTextoPrincipal() }
   const garantir = (altura: number) => { if (y + altura > PAGINA_H - 18) novaPagina() }
   const box = (x: number, yy: number, w: number, h: number) => { doc.setDrawColor(148, 163, 184); doc.setLineWidth(0.25); doc.roundedRect(x, yy, w, h, 1.3, 1.3) }
-  const rotulo = (valor: string, x: number, yy: number) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(100, 116, 139); doc.text(valor.toUpperCase(), x, yy) }
+  const rotulo = (texto: string, x: number, yy: number) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(100, 116, 139); doc.text(texto.toUpperCase(), x, yy) }
+  const linhaCampo = (label: string, conteudo: string, x: number, yy: number, largura = 108) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(51, 65, 85); doc.text(`${label}:`, x, yy)
+    const deslocamento = Math.min(30, Math.max(13, doc.getTextWidth(`${label}:`) + 2))
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 23, 42); doc.text(doc.splitTextToSize(conteudo || ' ', largura - deslocamento).slice(0, 1), x + deslocamento, yy)
+  }
 
-  if (logo) { try { doc.addImage(logo, 'JPEG', MARGEM, y, 31, 13, undefined, 'FAST') } catch {} }
-  const xEmpresa = logo ? MARGEM + 35 : MARGEM
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); setTextoPrincipal(); doc.text(nomeEmpresa, xEmpresa, y + 4.5)
-  if (empresa.slogan) { doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(71, 85, 105); doc.text(doc.splitTextToSize(empresa.slogan, 95).slice(0, 1), xEmpresa, y + 8) }
-  const enderecoEmpresa = [empresa.logradouro || empresa.endereco, empresa.numero, empresa.complemento, empresa.bairro, empresa.cidade || empresa.cidadeUf, empresa.uf, empresa.cep ? `CEP ${empresa.cep}` : ''].filter(Boolean).join(' · ')
-  const fiscalEmpresa = [empresa.cnpj ? `CNPJ ${empresa.cnpj}` : '', empresa.ie ? `IE ${empresa.ie}` : '', empresa.inscricaoMunicipal ? `IM ${empresa.inscricaoMunicipal}` : ''].filter(Boolean).join(' · ')
-  const contatosEmpresa = [[empresa.tel, empresa.tel2, empresa.whatsapp].filter(Boolean).join(' / '), empresa.email, empresa.site, empresa.instagram].filter(Boolean).join(' · ')
+  // Cabeçalho padrão comercial: empresa à esquerda e identificação do documento à direita.
+  const headerH = 32
+  box(MARGEM, y, UTIL, headerH)
+  const logoW = 30
+  if (logo) {
+    try { doc.addImage(logo, 'JPEG', MARGEM + 3, y + 5, 26, 16, undefined, 'FAST') } catch {}
+  } else {
+    rotulo('Logo', MARGEM + 10, y + 15)
+  }
+
+  const empresaX = MARGEM + logoW + 3
+  const docW = 46
+  const docX = PAGINA_W - MARGEM - docW
+  const empresaW = docX - empresaX - 3
+  doc.setDrawColor(203, 213, 225)
+  doc.line(docX - 2, y + 2, docX - 2, y + headerH - 2)
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); setTextoPrincipal(); doc.text(valor(empresa.nomeFantasia) || nomeEmpresa, empresaX, y + 5.5)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(71, 85, 105)
-  let yMeta = empresa.slogan ? y + 11 : y + 8
-  for (const linha of [fiscalEmpresa, enderecoEmpresa, contatosEmpresa].filter(Boolean)) { doc.text(doc.splitTextToSize(linha, 112).slice(0, 1), xEmpresa, yMeta); yMeta += 3 }
+  if (empresa.slogan) doc.text(doc.splitTextToSize(valor(empresa.slogan), empresaW).slice(0, 1), empresaX, y + 9)
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(71, 85, 105); doc.text(titulo, PAGINA_W - MARGEM, y + 2, { align: 'right' })
-  doc.setFontSize(16); setTextoPrincipal(); doc.text(dados.numero ? `Nº ${dados.numero}` : 'NOVO', PAGINA_W - MARGEM, y + 8, { align: 'right' })
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(71, 85, 105); doc.text(`Emissão ${dados.emissao}`, PAGINA_W - MARGEM, y + 12, { align: 'right' })
-  y = Math.max(y + 17, yMeta + 2)
+  const endereco = [valor(empresa.logradouro || empresa.endereco), valor(empresa.numero), valor(empresa.complemento), valor(empresa.bairro)].filter(Boolean).join(', ')
+  const cidadeUf = [valor(empresa.cidade || empresa.cidadeUf), valor(empresa.uf)].filter(Boolean).join(' - ')
+  const fone = [valor(empresa.tel), valor(empresa.tel2)].filter(Boolean).join(' / ')
+  let ey = y + 13
+  linhaCampo('Razão social', valor(empresa.nome), empresaX, ey, empresaW); ey += 3.5
+  linhaCampo('CNPJ', valor(empresa.cnpj), empresaX, ey, empresaW / 2)
+  linhaCampo('IE', valor(empresa.ie), empresaX + empresaW / 2, ey, empresaW / 2); ey += 3.5
+  linhaCampo('Endereço', endereco, empresaX, ey, empresaW); ey += 3.5
+  linhaCampo('Cidade/UF', cidadeUf, empresaX, ey, empresaW / 1.65)
+  linhaCampo('CEP', valor(empresa.cep), empresaX + empresaW / 1.65, ey, empresaW / 2.6); ey += 3.5
+  linhaCampo('Telefone', fone, empresaX, ey, empresaW / 1.55)
+  linhaCampo('WhatsApp', valor(empresa.whatsapp), empresaX + empresaW / 1.55, ey, empresaW / 2.8); ey += 3.5
+  linhaCampo('E-mail', valor(empresa.email), empresaX, ey, empresaW / 1.55)
+  linhaCampo('Site', valor(empresa.site), empresaX + empresaW / 1.55, ey, empresaW / 2.8)
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.3); doc.setTextColor(71, 85, 105); doc.text(titulo, docX + docW, y + 5, { align: 'right' })
+  doc.setFontSize(15); setTextoPrincipal(); doc.text(dados.numero ? `Nº ${dados.numero}` : 'NOVO', docX + docW, y + 11, { align: 'right' })
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(71, 85, 105)
+  doc.text(`Emissão: ${dados.emissao}`, docX + docW, y + 16, { align: 'right' })
+  doc.text(`Vendedor: ${valor(dados.vendedorNome) || valor(empresa.responsavelComercial)}`, docX + docW, y + 20, { align: 'right' })
+  doc.text(`Validade: ${validade} dias`, docX + docW, y + 24, { align: 'right' })
+
+  y += headerH + 3
   doc.setDrawColor(...cor); doc.setLineWidth(0.7); doc.line(MARGEM, y, PAGINA_W - MARGEM, y); y += 3
 
-  const cardGap = 1.6
-  const cardW = (UTIL - cardGap * 3) / 4
-  const resumo: Array<[string, string]> = [
-    ['Validade', `${validade} dias`],
-    ['Vendedor', dados.vendedorNome || empresa.responsavelComercial || 'Não informado'],
-    ['Pagamento', dados.formaPagamento || 'A combinar'],
-    ['Entrega', dados.prazoEntregaDias != null ? `${dados.prazoEntregaDias} dias` : 'A combinar'],
-  ]
-  resumo.forEach(([tituloCard, valor], index) => {
-    const x = MARGEM + index * (cardW + cardGap); box(x, y, cardW, 14); rotulo(tituloCard, x + 2, y + 3.3)
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); setTextoPrincipal(); doc.text(doc.splitTextToSize(valor, cardW - 4).slice(0, 2), x + 2, y + 7)
-  })
-  y += 17
-
-  box(MARGEM, y, UTIL, 22); rotulo('Dados do cliente / faturamento', MARGEM + 2.5, y + 4)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); setTextoPrincipal(); doc.text(dados.clienteNome || 'Cliente não informado', MARGEM + 2.5, y + 9)
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.1); doc.setTextColor(51, 65, 85)
-  const contato = [dados.clienteWhatsapp, dados.clienteTelefone, dados.clienteEmail].filter(Boolean).join(' · ')
-  if (contato) doc.text(doc.splitTextToSize(contato, 91).slice(0, 2), MARGEM + 100, y + 9)
-  if (dados.clienteCpfCnpj) doc.text(`CPF/CNPJ: ${dados.clienteCpfCnpj}`, MARGEM + 2.5, y + 14)
-  const enderecoCliente = [dados.clienteEndereco, dados.clienteCidade].filter(Boolean).join(' · ')
-  if (enderecoCliente) doc.text(doc.splitTextToSize(enderecoCliente, UTIL - 5).slice(0, 2), MARGEM + 2.5, y + 18)
+  // Cliente / faturamento.
+  box(MARGEM, y, UTIL, 22)
+  rotulo('Cliente / faturamento', MARGEM + 2.5, y + 4)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setTextoPrincipal(); doc.text(valor(dados.clienteNome) || ' ', MARGEM + 2.5, y + 9)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.setTextColor(51, 65, 85)
+  doc.text(`CPF/CNPJ: ${valor(dados.clienteCpfCnpj)}`, MARGEM + 2.5, y + 14)
+  doc.text(`Telefone: ${valor(dados.clienteTelefone)}`, MARGEM + 75, y + 14)
+  doc.text(`WhatsApp: ${valor(dados.clienteWhatsapp)}`, MARGEM + 130, y + 14)
+  doc.text(`E-mail: ${valor(dados.clienteEmail)}`, MARGEM + 2.5, y + 18)
+  const enderecoCliente = [valor(dados.clienteEndereco), valor(dados.clienteCidade)].filter(Boolean).join(' · ')
+  doc.text(`Endereço: ${enderecoCliente}`, MARGEM + 75, y + 18)
   y += 25
 
-  const localObra = [dados.obraEndereco, dados.obraNumero, dados.obraComplemento, dados.obraBairro, dados.obraCidade, dados.obraUf, dados.obraCep ? `CEP ${dados.obraCep}` : ''].filter(Boolean).join(', ')
-  if (localObra) {
-    box(MARGEM, y, UTIL, 14); rotulo('Local da obra / entrega', MARGEM + 2.5, y + 4)
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.3); doc.setTextColor(51, 65, 85); doc.text(doc.splitTextToSize(localObra, UTIL - 5).slice(0, 2), MARGEM + 2.5, y + 9)
-    y += 17
-  }
+  // Obra / entrega: sempre visível, mesmo quando os dados ainda estiverem em branco.
+  box(MARGEM, y, UTIL, 23)
+  rotulo('Obra / entrega', MARGEM + 2.5, y + 4)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.setTextColor(51, 65, 85)
+  doc.text(`Nome da obra: ${valor(dados.obraNome)}`, MARGEM + 2.5, y + 9)
+  doc.text(`Responsável: ${valor(dados.obraResponsavel)}`, MARGEM + 105, y + 9)
+  const enderecoObra = [valor(dados.obraEndereco), valor(dados.obraNumero), valor(dados.obraComplemento), valor(dados.obraBairro)].filter(Boolean).join(', ')
+  const cidadeObra = [valor(dados.obraCidade), valor(dados.obraUf)].filter(Boolean).join(' - ')
+  doc.text(`Endereço / entrega: ${enderecoObra}`, MARGEM + 2.5, y + 14)
+  doc.text(`Cidade/UF: ${cidadeObra}`, MARGEM + 2.5, y + 19)
+  doc.text(`CEP: ${valor(dados.obraCep)}`, MARGEM + 105, y + 19)
+  y += 26
 
   const colFoto = opcoes.mostrarFoto ? 22 : 0
   const colQtd = 14
