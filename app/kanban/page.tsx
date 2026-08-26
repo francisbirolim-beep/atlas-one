@@ -214,7 +214,8 @@ function aplicarDatasNosCards() {
         else cardEl.appendChild(dataEl)
       }
 
-      dataEl.textContent = `📅 Entrada: ${new Date(entrada).toLocaleDateString('pt-BR')}`
+      const textoData = `📅 Entrada: ${new Date(entrada).toLocaleDateString('pt-BR')}`
+      if (dataEl.textContent !== textoData) dataEl.textContent = textoData
       dataEl.style.color = nomeEl ? getComputedStyle(nomeEl).color : '#94a3b8'
       dataEl.style.opacity = '0.72'
     }
