@@ -1,74 +1,78 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowLeft, Filter, Minus, Plus, Trash2, UserCheck, X } from 'lucide-react'
-import { listarProdutos, CATEGORIAS_PRODUTO } from '@/lib/produtos'
-import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
-import { lerConfiguracaoOrcamento, lerDadosEmpresa, type ConfiguracaoOrcamento } from '@/lib/configGeral'
+import { AlertTriangle, ArrowLeft, FileDown, Loader2, Minus, Plus, Printer, Search, Trash2, UserCheck, X } from 'lucide-react'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import CatalogoFiltros from '@/components/balcao/CatalogoFiltros'
 import { criarOrcamentoBalcao } from '@/lib/orcamentoBalcao'
-import { gerarPdfOrcamentoBalcao } from '@/lib/pdfOrcamentoBalcao'
-import { usuarioAtual } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
-import { Produto, CategoriaProduto, ItemBalcao, DadosEmpresa } from '@/lib/tipos'
-import { abaixoDoPrecoMinimo, margemRealPorPreco, precoVendaBalcao } from '@/lib/precificacaoBalcao'
-import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
-import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
+import { abrirPdfParaImpressao, gerarPdfOrcamentoBalcao, type ItemPdfBalcao } from '@/lib/pdfOrcamentoBalcao'
+import { lerConfiguracaoOrcamento, lerDadosEmpresa, type ConfiguracaoOrcamento } from '@/lib/configGeral'
+import type { DadosEmpresa } from '@/lib/tipos'
 
-type ProdutoBalcao = Produto & {
-  preco_minimo?: number | null
-  preco_promocional?: number | null
-  ultimo_preco_vendido?: number | null
-  linha_id?: string | null
+type Categoria = { valor: string; label: string }
+type Produto = {
+  id: string
+  codigo: string
+  nome: string
+  descricao?: string | null
+  categoria?: string | null
   grupo?: string | null
-  marca?: string | null
-  ncm?: string | null
-  codigo_origem?: string | null
-  dados_origem?: Record<string, unknown> | null
+  grupos?: string[]
+  unidade: string
+  fotoUrl?: string | null
+  preco: number
+  precoPromocional?: number | null
+  precoEfetivo: number
+  custo?: number | null
+  precoMinimo?: number | null
+  pesoKgM?: number | null
+  tamanhoBarraMm?: number | null
 }
-
-type ClienteBusca = {
+type Cliente = {
   id: string
   nome: string
   apelido?: string | null
-  whatsapp?: string | null
-  telefone?: string | null
-  email?: string | null
   cpf_cnpj?: string | null
+  telefone?: string | null
+  whatsapp?: string | null
+  email?: string | null
   cidade?: string | null
   bairro?: string | null
   endereco?: string | null
   cep?: string | null
 }
+type ItemCarrinho = { produto: Produto; quantidade: number; precoUnitario: number }
+type ResultadoSalvo = { id?: string; numero?: number | null; total: number }
 
-type LinhaCarrinho = { quantidade: number; precoUnit: number }
-
-function moeda(valor: number | null | undefined) {
-  if (valor == null) return '—'
-  return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+function moeda(valor: number) {
+  return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
-
-function margemTexto(custo: number | null | undefined, preco: number) {
-  const margem = margemRealPorPreco(custo, preco)
-  return margem == null ? '—' : `${margem.toFixed(2)}%`
+function num(valor: string | number) {
+  const n = Number(String(valor).replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
+}
+function pesoTexto(produto: Produto) {
+  if (produto.categoria !== 'perfil' || produto.pesoKgM == null) return null
+  const peso = Number(produto.pesoKgM)
+  if (!Number.isFinite(peso)) return null
+  return `Peso cadastrado: ${peso.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} kg/m${peso > 50 ? ' • REVISAR CADASTRO' : ''}`
 }
 
 export default function NovoOrcamentoBalcao() {
-  const router = useRouter()
-  const [produtos, setProdutos] = useState<ProdutoBalcao[]>([])
-  const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
-  const [clientes, setClientes] = useState<ClienteBusca[]>([])
-  const [empresa, setEmpresa] = useState<DadosEmpresa | null>(null)
-  const [configOrcamento, setConfigOrcamento] = useState<ConfiguracaoOrcamento | null>(null)
-  const [carregando, setCarregando] = useState(true)
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [grupos, setGrupos] = useState<string[]>([])
+  const [categoria, setCategoria] = useState('')
+  const [grupo, setGrupo] = useState('')
   const [busca, setBusca] = useState('')
-  const [categoria, setCategoria] = useState<CategoriaProduto | 'todas'>('todas')
-  const [linhaId, setLinhaId] = useState('')
-  const [carrinho, setCarrinho] = useState<Record<string, LinhaCarrinho>>({})
+  const [carregando, setCarregando] = useState(false)
+  const [carrinho, setCarrinho] = useState<Record<string, ItemCarrinho>>({})
 
   const [clienteBusca, setClienteBusca] = useState('')
-  const [clienteSelecionadoId, setClienteSelecionadoId] = useState<string | null>(null)
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [cliente, setCliente] = useState<Cliente | null>(null)
+  const [carregandoClientes, setCarregandoClientes] = useState(false)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteApelido, setClienteApelido] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
@@ -79,110 +83,143 @@ export default function NovoOrcamentoBalcao() {
   const [clienteBairro, setClienteBairro] = useState('')
   const [clienteCep, setClienteCep] = useState('')
   const [clienteCidade, setClienteCidade] = useState('')
+
+  const [desconto, setDesconto] = useState('0')
+  const [formaPagamento, setFormaPagamento] = useState('A combinar')
+  const [prazoEntrega, setPrazoEntrega] = useState('')
   const [condicoes, setCondicoes] = useState('')
-  const [mostrarFoto, setMostrarFoto] = useState(true)
-  const [mostrarPrecoUnitario, setMostrarPrecoUnitario] = useState(true)
+  const [empresa, setEmpresa] = useState<(DadosEmpresa & { nomeFantasia?: string; logoUrl?: string; corPrincipal?: string }) | null>(null)
+  const [config, setConfig] = useState<ConfiguracaoOrcamento | null>(null)
   const [salvando, setSalvando] = useState(false)
-  const [mensagem, setMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const [erro, setErro] = useState('')
+  const [salvo, setSalvo] = useState<ResultadoSalvo | null>(null)
+  const documentoRef = useRef<Awaited<ReturnType<typeof gerarPdfOrcamentoBalcao>> | null>(null)
+  const arquivoRef = useRef('orcamento-balcao.pdf')
+  const catalogoAbort = useRef<AbortController | null>(null)
+  const catalogoSeq = useRef(0)
+  const clienteAbort = useRef<AbortController | null>(null)
+  const clienteSeq = useRef(0)
+
+  async function api(url: string, init?: RequestInit) {
+    const token = await tokenAtual()
+    if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+    return fetch(url, { ...init, headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` }, cache: 'no-store' })
+  }
+
+  async function carregarCatalogo() {
+    const seq = ++catalogoSeq.current
+    catalogoAbort.current?.abort()
+    const controller = new AbortController()
+    catalogoAbort.current = controller
+    setCarregando(true)
+    try {
+      const params = new URLSearchParams()
+      if (busca.trim().length >= 2) params.set('q', busca.trim())
+      if (categoria) params.set('categoria', categoria)
+      if (grupo) params.set('grupo', grupo)
+      const resp = await api(`/api/balcao/catalogo-v2?${params.toString()}`, { signal: controller.signal })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Não foi possível carregar o catálogo.')
+      if (seq !== catalogoSeq.current) return
+      setProdutos(json.produtos || [])
+      setCategorias(json.categorias || [])
+      setGrupos(json.grupos || [])
+    } catch (e) {
+      if ((e as { name?: string })?.name !== 'AbortError' && seq === catalogoSeq.current) setErro(e instanceof Error ? e.message : 'Erro ao carregar produtos.')
+    } finally {
+      if (seq === catalogoSeq.current) setCarregando(false)
+    }
+  }
+
+  async function carregarClientes(termo: string) {
+    const seq = ++clienteSeq.current
+    clienteAbort.current?.abort()
+    const controller = new AbortController()
+    clienteAbort.current = controller
+    setCarregandoClientes(true)
+    try {
+      const resp = await api(`/api/balcao/catalogo?tipo=clientes&q=${encodeURIComponent(termo)}`, { signal: controller.signal })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Erro ao pesquisar clientes.')
+      if (seq === clienteSeq.current) setClientes(json.clientes || [])
+    } catch (e) {
+      if ((e as { name?: string })?.name !== 'AbortError' && seq === clienteSeq.current) setErro(e instanceof Error ? e.message : 'Erro ao pesquisar cliente.')
+    } finally {
+      if (seq === clienteSeq.current) setCarregandoClientes(false)
+    }
+  }
 
   useEffect(() => {
-    async function carregar() {
-      const [listaProdutos, listaLinhas, dadosEmpresa, config, clientesResp] = await Promise.all([
-        listarProdutos(),
-        listarLinhasTecnicas(),
-        lerDadosEmpresa(),
-        lerConfiguracaoOrcamento(),
-        supabase.from('clientes').select('id,nome,apelido,whatsapp,telefone,email,cpf_cnpj,cidade,bairro,endereco,cep').order('nome').limit(1000),
-      ])
-      setProdutos((listaProdutos as ProdutoBalcao[]).filter(p => Boolean(p.unidade?.trim()) && p.ativo))
-      setLinhas(listaLinhas.filter(l => l.ativo))
-      setClientes((clientesResp.data || []) as ClienteBusca[])
+    Promise.all([lerDadosEmpresa(), lerConfiguracaoOrcamento()]).then(([dadosEmpresa, cfg]) => {
       setEmpresa(dadosEmpresa)
-      setConfigOrcamento(config)
-      setMostrarFoto(config.mostrarFoto)
-      setMostrarPrecoUnitario(config.mostrarPrecoUnitario)
-      setCondicoes(dadosEmpresa?.condicoesPadrao || config.observacaoPadrao || '')
-      setCarregando(false)
-    }
-    carregar()
+      setConfig(cfg)
+      setCondicoes(dadosEmpresa?.condicoesPadrao || cfg.observacaoPadrao || '')
+    })
   }, [])
 
-  const linhasPorProduto = useMemo(() => {
-    const mapa = new Map<string, LinhaTecnica[]>()
-    for (const linha of linhas) {
-      for (const produtoId of linha.produto_ids || []) {
-        const atual = mapa.get(produtoId) || []
-        atual.push(linha)
-        mapa.set(produtoId, atual)
-      }
+  useEffect(() => {
+    catalogoAbort.current?.abort()
+    catalogoSeq.current++
+    const h = setTimeout(() => carregarCatalogo(), 80)
+    return () => clearTimeout(h)
+  }, [busca, categoria, grupo])
+
+  useEffect(() => {
+    const termo = clienteBusca.trim()
+    clienteAbort.current?.abort()
+    clienteSeq.current++
+    if (termo.length < 2 || cliente) {
+      setClientes([])
+      setCarregandoClientes(false)
+      return
     }
-    return mapa
-  }, [linhas])
+    const h = setTimeout(() => carregarClientes(termo), 80)
+    return () => clearTimeout(h)
+  }, [clienteBusca, cliente])
 
-  const linhasDisponiveis = useMemo(() => {
-    const ids = new Set(produtos.filter(p => categoria === 'todas' || p.categoria === categoria).map(p => p.id))
-    return linhas.filter(l => (l.produto_ids || []).some(id => ids.has(id)))
-  }, [linhas, produtos, categoria])
+  const itens = useMemo(() => Object.values(carrinho), [carrinho])
+  const subtotal = itens.reduce((s, item) => s + item.quantidade * item.precoUnitario, 0)
+  const descontoN = Math.min(subtotal, Math.max(0, num(desconto)))
+  const total = Math.max(0, subtotal - descontoN)
+  const pesquisou = busca.trim().length >= 2 || Boolean(categoria) || Boolean(grupo)
 
-  const produtosFiltrados = useMemo(() => produtos.filter(p => {
-    if (categoria !== 'todas' && p.categoria !== categoria) return false
-    const linhasProduto = linhasPorProduto.get(p.id) || []
-    if (linhaId && !linhasProduto.some(l => l.id === linhaId)) return false
-    if (!busca.trim()) return true
-    return correspondeBuscaAtlas(
-      busca,
-      p.codigo,
-      p.codigo_origem,
-      p.nome,
-      p.descricao,
-      p.categoria,
-      p.grupo,
-      p.marca,
-      p.ncm,
-      ...linhasProduto.flatMap(l => [l.nome, l.fabricante, l.descricao, ...(l.apelidos || [])])
-    )
-  }), [produtos, busca, categoria, linhaId, linhasPorProduto])
-
-  const clientesEncontrados = useMemo(() => {
-    if (clienteSelecionadoId || clienteBusca.trim().length < 2) return []
-    return clientes.filter(c => correspondeBuscaAtlas(
-      clienteBusca,
-      c.nome,
-      c.apelido,
-      c.cpf_cnpj,
-      c.whatsapp,
-      c.telefone,
-      c.email,
-      c.cidade,
-      c.bairro,
-      c.endereco,
-      c.cep
-    )).slice(0, 12)
-  }, [clientes, clienteBusca, clienteSelecionadoId])
-
-  const itensCarrinho = useMemo(() => Object.entries(carrinho)
-    .filter(([, linha]) => linha.quantidade > 0)
-    .map(([produtoId, linha]) => {
-      const produto = produtos.find(p => p.id === produtoId)
-      return produto ? { produto, ...linha } : null
+  function adicionar(produto: Produto) {
+    setErro('')
+    setCarrinho(atual => {
+      const existente = atual[produto.id]
+      return {
+        ...atual,
+        [produto.id]: existente
+          ? { ...existente, quantidade: existente.quantidade + 1 }
+          : { produto, quantidade: 1, precoUnitario: Number(produto.precoEfetivo || 0) },
+      }
     })
-    .filter(Boolean) as Array<{ produto: ProdutoBalcao; quantidade: number; precoUnit: number }>, [carrinho, produtos])
-
-  const totalCarrinho = itensCarrinho.reduce((s, it) => s + it.precoUnit * it.quantidade, 0)
-
-  function trocarCategoria(valor: CategoriaProduto | 'todas') {
-    setCategoria(valor)
-    setLinhaId('')
+  }
+  function quantidade(produtoId: string, valor: number) {
+    setCarrinho(atual => {
+      const existente = atual[produtoId]
+      if (!existente) return atual
+      if (valor <= 0) {
+        const novo = { ...atual }
+        delete novo[produtoId]
+        return novo
+      }
+      return { ...atual, [produtoId]: { ...existente, quantidade: valor } }
+    })
+  }
+  function preco(produtoId: string, valor: string) {
+    setCarrinho(atual => atual[produtoId] ? { ...atual, [produtoId]: { ...atual[produtoId], precoUnitario: Math.max(0, num(valor)) } } : atual)
+  }
+  function remover(produtoId: string) {
+    setCarrinho(atual => {
+      const novo = { ...atual }
+      delete novo[produtoId]
+      return novo
+    })
   }
 
-  function digitarCliente(valor: string) {
-    if (clienteSelecionadoId) setClienteSelecionadoId(null)
-    setClienteBusca(valor)
-    setClienteNome(valor)
-  }
-
-  function selecionarCliente(c: ClienteBusca) {
-    setClienteSelecionadoId(c.id)
+  function selecionarCliente(c: Cliente) {
+    setCliente(c)
     setClienteBusca(c.nome)
     setClienteNome(c.nome || '')
     setClienteApelido(c.apelido || '')
@@ -194,266 +231,173 @@ export default function NovoOrcamentoBalcao() {
     setClienteBairro(c.bairro || '')
     setClienteCep(c.cep || '')
     setClienteCidade(c.cidade || '')
+    setClientes([])
+  }
+  function trocarCliente(valor: string) {
+    setCliente(null)
+    setClienteBusca(valor)
+    setClienteNome(valor)
+    if (!valor) {
+      setClienteApelido(''); setClienteWhatsapp(''); setClienteTelefone(''); setClienteEmail(''); setClienteCpfCnpj('')
+      setClienteEndereco(''); setClienteBairro(''); setClienteCep(''); setClienteCidade('')
+    }
   }
 
-  function limparCliente() {
-    setClienteSelecionadoId(null)
-    setClienteBusca('')
-    setClienteNome('')
-    setClienteApelido('')
-    setClienteWhatsapp('')
-    setClienteTelefone('')
-    setClienteEmail('')
-    setClienteCpfCnpj('')
-    setClienteEndereco('')
-    setClienteBairro('')
-    setClienteCep('')
-    setClienteCidade('')
-  }
-
-  function adicionar(produto: ProdutoBalcao) {
-    setCarrinho(prev => {
-      const atual = prev[produto.id]
-      if (atual) return { ...prev, [produto.id]: { ...atual, quantidade: atual.quantidade + 1 } }
-      return { ...prev, [produto.id]: { quantidade: 1, precoUnit: precoVendaBalcao(produto) } }
-    })
-  }
-
-  function decrementar(produtoId: string) {
-    setCarrinho(prev => {
-      const atual = prev[produtoId]
-      if (!atual) return prev
-      if (atual.quantidade <= 1) {
-        const { [produtoId]: _omit, ...resto } = prev
-        return resto
-      }
-      return { ...prev, [produtoId]: { ...atual, quantidade: atual.quantidade - 1 } }
-    })
-  }
-
-  function remover(produtoId: string) {
-    setCarrinho(prev => {
-      const { [produtoId]: _omit, ...resto } = prev
-      return resto
-    })
-  }
-
-  function mudarPreco(produtoId: string, valor: string) {
-    const preco = Number(valor)
-    setCarrinho(prev => ({ ...prev, [produtoId]: { ...prev[produtoId], precoUnit: Number.isFinite(preco) ? preco : 0 } }))
-  }
-
-  async function salvarEGerarPdf() {
-    setMensagem(null)
-    if (!clienteNome.trim()) return setMensagem({ tipo: 'erro', texto: 'Informe ou selecione o cliente.' })
-    if (!itensCarrinho.length) return setMensagem({ tipo: 'erro', texto: 'Adicione ao menos um produto.' })
-    const invalido = itensCarrinho.find(it => it.precoUnit <= 0)
-    if (invalido) return setMensagem({ tipo: 'erro', texto: `Informe um preço válido para ${invalido.produto.nome}.` })
-    const abaixo = itensCarrinho.find(it => abaixoDoPrecoMinimo(it.produto, it.precoUnit))
-    if (abaixo) return setMensagem({ tipo: 'erro', texto: `${abaixo.produto.nome}: ${moeda(abaixo.precoUnit)} está abaixo do preço mínimo ${moeda(abaixo.produto.preco_minimo)}.` })
-
-    setSalvando(true)
-    const itens: ItemBalcao[] = itensCarrinho.map(({ produto, quantidade, precoUnit }) => ({
+  function montarItens(): ItemPdfBalcao[] {
+    return itens.map(({ produto, quantidade: qtd, precoUnitario }) => ({
       produto_id: produto.id,
+      codigo: produto.codigo || null,
       nome: produto.nome,
-      categoria: produto.categoria,
+      categoria: produto.categoria || 'produto',
       descricao: produto.descricao || null,
-      foto_url: produto.foto_url || null,
-      unidade: produto.unidade!,
-      quantidade,
-      preco_unit: precoUnit,
-      preco_total: precoUnit * quantidade,
+      foto_url: produto.fotoUrl || null,
+      unidade: produto.unidade || 'UN',
+      quantidade: qtd,
+      preco_unit: precoUnitario,
+      preco_total: qtd * precoUnitario,
+      peso_kg_m: produto.pesoKgM ?? null,
+      tamanho_barra_mm: produto.tamanhoBarraMm ?? null,
+      linha_nome: (produto.grupos || []).join(', ') || produto.grupo || null,
     }))
+  }
 
-    const resultado = await criarOrcamentoBalcao({
-      clienteId: clienteSelecionadoId || undefined,
-      clienteNome,
-      clienteApelido: clienteApelido || undefined,
-      clienteWhatsapp: clienteWhatsapp || undefined,
-      clienteTelefone: clienteTelefone || undefined,
-      clienteEmail: clienteEmail || undefined,
-      clienteCpfCnpj: clienteCpfCnpj || undefined,
-      clienteEndereco: clienteEndereco || undefined,
-      clienteBairro: clienteBairro || undefined,
-      clienteCep: clienteCep || undefined,
-      cidade: clienteCidade || undefined,
-      itens,
-      condicoes: condicoes || undefined,
-    })
-
-    if (!resultado.ok) {
-      setMensagem({ tipo: 'erro', texto: resultado.error || 'Erro ao salvar orçamento.' })
-      setSalvando(false)
+  async function salvar(acao: 'pdf' | 'imprimir') {
+    setErro('')
+    if (salvo && documentoRef.current) {
+      if (acao === 'pdf') documentoRef.current.save(arquivoRef.current)
+      else abrirPdfParaImpressao(documentoRef.current)
       return
     }
+    if (!clienteNome.trim()) return setErro('Informe ou selecione o cliente.')
+    if (!itens.length) return setErro('Adicione pelo menos um produto ao orçamento.')
+    const semPreco = itens.find(item => item.precoUnitario <= 0)
+    if (semPreco) return setErro(`Informe um preço válido para ${semPreco.produto.nome}.`)
+    const abaixo = itens.find(item => item.produto.precoMinimo != null && item.precoUnitario < Number(item.produto.precoMinimo))
+    if (abaixo) return setErro(`${abaixo.produto.nome}: o preço está abaixo do mínimo cadastrado.`)
 
+    setSalvando(true)
     try {
-      const usuario = await usuarioAtual()
-      const config = configOrcamento || await lerConfiguracaoOrcamento()
-      const doc = await gerarPdfOrcamentoBalcao(
-        empresa || { nome: 'Empresa' },
-        {
-          numero: resultado.numero ?? null,
-          emissao: new Date().toLocaleDateString('pt-BR'),
-          vendedorNome: usuario?.nome || '',
-          clienteNome,
-          clienteTelefone: clienteTelefone || null,
-          clienteWhatsapp: clienteWhatsapp || null,
-          clienteEmail: clienteEmail || null,
-          clienteCpfCnpj: clienteCpfCnpj || null,
-          clienteEndereco: clienteEndereco || null,
-          clienteCidade: clienteCidade || null,
-          itens,
-          condicoes: condicoes || null,
-        },
-        {
-          mostrarFoto,
-          mostrarPrecoUnitario,
-          tituloDocumento: config.tituloDocumento,
-          validadeDias: config.validadeDias,
-          mostrarAssinatura: config.mostrarAssinatura,
-          rodape: config.rodape,
-        }
-      )
-      doc.save(`orcamento-${resultado.numero || 'balcao'}.pdf`)
-    } catch (e) {
-      console.error('Erro ao gerar PDF:', e)
-    }
+      const itensPdf = montarItens()
+      const prazo = prazoEntrega.trim() === '' ? null : Math.max(0, Math.round(num(prazoEntrega)))
+      const resultado = await criarOrcamentoBalcao({
+        clienteId: cliente?.id,
+        clienteNome: clienteNome.trim(),
+        clienteApelido: clienteApelido || undefined,
+        clienteWhatsapp: clienteWhatsapp || undefined,
+        clienteTelefone: clienteTelefone || undefined,
+        clienteEmail: clienteEmail || undefined,
+        clienteCpfCnpj: clienteCpfCnpj || undefined,
+        clienteEndereco: clienteEndereco || undefined,
+        clienteBairro: clienteBairro || undefined,
+        clienteCep: clienteCep || undefined,
+        cidade: clienteCidade || undefined,
+        itens: itensPdf,
+        desconto: descontoN,
+        formaPagamento,
+        prazoEntregaDias: prazo,
+        condicoes,
+      })
+      if (!resultado.ok) throw new Error(resultado.error || 'Não foi possível salvar o orçamento.')
 
-    setMensagem({ tipo: 'ok', texto: 'Orçamento balcão salvo com o cadastro compartilhado do Atlas.' })
-    setTimeout(() => router.push('/balcao/orcamentos'), 1400)
+      const usuario = await usuarioAtual()
+      const cfg = config || await lerConfiguracaoOrcamento()
+      const dadosEmpresa = empresa || { nome: 'ESQUADRIFÁCIO SOLUÇÕES EM ALUMÍNIO' }
+      const doc = await gerarPdfOrcamentoBalcao(dadosEmpresa, {
+        numero: resultado.numero ?? null,
+        emissao: new Date().toLocaleDateString('pt-BR'),
+        vendedorNome: usuario?.nome || '',
+        clienteNome: clienteNome.trim(),
+        clienteTelefone: clienteTelefone || null,
+        clienteWhatsapp: clienteWhatsapp || null,
+        clienteEmail: clienteEmail || null,
+        clienteCpfCnpj: clienteCpfCnpj || null,
+        clienteEndereco: [clienteEndereco, clienteBairro, clienteCep].filter(Boolean).join(' · ') || null,
+        clienteCidade: clienteCidade || null,
+        itens: itensPdf,
+        desconto: descontoN,
+        formaPagamento,
+        prazoEntregaDias: prazo,
+        condicoes,
+      }, { ...cfg, mostrarFoto: true })
+
+      documentoRef.current = doc
+      arquivoRef.current = `orcamento-${resultado.numero || 'balcao'}.pdf`
+      setSalvo({ id: resultado.id, numero: resultado.numero, total: resultado.total ?? total })
+      if (acao === 'pdf') doc.save(arquivoRef.current)
+      else abrirPdfParaImpressao(doc)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao salvar o orçamento.')
+    } finally {
+      setSalvando(false)
+    }
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight pb-24">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-4">
-          <Link href="/balcao/orcamentos" className="rounded-lg p-2 transition hover:bg-slate-100"><ArrowLeft size={20} /></Link>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">Venda / Orçamento Balcão</h1>
-            <p className="text-sm text-slate-500">Preço comercial do produto, usando os mesmos clientes, produtos e linhas do Atlas.</p>
-          </div>
+  return <main className="min-h-screen bg-slate-50 p-3">
+    <div className="mx-auto max-w-[1540px] space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link href="/balcao/orcamentos" className="rounded-lg border bg-white p-2"><ArrowLeft size={18}/></Link>
+          <div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-slate-400">Venda Balcão</p><h1 className="text-xl font-bold text-slate-900">Novo orçamento</h1><p className="text-xs text-slate-500">Catálogo à esquerda e orçamento sendo montado em tempo real.</p></div>
         </div>
+        {salvo && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800">Orçamento #{salvo.numero || '—'} salvo • {moeda(salvo.total)}</div>}
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-5">
-        <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-          <strong>Regra:</strong> tipologias usam <strong>custo técnico</strong>. Venda avulsa usa preço normal/promocional e preço abaixo do mínimo continua bloqueado.
-        </section>
+      {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</div>}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div><h2 className="text-sm font-semibold text-slate-800">Produtos</h2><p className="text-xs text-slate-500">Pesquise por várias palavras, em qualquer ordem, inclusive descrição e linha.</p></div>
-            <span className="text-xs text-slate-400">{produtosFiltrados.length} resultado(s)</span>
-          </div>
-          <BuscaAtlasInput value={busca} onValueChange={setBusca} placeholder="Ex.: SUPREMA ROLDANA, ROLDANA SUPREMA, código, descrição..." inputClassName="w-full rounded-lg border border-slate-200 py-2 pr-3 text-sm" />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => trocarCategoria('todas')} className={`rounded-full px-3 py-1.5 text-xs font-medium ${categoria === 'todas' ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}>Todas</button>
-            {CATEGORIAS_PRODUTO.map(cat => <button type="button" key={cat.valor} onClick={() => trocarCategoria(cat.valor)} className={`rounded-full px-3 py-1.5 text-xs font-medium ${categoria === cat.valor ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-600'}`}>{cat.label}</button>)}
-          </div>
-          {linhasDisponiveis.length > 0 && (
-            <div className="mt-3 border-t border-slate-100 pt-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Filter size={13}/>Linha / grupo</div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setLinhaId('')} className={`rounded-full border px-3 py-1 text-xs ${!linhaId ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800' : 'border-slate-200 text-slate-600'}`}>Todas</button>
-                {linhasDisponiveis.map(l => <button type="button" key={l.id} onClick={() => setLinhaId(l.id)} className={`rounded-full border px-3 py-1 text-xs ${linhaId === l.id ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800' : 'border-slate-200 text-slate-600'}`}>{l.nome}</button>)}
-              </div>
-            </div>
-          )}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <section className="min-w-0 rounded-xl border bg-white p-3">
+          <div className="mb-3"><h2 className="text-sm font-semibold text-slate-900">Adicionar produtos</h2><p className="text-[11px] text-slate-500">Pesquise código, nome ou descrição. Categoria e grupo/linha podem ser combinados.</p></div>
+          <div className="relative mb-3"><Search size={16} className="absolute left-3 top-2.5 text-slate-400"/><input value={busca} onInput={e => setBusca(e.currentTarget.value)} placeholder="Ex.: SUPREMA ROLDANA, SU 039, puxador preto..." className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm"/>{carregando && <Loader2 size={14} className="absolute right-3 top-2.5 animate-spin text-slate-400"/>}</div>
+          <CatalogoFiltros categorias={categorias} grupos={grupos} categoria={categoria} grupo={grupo} onCategoria={setCategoria} onGrupo={setGrupo}/>
 
-          {carregando ? <p className="py-8 text-center text-sm text-slate-400">Carregando produtos...</p> : (
-            <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
-              {produtosFiltrados.map(produto => {
-                const precoInicial = precoVendaBalcao(produto)
-                const promo = Number(produto.preco_promocional) > 0
-                const linhasProduto = linhasPorProduto.get(produto.id) || []
-                return <div key={produto.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 hover:bg-slate-50">
-                  {produto.foto_url ? <img src={produto.foto_url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" /> : <div className="h-10 w-10 shrink-0 rounded-lg bg-slate-100" />}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-800">{produto.codigo ? `${produto.codigo} — ` : ''}{produto.nome}</p>
-                    {produto.descricao ? <p className="truncate text-xs text-slate-500">{produto.descricao}</p> : null}
-                    <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
-                      {linhasProduto.map(l => <span key={l.id} className="rounded bg-sky-50 px-1.5 py-0.5 text-sky-700">{l.nome}</span>)}
-                      <span>{promo ? 'Promocional' : 'Preço'}: <strong>{moeda(precoInicial)}</strong> / {produto.unidade}</span>
-                      {produto.custo != null ? <span>Margem: <strong>{margemTexto(produto.custo, precoInicial)}</strong></span> : null}
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => adicionar(produto)} title={precoInicial <= 0 ? 'Adicionar e informar preço no orçamento' : 'Adicionar ao orçamento'} className="rounded-lg bg-brand-navyLight p-2 text-brand-navy transition hover:bg-brand-navy hover:text-white"><Plus size={16} /></button>
+          <div className="mt-4 max-h-[620px] space-y-2 overflow-y-auto pr-1">
+            {!pesquisou && <div className="py-16 text-center text-sm text-slate-400">Digite pelo menos 2 caracteres ou escolha um filtro para exibir produtos.</div>}
+            {pesquisou && !carregando && produtos.length === 0 && <div className="py-16 text-center text-sm text-slate-400">Nenhum produto encontrado com estes filtros.</div>}
+            {produtos.map(produto => {
+              const peso = pesoTexto(produto)
+              return <div key={produto.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/30">
+                {produto.fotoUrl ? <img src={produto.fotoUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg border bg-white object-contain" onError={e => { e.currentTarget.style.display = 'none' }}/>:<div className="h-12 w-12 shrink-0 rounded-lg border bg-slate-50"/>}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-800">{produto.codigo ? `${produto.codigo} — ` : ''}{produto.nome}</p>
+                  {produto.descricao && <p className="truncate text-[11px] text-slate-500">{produto.descricao}</p>}
+                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-500"><span>{(produto.grupos || []).join(' • ') || produto.grupo || produto.categoria}</span><span>Preço: <strong>{moeda(produto.precoEfetivo)}</strong> / {produto.unidade}</span>{peso && <span className={Number(produto.pesoKgM) > 50 ? 'font-semibold text-amber-700' : ''}>{peso}</span>}</div>
                 </div>
-              })}
-              {!produtosFiltrados.length ? <p className="py-6 text-center text-sm text-slate-400">Nenhum produto encontrado com todos os filtros.</p> : null}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-slate-800">Itens do orçamento</h2>
-          {!itensCarrinho.length ? <p className="text-sm text-slate-400">Nenhum produto adicionado.</p> : <div className="space-y-3">
-            {itensCarrinho.map(({ produto, quantidade, precoUnit }) => {
-              const abaixo = abaixoDoPrecoMinimo(produto, precoUnit)
-              return <div key={produto.id} className={`rounded-xl border p-3 ${abaixo ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50'}`}>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="min-w-[220px] flex-1"><p className="text-sm font-semibold text-slate-800">{produto.codigo ? `${produto.codigo} — ` : ''}{produto.nome}</p><p className="mt-1 text-xs text-slate-500">Custo: {moeda(produto.custo)} • Margem: <strong>{margemTexto(produto.custo, precoUnit)}</strong>{produto.preco_minimo != null ? ` • Mínimo: ${moeda(produto.preco_minimo)}` : ''}</p></div>
-                  <label className="text-xs text-slate-500">Preço unitário<input type="number" step="any" min="0" value={precoUnit} onChange={e => mudarPreco(produto.id, e.target.value)} className="mt-1 block w-32 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm" /></label>
-                  <div className="flex items-center gap-2"><button type="button" onClick={() => decrementar(produto.id)} className="rounded-lg border border-slate-200 p-2"><Minus size={14}/></button><span className="w-8 text-center text-sm font-semibold">{quantidade}</span><button type="button" onClick={() => adicionar(produto)} className="rounded-lg border border-slate-200 p-2"><Plus size={14}/></button></div>
-                  <strong className="w-28 text-right text-sm">{moeda(precoUnit * quantidade)}</strong>
-                  <button type="button" onClick={() => remover(produto.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>
-                </div>
-                {precoUnit <= 0 ? <p className="mt-2 flex items-center gap-1 text-xs font-medium text-amber-700"><AlertTriangle size={13}/>Informe o preço antes de salvar o orçamento.</p> : null}
-                {abaixo ? <p className="mt-2 flex items-center gap-1 text-xs font-medium text-red-600"><AlertTriangle size={13}/>Preço abaixo do mínimo permitido.</p> : null}
+                <button type="button" onClick={() => adicionar(produto)} className="rounded-lg bg-brand-navyLight p-2.5 text-brand-navy hover:bg-brand-navy hover:text-white" title="Adicionar ao orçamento"><Plus size={17}/></button>
               </div>
             })}
-            <div className="flex justify-end border-t border-slate-200 pt-3 text-base font-bold text-slate-800">Total: {moeda(totalCarrinho)}</div>
-          </div>}
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800">Dados do cliente</h2>
-              <p className="text-xs text-slate-500">Digite no campo Nome qualquer dado do cliente: nome, apelido, CPF/CNPJ, telefone, cidade, bairro ou endereço.</p>
-            </div>
-            {clienteSelecionadoId ? <button type="button" onClick={limparCliente} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500"><X size={13}/>Trocar cliente</button> : null}
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="relative sm:col-span-2">
-              <label className="text-xs text-slate-600">Nome / buscar cliente *</label>
-              <BuscaAtlasInput
-                value={clienteBusca}
-                onValueChange={digitarCliente}
-                placeholder="Ex.: FRANCIS, apelido, telefone, CPF/CNPJ, cidade, bairro..."
-                inputClassName="mt-1 w-full rounded-lg border border-slate-200 py-2.5 pr-3 text-sm"
-              />
-              {!clienteSelecionadoId && clientesEncontrados.length > 0 && <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-xl border bg-white shadow-xl">
-                {clientesEncontrados.map(c => <button key={c.id} type="button" onClick={() => selecionarCliente(c)} className="block w-full border-b px-3 py-2.5 text-left hover:bg-slate-50">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UserCheck size={14}/>{c.nome}{c.apelido ? <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">{c.apelido}</span> : null}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{[c.cidade, c.bairro, c.whatsapp || c.telefone, c.cpf_cnpj].filter(Boolean).join(' • ')}</div>
-                </button>)}
-              </div>}
-              {clienteSelecionadoId ? <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Cliente existente selecionado. O orçamento será vinculado ao mesmo cadastro do Atlas.</div> : clienteBusca.trim().length >= 2 && clientesEncontrados.length === 0 ? <div className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cliente encontrado. Se for um cliente novo, continue preenchendo os dados abaixo.</div> : null}
-            </div>
-
-            <label className="text-xs text-slate-600">Apelido<input value={clienteApelido} onChange={e => setClienteApelido(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Nome pelo qual é conhecido" /></label>
-            <label className="text-xs text-slate-600">Cidade<input value={clienteCidade} onChange={e => setClienteCidade(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">Bairro<input value={clienteBairro} onChange={e => setClienteBairro(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">WhatsApp<input value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">Telefone<input value={clienteTelefone} onChange={e => setClienteTelefone(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">E-mail<input value={clienteEmail} onChange={e => setClienteEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">CPF/CNPJ<input value={clienteCpfCnpj} onChange={e => setClienteCpfCnpj(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600 sm:col-span-2">Endereço<input value={clienteEndereco} onChange={e => setClienteEndereco(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">CEP<input value={clienteCep} onChange={e => setClienteCep(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <label className="text-sm font-semibold text-slate-800">Condições / observações<textarea value={condicoes} onChange={e => setCondicoes(e.target.value)} className="mt-2 h-28 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm" /></label>
-          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600"><label><input type="checkbox" checked={mostrarFoto} onChange={e => setMostrarFoto(e.target.checked)} className="mr-1"/>Mostrar foto no PDF</label><label><input type="checkbox" checked={mostrarPrecoUnitario} onChange={e => setMostrarPrecoUnitario(e.target.checked)} className="mr-1"/>Mostrar preço unitário</label></div>
-        </section>
+        <aside className="space-y-3 xl:sticky xl:top-3 xl:self-start">
+          <section className="rounded-xl border bg-white p-3">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-slate-900">Itens ({itens.length})</h2><span className="text-xs font-semibold text-emerald-700">{moeda(total)}</span></div>
+            <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
+              {!itens.length && <div className="rounded-lg bg-slate-50 py-8 text-center text-xs text-slate-400">Nenhum item adicionado.</div>}
+              {itens.map(({ produto, quantidade: qtd, precoUnitario }) => <div key={produto.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                <div className="flex gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-800">{produto.codigo ? `${produto.codigo} — ` : ''}{produto.nome}</p>{pesoTexto(produto) && <p className={`mt-0.5 text-[9px] ${Number(produto.pesoKgM) > 50 ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{pesoTexto(produto)}</p>}</div><button onClick={() => remover(produto.id)} className="text-red-500"><Trash2 size={14}/></button></div>
+                <div className="mt-2 grid grid-cols-[auto_1fr_auto] items-center gap-2"><div className="flex items-center gap-1"><button onClick={() => quantidade(produto.id, qtd - 1)} className="rounded border bg-white p-1"><Minus size={12}/></button><input type="number" min="0.001" step="any" value={qtd} onChange={e => quantidade(produto.id, Math.max(0, num(e.target.value)))} className="w-14 rounded border px-1 py-1 text-center text-xs"/><button onClick={() => quantidade(produto.id, qtd + 1)} className="rounded border bg-white p-1"><Plus size={12}/></button></div><input type="number" min="0" step="any" value={precoUnitario} onChange={e => preco(produto.id, e.target.value)} className="w-full rounded border px-2 py-1 text-right text-xs"/><strong className="min-w-20 text-right text-xs">{moeda(qtd * precoUnitario)}</strong></div>
+                {precoUnitario <= 0 && <p className="mt-1 flex items-center gap-1 text-[10px] font-medium text-amber-700"><AlertTriangle size={11}/>Informe o preço antes de salvar.</p>}
+              </div>)}
+            </div>
+            <div className="mt-3 space-y-2 border-t pt-3 text-xs"><div className="flex justify-between"><span>Subtotal</span><strong>{moeda(subtotal)}</strong></div><label className="grid grid-cols-[1fr_130px] items-center gap-2"><span>Desconto</span><input type="number" min="0" step="any" value={desconto} onChange={e => setDesconto(e.target.value)} className="rounded border px-2 py-1.5 text-right"/></label><div className="flex justify-between border-t pt-2 text-base font-bold"><span>Total</span><span className="text-emerald-700">{moeda(total)}</span></div></div>
+          </section>
 
-        {mensagem ? <div className={`rounded-xl border p-3 text-sm ${mensagem.tipo === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>{mensagem.texto}</div> : null}
-        <button type="button" onClick={salvarEGerarPdf} disabled={salvando} className="w-full rounded-xl bg-brand-navy px-4 py-3 font-semibold text-white disabled:opacity-50">{salvando ? 'Salvando...' : 'Salvar orçamento e gerar PDF'}</button>
-      </main>
+          <section className="rounded-xl border bg-white p-3">
+            <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold">Cliente</h2>{cliente && <button onClick={() => trocarCliente('')} className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-500"><X size={11}/>Trocar</button>}</div>
+            <div className="relative"><Search size={14} className="absolute left-3 top-2.5 text-slate-400"/><input value={clienteBusca} onInput={e => trocarCliente(e.currentTarget.value)} placeholder="Nome / buscar cliente" className="w-full rounded-lg border py-2 pl-8 pr-8 text-xs"/>{carregandoClientes && <Loader2 size={13} className="absolute right-3 top-2.5 animate-spin text-slate-400"/>}{!cliente && clientes.length > 0 && <div className="absolute z-30 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-white shadow-xl">{clientes.map(c => <button key={c.id} type="button" onClick={() => selecionarCliente(c)} className="block w-full border-b px-3 py-2 text-left hover:bg-slate-50"><div className="flex items-center gap-1.5 text-xs font-semibold"><UserCheck size={12}/>{c.nome}{c.apelido ? <span className="text-[9px] text-sky-700">({c.apelido})</span>:null}</div><div className="text-[9px] text-slate-400">{[c.cidade,c.bairro,c.whatsapp||c.telefone,c.cpf_cnpj].filter(Boolean).join(' • ')}</div></button>)}</div>}</div>
+            <div className="mt-2 grid grid-cols-2 gap-2"><input value={clienteCidade} onChange={e => setClienteCidade(e.target.value)} placeholder="Cidade" className="rounded border px-2 py-1.5 text-xs"/><input value={clienteBairro} onChange={e => setClienteBairro(e.target.value)} placeholder="Bairro" className="rounded border px-2 py-1.5 text-xs"/><input value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp" className="rounded border px-2 py-1.5 text-xs"/><input value={clienteCpfCnpj} onChange={e => setClienteCpfCnpj(e.target.value)} placeholder="CPF/CNPJ" className="rounded border px-2 py-1.5 text-xs"/><input value={clienteEmail} onChange={e => setClienteEmail(e.target.value)} placeholder="E-mail" className="rounded border px-2 py-1.5 text-xs col-span-2"/><input value={clienteEndereco} onChange={e => setClienteEndereco(e.target.value)} placeholder="Endereço" className="rounded border px-2 py-1.5 text-xs col-span-2"/></div>
+          </section>
+
+          <section className="rounded-xl border bg-white p-3 space-y-2">
+            <h2 className="text-sm font-semibold">Condições comerciais</h2>
+            <label className="block text-[10px] font-medium text-slate-500">Forma de pagamento<input list="formas-pagamento" value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-xs"/><datalist id="formas-pagamento"><option value="A combinar"/><option value="PIX"/><option value="Dinheiro"/><option value="Cartão"/><option value="Boleto"/><option value="À vista"/><option value="50% entrada + 50% entrega"/><option value="70% entrada + 30% entrega"/><option value="50% entrada + 20% produção + 30% entrega"/></datalist></label>
+            <label className="block text-[10px] font-medium text-slate-500">Prazo de entrega (dias)<input type="number" min="0" value={prazoEntrega} onChange={e => setPrazoEntrega(e.target.value)} placeholder="A combinar" className="mt-1 w-full rounded border px-2 py-1.5 text-xs"/></label>
+            <label className="block text-[10px] font-medium text-slate-500">Observações<textarea value={condicoes} onChange={e => setCondicoes(e.target.value)} rows={3} className="mt-1 w-full resize-none rounded border p-2 text-xs"/></label>
+          </section>
+
+          {!salvo ? <div className="grid grid-cols-2 gap-2"><button onClick={() => salvar('pdf')} disabled={salvando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"><FileDown size={16}/>{salvando ? 'Salvando...' : 'Salvar PDF'}</button><button onClick={() => salvar('imprimir')} disabled={salvando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"><Printer size={16}/>Imprimir</button></div> : <div className="grid grid-cols-2 gap-2"><button onClick={() => documentoRef.current?.save(arquivoRef.current)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-3 py-3 text-sm font-semibold text-white"><FileDown size={16}/>Baixar PDF</button><button onClick={() => documentoRef.current && abrirPdfParaImpressao(documentoRef.current)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white"><Printer size={16}/>Imprimir</button></div>}
+        </aside>
+      </div>
     </div>
-  )
+  </main>
 }
