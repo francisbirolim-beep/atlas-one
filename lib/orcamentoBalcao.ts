@@ -1,7 +1,6 @@
 import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
 import { usuarioAtual } from './auth'
-import { registrarHistorico } from './historico'
 import { v4 as uuidv4 } from 'uuid'
 import { OrigemCliente, ItemBalcao } from './tipos'
 
@@ -29,10 +28,9 @@ export interface ResultadoOrcamentoBalcao {
   numero?: number | null
 }
 
-// Cria um orçamento rápido do modo Balcão e congela o preço unitário nos itens.
-// Venda/Orçamento Balcão é um fluxo próprio e NÃO deve criar card no Kanban comercial.
-// O Kanban fica reservado para orçamento sob medida/obra, criado pelo fluxo normal do Atlas.
-// Se um cliente do cadastro compartilhado foi selecionado, usa o mesmo id e não cria duplicata.
+// Orçamento Balcão é um fluxo transacional próprio do PDV.
+// Ele compartilha cliente/produto/preço com o Atlas, mas NÃO usa a tabela `orcamentos`,
+// pois essa tabela é a fonte do Kanban de obras/orçamentos sob medida.
 export async function criarOrcamentoBalcao(
   dados: DadosOrcamentoBalcaoForm
 ): Promise<ResultadoOrcamentoBalcao> {
@@ -62,7 +60,7 @@ export async function criarOrcamentoBalcao(
   const novoId = uuidv4()
 
   const { data: inserido, error } = await supabase
-    .from('orcamentos')
+    .from('balcao_orcamentos')
     .insert({
       id: novoId,
       cliente_id: clienteIdResolvido,
@@ -70,16 +68,10 @@ export async function criarOrcamentoBalcao(
       cliente_whatsapp: dados.clienteWhatsapp || null,
       cidade: dados.cidade || null,
       origem: dados.origem || null,
-      tipo_esquadria: 'outro',
-      quantidade: dados.itens.reduce((soma, it) => soma + it.quantidade, 0) || 1,
       itens_balcao: dados.itens,
-      itens: [],
-      modo_entrada: 'balcao',
       condicoes: dados.condicoes || null,
       valor_estimado: valorTotal,
       status: 'rascunho',
-      coluna_id: null,
-      coluna_atualizada_em: null,
       criado_por_nome: usuario?.nome || null,
       criado_por_id: usuario?.id || null,
     })
@@ -87,7 +79,5 @@ export async function criarOrcamentoBalcao(
     .single()
 
   if (error) return { ok: false, error: error.message }
-
-  await registrarHistorico(novoId, usuario, 'Criou o orçamento balcão')
   return { ok: true, id: novoId, numero: inserido?.numero ?? null }
 }
