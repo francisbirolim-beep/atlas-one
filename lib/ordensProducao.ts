@@ -33,6 +33,15 @@ export type ClienteProducao = { id: string; nome: string }
 export type ObraProducao = { id: string; cliente_id: string; nome: string; status: string }
 export type VendaProducao = { id: string; numero: number; cliente_id: string; obra_id?: string | null; orcamento_id: string }
 
+function mapOrdem(row: any): OrdemProducao {
+  return {
+    ...row,
+    cliente_nome: row.clientes?.nome || null,
+    obra_nome: row.obras?.nome || null,
+    venda_numero: row.vendas_obras?.numero || null,
+  } as OrdemProducao
+}
+
 export async function listarOrdensProducao(): Promise<OrdemProducao[]> {
   const { data, error } = await supabase
     .from('ordens_producao')
@@ -42,12 +51,7 @@ export async function listarOrdensProducao(): Promise<OrdemProducao[]> {
     console.error('Erro ao listar ordens de produção', error)
     return []
   }
-  return (data || []).map((row: any) => ({
-    ...row,
-    cliente_nome: row.clientes?.nome || null,
-    obra_nome: row.obras?.nome || null,
-    venda_numero: row.vendas_obras?.numero || null,
-  })) as OrdemProducao[]
+  return (data || []).map(mapOrdem)
 }
 
 export async function listarOrdensPorCard(cardId: string): Promise<OrdemProducao[]> {
@@ -58,12 +62,7 @@ export async function listarOrdensPorCard(cardId: string): Promise<OrdemProducao
     .order('tipo_producao')
     .order('created_at')
   if (error) return []
-  return (data || []).map((row: any) => ({
-    ...row,
-    cliente_nome: row.clientes?.nome || null,
-    obra_nome: row.obras?.nome || null,
-    venda_numero: row.vendas_obras?.numero || null,
-  })) as OrdemProducao[]
+  return (data || []).map(mapOrdem)
 }
 
 export async function listarClientesProducao(): Promise<ClienteProducao[]> {
@@ -104,7 +103,34 @@ export async function criarOrdemProducaoManual(dados: {
   bloqueioMotivo?: string | null
 }): Promise<{ ok: boolean; ordem?: OrdemProducao; error?: string }> {
   const usuario = await usuarioAtual()
+  const { data: coluna } = await supabase
+    .from('setor_kanban_colunas')
+    .select('id')
+    .eq('setor_id', 'producao')
+    .order('ordem')
+    .limit(1)
+    .maybeSingle()
+
+  let cardId: string | null = null
+  if (coluna?.id) {
+    const { data: card, error: erroCard } = await supabase.from('setor_kanban_itens').insert({
+      titulo: dados.titulo.trim(),
+      descricao: dados.clienteId ? 'Produção vinculada criada manualmente.' : 'Produção avulsa criada manualmente.',
+      coluna_id: coluna.id,
+      cliente_id: dados.clienteId || null,
+      obra_id: dados.obraId || null,
+      orcamento_id: dados.orcamentoId || null,
+      criado_por_id: usuario?.id || null,
+      criado_por_nome: usuario?.nome || null,
+      atualizado_por_id: usuario?.id || null,
+      atualizado_por_nome: usuario?.nome || null,
+    }).select('id').single()
+    if (erroCard) return { ok: false, error: erroCard.message }
+    cardId = card?.id || null
+  }
+
   const { data, error } = await supabase.from('ordens_producao').insert({
+    setor_card_id: cardId,
     cliente_id: dados.clienteId || null,
     obra_id: dados.obraId || null,
     venda_obra_id: dados.vendaId || null,
@@ -121,9 +147,13 @@ export async function criarOrdemProducaoManual(dados: {
     origem: 'manual',
     criado_por_id: usuario?.id || null,
     criado_por_nome: usuario?.nome || null,
-  }).select('*').single()
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, ordem: data as OrdemProducao }
+  }).select('*, clientes(nome), obras(nome), vendas_obras(numero)').single()
+
+  if (error) {
+    if (cardId) await supabase.from('setor_kanban_itens').delete().eq('id', cardId)
+    return { ok: false, error: error.message }
+  }
+  return { ok: true, ordem: mapOrdem(data) }
 }
 
 export async function atualizarOrdemProducao(id: string, patch: Partial<Pick<OrdemProducao,
