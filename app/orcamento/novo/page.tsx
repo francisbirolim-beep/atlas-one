@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, FileText, ShoppingBag } from 'lucide-react'
+import { ArrowLeft, Calculator, FileText, ShoppingBag } from 'lucide-react'
 
 export default function NovoOrcamento() {
   return (
@@ -31,6 +31,19 @@ export default function NovoOrcamento() {
           <span>
             <span className="block text-sm font-semibold text-slate-800">Orçamento de Esquadrias</span>
             <span className="block text-xs text-slate-500">Modo rápido ou assistido, com Linha → Tipologia → Configuração</span>
+          </span>
+        </Link>
+
+        <Link
+          href="/orcamento/precificacao"
+          className="w-full flex items-center gap-3 bg-white rounded-2xl border border-emerald-200 p-5 hover:border-emerald-500 transition"
+        >
+          <span className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700 flex-shrink-0">
+            <Calculator size={20} />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-800">Otimização e Precificação</span>
+            <span className="block text-xs text-slate-500">Perfis, acessórios, vidros, sobra por item, margem geral/individual e custos extras</span>
           </span>
         </Link>
 
