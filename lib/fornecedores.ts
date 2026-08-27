@@ -8,34 +8,32 @@ export async function listarFornecedores(somenteAtivos = false): Promise<Fornece
   return (data as Fornecedor[]) || []
 }
 
-export async function criarFornecedor(dados: {
+type DadosFornecedor = {
   nome: string
   cnpj_cpf?: string | null
   contato?: string | null
   telefone?: string | null
+  whatsapp?: string | null
   email?: string | null
   endereco?: string | null
   cidade?: string | null
   observacoes?: string | null
+  pedido_minimo?: number | null
+  frete_gratis_minimo?: number | null
+  prazo_medio_dias?: number | null
+  condicao_pagamento_padrao?: string | null
+  observacoes_comerciais?: string | null
   criado_por_id?: string | null
   criado_por_nome?: string | null
-}) {
+}
+
+export async function criarFornecedor(dados: DadosFornecedor) {
   return supabase.from('fornecedores').insert({ ...dados, ativo: true })
 }
 
 export async function atualizarFornecedor(
   id: string,
-  dados: Partial<{
-    nome: string
-    cnpj_cpf: string | null
-    contato: string | null
-    telefone: string | null
-    email: string | null
-    endereco: string | null
-    cidade: string | null
-    observacoes: string | null
-    ativo: boolean
-  }>
+  dados: Partial<DadosFornecedor & { ativo: boolean }>
 ) {
   return supabase.from('fornecedores').update({ ...dados, updated_at: new Date().toISOString() }).eq('id', id)
 }
