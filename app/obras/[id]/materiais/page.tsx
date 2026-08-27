@@ -43,6 +43,7 @@ function n(v: unknown) { const x = Number(v); return Number.isFinite(x) ? x : 0 
 function qtd(v: unknown) { return n(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) }
 function mm(v: unknown) { return `${Math.round(n(v)).toLocaleString('pt-BR')} mm` }
 function dinheiro(v: unknown) { return n(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
+function msgErro(v?: string) { return v || 'Não foi possível concluir esta operação.' }
 
 export default function MateriaisObraPage() {
   const params = useParams()
@@ -104,7 +105,7 @@ export default function MateriaisObraPage() {
     const u = await usuarioAtual()
     const r = await gerarPacoteTecnico(orcamentoId, 'projeto_conferido', u, { perdaCorteMm: 0, minimoSobraReaproveitavelMm: 300 })
     setOcupado(false)
-    if (!r.ok) { setErro(r.error); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     setMensagem('Pacote técnico gerado. Agora confira fisicamente estoque, barras e retalhos.')
     await carregarBase(); setPacoteId(r.pacote.id)
   }
@@ -115,7 +116,7 @@ export default function MateriaisObraPage() {
     setOcupado(true)
     const r = await recalcularAproveitamentoPacote(id, reservadas)
     setOcupado(false)
-    if (!r.ok) { setErro(r.error); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     setMensagem('Aproveitamento e lista de compra recalculados.')
     await carregarPacote(id)
   }
@@ -133,14 +134,14 @@ export default function MateriaisObraPage() {
     setOcupado(true)
     const r = await ajustarMaterial(m.id, { quantidade_ajustada: Number(valor.replace(',', '.')) || 0, justificativa_ajuste: motivo })
     setOcupado(false)
-    if (!r.ok) setErro(r.error); else await recalcular()
+    if (!r.ok) setErro(msgErro(r.error)); else await recalcular()
   }
 
   async function removerMaterial(m: MaterialPacote) {
     const motivo = window.prompt(`Motivo para retirar ${m.codigo || m.descricao}:`, '') || ''
     if (motivo.trim().length < 3) return
     setOcupado(true); const r = await excluirMaterialDoPacote(m.id, motivo); setOcupado(false)
-    if (!r.ok) setErro(r.error); else await recalcular()
+    if (!r.ok) setErro(msgErro(r.error)); else await recalcular()
   }
 
   async function adicionarMaterialComMotivo(motivo: string) {
@@ -156,7 +157,7 @@ export default function MateriaisObraPage() {
       comprimento_barra_mm: novo.barra ? Number(novo.barra.replace(',', '.')) : (p?.tamanho_barra_mm || null), justificativa: motivo,
     })
     setOcupado(false)
-    if (!r.ok) { setErro(r.error); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     setNovo(NOVO_MATERIAL); await recalcular()
   }
 
@@ -167,21 +168,21 @@ export default function MateriaisObraPage() {
     const usuario = await usuarioAtual(); setOcupado(true)
     const r = await separarBarraInteira(pacote, { produto_id: s.produto_id, local_id: s.local_id, endereco_id: s.endereco_id || null, quantidade: Number(valor.replace(',', '.')) || 0, usuario, observacoes: `Separado para ${obra?.nome || 'obra'}` })
     setOcupado(false)
-    if (!r.ok) { setErro(r.error); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     await carregarPacote(pacote.id); await recalcular(pacote.id)
   }
 
   async function separarSobra(s: SobraPerfil) {
     if (!pacote) return
     const usuario = await usuarioAtual(); setOcupado(true); const r = await reservarSobraPerfil(pacote, s, usuario); setOcupado(false)
-    if (!r.ok) { setErro(r.error); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     await carregarPacote(pacote.id); await recalcular(pacote.id)
   }
 
   async function desfazer(s: SeparacaoPacote) {
     if (!window.confirm('Desfazer esta separação e devolver a disponibilidade ao estoque?')) return
     setOcupado(true); const r = await cancelarSeparacaoMaterial(s); setOcupado(false)
-    if (!r.ok) { setErro(r.error || 'Erro ao desfazer.'); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     await carregarPacote(s.pacote_id); await recalcular(s.pacote_id)
   }
 
@@ -191,7 +192,7 @@ export default function MateriaisObraPage() {
     const motivo = window.prompt('Motivo do ajuste da compra:', 'Conferência física do estoque') || ''
     if (motivo.trim().length < 3) return
     setOcupado(true); const r = await ajustarCompra(c.id, Number(valor.replace(',', '.')) || 0, motivo); setOcupado(false)
-    if (!r.ok) setErro(r.error); else await carregarPacote(c.pacote_id)
+    if (!r.ok) setErro(msgErro(r.error)); else await carregarPacote(c.pacote_id)
   }
 
   async function adicionarCompraComMotivo(motivo: string) {
@@ -206,7 +207,7 @@ export default function MateriaisObraPage() {
       quantidade: Number(novaCompra.quantidade.replace(',', '.')) || 0, justificativa: motivo,
     })
     setOcupado(false)
-    if (!r.ok) { setErro(r.error); return }
+    if (!r.ok) { setErro(msgErro(r.error)); return }
     setNovaCompra(NOVA_COMPRA); await carregarPacote(pacote.id)
   }
 
