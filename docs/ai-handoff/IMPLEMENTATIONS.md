@@ -2,6 +2,26 @@
 
 > Histórico anterior permanece no Git e em `docs/ai-handoff/archive/`.
 
+## 2026-08-27 — Novo Orçamento: 3 entradas + catálogo completo de tipologias — PR #280
+
+Implementado em `/orcamento/novo`:
+- três entradas principais: `Orçamento Obra`, `Novo Orçamento Sob Medida` e `Venda Balcão`;
+- `Orçamento Obra` exibe o catálogo completo de tipologias, com busca em tempo real, filtro por categoria e linha;
+- linha é apenas filtro: sem linha selecionada, todas as tipologias ativas ficam visíveis;
+- removido o limite visual de 40 cards;
+- seleção inicial de tipologia continua sendo repassada ao formulário de orçamento;
+- Venda Balcão permanece fora do Kanban de obra.
+
+A tabela `tipologias` já continha 122 tipologias, porém o campo `categoria` aceitava apenas `porta` e `janela`. A migration `20260827171516_tipologias_categorias_completas_v1.sql` ampliou a classificação sem apagar tipologias e redistribuiu os registros em famílias reais: porta, janela, módulo fixo, fachada, box, painel/ripado, ACM, cobertura/clarabóia, contramarco/arremate, espelho, portão/grade, guarda-corpo/corrimão, vidro, tela mosquiteira e outros.
+
+Validação desta rodada:
+- Build Validation #620: success;
+- Supabase Database Control #343: success;
+- Vercel Preview do HEAD `bd9597fb3462b83bfe54c80381067b4c96ed3bae`: READY;
+- `/orcamento/novo`: HTTP 200.
+
+---
+
 ## 2026-08-27 — Precificação técnica do orçamento — PR #280
 
 Criadas:
@@ -127,10 +147,16 @@ Validação transacional anterior com ROLLBACK confirmou idempotência do fluxo 
 
 ## Validação técnica da rodada
 
-HEAD de código `22fa0bf81e5ab8132e2b46808a67412dbee81585`:
+HEAD anterior de código `22fa0bf81e5ab8132e2b46808a67412dbee81585`:
 - Build Validation #605: success;
 - Supabase Database Control #328: success;
 - Vercel Preview: READY;
 - `/orcamento/precificacao`: HTTP 200.
+
+HEAD atual `bd9597fb3462b83bfe54c80381067b4c96ed3bae`:
+- Build Validation #620: success;
+- Supabase Database Control #343: success;
+- Vercel Preview: READY;
+- `/orcamento/novo`: HTTP 200.
 
 PR #280 continua draft e sem merge.
