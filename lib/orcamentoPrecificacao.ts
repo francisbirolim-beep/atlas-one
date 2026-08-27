@@ -97,7 +97,7 @@ function tamanhoBarra(p: any) {
 
 async function carregarConfigs() {
   const { data } = await supabase.from('configuracoes_precificacao').select('chave,valor').in('chave', ['preco_kg_aluminio','custo_pintura_kg','margem_padrao_orcamento'])
-  const map = new Map((data || []).map((x: any) => [x.chave, num(x.valor)]))
+  const map = new Map<string, number>((data || []).map((x: any) => [String(x.chave), num(x.valor)]))
   return {
     precoKg: map.get('preco_kg_aluminio') || 0,
     pinturaKg: map.get('custo_pintura_kg') || 0,
@@ -114,10 +114,10 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
   const produtoMap = new Map<string, any>()
   ;(produtos || []).forEach((p: any) => { if (p.codigo) produtoMap.set(codigoKey(p.codigo), p) })
 
-  for (const ov of overrides || []) {
-    const categoria = ov.componente_tipo === 'perfil' ? ['perfil','contramarco'] : [ov.componente_tipo]
-    const candidatas = (materiais || []).filter((m: any) =>
-      m.item_ref === ov.item_ref && categoria.includes(m.categoria) &&
+  for (const ov of (overrides || []) as any[]) {
+    const categorias = ov.componente_tipo === 'perfil' ? ['perfil','contramarco'] : [ov.componente_tipo]
+    const candidatas = ((materiais || []) as any[]).filter((m: any) =>
+      m.item_ref === ov.item_ref && categorias.includes(m.categoria) &&
       (!ov.codigo_origem || codigoKey(m.codigo) === codigoKey(ov.codigo_origem))
     )
 
@@ -128,9 +128,9 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
 
     if (ov.acao === 'substituir') {
       const destino = ov.produto_destino_id
-        ? (produtos || []).find((p: any) => p.id === ov.produto_destino_id)
+        ? ((produtos || []) as any[]).find((p: any) => p.id === ov.produto_destino_id)
         : produtoMap.get(codigoKey(ov.codigo_destino))
-      for (const m of candidatas as any[]) {
+      for (const m of candidatas) {
         await supabase.from('pacote_tecnico_materiais').update({
           produto_id: destino?.id || ov.produto_destino_id || null,
           codigo: ov.codigo_destino || destino?.codigo || m.codigo,
@@ -147,7 +147,7 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
 
     if (ov.acao === 'adicionar') {
       const destino = ov.produto_destino_id
-        ? (produtos || []).find((p: any) => p.id === ov.produto_destino_id)
+        ? ((produtos || []) as any[]).find((p: any) => p.id === ov.produto_destino_id)
         : produtoMap.get(codigoKey(ov.codigo_destino))
       await supabase.from('pacote_tecnico_materiais').insert({
         pacote_id: pacoteId,
@@ -194,9 +194,9 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
     supabase.from('orcamentos').select('margem_padrao_pct').eq('id', orcamentoId).single(),
   ])
   const cfg = await carregarConfigs()
-  const pMap = new Map((produtos || []).map((p: any) => [p.id, p]))
-  const cProduto = new Map((catalogo || []).filter((c: any) => c.produto_id).map((c: any) => [c.produto_id, c]))
-  const cCodigo = new Map((catalogo || []).filter((c: any) => c.codigo).map((c: any) => [codigoKey(c.codigo), c]))
+  const pMap = new Map<string, any>(((produtos || []) as any[]).map((p: any) => [String(p.id), p]))
+  const cProduto = new Map<string, any>(((catalogo || []) as any[]).filter((c: any) => c.produto_id).map((c: any) => [String(c.produto_id), c]))
+  const cCodigo = new Map<string, any>(((catalogo || []) as any[]).filter((c: any) => c.codigo).map((c: any) => [codigoKey(c.codigo), c]))
   const margem = num(orc?.margem_padrao_pct, cfg.margemPadrao)
 
   await supabase.from('orcamento_precificacao_componentes').delete().eq('orcamento_id', orcamentoId).eq('incluido_manual', false)
@@ -234,17 +234,20 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
 }
 
 async function garantirPoliticas(orcamento: any) {
-  const itens = Array.isArray(orcamento.itens) ? orcamento.itens : []
+  const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const { data: existentes } = await supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamento.id)
-  const refs = new Set((existentes || []).map((x: any) => x.item_ref))
-  const novos = itens.map((item: any, idx: number) => itemRef(item, idx)).filter(ref => !refs.has(ref)).map(ref => ({
-    orcamento_id: orcamento.id,
-    item_ref: ref,
-    margem_herda_geral: true,
-    margem_pct: null,
-    sobra_herda_geral: true,
-    cobrar_sobra: null,
-  }))
+  const refs = new Set<string>(((existentes || []) as any[]).map((x: any) => String(x.item_ref)))
+  const novos = itens
+    .map((item: any, idx: number): string => itemRef(item, idx))
+    .filter((ref: string) => !refs.has(ref))
+    .map((ref: string) => ({
+      orcamento_id: orcamento.id,
+      item_ref: ref,
+      margem_herda_geral: true,
+      margem_pct: null,
+      sobra_herda_geral: true,
+      cobrar_sobra: null,
+    }))
   if (novos.length) await supabase.from('orcamento_item_precificacao').insert(novos)
 }
 
@@ -273,12 +276,16 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
     supabase.from('produtos').select('id,codigo,nome,categoria,unidade,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true).order('categoria').order('nome'),
   ])
-  const itens = Array.isArray(orcamento.itens) ? orcamento.itens : []
-  const tipologiaIds = Array.from(new Set(itens.map((i: any) => i?.tipologia_id).filter(Boolean))) as string[]
-  const { data: fs } = tipologiaIds.length ? await supabase.from('engenharia_tipologia_formulas_corte').select('id,tipologia_id,configuracao_label,versao,status,ativo').in('tipologia_id', tipologiaIds).eq('ativo', true).order('status') : { data: [] as any[] }
+  const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
+  const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
+  const { data: fs } = tipologiaIds.length
+    ? await supabase.from('engenharia_tipologia_formulas_corte').select('id,tipologia_id,configuracao_label,versao,status,ativo').in('tipologia_id', tipologiaIds).eq('ativo', true).order('status')
+    : { data: [] as any[] }
   const formulas: Record<string, any> = {}
-  for (const f of fs || []) if (!formulas[f.tipologia_id] || f.status === 'validada') formulas[f.tipologia_id] = f
-  const pendencias = ((componentes || []) as any[]).filter(c => c.custo_pendente).map(c => `${c.codigo ? `${c.codigo} · ` : ''}${c.descricao}: custo ou regra técnica pendente.`)
+  for (const f of (fs || []) as any[]) if (!formulas[f.tipologia_id] || f.status === 'validada') formulas[f.tipologia_id] = f
+  const pendencias = ((componentes || []) as any[])
+    .filter((c: any) => c.custo_pendente)
+    .map((c: any) => `${c.codigo ? `${c.codigo} · ` : ''}${c.descricao}: custo ou regra técnica pendente.`)
   return {
     orcamento,
     pacote: (pacote || null) as PacoteTecnico | null,
@@ -350,7 +357,9 @@ export async function salvarCustoComponente(componente: ComponentePrecificacao, 
 export async function adicionarCustoExtra(dados: { orcamentoId: string; itemRef?: string | null; categoria: CategoriaPrecificacao; descricao: string; unidade?: string; quantidade: number; custoUnitario: number }) {
   const { data: orc } = await supabase.from('orcamentos').select('margem_padrao_pct').eq('id', dados.orcamentoId).single()
   const margem = num(orc?.margem_padrao_pct, 40)
-  const qtd = Math.max(0, num(dados.quantidade, 1)); const custo = Math.max(0, num(dados.custoUnitario)); const total = qtd * custo
+  const qtd = Math.max(0, num(dados.quantidade, 1))
+  const custo = Math.max(0, num(dados.custoUnitario))
+  const total = qtd * custo
   const { data, error } = await supabase.from('orcamento_precificacao_componentes').insert({
     orcamento_id: dados.orcamentoId,
     item_ref: dados.itemRef || null,
@@ -382,21 +391,51 @@ export async function excluirComponentePrecificacao(id: string, orcamentoId: str
 }
 
 export async function trocarComponenteOrcamento(dados: {
-  orcamentoId: string; itemRef: string; tipologiaId?: string|null; formulaId?: string|null; componenteTipo: 'perfil'|'acessorio'; codigoOrigem: string; produtoOrigemId?: string|null; produtoDestino: ProdutoPrecificacao; justificativa: string; escopo: 'orcamento'|'tipologia_definitiva'; comprimentoOverrideMm?: number|null; quantidadeOverride?: number|null
+  orcamentoId: string
+  itemRef: string
+  tipologiaId?: string | null
+  formulaId?: string | null
+  componenteTipo: 'perfil' | 'acessorio'
+  codigoOrigem: string
+  produtoOrigemId?: string | null
+  produtoDestino: ProdutoPrecificacao
+  justificativa: string
+  escopo: 'orcamento' | 'tipologia_definitiva'
+  comprimentoOverrideMm?: number | null
+  quantidadeOverride?: number | null
 }) {
   if (dados.justificativa.trim().length < 3) return { ok: false as const, error: 'Informe o motivo da alteração.' }
   if (dados.escopo === 'tipologia_definitiva') {
     if (!dados.formulaId) return { ok: false as const, error: 'Esta tipologia não possui fórmula técnica identificada. Abra o Editor Técnico.' }
-    const r = await substituirComponenteDefinitivo({ formulaId: dados.formulaId, componenteTipo: dados.componenteTipo, codigoOrigem: dados.codigoOrigem, codigoDestino: dados.produtoDestino.codigo || '', justificativa: dados.justificativa, orcamentoId: dados.orcamentoId, itemRef: dados.itemRef })
+    const r = await substituirComponenteDefinitivo({
+      formulaId: dados.formulaId,
+      componenteTipo: dados.componenteTipo,
+      codigoOrigem: dados.codigoOrigem,
+      codigoDestino: dados.produtoDestino.codigo || '',
+      justificativa: dados.justificativa,
+      orcamentoId: dados.orcamentoId,
+      itemRef: dados.itemRef,
+    })
     if (!r.ok) return r
   } else {
     const usuario = await usuarioAtual()
     const r = await registrarOverrideOrcamento({
-      orcamentoId: dados.orcamentoId, itemRef: dados.itemRef, tipologiaId: dados.tipologiaId || null, formulaId: dados.formulaId || null,
-      componenteTipo: dados.componenteTipo, acao: 'substituir', codigoOrigem: dados.codigoOrigem, produtoOrigemId: dados.produtoOrigemId || null,
-      codigoDestino: dados.produtoDestino.codigo || null, produtoDestinoId: dados.produtoDestino.id, descricaoDestino: dados.produtoDestino.nome,
-      quantidadeOverride: dados.quantidadeOverride ?? null, comprimentoOverrideMm: dados.comprimentoOverrideMm ?? null, justificativa: dados.justificativa,
-      criadoPorId: usuario?.id || null, criadoPorNome: usuario?.nome || null,
+      orcamentoId: dados.orcamentoId,
+      itemRef: dados.itemRef,
+      tipologiaId: dados.tipologiaId || null,
+      formulaId: dados.formulaId || null,
+      componenteTipo: dados.componenteTipo,
+      acao: 'substituir',
+      codigoOrigem: dados.codigoOrigem,
+      produtoOrigemId: dados.produtoOrigemId || null,
+      codigoDestino: dados.produtoDestino.codigo || null,
+      produtoDestinoId: dados.produtoDestino.id,
+      descricaoDestino: dados.produtoDestino.nome,
+      quantidadeOverride: dados.quantidadeOverride ?? null,
+      comprimentoOverrideMm: dados.comprimentoOverrideMm ?? null,
+      justificativa: dados.justificativa,
+      criadoPorId: usuario?.id || null,
+      criadoPorNome: usuario?.nome || null,
     })
     if (!r.ok) return r
   }
@@ -404,25 +443,61 @@ export async function trocarComponenteOrcamento(dados: {
 }
 
 export async function adicionarComponenteOrcamento(dados: {
-  orcamentoId: string; itemRef: string; tipologiaId?: string|null; formulaId?: string|null; componenteTipo: 'perfil'|'acessorio'|'vidro'|'outro'; produto?: ProdutoPrecificacao|null; descricao: string; quantidade: number; comprimentoMm?: number|null; justificativa: string
+  orcamentoId: string
+  itemRef: string
+  tipologiaId?: string | null
+  formulaId?: string | null
+  componenteTipo: 'perfil' | 'acessorio' | 'vidro' | 'outro'
+  produto?: ProdutoPrecificacao | null
+  descricao: string
+  quantidade: number
+  comprimentoMm?: number | null
+  justificativa: string
 }) {
   const usuario = await usuarioAtual()
   const r = await registrarOverrideOrcamento({
-    orcamentoId: dados.orcamentoId, itemRef: dados.itemRef, tipologiaId: dados.tipologiaId || null, formulaId: dados.formulaId || null,
-    componenteTipo: dados.componenteTipo, acao: 'adicionar', codigoDestino: dados.produto?.codigo || null, produtoDestinoId: dados.produto?.id || null,
-    descricaoDestino: dados.produto?.nome || dados.descricao, quantidadeOverride: dados.quantidade, comprimentoOverrideMm: dados.comprimentoMm ?? null,
-    justificativa: dados.justificativa, criadoPorId: usuario?.id || null, criadoPorNome: usuario?.nome || null,
+    orcamentoId: dados.orcamentoId,
+    itemRef: dados.itemRef,
+    tipologiaId: dados.tipologiaId || null,
+    formulaId: dados.formulaId || null,
+    componenteTipo: dados.componenteTipo,
+    acao: 'adicionar',
+    codigoDestino: dados.produto?.codigo || null,
+    produtoDestinoId: dados.produto?.id || null,
+    descricaoDestino: dados.produto?.nome || dados.descricao,
+    quantidadeOverride: dados.quantidade,
+    comprimentoOverrideMm: dados.comprimentoMm ?? null,
+    justificativa: dados.justificativa,
+    criadoPorId: usuario?.id || null,
+    criadoPorNome: usuario?.nome || null,
   })
   if (!r.ok) return r
   return gerarBasePrecificacao(dados.orcamentoId)
 }
 
-export async function removerComponenteOrcamento(dados: { orcamentoId: string; itemRef: string; tipologiaId?: string|null; formulaId?: string|null; componenteTipo: 'perfil'|'acessorio'|'vidro'|'outro'; codigoOrigem?: string|null; produtoOrigemId?: string|null; justificativa: string }) {
+export async function removerComponenteOrcamento(dados: {
+  orcamentoId: string
+  itemRef: string
+  tipologiaId?: string | null
+  formulaId?: string | null
+  componenteTipo: 'perfil' | 'acessorio' | 'vidro' | 'outro'
+  codigoOrigem?: string | null
+  produtoOrigemId?: string | null
+  justificativa: string
+}) {
   const usuario = await usuarioAtual()
   const r = await registrarOverrideOrcamento({
-    orcamentoId: dados.orcamentoId, itemRef: dados.itemRef, tipologiaId: dados.tipologiaId || null, formulaId: dados.formulaId || null,
-    componenteTipo: dados.componenteTipo, acao: 'remover', codigoOrigem: dados.codigoOrigem || null, produtoOrigemId: dados.produtoOrigemId || null,
-    justificativa: dados.justificativa, criadoPorId: usuario?.id || null, criadoPorNome: usuario?.nome || null,
+    orcamentoId: dados.orcamentoId,
+    itemRef: dados.itemRef,
+    tipologiaId: dados.tipologiaId || null,
+    formulaId: dados.formulaId || null,
+    componenteTipo: dados.componenteTipo,
+    acao: 'remover',
+    codigoOrigem: dados.codigoOrigem || null,
+    produtoOrigemId: dados.produtoOrigemId || null,
+    justificativa: dados.justificativa,
+    criadoPorId: usuario?.id || null,
+    criadoPorNome: usuario?.nome || null,
   })
   if (!r.ok) return r
   return gerarBasePrecificacao(dados.orcamentoId)
@@ -438,61 +513,75 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
     supabase.from('produtos').select('id,peso_kg_m').eq('ativo', true),
   ])
   if (!orc) return { ok: false as const, error: 'Orçamento não encontrado.' }
+
   const cfg = await carregarConfigs()
   const margemGeral = num(orc.margem_padrao_pct, cfg.margemPadrao)
   const sobraGeral = Boolean(orc.cobrar_sobra_padrao)
-  const itens = Array.isArray(orc.itens) ? orc.itens : []
-  const pMap = new Map((politicas || []).map((p: any) => [p.item_ref, p]))
-  const pesoMap = new Map((produtos || []).map((p: any) => [p.id, num(p.peso_kg_m)]))
-  const refs = itens.map((item: any, idx: number) => itemRef(item, idx))
+  const itens: any[] = Array.isArray(orc.itens) ? orc.itens : []
+  const pMap = new Map<string, any>(((politicas || []) as any[]).map((p: any) => [String(p.item_ref), p]))
+  const pesoMap = new Map<string, number>(((produtos || []) as any[]).map((p: any) => [String(p.id), num(p.peso_kg_m)]))
+  const refs: string[] = itens.map((item: any, idx: number): string => itemRef(item, idx))
   const custos = new Map<string, { produtivo: number; extras: number; sobra: number }>()
-  refs.forEach(ref => custos.set(ref, { produtivo: 0, extras: 0, sobra: 0 }))
-  let custoGlobal = 0; let vendaGlobal = 0
-  const catsExtras = new Set(['mao_obra','instalacao','deslocamento','frete','pintura','terceiro','consumivel'])
+  refs.forEach((ref: string) => custos.set(ref, { produtivo: 0, extras: 0, sobra: 0 }))
+  let custoGlobal = 0
+  let vendaGlobal = 0
+  const catsExtras = new Set<string>(['mao_obra','instalacao','deslocamento','frete','pintura','terceiro','consumivel'])
 
-  for (const c of comps || []) {
+  for (const c of (comps || []) as any[]) {
     const custo = num(c.custo_total)
-    if (!c.item_ref || !custos.has(c.item_ref)) {
-      custoGlobal += custo; vendaGlobal += margemVenda(custo, margemGeral); continue
+    if (!c.item_ref || !custos.has(String(c.item_ref))) {
+      custoGlobal += custo
+      vendaGlobal += margemVenda(custo, margemGeral)
+      continue
     }
-    const item = custos.get(c.item_ref)!
-    if (catsExtras.has(c.categoria)) item.extras += custo
+    const item = custos.get(String(c.item_ref))!
+    if (catsExtras.has(String(c.categoria))) item.extras += custo
     else item.produtivo += custo
   }
 
   const cortesPorBarra = new Map<string, any[]>()
-  for (const c of cortes || []) {
-    const arr = cortesPorBarra.get(c.barra_id) || []; arr.push(c); cortesPorBarra.set(c.barra_id, arr)
+  for (const c of (cortes || []) as any[]) {
+    const chave = String(c.barra_id)
+    const arr = cortesPorBarra.get(chave) || []
+    arr.push(c)
+    cortesPorBarra.set(chave, arr)
   }
-  let sobraTotalCusto = 0; let sobraCobrada = 0
-  for (const b of barras || []) {
+
+  let sobraTotalCusto = 0
+  let sobraCobrada = 0
+  for (const b of (barras || []) as any[]) {
     if (b.fonte_tipo !== 'barra_nova' || num(b.sobra_final_mm) <= 0) continue
-    const pesoM = pesoMap.get(b.produto_id) || 0
+    const pesoM = pesoMap.get(String(b.produto_id)) || 0
     if (pesoM <= 0 || pesoM >= 50 || cfg.precoKg <= 0) continue
     const custoSobra = (num(b.sobra_final_mm) / 1000) * pesoM * (cfg.precoKg + cfg.pinturaKg)
     sobraTotalCusto += custoSobra
-    const barraCortes = cortesPorBarra.get(b.id) || []
+    const barraCortes = cortesPorBarra.get(String(b.id)) || []
     const elegiveis = barraCortes.filter((c: any) => {
-      const pol: any = pMap.get(c.item_ref)
+      const ref = String(c.item_ref || '')
+      const pol = pMap.get(ref)
       const cobrar = pol ? (pol.sobra_herda_geral ? sobraGeral : Boolean(pol.cobrar_sobra)) : sobraGeral
-      return c.item_ref && custos.has(c.item_ref) && cobrar
+      return Boolean(ref) && custos.has(ref) && cobrar
     })
     const totalCompr = elegiveis.reduce((s: number, c: any) => s + num(c.comprimento_mm), 0)
     if (totalCompr <= 0) continue
     for (const c of elegiveis) {
+      const ref = String(c.item_ref)
       const parte = custoSobra * (num(c.comprimento_mm) / totalCompr)
-      custos.get(c.item_ref)!.sobra += parte; sobraCobrada += parte
+      custos.get(ref)!.sobra += parte
+      sobraCobrada += parte
     }
   }
 
-  let valorTotal = vendaGlobal; let custoProdutivoTotal = custoGlobal
+  let valorTotal = vendaGlobal
+  let custoProdutivoTotal = custoGlobal
   for (const ref of refs) {
     const pol: any = pMap.get(ref) || {}
     const margem = pol.margem_herda_geral === false ? num(pol.margem_pct, margemGeral) : margemGeral
     const c = custos.get(ref) || { produtivo: 0, extras: 0, sobra: 0 }
     const base = c.produtivo + c.extras
     const venda = margemVenda(base, margem) + c.sobra
-    valorTotal += venda; custoProdutivoTotal += base
+    valorTotal += venda
+    custoProdutivoTotal += base
     await supabase.from('orcamento_item_precificacao').update({
       custo_produtivo: c.produtivo,
       custo_extras: c.extras,
@@ -502,8 +591,9 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
     }).eq('orcamento_id', orcamentoId).eq('item_ref', ref)
     await supabase.from('orcamento_precificacao_componentes').update({ margem_pct: margem }).eq('orcamento_id', orcamentoId).eq('item_ref', ref)
   }
-  for (const c of comps || []) {
-    const pol: any = c.item_ref ? pMap.get(c.item_ref) : null
+
+  for (const c of (comps || []) as any[]) {
+    const pol: any = c.item_ref ? pMap.get(String(c.item_ref)) : null
     const margem = pol && pol.margem_herda_geral === false ? num(pol.margem_pct, margemGeral) : margemGeral
     await supabase.from('orcamento_precificacao_componentes').update({ preco_venda: margemVenda(num(c.custo_total), margem), margem_pct: margem }).eq('id', c.id)
   }
@@ -516,14 +606,15 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
     custo_sobra_cobrada: sobraCobrada,
     otimizacao_orcamento: {
       pacote_id: pacoteId,
-      barras_novas: (barras || []).filter((b: any) => b.fonte_tipo === 'barra_nova').length,
-      sobras_reaproveitadas: (barras || []).filter((b: any) => b.fonte_tipo === 'sobra_estoque').length,
-      sobra_total_mm: (barras || []).reduce((s: number, b: any) => s + num(b.sobra_final_mm), 0),
+      barras_novas: ((barras || []) as any[]).filter((b: any) => b.fonte_tipo === 'barra_nova').length,
+      sobras_reaproveitadas: ((barras || []) as any[]).filter((b: any) => b.fonte_tipo === 'sobra_estoque').length,
+      sobra_total_mm: ((barras || []) as any[]).reduce((s: number, b: any) => s + num(b.sobra_final_mm), 0),
       custo_sobra_total: sobraTotalCusto,
       custo_sobra_cobrada: sobraCobrada,
       margem_geral_pct: margemGeral,
       atualizado_em: new Date().toISOString(),
     },
   }).eq('id', orcamentoId)
+
   return { ok: true as const, valorTotal, custoOtimizado: otimizado, sobraCobrada }
 }
