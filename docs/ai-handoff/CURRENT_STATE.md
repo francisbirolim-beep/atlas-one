@@ -2,183 +2,216 @@
 
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
-## EM VALIDAÇÃO — CLIENTE 360 + OBRAS + WORKFLOW OPERACIONAL — 2026-08-26
+## EM VALIDAÇÃO — CLIENTE 360 + FLUXO + PRECIFICAÇÃO + MATERIAIS — 2026-08-27
 
 Branch: `feat/cliente-360-obras-financeiro-v1`
-PR: #280 — draft, não fazer merge antes da validação visual do usuário.
+PR: #280 — draft. **Não fazer merge antes da validação visual/funcional do usuário.**
 
-### Cliente 360
+## Fluxo oficial da venda sob medida
 
-Implementado:
-- `/clientes/[id]/central` como central do relacionamento com o cliente;
-- múltiplas Obras por cliente;
-- `/obras` e `/obras/[id]`;
-- vínculo opcional `obra_id` em orçamento, orçamento/venda balcão, assistência, medição e financeiro;
-- Financeiro consolidado por cliente e filtrável por obra;
-- recebimento geral do cliente, recebimento direto por obra e alocação de um mesmo recebimento entre várias obras;
-- baixa parcial usando `valor_pago`, mantendo a conta aberta até quitação;
-- documentos, histórico, relatórios e resumo inteligente;
-- contexto Cliente + Obra preservado também na fila offline.
-
-### Andamento do cliente
-
-Nova visão:
-- `/clientes/[id]/central?aba=andamento`;
-- lê os mesmos cards dos setores, sem duplicar estado;
-- agrupa por obra e mostra cadeia macro:
-  `Venda → Conferir Projeto → Medição Final → Engenharia final → Materiais → Produção → Instalação`;
-- mostra Perfis, Vidros, Acessórios e Outros em paralelo;
-- exibe status real e `Bloqueio atual`;
-- gates visuais impedem cards legados de liberar etapas antes da hora;
-- Perfis/Vidros/Acessórios/Outros abertos pelo Andamento possuem retorno contextual para a mesma aba.
-
-### Fluxo oficial da venda sob medida
-
-**Venda confirmada**:
+### Venda confirmada
+Cria somente:
 1. snapshot em `vendas_obras`;
-2. conta em `financeiro_contas_receber` se a regra Financeiro estiver ativa;
-3. dispara evento `venda_confirmada`;
-4. regras padrão criam Financeiro + `Engenharia — Conferir Projeto / A conferir`;
-5. somente então marca o orçamento `status='vendido'`.
+2. Financeiro conforme regra ativa;
+3. `Engenharia — Conferir Projeto`;
+4. só então `orcamentos.status='vendido'`.
 
 Não criar Medição Final, materiais, Produção ou Instalação diretamente em `Vendido`.
 
-**Projeto conferido** dispara `projeto_conferido`. Regras padrão ativas criam:
+### Projeto conferido
+Cria/garante:
 - Medição Final;
 - Perfis;
 - Acessórios;
 - Outros;
-- ainda não Vidros.
+- pacote técnico da obra a partir das fórmulas validadas;
+- ordens de Produção vinculadas quando aplicável.
 
-**Medição Final aprovada** dispara `medicao_aprovada`. Regras padrão ativas criam:
+Vidros ainda não são liberados nesta etapa.
+
+### Medição Final aprovada
+Cria/garante:
 - Vidros;
 - MEE/Engenharia técnica pós-medição.
 
-Fluxo de materiais:
-`Pendente → Em compra → Comprado → Aguardando entrega → Recebido → Separado → Liberado`.
+## Gates atuais de Produção e Instalação
 
-Detalhamento permanente: `docs/ai-handoff/CLIENTE360_FLUXO_VENDA.md`.
+Produção não é liberada por simples entrada em Vendido.
 
-### Motor de Automações do Fluxo
+A ordem de esquadria só pode ser liberada quando:
+- Medição Final estiver `aprovado`;
+- Perfis estiverem `Liberado`;
+- Acessórios estiverem `Liberado`;
+- Outros estiverem `Liberado`.
 
-Criado módulo master `/configuracoes/automacoes-fluxo`.
+O card de Produção acompanha o estado real das ordens e não deve ser arrastado manualmente para um estado incompatível.
 
-`workflow_automacoes` permite configurar:
-- evento/gatilho;
-- ação;
-- setor e coluna de destino;
-- responsável;
-- criação de tarefa;
-- prazo/prioridade;
-- aviso ao responsável;
-- usuários adicionais em `Notificar também`;
-- mensagem parametrizada;
-- ordem, ativo/inativo e proteção contra duplicidade.
+Instalação só é criada/liberada quando:
+- todas as ordens de produção não canceladas estiverem concluídas;
+- Vidros estiverem `Liberado`.
 
-`workflow_execucoes` audita cada execução. Cards e tarefas carregam contexto do workflow/orçamento/cliente/obra.
+A automação `Produção concluída → Instalação` está ativa. A regra genérica `Materiais liberados → Produção` continua inativa porque a liberação de Produção é feita pelo gate técnico das ordens, não por criação cega de card.
 
-O motor reaproveita `tarefas`, `tarefa_colunas` e `notificacoes` existentes. Não há um segundo sistema de tarefas. Quando uma tarefa atribuída já gera notificação, o workflow evita mandar outro sino duplicado para o mesmo responsável.
+Instalação usa as colunas iniciais:
+`Agendada → Em instalação → Concluída`.
 
-Regras padrão:
-- Venda confirmada → Financeiro: ativa; Gabrielle responsável; cria tarefa + aviso;
-- Venda confirmada → Conferir Projeto: ativa;
-- Projeto conferido → Medição Final: ativa;
-- Projeto conferido → Perfis: ativa;
-- Projeto conferido → Acessórios: ativa;
-- Projeto conferido → Outros materiais: ativa;
-- Medição aprovada → Vidros: ativa;
-- Medição aprovada → MEE: ativa;
-- Materiais liberados → Produção: cadastrada, inativa;
-- Produção concluída → Instalação: cadastrada, inativa.
+Concluir Instalação conclui a Obra e dispara o evento de fechamento correspondente.
 
-Produção ganhou cadastro/colunas iniciais apenas para permitir desenho do fluxo. Não ativar o gate até definição funcional.
+## Cliente 360 / Obras
 
-### Venda e revisões
+Implementado:
+- `/clientes/[id]/central`;
+- `/clientes/[id]/central?aba=andamento`;
+- múltiplas Obras por cliente;
+- `/obras` e `/obras/[id]`;
+- Financeiro único por cliente/obra;
+- recebimentos gerais, por obra e multiobra;
+- documentos, histórico, assistências, orçamentos/vendas, relatórios e IA;
+- Andamento derivado dos cards reais dos setores, sem status paralelo.
 
-`vendas_obras` preserva snapshot do orçamento vendido: valor, custo previsto, condições, forma, itens, cliente e obra.
+A obra agora possui navegação para:
+- Visão da Obra;
+- Materiais / Estoque;
+- Produção.
 
-`venda_obra_revisoes` é a base para alterações pós-venda com justificativa obrigatória e histórico antes/depois.
+## Materiais / Estoque da Obra
 
-### Financeiro
+Nova rota: `/obras/[id]/materiais`.
 
-- continua sendo base única;
-- cliente e obra são dimensões da mesma base;
-- confirmação cria pré-lançamento idempotente quando a automação Financeiro está ativa;
-- Financeiro poderá ajustar parcelas/vencimentos sem apagar o snapshot da venda;
-- recebimento geral pode ser distribuído entre várias obras.
+Fluxo operacional:
+`Necessidade técnica → Plano de barras → Separação física do estoque → Compra final`.
 
-### Balcão
+Estruturas principais:
+- `pacotes_tecnicos`;
+- `pacote_tecnico_materiais`;
+- `pacote_tecnico_barras`;
+- `pacote_tecnico_cortes`;
+- `pacote_tecnico_separacoes`;
+- `pacote_tecnico_compras`;
+- `estoque_sobras_perfis`.
 
-- Venda/Orçamento Balcão rápido não entra no Kanban de obras;
-- `balcao_orcamentos` é a tabela transacional própria;
-- cadastros e financeiro continuam compartilhados;
-- vínculo cliente/obra no Balcão serve a relatório, sem disparar workflow de obra automaticamente.
+A tela permite:
+- gerar/regerar pacote técnico;
+- editar quantidade de material com justificativa;
+- incluir/remover material manualmente;
+- visualizar plano de barras e cortes;
+- separar barras inteiras do estoque;
+- reservar retalhos/sobras;
+- desfazer separação;
+- recalcular aproveitamento;
+- ajustar a quantidade final que realmente será comprada;
+- incluir compra manual;
+- marcar pacote conferido.
 
-### Validações concluídas
+Regra permanente: **comprado não é igual a consumido**. Reserva, sobra, retorno ao estoque e consumo realizado devem permanecer conceitos distintos.
 
-Financeiro Cliente 360 com `ROLLBACK`:
-- R$ 10.000 gerais → R$ 6.000 em uma obra + R$ 4.000 em outra;
-- baixa integral/parcial, crédito excedente e bloqueio entre obras;
-- 0 registros temporários restantes.
+## Precificação do Orçamento
 
-Workflow, com `ROLLBACK`:
-- Venda confirmada: venda 1, conta 1, Financeiro 1, Conferir Projeto 1, tarefa Gabrielle 1, notificação Gabrielle 1, downstream 0;
-- Projeto conferido: Medição + Perfis + Acessórios + Outros; Vidros 0;
-- Medição aprovada: Vidros + MEE;
-- 8 execuções coerentes no cenário completo (2 + 4 + 2);
-- 0 registros temporários restantes.
+Rotas:
+- `/orcamento/precificacao`;
+- `/orcamento/[id]/precificacao`.
 
-### Banco / migrations desta evolução
+Base implementada:
+- margem geral do orçamento;
+- margem individual por item/tipologia;
+- cobrança de sobra geral ou por item;
+- sobra cobrada entra somente a custo, sem margem comercial;
+- cálculo/otimização de barras antes da venda;
+- componentes por Perfis, Acessórios, Vidros e custos extras;
+- custos extras: mão de obra, instalação, deslocamento, frete, pintura, terceiros, consumíveis e outros;
+- custo pendente explícito quando cadastro/regra não é suficiente;
+- edição do custo no orçamento;
+- opção de persistir custo corrigido em `catalogo_custos_tecnicos` para próximos orçamentos;
+- `custo_otimizado`, `custo_sobra_cobrada` e snapshot de otimização em `orcamentos`.
 
-Cliente 360:
-- `20260826185419_cliente_360_obras_financeiro_v1.sql`;
-- `20260826190418_cliente_360_propagacao_obra_v1.sql`;
-- `20260826192848_cliente360_recebimento_multiobra_v1.sql`;
-- `20260826193046_cliente360_recebimento_status_compativel_v1.sql`.
+Automação técnica só usa fórmula com status validado. Fórmula sem evidência suficiente gera pendência; não inventar material.
 
-Fluxo / workflow:
-- `20260826212725_fluxo_venda_conferir_projeto_materiais_v1.sql`;
-- `20260826213310_fluxo_engenharia_separar_projeto_mee_v1.sql`;
-- `20260826221809_fluxo_vendido_confirmacao_atomica_v1.sql`;
-- `20260826222110_conferir_projeto_sem_obra_v1.sql`;
-- `20260826222310_financeiro_contas_receber_cliente360_leitura_v1.sql`;
-- `20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql`;
-- `20260826233029_workflow_evitar_notificacao_duplicada_v1.sql`;
-- `20260826233648_workflow_restringir_funcoes_internas_v1.sql`.
+## Overrides e histórico de Tipologias
 
-### Segurança
+Alterações de componente podem ter dois escopos:
+- `orcamento`: vale somente naquele orçamento via `orcamento_item_componentes_overrides`;
+- `tipologia_definitiva`: altera a fórmula técnica e cria nova versão histórica.
 
-- `workflow_automacoes` tem RLS: leitura autenticada, escrita somente por master;
-- `workflow_execucoes` é leitura autenticada e escrita pelo motor;
-- helpers internos do workflow tiveram EXECUTE revogado de `anon` e `authenticated`;
-- `fn_iniciar_fluxo_venda_v2` e `fn_concluir_conferencia_projeto_v1` permanecem RPCs autenticadas intencionais;
-- advisors ainda apontam hardening legado de outras áreas; tratar em PR separado.
+Histórico:
+- tabela `engenharia_tipologia_formulas_historico`;
+- toda alteração técnica relevante cria versão;
+- restauração não apaga a versão atual: cria uma nova versão baseada na escolhida;
+- restauração e alteração definitiva são master-only;
+- tipologia pode ser duplicada para desenvolvimento sem alterar a original;
+- rota `/engenharia/historico-tipologias` está disponível no menu da Engenharia.
 
-### Pendente antes do merge
+## Produção
 
-- validar visualmente `/configuracoes/automacoes-fluxo` no Preview;
-- escolher responsáveis das etapas além do Financeiro;
-- validar no Preview uma Venda confirmada e conferir tarefa/sino do responsável;
-- validar Cliente 360 → Andamento e gates;
-- definir gates de Produção e Instalação antes de ativar suas regras;
-- validar checks do HEAD final do PR;
+`/producao` trabalha com ordens vinculadas a Cliente → Obra → Venda.
+
+- Contramarco e esquadria podem ser ordens separadas;
+- ordem de esquadria pode nascer bloqueada aguardando gates;
+- status de ordem: `aguardando`, `liberada`, `em_producao`, `conferencia`, `concluida`, `cancelada`;
+- card do setor é sincronizado a partir das ordens;
+- Plano de Corte continua como snapshot operacional da receita técnica.
+
+## Dados técnicos de perfis
+
+Migration `20260827023133_produtos_backfill_tamanho_barra_origem_v1.sql` preenche `produtos.tamanho_barra_mm` a partir de `tamanho_barra_mm_origem` somente onde o campo operacional estava nulo e a origem possuía valor válido. Não sobrescreve valor operacional existente.
+
+## Financeiro e Venda Balcão
+
+- Financeiro continua sendo base única;
+- Cliente e Obra são dimensões da mesma base;
+- snapshot de venda fica em `vendas_obras`;
+- alterações pós-venda devem usar revisão com justificativa;
+- Venda/Orçamento Balcão rápido continua fora do workflow de obra;
+- Balcão compartilha cadastros, estoque e financeiro, sem duplicar base.
+
+## Migrations desta etapa
+
+Além das migrations Cliente 360/workflow já registradas, entraram:
+- `20260827012106_producao_ordens_vinculadas_revisoes_v1.sql`;
+- `20260827013630_fluxo_producao_instalacao_gates_v1.sql`;
+- `20260827015657_material_planejamento_aproveitamento_estoque_v1.sql`;
+- `20260827020901_orcamento_margem_sobra_otimizacao_v1.sql`;
+- `20260827021039_orcamento_precificacao_componentes_catalogo_v1.sql`;
+- `20260827021551_orcamento_override_historico_tipologia_v1.sql`;
+- `20260827023133_produtos_backfill_tamanho_barra_origem_v1.sql`.
+
+Todas estão aplicadas no Supabase e versionadas no repositório.
+
+## Validação técnica
+
+Código funcional validado no HEAD `22fa0bf81e5ab8132e2b46808a67412dbee81585`:
+- GitHub Build Validation #605: success;
+- Supabase Database Control #328: success;
+- Vercel Preview correspondente: READY;
+- `/orcamento/precificacao` respondeu HTTP 200 no deployment.
+
+O commit de documentação posterior é docs-only e deve receber os checks finais antes de compartilhar o Preview definitivo.
+
+## Ainda pendente / não considerar concluído
+
+- teste visual e operacional do usuário no Preview;
+- validar Precificação com um orçamento real contendo tipologias/fórmulas validadas;
+- validar Materiais/Estoque em uma obra real;
+- validar separação de barra/retalho e desfazer;
+- validar Produção completa e gate de Instalação com cenário real;
+- definir responsáveis das etapas além do Financeiro;
+- completar o módulo de custos `Previsto → Otimizado → Comprado → Realizado` com consumo real, devolução e custo realizado;
+- interface completa para revisão financeira pós-venda ainda é evolução posterior;
 - não fazer merge do PR #280 até aprovação do usuário.
 
-## REGRAS TÉCNICAS A PRESERVAR
+## Regras técnicas a preservar
 
-- GitHub é a única fonte da verdade do código.
-- Nunca commitar direto em `main`; branch → PR → Build/Preview → merge manual.
-- Cliente é o centro do relacionamento; Obra é o centro da execução.
-- Financeiro é único; cliente/obra são dimensões do mesmo financeiro.
-- Cliente 360 Andamento deriva status dos processos reais, nunca de cópia manual.
-- Eventos do workflow devem ser idempotentes e auditados.
-- Configuração do workflow é master-only; responsáveis recebem tarefas/avisos pelo sistema existente.
-- Venda confirmada = Financeiro + Conferir Projeto pelas regras padrão; não liberar downstream cedo.
-- Perfis/Acessórios/Outros só após Projeto conferido.
-- Vidros só após Medição Final aprovada.
-- MEE permanece pós-medição enquanto depender de `medicao_itens`.
-- Produção/Instalação não ativar até seus gates estarem definidos.
-- Venda fechada preserva snapshot; alterações posteriores exigem justificativa/histórico.
-- Venda/Orçamento Balcão rápido não alimenta workflow de obra.
-- `kanban_entrada_em` é fixa; `coluna_atualizada_em` é movimentação/SLA.
-- W.Vetro é referência/origem; regra técnica Atlas validada tem prioridade.
+- GitHub é fonte da verdade.
+- Nunca commit direto em `main`; branch → PR → checks → Preview → merge manual.
+- Cliente é centro do relacionamento; Obra é centro da execução.
+- Cliente 360 deriva status dos processos reais.
+- Venda confirmada não libera downstream completo.
+- Vidros nunca antes da Medição Final aprovada.
+- Produção depende de Medição aprovada + Perfis/Acessórios/Outros liberados.
+- Instalação depende de Produção concluída + Vidros liberados.
+- Workflow deve ser idempotente e auditável.
+- Fórmula técnica não validada não deve gerar compra automática inventada.
+- Alteração definitiva de tipologia gera nova versão; restauração nunca apaga histórico.
+- Sobra cobrada no orçamento entra somente a custo, sem margem.
+- Compra, separação, consumo e sobra são estados distintos.
+- Venda fechada preserva snapshot; revisão exige justificativa.
+- Venda/Orçamento Balcão rápido não entra no workflow de obra.

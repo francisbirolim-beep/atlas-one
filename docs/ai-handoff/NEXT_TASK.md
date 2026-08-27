@@ -1,147 +1,107 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Cliente 360 + Motor de Automações
+## TAREFA ATUAL — validar Preview do PR #280
 
 Branch: `feat/cliente-360-obras-financeiro-v1`
 PR: #280 — draft. **Não fazer merge ainda.**
 
-Referência detalhada: `docs/ai-handoff/CLIENTE360_FLUXO_VENDA.md`.
+O objetivo agora é testar o fluxo real no Preview antes de continuar expandindo.
 
-## Motor de workflow implementado
+## Checklist de validação manual
 
-Rota master: `/configuracoes/automacoes-fluxo`.
+### 1. Precificação do orçamento
+1. Abrir `/orcamento/precificacao`.
+2. Escolher um orçamento real com itens estruturados e tipologias cadastradas.
+3. Gerar a base de precificação.
+4. Conferir Perfis, Acessórios, Vidros e pendências.
+5. Conferir plano de barras e aproveitamento.
+6. Alterar margem geral.
+7. Alterar margem somente de um item e confirmar que os demais herdam a geral.
+8. Ativar/desativar cobrança de sobra geral e individual.
+9. Confirmar que sobra cobrada entra a custo, sem margem.
+10. Alterar custo de um componente só neste orçamento.
+11. Testar `Salvar no catálogo` e confirmar reaproveitamento em nova geração.
+12. Incluir custo extra (ex.: instalação/frete) e conferir preço final.
 
-Cada automação pode configurar:
-- gatilho/evento;
-- ação;
-- setor e coluna de destino;
-- responsável;
-- criar ou não tarefa;
-- prazo e prioridade;
-- avisar responsável;
-- usuários adicionais em `Notificar também`;
-- mensagem;
-- ordem;
-- evitar duplicidade;
-- ativo/inativo.
+### 2. Alteração de componente / Tipologia
+1. Em Precificação, trocar um perfil/acessório somente neste orçamento.
+2. Regerar e confirmar que a tipologia mestre não mudou.
+3. Como master, testar alteração definitiva em uma tipologia de teste.
+4. Abrir `/engenharia/historico-tipologias`.
+5. Confirmar nova versão.
+6. Restaurar uma versão anterior e confirmar que nasce outra versão, sem apagar histórico.
+7. Duplicar uma tipologia e confirmar que a original permanece intacta.
 
-O motor usa `workflow_automacoes` + `workflow_execucoes` e reaproveita `tarefas`/`notificacoes` existentes.
+### 3. Projeto conferido → Materiais
+1. Confirmar uma venda controlada.
+2. Conferir Financeiro + Conferir Projeto e nenhum downstream precoce.
+3. Mover para `Projeto conferido`.
+4. Confirmar Medição Final + Perfis + Acessórios + Outros.
+5. Confirmar que um pacote técnico é gerado/está disponível para a obra.
+6. Vidros ainda não devem estar liberados antes da Medição aprovada.
 
-Regras padrão já cadastradas:
-- Venda confirmada → Financeiro: ativa, Gabrielle responsável, tarefa + aviso;
-- Venda confirmada → Conferir Projeto: ativa;
-- Projeto conferido → Medição Final: ativa;
-- Projeto conferido → Perfis: ativa;
-- Projeto conferido → Acessórios: ativa;
-- Projeto conferido → Outros: ativa;
-- Medição aprovada → Vidros: ativa;
-- Medição aprovada → MEE: ativa;
-- Materiais liberados → Produção: inativa;
-- Produção concluída → Instalação: inativa.
+### 4. Materiais / Estoque da Obra
+1. Abrir Obra → `Materiais / Estoque`.
+2. Conferir Necessidade técnica.
+3. Conferir Plano de barras.
+4. Separar uma barra inteira disponível.
+5. Reservar um retalho/sobra compatível.
+6. Recalcular e conferir redução da compra.
+7. Desfazer uma separação e confirmar retorno da disponibilidade.
+8. Ajustar quantidade final de compra com justificativa.
+9. Incluir/remover material manual e conferir histórico/motivo.
+10. Marcar pacote conferido somente após revisão.
 
-## Fluxo que deve ser preservado
+### 5. Medição / Vidros / Produção
+1. Aprovar Medição Final.
+2. Confirmar Vidros + MEE.
+3. Conferir ordens de Produção vinculadas.
+4. Confirmar que esquadria continua bloqueada enquanto Perfis/Acessórios/Outros não estiverem `Liberado`.
+5. Liberar os três setores de materiais.
+6. Confirmar que Produção é liberada somente com Medição aprovada.
+7. Avançar ordens por `Em produção → Conferência → Concluída`.
+8. Confirmar que o card de Produção acompanha as ordens e rejeita movimento manual incompatível.
 
-### Arrastar para Vendido
-- abre `/vendas/confirmar`;
-- NÃO persiste em `Vendido` antes da confirmação.
+### 6. Instalação
+1. Com todas as ordens concluídas, deixar Vidros ainda não liberados e confirmar que Instalação não nasce.
+2. Mover Vidros para `Liberado`.
+3. Confirmar criação/liberação da Instalação.
+4. Validar `Agendada → Em instalação → Concluída`.
+5. Confirmar fechamento da Obra ao concluir Instalação.
 
-### Venda confirmada
-- snapshot em `vendas_obras`;
-- conta real em `financeiro_contas_receber` se a regra Financeiro estiver ativa;
-- dispara `venda_confirmada`;
-- regras padrão criam somente Financeiro + Conferir Projeto;
-- só então `status='vendido'`.
+### 7. Cliente 360
+1. Abrir Cliente → Central 360 → Andamento.
+2. Conferir que os estados são os mesmos dos setores.
+3. Conferir `Bloqueio atual`.
+4. Confirmar que não há status paralelo/duplicado.
 
-### Projeto conferido
-Dispara `projeto_conferido` e, pelas regras ativas:
-- Medição Final;
-- Perfis;
-- Acessórios;
-- Outros;
-- Vidros ainda não.
+## Pontos a observar durante o teste
 
-### Medição Final aprovada
-Dispara `medicao_aprovada` e, pelas regras ativas:
-- Vidros;
-- MEE/Engenharia técnica pós-medição.
+- fórmula não validada deve gerar pendência, nunca material inventado;
+- tamanho de barra deve usar o cadastro operacional normalizado;
+- compra deve refletir estoque/separações, não apenas necessidade bruta;
+- comprado ≠ consumido;
+- reprocessamento não deve duplicar cards/tarefas/notificações/ordens;
+- alterações pós-venda relevantes exigem justificativa e histórico;
+- Balcão rápido continua fora do workflow de obra.
 
-## Validações automáticas concluídas
+## Próximas implementações após validação
 
-Venda confirmada, com `ROLLBACK`:
-- venda = 1;
-- conta a receber = 1;
-- Financeiro = 1;
-- Conferir Projeto = 1;
-- tarefa Gabrielle = 1;
-- notificação Gabrielle = 1;
-- workflow execuções = 2;
-- downstream = 0.
-
-Projeto conferido:
-- Medição = 1;
-- Perfis = 1;
-- Acessórios = 1;
-- Outros = 1;
-- Vidros = 0.
-
-Medição aprovada:
-- Vidros = 1;
-- MEE = 1;
-- cenário completo = 8 execuções (2 venda + 4 projeto + 2 medição).
-
-Nenhum dado temporário ficou no banco.
-
-## Segurança já validada
-
-- configuração do workflow: escrita somente master;
-- `fn_iniciar_fluxo_venda_v2` e `fn_concluir_conferencia_projeto_v1` continuam executáveis por usuário autenticado;
-- helpers `fn_workflow_disparar_evento_v1`, `fn_workflow_executar_automacao_v1`, `fn_workflow_renderizar_v1` e `fn_workflow_coluna_tarefa_v1` NÃO são executáveis diretamente por authenticated/anon;
-- advisories restantes são legados de outras áreas e não devem ampliar o escopo deste PR.
-
-## Migrations novas do motor
-
-- `20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql`;
-- `20260826233029_workflow_evitar_notificacao_duplicada_v1.sql`;
-- `20260826233648_workflow_restringir_funcoes_internas_v1.sql`.
-
-## Validação manual no Preview antes do merge
-
-1. Abrir `/configuracoes/automacoes-fluxo` como master.
-2. Conferir as regras agrupadas por gatilho.
-3. Abrir `Venda confirmada → Financeiro` e confirmar Gabrielle como responsável, criação de tarefa e aviso.
-4. Testar edição de responsável, `Notificar também`, prazo, prioridade e mensagem sem ativar regras de Produção/Instalação.
-5. Confirmar uma venda controlada.
-6. Conferir: Financeiro + Conferir Projeto e tarefa/sino do responsável; nenhum downstream.
-7. Mover para Projeto conferido e conferir Medição + Perfis + Acessórios + Outros.
-8. Aprovar Medição Final e conferir Vidros + MEE.
-9. Abrir Cliente 360 → Andamento e conferir os mesmos estados.
-10. Confirmar que reprocessamento não duplica cards, tarefas ou notificações.
-11. Somente após aprovação do usuário considerar merge.
-
-## Caso legado #60
-
-O orçamento #60 continua sem venda real/conta real confirmada. Não regularizar automaticamente. Se for uma venda válida, usar a confirmação consciente pelo fluxo novo.
-
-## Próximas definições funcionais
-
-- quem será responsável por Conferir Projeto;
-- responsável por Medição Final;
-- responsável por Perfis, Acessórios, Outros e Vidros;
-- responsável pelo MEE;
-- gate exato de Produção e possibilidade de produção parcial;
-- gate/agendamento de Instalação;
-- reabertura após revisão da venda/projeto;
-- custos `Previsto → Otimizado → Comprado → Realizado`.
+- completar custos `Previsto → Otimizado → Comprado → Realizado` por obra/item/categoria;
+- ligar NF/Compras ao custo comprado da obra;
+- ligar consumo de estoque, perdas, devoluções e sobras ao custo realizado;
+- dashboard de margem realizada no Cliente 360/Obra;
+- interface completa de revisão pós-venda e seus ajustes financeiros;
+- definir responsáveis dos demais setores no Motor de Automações.
 
 ## Regras invioláveis
 
-- GitHub é fonte da verdade.
-- Branch → PR → build/preview → merge manual; nunca commit direto em `main`.
-- Workflow é configurável, auditável e idempotente.
-- Usuário responsável e usuários notificados são conceitos separados.
-- Não criar um segundo sistema de tarefas/notificações.
-- Cliente 360 consolida registros reais; não duplicar status.
-- Venda confirmada não libera downstream completo.
-- Vidro nunca nasce antes da Medição Final aprovada.
-- Produção e Instalação permanecem inativas até gates definidos.
-- Venda/Orçamento Balcão rápido não entra no workflow de obra.
+- não mergear PR #280 antes da aprovação do usuário;
+- não criar status duplicado para Cliente 360;
+- não liberar Vidros antes da Medição aprovada;
+- não liberar Produção sem Medição + Perfis/Acessórios/Outros liberados;
+- não criar Instalação sem Produção concluída + Vidros liberados;
+- não inventar fórmula/material pendente;
+- restauração de tipologia nunca apaga histórico;
+- sobra cobrada fica sem margem;
+- GitHub continua fonte da verdade.
