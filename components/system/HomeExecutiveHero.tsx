@@ -116,9 +116,9 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
       {modulos.length > 0 && (
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {tem('orcamentos') && (
-            <Link href="/orcamento-rapido" className={classeAtalho}>
+            <Link href="/orcamento/novo" className={classeAtalho}>
               <span className={classeIcone}><FilePlus2 size={19} /></span>
-              <span><strong className="block text-sm text-slate-900">Novo orçamento</strong><span className="mt-0.5 block text-xs text-slate-400">Criar orçamento</span></span>
+              <span><strong className="block text-sm text-slate-900">Novo orçamento</strong><span className="mt-0.5 block text-xs text-slate-400">Escolher tipo de orçamento</span></span>
             </Link>
           )}
           {tem('clientes') && (
