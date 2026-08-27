@@ -22,6 +22,13 @@ export type PlanoCorte = {
   produto_id?: string | null
   tipologia_id?: string | null
   receita_id?: string | null
+  ordem_producao_id?: string | null
+  cliente_id?: string | null
+  obra_id?: string | null
+  venda_obra_id?: string | null
+  orcamento_id?: string | null
+  item_ref?: string | null
+  tipo_producao?: string | null
   nome: string
   largura_mm?: number | null
   altura_mm?: number | null
@@ -85,11 +92,27 @@ export async function criarPlanoCorte(dados: {
   variaveis: VariaveisPlanoCorte
   observacoes?: string | null
   usuario: Usuario | null
+  vinculo?: {
+    ordem_producao_id?: string | null
+    cliente_id?: string | null
+    obra_id?: string | null
+    venda_obra_id?: string | null
+    orcamento_id?: string | null
+    item_ref?: string | null
+    tipo_producao?: string | null
+  }
 }): Promise<PlanoCorte | null> {
   const { data: plano, error } = await supabase.from('planos_corte').insert({
     produto_id: dados.produto.id,
     tipologia_id: dados.tipologia.id,
     receita_id: dados.receita.id,
+    ordem_producao_id: dados.vinculo?.ordem_producao_id || null,
+    cliente_id: dados.vinculo?.cliente_id || null,
+    obra_id: dados.vinculo?.obra_id || null,
+    venda_obra_id: dados.vinculo?.venda_obra_id || null,
+    orcamento_id: dados.vinculo?.orcamento_id || null,
+    item_ref: dados.vinculo?.item_ref || null,
+    tipo_producao: dados.vinculo?.tipo_producao || null,
     nome: dados.produto.nome,
     largura_mm: dados.largura_mm,
     altura_mm: dados.altura_mm,
