@@ -20,6 +20,14 @@ import TipologiaMiniatura from './TipologiaMiniatura'
 
 type Modo = 'obra' | 'sob_medida' | 'balcao'
 
+const ETAPAS = [
+  'Tipo de Orçamento',
+  'Seleção de Tipologias',
+  'Configurações e Itens',
+  'Otimização e Precificação',
+  'Finalizado',
+]
+
 const ROTULOS_CATEGORIA: Record<string, string> = {
   porta: 'Portas',
   janela: 'Janelas',
@@ -76,14 +84,14 @@ export default function NovoOrcamentoHub() {
 
   const tipologiasFiltradas = useMemo(() => {
     const q = normalizar(busca)
-    const linhaSelecionada = linhas.find(l => l.id === linhaFiltro)
+    const linhaSelecionadaFiltro = linhas.find(l => l.id === linhaFiltro)
     return tipologias.filter(t => {
       const linhasDaTipologia = linhas.filter(l => (l.tipologia_ids || []).includes(t.id))
       const nomesLinhas = linhasDaTipologia.map(l => l.nome).join(' ')
       const texto = normalizar(`${t.label} ${t.chave} ${categoriaVisual(t)} ${nomesLinhas}`)
       if (q && !texto.includes(q)) return false
       if (categoriaFiltro && t.categoria !== categoriaFiltro) return false
-      if (linhaSelecionada && !(linhaSelecionada.tipologia_ids || []).includes(t.id)) return false
+      if (linhaSelecionadaFiltro && !(linhaSelecionadaFiltro.tipologia_ids || []).includes(t.id)) return false
       return true
     })
   }, [busca, categoriaFiltro, linhaFiltro, linhas, tipologias])
@@ -107,36 +115,44 @@ export default function NovoOrcamentoHub() {
   const etapaAtiva = modo === 'obra' ? 2 : 1
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-4 lg:px-6">
-          <Link href="/orcamento" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50">
+      <header className="w-full max-w-full border-b border-slate-200 bg-white">
+        <div className="mx-auto flex w-full max-w-[1500px] min-w-0 items-center gap-2 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-6">
+          <Link href="/orcamento" className="shrink-0 rounded-lg p-2 text-slate-600 hover:bg-slate-100">
             <ArrowLeft size={20} />
           </Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/icon-mark.png" alt="" className="h-8 w-8" />
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Novo Orçamento</h1>
-            <p className="text-xs text-slate-500">Escolha o tipo de orçamento para iniciar.</p>
+          <img src="/icons/icon-mark.png" alt="" className="h-7 w-7 shrink-0 sm:h-8 sm:w-8" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-bold text-slate-900 sm:text-xl">Novo Orçamento</h1>
+            <p className="truncate text-[11px] text-slate-500 sm:text-xs">Escolha o tipo de orçamento para iniciar.</p>
           </div>
         </div>
 
         <div className="border-t border-slate-100">
-          <div className="mx-auto flex max-w-[1500px] gap-2 overflow-x-auto px-4 py-3 text-xs lg:px-6">
-            {[
-              ['1', 'Tipo de Orçamento'],
-              ['2', 'Seleção de Tipologias'],
-              ['3', 'Configurações e Itens'],
-              ['4', 'Otimização e Precificação'],
-              ['5', 'Finalizado'],
-            ].map(([n, label], index) => {
+          <div className="mx-auto w-full max-w-[1500px] px-3 py-3 sm:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Etapa {etapaAtiva} de {ETAPAS.length}</p>
+                <p className="truncate text-sm font-bold text-blue-700">{ETAPAS[etapaAtiva - 1]}</p>
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                {ETAPAS.map((_, index) => (
+                  <span key={index} className={`h-2 rounded-full transition-all ${index + 1 <= etapaAtiva ? 'w-5 bg-blue-600' : 'w-2 bg-slate-200'}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mx-auto hidden max-w-[1500px] gap-2 px-4 py-3 text-xs sm:flex lg:px-6">
+            {ETAPAS.map((label, index) => {
               const numero = index + 1
               const ativo = numero <= etapaAtiva
               return (
-                <div key={n} className="flex shrink-0 items-center gap-2">
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${ativo ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{n}</span>
-                  <span className={ativo ? 'font-semibold text-blue-700' : 'text-slate-500'}>{label}</span>
-                  {index < 4 && <span className="mx-2 h-px w-6 bg-slate-200" />}
+                <div key={label} className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${ativo ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{numero}</span>
+                  <span className={`truncate ${ativo ? 'font-semibold text-blue-700' : 'text-slate-500'}`}>{label}</span>
+                  {index < ETAPAS.length - 1 && <span className="mx-1 h-px min-w-3 flex-1 bg-slate-200" />}
                 </div>
               )
             })}
@@ -144,25 +160,25 @@ export default function NovoOrcamentoHub() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1500px] px-4 py-5 lg:px-6">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <main className="mx-auto w-full max-w-[1500px] min-w-0 px-3 py-3 pb-24 sm:px-4 sm:py-5 sm:pb-5 lg:px-6">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-5">
+          <section className="min-w-0 space-y-4 sm:space-y-5">
+            <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
               <div className="mb-3">
-                <h2 className="text-base font-bold text-slate-900">Tipo de Orçamento</h2>
-                <p className="text-xs text-slate-500">Selecione a opção que corresponde ao atendimento.</p>
+                <h2 className="text-sm font-bold text-slate-900 sm:text-base">Tipo de Orçamento</h2>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 sm:text-xs">Selecione a opção que corresponde ao atendimento.</p>
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid min-w-0 grid-cols-1 gap-2.5 md:grid-cols-3 md:gap-3">
                 <button
                   type="button"
                   onClick={() => setModo('obra')}
-                  className={`relative flex min-h-32 items-center gap-4 rounded-xl border-2 p-4 text-left transition ${modo === 'obra' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                  className={`relative flex w-full min-w-0 items-start gap-3 rounded-xl border-2 p-3 text-left transition sm:items-center sm:gap-4 sm:p-4 md:min-h-32 ${modo === 'obra' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                 >
-                  <span className="rounded-xl bg-blue-100 p-3 text-blue-700"><Building2 size={25} /></span>
-                  <span>
+                  <span className="shrink-0 rounded-xl bg-blue-100 p-2.5 text-blue-700 sm:p-3"><Building2 size={22} className="sm:h-[25px] sm:w-[25px]" /></span>
+                  <span className="min-w-0 flex-1 pr-5 sm:pr-0">
                     <span className="block text-sm font-bold text-slate-900">Orçamento Obra</span>
-                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">Para uma obra completa, com várias tipologias, ambientes e etapas.</span>
+                    <span className="mt-1 block text-[11px] leading-relaxed text-slate-500 sm:text-xs">Para uma obra completa, com várias tipologias, ambientes e etapas.</span>
                   </span>
                   {modo === 'obra' && <CheckCircle2 size={18} className="absolute right-3 top-3 text-blue-600" />}
                 </button>
@@ -170,12 +186,12 @@ export default function NovoOrcamentoHub() {
                 <button
                   type="button"
                   onClick={() => setModo('sob_medida')}
-                  className={`relative flex min-h-32 items-center gap-4 rounded-xl border-2 p-4 text-left transition ${modo === 'sob_medida' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                  className={`relative flex w-full min-w-0 items-start gap-3 rounded-xl border-2 p-3 text-left transition sm:items-center sm:gap-4 sm:p-4 md:min-h-32 ${modo === 'sob_medida' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                 >
-                  <span className="rounded-xl bg-indigo-50 p-3 text-indigo-700"><DraftingCompass size={25} /></span>
-                  <span>
+                  <span className="shrink-0 rounded-xl bg-indigo-50 p-2.5 text-indigo-700 sm:p-3"><DraftingCompass size={22} className="sm:h-[25px] sm:w-[25px]" /></span>
+                  <span className="min-w-0 flex-1 pr-5 sm:pr-0">
                     <span className="block text-sm font-bold text-slate-900">Novo Orçamento Sob Medida</span>
-                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">Para montar uma esquadria personalizada de forma direta.</span>
+                    <span className="mt-1 block text-[11px] leading-relaxed text-slate-500 sm:text-xs">Para montar uma esquadria personalizada de forma direta.</span>
                   </span>
                   {modo === 'sob_medida' && <CheckCircle2 size={18} className="absolute right-3 top-3 text-blue-600" />}
                 </button>
@@ -183,12 +199,12 @@ export default function NovoOrcamentoHub() {
                 <button
                   type="button"
                   onClick={() => setModo('balcao')}
-                  className={`relative flex min-h-32 items-center gap-4 rounded-xl border-2 p-4 text-left transition ${modo === 'balcao' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                  className={`relative flex w-full min-w-0 items-start gap-3 rounded-xl border-2 p-3 text-left transition sm:items-center sm:gap-4 sm:p-4 md:min-h-32 ${modo === 'balcao' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                 >
-                  <span className="rounded-xl bg-slate-100 p-3 text-slate-700"><ShoppingBag size={25} /></span>
-                  <span>
+                  <span className="shrink-0 rounded-xl bg-slate-100 p-2.5 text-slate-700 sm:p-3"><ShoppingBag size={22} className="sm:h-[25px] sm:w-[25px]" /></span>
+                  <span className="min-w-0 flex-1 pr-5 sm:pr-0">
                     <span className="block text-sm font-bold text-slate-900">Venda Balcão</span>
-                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">Venda rápida de produtos, sem abrir todo o fluxo de uma obra.</span>
+                    <span className="mt-1 block text-[11px] leading-relaxed text-slate-500 sm:text-xs">Venda rápida de produtos, sem abrir todo o fluxo de uma obra.</span>
                   </span>
                   {modo === 'balcao' && <CheckCircle2 size={18} className="absolute right-3 top-3 text-blue-600" />}
                 </button>
@@ -196,42 +212,48 @@ export default function NovoOrcamentoHub() {
             </div>
 
             {modo === 'obra' && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-4">
-                  <h2 className="text-base font-bold text-slate-900">Selecionar Tipologia</h2>
-                  <p className="text-xs text-slate-500">Todas as tipologias cadastradas no Atlas ficam disponíveis. Pesquise ou filtre para localizar rapidamente.</p>
+              <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
+                <div className="mb-3 sm:mb-4">
+                  <h2 className="text-sm font-bold text-slate-900 sm:text-base">Selecionar Tipologia</h2>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 sm:text-xs">Todas as tipologias cadastradas no Atlas ficam disponíveis. Pesquise ou filtre.</p>
                 </div>
 
-                <div className="grid gap-2 lg:grid-cols-[minmax(260px,1fr)_230px_230px_auto]">
-                  <div className="relative">
+                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(260px,1fr)_230px_230px_auto]">
+                  <div className="relative min-w-0 sm:col-span-2 xl:col-span-1">
                     <Search size={17} className="absolute left-3 top-3 text-slate-400" />
                     <input
                       value={busca}
                       onChange={e => setBusca(e.target.value)}
-                      placeholder="Pesquisar porta, ripado, fachada, ACM, guarda-corpo..."
-                      className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      placeholder="Pesquisar tipologia..."
+                      className="w-full min-w-0 rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
-                  <select value={categoriaFiltro} onChange={e => setCategoriaFiltro(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <select value={categoriaFiltro} onChange={e => setCategoriaFiltro(e.target.value)} className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
                     <option value="">Categoria: Todas</option>
                     {categorias.map(c => <option key={c} value={c}>{ROTULOS_CATEGORIA[c] || c}</option>)}
                   </select>
-                  <select value={linhaFiltro} onChange={e => setLinhaFiltro(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <select value={linhaFiltro} onChange={e => setLinhaFiltro(e.target.value)} className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
                     <option value="">Linha: Todas</option>
                     {linhas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
                   </select>
-                  <button type="button" onClick={() => { setBusca(''); setCategoriaFiltro(''); setLinhaFiltro('') }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
-                    <SlidersHorizontal size={16} /> Limpar
+                  <button type="button" onClick={() => { setBusca(''); setCategoriaFiltro(''); setLinhaFiltro('') }} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 sm:col-span-2 xl:col-span-1 xl:w-auto">
+                    <SlidersHorizontal size={16} /> Limpar filtros
                   </button>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                <div className="mt-3 flex flex-col gap-1 text-[10px] leading-relaxed text-slate-500 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 sm:text-[11px]">
                   <span>{carregando ? 'Carregando tipologias...' : `Mostrando ${tipologiasFiltradas.length} de ${tipologias.length} tipologia(s)`}</span>
-                  <span>A linha funciona como filtro; sem linha selecionada, o Atlas mostra o catálogo completo.</span>
+                  <span className="hidden md:inline">Sem linha selecionada, o Atlas mostra o catálogo completo.</span>
                 </div>
 
+                {!selecionada && (
+                  <button type="button" onClick={continuarObra} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 xl:hidden">
+                    Começar sem tipologia definida
+                  </button>
+                )}
+
                 {tipologiasFiltradas.length ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                  <div className="mt-3 grid min-w-0 grid-cols-1 gap-2.5 sm:mt-4 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">
                     {tipologiasFiltradas.map(t => {
                       const linhasDaTipologia = linhas.filter(l => (l.tipologia_ids || []).includes(t.id))
                       const ativo = selecionadaId === t.id
@@ -240,9 +262,9 @@ export default function NovoOrcamentoHub() {
                           key={t.id}
                           type="button"
                           onClick={() => setSelecionadaId(t.id)}
-                          className={`overflow-hidden rounded-xl border-2 bg-white text-left transition hover:-translate-y-0.5 hover:shadow-md ${ativo ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-300'}`}
+                          className={`min-w-0 overflow-hidden rounded-xl border-2 bg-white text-left transition sm:hover:-translate-y-0.5 sm:hover:shadow-md ${ativo ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-300'}`}
                         >
-                          <div className="aspect-[16/10] border-b border-slate-100">
+                          <div className="aspect-[16/8] border-b border-slate-100 sm:aspect-[16/10]">
                             {(t as any).foto_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={(t as any).foto_url} alt={t.label} className="h-full w-full object-contain" />
@@ -251,13 +273,13 @@ export default function NovoOrcamentoHub() {
                             )}
                           </div>
                           <div className="p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-bold leading-snug text-slate-900">{t.label}</p>
+                            <div className="flex min-w-0 items-start justify-between gap-2">
+                              <p className="min-w-0 flex-1 text-sm font-bold leading-snug text-slate-900">{t.label}</p>
                               {ativo && <CheckCircle2 size={17} className="shrink-0 text-blue-600" />}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              <span className="rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">{categoriaVisual(t)}</span>
-                              {linhasDaTipologia.slice(0, 2).map(l => <span key={l.id} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{l.nome}</span>)}
+                              <span className="max-w-full truncate rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">{categoriaVisual(t)}</span>
+                              {linhasDaTipologia.slice(0, 2).map(l => <span key={l.id} className="max-w-full truncate rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{l.nome}</span>)}
                               {linhasDaTipologia.length > 2 && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">+{linhasDaTipologia.length - 2}</span>}
                             </div>
                             <p className="mt-3 text-right text-[11px] font-semibold text-blue-700">{ativo ? 'Selecionada' : '+ Selecionar'}</p>
@@ -267,19 +289,19 @@ export default function NovoOrcamentoHub() {
                     })}
                   </div>
                 ) : !carregando ? (
-                  <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">Nenhuma tipologia encontrada. Tente outro termo ou limpe os filtros.</div>
+                  <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 sm:p-10">Nenhuma tipologia encontrada. Tente outro termo ou limpe os filtros.</div>
                 ) : null}
               </div>
             )}
 
             {modo === 'sob_medida' && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start gap-4">
-                  <span className="rounded-xl bg-indigo-50 p-3 text-indigo-700"><DraftingCompass size={28} /></span>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900">Novo Orçamento Sob Medida</h2>
-                    <p className="mt-1 max-w-2xl text-sm text-slate-500">Abre diretamente o formulário para montar uma esquadria personalizada, com linha e tipologia opcionais, medidas, configuração técnica e itens.</p>
-                    <button type="button" onClick={() => router.push('/orcamento-rapido')} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-6">
+                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                  <span className="shrink-0 rounded-xl bg-indigo-50 p-2.5 text-indigo-700 sm:p-3"><DraftingCompass size={24} className="sm:h-7 sm:w-7" /></span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-bold text-slate-900 sm:text-base">Novo Orçamento Sob Medida</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">Abre diretamente o formulário para montar uma esquadria personalizada, com linha e tipologia opcionais, medidas, configuração técnica e itens.</p>
+                    <button type="button" onClick={() => router.push('/orcamento-rapido')} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 sm:mt-5 sm:w-auto sm:px-5">
                       Abrir orçamento sob medida <ChevronRight size={17} />
                     </button>
                   </div>
@@ -288,13 +310,13 @@ export default function NovoOrcamentoHub() {
             )}
 
             {modo === 'balcao' && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start gap-4">
-                  <span className="rounded-xl bg-slate-100 p-3 text-slate-700"><ShoppingBag size={28} /></span>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900">Venda Balcão</h2>
-                    <p className="mt-1 max-w-2xl text-sm text-slate-500">Cliente, produtos, quantidade, pagamento e finalização rápida. Continua fora do Kanban de obra.</p>
-                    <button type="button" onClick={() => router.push('/orcamento/balcao/novo')} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-6">
+                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                  <span className="shrink-0 rounded-xl bg-slate-100 p-2.5 text-slate-700 sm:p-3"><ShoppingBag size={24} className="sm:h-7 sm:w-7" /></span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-bold text-slate-900 sm:text-base">Venda Balcão</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">Cliente, produtos, quantidade, pagamento e finalização rápida. Continua fora do Kanban de obra.</p>
+                    <button type="button" onClick={() => router.push('/orcamento/balcao/novo')} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 sm:mt-5 sm:w-auto sm:px-5">
                       Abrir Venda Balcão <ChevronRight size={17} />
                     </button>
                   </div>
@@ -303,7 +325,7 @@ export default function NovoOrcamentoHub() {
             )}
           </section>
 
-          <aside className="self-start rounded-2xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-5">
+          <aside className="hidden self-start rounded-2xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-5 xl:block">
             <div className="border-b border-slate-100 p-4">
               <h2 className="text-base font-bold text-slate-900">Resumo do Orçamento</h2>
             </div>
@@ -352,6 +374,20 @@ export default function NovoOrcamentoHub() {
           </aside>
         </div>
       </main>
+
+      {modo === 'obra' && selecionada && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.10)] backdrop-blur md:hidden">
+          <div className="mx-auto flex max-w-md min-w-0 items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-blue-600">Tipologia selecionada</p>
+              <p className="truncate text-sm font-bold text-slate-900">{selecionada.label}</p>
+            </div>
+            <button type="button" onClick={continuarObra} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700">
+              Continuar <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
