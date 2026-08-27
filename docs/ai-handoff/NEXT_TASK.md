@@ -7,6 +7,17 @@ PR: #280 — draft. **Não fazer merge ainda.**
 
 O objetivo agora é testar o fluxo real no Preview antes de continuar expandindo.
 
+## 0. Novo Orçamento — validar primeiro
+1. Abrir `/orcamento/novo`.
+2. Confirmar os três cards no topo: `Orçamento Obra`, `Novo Orçamento Sob Medida`, `Venda Balcão`.
+3. Em `Orçamento Obra`, deixar `Categoria: Todas` e `Linha: Todas` e confirmar que o catálogo mostra as 122 tipologias ativas.
+4. Conferir categorias além de Porta/Janela: Painéis/Ripados, Fachadas/Pele de Vidro, ACM, Guarda-corpos/Corrimãos, Portões/Grades, Vidros, Boxes, Espelhos, Coberturas/Clarabóias, Módulos Fixos, Contramarcos/Arremates e Tela Mosquiteira.
+5. Pesquisar por texto e confirmar filtro em tempo real.
+6. Filtrar por categoria e por linha separadamente.
+7. Selecionar uma tipologia e continuar para o formulário.
+8. Testar `Novo Orçamento Sob Medida` abrindo diretamente o formulário.
+9. Testar `Venda Balcão` e confirmar que segue fora do Kanban de obra.
+
 ## Checklist de validação manual
 
 ### 1. Precificação do orçamento
