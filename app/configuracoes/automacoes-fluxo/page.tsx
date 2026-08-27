@@ -2,7 +2,20 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Bell, CheckCircle2, Clock3, ListTodo, Plus, Save, Trash2, UserRoundCheck, Zap } from 'lucide-react'
+import {
+  ArrowLeft,
+  Bell,
+  CheckCircle2,
+  Clock3,
+  ListTodo,
+  Plus,
+  Save,
+  Trash2,
+  UserPlus,
+  UserRoundCheck,
+  Users,
+  Zap,
+} from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
   WorkflowAutomacao,
@@ -19,9 +32,9 @@ const EVENTOS = [
   { value: 'venda_confirmada', label: 'Venda confirmada', ajuda: 'Nasce quando a venda sob medida é realmente confirmada.' },
   { value: 'projeto_conferido', label: 'Projeto conferido', ajuda: 'Libera Medição Final e materiais previstos no projeto.' },
   { value: 'medicao_aprovada', label: 'Medição Final aprovada', ajuda: 'Libera Vidros e a engenharia técnica pós-medição.' },
-  { value: 'materiais_liberados', label: 'Materiais liberados', ajuda: 'Futuro gate para entrada em Produção.' },
-  { value: 'producao_concluida', label: 'Produção concluída', ajuda: 'Futuro gate para Instalação/agendamento.' },
-  { value: 'instalacao_concluida', label: 'Instalação concluída', ajuda: 'Futuro gate para fechamento/qualidade.' },
+  { value: 'materiais_liberados', label: 'Materiais liberados', ajuda: 'Gate futuro para entrada em Produção.' },
+  { value: 'producao_concluida', label: 'Produção concluída', ajuda: 'Gate futuro para Instalação/agendamento.' },
+  { value: 'instalacao_concluida', label: 'Instalação concluída', ajuda: 'Gate futuro para fechamento/qualidade.' },
 ]
 
 const ACOES = [
@@ -90,11 +103,27 @@ export default function AutomacoesFluxoPage() {
       mapa.set(a.evento_chave, lista)
     })
     return EVENTOS.map(evento => ({ ...evento, automacoes: mapa.get(evento.value) || [] }))
-      .concat(Array.from(mapa.entries()).filter(([chave]) => !EVENTOS.some(e => e.value === chave)).map(([value, autos]) => ({ value, label: value, ajuda: '', automacoes: autos })))
+      .concat(Array.from(mapa.entries())
+        .filter(([chave]) => !EVENTOS.some(e => e.value === chave))
+        .map(([value, autos]) => ({ value, label: value, ajuda: '', automacoes: autos })))
   }, [automacoes])
 
   function atualizar(id: string, patch: Partial<WorkflowAutomacao>) {
     setAutomacoes(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a))
+  }
+
+  function trocarResponsavel(a: WorkflowAutomacao, usuarioId: string) {
+    const novoId = usuarioId || null
+    const adicionais = (a.notificar_usuario_ids || []).filter(id => id !== novoId)
+    atualizar(a.id, { responsavel_usuario_id: novoId, notificar_usuario_ids: adicionais })
+  }
+
+  function alternarNotificado(a: WorkflowAutomacao, usuarioId: string) {
+    const atuais = a.notificar_usuario_ids || []
+    const proximo = atuais.includes(usuarioId)
+      ? atuais.filter(id => id !== usuarioId)
+      : [...atuais, usuarioId]
+    atualizar(a.id, { notificar_usuario_ids: proximo })
   }
 
   async function salvar(a: WorkflowAutomacao) {
@@ -170,16 +199,19 @@ export default function AutomacoesFluxoPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+      <header className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link href="/configuracoes" className="p-2 rounded-xl hover:bg-slate-100 text-slate-500"><ArrowLeft size={18} /></Link>
+            <Link href="/configuracoes" className="p-2 rounded-xl hover:bg-slate-100 text-slate-500" title="Voltar às configurações"><ArrowLeft size={18} /></Link>
             <div>
               <div className="flex items-center gap-2"><Zap size={19} className="text-brand-navy" /><h1 className="text-lg font-bold text-brand-navy">Automações do Fluxo</h1></div>
               <p className="text-xs text-slate-500 mt-0.5">Gatilho → processo/setor → responsável → tarefa → notificação.</p>
             </div>
           </div>
-          <button onClick={novaAutomacao} disabled={criando} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-50"><Plus size={16} /> {criando ? 'Criando...' : 'Nova automação'}</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/configuracoes/usuarios" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50"><UserPlus size={16} /> Gerenciar pessoas</Link>
+            <button onClick={novaAutomacao} disabled={criando} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-50"><Plus size={16} /> {criando ? 'Criando...' : 'Nova automação'}</button>
+          </div>
         </div>
       </header>
 
@@ -196,7 +228,7 @@ export default function AutomacoesFluxoPage() {
         <section className="bg-brand-navyLight border border-blue-100 rounded-2xl p-4 text-sm text-slate-700">
           <p className="font-semibold text-brand-navy">Fluxo-base atual</p>
           <p className="mt-1">Venda confirmada → <b>Financeiro + Conferir Projeto</b> → Projeto conferido → <b>Medição Final + Perfis + Acessórios + Outros</b> → Medição aprovada → <b>Vidros + MEE</b>.</p>
-          <p className="text-xs text-slate-500 mt-1">Produção e Instalação já estão cadastradas como próximas regras, mas permanecem inativas até definirmos os gates.</p>
+          <p className="text-xs text-slate-500 mt-1">Você pode trocar o responsável de qualquer regra e adicionar quantas pessoas quiser em “Notificar também”. Produção e Instalação continuam cadastradas, porém inativas até definirmos os gates.</p>
         </section>
 
         {grupos.map(grupo => (
@@ -212,6 +244,7 @@ export default function AutomacoesFluxoPage() {
                   const aberto = abertoId === a.id
                   const colunasSetor = colunas.filter(c => c.setor_id === a.destino_setor_id)
                   const adicionais = a.notificar_usuario_ids || []
+                  const usuariosAdicionais = usuarios.filter(u => u.id !== a.responsavel_usuario_id)
                   return (
                     <div key={a.id} className="p-5">
                       <div className="flex flex-wrap items-center gap-3">
@@ -221,7 +254,7 @@ export default function AutomacoesFluxoPage() {
                           <p className="text-xs text-slate-500 mt-0.5">{labelEvento(a.evento_chave)} → {nomeSetor(a.destino_setor_id, setores)} · {nomeUsuario(a.responsavel_usuario_id, usuarios)}</p>
                         </button>
                         {a.criar_tarefa && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-violet-50 text-violet-700"><ListTodo size={12} /> tarefa</span>}
-                        {(a.notificar_responsavel || adicionais.length > 0) && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-amber-50 text-amber-700"><Bell size={12} /> aviso</span>}
+                        {(a.notificar_responsavel || adicionais.length > 0) && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-amber-50 text-amber-700"><Bell size={12} /> {adicionais.length > 0 ? `${adicionais.length + (a.notificar_responsavel && a.responsavel_usuario_id ? 1 : 0)} aviso(s)` : 'aviso'}</span>}
                         <span className={`text-[11px] px-2 py-1 rounded-full ${a.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{a.ativo ? 'Ativa' : 'Inativa'}</span>
                       </div>
 
@@ -236,12 +269,13 @@ export default function AutomacoesFluxoPage() {
                           <div className="grid md:grid-cols-3 gap-3">
                             <label><span className="block text-xs font-medium text-slate-600 mb-1">Setor de destino</span><select value={a.destino_setor_id || ''} onChange={e => atualizar(a.id, { destino_setor_id: e.target.value || null, destino_coluna_id: null })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"><option value="">Processo especial / sem setor</option>{setores.filter(s => s.id !== 'workflow-automacoes').map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
                             <label><span className="block text-xs font-medium text-slate-600 mb-1">Coluna de entrada</span><select value={a.destino_coluna_id || ''} onChange={e => atualizar(a.id, { destino_coluna_id: e.target.value || null })} disabled={!a.destino_setor_id} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm disabled:bg-slate-50"><option value="">Primeira / processo especial</option>{colunasSetor.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Responsável</span><select value={a.responsavel_usuario_id || ''} onChange={e => atualizar(a.id, { responsavel_usuario_id: e.target.value || null })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"><option value="">Sem responsável definido</option>{usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select></label>
+                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Responsável principal</span><select value={a.responsavel_usuario_id || ''} onChange={e => trocarResponsavel(a, e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"><option value="">Sem responsável definido</option>{usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select></label>
                           </div>
 
                           <div className="grid md:grid-cols-2 gap-4">
                             <div className="rounded-xl border border-slate-200 p-4 space-y-3">
                               <div className="flex items-center gap-2"><UserRoundCheck size={16} className="text-brand-navy" /><p className="text-sm font-semibold text-slate-800">Tarefa e responsabilidade</p></div>
+                              <p className="text-xs text-slate-500">O responsável principal pode ser alterado a qualquer momento. A próxima execução da regra já usa a nova pessoa.</p>
                               <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={a.criar_tarefa} onChange={e => atualizar(a.id, { criar_tarefa: e.target.checked })} /> Criar tarefa para o responsável</label>
                               <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={a.notificar_responsavel} onChange={e => atualizar(a.id, { notificar_responsavel: e.target.checked })} /> Avisar o responsável no sino</label>
                               <div className="grid grid-cols-2 gap-2"><label><span className="block text-xs text-slate-500 mb-1">Prazo em horas</span><input type="number" min={0} value={a.prazo_horas ?? ''} onChange={e => atualizar(a.id, { prazo_horas: e.target.value === '' ? null : Number(e.target.value) })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm" placeholder="Sem prazo" /></label><label><span className="block text-xs text-slate-500 mb-1">Prioridade</span><select value={a.prioridade_tarefa} onChange={e => atualizar(a.id, { prioridade_tarefa: e.target.value as WorkflowAutomacao['prioridade_tarefa'] })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm"><option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></label></div>
@@ -249,9 +283,22 @@ export default function AutomacoesFluxoPage() {
                             </div>
 
                             <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                              <div className="flex items-center gap-2"><Bell size={16} className="text-brand-navy" /><p className="text-sm font-semibold text-slate-800">Notificar também</p></div>
-                              <p className="text-xs text-slate-500">Essas pessoas recebem o aviso mesmo sem serem responsáveis pelo card/tarefa.</p>
-                              <select multiple value={adicionais} onChange={e => atualizar(a.id, { notificar_usuario_ids: Array.from(e.target.selectedOptions).map(o => o.value) })} className="w-full min-h-28 border border-slate-200 rounded-lg px-2.5 py-2 text-sm">{usuarios.map(u => <option key={u.id} value={u.id}>{u.nome} — {u.email}</option>)}</select>
+                              <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Users size={16} className="text-brand-navy" /><p className="text-sm font-semibold text-slate-800">Notificar também</p></div><Link href="/configuracoes/usuarios" className="inline-flex items-center gap-1 text-xs font-medium text-brand-navy hover:underline"><UserPlus size={13} /> Adicionar pessoa</Link></div>
+                              <p className="text-xs text-slate-500">Marque outras pessoas que devem receber o comunicado, mesmo sem serem responsáveis pela tarefa.</p>
+                              <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-100">
+                                {usuariosAdicionais.length === 0 && <p className="px-3 py-3 text-xs text-slate-400">Nenhuma outra pessoa cadastrada.</p>}
+                                {usuariosAdicionais.map(u => {
+                                  const marcado = adicionais.includes(u.id)
+                                  return (
+                                    <label key={u.id} className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 transition ${marcado ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
+                                      <input type="checkbox" checked={marcado} onChange={() => alternarNotificado(a, u.id)} />
+                                      <div className="min-w-0 flex-1"><p className="text-sm font-medium text-slate-700 truncate">{u.nome}</p><p className="text-[11px] text-slate-400 truncate">{u.email}</p></div>
+                                      {marcado && <span className="text-[10px] font-semibold text-brand-navy">AVISAR</span>}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                              {adicionais.length > 0 && <div className="flex flex-wrap gap-1.5">{adicionais.map(id => { const u = usuarios.find(item => item.id === id); return u ? <span key={id} className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-brand-navy">{u.nome}</span> : null })}</div>}
                             </div>
                           </div>
 
@@ -272,8 +319,8 @@ export default function AutomacoesFluxoPage() {
         ))}
 
         <section className="bg-white border border-slate-200 rounded-2xl p-5">
-          <div className="flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" /><h2 className="font-semibold text-slate-900">Como o responsável recebe</h2></div>
-          <p className="text-sm text-slate-600 mt-2">Quando uma regra dispara, o Atlas registra a execução, atribui o card, cria a tarefa quando configurado e envia o aviso no sino. Se a tarefa já gera notificação para outra pessoa, o motor evita mandar um segundo aviso duplicado.</p>
+          <div className="flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" /><h2 className="font-semibold text-slate-900">Como as pessoas recebem</h2></div>
+          <p className="text-sm text-slate-600 mt-2">Cada regra tem um responsável principal e pode ter várias pessoas adicionais para aviso. Quando a regra dispara, o Atlas registra a execução, atribui o card, cria a tarefa quando configurado e envia as notificações sem duplicar o sino do responsável.</p>
         </section>
       </main>
     </div>
