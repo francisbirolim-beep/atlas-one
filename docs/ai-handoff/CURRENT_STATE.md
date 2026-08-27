@@ -7,6 +7,33 @@
 Branch: `feat/cliente-360-obras-financeiro-v1`
 PR: #280 — draft. **Não fazer merge antes da validação visual/funcional do usuário.**
 
+## Novo Orçamento / Tipologias — atualização 2026-08-27
+
+`/orcamento/novo` agora é o hub principal com três opções:
+- `Orçamento Obra`: fluxo completo com seleção inicial de tipologia e catálogo completo;
+- `Novo Orçamento Sob Medida`: abre diretamente o formulário técnico;
+- `Venda Balcão`: fluxo rápido fora do Kanban de obra.
+
+O catálogo contém 122 tipologias ativas. Antes, a coluna `tipologias.categoria` aceitava somente `porta` e `janela`, apesar de existirem registros de fachada, ACM, ripados, vidro, guarda-corpo, portão etc. A migration `20260827171516_tipologias_categorias_completas_v1.sql` ampliou a classificação sem excluir registros.
+
+Categorias atuais: `porta`, `janela`, `modulo_fixo`, `fachada`, `box`, `painel_ripado`, `acm`, `cobertura_claraboia`, `contramarco_arremate`, `espelho`, `portao_grade`, `guarda_corpo_corrimao`, `vidro`, `tela_mosquiteira`, `outros`.
+
+Na tela de Orçamento Obra:
+- busca filtra em tempo real;
+- categoria e linha são filtros independentes;
+- sem linha selecionada, todas as tipologias ficam disponíveis;
+- não há mais limite visual de 40 cards;
+- tipologia selecionada é repassada ao formulário técnico;
+- imagens reais têm prioridade; ausência de foto usa miniatura esquemática.
+
+Regra de Kanban criada anteriormente continua válida: orçamento de formulário concluído entra em `Orçamento feito`; Venda Balcão continua fora do Kanban de obra.
+
+Validação funcional do HEAD de código `bd9597fb3462b83bfe54c80381067b4c96ed3bae`:
+- Build Validation #620: success;
+- Supabase Database Control #343: success;
+- Vercel Preview: READY;
+- `/orcamento/novo`: HTTP 200.
+
 ## Fluxo oficial da venda sob medida
 
 ### Venda confirmada
@@ -172,23 +199,16 @@ Além das migrations Cliente 360/workflow já registradas, entraram:
 - `20260827020901_orcamento_margem_sobra_otimizacao_v1.sql`;
 - `20260827021039_orcamento_precificacao_componentes_catalogo_v1.sql`;
 - `20260827021551_orcamento_override_historico_tipologia_v1.sql`;
-- `20260827023133_produtos_backfill_tamanho_barra_origem_v1.sql`.
+- `20260827023133_produtos_backfill_tamanho_barra_origem_v1.sql`;
+- `20260827164537_orcamento_obra_entrar_orcamento_feito_v1.sql`;
+- `20260827171516_tipologias_categorias_completas_v1.sql`.
 
 Todas estão aplicadas no Supabase e versionadas no repositório.
-
-## Validação técnica
-
-Código funcional validado no HEAD `22fa0bf81e5ab8132e2b46808a67412dbee81585`:
-- GitHub Build Validation #605: success;
-- Supabase Database Control #328: success;
-- Vercel Preview correspondente: READY;
-- `/orcamento/precificacao` respondeu HTTP 200 no deployment.
-
-O commit de documentação posterior é docs-only e deve receber os checks finais antes de compartilhar o Preview definitivo.
 
 ## Ainda pendente / não considerar concluído
 
 - teste visual e operacional do usuário no Preview;
+- validar as 3 opções do Novo Orçamento e o catálogo completo de tipologias;
 - validar Precificação com um orçamento real contendo tipologias/fórmulas validadas;
 - validar Materiais/Estoque em uma obra real;
 - validar separação de barra/retalho e desfazer;
