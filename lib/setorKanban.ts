@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { usuarioAtual } from './auth'
+import { gerarPacoteTecnico } from './materialPlanejamento'
 import { SetorKanbanColuna, SetorKanbanItem } from './tipos'
 
 const COLUNA_PADRAO = 'A Fazer'
@@ -52,17 +53,17 @@ export async function criarItemSetor(colunaId: string, titulo: string, descricao
 }
 
 export async function moverItemSetor(id: string, novaColunaId: string): Promise<boolean> {
-  const [{ data: destino }, usuario] = await Promise.all([
+  const [{ data: destino }, { data: card }, usuario] = await Promise.all([
     supabase.from('setor_kanban_colunas').select('nome,setor_id').eq('id', novaColunaId).maybeSingle(),
+    supabase.from('setor_kanban_itens').select('orcamento_id').eq('id', id).maybeSingle(),
     usuarioAtual(),
   ])
 
   const destinoNome = String(destino?.nome || '').toLowerCase()
 
-  // A conferência do projeto é o portão do fluxo operacional da venda.
-  // Somente ao entrar em "Projeto conferido" nascem Medição Final e os
-  // fluxos de Perfis/Acessórios/Outros. Vidros continuam bloqueados até a
-  // aprovação da Medição Final.
+  // Projeto conferido fecha o checkpoint pré-medição e gera o pacote técnico
+  // inicial da obra. Fórmula ainda não validada vira pendência editável: nunca
+  // é inventada. Vidros permanecem provisórios até a Medição Final aprovada.
   if (destino?.setor_id === 'engenharia-projeto' && destinoNome === 'projeto conferido') {
     const { error } = await supabase.rpc('fn_concluir_conferencia_projeto_v1', {
       p_card_id: id,
@@ -70,8 +71,32 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
       p_usuario_id: usuario?.id || null,
       p_usuario_nome: usuario?.nome || null,
     })
-    if (error) console.error('Erro ao concluir conferência do projeto:', error)
-    return !error
+    if (error) {
+      console.error('Erro ao concluir conferência do projeto:', error)
+      return false
+    }
+
+    const orcamentoId = card?.orcamento_id ? String(card.orcamento_id) : ''
+    if (orcamentoId) {
+      const { data: existente } = await supabase
+        .from('pacotes_tecnicos')
+        .select('id')
+        .eq('orcamento_id', orcamentoId)
+        .eq('origem', 'projeto_conferido')
+        .neq('status', 'substituido')
+        .order('versao', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (!existente) {
+        const pacote = await gerarPacoteTecnico(orcamentoId, 'projeto_conferido', usuario, {
+          perdaCorteMm: 0,
+          minimoSobraReaproveitavelMm: 300,
+        })
+        if (!pacote.ok) console.warn('Projeto conferido, mas o pacote técnico ficou pendente:', pacote.error)
+      }
+    }
+    return true
   }
 
   if (destinoNome.includes('liberad') && destinoNome.includes('produ')) {
