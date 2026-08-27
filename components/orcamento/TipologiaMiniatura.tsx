@@ -18,7 +18,7 @@ export default function TipologiaMiniatura({ nome, className = '' }: Props) {
   const maxim = n.includes('maxim') || n.includes('max-ar') || n.includes('max ar')
   const porta = n.includes('porta')
   const correr = n.includes('correr')
-  const folhas = Math.max(2, Math.min(4, Number((n.match(/(\d+)\s*folh/) || [])[1] || (correr ? 2 : 1)))
+  const folhas = Math.max(2, Math.min(4, Number((n.match(/(\d+)\s*folh/) || [])[1] || (correr ? 2 : 1))))
 
   if (ripado) {
     return (
