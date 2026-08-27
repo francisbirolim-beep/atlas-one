@@ -5,9 +5,11 @@ import Link from 'next/link'
 import {
   ArrowLeft,
   Bell,
-  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   ListTodo,
+  Pencil,
   Plus,
   Save,
   Trash2,
@@ -120,10 +122,11 @@ export default function AutomacoesFluxoPage() {
 
   function alternarNotificado(a: WorkflowAutomacao, usuarioId: string) {
     const atuais = a.notificar_usuario_ids || []
-    const proximo = atuais.includes(usuarioId)
-      ? atuais.filter(id => id !== usuarioId)
-      : [...atuais, usuarioId]
-    atualizar(a.id, { notificar_usuario_ids: proximo })
+    atualizar(a.id, {
+      notificar_usuario_ids: atuais.includes(usuarioId)
+        ? atuais.filter(id => id !== usuarioId)
+        : [...atuais, usuarioId],
+    })
   }
 
   async function salvar(a: WorkflowAutomacao) {
@@ -149,6 +152,7 @@ export default function AutomacoesFluxoPage() {
         ordem: Number(a.ordem || 0),
       })
       setAutomacoes(prev => prev.map(item => item.id === salvo.id ? salvo : item))
+      setAbertoId(null)
     } catch (e: any) {
       setErro(e?.message || 'Não foi possível salvar a automação.')
     } finally {
@@ -225,10 +229,9 @@ export default function AutomacoesFluxoPage() {
           <div className="bg-white border border-slate-200 rounded-2xl p-4"><p className="text-xs text-slate-500">Execuções recentes</p><p className="text-2xl font-bold text-slate-900 mt-1">{execucoes.length}</p></div>
         </section>
 
-        <section className="bg-brand-navyLight border border-blue-100 rounded-2xl p-4 text-sm text-slate-700">
-          <p className="font-semibold text-brand-navy">Fluxo-base atual</p>
-          <p className="mt-1">Venda confirmada → <b>Financeiro + Conferir Projeto</b> → Projeto conferido → <b>Medição Final + Perfis + Acessórios + Outros</b> → Medição aprovada → <b>Vidros + MEE</b>.</p>
-          <p className="text-xs text-slate-500 mt-1">Você pode trocar o responsável de qualquer regra e adicionar quantas pessoas quiser em “Notificar também”. Produção e Instalação continuam cadastradas, porém inativas até definirmos os gates.</p>
+        <section className="rounded-2xl border border-blue-100 bg-brand-navyLight p-4 text-sm text-slate-700">
+          <p className="font-semibold text-brand-navy">Como preencher</p>
+          <p className="mt-1">Clique em <b>Preencher</b> ou <b>Editar</b> em cada regra. O formulário completo abrirá logo abaixo da regra.</p>
         </section>
 
         {grupos.map(grupo => (
@@ -238,53 +241,78 @@ export default function AutomacoesFluxoPage() {
               <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">{grupo.automacoes.length} regra(s)</span>
             </div>
 
-            {grupo.automacoes.length === 0 ? <div className="px-5 py-5 text-sm text-slate-400">Nenhuma automação cadastrada para este evento.</div> : (
+            {grupo.automacoes.length === 0 ? (
+              <div className="px-5 py-5 text-sm text-slate-400">Nenhuma automação cadastrada para este evento.</div>
+            ) : (
               <div className="divide-y divide-slate-100">
                 {grupo.automacoes.map(a => {
                   const aberto = abertoId === a.id
                   const colunasSetor = colunas.filter(c => c.setor_id === a.destino_setor_id)
                   const adicionais = a.notificar_usuario_ids || []
                   const usuariosAdicionais = usuarios.filter(u => u.id !== a.responsavel_usuario_id)
+                  const incompleta = !a.responsavel_usuario_id && (a.criar_tarefa || a.notificar_responsavel)
+
                   return (
                     <div key={a.id} className="p-5">
                       <div className="flex flex-wrap items-center gap-3">
                         <button onClick={() => atualizar(a.id, { ativo: !a.ativo })} className={`w-11 h-6 rounded-full p-0.5 transition ${a.ativo ? 'bg-emerald-500' : 'bg-slate-300'}`} aria-label="Ativar automação"><span className={`block w-5 h-5 bg-white rounded-full shadow transition ${a.ativo ? 'translate-x-5' : ''}`} /></button>
-                        <button onClick={() => setAbertoId(aberto ? null : a.id)} className="min-w-0 flex-1 text-left">
+
+                        <div className="min-w-0 flex-1">
                           <p className="font-medium text-slate-900 truncate">{a.nome}</p>
                           <p className="text-xs text-slate-500 mt-0.5">{labelEvento(a.evento_chave)} → {nomeSetor(a.destino_setor_id, setores)} · {nomeUsuario(a.responsavel_usuario_id, usuarios)}</p>
-                        </button>
+                        </div>
+
                         {a.criar_tarefa && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-violet-50 text-violet-700"><ListTodo size={12} /> tarefa</span>}
-                        {(a.notificar_responsavel || adicionais.length > 0) && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-amber-50 text-amber-700"><Bell size={12} /> {adicionais.length > 0 ? `${adicionais.length + (a.notificar_responsavel && a.responsavel_usuario_id ? 1 : 0)} aviso(s)` : 'aviso'}</span>}
+                        {(a.notificar_responsavel || adicionais.length > 0) && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-amber-50 text-amber-700"><Bell size={12} /> aviso</span>}
+                        {incompleta && <span className="text-[11px] px-2 py-1 rounded-full bg-orange-50 text-orange-700">falta responsável</span>}
                         <span className={`text-[11px] px-2 py-1 rounded-full ${a.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{a.ativo ? 'Ativa' : 'Inativa'}</span>
+
+                        <button
+                          type="button"
+                          onClick={() => setAbertoId(aberto ? null : a.id)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition ${incompleta && !aberto ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          <Pencil size={13} /> {aberto ? 'Fechar' : incompleta ? 'Preencher' : 'Editar'} {aberto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
                       </div>
 
                       {aberto && (
-                        <div className="mt-5 border-t border-slate-100 pt-5 space-y-4">
+                        <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/30 p-4 md:p-5 space-y-5">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                              <p className="font-semibold text-slate-900">Configurar automação</p>
+                              <p className="text-xs text-slate-500 mt-0.5">Preencha os campos e clique em “Salvar automação”.</p>
+                            </div>
+                            <span className="text-xs text-slate-500">{a.ativo ? 'Regra ativa' : 'Regra inativa'}</span>
+                          </div>
+
                           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <label className="lg:col-span-2"><span className="block text-xs font-medium text-slate-600 mb-1">Nome</span><input value={a.nome} onChange={e => atualizar(a.id, { nome: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" /></label>
-                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Gatilho</span><select value={a.evento_chave} onChange={e => atualizar(a.id, { evento_chave: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">{EVENTOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}</select></label>
-                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Ação</span><select value={a.acao_tipo} onChange={e => atualizar(a.id, { acao_tipo: e.target.value as WorkflowAutomacao['acao_tipo'] })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">{ACOES.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}</select></label>
+                            <label className="lg:col-span-2"><span className="block text-xs font-medium text-slate-600 mb-1">Nome da automação</span><input value={a.nome} onChange={e => atualizar(a.id, { nome: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white" /></label>
+                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Gatilho</span><select value={a.evento_chave} onChange={e => atualizar(a.id, { evento_chave: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">{EVENTOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}</select></label>
+                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Ação</span><select value={a.acao_tipo} onChange={e => atualizar(a.id, { acao_tipo: e.target.value as WorkflowAutomacao['acao_tipo'] })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">{ACOES.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}</select></label>
                           </div>
 
                           <div className="grid md:grid-cols-3 gap-3">
-                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Setor de destino</span><select value={a.destino_setor_id || ''} onChange={e => atualizar(a.id, { destino_setor_id: e.target.value || null, destino_coluna_id: null })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"><option value="">Processo especial / sem setor</option>{setores.filter(s => s.id !== 'workflow-automacoes').map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
-                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Coluna de entrada</span><select value={a.destino_coluna_id || ''} onChange={e => atualizar(a.id, { destino_coluna_id: e.target.value || null })} disabled={!a.destino_setor_id} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm disabled:bg-slate-50"><option value="">Primeira / processo especial</option>{colunasSetor.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Responsável principal</span><select value={a.responsavel_usuario_id || ''} onChange={e => trocarResponsavel(a, e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"><option value="">Sem responsável definido</option>{usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select></label>
+                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Setor de destino</span><select value={a.destino_setor_id || ''} onChange={e => atualizar(a.id, { destino_setor_id: e.target.value || null, destino_coluna_id: null })} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white"><option value="">Processo especial / sem setor</option>{setores.filter(s => s.id !== 'workflow-automacoes').map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Coluna de entrada</span><select value={a.destino_coluna_id || ''} onChange={e => atualizar(a.id, { destino_coluna_id: e.target.value || null })} disabled={!a.destino_setor_id} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white disabled:bg-slate-100"><option value="">Primeira / processo especial</option>{colunasSetor.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
+                            <label><span className="block text-xs font-medium text-slate-600 mb-1">Responsável principal</span><select value={a.responsavel_usuario_id || ''} onChange={e => trocarResponsavel(a, e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white"><option value="">Escolha o responsável</option>{usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select></label>
                           </div>
 
                           <div className="grid md:grid-cols-2 gap-4">
-                            <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                               <div className="flex items-center gap-2"><UserRoundCheck size={16} className="text-brand-navy" /><p className="text-sm font-semibold text-slate-800">Tarefa e responsabilidade</p></div>
-                              <p className="text-xs text-slate-500">O responsável principal pode ser alterado a qualquer momento. A próxima execução da regra já usa a nova pessoa.</p>
                               <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={a.criar_tarefa} onChange={e => atualizar(a.id, { criar_tarefa: e.target.checked })} /> Criar tarefa para o responsável</label>
                               <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={a.notificar_responsavel} onChange={e => atualizar(a.id, { notificar_responsavel: e.target.checked })} /> Avisar o responsável no sino</label>
-                              <div className="grid grid-cols-2 gap-2"><label><span className="block text-xs text-slate-500 mb-1">Prazo em horas</span><input type="number" min={0} value={a.prazo_horas ?? ''} onChange={e => atualizar(a.id, { prazo_horas: e.target.value === '' ? null : Number(e.target.value) })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm" placeholder="Sem prazo" /></label><label><span className="block text-xs text-slate-500 mb-1">Prioridade</span><select value={a.prioridade_tarefa} onChange={e => atualizar(a.id, { prioridade_tarefa: e.target.value as WorkflowAutomacao['prioridade_tarefa'] })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm"><option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></label></div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <label><span className="block text-xs text-slate-500 mb-1">Prazo em horas</span><input type="number" min={0} value={a.prazo_horas ?? ''} onChange={e => atualizar(a.id, { prazo_horas: e.target.value === '' ? null : Number(e.target.value) })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm" placeholder="Sem prazo" /></label>
+                                <label><span className="block text-xs text-slate-500 mb-1">Prioridade</span><select value={a.prioridade_tarefa} onChange={e => atualizar(a.id, { prioridade_tarefa: e.target.value as WorkflowAutomacao['prioridade_tarefa'] })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm"><option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></label>
+                              </div>
                               <label><span className="block text-xs text-slate-500 mb-1">Título da tarefa</span><input value={a.titulo_tarefa_template || ''} onChange={e => atualizar(a.id, { titulo_tarefa_template: e.target.value })} className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm" placeholder="Ex.: Conferir {cliente}" /></label>
                             </div>
 
-                            <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                               <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Users size={16} className="text-brand-navy" /><p className="text-sm font-semibold text-slate-800">Notificar também</p></div><Link href="/configuracoes/usuarios" className="inline-flex items-center gap-1 text-xs font-medium text-brand-navy hover:underline"><UserPlus size={13} /> Adicionar pessoa</Link></div>
-                              <p className="text-xs text-slate-500">Marque outras pessoas que devem receber o comunicado, mesmo sem serem responsáveis pela tarefa.</p>
+                              <p className="text-xs text-slate-500">Marque outras pessoas que também devem receber o comunicado.</p>
                               <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-100">
                                 {usuariosAdicionais.length === 0 && <p className="px-3 py-3 text-xs text-slate-400">Nenhuma outra pessoa cadastrada.</p>}
                                 {usuariosAdicionais.map(u => {
@@ -293,20 +321,24 @@ export default function AutomacoesFluxoPage() {
                                     <label key={u.id} className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 transition ${marcado ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
                                       <input type="checkbox" checked={marcado} onChange={() => alternarNotificado(a, u.id)} />
                                       <div className="min-w-0 flex-1"><p className="text-sm font-medium text-slate-700 truncate">{u.nome}</p><p className="text-[11px] text-slate-400 truncate">{u.email}</p></div>
-                                      {marcado && <span className="text-[10px] font-semibold text-brand-navy">AVISAR</span>}
                                     </label>
                                   )
                                 })}
                               </div>
-                              {adicionais.length > 0 && <div className="flex flex-wrap gap-1.5">{adicionais.map(id => { const u = usuarios.find(item => item.id === id); return u ? <span key={id} className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-brand-navy">{u.nome}</span> : null })}</div>}
                             </div>
                           </div>
 
-                          <label className="block"><span className="block text-xs font-medium text-slate-600 mb-1">Mensagem</span><textarea value={a.mensagem_template || ''} onChange={e => atualizar(a.id, { mensagem_template: e.target.value })} className="w-full min-h-24 border border-slate-200 rounded-xl px-3 py-2 text-sm" placeholder="Use {cliente}, {numero}, {valor}, {obra} e {evento}." /><span className="text-[11px] text-slate-400">Variáveis disponíveis: {'{cliente}'} · {'{numero}'} · {'{valor}'} · {'{obra}'} · {'{evento}'}</span></label>
+                          <label className="block"><span className="block text-xs font-medium text-slate-600 mb-1">Mensagem do aviso</span><textarea value={a.mensagem_template || ''} onChange={e => atualizar(a.id, { mensagem_template: e.target.value })} className="w-full min-h-24 border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white" placeholder="Use {cliente}, {numero}, {valor}, {obra} e {evento}." /><span className="text-[11px] text-slate-400">Variáveis: {'{cliente}'} · {'{numero}'} · {'{valor}'} · {'{obra}'} · {'{evento}'}</span></label>
 
                           <div className="flex items-center justify-between gap-3 flex-wrap">
-                            <div className="flex items-center gap-4 text-xs text-slate-600"><label className="flex items-center gap-2"><input type="checkbox" checked={a.evitar_duplicidade} onChange={e => atualizar(a.id, { evitar_duplicidade: e.target.checked })} /> Não duplicar processo</label><label className="flex items-center gap-2"><Clock3 size={13} /> Ordem <input type="number" value={a.ordem} onChange={e => atualizar(a.id, { ordem: Number(e.target.value) })} className="w-16 border border-slate-200 rounded px-2 py-1" /></label></div>
-                            <div className="flex items-center gap-2"><button onClick={() => excluir(a)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-red-50"><Trash2 size={14} /> Excluir</button><button onClick={() => salvar(a)} disabled={salvandoId === a.id} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-navy text-white text-xs font-medium disabled:opacity-50"><Save size={14} /> {salvandoId === a.id ? 'Salvando...' : 'Salvar automação'}</button></div>
+                            <div className="flex items-center gap-4 text-xs text-slate-600">
+                              <label className="flex items-center gap-2"><input type="checkbox" checked={a.evitar_duplicidade} onChange={e => atualizar(a.id, { evitar_duplicidade: e.target.checked })} /> Não duplicar processo</label>
+                              <label className="flex items-center gap-2"><Clock3 size={13} /> Ordem <input type="number" value={a.ordem} onChange={e => atualizar(a.id, { ordem: Number(e.target.value) })} className="w-16 border border-slate-200 rounded px-2 py-1 bg-white" /></label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => excluir(a)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 bg-white text-red-600 text-xs hover:bg-red-50"><Trash2 size={14} /> Excluir</button>
+                              <button onClick={() => salvar(a)} disabled={salvandoId === a.id} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-navy text-white text-xs font-medium disabled:opacity-50"><Save size={14} /> {salvandoId === a.id ? 'Salvando...' : 'Salvar automação'}</button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -317,11 +349,6 @@ export default function AutomacoesFluxoPage() {
             )}
           </section>
         ))}
-
-        <section className="bg-white border border-slate-200 rounded-2xl p-5">
-          <div className="flex items-center gap-2"><CheckCircle2 size={17} className="text-emerald-600" /><h2 className="font-semibold text-slate-900">Como as pessoas recebem</h2></div>
-          <p className="text-sm text-slate-600 mt-2">Cada regra tem um responsável principal e pode ter várias pessoas adicionais para aviso. Quando a regra dispara, o Atlas registra a execução, atribui o card, cria a tarefa quando configurado e envia as notificações sem duplicar o sino do responsável.</p>
-        </section>
       </main>
     </div>
   )
