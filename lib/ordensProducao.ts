@@ -54,6 +54,17 @@ export async function listarOrdensProducao(): Promise<OrdemProducao[]> {
   return (data || []).map(mapOrdem)
 }
 
+export async function carregarOrdemProducao(id: string): Promise<OrdemProducao | null> {
+  if (!id) return null
+  const { data, error } = await supabase
+    .from('ordens_producao')
+    .select('*, clientes(nome), obras(nome), vendas_obras(numero)')
+    .eq('id', id)
+    .maybeSingle()
+  if (error || !data) return null
+  return mapOrdem(data)
+}
+
 export async function listarOrdensPorCard(cardId: string): Promise<OrdemProducao[]> {
   const { data, error } = await supabase
     .from('ordens_producao')
