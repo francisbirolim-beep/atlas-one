@@ -1,5 +1,20 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar Cadastros 360 por usuário
+
+Branch: `feat/cadastros-360-permissoes`
+
+Validar no preview:
+
+1. abrir `/cadastros` como Master e confirmar todos os cards, incluindo Clientes;
+2. em `/configuracoes/usuarios`, selecionar um funcionário de teste e deixar somente Clientes marcado em Cadastros 360;
+3. entrar com esse funcionário e confirmar que `/cadastros` mostra somente Clientes;
+4. restaurar as opções do funcionário após o teste, se necessário;
+5. conferir o layout da seleção no celular.
+
+Próxima evolução recomendada: aplicar permissões profundas por rota e ação (`ver`, `criar`, `editar`, `excluir`, `aprovar`) sem criar uma segunda base de usuários ou cadastros.
+
+
 ## TAREFA ATUAL — validar filtro do Kanban por período e tipo de data
 
 Branch: `feat/kanban-filtro-periodo-datas`
