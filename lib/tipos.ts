@@ -155,6 +155,7 @@ export interface OrcamentoRapido {
       valor_estimado?: number | null
       status: StatusOrcamento
       coluna_id?: string | null
+      kanban_entrada_em?: string | null
       coluna_atualizada_em?: string | null
       observacoes?: string
       arquiteto_nome?: string | null
