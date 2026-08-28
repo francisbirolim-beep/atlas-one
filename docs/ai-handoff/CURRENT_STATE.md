@@ -2,6 +2,31 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — CADASTROS 360 POR USUÁRIO — 2026-08-28
+
+Branch: `feat/cadastros-360-permissoes`
+
+### Implementado no código
+
+- a antiga Central de Cadastros passou a se apresentar como **Cadastros 360**;
+- Clientes foi incluído na mesma central, reutilizando o cadastro único existente em `/clientes`;
+- a lista de cards visíveis pode ser configurada individualmente em `Usuários e Acesso`;
+- usuário Master continua com acesso completo e não pode ter os cadastros ocultados;
+- funcionário vê apenas os cards marcados pelo Master;
+- usuários antigos preservam a visibilidade atual até receberem uma configuração explícita;
+- a configuração usa `configuracoes_gerais` por usuário, sem migration e sem duplicar clientes, produtos, fornecedores ou materiais.
+
+### Validação concluída
+
+- build local completo passou, incluindo TypeScript e geração das 90 rotas;
+- nenhum cadastro mestre ou regra comercial/técnica foi alterado.
+
+### Limite desta primeira etapa
+
+- esta entrega controla a composição visual do Cadastros 360;
+- autorização profunda por rota e ações separadas (`ver`, `criar`, `editar`, `excluir`, `aprovar`) permanece para a próxima evolução, integrada ao modelo geral de permissões.
+
+
 ## EM VALIDAÇÃO — FILTRO DO KANBAN POR PERÍODO E TIPO DE DATA — 2026-08-28
 
 Branch: `feat/kanban-filtro-periodo-datas`
