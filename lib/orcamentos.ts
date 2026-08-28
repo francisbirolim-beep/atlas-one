@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
 import { primeiraColunaId } from './kanban'
 import { uploadFoto, uploadArquivo } from './upload'
-import { usuarioAtual } from './auth'
+import { usuarioAtual, tokenAtual } from './auth'
 import { registrarHistorico } from './historico'
 import { executarAutomacoesColuna } from './automacoes'
 import { v4 as uuidv4 } from 'uuid'
@@ -99,6 +99,35 @@ async function carregarReferenciasWvetroSnapshot(): Promise<Record<string, Refer
   }
 }
 
+function numeroOpcional(valor: string): number | null {
+  const n = parseFloat((valor || '').replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+async function lerTrena(url: string, eixo: 'largura' | 'altura'): Promise<number[]> {
+  try {
+    const token = await tokenAtual()
+    if (!token) return []
+    const resposta = await fetch('/api/medicao-final/ler-trena', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ imageUrl: url, eixo }),
+    })
+    const json = await resposta.json().catch(() => ({}))
+    if (!resposta.ok || !Array.isArray(json?.medidas_mm)) return []
+    return json.medidas_mm
+      .map((valor: unknown) => Number(valor))
+      .filter((valor: number) => Number.isFinite(valor) && valor > 0)
+      .slice(0, 3)
+  } catch (erro) {
+    console.error('Erro ao ler foto da trena no orçamento:', erro)
+    return []
+  }
+}
+
 export async function criarOrcamentoNoServidor(
   dados: DadosOrcamentoForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
@@ -118,19 +147,25 @@ export async function criarOrcamentoNoServidor(
     carregarReferenciasWvetroSnapshot(),
   ])
 
-  let itensSalvos: ItemEsquadria[] = []
+  const itensSalvos: ItemEsquadria[] = []
   const fotosUrls: string[] = []
-  for (const foto of fotos) { const url = await uploadFoto(foto); if (url) fotosUrls.push(url) }
+  for (const foto of fotos) {
+    const url = await uploadFoto(foto)
+    if (url) fotosUrls.push(url)
+  }
+
   const anexosSalvos: Anexo[] = []
   for (const arquivo of arquivos) {
     const url = await uploadArquivo(arquivo)
     if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
+
   for (const it of itens) {
     const itemFotoUrls: string[] = []
-    for (const f of it.fotos) { const url = await uploadFoto(f); if (url) itemFotoUrls.push(url) }
-    const foto_url = itemFotoUrls[0] || null
-    const foto_urls = itemFotoUrls.length ? itemFotoUrls : null
+    for (const f of it.fotos) {
+      const url = await uploadFoto(f)
+      if (url) itemFotoUrls.push(url)
+    }
 
     const produto_id = it.modoOrigem === 'produto' ? (it.produtoId || null) : null
     const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
@@ -180,14 +215,27 @@ export async function criarOrcamentoNoServidor(
     if (tipoMedida === 'final') {
       const usaFotoLargura = it.modoLargura === 'foto'
       const usaFotoAltura = it.modoAltura === 'foto'
-      const lb = usaFotoLargura ? NaN : parseFloat(it.larguraBaixo.replace(',', '.'))
-      const lm = usaFotoLargura ? NaN : parseFloat(it.larguraMeio.replace(',', '.'))
-      const lc = usaFotoLargura ? NaN : parseFloat(it.larguraCima.replace(',', '.'))
-      const ad = usaFotoAltura ? NaN : parseFloat(it.alturaDireita.replace(',', '.'))
-      const am = usaFotoAltura ? NaN : parseFloat(it.alturaMeio.replace(',', '.'))
-      const ae = usaFotoAltura ? NaN : parseFloat(it.alturaEsquerda.replace(',', '.'))
       const foto_larguras_url = usaFotoLargura && it.fotoLargura ? await uploadFoto(it.fotoLargura) : null
       const foto_alturas_url = usaFotoAltura && it.fotoAltura ? await uploadFoto(it.fotoAltura) : null
+
+      const [medidasLidasLargura, medidasLidasAltura] = await Promise.all([
+        foto_larguras_url ? lerTrena(foto_larguras_url, 'largura') : Promise.resolve([]),
+        foto_alturas_url ? lerTrena(foto_alturas_url, 'altura') : Promise.resolve([]),
+      ])
+
+      const lb = medidasLidasLargura[0] ?? numeroOpcional(it.larguraBaixo)
+      const lm = medidasLidasLargura[1] ?? numeroOpcional(it.larguraMeio)
+      const lc = medidasLidasLargura[2] ?? numeroOpcional(it.larguraCima)
+      const ad = medidasLidasAltura[0] ?? numeroOpcional(it.alturaDireita)
+      const am = medidasLidasAltura[1] ?? numeroOpcional(it.alturaMeio)
+      const ae = medidasLidasAltura[2] ?? numeroOpcional(it.alturaEsquerda)
+
+      const todasFotosItem = [
+        ...itemFotoUrls,
+        ...(foto_larguras_url ? [foto_larguras_url] : []),
+        ...(foto_alturas_url ? [foto_alturas_url] : []),
+      ]
+
       itensSalvos.push({
         id: it.id,
         ambiente: it.ambiente?.trim() || null,
@@ -205,8 +253,8 @@ export async function criarOrcamentoNoServidor(
         foto_larguras_url,
         foto_alturas_url,
         quantidade: quantidadeNum,
-        foto_url,
-        foto_urls,
+        foto_url: itemFotoUrls[0] || foto_larguras_url || foto_alturas_url || null,
+        foto_urls: todasFotosItem.length ? todasFotosItem : null,
         descricao: it.descricao || undefined,
         cor: it.cor || null,
         produto_id,
@@ -224,8 +272,8 @@ export async function criarOrcamentoNoServidor(
         largura_mm: parseFloat(it.largura),
         altura_mm: parseFloat(it.altura),
         quantidade: quantidadeNum,
-        foto_url,
-        foto_urls,
+        foto_url: itemFotoUrls[0] || null,
+        foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
         descricao: it.descricao || undefined,
         cor: it.cor || null,
         produto_id,
@@ -273,7 +321,12 @@ export async function criarOrcamentoNoServidor(
   if (error) {
     return { ok: false, error: error.message }
   }
-  if (colunaId) { executarAutomacoesColuna(colunaId, { cliente_nome: clienteNome, criado_por_id: usuario?.id || null }).catch(() => {}) }
+  if (colunaId) {
+    executarAutomacoesColuna(colunaId, {
+      cliente_nome: clienteNome,
+      criado_por_id: usuario?.id || null,
+    }).catch(() => {})
+  }
 
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true, id: novoId }
