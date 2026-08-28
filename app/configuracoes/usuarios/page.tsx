@@ -27,6 +27,14 @@ import {
   type HomeUsuarioConfig,
 } from '@/lib/homeUsuario'
 import type { Usuario } from '@/lib/tipos'
+import {
+  CADASTROS_360,
+  cadastrosConfigPadrao,
+  lerCadastrosUsuarioConfig,
+  salvarCadastrosUsuarioConfig,
+  type Cadastro360Id,
+  type CadastrosUsuarioConfig,
+} from '@/lib/cadastrosUsuario'
 
 function normalizar(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -49,6 +57,8 @@ export default function UsuariosSenhasPage() {
   const [carregandoHome, setCarregandoHome] = useState(false)
   const [salvandoHome, setSalvandoHome] = useState(false)
   const [msgHome, setMsgHome] = useState('')
+  const [cadastrosConfig, setCadastrosConfig] = useState<CadastrosUsuarioConfig | null>(null)
+  const [msgCadastros, setMsgCadastros] = useState('')
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [novoNome, setNovoNome] = useState('')
@@ -58,6 +68,7 @@ export default function UsuariosSenhasPage() {
   const [novoSenha, setNovoSenha] = useState('')
   const [novoConfirmacao, setNovoConfirmacao] = useState('')
   const [novaHome, setNovaHome] = useState<HomeUsuarioConfig>(() => homeConfigPadrao('funcionario'))
+  const [novosCadastros, setNovosCadastros] = useState<CadastrosUsuarioConfig>(() => cadastrosConfigPadrao('funcionario'))
   const [criandoUsuario, setCriandoUsuario] = useState(false)
   const [erroNovo, setErroNovo] = useState('')
   const [sucessoNovo, setSucessoNovo] = useState('')
@@ -95,10 +106,16 @@ export default function UsuariosSenhasPage() {
     setErro('')
     setSucesso('')
     setMsgHome('')
+    setMsgCadastros('')
     const usuario = usuarios.find(u => u.id === id)
     if (!usuario) return
     setCarregandoHome(true)
-    setHomeConfig(await lerHomeUsuarioConfig(usuario))
+    const [home, cadastros] = await Promise.all([
+      lerHomeUsuarioConfig(usuario),
+      lerCadastrosUsuarioConfig(usuario),
+    ])
+    setHomeConfig(home)
+    setCadastrosConfig(cadastros)
     setCarregandoHome(false)
   }
 
@@ -107,6 +124,13 @@ export default function UsuariosSenhasPage() {
     setConfig({
       ...config,
       modulos: existe ? config.modulos.filter(id => id !== modulo) : [...config.modulos, modulo],
+    })
+  }
+
+  function alternarCadastro(config: CadastrosUsuarioConfig, setConfig: (valor: CadastrosUsuarioConfig) => void, cadastro: Cadastro360Id) {
+    const existe = config.visiveis.includes(cadastro)
+    setConfig({
+      visiveis: existe ? config.visiveis.filter(id => id !== cadastro) : [...config.visiveis, cadastro],
     })
   }
 
@@ -120,6 +144,17 @@ export default function UsuariosSenhasPage() {
     const ok = await salvarHomeUsuarioConfig(usuarioSelecionado.id, configFinal)
     setSalvandoHome(false)
     setMsgHome(ok ? 'Tela inicial salva. Na próxima atualização esse usuário já verá a nova composição.' : 'Não foi possível salvar a tela inicial.')
+  }
+
+  async function salvarCadastrosUsuario() {
+    if (!usuarioSelecionado || !cadastrosConfig) return
+    setSalvandoHome(true)
+    setMsgCadastros('')
+    const ok = usuarioSelecionado.role === 'master'
+      ? true
+      : await salvarCadastrosUsuarioConfig(usuarioSelecionado.id, cadastrosConfig)
+    setSalvandoHome(false)
+    setMsgCadastros(ok ? 'Cadastros 360 salvos. O usuário verá apenas as opções marcadas.' : 'Não foi possível salvar os Cadastros 360.')
   }
 
   async function salvarSenha(e: React.FormEvent) {
@@ -170,6 +205,7 @@ export default function UsuariosSenhasPage() {
   function mudarRoleNovo(role: Usuario['role']) {
     setNovoRole(role)
     setNovaHome(homeConfigPadrao(role))
+    setNovosCadastros(cadastrosConfigPadrao(role))
   }
 
   function fecharNovo() {
@@ -226,14 +262,17 @@ export default function UsuariosSenhasPage() {
     const configFinal: HomeUsuarioConfig = novoRole === 'master'
       ? { ...novaHome, assistenciasEscopo: 'todas' }
       : novaHome
-    const homeOk = await salvarHomeUsuarioConfig(json.id, configFinal)
+    const [homeOk, cadastrosOk] = await Promise.all([
+      salvarHomeUsuarioConfig(json.id, configFinal),
+      novoRole === 'master' ? Promise.resolve(true) : salvarCadastrosUsuarioConfig(json.id, novosCadastros),
+    ])
 
     const { data } = await supabase.from('usuarios').select('*').order('nome', { ascending: true })
     const lista = (data as Usuario[]) || []
     setUsuarios(lista)
     setCriandoUsuario(false)
     setSucessoNovo(
-      `${novoNome} criado com sucesso.${json.emailGerado ? ` Login gerado: ${json.email}.` : ''}${homeOk ? ' A tela inicial também foi configurada.' : ' O usuário foi criado, mas a tela inicial precisa ser salva novamente.'}`
+      `${novoNome} criado com sucesso.${json.emailGerado ? ` Login gerado: ${json.email}.` : ''}${homeOk && cadastrosOk ? ' A tela inicial e os Cadastros 360 também foram configurados.' : ' O usuário foi criado, mas alguma configuração de acesso precisa ser salva novamente.'}`
     )
 
     setNovoNome('')
@@ -243,11 +282,16 @@ export default function UsuariosSenhasPage() {
     setNovoConfirmacao('')
     setNovoRole('funcionario')
     setNovaHome(homeConfigPadrao('funcionario'))
+    setNovosCadastros(cadastrosConfigPadrao('funcionario'))
 
     if (json.id) {
       setUsuarioId(json.id)
       const criado = lista.find(u => u.id === json.id)
-      if (criado) setHomeConfig(await lerHomeUsuarioConfig(criado))
+      if (criado) {
+        const [home, cadastros] = await Promise.all([lerHomeUsuarioConfig(criado), lerCadastrosUsuarioConfig(criado)])
+        setHomeConfig(home)
+        setCadastrosConfig(cadastros)
+      }
     }
   }
 
@@ -303,6 +347,15 @@ export default function UsuariosSenhasPage() {
                     </label>
                   ))}
                 </div>
+                <div className="mb-3 mt-5 flex items-center gap-2"><ShieldCheck size={17} className="text-blue-600"/><div><p className="text-sm font-semibold text-slate-800">Cadastros 360</p><p className="text-xs text-slate-500">Marque somente os cadastros que esta pessoa poderá enxergar.</p></div></div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {CADASTROS_360.map(cadastro => (
+                    <label key={cadastro.id} className={`cursor-pointer rounded-xl border p-3 transition ${novosCadastros.visiveis.includes(cadastro.id) ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                      <div className="flex items-start gap-2"><input type="checkbox" checked={novosCadastros.visiveis.includes(cadastro.id)} disabled={novoRole === 'master'} onChange={() => alternarCadastro(novosCadastros, setNovosCadastros, cadastro.id)} className="mt-0.5"/><span><span className="block text-sm font-medium text-slate-800">{cadastro.label}</span><span className="mt-0.5 block text-[11px] text-slate-500">{cadastro.grupo}</span></span></div>
+                    </label>
+                  ))}
+                </div>
+                {novoRole === 'master' && <p className="mt-2 text-xs text-blue-700">Usuário Master sempre possui acesso completo.</p>}
                 {novaHome.modulos.includes('assistencias') && novoRole !== 'master' && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-900">Assistências que o usuário poderá acompanhar</p><div className="mt-2 flex flex-wrap gap-4 text-sm text-amber-900"><label className="flex items-center gap-2"><input type="radio" checked={novaHome.assistenciasEscopo === 'proprias'} onChange={() => setNovaHome({ ...novaHome, assistenciasEscopo: 'proprias' })}/>Somente as que ele abriu</label><label className="flex items-center gap-2"><input type="radio" checked={novaHome.assistenciasEscopo === 'todas'} onChange={() => setNovaHome({ ...novaHome, assistenciasEscopo: 'todas' })}/>Todas as assistências</label></div></div>
                 )}
@@ -363,6 +416,23 @@ export default function UsuariosSenhasPage() {
 
                       {msgHome && <p className="pt-1 text-xs text-slate-600">{msgHome}</p>}
                       <button type="button" onClick={() => void salvarTelaUsuario()} disabled={salvandoHome} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50">{salvandoHome ? <Loader2 size={17} className="animate-spin"/> : <Save size={17}/>} {salvandoHome ? 'Salvando...' : 'Salvar tela do usuário'}</button>
+                    </div>
+                  )}
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-start gap-2"><ShieldCheck size={18} className="mt-0.5 text-blue-600"/><div><h2 className="font-semibold text-slate-900">Cadastros 360 de {usuarioSelecionado.nome.split(' ')[0]}</h2><p className="text-xs text-slate-500">As opções desmarcadas não aparecem na central deste usuário.</p></div></div>
+                  {!cadastrosConfig ? <div className="grid place-items-center py-8 text-slate-400"><Loader2 size={20} className="animate-spin"/></div> : (
+                    <div className="space-y-2">
+                      {CADASTROS_360.map(cadastro => (
+                        <label key={cadastro.id} className={`block rounded-xl border p-3 transition ${cadastrosConfig.visiveis.includes(cadastro.id) ? 'border-blue-300 bg-blue-50' : 'border-slate-200'} ${usuarioSelecionado.role === 'master' ? 'cursor-not-allowed opacity-75' : 'cursor-pointer hover:border-slate-300'}`}>
+                          <div className="flex items-start gap-2"><input type="checkbox" checked={cadastrosConfig.visiveis.includes(cadastro.id)} disabled={usuarioSelecionado.role === 'master'} onChange={() => alternarCadastro(cadastrosConfig, setCadastrosConfig, cadastro.id)} className="mt-0.5"/><span><span className="block text-sm font-medium text-slate-800">{cadastro.label}</span><span className="mt-0.5 block text-[11px] text-slate-500">{cadastro.grupo}</span></span></div>
+                        </label>
+                      ))}
+                      {usuarioSelecionado.role === 'master' ? <p className="pt-1 text-xs text-blue-700">Usuário Master sempre possui acesso completo aos Cadastros 360.</p> : <>
+                        {msgCadastros && <p className="pt-1 text-xs text-slate-600">{msgCadastros}</p>}
+                        <button type="button" onClick={() => void salvarCadastrosUsuario()} disabled={salvandoHome} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50">{salvandoHome ? <Loader2 size={17} className="animate-spin"/> : <Save size={17}/>} {salvandoHome ? 'Salvando...' : 'Salvar Cadastros 360'}</button>
+                      </>}
                     </div>
                   )}
                 </section>
