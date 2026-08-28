@@ -1,5 +1,17 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-28 — Compras 360 V1
+
+- transformada `/compras` em uma central única de necessidades, cotações, aprovações, pedidos, entregas e recebimentos;
+- adicionadas necessidades vinculadas a produto oficial ou descrição livre;
+- comparação de fornecedores por preço, frete, total, prazo e condição de pagamento;
+- histórico da última compra real do produto exibido como apoio à decisão;
+- criadas as tabelas `compras_necessidades` e `compras_cotacoes`, protegidas por RLS e operadas pela API autenticada `/api/compras/360`;
+- preservada a separação entre acompanhamento da compra e estoque: apenas o recebimento físico da NF gera entrada;
+- build local completo aprovado com 90 rotas.
+
+---
+
 ## 2026-08-28 — PR #281 — Filtro do Kanban por período e tipo de data
 
 - substituído o filtro de dia único por intervalo inclusivo `De` / `Até`;

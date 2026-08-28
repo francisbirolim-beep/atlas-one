@@ -1,6 +1,33 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar filtro do Kanban por período e tipo de data
+## TAREFA ATUAL — validar Compras 360 V1
+
+Branch: `feat/compras-360-v1`
+
+Objetivo: testar o fluxo operacional completo de compra antes do merge.
+
+### Roteiro de validação
+
+Em `/compras`:
+
+1. criar uma necessidade manual para um item ainda não cadastrado;
+2. criar outra necessidade vinculada a um produto oficial e conferir a última compra exibida;
+3. cadastrar duas cotações de fornecedores diferentes e comparar total, prazo e pagamento;
+4. avançar o card por cotação, aprovação, pedido, aguardando entrega e recebido;
+5. confirmar que mudar o card para recebido não altera o estoque;
+6. usar o recebimento físico da nota fiscal para realizar a entrada oficial no estoque;
+7. conferir o layout no desktop e no celular.
+
+### W.Vetro — próxima etapa em PR separado
+
+- manter Atlas como fonte oficial e W.Vetro somente como referência até validação;
+- revisar as 93 divergências de unidade e os 785 acessórios ainda ausentes;
+- validar tipologias/receitas antes de qualquer promoção para cadastro oficial;
+- não sobrescrever automaticamente produto, unidade, custo, preço, margem ou estoque do Atlas.
+
+---
+
+## TAREFA ANTERIOR — validar filtro do Kanban por período e tipo de data
 
 Branch: `feat/kanban-filtro-periodo-datas`
 

@@ -1,0 +1,165 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { autenticarCompras } from '@/lib/comprasServer'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+const STATUS_VALIDOS = new Set([
+  'necessidade', 'cotacao', 'aprovado', 'pedido_emitido',
+  'aguardando_entrega', 'recebido', 'cancelado',
+])
+
+function texto(valor: unknown, maximo = 500) {
+  return String(valor ?? '').trim().slice(0, maximo)
+}
+
+function numero(valor: unknown) {
+  const n = Number(valor)
+  return Number.isFinite(n) ? n : null
+}
+
+export async function GET(req: NextRequest) {
+  const usuario = await autenticarCompras(req)
+  if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+
+  try {
+    const [necessidadesResp, cotacoesResp, produtosResp, fornecedoresResp, historicoResp] = await Promise.all([
+      supabaseAdmin.from('compras_necessidades').select('*').neq('status', 'cancelado').order('updated_at', { ascending: false }).limit(500),
+      supabaseAdmin.from('compras_cotacoes').select('*').order('preco_unitario', { ascending: true }).limit(2000),
+      supabaseAdmin.from('produtos').select('id,nome,codigo,categoria,unidade,custo,ativo').eq('ativo', true).order('nome').limit(5000),
+      supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf,contato,telefone,email,cidade,observacoes,ativo').eq('ativo', true).order('nome').limit(1000),
+      supabaseAdmin.from('compras_nf_itens').select('produto_id,nf_id,valor_unitario,custo_aquisicao_unitario,created_at').not('produto_id', 'is', null).order('created_at', { ascending: false }).limit(3000),
+    ])
+
+    for (const resposta of [necessidadesResp, cotacoesResp, produtosResp, fornecedoresResp, historicoResp]) {
+      if (resposta.error) throw new Error(resposta.error.message)
+    }
+
+    const nfIds = Array.from(new Set((historicoResp.data || []).map(item => item.nf_id).filter(Boolean)))
+    const { data: nfs, error: nfsError } = nfIds.length
+      ? await supabaseAdmin.from('compras_nfs').select('id,fornecedor_id,fornecedor_nome,data_emissao,data_entrada').in('id', nfIds)
+      : { data: [], error: null }
+    if (nfsError) throw new Error(nfsError.message)
+
+    const nfPorId = new Map((nfs || []).map(nf => [nf.id, nf]))
+    const ultimoPorProduto = new Map<string, Record<string, unknown>>()
+    for (const item of historicoResp.data || []) {
+      if (!item.produto_id || ultimoPorProduto.has(item.produto_id)) continue
+      const nf = nfPorId.get(item.nf_id)
+      ultimoPorProduto.set(item.produto_id, {
+        precoUnitario: item.custo_aquisicao_unitario ?? item.valor_unitario ?? null,
+        fornecedorId: nf?.fornecedor_id ?? null,
+        fornecedorNome: nf?.fornecedor_nome ?? null,
+        data: nf?.data_emissao ?? nf?.data_entrada ?? item.created_at,
+      })
+    }
+
+    return NextResponse.json({
+      necessidades: necessidadesResp.data || [],
+      cotacoes: cotacoesResp.data || [],
+      produtos: produtosResp.data || [],
+      fornecedores: fornecedoresResp.data || [],
+      ultimoPrecoPorProduto: Object.fromEntries(ultimoPorProduto),
+    })
+  } catch (error) {
+    console.error('Erro ao carregar Compras 360:', error)
+    return NextResponse.json({ error: 'Não foi possível carregar o Compras 360.' }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const usuario = await autenticarCompras(req)
+  if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+
+  try {
+    const body = await req.json()
+    const acao = texto(body.acao, 50)
+
+    if (acao === 'criar_necessidade') {
+      const descricao = texto(body.descricao, 300)
+      const quantidade = numero(body.quantidade)
+      if (!descricao || quantidade === null || quantidade <= 0) {
+        return NextResponse.json({ error: 'Informe o material e uma quantidade válida.' }, { status: 400 })
+      }
+
+      const { data, error } = await supabaseAdmin.from('compras_necessidades').insert({
+        produto_id: body.produto_id || null,
+        descricao,
+        categoria: texto(body.categoria, 80) || null,
+        quantidade,
+        unidade: texto(body.unidade, 20) || 'UN',
+        prioridade: ['baixa', 'normal', 'alta', 'urgente'].includes(body.prioridade) ? body.prioridade : 'normal',
+        data_limite: body.data_limite || null,
+        obra_referencia: texto(body.obra_referencia, 160) || null,
+        observacoes: texto(body.observacoes, 1000) || null,
+        criado_por_id: usuario.id,
+        criado_por_nome: usuario.nome,
+        responsavel_id: usuario.id,
+        responsavel_nome: usuario.nome,
+      }).select('*').single()
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ necessidade: data }, { status: 201 })
+    }
+
+    if (acao === 'adicionar_cotacao') {
+      const preco = numero(body.preco_unitario)
+      if (!body.necessidade_id || !body.fornecedor_id || preco === null || preco < 0) {
+        return NextResponse.json({ error: 'Informe fornecedor e preço válido.' }, { status: 400 })
+      }
+      const { data, error } = await supabaseAdmin.from('compras_cotacoes').upsert({
+        necessidade_id: body.necessidade_id,
+        fornecedor_id: body.fornecedor_id,
+        preco_unitario: preco,
+        frete: Math.max(0, numero(body.frete) || 0),
+        prazo_dias: numero(body.prazo_dias),
+        previsao_entrega: body.previsao_entrega || null,
+        validade: body.validade || null,
+        forma_pagamento: texto(body.forma_pagamento, 200) || null,
+        observacoes: texto(body.observacoes, 1000) || null,
+        criado_por_id: usuario.id,
+        criado_por_nome: usuario.nome,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'necessidade_id,fornecedor_id' }).select('*').single()
+      if (error) throw new Error(error.message)
+
+      await supabaseAdmin.from('compras_necessidades').update({
+        status: 'cotacao',
+        updated_at: new Date().toISOString(),
+      }).eq('id', body.necessidade_id).eq('status', 'necessidade')
+
+      return NextResponse.json({ cotacao: data })
+    }
+
+    return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 })
+  } catch (error) {
+    console.error('Erro ao salvar Compras 360:', error)
+    return NextResponse.json({ error: 'Não foi possível salvar a informação de compra.' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const usuario = await autenticarCompras(req)
+  if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+
+  try {
+    const body = await req.json()
+    const status = texto(body.status, 40)
+    if (!body.id || !STATUS_VALIDOS.has(status)) {
+      return NextResponse.json({ error: 'Necessidade ou situação inválida.' }, { status: 400 })
+    }
+    const agora = new Date().toISOString()
+    const atualizacao: Record<string, unknown> = { status, updated_at: agora }
+    if (status === 'recebido') atualizacao.recebido_em = agora
+    if (status === 'cancelado') atualizacao.cancelado_em = agora
+
+    const { data, error } = await supabaseAdmin.from('compras_necessidades')
+      .update(atualizacao).eq('id', body.id).select('*').single()
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ necessidade: data })
+  } catch (error) {
+    console.error('Erro ao movimentar necessidade de compra:', error)
+    return NextResponse.json({ error: 'Não foi possível atualizar a situação da compra.' }, { status: 500 })
+  }
+}
+

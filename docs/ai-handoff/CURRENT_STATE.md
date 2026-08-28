@@ -2,6 +2,37 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — COMPRAS 360 V1 — 2026-08-28
+
+Branch: `feat/compras-360-v1`
+
+### Implementado no código
+
+- `/compras` passou a ser uma central operacional com lista de faltas, cotação, aprovação, pedido, acompanhamento de entrega e recebimento;
+- necessidades podem usar um produto oficial do Atlas ou uma descrição livre para itens ainda não cadastrados;
+- cada necessidade compara cotações por fornecedor, preço unitário, frete, total, prazo de entrega, validade e condição de pagamento;
+- produtos cadastrados exibem a última compra real encontrada nas notas fiscais, com fornecedor, data e preço;
+- atalhos mantêm fornecedor, nota fiscal, vínculos, estoque e contas a pagar conectados ao mesmo fluxo;
+- API nova `/api/compras/360` concentra leitura e gravação no servidor.
+
+### Banco e segurança
+
+- migration `20260828175453_compras_360_necessidades_cotacoes_v1.sql` cria `compras_necessidades` e `compras_cotacoes`;
+- RLS habilitado e acesso direto de `anon`/`authenticated` revogado; operações passam pela API autenticada com service role;
+- marcar um card como recebido **não movimenta estoque**: a entrada oficial continua ocorrendo somente no recebimento físico da nota fiscal.
+
+### Validação concluída
+
+- build local completo aprovado, incluindo TypeScript e geração das 90 rotas;
+- `git diff --check` aprovado.
+
+### Conferência funcional pendente
+
+- testar a criação de uma falta manual e outra vinculada a produto;
+- comparar ao menos duas cotações do mesmo item;
+- avançar o item pelo fluxo e confirmar que o estoque não muda fora do recebimento da NF;
+- validar o layout no desktop e no celular.
+
 ## EM VALIDAÇÃO — FILTRO DO KANBAN POR PERÍODO E TIPO DE DATA — 2026-08-28
 
 Branch: `feat/kanban-filtro-periodo-datas`
