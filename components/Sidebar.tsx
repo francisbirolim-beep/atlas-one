@@ -160,10 +160,13 @@ export default function Sidebar() {
   const semResultados = gruposVisiveis.length === 0 && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
 
   return (
-    <nav className="atlas-sidebar-shell hidden h-screen w-64 flex-shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-5 md:flex">
-      <div className="px-2 pb-4">
-        <p className="text-base font-bold tracking-tight text-brand-navy">Atlas One</p>
-        <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">Operação Esquadrifácio</p>
+    <nav className="atlas-sidebar-shell hidden h-screen w-60 flex-shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-5 md:flex">
+      <div className="atlas-sidebar-brand flex items-center gap-3 px-2 pb-5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white shadow-lg shadow-blue-950/20">A</span>
+        <span className="min-w-0">
+          <strong className="block text-sm font-bold uppercase tracking-[0.08em] text-white">Atlas One</strong>
+          <span className="mt-0.5 block truncate text-[11px] text-slate-400">Esquadrifácio</span>
+        </span>
       </div>
 
       <div className="mb-4 px-1">
@@ -211,6 +214,7 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={() => setAdminAberto(aberto => !aberto)}
+                aria-expanded={mostrarAdmin}
                 className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
               >
                 <span className="inline-flex items-center gap-2"><Settings size={15} /> Administração</span>

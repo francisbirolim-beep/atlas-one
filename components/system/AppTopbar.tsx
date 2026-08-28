@@ -11,6 +11,12 @@ import type { Usuario } from '@/lib/tipos'
 import HomeNotificationBell from '@/components/system/HomeNotificationBell'
 
 const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
+  { prefixo: '/compras', titulo: 'Compras 360', grupo: 'Operações' },
+  { prefixo: '/cadastros', titulo: 'Cadastros 360', grupo: 'Cadastros' },
+  { prefixo: '/cadastro', titulo: 'Cadastros', grupo: 'Cadastros' },
+  { prefixo: '/estoque', titulo: 'Estoque', grupo: 'Operações' },
+  { prefixo: '/assistencias', titulo: 'Assistências', grupo: 'Operações' },
+  { prefixo: '/engenharia', titulo: 'Engenharia', grupo: 'Operações' },
   { prefixo: '/kanban', titulo: 'Kanban Comercial', grupo: 'Comercial' },
   { prefixo: '/vendas/confirmar', titulo: 'Confirmar Venda', grupo: 'Comercial' },
   { prefixo: '/orcamento', titulo: 'Orçamentos', grupo: 'Comercial' },

@@ -1,5 +1,18 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-28 — Atlas Visual V2
+
+- nova identidade visual global inspirada na Central de Compras aprovada por Francis;
+- sidebar compacta azul-marinho com item ativo azul e marca Atlas One;
+- fundo geral mais claro, superfícies brancas e hierarquia tipográfica mais suave;
+- Home reorganizada com cabeçalho executivo, atalhos e indicadores no topo;
+- painéis operacionais da Home clareados por uma camada CSS isolada;
+- títulos contextuais adicionados para Compras 360, Cadastros 360, Estoque, Assistências e Engenharia;
+- lógica, permissões, rotas e banco preservados;
+- build local completo aprovado com 90 rotas.
+
+---
+
 ## 2026-08-28 — PR #281 — Filtro do Kanban por período e tipo de data
 
 - substituído o filtro de dia único por intervalo inclusivo `De` / `Até`;

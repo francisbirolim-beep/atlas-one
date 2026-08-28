@@ -59,7 +59,7 @@ export default function HomeManagementOverview() {
   ]
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-4 md:px-6 md:pb-10">
+    <section className="mx-auto w-full max-w-[1500px] px-4 pt-4 md:px-8">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(card => {
           const Icon = card.icon
