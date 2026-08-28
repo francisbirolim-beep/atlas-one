@@ -19,13 +19,13 @@ Objetivo: permitir consultar cards por intervalo inclusivo de datas, escolhendo 
 9. `OrcamentoRapido` tipado com `kanban_entrada_em`;
 10. build completo local aprovado.
 
-### Validação técnica antes do merge
+### Validação técnica concluída
 
-- abrir PR para `main`;
-- confirmar Build Validation / TypeScript;
-- confirmar Preview Vercel `READY`;
-- revisar o diff final;
-- somente então fazer merge manual e confirmar produção `READY`.
+- PR #281 aberto para `main`;
+- Build Validation #643 concluído com sucesso;
+- Preview Vercel em estado `READY`;
+- diff remoto contém somente os seis arquivos esperados;
+- próximo passo: merge manual e confirmação do deploy de produção.
 
 ### Validação funcional no preview
 

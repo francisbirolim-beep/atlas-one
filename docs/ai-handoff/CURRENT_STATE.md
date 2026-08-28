@@ -24,9 +24,14 @@ Branch: `feat/kanban-filtro-periodo-datas`
 - consulta real na base: 49 orçamentos, 49 válidos para o Kanban, 49 com data de entrada, 49 com última movimentação e 0 balcão indevido;
 - nenhuma migration nova foi necessária.
 
-### Validação pendente
+### Validação remota concluída
 
-- abrir PR e confirmar Build Validation / Preview Vercel `READY`;
+- PR #281 aberto com um único commit e os seis arquivos esperados;
+- Build Validation #643 concluído com sucesso;
+- Preview Vercel confirmado como `READY`.
+
+### Conferência funcional pendente
+
 - conferir visualmente o layout dos filtros no desktop e no celular;
 - testar um período pela data de entrada e o mesmo período pela última movimentação;
 - confirmar que `Limpar filtros` restaura o tipo padrão para data de entrada.

@@ -1,6 +1,6 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-28 — Filtro do Kanban por período e tipo de data
+## 2026-08-28 — PR #281 — Filtro do Kanban por período e tipo de data
 
 - substituído o filtro de dia único por intervalo inclusivo `De` / `Até`;
 - adicionada escolha entre `kanban_entrada_em` e `coluna_atualizada_em`;
@@ -10,6 +10,7 @@
 - consulta principal do Kanban exclui explicitamente balcão e preserva registros legados com `modo_entrada` nulo;
 - tipo `OrcamentoRapido` atualizado com `kanban_entrada_em`;
 - build local completo aprovado;
+- Build Validation #643 aprovado e preview Vercel `READY`;
 - base validada: 49 cards do Kanban, 49 com entrada, 49 com movimentação e 0 balcão indevido.
 
 ---
