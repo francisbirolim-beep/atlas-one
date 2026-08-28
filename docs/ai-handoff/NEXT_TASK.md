@@ -9,11 +9,13 @@ Objetivo: confirmar a nova identidade visual do Atlas antes de expandi-la para o
 ### Validar no preview
 
 1. abrir a Home no computador e confirmar sidebar, cabeçalho, atalhos e indicadores;
-2. abrir no celular e confirmar que não existe rolagem horizontal indevida;
-3. testar busca global, notificações e menu do usuário;
-4. navegar por Clientes, Orçamentos, Kanban, Compras, Estoque, Produção e Engenharia;
-5. conferir tema claro/escuro por usuário;
-6. confirmar que nenhuma ação operacional ou permissão mudou.
+2. abrir no celular e confirmar que o cabeçalho não comprime o título e que os atalhos aparecem em duas colunas;
+3. confirmar que o placeholder de logo não ocupa espaço no celular quando a empresa ainda não tem logo cadastrado;
+4. confirmar que não existe rolagem horizontal indevida;
+5. testar busca global, notificações e menu do usuário;
+6. navegar por Clientes, Orçamentos, Kanban, Compras, Estoque, Produção e Engenharia;
+7. conferir tema claro/escuro por usuário;
+8. confirmar que nenhuma ação operacional ou permissão mudou.
 
 ### Próxima etapa depois da aprovação
 

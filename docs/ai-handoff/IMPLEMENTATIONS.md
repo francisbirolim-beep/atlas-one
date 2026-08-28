@@ -8,8 +8,13 @@
 - Home reorganizada com cabeçalho executivo, atalhos e indicadores no topo;
 - painéis operacionais da Home clareados por uma camada CSS isolada;
 - títulos contextuais adicionados para Compras 360, Cadastros 360, Estoque, Assistências e Engenharia;
+- screenshot real do celular revelou compressão no cabeçalho e excesso de altura na primeira tela;
+- topbar mobile reduzido para 60 px, com contexto legível e ações compactas;
+- hero mobile compactado e placeholder de logo ocultado no celular enquanto não existir logo cadastrado;
+- atalhos e indicadores reorganizados em duas colunas no mobile;
+- extravasamento horizontal bloqueado na superfície principal;
 - lógica, permissões, rotas e banco preservados;
-- build local completo aprovado com 90 rotas.
+- build local completo reaprovado com TypeScript e 90 rotas após a correção mobile.
 
 ---
 

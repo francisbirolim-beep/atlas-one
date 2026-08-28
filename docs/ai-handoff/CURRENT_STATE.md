@@ -15,16 +15,21 @@ Branch: `feat/atlas-visual-v2`
 - indicadores de gestão foram reposicionados logo após o cabeçalho;
 - painéis escuros da Home passaram a superfícies claras sem alterar dados ou ações;
 - topbar reconhece Compras 360, Cadastros 360, Estoque, Assistências e Engenharia;
-- preservadas rotas, permissões, busca, regras operacionais e comportamento mobile.
+- após validação por screenshot real no celular, o topbar mobile foi reduzido e deixou de comprimir grupo/título;
+- no mobile, o bloco de saudação ganhou espaçamentos e tipografia menores e o placeholder de logo sem cadastro não ocupa mais a primeira tela;
+- atalhos e indicadores passaram a uma grade compacta de duas colunas no celular;
+- a área principal bloqueia extravasamento horizontal sem esconder rolagem vertical;
+- preservadas rotas, permissões, busca e regras operacionais.
 
 ### Validação concluída
 
 - build local completo aprovado, incluindo TypeScript e geração das 90 rotas;
+- correção mobile recompilada com sucesso, incluindo TypeScript e geração das 90 rotas;
 - nenhuma migration e nenhuma alteração de banco.
 
 ### Conferência funcional pendente
 
-- validar visualmente a Home no desktop e no celular;
+- validar visualmente no preview a Home corrigida no desktop e no celular;
 - conferir contraste da sidebar e do tema por usuário;
 - navegar por Compras, Cadastros, Estoque, Kanban e Produção;
 - confirmar que atalhos, busca global e menu do perfil permanecem funcionando.

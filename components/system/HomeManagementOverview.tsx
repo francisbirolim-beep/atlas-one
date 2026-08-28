@@ -60,18 +60,18 @@ export default function HomeManagementOverview() {
 
   return (
     <section className="mx-auto w-full max-w-[1500px] px-4 pt-4 md:px-8">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         {cards.map(card => {
           const Icon = card.icon
           return (
-            <Link key={card.label} href={card.href} className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md md:p-5">
+            <Link key={card.label} href={card.href} className="group rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:rounded-2xl sm:p-4 md:p-5">
               <div className="flex items-start justify-between gap-3">
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.classe}`}><Icon size={18}/></span>
+                <span className={`flex h-9 w-9 items-center justify-center rounded-xl sm:h-10 sm:w-10 ${card.classe}`}><Icon size={18}/></span>
                 <ArrowUpRight size={15} className="text-slate-300 transition group-hover:text-slate-600"/>
               </div>
-              <p className="mt-4 text-xs font-medium text-slate-500">{card.label}</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{carregando ? '—' : card.valor}</p>
-              <p className="mt-1 text-[11px] text-slate-400">{carregando ? 'Carregando...' : card.detalhe}</p>
+              <p className="mt-3 text-[11px] font-medium leading-4 text-slate-500 sm:mt-4 sm:text-xs">{card.label}</p>
+              <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">{carregando ? '—' : card.valor}</p>
+              <p className="mt-1 hidden text-[11px] text-slate-400 sm:block">{carregando ? 'Carregando...' : card.detalhe}</p>
             </Link>
           )
         })}

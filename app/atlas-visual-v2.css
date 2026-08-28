@@ -4,6 +4,7 @@
 
 .atlas-main-surface {
   background: #f4f7fb;
+  overflow-x: clip;
 }
 
 @media (min-width: 768px) {
@@ -111,5 +112,10 @@
   .atlas-main-surface,
   .atlas-home-v2 {
     background: #f4f7fb !important;
+  }
+
+  .atlas-home-v2 > section,
+  .atlas-home-v2 > div > section {
+    max-width: 100%;
   }
 }

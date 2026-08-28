@@ -40,7 +40,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <MobileNavigationControls />
       <div className="min-w-0 flex-1 bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
-        <main className={`atlas-main-surface min-h-[calc(100vh-68px)] pb-24 md:pb-0 ${ehHome ? 'atlas-home-v2' : ''}`}>
+        <main className={`atlas-main-surface min-h-[calc(100vh-60px)] pb-24 sm:min-h-[calc(100vh-68px)] md:pb-0 ${ehHome ? 'atlas-home-v2' : ''}`}>
           {ehHome && <HomeDashboard />}
           <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehProducao && <ProducaoEtapasBar />}
