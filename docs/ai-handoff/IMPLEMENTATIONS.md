@@ -1,5 +1,19 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-28 — Filtro do Kanban por período e tipo de data
+
+- substituído o filtro de dia único por intervalo inclusivo `De` / `Até`;
+- adicionada escolha entre `kanban_entrada_em` e `coluna_atualizada_em`;
+- mantido fallback de entrada para `created_at` apenas para compatibilidade legada;
+- data de entrada agora é renderizada diretamente no card React;
+- removida a leitura duplicada do Supabase e a injeção da data por manipulação do DOM;
+- consulta principal do Kanban exclui explicitamente balcão e preserva registros legados com `modo_entrada` nulo;
+- tipo `OrcamentoRapido` atualizado com `kanban_entrada_em`;
+- build local completo aprovado;
+- base validada: 49 cards do Kanban, 49 com entrada, 49 com movimentação e 0 balcão indevido.
+
+---
+
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
 ## 2026-08-26 — Balcão fora do Kanban + data fixa de entrada

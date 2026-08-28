@@ -61,6 +61,20 @@ const numero = Number(valor || 0)
 return `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function dataLocalYmd(valor: string | null | undefined): string | null {
+if (!valor) return null
+const data = new Date(valor)
+if (Number.isNaN(data.getTime())) return null
+return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`
+}
+
+function formatarDataBR(valor: string | null | undefined): string {
+if (!valor) return '-'
+const data = new Date(valor)
+if (Number.isNaN(data.getTime())) return '-'
+return data.toLocaleDateString('pt-BR')
+}
+
 function ehPdfOrcamentoAtlas(anexo: Anexo): boolean {
 return anexo.titulo === 'Orçamento (PDF)' || /^Orçamento — Versão \d+/i.test(anexo.titulo || '')
 }
@@ -219,7 +233,9 @@ const [vendedorInfo, setVendedorInfo] = useState<Usuario | null>(null)
 const [whatsappVendedor, setWhatsappVendedor] = useState('')
 const [mensagemVendedor, setMensagemVendedor] = useState('')
 const [busca, setBusca] = useState('')
-const [filtroData, setFiltroData] = useState('')
+const [tipoFiltroData, setTipoFiltroData] = useState<'entrada' | 'movimentacao'>('entrada')
+const [filtroDataDe, setFiltroDataDe] = useState('')
+const [filtroDataAte, setFiltroDataAte] = useState('')
 const [filtroTemperatura, setFiltroTemperatura] = useState('')
 const [corAssistencia, setCorAssistencia] = useState('#8b5cf6')
 const [tiposVersao, setTiposVersao] = useState(0)
@@ -243,6 +259,7 @@ listarColunas(),
 supabase
 .from('orcamentos')
 .select('*')
+.or('modo_entrada.is.null,modo_entrada.neq.balcao')
 .order('created_at', { ascending: false }),
 ])
 setColunas(cols)
@@ -273,10 +290,14 @@ const bate = bateBusca(
 )
 if (!bate) return false
 }
-if (filtroData) {
-const d = new Date(c.created_at)
-const dataCard = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-if (dataCard !== filtroData) return false
+if (filtroDataDe || filtroDataAte) {
+const referencia = tipoFiltroData === 'entrada'
+? (c.kanban_entrada_em || c.created_at)
+: c.coluna_atualizada_em
+const dataCard = dataLocalYmd(referencia)
+if (!dataCard) return false
+if (filtroDataDe && dataCard < filtroDataDe) return false
+if (filtroDataAte && dataCard > filtroDataAte) return false
 }
 if (filtroTemperatura && c.temperatura !== filtroTemperatura) return false
 return true
@@ -840,12 +861,47 @@ placeholder="Buscar por cliente, cidade, arquiteto, vendedor, tipo..."
 className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
 />
 </div>
+<select
+value={tipoFiltroData}
+onChange={e => setTipoFiltroData(e.target.value as 'entrada' | 'movimentacao')}
+aria-label="Escolher a data usada no filtro"
+className="w-full sm:w-auto border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
+>
+<option value="entrada">Data: entrada no Kanban</option>
+<option value="movimentacao">Data: última movimentação</option>
+</select>
+<div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+<label className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2">
+<span className="text-xs font-medium text-slate-500">De</span>
 <input
 type="date"
-value={filtroData}
-onChange={e => setFiltroData(e.target.value)}
-className="w-full sm:w-auto border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
+value={filtroDataDe}
+max={filtroDataAte || undefined}
+onChange={e => {
+const valor = e.target.value
+setFiltroDataDe(valor)
+if (valor && filtroDataAte && valor > filtroDataAte) setFiltroDataAte(valor)
+}}
+aria-label="Data inicial do filtro do Kanban"
+className="min-w-0 w-full bg-transparent text-sm"
 />
+</label>
+<label className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2">
+<span className="text-xs font-medium text-slate-500">Até</span>
+<input
+type="date"
+value={filtroDataAte}
+min={filtroDataDe || undefined}
+onChange={e => {
+const valor = e.target.value
+setFiltroDataAte(valor)
+if (valor && filtroDataDe && valor < filtroDataDe) setFiltroDataDe(valor)
+}}
+aria-label="Data final do filtro do Kanban"
+className="min-w-0 w-full bg-transparent text-sm"
+/>
+</label>
+</div>
 <select
 value={filtroTemperatura}
 onChange={e => setFiltroTemperatura(e.target.value)}
@@ -856,9 +912,15 @@ className="border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white"
 <option value="morno">🌤️ Morno</option>
 <option value="frio">❄️ Frio</option>
 </select>
-{(busca || filtroData || filtroTemperatura) && (
+{(busca || filtroDataDe || filtroDataAte || filtroTemperatura) && (
 <button
-onClick={() => { setBusca(''); setFiltroData(''); setFiltroTemperatura('') }}
+onClick={() => {
+setBusca('')
+setTipoFiltroData('entrada')
+setFiltroDataDe('')
+setFiltroDataAte('')
+setFiltroTemperatura('')
+}}
 className="text-xs text-slate-400 hover:text-slate-600 px-2"
 >
 Limpar filtros
@@ -957,6 +1019,15 @@ Assistência
 </p>
 )}
 </>
+)}
+{!card.eh_assistencia && (
+<p
+data-kanban-entrada="true"
+className="text-xs flex items-center gap-1 mt-1"
+style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}
+>
+📅 Entrada: {formatarDataBR(card.kanban_entrada_em || card.created_at)}
+</p>
 )}
 {card.criado_por_nome && (
 <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}>

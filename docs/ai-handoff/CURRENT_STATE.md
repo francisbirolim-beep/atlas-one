@@ -2,7 +2,36 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
-## EM VALIDAÇÃO — BALCÃO FORA DO KANBAN + DATA DE ENTRADA — 2026-08-26
+## EM VALIDAÇÃO — FILTRO DO KANBAN POR PERÍODO E TIPO DE DATA — 2026-08-28
+
+Branch: `feat/kanban-filtro-periodo-datas`
+
+### Implementado no código
+
+- o filtro de data única foi substituído pelo intervalo inclusivo `De` / `Até`;
+- o usuário pode escolher entre **data de entrada no Kanban** e **data da última movimentação**;
+- entrada usa `kanban_entrada_em`, com fallback para `created_at` apenas em registros legados;
+- movimentação usa exclusivamente `coluna_atualizada_em`, preservando a separação de significado entre as duas datas;
+- datas ausentes ou inválidas não entram no resultado quando existe filtro de período ativo;
+- os limites `De` / `Até` se ajustam para impedir intervalo invertido;
+- a data `📅 Entrada: DD/MM/AAAA` passou a ser renderizada diretamente no componente React do card;
+- removida a consulta duplicada e a injeção de data por `MutationObserver`/manipulação do DOM;
+- a consulta principal do Kanban ganhou proteção explícita para excluir `modo_entrada='balcao'`, preservando registros legados com modo nulo.
+
+### Validação concluída
+
+- build local completo passou, incluindo TypeScript e geração das 90 rotas;
+- consulta real na base: 49 orçamentos, 49 válidos para o Kanban, 49 com data de entrada, 49 com última movimentação e 0 balcão indevido;
+- nenhuma migration nova foi necessária.
+
+### Validação pendente
+
+- abrir PR e confirmar Build Validation / Preview Vercel `READY`;
+- conferir visualmente o layout dos filtros no desktop e no celular;
+- testar um período pela data de entrada e o mesmo período pela última movimentação;
+- confirmar que `Limpar filtros` restaura o tipo padrão para data de entrada.
+
+## INTEGRADO NA MAIN — BALCÃO FORA DO KANBAN + DATA DE ENTRADA — PR #279
 
 Branch: `fix/balcao-fora-kanban`
 
@@ -31,10 +60,14 @@ Branch: `fix/balcao-fora-kanban`
 - `balcao_orcamentos` possui RLS e policies compatíveis com o padrão operacional atual do Atlas;
 - advisor de segurança não apontou problema novo da tabela; o warning de `search_path` da função nova foi corrigido.
 
-### Validação pendente antes do merge
+### Validação técnica concluída
 
-- Build Validation / TypeScript no PR;
-- Preview Vercel `READY`;
+- PR #279 mesclado na `main` em 2026-08-26;
+- deploy Vercel do merge confirmado com status `success`;
+- base reconferida em 2026-08-28: 49/49 cards com `kanban_entrada_em` e 0 registro de balcão em `orcamentos`.
+
+### Conferência funcional recomendada em produção
+
 - abrir `/kanban` e confirmar visualmente a data na posição combinada;
 - mover um card de coluna e confirmar que `Entrada` permanece a mesma;
 - filtrar pelo calendário e confirmar o dia de entrada;

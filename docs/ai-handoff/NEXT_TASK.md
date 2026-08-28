@@ -1,29 +1,23 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar Balcão fora do Kanban + data fixa de entrada
+## TAREFA ATUAL — validar filtro do Kanban por período e tipo de data
 
-Branch: `fix/balcao-fora-kanban`
+Branch: `feat/kanban-filtro-periodo-datas`
 
-Objetivo: manter Venda/Orçamento Balcão fora do Kanban de obras e registrar/exibir uma data fixa para quando cada card entra no Kanban.
+Objetivo: permitir consultar cards por intervalo inclusivo de datas, escolhendo entre a data fixa de entrada no Kanban e a data da última movimentação da coluna.
 
 ### Implementado
 
-1. criado `balcao_orcamentos` como tabela transacional própria para o orçamento rápido do PDV, mantendo os mesmos clientes/produtos/cadastros mestres do Atlas;
-2. `lib/orcamentoBalcao.ts` passou a salvar em `balcao_orcamentos`, não em `orcamentos`;
-3. `/api/balcao/orcamentos` passou a consultar `balcao_orcamentos`;
-4. registros de balcão existentes foram migrados da fonte do Kanban para a tabela própria e removidos de `orcamentos`;
-5. criada `orcamentos.kanban_entrada_em` como data fixa de entrada no Kanban;
-6. trigger preenche `kanban_entrada_em` automaticamente para todo registro não-balcão sem alterar essa data quando o card muda de coluna;
-7. `coluna_atualizada_em` continua separada e representa a última movimentação de coluna/SLA;
-8. `/kanban` exibe `📅 Entrada: DD/MM/AAAA` dentro do card, na posição combinada abaixo da descrição da esquadria e antes dos demais dados;
-9. o campo de calendário do painel é identificado como filtro da data de entrada no Kanban;
-10. banco validado: 49 cards de Kanban, 49 com data de entrada preenchida e 0 registros de balcão na fonte `orcamentos`.
-
-### Migrations aplicadas e versionadas
-
-- `20260826135831_kanban_data_entrada_v1.sql`;
-- `20260826140437_balcao_orcamentos_separado_v1.sql`;
-- `20260826140909_kanban_data_entrada_search_path_v1.sql`.
+1. seletor `Data: entrada no Kanban` / `Data: última movimentação`;
+2. campos `De` e `Até`, ambos opcionais e inclusivos;
+3. correção automática de intervalo invertido;
+4. filtro de entrada baseado em `kanban_entrada_em`, com fallback legado para `created_at`;
+5. filtro de movimentação baseado em `coluna_atualizada_em`;
+6. data de entrada renderizada diretamente no card React;
+7. removida a segunda consulta ao Supabase usada apenas para injetar datas no DOM;
+8. consulta do Kanban exclui explicitamente registros de balcão sem eliminar registros legados com `modo_entrada` nulo;
+9. `OrcamentoRapido` tipado com `kanban_entrada_em`;
+10. build completo local aprovado.
 
 ### Validação técnica antes do merge
 
@@ -33,30 +27,22 @@ Objetivo: manter Venda/Orçamento Balcão fora do Kanban de obras e registrar/ex
 - revisar o diff final;
 - somente então fazer merge manual e confirmar produção `READY`.
 
-### Validação funcional depois do build
+### Validação funcional no preview
 
 Em `/kanban`:
 
-- confirmar a data visível dentro do card na posição combinada;
-- arrastar um card para outra coluna e confirmar que a data `Entrada` não muda;
-- confirmar que o histórico/SLA continua usando a movimentação da coluna separadamente;
-- usar o calendário e confirmar o filtro pelo dia de entrada;
-- conferir que cards antigos continuam aparecendo com a data preenchida pelo backfill.
+- confirmar que `De` sozinho traz a data inicial e posteriores;
+- confirmar que `Até` sozinho traz a data final e anteriores;
+- confirmar que `De` + `Até` inclui os dois dias limites;
+- alternar para `Data: última movimentação` e confirmar que o conjunto muda conforme `coluna_atualizada_em`;
+- conferir o layout em largura de celular;
+- confirmar que a linha `📅 Entrada` continua abaixo da descrição e antes do vendedor/valor;
+- confirmar que nenhum orçamento/venda de balcão aparece;
+- usar `Limpar filtros` e confirmar retorno ao padrão de data de entrada.
 
-Em `/balcao/orcamentos/novo`:
+## Próximo passo recomendado depois desta validação
 
-- criar um orçamento rápido de balcão;
-- confirmar que ele aparece em `/balcao/orcamentos`;
-- confirmar que ele não aparece em `/kanban`.
-
-No fluxo sob medida:
-
-- criar/solicitar um orçamento sob medida pelo fluxo normal do Atlas;
-- confirmar que esse fluxo continua entrando no Kanban normalmente e recebe `kanban_entrada_em`.
-
-## Próximo passo depois desta validação
-
-Evoluir os filtros do Kanban para intervalo de datas (`De` / `Até`) e, se necessário, permitir escolher entre **data de entrada** e **data da última movimentação**, preservando as duas informações separadas.
+Adicionar indicadores/resumo do período filtrado somente se houver necessidade operacional validada, sem misturar novamente entrada e movimentação.
 
 ## W.Vetro
 
