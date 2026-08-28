@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
 import { primeiraColunaId } from './kanban'
 import { uploadFoto, uploadArquivo } from './upload'
-import { usuarioAtual } from './auth'
+import { usuarioAtual, tokenAtual } from './auth'
 import { registrarHistorico } from './historico'
 import { executarAutomacoesColuna } from './automacoes'
 import { v4 as uuidv4 } from 'uuid'
@@ -81,6 +81,12 @@ type ReferenciaTipologiaSnapshot = {
   variaveis?: ReferenciaVariavelSnapshot[]
 }
 
+type LeituraTrena = {
+  medidas_mm: number[]
+  confianca: number
+  observacao?: string
+}
+
 async function carregarReferenciasWvetroSnapshot(): Promise<Record<string, ReferenciaTipologiaSnapshot>> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) return {}
@@ -96,6 +102,44 @@ async function carregarReferenciasWvetroSnapshot(): Promise<Record<string, Refer
   } catch {
     // Falha de procedência não pode impedir o salvamento do orçamento.
     return {}
+  }
+}
+
+async function lerTrenaPorFoto(imageUrl: string, eixo: 'largura' | 'altura'): Promise<LeituraTrena | null> {
+  try {
+    const token = await tokenAtual()
+    if (!token) return null
+
+    const resposta = await fetch('/api/medicao-final/ler-trena', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ imageUrl, eixo }),
+    })
+    const json = await resposta.json().catch(() => ({}))
+    if (!resposta.ok) {
+      console.warn('Foto salva, mas a leitura automática da trena não foi concluída:', json?.error || resposta.statusText)
+      return null
+    }
+
+    const medidas = Array.isArray(json?.medidas_mm)
+      ? json.medidas_mm
+          .map((v: unknown) => Number(v))
+          .filter((v: number) => Number.isFinite(v) && v > 0 && v <= 10000)
+          .slice(0, 3)
+      : []
+    if (medidas.length === 0) return null
+
+    return {
+      medidas_mm: medidas,
+      confianca: Number(json?.confianca) || 0,
+      observacao: typeof json?.observacao === 'string' ? json.observacao : undefined,
+    }
+  } catch (error) {
+    console.warn('Foto salva, mas ocorreu erro ao solicitar leitura da trena:', error)
+    return null
   }
 }
 
@@ -118,7 +162,7 @@ export async function criarOrcamentoNoServidor(
     carregarReferenciasWvetroSnapshot(),
   ])
 
-  let itensSalvos: ItemEsquadria[] = []
+  const itensSalvos: ItemEsquadria[] = []
   const fotosUrls: string[] = []
   for (const foto of fotos) { const url = await uploadFoto(foto); if (url) fotosUrls.push(url) }
   const anexosSalvos: Anexo[] = []
@@ -126,11 +170,10 @@ export async function criarOrcamentoNoServidor(
     const url = await uploadArquivo(arquivo)
     if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
+
   for (const it of itens) {
     const itemFotoUrls: string[] = []
     for (const f of it.fotos) { const url = await uploadFoto(f); if (url) itemFotoUrls.push(url) }
-    const foto_url = itemFotoUrls[0] || null
-    const foto_urls = itemFotoUrls.length ? itemFotoUrls : null
 
     const produto_id = it.modoOrigem === 'produto' ? (it.produtoId || null) : null
     const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
@@ -180,28 +223,60 @@ export async function criarOrcamentoNoServidor(
     if (tipoMedida === 'final') {
       const usaFotoLargura = it.modoLargura === 'foto'
       const usaFotoAltura = it.modoAltura === 'foto'
-      const lb = usaFotoLargura ? NaN : parseFloat(it.larguraBaixo.replace(',', '.'))
-      const lm = usaFotoLargura ? NaN : parseFloat(it.larguraMeio.replace(',', '.'))
-      const lc = usaFotoLargura ? NaN : parseFloat(it.larguraCima.replace(',', '.'))
-      const ad = usaFotoAltura ? NaN : parseFloat(it.alturaDireita.replace(',', '.'))
-      const am = usaFotoAltura ? NaN : parseFloat(it.alturaMeio.replace(',', '.'))
-      const ae = usaFotoAltura ? NaN : parseFloat(it.alturaEsquerda.replace(',', '.'))
+
+      let lb = usaFotoLargura ? NaN : parseFloat(it.larguraBaixo.replace(',', '.'))
+      let lm = usaFotoLargura ? NaN : parseFloat(it.larguraMeio.replace(',', '.'))
+      let lc = usaFotoLargura ? NaN : parseFloat(it.larguraCima.replace(',', '.'))
+      let ad = usaFotoAltura ? NaN : parseFloat(it.alturaDireita.replace(',', '.'))
+      let am = usaFotoAltura ? NaN : parseFloat(it.alturaMeio.replace(',', '.'))
+      let ae = usaFotoAltura ? NaN : parseFloat(it.alturaEsquerda.replace(',', '.'))
+
       const foto_larguras_url = usaFotoLargura && it.fotoLargura ? await uploadFoto(it.fotoLargura) : null
       const foto_alturas_url = usaFotoAltura && it.fotoAltura ? await uploadFoto(it.fotoAltura) : null
+
+      // Foto e medida são duas informações diferentes: a foto SEMPRE permanece salva.
+      // Depois do upload, a IA tenta ler o visor e preencher os campos numéricos.
+      if (foto_larguras_url) {
+        const leituraLargura = await lerTrenaPorFoto(foto_larguras_url, 'largura')
+        if (leituraLargura?.medidas_mm.length) {
+          lb = leituraLargura.medidas_mm[0] ?? NaN
+          lm = leituraLargura.medidas_mm[1] ?? NaN
+          lc = leituraLargura.medidas_mm[2] ?? NaN
+        }
+      }
+      if (foto_alturas_url) {
+        const leituraAltura = await lerTrenaPorFoto(foto_alturas_url, 'altura')
+        if (leituraAltura?.medidas_mm.length) {
+          ad = leituraAltura.medidas_mm[0] ?? NaN
+          am = leituraAltura.medidas_mm[1] ?? NaN
+          ae = leituraAltura.medidas_mm[2] ?? NaN
+        }
+      }
+
+      // Compatibilidade com a edição atual do Kanban: além dos campos específicos,
+      // as fotos da trena também entram em foto_url/foto_urls para continuarem visíveis.
+      const todasFotosItem = Array.from(new Set([
+        ...itemFotoUrls,
+        ...(foto_larguras_url ? [foto_larguras_url] : []),
+        ...(foto_alturas_url ? [foto_alturas_url] : []),
+      ]))
+      const foto_url = todasFotosItem[0] || null
+      const foto_urls = todasFotosItem.length ? todasFotosItem : null
+
       itensSalvos.push({
         id: it.id,
         ambiente: it.ambiente?.trim() || null,
         tipo_esquadria: it.tipo as TipoEsquadria,
         tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
         folhas: it.folhas || null,
-        largura_mm: lm,
-        altura_mm: am,
-        largura_baixo_mm: lb,
-        largura_meio_mm: lm,
-        largura_cima_mm: lc,
-        altura_direita_mm: ad,
-        altura_meio_mm: am,
-        altura_esquerda_mm: ae,
+        largura_mm: Number.isFinite(lm) ? lm : null,
+        altura_mm: Number.isFinite(am) ? am : null,
+        largura_baixo_mm: Number.isFinite(lb) ? lb : null,
+        largura_meio_mm: Number.isFinite(lm) ? lm : null,
+        largura_cima_mm: Number.isFinite(lc) ? lc : null,
+        altura_direita_mm: Number.isFinite(ad) ? ad : null,
+        altura_meio_mm: Number.isFinite(am) ? am : null,
+        altura_esquerda_mm: Number.isFinite(ae) ? ae : null,
         foto_larguras_url,
         foto_alturas_url,
         quantidade: quantidadeNum,
@@ -215,6 +290,8 @@ export async function criarOrcamentoNoServidor(
         ...snapshotConfiguracao,
       })
     } else {
+      const foto_url = itemFotoUrls[0] || null
+      const foto_urls = itemFotoUrls.length ? itemFotoUrls : null
       itensSalvos.push({
         id: it.id,
         ambiente: it.ambiente?.trim() || null,
