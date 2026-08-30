@@ -6,14 +6,15 @@ Branch: `fix/compras-360-main`
 
 ### Validar no preview
 
-1. criar uma necessidade com produto cadastrado e outra digitada manualmente;
-2. abrir a necessidade, incluir cotações de dois fornecedores e comparar total, prazo e pagamento;
-3. selecionar a cotação vencedora e confirmar que só então a compra pode ser aprovada;
-4. avançar por pedido emitido, aguardando entrega e recebido;
-5. confirmar que `Recebido` não altera o saldo de estoque;
-6. acessar Entrada por NF, Recebimentos e NFs, Itens sem vínculo, Estoque e Contas a pagar pelos atalhos;
-7. testar no celular e confirmar que página, cards, modal e tabela não estouram horizontalmente;
-8. confirmar Build Validation, Vercel e Supabase Database Control antes do merge.
+1. no modal de nova necessidade, alternar entre **Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros** e confirmar que a lista de produto cadastrado muda conforme o filtro;
+2. criar uma necessidade com produto cadastrado e outra digitada manualmente;
+3. abrir a necessidade, incluir cotações de dois fornecedores e comparar total, prazo e pagamento;
+4. selecionar a cotação vencedora e confirmar que só então a compra pode ser aprovada;
+5. avançar por pedido emitido, aguardando entrega e recebido;
+6. confirmar que `Recebido` não altera o saldo de estoque;
+7. acessar Entrada por NF, Recebimentos e NFs, Itens sem vínculo, Estoque e Contas a pagar pelos atalhos;
+8. testar no celular e confirmar que página, cards, modal e tabela não estouram horizontalmente;
+9. confirmar Build Validation, Vercel e Supabase Database Control antes do merge.
 
 ### Publicação
 

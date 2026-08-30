@@ -17,6 +17,13 @@ Branch: `fix/compras-360-main`
 - a página recebeu contenção de largura e quebra de textos para não estourar no celular;
 - a API valida a sequência do processo e impede aprovação sem cotação selecionada.
 
+### Ajuste pendente de validação — filtro de categoria ao adicionar falta
+
+- o seletor de produto cadastrado passou a ter filtros rápidos: **Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros**;
+- os filtros usam a categoria já existente em `produtos`, sem criar cadastro, preço ou regra paralela;
+- ao trocar para uma categoria que não contém o produto selecionado, o vínculo é removido para impedir o envio de um item fora do filtro;
+- a opção de digitar material manualmente permanece disponível em todas as categorias.
+
 ### Banco e histórico
 
 - tabelas `compras_necessidades` e `compras_cotacoes` já existentes e vazias no Supabase de produção foram conferidas;

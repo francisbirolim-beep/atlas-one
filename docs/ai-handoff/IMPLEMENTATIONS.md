@@ -1,5 +1,14 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-30 — Filtro de produtos ao criar necessidade no Compras 360
+
+- adicionados filtros rápidos de catálogo para Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros;
+- filtro classifica os produtos pela categoria já cadastrada e preserva a opção de necessidade digitada manualmente;
+- o produto selecionado é desvinculado ao escolher uma categoria incompatível, evitando registrar uma necessidade com filtro visual incorreto;
+- nenhuma migration, dado mestre, preço, estoque ou regra de compra foi alterado.
+
+---
+
 ## 2026-08-30 — Compras 360 integrado à versão atual do Atlas
 
 - substituída a antiga tela inicial de Compras pela Central Compras 360 sem remover as rotas de NF, recebimento, estoque e financeiro;
