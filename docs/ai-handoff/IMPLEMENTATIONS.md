@@ -1,5 +1,34 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-29 — Correção global de telas estourando no celular
+
+- corrigida a largura do documento, shell e superfície principal para respeitar o viewport móvel;
+- adicionados limites responsivos aos containers internos sem remover a rolagem vertical;
+- textos longos, campos e imagens passaram a respeitar a largura disponível;
+- Central de Compras ajustada especificamente após evidência enviada em iPhone;
+- cards de resumo e atalhos ganharam `min-width: 0`, quebra de texto e ícones sem compressão;
+- tabelas largas preservam a rolagem horizontal dentro do próprio componente;
+- cache local corrompido do Next.js foi isolado e reconstruído;
+- build completo aprovado com TypeScript e geração das 90 rotas;
+- nenhuma migration, tabela, permissão ou regra operacional foi alterada.
+
+---
+
+## 2026-08-28 — Navegação completa no celular
+
+- criada barra inferior mobile com Início, Kanban, Compras, Favoritos e Menu;
+- substituído o botão flutuante de Favoritos que cobria parte dos indicadores;
+- criada gaveta lateral azul-marinho com a navegação operacional agrupada por área;
+- adicionada pesquisa de módulos, setores e configurações dentro do menu;
+- Administração e Configurações permanecem visíveis somente para o usuário master;
+- setores ativos adicionais respeitam o mapa de permissões do usuário;
+- itens fixos relacionados a setores ocultos deixam de aparecer nos atalhos rápidos quando existe associação de rota;
+- extraída a lista administrativa compartilhada para evitar divergência entre desktop e mobile;
+- build local completo aprovado com TypeScript e geração das 90 rotas;
+- nenhuma migration, tabela ou regra operacional alterada.
+
+---
+
 ## 2026-08-28 — Atlas Visual V2
 
 - nova identidade visual global inspirada na Central de Compras aprovada por Francis;
