@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { Cliente, Anexo, TipoInteracao, Tarefa, Interacao, Usuario } from '@/lib/tipos'
 import { usuarioAtual } from '@/lib/auth'
 import { uploadArquivo } from '@/lib/upload'
-import ClienteOperacoes from '@/components/clientes/ClienteOperacoes'
+import ClienteOperacoes, { ClienteAcoes } from '@/components/clientes/ClienteOperacoes'
 import {
   listarTarefasCliente, criarTarefa, concluirTarefa, excluirTarefa,
   listarInteracoesCliente, registrarInteracao, STATUS_FUNIL,
@@ -276,6 +276,8 @@ export default function DetalheCliente() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+        <ClienteAcoes clienteId={cliente.id} />
+
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           {editando && formEdicao ? (
             <div className="space-y-3">
