@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { History, Loader2, Plus, Search, ShoppingCart, Trash2, Truck, UserPlus, WalletCards } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
@@ -21,6 +21,7 @@ function num(v:string|number){const n=Number(String(v).replace(',','.'));return 
 
 export default function VendaBalcaoPage(){
  const searchParams=useSearchParams()
+ const router=useRouter()
  const [produtos,setProdutos]=useState<Produto[]>([]),[busca,setBusca]=useState(''),[carregando,setCarregando]=useState(false),[podeVerGestao,setPodeVerGestao]=useState(false),[localAtual,setLocalAtual]=useState<LocalAtual|null>(null)
  const [origemPorProduto,setOrigemPorProduto]=useState<Record<string,string>>({}),[carrinho,setCarrinho]=useState<Record<string,ItemCarrinho>>({})
  const [clienteBusca,setClienteBusca]=useState(''),[clientes,setClientes]=useState<Cliente[]>([]),[cliente,setCliente]=useState<Cliente|null>(null),[carregandoClientes,setCarregandoClientes]=useState(false)
@@ -66,7 +67,7 @@ export default function VendaBalcaoPage(){
  }
  async function carregarCaixa(){try{const resp=await api('/api/balcao/caixa');const json=await resp.json();if(resp.ok)setCaixa(json.caixa||null)}catch{}}
  useEffect(()=>{carregarCaixa()},[])
- useEffect(()=>{const clienteId=searchParams.get('cliente');if(!clienteId)return;api(`/api/balcao/catalogo?tipo=clientes&q=${encodeURIComponent(clienteId)}`).then(r=>r.json()).then(j=>{const encontrado=(j.clientes||[]).find((c:Cliente)=>c.id===clienteId);if(encontrado){setCliente(encontrado);setClienteBusca(encontrado.nome)}}).catch(()=>{})},[searchParams])
+ useEffect(()=>{const clienteId=searchParams.get('cliente');if(!clienteId)return;if(searchParams.get('origem')!=='cliente-360'){router.replace(`/clientes/${clienteId}`);return}api(`/api/balcao/catalogo?tipo=clientes&q=${encodeURIComponent(clienteId)}`).then(r=>r.json()).then(j=>{const encontrado=(j.clientes||[]).find((c:Cliente)=>c.id===clienteId);if(encontrado){setCliente(encontrado);setClienteBusca(encontrado.nome)}}).catch(()=>{})},[router,searchParams])
  useEffect(()=>{
   const termo=busca.trim()
   buscaAbort.current?.abort()

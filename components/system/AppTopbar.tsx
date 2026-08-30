@@ -177,7 +177,7 @@ export default function AppTopbar() {
 
           <div className="relative flex flex-none items-center justify-end gap-1.5 sm:flex-1 sm:gap-2 xl:max-w-[430px]">
             <HomeNotificationBell />
-            <Link href="/orcamento/novo" className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700 sm:inline-flex" title="Identificar cliente e criar novo orçamento"><Plus size={16} /> Novo</Link>
+            <Link href="/orcamento/novo" className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700 sm:inline-flex" title="Pesquisar ou cadastrar cliente no Cliente 360"><Plus size={16} /> Cliente</Link>
             <Link href="/ia/comercial" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 lg:inline-flex" title="Abrir IA Atlas"><Sparkles size={15} className="text-emerald-600" /> IA Atlas</Link>
             <button type="button" onClick={abrirBusca} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 xl:hidden" title="Busca global"><Search size={16} /></button>
 

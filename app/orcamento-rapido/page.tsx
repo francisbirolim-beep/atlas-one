@@ -102,6 +102,7 @@ export default function OrcamentoRapido() {
   const router = useRouter()
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
+  const [modoAtendimento, setModoAtendimento] = useState<'pedido' | 'sob-medida'>('sob-medida')
   const [obras, setObras] = useState<ObraBusca[]>([])
   const [obraId, setObraId] = useState<string | null>(null)
   const [novaObraAberta, setNovaObraAberta] = useState(false)
@@ -142,9 +143,15 @@ export default function OrcamentoRapido() {
   }, [])
 
   useEffect(() => {
-    const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    const obraParam = new URLSearchParams(window.location.search).get('obra')
+    const parametros = new URLSearchParams(window.location.search)
+    const clienteId = parametros.get('cliente')
+    const obraParam = parametros.get('obra')
+    const origem = parametros.get('origem')
+    setModoAtendimento(parametros.get('modo') === 'pedido' ? 'pedido' : 'sob-medida')
     if (!clienteId) { router.replace('/orcamento/novo'); return }
+    // Um orçamento só pode começar depois da escolha feita no Cliente 360.
+    // Isso impede links antigos ou acessos diretos de pularem a ficha do cliente.
+    if (origem !== 'cliente-360') { router.replace(`/clientes/${clienteId}`); return }
 
     supabase
       .from('clientes')
@@ -462,7 +469,7 @@ export default function OrcamentoRapido() {
           <Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg transition"><ArrowLeft size={20} /></Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
-          <div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div>
+          <div><h1 className="text-lg font-bold text-slate-800">{modoAtendimento === 'pedido' ? 'Pedido de orçamento' : 'Orçamento sob medida'}</h1><p className="text-sm text-slate-500">{modoAtendimento === 'pedido' ? 'Registre a visita para o responsável preparar a proposta no Kanban' : 'Monte a proposta técnica com tipologia, medidas e variáveis'}</p></div>
         </div>
       </header>
 
@@ -566,7 +573,7 @@ export default function OrcamentoRapido() {
         </div>
 
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
-        <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : 'Enviar pedido'}</button>
+        <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : modoAtendimento === 'pedido' ? 'Enviar pedido ao Kanban' : 'Enviar orçamento ao Kanban'}</button>
       </main>
 
       {conferenciaAberta && (

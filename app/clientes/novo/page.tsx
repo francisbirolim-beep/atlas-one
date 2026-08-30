@@ -10,8 +10,6 @@ import { OrigemCliente } from '@/lib/tipos'
 import {
   CampoConfiguravel,
   campoNoContexto,
-  campoObrigatorio,
-  camposDoContexto,
   listarCamposConfiguraveis,
 } from '@/lib/camposConfiguraveis'
 
@@ -63,9 +61,7 @@ export default function NovoCliente() {
   }
 
   function obrigatorio(chave: string) {
-    if (chave === 'nome') return true
-    if (!configCarregada) return chave === 'cpf_cnpj' || chave === 'endereco'
-    return campoObrigatorio(campos, chave, 'cliente')
+    return chave === 'nome'
   }
 
   function rotulo(chave: string, fallback: string) {
@@ -77,40 +73,8 @@ export default function NovoCliente() {
   }
 
   async function salvar() {
-    const valores: Record<string, string> = {
-      nome,
-      apelido,
-      whatsapp,
-      telefone,
-      email,
-      cidade,
-      cpf_cnpj: cpfCnpj,
-      endereco,
-      bairro,
-      cep,
-      data_nascimento: dataNascimento,
-      origem,
-      observacoes,
-    }
-
-    const obrigatorios = configCarregada
-      ? camposDoContexto(campos, 'cliente', true)
-      : [
-          { chave: 'nome', label: 'Nome completo' },
-          { chave: 'cpf_cnpj', label: 'CPF ou CNPJ' },
-          { chave: 'endereco', label: 'Endereço da obra' },
-        ]
-
-    for (const campo of obrigatorios) {
-      const valor = valores[campo.chave]
-      if (valor !== undefined && !String(valor).trim()) {
-        setErro(`Informe: ${campo.label}`)
-        return
-      }
-    }
-
-    if (!nome.trim()) {
-      setErro('Informe: Nome completo')
+    if (nome.trim().split(/\s+/).filter(Boolean).length < 2) {
+      setErro('Informe nome e sobrenome')
       return
     }
 

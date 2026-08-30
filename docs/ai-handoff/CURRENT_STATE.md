@@ -11,8 +11,10 @@ Branch: `feat/orcamento-cliente-minimo`
 - `Novo orçamento` agora começa pela busca do nome do cliente e abre o respectivo Cliente 360;
 - cliente inexistente é criado com nome e sobrenome e aberto imediatamente na ficha 360;
 - a busca de cliente informa visualmente carregamento, quantidade encontrada, ausência de resultado e erro de consulta; a consulta lê o cadastro completo para não depender de campo opcional ausente no banco;
-- da ficha do cliente é possível iniciar orçamento sob medida, venda balcão e assistência/manutenção, preservando o mesmo histórico;
-- atalhos de novo orçamento da Home, topbar e Central de Orçamentos passam pela identificação do cliente;
+- da ficha Cliente 360 é possível escolher pedido de orçamento, orçamento sob medida, orçamento balcão e assistência/manutenção, preservando o mesmo histórico;
+- os atalhos da Home foram simplificados para Cliente 360, Kanban, tarefa e compromisso; não há mais criação direta de orçamento ou assistência na Home;
+- o botão superior também abre Cliente 360, e os links diretos com cliente voltam à ficha caso não tenham sido iniciados nela;
+- o cadastro de cliente exige somente nome e sobrenome; os demais dados podem ser completados na ficha quando necessários;
 - orçamento sob medida valida nome e sobrenome e o servidor impede salvar orçamento sem `cliente_id`;
 - venda balcão exige Cliente 360 com nome e telefone/WhatsApp, validado na tela e na API;
 - a confirmação de venda sob medida continua usando os campos obrigatórios configuráveis em `Configurações → Campos`.
@@ -30,7 +32,7 @@ Branch: `feat/orcamento-cliente-minimo`
 
 - Build Validation e preview Vercel;
 - confirmar busca de cliente existente, cadastro mínimo e abertura da ficha no celular e no computador;
-- conferir orçamento sob medida, venda balcão e assistência iniciados pela ficha do Cliente 360.
+- conferir as quatro ações iniciadas pela ficha Cliente 360, incluindo Pedido de orçamento entrando no Kanban.
 - cadastrar duas obras para o mesmo cliente e confirmar que orçamento e assistência aparecem com o local correto;
 - conferir a tela em celular e desktop, especialmente os cartões de obra e o seletor azul de obra no orçamento.
 

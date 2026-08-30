@@ -5,8 +5,11 @@
 - criada a porta `Novo orçamento` para buscar o cliente antes de escolher a operação;
 - a busca em tempo real mostra os clientes cadastrados abaixo do campo conforme o nome é digitado, com estado visível para carregamento, resultado vazio e falha de consulta;
 - cliente localizado abre diretamente a ficha Cliente 360; cliente inexistente recebe cadastro mínimo de nome e sobrenome;
-- a ficha Cliente 360 concentra atalhos para orçamento sob medida, venda balcão e assistência/manutenção;
-- atalhos globais de orçamento agora passam pela identificação do cliente;
+- a ficha Cliente 360 concentra quatro escolhas: pedido de orçamento, orçamento sob medida, orçamento balcão e assistência/manutenção;
+- pedido de orçamento e orçamento sob medida entram no Kanban pelo mesmo fluxo de orçamento, com identificação visual distinta;
+- Home e botão superior foram simplificados para abrir Cliente 360 antes de qualquer operação comercial;
+- links antigos ou diretos de orçamento, balcão e assistência voltam à ficha Cliente 360 quando não foram iniciados nela;
+- o cadastro inicial e a edição do cliente exigem somente nome e sobrenome; telefone continua obrigatório apenas para finalizar venda balcão;
 - orçamento sob medida só persiste após vínculo válido ao Cliente 360;
 - venda balcão passou a exigir cliente identificado e telefone ou WhatsApp, inclusive na API;
 - venda sob medida preserva os campos completos configuráveis na confirmação da venda;

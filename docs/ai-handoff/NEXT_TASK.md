@@ -6,10 +6,10 @@ Branch: `feat/orcamento-cliente-minimo`
 
 1. abrir **Novo orçamento**, pesquisar um cliente existente e confirmar que a ficha Cliente 360 abre;
 2. pesquisar cliente inexistente, informar nome e sobrenome e confirmar criação/abertura da ficha;
-3. na ficha, abrir **Orçamento sob medida**, **Venda balcão** e **Nova assistência / manutenção** e conferir o vínculo ao mesmo cliente;
+3. na ficha, abrir **Pedido de orçamento**, **Orçamento sob medida**, **Orçamento balcão** e **Assistência** e conferir o vínculo ao mesmo cliente;
 4. tentar salvar orçamento sob medida com somente primeiro nome e confirmar o bloqueio;
 5. tentar finalizar venda balcão sem cliente ou sem telefone/WhatsApp e confirmar o bloqueio;
-6. confirmar que os campos completos da venda sob medida permanecem configuráveis em `Configurações → Campos`;
+6. confirmar que o cadastro permite salvar somente com nome e sobrenome e que a venda balcão ainda bloqueia a finalização sem telefone/WhatsApp;
 7. aguardar Build Validation e preview Vercel antes de merge.
 8. criar duas obras/locais no mesmo Cliente 360; iniciar um orçamento e uma assistência por cada cartão e confirmar que o histórico mostra o local certo;
 9. no orçamento, testar escolher uma obra existente e cadastrar uma obra nova pelo seletor azul; confirmar que uma obra de outro cliente não é aceita pelo servidor.

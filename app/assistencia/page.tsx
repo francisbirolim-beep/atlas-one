@@ -49,8 +49,11 @@ export default function Assistencia() {
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    const obraParam = new URLSearchParams(window.location.search).get('obra')
+    const parametros = new URLSearchParams(window.location.search)
+    const obraParam = parametros.get('obra')
+    const origem = parametros.get('origem')
     if (!clienteId) { router.replace('/orcamento/novo'); return }
+    if (origem !== 'cliente-360') { router.replace(`/clientes/${clienteId}`); return }
 
     supabase
       .from('clientes')
