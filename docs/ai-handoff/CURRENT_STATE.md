@@ -2,6 +2,65 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — CORREÇÃO GLOBAL DE LARGURA NO CELULAR — 2026-08-29
+
+Branch: `feat/mobile-navigation-v2`
+
+### Implementado no código
+
+- `html`, `body`, shell e superfície principal agora respeitam a largura real do viewport e bloqueiam extravasamento horizontal do documento;
+- containers flex/grid internos podem encolher corretamente com `min-width: 0` e `max-width: 100%`;
+- títulos e textos longos quebram linha no celular sem ampliar a página;
+- inputs, selects, textareas e imagens ficam limitados à largura disponível;
+- a Central de Compras recebeu contenção responsiva própria nos cabeçalhos, cards de resumo e atalhos;
+- tabelas e quadros que precisam de largura continuam usando a rolagem horizontal interna já existente;
+- nenhuma rota, permissão, regra operacional, migration ou dado foi alterado.
+
+### Validação concluída
+
+- cache local corrompido do Next.js isolado e regenerado;
+- compilação e TypeScript aprovados;
+- build completo aprovado com geração das 90 rotas;
+- `git diff --check` aprovado.
+
+### Conferência funcional pendente
+
+- validar no preview a Home, Compras, Estoque, Cadastros e Configurações em um iPhone;
+- confirmar que não é mais possível deslocar a página inteira lateralmente;
+- confirmar que tabelas largas continuam rolando apenas dentro do próprio quadro.
+
+## EM VALIDAÇÃO — NAVEGAÇÃO COMPLETA NO CELULAR — 2026-08-28
+
+Branch: `feat/mobile-navigation-v2`
+
+### Implementado no código
+
+- criada barra inferior mobile permanente com **Início, Kanban, Compras, Favoritos e Menu**;
+- atalhos de Kanban e Compras deixam de aparecer quando a permissão correspondente estiver oculta;
+- botão **Menu** abre uma gaveta lateral em tela cheia com a mesma navegação operacional do desktop;
+- gaveta organizada por grupos, com pesquisa por nome do módulo/setor;
+- setores adicionais ativos aparecem somente quando liberados para o usuário;
+- Administração, Cadastros, Usuários, Permissões e Configurações continuam exclusivos do usuário master;
+- Favoritos passou para a barra inferior e o antigo botão flutuante, que cobria indicadores da Home, foi removido;
+- ao abrir a gaveta, a rolagem da página de fundo é bloqueada e pode ser fechada pelo fundo, botão ou tecla Escape;
+- lista administrativa foi extraída para `lib/navegacaoAdmin.ts` e é compartilhada entre desktop e mobile;
+- nenhuma rota, migration, regra operacional ou dado foi alterado.
+
+### Validação concluída
+
+- build local completo aprovado;
+- TypeScript aprovado;
+- 90 rotas geradas;
+- `git diff --check` aprovado.
+
+### Conferência funcional pendente
+
+- validar no preview em celular real;
+- abrir e fechar Menu e Favoritos;
+- acessar Compras, Estoque, Cadastros e Configurações;
+- pesquisar uma opção dentro da gaveta;
+- conferir Francis/master com acesso total e um funcionário com opções limitadas por setor.
+
 ## EM VALIDAÇÃO — ATLAS VISUAL V2 — 2026-08-28
 
 Branch: `feat/atlas-visual-v2`

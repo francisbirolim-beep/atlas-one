@@ -7,6 +7,7 @@ import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
   GUIAS,
+  EVENTO_ABRIR_FAVORITOS_MOBILE,
   EVENTO_OCULTOS_MUDOU,
   alternarOculto,
   guiasFavoritos,
@@ -25,6 +26,12 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
     const atualizar = () => setOcultos(lerOcultos())
     window.addEventListener(EVENTO_OCULTOS_MUDOU, atualizar)
     return () => window.removeEventListener(EVENTO_OCULTOS_MUDOU, atualizar)
+  }, [])
+
+  useEffect(() => {
+    const abrirFavoritos = () => setAberto(true)
+    window.addEventListener(EVENTO_ABRIR_FAVORITOS_MOBILE, abrirFavoritos)
+    return () => window.removeEventListener(EVENTO_ABRIR_FAVORITOS_MOBILE, abrirFavoritos)
   }, [])
 
   const isMaster = usuario?.role === 'master'
@@ -99,16 +106,6 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
           </div>
         </section>
       )}
-
-      <button
-        type="button"
-        onClick={() => setAberto(true)}
-        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-50 inline-flex h-14 items-center gap-2 rounded-2xl bg-brand-navy px-4 text-sm font-semibold text-white shadow-xl md:hidden"
-        aria-label="Abrir favoritos"
-      >
-        <Star size={19} fill="currentColor" />
-        Favoritos
-      </button>
 
       {aberto && (
         <div className="fixed inset-0 z-[90] flex items-end bg-slate-950/45 md:hidden" onClick={() => setAberto(false)}>

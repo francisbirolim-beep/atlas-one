@@ -1,5 +1,51 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar correção global de largura no celular
+
+Branch: `feat/mobile-navigation-v2`
+
+### Validar no preview
+
+1. abrir Home, Compras, Estoque, Cadastros e Configurações no celular;
+2. tentar arrastar a página para os lados e confirmar que o conteúdo permanece preso ao viewport;
+3. conferir que títulos, descrições, cards e campos quebram linha sem cortar o início ou o final;
+4. em Estoque e demais telas com tabelas largas, confirmar que somente a tabela possui rolagem horizontal;
+5. confirmar que a barra inferior e a gaveta de navegação continuam funcionando normalmente;
+6. validar em iPhone instalado e também no navegador móvel.
+
+### Estado técnico
+
+- correção implementada sem alteração de dados ou regras operacionais;
+- build completo aprovado, incluindo TypeScript e geração das 90 rotas;
+- próximo passo: atualizar o preview da branch e validar visualmente no aparelho real.
+
+---
+
+## TAREFA ATUAL — validar navegação completa no celular
+
+Branch: `feat/mobile-navigation-v2`
+
+Dependência visual: `feat/atlas-visual-v2` / PR #284.
+
+### Validar no preview
+
+1. confirmar que a barra inferior não cobre cards, botões ou campos;
+2. abrir **Menu** e conferir os grupos Geral, Comercial, Operações e Administração;
+3. pesquisar `compras`, `estoque`, `cadastros` e `configurações`;
+4. abrir um módulo e confirmar que a gaveta fecha automaticamente;
+5. abrir Favoritos pela barra inferior e confirmar que o botão flutuante antigo não aparece;
+6. validar a área segura inferior no iPhone instalado e no navegador;
+7. entrar com usuário master e confirmar Administração completa;
+8. entrar com funcionário limitado e confirmar que setores ocultos não aparecem.
+
+### Ordem de integração
+
+- primeiro validar e integrar o PR #284;
+- depois retargetar esta branch para `main`, validar o diff isolado e integrar manualmente;
+- não misturar correções funcionais de Compras, Estoque ou permissões neste PR visual de navegação.
+
+---
+
 ## TAREFA ATUAL — validar Atlas Visual V2
 
 Branch: `feat/atlas-visual-v2`

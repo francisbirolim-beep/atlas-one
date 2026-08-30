@@ -3,8 +3,11 @@
  */
 
 .atlas-main-surface {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   background: #f4f7fb;
-  overflow-x: clip;
+  overflow-x: hidden;
 }
 
 @media (min-width: 768px) {
@@ -109,9 +112,39 @@
 }
 
 @media (max-width: 767px) {
+  html,
+  body {
+    overscroll-behavior-x: none;
+  }
+
   .atlas-main-surface,
   .atlas-home-v2 {
     background: #f4f7fb !important;
+  }
+
+  .atlas-main-surface > div,
+  .atlas-main-surface main,
+  .atlas-main-surface header,
+  .atlas-main-surface section,
+  .atlas-main-surface article,
+  .atlas-main-surface form,
+  .atlas-main-surface fieldset {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .atlas-main-surface h1,
+  .atlas-main-surface h2,
+  .atlas-main-surface h3,
+  .atlas-main-surface p {
+    overflow-wrap: break-word;
+  }
+
+  .atlas-main-surface input,
+  .atlas-main-surface select,
+  .atlas-main-surface textarea,
+  .atlas-main-surface img {
+    max-width: 100%;
   }
 
   .atlas-home-v2 > section,

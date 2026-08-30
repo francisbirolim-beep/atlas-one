@@ -28,6 +28,7 @@ export const GRUPOS_ORDEM_GUIAS = ['Geral', 'Comercial', 'Operações']
 
 export const CHAVE_OCULTOS = 'atlas_guias_ocultos'
 export const EVENTO_OCULTOS_MUDOU = 'guias-ocultos-changed'
+export const EVENTO_ABRIR_FAVORITOS_MOBILE = 'atlas-mobile-favorites-open'
 
 export function lerOcultos(): string[] {
   try {
