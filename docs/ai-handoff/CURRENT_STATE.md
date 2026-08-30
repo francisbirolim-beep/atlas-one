@@ -2,6 +2,25 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — MENU MOBILE CLARO — 2026-08-30
+
+Branch: `feat/mobile-menu-claro`
+
+### Implementado no código
+
+- a gaveta lateral do celular passou do azul-marinho para uma superfície branca, alinhada à identidade clara da Home;
+- textos, ícones, campo de pesquisa, divisórias, botão de fechar e rodapé receberam contraste adequado no tema claro;
+- o item selecionado continua azul para preservar a orientação visual;
+- fundo externo permanece suavemente escurecido para destacar a gaveta aberta;
+- rotas, grupos, busca, favoritos, permissões por setor e acesso administrativo não foram alterados.
+
+### Conferência funcional pendente
+
+- validar o menu aberto no iPhone;
+- pesquisar e acessar Compras, Estoque, Cadastros e Configurações;
+- conferir o item selecionado e a leitura dos itens não selecionados;
+- conferir um usuário com acesso limitado por setor.
+
 ## EM VALIDAÇÃO — CORREÇÃO GLOBAL DE LARGURA NO CELULAR — 2026-08-29
 
 Branch: `feat/mobile-navigation-v2`
