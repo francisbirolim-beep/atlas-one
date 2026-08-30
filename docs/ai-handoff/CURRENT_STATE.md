@@ -2,6 +2,34 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — COMPRAS 360 INTEGRADO À MAIN — 2026-08-30
+
+Branch: `fix/compras-360-main`
+
+### Implementado no código
+
+- `/compras` passou a ser a Central Compras 360, com lista de faltas, cotação, aprovação, pedido, entrega e recebimento;
+- comparação de fornecedores mostra preço unitário, frete, total, prazo e forma de pagamento;
+- o comprador escolhe explicitamente a cotação vencedora antes de aprovar a compra;
+- produtos, fornecedores e último preço real das NFs do Atlas são reutilizados na mesma tela;
+- atalhos preservam Entrada por NF, recebimentos, vínculos pendentes, estoque e contas a pagar;
+- marcar a necessidade como recebida não altera estoque; o saldo continua entrando somente pela conferência da NF;
+- a página recebeu contenção de largura e quebra de textos para não estourar no celular;
+- a API valida a sequência do processo e impede aprovação sem cotação selecionada.
+
+### Banco e histórico
+
+- tabelas `compras_necessidades` e `compras_cotacoes` já existentes e vazias no Supabase de produção foram conferidas;
+- migration local reconciliada com a versão remota `20260828180539`;
+- 26 migrations já aplicadas no banco, mas ausentes na `main`, foram restauradas a partir do próprio histórico Git para que o controle do Supabase volte a comparar local e remoto corretamente;
+- RLS permanece habilitado nas duas tabelas do Compras 360 e o acesso ocorre pela API autenticada do servidor.
+
+### Validação pendente
+
+- build, TypeScript, preview Vercel e controle de migrations do novo PR;
+- teste no celular e no computador do fluxo completo até `Recebido`;
+- confirmação do deploy de produção após o merge.
+
 ## EM VALIDAÇÃO — MENU MOBILE CLARO — 2026-08-30
 
 Branch: `feat/mobile-menu-claro`
