@@ -1,5 +1,20 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-30 — Compras 360 integrado à versão atual do Atlas
+
+- substituída a antiga tela inicial de Compras pela Central Compras 360 sem remover as rotas de NF, recebimento, estoque e financeiro;
+- criado fluxo visual de necessidade, cotação, aprovação, pedido, espera de entrega e recebimento;
+- adicionada comparação de fornecedores por preço, frete, total, prazo e condição de pagamento;
+- adicionada escolha persistida da cotação vencedora e bloqueio de aprovação enquanto nenhuma cotação estiver selecionada;
+- reutilizados cadastros reais de produtos e fornecedores e histórico do último custo observado em NF;
+- mantida a regra de que `Recebido` no planejamento não movimenta estoque; somente a conferência da NF gera entrada física;
+- API autenticada valida dados, sequência de status e vínculo entre necessidade e cotação;
+- página adaptada à contenção global de largura para funcionar no celular sem extravasamento horizontal;
+- migration do Compras 360 alinhada à versão já registrada no Supabase (`20260828180539`);
+- restaurados do histórico Git os 26 arquivos de migrations que já estavam aplicados em produção, mas haviam ficado ausentes da `main`.
+
+---
+
 ## 2026-08-30 — Menu mobile claro
 
 - gaveta lateral móvel alinhada ao visual claro já aprovado na Home do Atlas;
