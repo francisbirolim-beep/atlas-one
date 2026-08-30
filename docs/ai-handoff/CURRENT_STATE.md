@@ -2,6 +2,38 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — ATLAS VISUAL V2 — 2026-08-28
+
+Branch: `feat/atlas-visual-v2`
+
+### Implementado no código
+
+- criada uma camada visual transversal inspirada no protótipo do Compras 360;
+- sidebar desktop reduzida para 236 px, com identidade Atlas, fundo azul-marinho e seleção azul;
+- a área principal passou a usar fundo claro e suave, com superfícies brancas e bordas discretas;
+- Home ganhou cabeçalho executivo claro, saudação, empresa, data e atalhos operacionais compactos;
+- indicadores de gestão foram reposicionados logo após o cabeçalho;
+- painéis escuros da Home passaram a superfícies claras sem alterar dados ou ações;
+- topbar reconhece Compras 360, Cadastros 360, Estoque, Assistências e Engenharia;
+- após validação por screenshot real no celular, o topbar mobile foi reduzido e deixou de comprimir grupo/título;
+- no mobile, o bloco de saudação ganhou espaçamentos e tipografia menores e o placeholder de logo sem cadastro não ocupa mais a primeira tela;
+- atalhos e indicadores passaram a uma grade compacta de duas colunas no celular;
+- a área principal bloqueia extravasamento horizontal sem esconder rolagem vertical;
+- preservadas rotas, permissões, busca e regras operacionais.
+
+### Validação concluída
+
+- build local completo aprovado, incluindo TypeScript e geração das 90 rotas;
+- correção mobile recompilada com sucesso, incluindo TypeScript e geração das 90 rotas;
+- nenhuma migration e nenhuma alteração de banco.
+
+### Conferência funcional pendente
+
+- validar visualmente no preview a Home corrigida no desktop e no celular;
+- conferir contraste da sidebar e do tema por usuário;
+- navegar por Compras, Cadastros, Estoque, Kanban e Produção;
+- confirmar que atalhos, busca global e menu do perfil permanecem funcionando.
+
 ## EM VALIDAÇÃO — FILTRO DO KANBAN POR PERÍODO E TIPO DE DATA — 2026-08-28
 
 Branch: `feat/kanban-filtro-periodo-datas`

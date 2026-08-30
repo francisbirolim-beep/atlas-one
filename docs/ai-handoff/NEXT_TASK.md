@@ -1,6 +1,31 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar filtro do Kanban por período e tipo de data
+## TAREFA ATUAL — validar Atlas Visual V2
+
+Branch: `feat/atlas-visual-v2`
+
+Objetivo: confirmar a nova identidade visual do Atlas antes de expandi-la para o conteúdo interno de cada módulo.
+
+### Validar no preview
+
+1. abrir a Home no computador e confirmar sidebar, cabeçalho, atalhos e indicadores;
+2. abrir no celular e confirmar que o cabeçalho não comprime o título e que os atalhos aparecem em duas colunas;
+3. confirmar que o placeholder de logo não ocupa espaço no celular quando a empresa ainda não tem logo cadastrado;
+4. confirmar que não existe rolagem horizontal indevida;
+5. testar busca global, notificações e menu do usuário;
+6. navegar por Clientes, Orçamentos, Kanban, Compras, Estoque, Produção e Engenharia;
+7. conferir tema claro/escuro por usuário;
+8. confirmar que nenhuma ação operacional ou permissão mudou.
+
+### Próxima etapa depois da aprovação
+
+- aplicar os mesmos componentes de cabeçalho, métricas, abas, filtros e tabelas aos módulos antigos;
+- migrar um módulo por PR para reduzir risco e permitir validação visual gradual;
+- manter os módulos 360 e a Home como referência oficial do design.
+
+---
+
+## TAREFA ANTERIOR — validar filtro do Kanban por período e tipo de data
 
 Branch: `feat/kanban-filtro-periodo-datas`
 

@@ -1,0 +1,121 @@
+/* Atlas Visual V2 — linguagem limpa inspirada no Compras 360.
+ * Esta camada altera apenas apresentação; rotas, permissões e regras permanecem intactas.
+ */
+
+.atlas-main-surface {
+  background: #f4f7fb;
+  overflow-x: clip;
+}
+
+@media (min-width: 768px) {
+  .atlas-sidebar-shell {
+    width: 236px !important;
+    flex-basis: 236px !important;
+    background: #101a28 !important;
+  }
+
+  .atlas-sidebar-shell > nav {
+    width: 236px !important;
+    padding: 20px 12px 14px !important;
+    border-right-color: rgb(255 255 255 / 0.06) !important;
+    background: #101a28 !important;
+    box-shadow: none !important;
+  }
+
+  .atlas-sidebar-brand {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .atlas-sidebar-shell nav a {
+    min-height: 42px;
+    border-radius: 10px !important;
+  }
+
+  .atlas-sidebar-shell nav a[class*="bg-brand-navy"] {
+    background: #2563d4 !important;
+    color: #ffffff !important;
+    box-shadow: 0 7px 18px rgb(37 99 212 / 0.2) !important;
+  }
+
+  .atlas-sidebar-shell nav a:not([class*="bg-brand-navy"]):hover {
+    background: rgb(255 255 255 / 0.055) !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell,
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav {
+    background: #101a28 !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-brand strong {
+    color: #ffffff !important;
+  }
+}
+
+.atlas-home-v2 {
+  background: #f4f7fb !important;
+}
+
+.atlas-home-v2 > section,
+.atlas-home-v2 > div > section {
+  max-width: 1500px;
+}
+
+.atlas-home-v2 .bg-slate-950 {
+  border-color: #e2e8f0 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04) !important;
+}
+
+.atlas-home-v2 .bg-slate-950 .text-white,
+.atlas-home-v2 .bg-slate-950 .text-slate-100,
+.atlas-home-v2 .bg-slate-950 .text-slate-200 {
+  color: #0f172a !important;
+}
+
+.atlas-home-v2 .bg-slate-950 .text-slate-300,
+.atlas-home-v2 .bg-slate-950 .text-slate-400,
+.atlas-home-v2 .bg-slate-950 .text-slate-500,
+.atlas-home-v2 .bg-slate-950 .text-slate-600 {
+  color: #64748b !important;
+}
+
+.atlas-home-v2 .bg-slate-950 [class*="border-white/10"] {
+  border-color: #e2e8f0 !important;
+}
+
+.atlas-home-v2 .bg-slate-950 [class*="divide-white/10"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+.atlas-home-v2 .bg-slate-950 [class*="bg-white/"] {
+  background: #f8fafc !important;
+}
+
+.atlas-home-v2 .bg-slate-950 a[class*="text-emerald"],
+.atlas-home-v2 .bg-slate-950 strong[class*="text-emerald"] {
+  color: #2563d4 !important;
+}
+
+.atlas-home-v2 article,
+.atlas-home-v2 a.rounded-2xl,
+.atlas-home-v2 button.rounded-2xl {
+  border-radius: 14px !important;
+}
+
+.atlas-home-v2 article {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04) !important;
+}
+
+@media (max-width: 767px) {
+  .atlas-main-surface,
+  .atlas-home-v2 {
+    background: #f4f7fb !important;
+  }
+
+  .atlas-home-v2 > section,
+  .atlas-home-v2 > div > section {
+    max-width: 100%;
+  }
+}
