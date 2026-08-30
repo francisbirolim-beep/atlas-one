@@ -210,25 +210,25 @@ export default function MobileNavigationControls() {
 
       {menuAberto && (
         <div
-          className="fixed inset-0 z-[95] bg-slate-950/50 backdrop-blur-[2px] print:hidden md:hidden"
+          className="fixed inset-0 z-[95] bg-slate-950/35 backdrop-blur-[2px] print:hidden md:hidden"
           onMouseDown={event => { if (event.currentTarget === event.target) fecharMenu() }}
         >
           <aside
-            className="flex h-full w-[88%] max-w-sm flex-col border-r border-white/10 bg-slate-950 text-white shadow-2xl"
+            className="flex h-full w-[88%] max-w-sm flex-col border-r border-slate-200 bg-white text-slate-950 shadow-2xl"
             aria-label="Menu completo do Atlas"
           >
-            <div className="flex items-center justify-between border-b border-white/10 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold">A</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white">A</span>
                 <span className="min-w-0">
-                  <strong className="block text-sm font-bold uppercase tracking-[0.08em]">Atlas One</strong>
-                  <span className="block truncate text-[11px] text-slate-400">Esquadrifácio</span>
+                  <strong className="block text-sm font-bold uppercase tracking-[0.08em] text-slate-950">Atlas One</strong>
+                  <span className="block truncate text-[11px] text-slate-500">Esquadrifácio</span>
                 </span>
               </div>
               <button
                 type="button"
                 onClick={fecharMenu}
-                className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-slate-300 active:bg-white/10"
+                className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-500 active:bg-slate-100"
                 aria-label="Fechar menu"
               >
                 <X size={20} />
@@ -237,13 +237,13 @@ export default function MobileNavigationControls() {
 
             <div className="px-4 py-3">
               <label className="relative block">
-                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <span className="sr-only">Buscar no menu</span>
                 <input
                   value={busca}
                   onChange={event => setBusca(event.target.value)}
                   placeholder="Buscar no menu..."
-                  className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
             </div>
@@ -266,7 +266,7 @@ export default function MobileNavigationControls() {
                           key={setor.id}
                           href={hrefSetor(setor)}
                           onClick={fecharMenu}
-                          className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-300 active:bg-white/10"
+                          className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 active:bg-slate-100"
                         >
                           <LayoutGrid size={19} className="shrink-0" />
                           <span>{setor.nome}</span>
@@ -277,7 +277,7 @@ export default function MobileNavigationControls() {
                 )}
 
                 {adminVisiveis.length > 0 && (
-                  <section className="border-t border-white/10 pt-4">
+                  <section className="border-t border-slate-200 pt-4">
                     <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Administração</p>
                     <div className="space-y-1">
                       {adminVisiveis.map(item => {
@@ -287,7 +287,7 @@ export default function MobileNavigationControls() {
                             key={item.href}
                             href={item.href}
                             onClick={fecharMenu}
-                            className="flex items-start gap-3 rounded-xl px-3 py-3 text-slate-300 active:bg-white/10"
+                            className="flex items-start gap-3 rounded-xl px-3 py-3 text-slate-700 active:bg-slate-100"
                           >
                             <Icon size={18} className="mt-0.5 shrink-0" />
                             <span className="min-w-0">
@@ -302,15 +302,15 @@ export default function MobileNavigationControls() {
                 )}
 
                 {gruposVisiveis.length === 0 && setoresExtras.length === 0 && adminVisiveis.length === 0 && (
-                  <div className="mx-2 rounded-xl border border-dashed border-white/15 px-4 py-6 text-center text-sm text-slate-500">
+                  <div className="mx-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                     Nenhuma opção encontrada para “{busca}”.
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="border-t border-white/10 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-              <p className="truncate text-xs font-semibold text-white">{usuario?.nome || 'Usuário'}</p>
+            <div className="border-t border-slate-200 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              <p className="truncate text-xs font-semibold text-slate-900">{usuario?.nome || 'Usuário'}</p>
               <p className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-500">{usuario?.role === 'master' ? 'Acesso total' : 'Acesso por setor'}</p>
             </div>
           </aside>

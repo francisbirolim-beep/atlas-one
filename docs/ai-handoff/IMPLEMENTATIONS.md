@@ -1,5 +1,16 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-30 — Menu mobile claro
+
+- gaveta lateral móvel alinhada ao visual claro já aprovado na Home do Atlas;
+- fundo branco, bordas suaves e textos/ícones escuros com contraste maior;
+- campo de pesquisa e botão de fechar convertidos para superfícies claras;
+- seleção azul preservada para indicar a rota atual;
+- permissões, grupos, busca, navegação e acessos administrativos preservados;
+- nenhuma migration, tabela, dado ou regra operacional alterada.
+
+---
+
 ## 2026-08-29 — Correção global de telas estourando no celular
 
 - corrigida a largura do documento, shell e superfície principal para respeitar o viewport móvel;

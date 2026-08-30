@@ -1,5 +1,25 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar menu mobile claro
+
+Branch: `feat/mobile-menu-claro`
+
+### Validar no preview
+
+1. abrir o menu completo no iPhone e confirmar o fundo branco;
+2. conferir contraste de marca, busca, grupos, itens, descrições administrativas e rodapé;
+3. navegar para Compras, Estoque, Cadastros e Configurações;
+4. pesquisar uma opção e confirmar o estado vazio quando não houver resultado;
+5. confirmar que o item da rota atual permanece destacado em azul;
+6. validar Francis/master e um funcionário com setores limitados.
+
+### Limite da mudança
+
+- alteração exclusivamente visual da gaveta mobile;
+- nenhuma rota, permissão, regra operacional, migration ou dado alterado.
+
+---
+
 ## TAREFA ATUAL — validar correção global de largura no celular
 
 Branch: `feat/mobile-navigation-v2`
