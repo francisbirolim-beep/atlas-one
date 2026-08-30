@@ -11,6 +11,8 @@ Branch: `feat/orcamento-cliente-minimo`
 5. tentar finalizar venda balcão sem cliente ou sem telefone/WhatsApp e confirmar o bloqueio;
 6. confirmar que os campos completos da venda sob medida permanecem configuráveis em `Configurações → Campos`;
 7. aguardar Build Validation e preview Vercel antes de merge.
+8. criar duas obras/locais no mesmo Cliente 360; iniciar um orçamento e uma assistência por cada cartão e confirmar que o histórico mostra o local certo;
+9. no orçamento, testar escolher uma obra existente e cadastrar uma obra nova pelo seletor azul; confirmar que uma obra de outro cliente não é aceita pelo servidor.
 
 ---
 

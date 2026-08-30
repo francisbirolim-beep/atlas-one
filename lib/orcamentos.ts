@@ -46,6 +46,7 @@ export interface ItemOrcamentoForm {
 
 export interface DadosOrcamentoForm {
   clienteId?: string | null
+  obraId?: string | null
   itens: ItemOrcamentoForm[]
   clienteNome: string
   clienteWhatsapp: string
@@ -133,6 +134,7 @@ export async function criarOrcamentoNoServidor(
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const {
     clienteId: clienteIdInformado,
+    obraId: obraIdInformada,
     itens, clienteNome, clienteWhatsapp, cidade, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
@@ -153,6 +155,20 @@ export async function criarOrcamentoNoServidor(
 
   if (!clienteId) {
     return { ok: false, error: 'Não foi possível criar ou localizar o Cliente 360.' }
+  }
+
+  let obraId: string | null = null
+  if (obraIdInformada) {
+    const { data: obra, error: erroObra } = await supabase
+      .from('obras')
+      .select('id, cliente_id')
+      .eq('id', obraIdInformada)
+      .maybeSingle()
+
+    if (erroObra || !obra || obra.cliente_id !== clienteId) {
+      return { ok: false, error: 'A obra escolhida não pertence a este Cliente 360.' }
+    }
+    obraId = obra.id
   }
 
   const itensSalvos: ItemEsquadria[] = []
@@ -298,6 +314,7 @@ export async function criarOrcamentoNoServidor(
   const { error } = await supabase.from('orcamentos').insert({
     id: novoId,
     cliente_id: clienteId,
+    obra_id: obraId,
     cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp,
     cidade,

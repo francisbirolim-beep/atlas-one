@@ -16,11 +16,22 @@ Branch: `feat/orcamento-cliente-minimo`
 - venda balcão exige Cliente 360 com nome e telefone/WhatsApp, validado na tela e na API;
 - a confirmação de venda sob medida continua usando os campos obrigatórios configuráveis em `Configurações → Campos`.
 
+### Ampliação em andamento: Obras dentro do Cliente 360
+
+- Cliente 360 passa a listar e cadastrar várias **obras/locais** para o mesmo cliente, com cores por etapa;
+- o orçamento sob medida exibe uma escolha destacada de obra, permite cadastrar uma nova obra e persiste `obra_id` somente se a obra pertencer ao cliente selecionado;
+- assistência/manutenção também pode escolher uma obra e persiste o mesmo vínculo, inclusive no card espelho do Kanban;
+- vendas e assistências já vinculadas mostram a obra no histórico do Cliente 360;
+- atalhos globais de assistência e cliente passaram a levar primeiro à identificação do Cliente 360; as ações operacionais ficam dentro da ficha;
+- não há migration nova: a tabela `obras` e as colunas `obra_id` já existem na estrutura aplicada anteriormente.
+
 ### Validação pendente
 
 - Build Validation e preview Vercel;
 - confirmar busca de cliente existente, cadastro mínimo e abertura da ficha no celular e no computador;
 - conferir orçamento sob medida, venda balcão e assistência iniciados pela ficha do Cliente 360.
+- cadastrar duas obras para o mesmo cliente e confirmar que orçamento e assistência aparecem com o local correto;
+- conferir a tela em celular e desktop, especialmente os cartões de obra e o seletor azul de obra no orçamento.
 
 ## EM VALIDAÇÃO — COMPRAS 360 INTEGRADO À MAIN — 2026-08-30
 

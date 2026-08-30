@@ -115,9 +115,9 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
             </Link>
           )}
           {tem('clientes') && (
-            <Link href="/clientes/novo" className={classeAtalho}>
+            <Link href="/orcamento/novo" className={classeAtalho}>
               <span className={classeIcone}><UserPlus size={19} /></span>
-              <span className="min-w-0"><strong className={classeTextoAtalho}>Novo cliente</strong><span className={classeSubtituloAtalho}>Cadastrar cliente</span></span>
+              <span className="min-w-0"><strong className={classeTextoAtalho}>Localizar cliente</strong><span className={classeSubtituloAtalho}>Abrir Cliente 360</span></span>
             </Link>
           )}
           {tem('kanban') && (
@@ -127,9 +127,9 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
             </Link>
           )}
           {tem('assistencias') && (
-            <Link href="/assistencia" className={classeAtalho}>
+            <Link href="/orcamento/novo" className={classeAtalho}>
               <span className={classeIcone}><Wrench size={19} /></span>
-              <span className="min-w-0"><strong className={classeTextoAtalho}>Nova assistência</strong><span className={classeSubtituloAtalho}>Abrir chamado</span></span>
+              <span className="min-w-0"><strong className={classeTextoAtalho}>Novo atendimento</strong><span className={classeSubtituloAtalho}>Identificar cliente</span></span>
             </Link>
           )}
           {tem('tarefas') && (

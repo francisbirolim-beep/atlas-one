@@ -55,7 +55,7 @@ export default function HomeAssistenciasBlock({ escopo }: { escopo: EscopoAssist
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Link href="/assistencia" className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-amber-400"><Plus size={13}/> Nova assistência</Link>
+        <Link href="/orcamento/novo" className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-amber-400"><Plus size={13}/> Identificar cliente</Link>
         <Link href="/assistencias" className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 hover:text-white">Abrir Kanban <ArrowUpRight size={13}/></Link>
       </div>
     </article>

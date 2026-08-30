@@ -11,6 +11,16 @@
 - venda sob medida preserva os campos completos configuráveis na confirmação da venda;
 - sem nova migration: reutiliza `clientes`, `orcamentos`, vínculo `cliente_id` e configuração `campos_formularios_v1` existentes.
 
+### Obras e locais no Cliente 360
+
+- adicionada a central de obras/locais dentro da ficha do cliente, permitindo várias obras para o mesmo cadastro;
+- cada obra tem tom visual por etapa e atalhos próprios para orçamento sob medida e assistência;
+- orçamento sob medida ganhou seletor de obra e cadastro rápido de obra, com persistência em `orcamentos.obra_id`;
+- assistência ganhou seletor de obra, com persistência em `assistencias.obra_id` e no card espelho em `orcamentos.obra_id`;
+- os serviços validam no servidor que a obra selecionada pertence ao mesmo Cliente 360;
+- Home e Kanban de Assistências passam a chamar primeiro a identificação do cliente; as decisões operacionais ficam na ficha Cliente 360;
+- reutilizada a estrutura existente `obras` e os vínculos `obra_id`, sem migration adicional.
+
 ---
 
 ## 2026-08-30 — Compras 360 integrado à versão atual do Atlas

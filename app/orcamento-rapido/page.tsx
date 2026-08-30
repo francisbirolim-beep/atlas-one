@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard, Pencil, UserCheck } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard, Pencil, UserCheck, Building2 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead, Cliente } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { salvarPendente } from '@/lib/offlineFila'
@@ -59,6 +60,7 @@ interface ItemForm {
 }
 
 type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
+type ObraBusca = { id: string; nome: string; cidade?: string | null; endereco?: string | null; status?: string | null }
 
 function temNomeCompleto(nome: string) {
   return nome.trim().split(/\s+/).filter(Boolean).length >= 2
@@ -97,8 +99,15 @@ function resumoMedidas(item: ItemForm, tipoMedida: 'comum' | 'final' | '') {
 }
 
 export default function OrcamentoRapido() {
+  const router = useRouter()
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
+  const [obras, setObras] = useState<ObraBusca[]>([])
+  const [obraId, setObraId] = useState<string | null>(null)
+  const [novaObraAberta, setNovaObraAberta] = useState(false)
+  const [novaObraNome, setNovaObraNome] = useState('')
+  const [novaObraEndereco, setNovaObraEndereco] = useState('')
+  const [salvandoObra, setSalvandoObra] = useState(false)
   const [clientes, setClientes] = useState<ClienteBusca[]>([])
   const [clienteBusca, setClienteBusca] = useState('')
   const [clienteNome, setClienteNome] = useState('')
@@ -134,7 +143,8 @@ export default function OrcamentoRapido() {
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    if (!clienteId) return
+    const obraParam = new URLSearchParams(window.location.search).get('obra')
+    if (!clienteId) { router.replace('/orcamento/novo'); return }
 
     supabase
       .from('clientes')
@@ -149,8 +159,18 @@ export default function OrcamentoRapido() {
         setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
         setCidade(cliente.cidade || '')
         if (cliente.origem) setOrigem(cliente.origem)
+        if (obraParam) setObraId(obraParam)
       })
-  }, [])
+  }, [router])
+
+  useEffect(() => {
+    if (!clienteIdOrigem) { setObras([]); setObraId(null); return }
+    supabase.from('obras').select('id,nome,cidade,endereco,status').eq('cliente_id', clienteIdOrigem).order('created_at', { ascending: false }).then(({ data }) => {
+      const lista = (data || []) as ObraBusca[]
+      setObras(lista)
+      setObraId(atual => atual && lista.some(obra => obra.id === atual) ? atual : null)
+    })
+  }, [clienteIdOrigem])
 
   const clientesEncontrados = clienteIdOrigem || clienteBusca.trim().length < 2
     ? []
@@ -171,11 +191,23 @@ export default function OrcamentoRapido() {
     setClienteNome(cliente.nome || '')
     setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
     setCidade(cliente.cidade || '')
+    setObraId(null)
   }
 
   function alterarNomeCliente(valor: string) {
     setClienteNome(valor)
-    if (clienteIdOrigem) setClienteIdOrigem(null)
+    if (clienteIdOrigem) { setClienteIdOrigem(null); setObraId(null) }
+  }
+
+  async function criarNovaObra() {
+    if (!clienteIdOrigem) return
+    if (!novaObraNome.trim()) { setErro('Informe o nome da obra ou do local.'); return }
+    setSalvandoObra(true)
+    const { data, error } = await supabase.from('obras').insert({ cliente_id: clienteIdOrigem, nome: novaObraNome.trim(), endereco: novaObraEndereco.trim() || null, cidade: cidade.trim() || null, status: 'planejamento' }).select('id,nome,cidade,endereco,status').single()
+    setSalvandoObra(false)
+    if (error || !data) { setErro(error?.message || 'Não foi possível cadastrar a obra.'); return }
+    const obra = data as ObraBusca
+    setObras(prev => [obra, ...prev]); setObraId(obra.id); setNovaObraAberta(false); setNovaObraNome(''); setNovaObraEndereco('')
   }
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
@@ -266,6 +298,7 @@ export default function OrcamentoRapido() {
 
     const dadosForm: DadosOrcamentoForm = {
       clienteId: clienteIdOrigem,
+      obraId,
       itens, clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
@@ -362,6 +395,11 @@ export default function OrcamentoRapido() {
     setConferenciaAberta(false)
     setItens([novoItem()])
     setClienteIdOrigem(null)
+    setObras([])
+    setObraId(null)
+    setNovaObraAberta(false)
+    setNovaObraNome('')
+    setNovaObraEndereco('')
     setClienteBusca('')
     setClienteNome('')
     setClienteWhatsapp('')
@@ -432,7 +470,7 @@ export default function OrcamentoRapido() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
           <div><p className="text-xs font-semibold uppercase tracking-wide text-brand-navy">1. Cliente 360</p><h3 className="mt-1 text-sm font-medium text-slate-700">Identifique o cliente antes de montar o orçamento</h3><p className="mt-1 text-xs text-slate-500">Todo orçamento fica salvo no histórico do Cliente 360. Se ele ainda não existir, será criado com nome e sobrenome.</p></div>
           <div className="relative">
-            <BuscaAtlasInput value={clienteBusca} onValueChange={valor => { setClienteBusca(valor); if (clienteIdOrigem) setClienteIdOrigem(null) }} placeholder="Buscar cliente já cadastrado..." inputClassName="w-full rounded-xl border border-slate-300 py-3 pr-3 text-sm" />
+            <BuscaAtlasInput value={clienteBusca} onValueChange={valor => { setClienteBusca(valor); if (clienteIdOrigem) { setClienteIdOrigem(null); setObraId(null) } }} placeholder="Buscar cliente já cadastrado..." inputClassName="w-full rounded-xl border border-slate-300 py-3 pr-3 text-sm" />
             {clientesEncontrados.length > 0 && <div className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">{clientesEncontrados.map(cliente => <button key={cliente.id} type="button" onClick={() => selecionarCliente(cliente)} className="block w-full border-b border-slate-100 px-3 py-2.5 text-left hover:bg-slate-50"><div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UserCheck size={14}/>{cliente.nome}</div><div className="mt-0.5 text-xs text-slate-500">{[cliente.cidade, cliente.bairro, cliente.whatsapp || cliente.telefone, cliente.cpf_cnpj].filter(Boolean).join(' • ') || 'Cliente cadastrado'}</div></button>)}</div>}
           </div>
           {clienteIdOrigem ? <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800"><span>Cliente existente selecionado. Este orçamento ficará no histórico dele.</span><Link href={`/clientes/${clienteIdOrigem}`} className="font-semibold underline underline-offset-2">Abrir Cliente 360</Link></div> : clienteBusca.trim().length >= 2 && clientesEncontrados.length === 0 ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cliente encontrado. Informe somente nome e sobrenome para criar o Cliente 360 junto com este orçamento.</p> : null}
@@ -444,6 +482,16 @@ export default function OrcamentoRapido() {
               <option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option>
             </select>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-6 space-y-3">
+          <div className="flex items-start gap-3"><span className="rounded-xl bg-white p-2 text-blue-700 shadow-sm"><Building2 size={18}/></span><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">2. Obra / local</p><h3 className="mt-1 text-sm font-semibold text-slate-800">Em qual local este orçamento será feito?</h3><p className="mt-1 text-xs text-slate-600">Opcional para atendimentos simples e recomendado para construtoras. Assim, cada orçamento fica separado dentro do Cliente 360.</p></div></div>
+          {!clienteIdOrigem ? <p className="rounded-xl border border-blue-200 bg-white/80 px-3 py-2 text-xs text-blue-800">Primeiro identifique o Cliente 360 acima para escolher ou cadastrar uma obra.</p> : <>
+            <select value={obraId || ''} onChange={e => setObraId(e.target.value || null)} className="w-full rounded-xl border border-blue-200 bg-white p-3 text-sm text-slate-700"><option value="">Sem obra específica</option>{obras.map(obra => <option key={obra.id} value={obra.id}>{obra.nome}{obra.cidade ? ` — ${obra.cidade}` : ''}</option>)}</select>
+            {obraId && (() => { const obra = obras.find(item => item.id === obraId); return obra ? <p className="rounded-lg bg-white/80 px-3 py-2 text-xs font-medium text-blue-800">Orçamento vinculado a: {obra.nome}{obra.endereco ? ` · ${obra.endereco}` : ''}</p> : null })()}
+            <button type="button" onClick={() => setNovaObraAberta(v => !v)} className="text-xs font-semibold text-blue-800 hover:underline">{novaObraAberta ? 'Cancelar cadastro de obra' : '+ Cadastrar nova obra / local'}</button>
+            {novaObraAberta && <div className="grid gap-3 rounded-xl border border-blue-200 bg-white/80 p-3 sm:grid-cols-2"><input value={novaObraNome} onChange={e => setNovaObraNome(e.target.value)} placeholder="Nome da obra / local *" className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"/><input value={novaObraEndereco} onChange={e => setNovaObraEndereco(e.target.value)} placeholder="Endereço (opcional)" className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"/><div className="sm:col-span-2 flex justify-end"><button type="button" onClick={() => void criarNovaObra()} disabled={salvandoObra} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{salvandoObra ? 'Salvando...' : 'Salvar e selecionar obra'}</button></div></div>}
+          </>}
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
