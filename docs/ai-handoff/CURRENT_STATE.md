@@ -2,6 +2,26 @@
 
 > Checkpoint anterior preservado em `docs/ai-handoff/archive/2026-08-23-pre-pr258-CURRENT_STATE.md`.
 
+## EM VALIDAÇÃO — PORTA DE ENTRADA CLIENTE 360 — 2026-08-30
+
+Branch: `feat/orcamento-cliente-minimo`
+
+### Implementado no código
+
+- `Novo orçamento` agora começa pela busca do nome do cliente e abre o respectivo Cliente 360;
+- cliente inexistente é criado com nome e sobrenome e aberto imediatamente na ficha 360;
+- da ficha do cliente é possível iniciar orçamento sob medida, venda balcão e assistência/manutenção, preservando o mesmo histórico;
+- atalhos de novo orçamento da Home, topbar e Central de Orçamentos passam pela identificação do cliente;
+- orçamento sob medida valida nome e sobrenome e o servidor impede salvar orçamento sem `cliente_id`;
+- venda balcão exige Cliente 360 com nome e telefone/WhatsApp, validado na tela e na API;
+- a confirmação de venda sob medida continua usando os campos obrigatórios configuráveis em `Configurações → Campos`.
+
+### Validação pendente
+
+- Build Validation e preview Vercel;
+- confirmar busca de cliente existente, cadastro mínimo e abertura da ficha no celular e no computador;
+- conferir orçamento sob medida, venda balcão e assistência iniciados pela ficha do Cliente 360.
+
 ## EM VALIDAÇÃO — COMPRAS 360 INTEGRADO À MAIN — 2026-08-30
 
 Branch: `fix/compras-360-main`

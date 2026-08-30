@@ -1,5 +1,18 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-30 — Entrada unificada pelo Cliente 360
+
+- criada a porta `Novo orçamento` para buscar o cliente antes de escolher a operação;
+- cliente localizado abre diretamente a ficha Cliente 360; cliente inexistente recebe cadastro mínimo de nome e sobrenome;
+- a ficha Cliente 360 concentra atalhos para orçamento sob medida, venda balcão e assistência/manutenção;
+- atalhos globais de orçamento agora passam pela identificação do cliente;
+- orçamento sob medida só persiste após vínculo válido ao Cliente 360;
+- venda balcão passou a exigir cliente identificado e telefone ou WhatsApp, inclusive na API;
+- venda sob medida preserva os campos completos configuráveis na confirmação da venda;
+- sem nova migration: reutiliza `clientes`, `orcamentos`, vínculo `cliente_id` e configuração `campos_formularios_v1` existentes.
+
+---
+
 ## 2026-08-30 — Compras 360 integrado à versão atual do Atlas
 
 - substituída a antiga tela inicial de Compras pela Central Compras 360 sem remover as rotas de NF, recebimento, estoque e financeiro;

@@ -1,5 +1,19 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar porta de entrada Cliente 360
+
+Branch: `feat/orcamento-cliente-minimo`
+
+1. abrir **Novo orçamento**, pesquisar um cliente existente e confirmar que a ficha Cliente 360 abre;
+2. pesquisar cliente inexistente, informar nome e sobrenome e confirmar criação/abertura da ficha;
+3. na ficha, abrir **Orçamento sob medida**, **Venda balcão** e **Nova assistência / manutenção** e conferir o vínculo ao mesmo cliente;
+4. tentar salvar orçamento sob medida com somente primeiro nome e confirmar o bloqueio;
+5. tentar finalizar venda balcão sem cliente ou sem telefone/WhatsApp e confirmar o bloqueio;
+6. confirmar que os campos completos da venda sob medida permanecem configuráveis em `Configurações → Campos`;
+7. aguardar Build Validation e preview Vercel antes de merge.
+
+---
+
 ## TAREFA ATUAL — validar e publicar Compras 360
 
 Branch: `fix/compras-360-main`

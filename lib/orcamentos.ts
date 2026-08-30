@@ -138,6 +138,10 @@ export async function criarOrcamentoNoServidor(
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
 
+  if (clienteNome.trim().split(/\s+/).filter(Boolean).length < 2) {
+    return { ok: false, error: 'Informe nome e sobrenome do cliente.' }
+  }
+
   const [clienteId, colunaId, usuario, referenciasWvetro] = await Promise.all([
     clienteIdInformado
       ? Promise.resolve(clienteIdInformado)
@@ -146,6 +150,10 @@ export async function criarOrcamentoNoServidor(
     usuarioAtual(),
     carregarReferenciasWvetroSnapshot(),
   ])
+
+  if (!clienteId) {
+    return { ok: false, error: 'Não foi possível criar ou localizar o Cliente 360.' }
+  }
 
   const itensSalvos: ItemEsquadria[] = []
   const fotosUrls: string[] = []

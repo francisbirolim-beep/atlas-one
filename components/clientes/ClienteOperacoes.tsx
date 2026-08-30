@@ -122,7 +122,10 @@ export default function ClienteOperacoes({ clienteId, clienteNome }: ClienteOper
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(clienteId)}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-medium text-white hover:bg-brand-navyDark">
-              <Plus size={14} /> Novo orçamento
+              <Plus size={14} /> Orçamento sob medida
+            </Link>
+            <Link href={`/balcao?cliente=${encodeURIComponent(clienteId)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100">
+              <Plus size={14} /> Venda balcão
             </Link>
             <Link href={`/assistencia?cliente=${encodeURIComponent(clienteId)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
               <Wrench size={14} /> Nova assistência / manutenção

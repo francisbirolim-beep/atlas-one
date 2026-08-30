@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard, Pencil } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Plus, Trash2, Camera, X, WifiOff, Paperclip, Keyboard, Pencil, UserCheck } from 'lucide-react'
 import Link from 'next/link'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, TemperaturaLead, Cliente } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
@@ -9,6 +9,8 @@ import { salvarPendente } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
+import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
+import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
@@ -56,6 +58,12 @@ interface ItemForm {
   variaveis: Record<string, string>
 }
 
+type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
+
+function temNomeCompleto(nome: string) {
+  return nome.trim().split(/\s+/).filter(Boolean).length >= 2
+}
+
 function novoItem(): ItemForm {
   return {
     id: uuidv4(), ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '1', descricao: '', cor: '',
@@ -91,6 +99,8 @@ function resumoMedidas(item: ItemForm, tipoMedida: 'comum' | 'final' | '') {
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
+  const [clientes, setClientes] = useState<ClienteBusca[]>([])
+  const [clienteBusca, setClienteBusca] = useState('')
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
@@ -114,6 +124,15 @@ export default function OrcamentoRapido() {
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
 
   useEffect(() => {
+    supabase
+      .from('clientes')
+      .select('id,nome,apelido,whatsapp,telefone,cidade,bairro,cpf_cnpj')
+      .order('nome')
+      .limit(1000)
+      .then(({ data }) => setClientes((data || []) as ClienteBusca[]))
+  }, [])
+
+  useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
     if (!clienteId) return
 
@@ -132,6 +151,32 @@ export default function OrcamentoRapido() {
         if (cliente.origem) setOrigem(cliente.origem)
       })
   }, [])
+
+  const clientesEncontrados = clienteIdOrigem || clienteBusca.trim().length < 2
+    ? []
+    : clientes.filter(cliente => correspondeBuscaAtlas(
+      clienteBusca,
+      cliente.nome,
+      cliente.apelido,
+      cliente.whatsapp,
+      cliente.telefone,
+      cliente.cidade,
+      cliente.bairro,
+      cliente.cpf_cnpj
+    )).slice(0, 8)
+
+  function selecionarCliente(cliente: ClienteBusca) {
+    setClienteIdOrigem(cliente.id)
+    setClienteBusca(cliente.nome || '')
+    setClienteNome(cliente.nome || '')
+    setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
+    setCidade(cliente.cidade || '')
+  }
+
+  function alterarNomeCliente(valor: string) {
+    setClienteNome(valor)
+    if (clienteIdOrigem) setClienteIdOrigem(null)
+  }
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
     setItens(itens.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
@@ -248,8 +293,7 @@ export default function OrcamentoRapido() {
   }
 
   async function salvar() {
-    if (!clienteNome.trim()) { setErro('Informe o nome do cliente'); return }
-    if (!cidade.trim()) { setErro('Informe a cidade da obra'); return }
+    if (!temNomeCompleto(clienteNome)) { setErro('Informe nome e sobrenome do cliente'); return }
     if (!temperatura) { setErro('Selecione a temperatura do orçamento (quente, morno ou frio)'); return }
     if (!acabamento) { setErro('Selecione a cor/acabamento'); return }
     if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) { setErro('Escreva qual é a cor'); return }
@@ -318,6 +362,7 @@ export default function OrcamentoRapido() {
     setConferenciaAberta(false)
     setItens([novoItem()])
     setClienteIdOrigem(null)
+    setClienteBusca('')
     setClienteNome('')
     setClienteWhatsapp('')
     setCidade('')
@@ -385,12 +430,16 @@ export default function OrcamentoRapido() {
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
-          <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
-          {clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}
-          <input type="text" value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-          <input type="text" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
+          <div><p className="text-xs font-semibold uppercase tracking-wide text-brand-navy">1. Cliente 360</p><h3 className="mt-1 text-sm font-medium text-slate-700">Identifique o cliente antes de montar o orçamento</h3><p className="mt-1 text-xs text-slate-500">Todo orçamento fica salvo no histórico do Cliente 360. Se ele ainda não existir, será criado com nome e sobrenome.</p></div>
+          <div className="relative">
+            <BuscaAtlasInput value={clienteBusca} onValueChange={valor => { setClienteBusca(valor); if (clienteIdOrigem) setClienteIdOrigem(null) }} placeholder="Buscar cliente já cadastrado..." inputClassName="w-full rounded-xl border border-slate-300 py-3 pr-3 text-sm" />
+            {clientesEncontrados.length > 0 && <div className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">{clientesEncontrados.map(cliente => <button key={cliente.id} type="button" onClick={() => selecionarCliente(cliente)} className="block w-full border-b border-slate-100 px-3 py-2.5 text-left hover:bg-slate-50"><div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UserCheck size={14}/>{cliente.nome}</div><div className="mt-0.5 text-xs text-slate-500">{[cliente.cidade, cliente.bairro, cliente.whatsapp || cliente.telefone, cliente.cpf_cnpj].filter(Boolean).join(' • ') || 'Cliente cadastrado'}</div></button>)}</div>}
+          </div>
+          {clienteIdOrigem ? <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800"><span>Cliente existente selecionado. Este orçamento ficará no histórico dele.</span><Link href={`/clientes/${clienteIdOrigem}`} className="font-semibold underline underline-offset-2">Abrir Cliente 360</Link></div> : clienteBusca.trim().length >= 2 && clientesEncontrados.length === 0 ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cliente encontrado. Informe somente nome e sobrenome para criar o Cliente 360 junto com este orçamento.</p> : null}
+          <input type="text" value={clienteNome} onChange={e => alterarNomeCliente(e.target.value)} placeholder="Nome e sobrenome *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
+          <input type="text" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional no orçamento)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
           <div className="grid grid-cols-2 gap-3">
-            <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
+            <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
             <select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">
               <option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option>
             </select>
