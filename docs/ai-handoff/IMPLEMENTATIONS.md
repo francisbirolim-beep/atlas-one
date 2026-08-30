@@ -3,6 +3,7 @@
 ## 2026-08-30 — Entrada unificada pelo Cliente 360
 
 - criada a porta `Novo orçamento` para buscar o cliente antes de escolher a operação;
+- a busca em tempo real mostra os clientes cadastrados abaixo do campo conforme o nome é digitado, com estado visível para carregamento, resultado vazio e falha de consulta;
 - cliente localizado abre diretamente a ficha Cliente 360; cliente inexistente recebe cadastro mínimo de nome e sobrenome;
 - a ficha Cliente 360 concentra atalhos para orçamento sob medida, venda balcão e assistência/manutenção;
 - atalhos globais de orçamento agora passam pela identificação do cliente;

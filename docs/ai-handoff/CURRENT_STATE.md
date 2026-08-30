@@ -10,6 +10,7 @@ Branch: `feat/orcamento-cliente-minimo`
 
 - `Novo orçamento` agora começa pela busca do nome do cliente e abre o respectivo Cliente 360;
 - cliente inexistente é criado com nome e sobrenome e aberto imediatamente na ficha 360;
+- a busca de cliente informa visualmente carregamento, quantidade encontrada, ausência de resultado e erro de consulta; a consulta lê o cadastro completo para não depender de campo opcional ausente no banco;
 - da ficha do cliente é possível iniciar orçamento sob medida, venda balcão e assistência/manutenção, preservando o mesmo histórico;
 - atalhos de novo orçamento da Home, topbar e Central de Orçamentos passam pela identificação do cliente;
 - orçamento sob medida valida nome e sobrenome e o servidor impede salvar orçamento sem `cliente_id`;

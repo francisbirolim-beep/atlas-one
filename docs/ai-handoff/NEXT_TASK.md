@@ -13,6 +13,7 @@ Branch: `feat/orcamento-cliente-minimo`
 7. aguardar Build Validation e preview Vercel antes de merge.
 8. criar duas obras/locais no mesmo Cliente 360; iniciar um orçamento e uma assistência por cada cartão e confirmar que o histórico mostra o local certo;
 9. no orçamento, testar escolher uma obra existente e cadastrar uma obra nova pelo seletor azul; confirmar que uma obra de outro cliente não é aceita pelo servidor.
+10. na identificação, digitar parte do nome de um cliente já cadastrado e confirmar que ele aparece imediatamente abaixo do campo.
 
 ---
 
