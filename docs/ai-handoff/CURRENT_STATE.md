@@ -15,6 +15,7 @@ Branch: `feat/orcamento-cliente-minimo`
 - os atalhos da Home foram simplificados para Cliente 360, Kanban, tarefa e compromisso; não há mais criação direta de orçamento ou assistência na Home;
 - o botão superior também abre Cliente 360, e os links diretos com cliente voltam à ficha caso não tenham sido iniciados nela;
 - o cadastro de cliente exige somente nome e sobrenome; os demais dados podem ser completados na ficha quando necessários;
+- o campo de identificação reage a cada caractere digitado, inclusive em navegadores móveis, para atualizar a lista sem exigir apagar ou redigitar;
 - orçamento sob medida valida nome e sobrenome e o servidor impede salvar orçamento sem `cliente_id`;
 - venda balcão exige Cliente 360 com nome e telefone/WhatsApp, validado na tela e na API;
 - a confirmação de venda sob medida continua usando os campos obrigatórios configuráveis em `Configurações → Campos`.

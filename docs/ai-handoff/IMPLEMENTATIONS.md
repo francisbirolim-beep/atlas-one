@@ -10,6 +10,7 @@
 - Home e botão superior foram simplificados para abrir Cliente 360 antes de qualquer operação comercial;
 - links antigos ou diretos de orçamento, balcão e assistência voltam à ficha Cliente 360 quando não foram iniciados nela;
 - o cadastro inicial e a edição do cliente exigem somente nome e sobrenome; telefone continua obrigatório apenas para finalizar venda balcão;
+- a pesquisa de identificação escuta a digitação imediatamente, mantendo a lista de clientes atualizada a cada letra;
 - orçamento sob medida só persiste após vínculo válido ao Cliente 360;
 - venda balcão passou a exigir cliente identificado e telefone ou WhatsApp, inclusive na API;
 - venda sob medida preserva os campos completos configuráveis na confirmação da venda;
