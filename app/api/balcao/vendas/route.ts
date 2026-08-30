@@ -70,6 +70,16 @@ export async function POST(req: NextRequest) {
     if (!itens.length) return NextResponse.json({ error: 'Adicione pelo menos um produto.' }, { status: 400 })
     if (!pagamentos.length) return NextResponse.json({ error: 'Informe a forma de pagamento.' }, { status: 400 })
 
+    if (!body.clienteId) return NextResponse.json({ error: 'Identifique o cliente antes de finalizar a venda de balcão.' }, { status: 400 })
+    const { data: cliente, error: erroCliente } = await supabaseAdmin
+      .from('clientes')
+      .select('id,nome,whatsapp,telefone')
+      .eq('id', String(body.clienteId))
+      .maybeSingle()
+    if (erroCliente) throw erroCliente
+    if (!cliente?.nome?.trim()) return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 400 })
+    if (!(cliente.whatsapp || cliente.telefone)) return NextResponse.json({ error: 'A venda de balcão exige telefone ou WhatsApp no Cliente 360.' }, { status: 400 })
+
     const temPrazo = pagamentos.some((p: any) => ['boleto', 'a_prazo'].includes(String(p.forma || '')))
     if (temPrazo && !body.clienteId) return NextResponse.json({ error: 'Identifique o cliente para venda por boleto ou a prazo.' }, { status: 400 })
 
@@ -108,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabaseAdmin.rpc('finalizar_venda_balcao', {
       p_caixa_id: caixa.id, p_usuario_id: usuario.id, p_usuario_nome: usuario.nome, p_usuario_role: usuario.role,
-      p_cliente_id: body.clienteId || null, p_cliente_nome: String(body.clienteNome || '').trim() || null,
+      p_cliente_id: cliente.id, p_cliente_nome: cliente.nome.trim(),
       p_itens: payloadItens, p_pagamentos: payloadPagamentos, p_desconto: desconto,
       p_observacoes: String(body.observacoes || '').trim() || null, p_permitir_abaixo_minimo: podeAutorizarAbaixoMinimo,
     })

@@ -9,7 +9,6 @@ import {
   ClipboardCheck,
   Headset,
   KanbanSquare,
-  Plus,
   Users,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -115,7 +114,7 @@ export default function HomeOperationalAttention() {
   ]
 
   const acoes = [
-    { label: 'Novo orçamento', detalhe: 'Cadastrar uma nova proposta', href: '/orcamento-rapido', icon: Plus },
+    { label: 'Cliente 360', detalhe: 'Pesquisar ou cadastrar cliente', href: '/orcamento/novo', icon: Users },
     { label: 'Abrir Kanban', detalhe: 'Acompanhar vendas e processos', href: '/kanban', icon: KanbanSquare },
     { label: 'Medição Final', detalhe: 'Ver medições em andamento', href: '/producao/medicao-final', icon: ClipboardCheck },
     { label: 'Clientes', detalhe: 'Consultar cadastros e histórico', href: '/clientes', icon: Users },

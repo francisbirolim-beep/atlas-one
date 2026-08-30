@@ -36,6 +36,11 @@ function textoNormalizado(valor: unknown) { return String(valor || '').normalize
 function textoProduto(p: ProdutoCatalogo) { return textoNormalizado(`${p.codigo || ''} ${p.nome || ''} ${p.descricao || ''} ${p.categoria || ''}`) }
 
 async function buscarClientes(q: string): Promise<ClienteCatalogo[]> {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q)) {
+    const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('id', q).maybeSingle()
+    if (error) throw error
+    return data ? [data as ClienteCatalogo] : []
+  }
   const termos = termosBusca(q)
   if (!termos.length) return []
   const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).order('nome').limit(1000)
