@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Phone, MapPin, FileText, Camera, Plus, CheckSquare, Square,
   Trash2, Paperclip, MessageCircle, PhoneCall, Handshake, StickyNote, Send,
-  Pencil, X, Save, Mail, Cake, Hash,
+  Pencil, X, Save, Mail, Cake, Hash, ShoppingBag, Wrench,
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -276,6 +276,20 @@ export default function DetalheCliente() {
           </div>
         </div>
       </header>
+
+      <div className="max-w-3xl mx-auto px-4 pt-4">
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3">
+          <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(id)}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-medium text-white hover:bg-brand-navyDark">
+            <Plus size={14} /> Orçamento sob medida
+          </Link>
+          <Link href={`/orcamento/balcao/novo?cliente=${encodeURIComponent(id)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+            <ShoppingBag size={14} /> Venda balcão
+          </Link>
+          <Link href={`/assistencia?cliente=${encodeURIComponent(id)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+            <Wrench size={14} /> Assistência / manutenção
+          </Link>
+        </div>
+      </div>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
