@@ -101,6 +101,8 @@ type Fornecedor = {
   email: string | null;
   cidade: string | null;
   observacoes: string | null;
+  pedido_minimo: number | null;
+  prazo_entrega_dias: number | null;
 };
 type UltimoPreco = {
   precoUnitario: number | null;
@@ -322,6 +324,23 @@ export default function ComprasPage() {
       const qtd = selecionada?.quantidade || 0;
       return a.preco_unitario * qtd + a.frete - (b.preco_unitario * qtd + b.frete);
     });
+  const necessidadePorId = useMemo(() => {
+    const m = new Map<string, Necessidade>();
+    for (const n of dados?.necessidades || []) m.set(n.id, n);
+    return m;
+  }, [dados?.necessidades]);
+  const totalPendentePorFornecedor = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of dados?.cotacoes || []) {
+      if (c.preco_unitario === null) continue;
+      const n = necessidadePorId.get(c.necessidade_id);
+      if (!n || n.status === "recebido" || n.status === "cancelado") continue;
+      const qtd = n.quantidade || 0;
+      const atual = m.get(c.fornecedor_id) || 0;
+      m.set(c.fornecedor_id, atual + c.preco_unitario * qtd + c.frete);
+    }
+    return m;
+  }, [dados?.cotacoes, necessidadePorId]);
   const fornecedor = (id: string) =>
     dados?.fornecedores.find((f) => f.id === id);
   const produto = (id: string | null) =>
@@ -1142,12 +1161,24 @@ export default function ComprasPage() {
                   <select
                     required
                     value={formCotacao.fornecedor_id}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const novoId = e.target.value;
+                      const ultimo =
+                        selecionada?.produto_id
+                          ? dados?.ultimoPrecoPorProduto[selecionada.produto_id]
+                          : null;
+                      const sugerirPreco =
+                        !formCotacao.preco_unitario &&
+                        ultimo?.fornecedorId === novoId &&
+                        ultimo?.precoUnitario != null;
                       setFormCotacao((v) => ({
                         ...v,
-                        fornecedor_id: e.target.value,
-                      }))
-                    }
+                        fornecedor_id: novoId,
+                        preco_unitario: sugerirPreco
+                          ? String(ultimo!.precoUnitario)
+                          : v.preco_unitario,
+                      }));
+                    }}
                     className="mt-1 w-full rounded-xl border bg-white p-2.5 text-sm"
                   >
                     <option value="">Selecionar</option>
@@ -1206,6 +1237,46 @@ export default function ComprasPage() {
                   />
                 </div>
               </div>
+              {formCotacao.fornecedor_id &&
+                (() => {
+                  const f = fornecedor(formCotacao.fornecedor_id);
+                  if (!f || f.pedido_minimo == null) return null;
+                  const totalFormAtual =
+                    Number(formCotacao.preco_unitario || 0) *
+                      (selecionada?.quantidade || 0) +
+                    Number(formCotacao.frete || 0);
+                  const linhaExistente = cotacoesSelecionadas.find(
+                    (c) =>
+                      c.fornecedor_id === formCotacao.fornecedor_id &&
+                      c.preco_unitario !== null,
+                  );
+                  const valorExistente = linhaExistente
+                    ? (linhaExistente.preco_unitario as number) *
+                        (selecionada?.quantidade || 0) +
+                      linhaExistente.frete
+                    : 0;
+                  const totalProjetado =
+                    (totalPendentePorFornecedor.get(f.id) || 0) -
+                    valorExistente +
+                    totalFormAtual;
+                  const falta = f.pedido_minimo - totalProjetado;
+                  return (
+                    <div
+                      className={`mt-3 rounded-xl border p-3 text-xs ${
+                        falta > 0
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      Pedido mínimo de {f.nome}: {moeda(f.pedido_minimo)} ·
+                      cotações pendentes com esse fornecedor somam{" "}
+                      {moeda(totalProjetado)}
+                      {falta > 0
+                        ? ` · falta ${moeda(falta)} para atingir o mínimo.`
+                        : " · pedido mínimo já atingido."}
+                    </div>
+                  );
+                })()}
               <button
                 disabled={salvando}
                 className="mt-3 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
