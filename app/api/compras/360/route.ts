@@ -240,6 +240,71 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ necessidade: data }, { status: 201 });
     }
 
+    if (acao === "convidar_fornecedores") {
+      const necessidadeId = texto(body.necessidade_id, 80);
+      const fornecedorIds = Array.isArray(body.fornecedor_ids)
+        ? Array.from(
+            new Set(
+              body.fornecedor_ids
+                .map((id: unknown) => texto(id, 80))
+                .filter(Boolean),
+            ),
+          )
+        : [];
+      if (!necessidadeId || !fornecedorIds.length) {
+        return NextResponse.json(
+          { error: "Selecione ao menos um fornecedor para cotar." },
+          { status: 400 },
+        );
+      }
+
+      const { data: necessidade, error: necessidadeError } = await supabaseAdmin
+        .from("compras_necessidades")
+        .select("id,status")
+        .eq("id", necessidadeId)
+        .maybeSingle();
+      if (necessidadeError) throw new Error(necessidadeError.message);
+      if (!necessidade) {
+        return NextResponse.json(
+          { error: "Necessidade de compra não encontrada." },
+          { status: 404 },
+        );
+      }
+
+      const linhas = fornecedorIds.map((fornecedorId) => ({
+        necessidade_id: necessidadeId,
+        fornecedor_id: fornecedorId,
+        preco_unitario: null,
+        frete: 0,
+        criado_por_id: usuario.id,
+        criado_por_nome: usuario.nome,
+      }));
+      const { error: cotacoesError } = await supabaseAdmin
+        .from("compras_cotacoes")
+        .upsert(linhas, {
+          onConflict: "necessidade_id,fornecedor_id",
+          ignoreDuplicates: true,
+        });
+      if (cotacoesError) throw new Error(cotacoesError.message);
+
+      if (necessidade.status === "necessidade") {
+        const { error: statusError } = await supabaseAdmin
+          .from("compras_necessidades")
+          .update({ status: "cotacao", updated_at: new Date().toISOString() })
+          .eq("id", necessidadeId)
+          .eq("status", "necessidade");
+        if (statusError) throw new Error(statusError.message);
+      }
+
+      const { data: cotacoesAtuais, error: listaError } = await supabaseAdmin
+        .from("compras_cotacoes")
+        .select("*")
+        .eq("necessidade_id", necessidadeId);
+      if (listaError) throw new Error(listaError.message);
+
+      return NextResponse.json({ cotacoes: cotacoesAtuais || [] });
+    }
+
     if (acao === "adicionar_cotacao") {
       const preco = numero(body.preco_unitario);
       if (
