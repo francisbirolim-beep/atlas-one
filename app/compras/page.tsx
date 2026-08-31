@@ -248,6 +248,7 @@ export default function ComprasPage() {
       useState<FiltroCategoriaProduto>("todos"),
     [buscaProdutoCatalogo, setBuscaProdutoCatalogo] = useState(""),
     [buscaClienteDestino, setBuscaClienteDestino] = useState(""),
+    [revisando, setRevisando] = useState(false),
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
     [formCotacao, setFormCotacao] = useState(cotacaoVazia);
   useEffect(() => {
@@ -385,6 +386,15 @@ export default function ComprasPage() {
       setErro("Escolha o cliente e a obra, ou marque Estoque.");
       return;
     }
+    if (!form.descricao.trim()) {
+      setErro("Preencha o material / necessidade.");
+      return;
+    }
+    if (!revisando) {
+      setErro("");
+      setRevisando(true);
+      return;
+    }
     setSalvando(true);
     setErro("");
     try {
@@ -400,6 +410,7 @@ export default function ComprasPage() {
       setFiltroCategoriaProduto("todos");
       setBuscaProdutoCatalogo("");
       setBuscaClienteDestino("");
+      setRevisando(false);
       setNovaAberta(false);
       await carregar();
     } catch (e) {
@@ -515,6 +526,7 @@ export default function ComprasPage() {
                 setFiltroCategoriaProduto("todos");
                 setBuscaProdutoCatalogo("");
                 setBuscaClienteDestino("");
+                setRevisando(false);
                 setNovaAberta(true);
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
@@ -661,9 +673,12 @@ export default function ComprasPage() {
             setFiltroCategoriaProduto("todos");
             setBuscaProdutoCatalogo("");
             setBuscaClienteDestino("");
+            setRevisando(false);
           }}
         >
           <form onSubmit={criar} className="space-y-4">
+            {!revisando && (
+              <>
             <div className="min-w-0">
               <p className="text-xs font-medium text-slate-600">
                 Filtrar produtos cadastrados
@@ -933,17 +948,92 @@ export default function ComprasPage() {
                 className="mt-1 w-full rounded-xl border p-3 text-sm"
               />
             </label>
-            <button
-              disabled={salvando}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {salvando ? (
-                <Loader2 size={17} className="animate-spin" />
-              ) : (
-                <Plus size={17} />
-              )}
-              Adicionar à lista
-            </button>
+              </>
+            )}
+            {revisando && (
+              <div className="space-y-3 rounded-xl border bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Confira antes de enviar
+                </p>
+                <div className="space-y-1.5 text-sm">
+                  <p>
+                    <span className="text-slate-500">Material:</span>{" "}
+                    <span className="font-semibold text-slate-800">
+                      {form.descricao || "—"}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Quantidade:</span>{" "}
+                    <span className="font-semibold text-slate-800">
+                      {form.quantidade || "0"} {form.unidade}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Prioridade:</span>{" "}
+                    <span className="font-semibold capitalize text-slate-800">
+                      {form.prioridade}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Precisa até:</span>{" "}
+                    <span className="font-semibold text-slate-800">
+                      {form.data_limite
+                        ? dataBr(form.data_limite)
+                        : "Sem prazo definido"}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Destino:</span>{" "}
+                    <span className="font-semibold text-slate-800">
+                      {form.destino === "obra"
+                        ? `${cliente(form.cliente_id)?.nome || "Cliente"} · ${
+                            obra(form.obra_id)?.nome || "Obra"
+                          }`
+                        : form.obra_referencia
+                          ? `Estoque — ${form.obra_referencia}`
+                          : "Estoque"}
+                    </span>
+                  </p>
+                  {form.observacoes && (
+                    <p>
+                      <span className="text-slate-500">Observações:</span>{" "}
+                      <span className="font-semibold text-slate-800">
+                        {form.observacoes}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            {revisando ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRevisando(false)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  disabled={salvando}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {salvando ? (
+                    <Loader2 size={17} className="animate-spin" />
+                  ) : (
+                    <Plus size={17} />
+                  )}
+                  Confirmar e enviar pedido
+                </button>
+              </div>
+            ) : (
+              <button
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                <ArrowRight size={17} />
+                Revisar pedido
+              </button>
+            )}
           </form>
         </Modal>
       )}
