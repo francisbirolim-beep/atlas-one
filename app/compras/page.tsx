@@ -635,27 +635,47 @@ export default function ComprasPage() {
                   : "produtos encontrados"}
               </p>
             </div>
-            <label className="block text-xs font-medium text-slate-600">
-              Produto cadastrado (opcional)
-              <select
-                value={form.produto_id}
-                onChange={(e) => selecionarProduto(e.target.value)}
-                className="mt-1 w-full rounded-xl border p-3 text-sm"
-              >
-                <option value="">Digitar material manualmente</option>
-                {produtosFiltrados.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.codigo ? `${p.codigo} — ` : ""}
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
-              {produtosFiltrados.length === 0 && (
-                <span className="mt-1 block text-[11px] text-amber-600">
-                  Nenhum produto encontrado com esse filtro/busca.
-                </span>
-              )}
-            </label>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">
+                Produto cadastrado (opcional)
+              </p>
+              <div className="mt-1 max-h-48 overflow-y-auto rounded-xl border">
+                <button
+                  type="button"
+                  onClick={() => selecionarProduto("")}
+                  className={`block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 ${
+                    !form.produto_id
+                      ? "bg-blue-50 font-semibold text-blue-700"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Digitar material manualmente
+                </button>
+                {produtosFiltrados.map((p) => {
+                  const ativo = form.produto_id === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => selecionarProduto(p.id)}
+                      className={`block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 ${
+                        ativo
+                          ? "bg-blue-50 font-semibold text-blue-700"
+                          : "bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {p.codigo ? `${p.codigo} — ` : ""}
+                      {p.nome}
+                    </button>
+                  );
+                })}
+                {produtosFiltrados.length === 0 && (
+                  <p className="px-3 py-3 text-[11px] text-amber-600">
+                    Nenhum produto encontrado com esse filtro/busca.
+                  </p>
+                )}
+              </div>
+            </div>
             <label className="block text-xs font-medium text-slate-600">
               Material / necessidade *
               <input
