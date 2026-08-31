@@ -176,7 +176,7 @@ const FILTROS_CATEGORIA_PRODUTO: {
   id: FiltroCategoriaProduto;
   label: string;
 }[] = [
-  { id: "todos", label: "Todos" },
+  { id: "todos", label: "Todas" },
   { id: "perfil", label: "Perfis" },
   { id: "acessorio", label: "Acessórios" },
   { id: "vidro", label: "Vidros" },
@@ -224,6 +224,7 @@ export default function ComprasPage() {
     [form, setForm] = useState(vazio),
     [filtroCategoriaProduto, setFiltroCategoriaProduto] =
       useState<FiltroCategoriaProduto>("todos"),
+    [buscaProdutoCatalogo, setBuscaProdutoCatalogo] = useState(""),
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
     [formCotacao, setFormCotacao] = useState(cotacaoVazia);
   useEffect(() => {
@@ -280,10 +281,11 @@ export default function ComprasPage() {
     () =>
       (dados?.produtos || []).filter(
         (p) =>
-          filtroCategoriaProduto === "todos" ||
-          grupoCategoriaProduto(p.categoria) === filtroCategoriaProduto,
+          (filtroCategoriaProduto === "todos" ||
+            grupoCategoriaProduto(p.categoria) === filtroCategoriaProduto) &&
+          correspondeBuscaAtlas(buscaProdutoCatalogo, p.nome, p.codigo, p.categoria),
       ),
-    [dados?.produtos, filtroCategoriaProduto],
+    [dados?.produtos, filtroCategoriaProduto, buscaProdutoCatalogo],
   );
   const cotacoesSelecionadas = (dados?.cotacoes || [])
     .filter((c) => c.necessidade_id === selecionadaId)
@@ -332,6 +334,8 @@ export default function ComprasPage() {
         }),
       });
       setForm(vazio);
+      setFiltroCategoriaProduto("todos");
+      setBuscaProdutoCatalogo("");
       setNovaAberta(false);
       await carregar();
     } catch (e) {
@@ -443,7 +447,11 @@ export default function ComprasPage() {
               Entrada por NF
             </Link>
             <button
-              onClick={() => setNovaAberta(true)}
+              onClick={() => {
+                setFiltroCategoriaProduto("todos");
+                setBuscaProdutoCatalogo("");
+                setNovaAberta(true);
+              }}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
             >
               <Plus size={17} />
@@ -583,14 +591,18 @@ export default function ComprasPage() {
       {novaAberta && (
         <Modal
           titulo="Adicionar à lista de faltas"
-          onFechar={() => setNovaAberta(false)}
+          onFechar={() => {
+            setNovaAberta(false);
+            setFiltroCategoriaProduto("todos");
+            setBuscaProdutoCatalogo("");
+          }}
         >
           <form onSubmit={criar} className="space-y-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-medium text-slate-600">
                 Filtrar produtos cadastrados
               </p>
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              <div className="mt-2 flex w-full min-w-0 gap-2 overflow-x-auto pb-1">
                 {FILTROS_CATEGORIA_PRODUTO.map((filtro) => {
                   const ativo = filtroCategoriaProduto === filtro.id;
                   return (
@@ -609,6 +621,19 @@ export default function ComprasPage() {
                   );
                 })}
               </div>
+              <BuscaAtlasInput
+                value={buscaProdutoCatalogo}
+                onValueChange={setBuscaProdutoCatalogo}
+                placeholder="Buscar por nome, código ou categoria..."
+                containerClassName="mt-2 w-full min-w-0"
+                inputClassName="w-full rounded-xl border p-3 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                {produtosFiltrados.length}{" "}
+                {produtosFiltrados.length === 1
+                  ? "produto encontrado"
+                  : "produtos encontrados"}
+              </p>
             </div>
             <label className="block text-xs font-medium text-slate-600">
               Produto cadastrado (opcional)
@@ -625,6 +650,11 @@ export default function ComprasPage() {
                   </option>
                 ))}
               </select>
+              {produtosFiltrados.length === 0 && (
+                <span className="mt-1 block text-[11px] text-amber-600">
+                  Nenhum produto encontrado com esse filtro/busca.
+                </span>
+              )}
             </label>
             <label className="block text-xs font-medium text-slate-600">
               Material / necessidade *
