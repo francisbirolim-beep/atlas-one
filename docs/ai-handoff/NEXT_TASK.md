@@ -21,23 +21,27 @@ Aprovado pelo usuário em 2026-08-31, a executar em PRs separados, nesta ordem:
    a pedido do usuário. Erros de gravação aparecem dentro do próprio modal
    (antes ficavam escondidos atrás dele).
 
-3. **Fornecedor 360 — PRÓXIMA ETAPA.** Espelhando o Cliente 360, mas do
-   lado do fornecedor. Fluxo completo detalhado pelo usuário em 2026-08-31:
-   - Necessidade de compra criada (ex.: estoquista) entra pendente num
-     **kanban de aprovação do comprador**.
-   - Comprador abre o pedido, vê o que foi pedido, e escolhe os possíveis
-     fornecedores (empresas que costumam cotar aquele produto).
-   - Ao aprovar, o sistema cria automaticamente, dentro de cada fornecedor
-     escolhido, uma **lista de cotação separada** — cada fornecedor fica
-     com sua própria lista do que precisa cotar/comprar dele.
-   - Cadastro de fornecedor ganha **pedido mínimo** e **prazo de entrega**.
-   - Conforme os pedidos entram na lista de um fornecedor, o sistema puxa
-     automaticamente o **último preço pago** a ele (base já existe em
-     `ultimoPrecoPorProduto`, app/api/compras/360) e mostra **quanto falta
-     em valor para atingir o pedido mínimo** daquele fornecedor.
-   - Histórico completo por fornecedor: produto, categoria
-     (perfil/acessório/vidro/etc.), preço pago, data, status de entrega —
-     nos moldes do Cliente 360.
+3. **Fornecedor 360 — CONCLUÍDO (2026-08-31, PRs #298, #299, #300).**
+   Espelhando o Cliente 360, do lado do fornecedor. Entregue:
+   - Cadastro de fornecedor com **pedido mínimo** e **prazo de entrega**
+     (migration 20260831150000).
+   - Página **Fornecedor 360** (`/fornecedores/[id]`): dados do fornecedor,
+     cotações pendentes, "falta R$X pro pedido mínimo" e histórico de
+     compras recebidas (produto, categoria, preço, data).
+   - **Kanban de aprovação do comprador** dentro do Compras 360 existente:
+     seção "Fornecedores para cotar" no card da necessidade — o comprador
+     marca os fornecedores possíveis e "Convidar para cotação" cria, em
+     lote, uma linha de cotação por fornecedor (`preco_unitario` aceita
+     nulo — migration 20260831190000 — até o preço chegar), avançando a
+     necessidade para a coluna de cotação automaticamente.
+   - No formulário de cotação: ao escolher um fornecedor, se ele vendeu
+     esse mesmo item da última vez, o **preço já vem sugerido**; e um
+     aviso mostra quanto falta (ou se já bateu) o **pedido mínimo** desse
+     fornecedor, somando as cotações pendentes dele em todas as
+     necessidades abertas.
+
+   Nada pendente deste item. Próxima frente do Compras 360 fica em aberto
+   — decidir com o usuário antes de iniciar.
 
 Fluxo final desejado pelo usuário: necessidade pendente → aprovação do
 comprador (kanban) → cotação separada por fornecedor → comprado aguardando
