@@ -1,5 +1,37 @@
 # NEXT_TASK.md — Atlas One
 
+## ROTEIRO ACORDADO — Compras 360 mais dinâmico (2026-08-31)
+
+Aprovado pelo usuário em 2026-08-31, a executar em PRs separados, nesta ordem:
+
+1. **PR #291 (feat/compras-360-filtro-categoria)** — filtros de produtos por categoria
+   (Perfis, Acessórios, Vidros, Produto pronto, Outros, Todas) + busca por
+   nome/código com lista de sugestões clicáveis. Concluído e aprovado pelo
+   usuário; aguardando merge.
+
+2. **Vínculo necessidade → Cliente/Obra ou Estoque.** Ao clicar em
+   "Adicionar necessidade", primeiro passo passa a ser escolher o destino:
+   Cliente (busca cliente, depois escolhe a obra dele) ou Estoque. Só depois
+   aparece a etapa atual de escolher produto/quantidade/prioridade. Guardar
+   `cliente_id`/`obra_id` estruturados na necessidade (hoje só existe
+   `obra_referencia` como texto livre). Objetivo: o pedido de compra já
+   nasce vinculado ao lugar certo, e o Cliente 360 passa a mostrar o
+   histórico de compras daquela obra automaticamente (sem duplicar dado).
+
+3. **Fornecedor 360.** Espelhando o Cliente 360, mas do lado do fornecedor:
+   ao avançar uma cotação vencedora e emitir o pedido, o histórico
+   (produto, categoria — perfil/acessório/vidro —, preço pago, data,
+   status de entrega) fica permanentemente vinculado ao fornecedor. Já
+   existe uma base disso em `ultimoPrecoPorProduto`
+   (app/api/compras/360); expandir para uma visão dedicada por fornecedor,
+   nos moldes do Cliente 360.
+
+Fluxo final desejado pelo usuário: necessidade pendente → cotação →
+comprado aguardando chegar, com o cliente/obra sempre rastreado, e depois
+o fornecedor também rastreado com tudo que já foi comprado dele.
+
+---
+
 ## TAREFA ATUAL — validar e publicar Compras 360
 
 Branch: `fix/compras-360-main`
