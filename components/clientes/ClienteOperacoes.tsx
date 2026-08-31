@@ -24,7 +24,7 @@ export function ClienteAcoes({ clienteId }: { clienteId: string }) {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <AcaoCliente href={`/orcamento-rapido?cliente=${encodeURIComponent(clienteId)}&origem=cliente-360&modo=pedido`} titulo="Pedido de orçamento" texto="Registrar a visita para entrar no Kanban." icone={<FileText size={18}/>}/>
       <AcaoCliente href={`/orcamento-rapido?cliente=${encodeURIComponent(clienteId)}&origem=cliente-360&modo=sob-medida`} titulo="Orçamento sob medida" texto="Montar proposta técnica com tipologia." icone={<Plus size={18}/>}/>
-      <AcaoCliente href={`/balcao?cliente=${encodeURIComponent(clienteId)}&origem=cliente-360`} titulo="Orçamento balcão" texto="Venda de produtos e acessórios." icone={<ShoppingCart size={18}/>}/>
+      <AcaoCliente href={`/balcao?cliente=${encodeURIComponent(clienteId)}&origem=cliente-360`} titulo="Balcão" texto="Venda de produtos e acessórios." icone={<ShoppingCart size={18}/>}/>
       <AcaoCliente href={`/assistencia?cliente=${encodeURIComponent(clienteId)}&origem=cliente-360`} titulo="Assistência" texto="Abrir manutenção ou pós-venda." icone={<Wrench size={18}/>}/>
     </div>
   </div>
