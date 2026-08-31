@@ -9,26 +9,41 @@ Aprovado pelo usuário em 2026-08-31, a executar em PRs separados, nesta ordem:
    nome/código com lista de sugestões clicáveis. Concluído e aprovado pelo
    usuário; aguardando merge.
 
-2. **Vínculo necessidade → Cliente/Obra ou Estoque.** Ao clicar em
-   "Adicionar necessidade", primeiro passo passa a ser escolher o destino:
-   Cliente (busca cliente, depois escolhe a obra dele) ou Estoque. Só depois
-   aparece a etapa atual de escolher produto/quantidade/prioridade. Guardar
-   `cliente_id`/`obra_id` estruturados na necessidade (hoje só existe
-   `obra_referencia` como texto livre). Objetivo: o pedido de compra já
-   nasce vinculado ao lugar certo, e o Cliente 360 passa a mostrar o
-   histórico de compras daquela obra automaticamente (sem duplicar dado).
+2. **Vínculo necessidade → Cliente/Obra ou Estoque. CONCLUÍDO (PR #297,
+   mesclado em main, migration aplicada em produção em 2026-08-31).**
+   Modal "Adicionar necessidade" tem passo "Destino da compra": Cliente/Obra
+   (busca cliente, depois lista as obras dele) ou Estoque. Necessidade
+   guarda `destino`/`cliente_id`/`cliente_nome`/`obra_id`/`obra_nome`
+   estruturados (colunas novas em `compras_necessidades`, migration
+   20260831113359). Modal também ganhou uma etapa de confirmação/resumo
+   ("Revisar pedido" → mostra material, quantidade, prioridade, prazo,
+   destino e observações → "Confirmar e enviar pedido") antes de gravar,
+   a pedido do usuário. Erros de gravação aparecem dentro do próprio modal
+   (antes ficavam escondidos atrás dele).
 
-3. **Fornecedor 360.** Espelhando o Cliente 360, mas do lado do fornecedor:
-   ao avançar uma cotação vencedora e emitir o pedido, o histórico
-   (produto, categoria — perfil/acessório/vidro —, preço pago, data,
-   status de entrega) fica permanentemente vinculado ao fornecedor. Já
-   existe uma base disso em `ultimoPrecoPorProduto`
-   (app/api/compras/360); expandir para uma visão dedicada por fornecedor,
-   nos moldes do Cliente 360.
+3. **Fornecedor 360 — PRÓXIMA ETAPA.** Espelhando o Cliente 360, mas do
+   lado do fornecedor. Fluxo completo detalhado pelo usuário em 2026-08-31:
+   - Necessidade de compra criada (ex.: estoquista) entra pendente num
+     **kanban de aprovação do comprador**.
+   - Comprador abre o pedido, vê o que foi pedido, e escolhe os possíveis
+     fornecedores (empresas que costumam cotar aquele produto).
+   - Ao aprovar, o sistema cria automaticamente, dentro de cada fornecedor
+     escolhido, uma **lista de cotação separada** — cada fornecedor fica
+     com sua própria lista do que precisa cotar/comprar dele.
+   - Cadastro de fornecedor ganha **pedido mínimo** e **prazo de entrega**.
+   - Conforme os pedidos entram na lista de um fornecedor, o sistema puxa
+     automaticamente o **último preço pago** a ele (base já existe em
+     `ultimoPrecoPorProduto`, app/api/compras/360) e mostra **quanto falta
+     em valor para atingir o pedido mínimo** daquele fornecedor.
+   - Histórico completo por fornecedor: produto, categoria
+     (perfil/acessório/vidro/etc.), preço pago, data, status de entrega —
+     nos moldes do Cliente 360.
 
-Fluxo final desejado pelo usuário: necessidade pendente → cotação →
-comprado aguardando chegar, com o cliente/obra sempre rastreado, e depois
-o fornecedor também rastreado com tudo que já foi comprado dele.
+Fluxo final desejado pelo usuário: necessidade pendente → aprovação do
+comprador (kanban) → cotação separada por fornecedor → comprado aguardando
+chegar, com o cliente/obra sempre rastreado (já entregue na etapa 2), e o
+fornecedor também totalmente rastreado com tudo que já foi comprado dele,
+pedido mínimo e prazo de entrega facilitando a decisão de quando comprar.
 
 ---
 
