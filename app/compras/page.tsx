@@ -75,7 +75,7 @@ type Cotacao = {
   id: string;
   necessidade_id: string;
   fornecedor_id: string;
-  preco_unitario: number;
+  preco_unitario: number | null;
   frete: number;
   prazo_dias: number | null;
   previsao_entrega: string | null;
@@ -250,7 +250,9 @@ export default function ComprasPage() {
     [buscaClienteDestino, setBuscaClienteDestino] = useState(""),
     [revisando, setRevisando] = useState(false),
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
-    [formCotacao, setFormCotacao] = useState(cotacaoVazia);
+    [formCotacao, setFormCotacao] = useState(cotacaoVazia),
+    [fornecedoresConvite, setFornecedoresConvite] = useState<string[]>([]),
+    [convidando, setConvidando] = useState(false);
   useEffect(() => {
     void carregar();
   }, []);
@@ -313,12 +315,13 @@ export default function ComprasPage() {
   );
   const cotacoesSelecionadas = (dados?.cotacoes || [])
     .filter((c) => c.necessidade_id === selecionadaId)
-    .sort(
-      (a, b) =>
-        a.preco_unitario * (selecionada?.quantidade || 0) +
-        a.frete -
-        (b.preco_unitario * (selecionada?.quantidade || 0) + b.frete),
-    );
+    .sort((a, b) => {
+      if (a.preco_unitario === null && b.preco_unitario === null) return 0;
+      if (a.preco_unitario === null) return 1;
+      if (b.preco_unitario === null) return -1;
+      const qtd = selecionada?.quantidade || 0;
+      return a.preco_unitario * qtd + a.frete - (b.preco_unitario * qtd + b.frete);
+    });
   const fornecedor = (id: string) =>
     dados?.fornecedores.find((f) => f.id === id);
   const produto = (id: string | null) =>
@@ -479,6 +482,34 @@ export default function ComprasPage() {
       setErro(e instanceof Error ? e.message : "Erro ao escolher a cotação.");
     } finally {
       setSalvando(false);
+    }
+  }
+  function alternarFornecedorConvite(id: string) {
+    setFornecedoresConvite((atual) =>
+      atual.includes(id) ? atual.filter((f) => f !== id) : [...atual, id],
+    );
+  }
+  async function convidarFornecedores() {
+    if (!selecionada || !fornecedoresConvite.length) return;
+    setConvidando(true);
+    setErro("");
+    try {
+      await requisicao("/api/compras/360", {
+        method: "POST",
+        body: JSON.stringify({
+          acao: "convidar_fornecedores",
+          necessidade_id: selecionada.id,
+          fornecedor_ids: fornecedoresConvite,
+        }),
+      });
+      setFornecedoresConvite([]);
+      await carregar();
+    } catch (e) {
+      setErro(
+        e instanceof Error ? e.message : "Erro ao convidar fornecedores.",
+      );
+    } finally {
+      setConvidando(false);
     }
   }
   const abertos = (dados?.necessidades || []).filter(
@@ -643,7 +674,10 @@ export default function ComprasPage() {
                         cotacoes={(dados?.cotacoes || []).filter(
                           (c) => c.necessidade_id === n.id,
                         )}
-                        onAbrir={() => setSelecionadaId(n.id)}
+                        onAbrir={() => {
+                          setSelecionadaId(n.id);
+                          setFornecedoresConvite([]);
+                        }}
                         onAvancar={(s) => void movimentar(n.id, s)}
                         salvando={salvando}
                       />
@@ -1080,6 +1114,14 @@ export default function ComprasPage() {
                   ultimo={dados.ultimoPrecoPorProduto[selecionada.produto_id]}
                 />
               )}
+            <ConviteFornecedores
+              fornecedores={dados?.fornecedores || []}
+              jaConvidados={cotacoesSelecionadas.map((c) => c.fornecedor_id)}
+              selecionados={fornecedoresConvite}
+              onAlternar={alternarFornecedorConvite}
+              onConvidar={() => void convidarFornecedores()}
+              convidando={convidando}
+            />
             <TabelaCotacoes
               cotacoes={cotacoesSelecionadas}
               quantidade={selecionada.quantidade}
@@ -1244,13 +1286,14 @@ function Card({
   salvando: boolean;
 }) {
   const prox = PROXIMO[n.status],
+    cotadas = cotacoes.filter((c) => c.preco_unitario !== null),
     precisaEscolherCotacao =
       n.status === "cotacao" && !cotacoes.some((c) => c.selecionada),
-    melhor = [...cotacoes].sort(
+    melhor = [...cotadas].sort(
       (a, b) =>
-        a.preco_unitario * n.quantidade +
+        (a.preco_unitario as number) * n.quantidade +
         a.frete -
-        (b.preco_unitario * n.quantidade + b.frete),
+        ((b.preco_unitario as number) * n.quantidade + b.frete),
     )[0];
   return (
     <article className="min-w-0 rounded-xl border bg-white p-3 shadow-sm">
@@ -1292,11 +1335,13 @@ function Card({
         {melhor && (
           <div className="mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">
             <b>Melhor total:</b>{" "}
-            {moeda(melhor.preco_unitario * n.quantidade + melhor.frete)}
+            {moeda((melhor.preco_unitario as number) * n.quantidade + melhor.frete)}
           </div>
         )}
         <div className="mt-3 flex justify-between text-[10px] text-slate-400">
-          <span>{cotacoes.length} cotação(ões)</span>
+          <span>
+            {cotadas.length} de {cotacoes.length} cotação(ões) com preço
+          </span>
           <span>
             {n.data_limite ? `Até ${dataBr(n.data_limite)}` : "Sem prazo"}
           </span>
@@ -1415,6 +1460,80 @@ function Historico({ ultimo }: { ultimo: UltimoPreco }) {
     </div>
   );
 }
+function ConviteFornecedores({
+  fornecedores,
+  jaConvidados,
+  selecionados,
+  onAlternar,
+  onConvidar,
+  convidando,
+}: {
+  fornecedores: Fornecedor[];
+  jaConvidados: string[];
+  selecionados: string[];
+  onAlternar: (id: string) => void;
+  onConvidar: () => void;
+  convidando: boolean;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <h3 className="font-semibold text-slate-800">
+        Fornecedores para cotar
+      </h3>
+      <p className="mt-0.5 text-xs text-slate-500">
+        Marque as empresas que costumam ter esse material. Ao convidar, cada
+        uma entra com uma linha própria na comparação, aguardando o preço.
+      </p>
+      <div className="mt-3 max-h-48 space-y-1 overflow-y-auto rounded-xl border bg-white p-2">
+        {fornecedores.map((f) => {
+          const convidado = jaConvidados.includes(f.id);
+          return (
+            <label
+              key={f.id}
+              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
+                convidado
+                  ? "text-slate-400"
+                  : "cursor-pointer text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                disabled={convidado}
+                checked={convidado || selecionados.includes(f.id)}
+                onChange={() => onAlternar(f.id)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              {f.nome}
+              {convidado && (
+                <span className="ml-auto text-[10px] uppercase tracking-wide text-emerald-600">
+                  Já convidado
+                </span>
+              )}
+            </label>
+          );
+        })}
+        {!fornecedores.length && (
+          <p className="px-2 py-3 text-center text-xs text-slate-400">
+            Nenhum fornecedor cadastrado ainda.
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        disabled={convidando || !selecionados.length}
+        onClick={onConvidar}
+        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        {convidando ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <Plus size={16} />
+        )}
+        Convidar para cotação
+      </button>
+    </section>
+  );
+}
 function TabelaCotacoes({
   cotacoes,
   quantidade,
@@ -1469,11 +1588,17 @@ function TabelaCotacoes({
                   )}
                 </td>
                 <td className="px-3 py-3 text-right">
-                  {moeda(c.preco_unitario)}
+                  {c.preco_unitario === null ? (
+                    <span className="text-amber-600">Aguardando preço</span>
+                  ) : (
+                    moeda(c.preco_unitario)
+                  )}
                 </td>
                 <td className="px-3 py-3 text-right">{moeda(c.frete)}</td>
                 <td className="px-3 py-3 text-right font-bold">
-                  {moeda(c.preco_unitario * quantidade + c.frete)}
+                  {c.preco_unitario === null
+                    ? "—"
+                    : moeda(c.preco_unitario * quantidade + c.frete)}
                 </td>
                 <td className="px-3 py-3">
                   {c.previsao_entrega
@@ -1491,7 +1616,7 @@ function TabelaCotacoes({
                   ) : (
                     <button
                       type="button"
-                      disabled={salvando}
+                      disabled={salvando || c.preco_unitario === null}
                       onClick={() => onSelecionar(c.id)}
                       className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 disabled:opacity-50"
                     >
