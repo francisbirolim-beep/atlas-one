@@ -1,29 +1,11 @@
 # IMPLEMENTATIONS.md — Atlas One
 
-## 2026-08-30 — Entrada unificada pelo Cliente 360
+## 2026-08-30 — Filtro de produtos ao criar necessidade no Compras 360
 
-- criada a porta `Novo orçamento` para buscar o cliente antes de escolher a operação;
-- a busca em tempo real mostra os clientes cadastrados abaixo do campo conforme o nome é digitado, com estado visível para carregamento, resultado vazio e falha de consulta;
-- cliente localizado abre diretamente a ficha Cliente 360; cliente inexistente recebe cadastro mínimo de nome e sobrenome;
-- a ficha Cliente 360 concentra quatro escolhas: pedido de orçamento, orçamento sob medida, orçamento balcão e assistência/manutenção;
-- pedido de orçamento e orçamento sob medida entram no Kanban pelo mesmo fluxo de orçamento, com identificação visual distinta;
-- Home e botão superior foram simplificados para abrir Cliente 360 antes de qualquer operação comercial;
-- links antigos ou diretos de orçamento, balcão e assistência voltam à ficha Cliente 360 quando não foram iniciados nela;
-- o cadastro inicial e a edição do cliente exigem somente nome e sobrenome; telefone continua obrigatório apenas para finalizar venda balcão;
-- orçamento sob medida só persiste após vínculo válido ao Cliente 360;
-- venda balcão passou a exigir cliente identificado e telefone ou WhatsApp, inclusive na API;
-- venda sob medida preserva os campos completos configuráveis na confirmação da venda;
-- sem nova migration: reutiliza `clientes`, `orcamentos`, vínculo `cliente_id` e configuração `campos_formularios_v1` existentes.
-
-### Obras e locais no Cliente 360
-
-- adicionada a central de obras/locais dentro da ficha do cliente, permitindo várias obras para o mesmo cadastro;
-- cada obra tem tom visual por etapa e atalhos próprios para orçamento sob medida e assistência;
-- orçamento sob medida ganhou seletor de obra e cadastro rápido de obra, com persistência em `orcamentos.obra_id`;
-- assistência ganhou seletor de obra, com persistência em `assistencias.obra_id` e no card espelho em `orcamentos.obra_id`;
-- os serviços validam no servidor que a obra selecionada pertence ao mesmo Cliente 360;
-- Home e Kanban de Assistências passam a chamar primeiro a identificação do cliente; as decisões operacionais ficam na ficha Cliente 360;
-- reutilizada a estrutura existente `obras` e os vínculos `obra_id`, sem migration adicional.
+- adicionados filtros rápidos de catálogo para Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros;
+- filtro classifica os produtos pela categoria já cadastrada e preserva a opção de necessidade digitada manualmente;
+- o produto selecionado é desvinculado ao escolher uma categoria incompatível, evitando registrar uma necessidade com filtro visual incorreto;
+- nenhuma migration, dado mestre, preço, estoque ou regra de compra foi alterado.
 
 ---
 

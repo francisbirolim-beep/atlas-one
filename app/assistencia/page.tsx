@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound, CalendarDays, Building2 } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { criarAssistenciaNoServidor, DadosAssistenciaForm } from '@/lib/assistencias'
@@ -18,7 +18,6 @@ interface FotoItem {
 }
 
 type ClienteBusca = Cliente & { apelido?: string | null }
-type ObraBusca = { id: string; nome: string; cidade?: string | null; endereco?: string | null }
 
 function dataHojeParaInput() {
   const agora = new Date()
@@ -44,16 +43,10 @@ export default function Assistencia() {
   const [sugestoes, setSugestoes] = useState<ClienteBusca[]>([])
   const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [clienteEscolhido, setClienteEscolhido] = useState<string | null>(null)
-  const [obras, setObras] = useState<ObraBusca[]>([])
-  const [obraId, setObraId] = useState<string | null>(null)
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    const parametros = new URLSearchParams(window.location.search)
-    const obraParam = parametros.get('obra')
-    const origem = parametros.get('origem')
-    if (!clienteId) { router.replace('/orcamento/novo'); return }
-    if (origem !== 'cliente-360') { router.replace(`/clientes/${clienteId}`); return }
+    if (!clienteId) return
 
     supabase
       .from('clientes')
@@ -61,18 +54,9 @@ export default function Assistencia() {
       .eq('id', clienteId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) { selecionarCliente(data as ClienteBusca); if (obraParam) setObraId(obraParam) }
+        if (data) selecionarCliente(data as ClienteBusca)
       })
-  }, [router])
-
-  useEffect(() => {
-    if (!clienteEscolhido) { setObras([]); setObraId(null); return }
-    supabase.from('obras').select('id,nome,cidade,endereco').eq('cliente_id', clienteEscolhido).order('created_at', { ascending: false }).then(({ data }) => {
-      const lista = (data || []) as ObraBusca[]
-      setObras(lista)
-      setObraId(atual => atual && lista.some(obra => obra.id === atual) ? atual : null)
-    })
-  }, [clienteEscolhido])
+  }, [])
 
   useEffect(() => {
     const termo = clienteNome.trim()
@@ -124,12 +108,10 @@ export default function Assistencia() {
     setEndereco(cliente.endereco || '')
     setBairro(cliente.bairro || '')
     setSugestoes([])
-    setObraId(null)
   }
 
   function alterarNome(valor: string) {
     setClienteEscolhido(null)
-    setObraId(null)
     setClienteNome(valor)
   }
 
@@ -167,7 +149,6 @@ export default function Assistencia() {
 
     const dadosForm: DadosAssistenciaForm = {
       clienteId: clienteEscolhido,
-      obraId,
       dataAssistencia,
       clienteNome: clienteNome.trim(),
       clienteWhatsapp,
@@ -215,8 +196,6 @@ export default function Assistencia() {
     setDescricao('')
     setFotos([])
     setClienteEscolhido(null)
-    setObras([])
-    setObraId(null)
     setSugestoes([])
   }
 
@@ -290,7 +269,6 @@ export default function Assistencia() {
             )}
           </div>
           {clienteEscolhido && <p className="text-xs text-emerald-600">Cliente cadastrado selecionado. Esta assistência ficará vinculada ao histórico deste cliente.</p>}
-          {clienteEscolhido && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3"><div className="flex items-start gap-2"><Building2 size={16} className="mt-0.5 text-blue-700"/><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-blue-900">Obra / local do atendimento</p><p className="mt-0.5 text-[11px] text-blue-700">Escolha para deixar esta assistência separada no Cliente 360.</p><select value={obraId || ''} onChange={e => setObraId(e.target.value || null)} className="mt-2 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-slate-700"><option value="">Sem obra específica</option>{obras.map(obra => <option key={obra.id} value={obra.id}>{obra.nome}{obra.cidade ? ` — ${obra.cidade}` : ''}</option>)}</select></div></div></div>}
           <input type="text" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp / telefone (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />

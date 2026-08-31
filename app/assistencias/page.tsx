@@ -255,7 +255,7 @@ export default function Assistencias() {
             <h1 className="text-lg font-bold text-slate-800">Assistências Técnicas</h1>
             <p className="text-sm text-slate-500">{escopo === 'todas' ? 'Visualizando todas as assistências liberadas para este usuário.' : 'Visualizando somente as assistências abertas por você.'}</p>
           </div>
-          <Link href="/orcamento/novo" className="inline-flex items-center gap-2 rounded-xl bg-brand-teal px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"><Plus size={16}/> Identificar cliente</Link>
+          <Link href="/assistencia" className="inline-flex items-center gap-2 rounded-xl bg-brand-teal px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"><Plus size={16}/> Nova assistência</Link>
         </div>
       </header>
 

@@ -1,19 +1,34 @@
 # NEXT_TASK.md — Atlas One
 
-## TAREFA ATUAL — validar porta de entrada Cliente 360
+## ROTEIRO ACORDADO — Compras 360 mais dinâmico (2026-08-31)
 
-Branch: `feat/orcamento-cliente-minimo`
+Aprovado pelo usuário em 2026-08-31, a executar em PRs separados, nesta ordem:
 
-1. abrir **Novo orçamento**, pesquisar um cliente existente e confirmar que a ficha Cliente 360 abre;
-2. pesquisar cliente inexistente, informar nome e sobrenome e confirmar criação/abertura da ficha;
-3. na ficha, abrir **Pedido de orçamento**, **Orçamento sob medida**, **Orçamento balcão** e **Assistência** e conferir o vínculo ao mesmo cliente;
-4. tentar salvar orçamento sob medida com somente primeiro nome e confirmar o bloqueio;
-5. tentar finalizar venda balcão sem cliente ou sem telefone/WhatsApp e confirmar o bloqueio;
-6. confirmar que o cadastro permite salvar somente com nome e sobrenome e que a venda balcão ainda bloqueia a finalização sem telefone/WhatsApp;
-7. aguardar Build Validation e preview Vercel antes de merge.
-8. criar duas obras/locais no mesmo Cliente 360; iniciar um orçamento e uma assistência por cada cartão e confirmar que o histórico mostra o local certo;
-9. no orçamento, testar escolher uma obra existente e cadastrar uma obra nova pelo seletor azul; confirmar que uma obra de outro cliente não é aceita pelo servidor.
-10. na identificação, digitar parte do nome de um cliente já cadastrado e confirmar que ele aparece imediatamente abaixo do campo.
+1. **PR #291 (feat/compras-360-filtro-categoria)** — filtros de produtos por categoria
+   (Perfis, Acessórios, Vidros, Produto pronto, Outros, Todas) + busca por
+   nome/código com lista de sugestões clicáveis. Concluído e aprovado pelo
+   usuário; aguardando merge.
+
+2. **Vínculo necessidade → Cliente/Obra ou Estoque.** Ao clicar em
+   "Adicionar necessidade", primeiro passo passa a ser escolher o destino:
+   Cliente (busca cliente, depois escolhe a obra dele) ou Estoque. Só depois
+   aparece a etapa atual de escolher produto/quantidade/prioridade. Guardar
+   `cliente_id`/`obra_id` estruturados na necessidade (hoje só existe
+   `obra_referencia` como texto livre). Objetivo: o pedido de compra já
+   nasce vinculado ao lugar certo, e o Cliente 360 passa a mostrar o
+   histórico de compras daquela obra automaticamente (sem duplicar dado).
+
+3. **Fornecedor 360.** Espelhando o Cliente 360, mas do lado do fornecedor:
+   ao avançar uma cotação vencedora e emitir o pedido, o histórico
+   (produto, categoria — perfil/acessório/vidro —, preço pago, data,
+   status de entrega) fica permanentemente vinculado ao fornecedor. Já
+   existe uma base disso em `ultimoPrecoPorProduto`
+   (app/api/compras/360); expandir para uma visão dedicada por fornecedor,
+   nos moldes do Cliente 360.
+
+Fluxo final desejado pelo usuário: necessidade pendente → cotação →
+comprado aguardando chegar, com o cliente/obra sempre rastreado, e depois
+o fornecedor também rastreado com tudo que já foi comprado dele.
 
 ---
 
@@ -23,14 +38,15 @@ Branch: `fix/compras-360-main`
 
 ### Validar no preview
 
-1. criar uma necessidade com produto cadastrado e outra digitada manualmente;
-2. abrir a necessidade, incluir cotações de dois fornecedores e comparar total, prazo e pagamento;
-3. selecionar a cotação vencedora e confirmar que só então a compra pode ser aprovada;
-4. avançar por pedido emitido, aguardando entrega e recebido;
-5. confirmar que `Recebido` não altera o saldo de estoque;
-6. acessar Entrada por NF, Recebimentos e NFs, Itens sem vínculo, Estoque e Contas a pagar pelos atalhos;
-7. testar no celular e confirmar que página, cards, modal e tabela não estouram horizontalmente;
-8. confirmar Build Validation, Vercel e Supabase Database Control antes do merge.
+1. no modal de nova necessidade, alternar entre **Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros** e confirmar que a lista de produto cadastrado muda conforme o filtro;
+2. criar uma necessidade com produto cadastrado e outra digitada manualmente;
+3. abrir a necessidade, incluir cotações de dois fornecedores e comparar total, prazo e pagamento;
+4. selecionar a cotação vencedora e confirmar que só então a compra pode ser aprovada;
+5. avançar por pedido emitido, aguardando entrega e recebido;
+6. confirmar que `Recebido` não altera o saldo de estoque;
+7. acessar Entrada por NF, Recebimentos e NFs, Itens sem vínculo, Estoque e Contas a pagar pelos atalhos;
+8. testar no celular e confirmar que página, cards, modal e tabela não estouram horizontalmente;
+9. confirmar Build Validation, Vercel e Supabase Database Control antes do merge.
 
 ### Publicação
 

@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
+  ArrowRight,
   Building2,
   CalendarDays,
   CalendarPlus,
   CheckSquare,
   Columns3,
+  FilePlus2,
   ImageIcon,
   UserPlus,
+  Wrench,
 } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { lerDadosEmpresa, type IdentidadeEmpresa } from '@/lib/configGeral'
@@ -104,17 +107,29 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
       </div>
 
       {modulos.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 lg:grid-cols-4">
-          {(tem('clientes') || tem('orcamentos') || tem('assistencias')) && (
-            <Link href="/orcamento/novo" className={classeAtalho}>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 lg:grid-cols-3 2xl:grid-cols-6">
+          {tem('orcamentos') && (
+            <Link href="/orcamento-rapido" className={classeAtalho}>
+              <span className={classeIcone}><FilePlus2 size={19} /></span>
+              <span className="min-w-0 flex-1"><strong className={classeTextoAtalho}>Novo orçamento</strong><span className={classeSubtituloAtalho}>Criar orçamento</span></span><ArrowRight size={14} className="hidden text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600 sm:block" />
+            </Link>
+          )}
+          {tem('clientes') && (
+            <Link href="/clientes/novo" className={classeAtalho}>
               <span className={classeIcone}><UserPlus size={19} /></span>
-              <span className="min-w-0"><strong className={classeTextoAtalho}>Cliente 360</strong><span className={classeSubtituloAtalho}>Pesquisar ou cadastrar cliente</span></span>
+              <span className="min-w-0"><strong className={classeTextoAtalho}>Novo cliente</strong><span className={classeSubtituloAtalho}>Cadastrar cliente</span></span>
             </Link>
           )}
           {tem('kanban') && (
             <Link href="/kanban" className={classeAtalho}>
               <span className={classeIcone}><Columns3 size={19} /></span>
               <span className="min-w-0"><strong className={classeTextoAtalho}>Kanban</strong><span className={classeSubtituloAtalho}>Abrir comercial</span></span>
+            </Link>
+          )}
+          {tem('assistencias') && (
+            <Link href="/assistencia" className={classeAtalho}>
+              <span className={classeIcone}><Wrench size={19} /></span>
+              <span className="min-w-0"><strong className={classeTextoAtalho}>Nova assistência</strong><span className={classeSubtituloAtalho}>Abrir chamado</span></span>
             </Link>
           )}
           {tem('tarefas') && (

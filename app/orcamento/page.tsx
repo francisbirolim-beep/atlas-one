@@ -13,7 +13,7 @@ const ACOES = [
     destaque: true,
   },
   {
-    href: '/orcamento/novo',
+    href: '/orcamento-rapido',
     titulo: 'Orçamento rápido',
     descricao: 'Registre uma oportunidade em poucos minutos para continuar depois.',
     detalhe: 'Atendimento em campo',

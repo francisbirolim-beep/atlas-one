@@ -32,6 +32,13 @@ type StatusCompra =
   | "aguardando_entrega"
   | "recebido"
   | "cancelado";
+type FiltroCategoriaProduto =
+  | "todos"
+  | "perfil"
+  | "acessorio"
+  | "vidro"
+  | "produto_pronto"
+  | "outros";
 type Necessidade = {
   id: string;
   status: StatusCompra;
@@ -165,6 +172,37 @@ const cotacaoVazia = {
   forma_pagamento: "",
   observacoes: "",
 };
+const FILTROS_CATEGORIA_PRODUTO: {
+  id: FiltroCategoriaProduto;
+  label: string;
+}[] = [
+  { id: "todos", label: "Todas" },
+  { id: "perfil", label: "Perfis" },
+  { id: "acessorio", label: "Acessórios" },
+  { id: "vidro", label: "Vidros" },
+  { id: "produto_pronto", label: "Produto pronto" },
+  { id: "outros", label: "Outros" },
+];
+
+function grupoCategoriaProduto(categoria: string | null): FiltroCategoriaProduto {
+  const valor = (categoria || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+  if (valor.includes("perfil")) return "perfil";
+  if (valor.includes("acessor")) return "acessorio";
+  if (valor.includes("vidro")) return "vidro";
+  if (
+    valor === "produto" ||
+    valor === "pu" ||
+    valor.includes("produto pronto")
+  ) {
+    return "produto_pronto";
+  }
+  return "outros";
+}
 
 function moeda(v: number | null | undefined) {
   return v === null || v === undefined
@@ -184,6 +222,9 @@ export default function ComprasPage() {
   const [busca, setBusca] = useState(""),
     [novaAberta, setNovaAberta] = useState(false),
     [form, setForm] = useState(vazio),
+    [filtroCategoriaProduto, setFiltroCategoriaProduto] =
+      useState<FiltroCategoriaProduto>("todos"),
+    [buscaProdutoCatalogo, setBuscaProdutoCatalogo] = useState(""),
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
     [formCotacao, setFormCotacao] = useState(cotacaoVazia);
   useEffect(() => {
@@ -236,6 +277,16 @@ export default function ComprasPage() {
   }, [dados, busca]);
   const selecionada =
     dados?.necessidades.find((n) => n.id === selecionadaId) || null;
+  const produtosFiltrados = useMemo(
+    () =>
+      (dados?.produtos || []).filter(
+        (p) =>
+          (filtroCategoriaProduto === "todos" ||
+            grupoCategoriaProduto(p.categoria) === filtroCategoriaProduto) &&
+          correspondeBuscaAtlas(buscaProdutoCatalogo, p.nome, p.codigo, p.categoria),
+      ),
+    [dados?.produtos, filtroCategoriaProduto, buscaProdutoCatalogo],
+  );
   const cotacoesSelecionadas = (dados?.cotacoes || [])
     .filter((c) => c.necessidade_id === selecionadaId)
     .sort(
@@ -258,6 +309,17 @@ export default function ComprasPage() {
       unidade: p?.unidade || "UN",
     }));
   }
+  function alterarFiltroCategoriaProduto(filtro: FiltroCategoriaProduto) {
+    setFiltroCategoriaProduto(filtro);
+    const produtoSelecionado = produto(form.produto_id || null);
+    if (
+      produtoSelecionado &&
+      filtro !== "todos" &&
+      grupoCategoriaProduto(produtoSelecionado.categoria) !== filtro
+    ) {
+      setForm((v) => ({ ...v, produto_id: "" }));
+    }
+  }
   async function criar(e: React.FormEvent) {
     e.preventDefault();
     setSalvando(true);
@@ -272,6 +334,8 @@ export default function ComprasPage() {
         }),
       });
       setForm(vazio);
+      setFiltroCategoriaProduto("todos");
+      setBuscaProdutoCatalogo("");
       setNovaAberta(false);
       await carregar();
     } catch (e) {
@@ -383,7 +447,11 @@ export default function ComprasPage() {
               Entrada por NF
             </Link>
             <button
-              onClick={() => setNovaAberta(true)}
+              onClick={() => {
+                setFiltroCategoriaProduto("todos");
+                setBuscaProdutoCatalogo("");
+                setNovaAberta(true);
+              }}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
             >
               <Plus size={17} />
@@ -523,25 +591,91 @@ export default function ComprasPage() {
       {novaAberta && (
         <Modal
           titulo="Adicionar à lista de faltas"
-          onFechar={() => setNovaAberta(false)}
+          onFechar={() => {
+            setNovaAberta(false);
+            setFiltroCategoriaProduto("todos");
+            setBuscaProdutoCatalogo("");
+          }}
         >
           <form onSubmit={criar} className="space-y-4">
-            <label className="block text-xs font-medium text-slate-600">
-              Produto cadastrado (opcional)
-              <select
-                value={form.produto_id}
-                onChange={(e) => selecionarProduto(e.target.value)}
-                className="mt-1 w-full rounded-xl border p-3 text-sm"
-              >
-                <option value="">Digitar material manualmente</option>
-                {dados?.produtos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.codigo ? `${p.codigo} — ` : ""}
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">
+                Filtrar produtos cadastrados
+              </p>
+              <div className="mt-2 flex w-full min-w-0 gap-2 overflow-x-auto pb-1">
+                {FILTROS_CATEGORIA_PRODUTO.map((filtro) => {
+                  const ativo = filtroCategoriaProduto === filtro.id;
+                  return (
+                    <button
+                      key={filtro.id}
+                      type="button"
+                      onClick={() => alterarFiltroCategoriaProduto(filtro.id)}
+                      className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                        ativo
+                          ? "bg-blue-600 text-white"
+                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {filtro.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <BuscaAtlasInput
+                value={buscaProdutoCatalogo}
+                onValueChange={setBuscaProdutoCatalogo}
+                placeholder="Buscar por nome, código ou categoria..."
+                containerClassName="mt-2 w-full min-w-0"
+                inputClassName="w-full rounded-xl border p-3 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                {produtosFiltrados.length}{" "}
+                {produtosFiltrados.length === 1
+                  ? "produto encontrado"
+                  : "produtos encontrados"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">
+                Produto cadastrado (opcional)
+              </p>
+              <div className="mt-1 max-h-48 overflow-y-auto rounded-xl border">
+                <button
+                  type="button"
+                  onClick={() => selecionarProduto("")}
+                  className={`block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 ${
+                    !form.produto_id
+                      ? "bg-blue-50 font-semibold text-blue-700"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Digitar material manualmente
+                </button>
+                {produtosFiltrados.map((p) => {
+                  const ativo = form.produto_id === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => selecionarProduto(p.id)}
+                      className={`block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 ${
+                        ativo
+                          ? "bg-blue-50 font-semibold text-blue-700"
+                          : "bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {p.codigo ? `${p.codigo} — ` : ""}
+                      {p.nome}
+                    </button>
+                  );
+                })}
+                {produtosFiltrados.length === 0 && (
+                  <p className="px-3 py-3 text-[11px] text-amber-600">
+                    Nenhum produto encontrado com esse filtro/busca.
+                  </p>
+                )}
+              </div>
+            </div>
             <label className="block text-xs font-medium text-slate-600">
               Material / necessidade *
               <input

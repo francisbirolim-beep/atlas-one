@@ -9,7 +9,6 @@ import { v4 as uuidv4 } from 'uuid'
 
 export interface DadosAssistenciaForm {
   clienteId?: string | null
-  obraId?: string | null
   clienteNome: string
   clienteWhatsapp: string
   cidade: string
@@ -36,7 +35,7 @@ function dataAssistenciaParaIso(dataAssistencia?: string) {
 export async function criarAssistenciaNoServidor(
   dados: DadosAssistenciaForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const { clienteId: clienteIdInformado, obraId: obraIdInformada, clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
+  const { clienteId: clienteIdInformado, clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
 
   const [clienteId, usuario, colunaAssistenciaId, colunaOrcamentoId] = await Promise.all([
     clienteIdInformado
@@ -48,21 +47,6 @@ export async function criarAssistenciaNoServidor(
   ])
 
   const fotosUrls: string[] = []
-
-  let obraId: string | null = null
-  if (obraIdInformada) {
-    const { data: obra, error: erroObra } = await supabase
-      .from('obras')
-      .select('id, cliente_id')
-      .eq('id', obraIdInformada)
-      .maybeSingle()
-
-    if (erroObra || !obra || obra.cliente_id !== clienteId) {
-      return { ok: false, error: 'A obra escolhida não pertence a este Cliente 360.' }
-    }
-    obraId = obra.id
-  }
-
   for (const f of fotos) {
     const url = await uploadFoto(f)
     if (url) fotosUrls.push(url)
@@ -75,7 +59,6 @@ export async function criarAssistenciaNoServidor(
     id: novaAssistenciaId,
     created_at: criadaEm,
     cliente_id: clienteId,
-    obra_id: obraId,
     cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp || null,
     cidade: cidade || null,
@@ -105,7 +88,6 @@ export async function criarAssistenciaNoServidor(
     const { error: erroEspelho } = await supabase.from('orcamentos').insert({
       id: uuidv4(),
       cliente_id: clienteId,
-      obra_id: obraId,
       cliente_nome: clienteNome,
       cliente_whatsapp: clienteWhatsapp || null,
       cidade: cidade || null,

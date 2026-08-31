@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { Cliente, Anexo, TipoInteracao, Tarefa, Interacao, Usuario } from '@/lib/tipos'
 import { usuarioAtual } from '@/lib/auth'
 import { uploadArquivo } from '@/lib/upload'
-import ClienteOperacoes, { ClienteAcoes } from '@/components/clientes/ClienteOperacoes'
+import ClienteOperacoes from '@/components/clientes/ClienteOperacoes'
 import {
   listarTarefasCliente, criarTarefa, concluirTarefa, excluirTarefa,
   listarInteracoesCliente, registrarInteracao, STATUS_FUNIL,
@@ -161,7 +161,9 @@ export default function DetalheCliente() {
 
   async function salvarEdicaoCliente() {
     if (!cliente || !formEdicao) return
-    if (formEdicao.nome.trim().split(/\s+/).filter(Boolean).length < 2) { setErroCliente('Informe nome e sobrenome do cliente'); return }
+    if (!formEdicao.nome.trim()) { setErroCliente('Informe o nome completo do cliente'); return }
+    if (!formEdicao.cpfCnpj.trim()) { setErroCliente('Informe o CPF ou CNPJ do cliente'); return }
+    if (!formEdicao.endereco.trim()) { setErroCliente('Informe o endereço da obra'); return }
 
     setErroCliente('')
     setSalvandoCliente(true)
@@ -172,8 +174,8 @@ export default function DetalheCliente() {
       telefone: formEdicao.telefone.trim() || null,
       email: formEdicao.email.trim() || null,
       cidade: formEdicao.cidade.trim() || null,
-      cpf_cnpj: formEdicao.cpfCnpj.trim() || null,
-      endereco: formEdicao.endereco.trim() || null,
+      cpf_cnpj: formEdicao.cpfCnpj.trim(),
+      endereco: formEdicao.endereco.trim(),
       bairro: formEdicao.bairro.trim() || null,
       cep: formEdicao.cep.trim() || null,
       data_nascimento: formEdicao.dataNascimento || null,
@@ -270,14 +272,12 @@ export default function DetalheCliente() {
           <img src="/icons/icon-mark.png" alt="" className="w-8 h-8" />
           <div>
             <h1 className="text-lg font-bold text-slate-800">{cliente.nome}</h1>
-            <p className="text-sm text-slate-500">Cliente 360 · desde {new Date(cliente.created_at).toLocaleDateString('pt-BR')}</p>
+            <p className="text-sm text-slate-500">Cliente desde {new Date(cliente.created_at).toLocaleDateString('pt-BR')}</p>
           </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        <ClienteAcoes clienteId={cliente.id} />
-
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           {editando && formEdicao ? (
             <div className="space-y-3">
@@ -298,10 +298,10 @@ export default function DetalheCliente() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs text-slate-500 mb-1">Cidade</label><input value={formEdicao.cidade} onChange={e => atualizarCampoEdicao('cidade', e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
-                <div><label className="block text-xs text-slate-500 mb-1">CPF ou CNPJ</label><input value={formEdicao.cpfCnpj} onChange={e => atualizarCampoEdicao('cpfCnpj', e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
+                <div><label className="block text-xs text-slate-500 mb-1">CPF ou CNPJ *</label><input value={formEdicao.cpfCnpj} onChange={e => atualizarCampoEdicao('cpfCnpj', e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
               </div>
 
-              <div><label className="block text-xs text-slate-500 mb-1">Endereço da obra</label><input value={formEdicao.endereco} onChange={e => atualizarCampoEdicao('endereco', e.target.value)} placeholder="Rua, número" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
+              <div><label className="block text-xs text-slate-500 mb-1">Endereço da obra *</label><input value={formEdicao.endereco} onChange={e => atualizarCampoEdicao('endereco', e.target.value)} placeholder="Rua, número" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs text-slate-500 mb-1">Bairro</label><input value={formEdicao.bairro} onChange={e => atualizarCampoEdicao('bairro', e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
@@ -417,7 +417,7 @@ export default function DetalheCliente() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-slate-700">Propostas e orçamentos</h2>
-            <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(cliente.id)}&origem=cliente-360`} className="flex items-center gap-1 text-sm text-brand-navy hover:text-brand-navyDark"><Plus size={14} /> Novo orçamento</Link>
+            <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(cliente.id)}`} className="flex items-center gap-1 text-sm text-brand-navy hover:text-brand-navyDark"><Plus size={14} /> Novo orçamento</Link>
           </div>
 
           {orcamentos.length === 0 ? (
