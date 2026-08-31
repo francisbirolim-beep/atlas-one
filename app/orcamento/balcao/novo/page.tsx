@@ -111,6 +111,15 @@ export default function NovoOrcamentoBalcao() {
     carregar()
   }, [])
 
+  useEffect(() => {
+    if (clientes.length === 0 || clienteSelecionadoId) return
+    const clienteId = new URLSearchParams(window.location.search).get('cliente')
+    if (!clienteId) return
+    const c = clientes.find(cl => cl.id === clienteId)
+    if (c) selecionarCliente(c)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientes])
+
   const linhasPorProduto = useMemo(() => {
     const mapa = new Map<string, LinhaTecnica[]>()
     for (const linha of linhas) {
