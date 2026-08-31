@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       supabaseAdmin
         .from("fornecedores")
         .select(
-          "id,nome,cnpj_cpf,contato,telefone,email,cidade,observacoes,ativo",
+          "id,nome,cnpj_cpf,contato,telefone,email,cidade,observacoes,ativo,pedido_minimo,prazo_entrega_dias",
         )
         .eq("ativo", true)
         .order("nome")
