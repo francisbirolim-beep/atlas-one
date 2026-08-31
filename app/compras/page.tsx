@@ -677,6 +677,14 @@ export default function ComprasPage() {
           }}
         >
           <form onSubmit={criar} className="space-y-4">
+            {erro && (
+              <div className="flex items-start justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <span>{erro}</span>
+                <button type="button" onClick={() => setErro("")}>
+                  <X size={14} />
+                </button>
+              </div>
+            )}
             {!revisando && (
               <>
             <div className="min-w-0">
