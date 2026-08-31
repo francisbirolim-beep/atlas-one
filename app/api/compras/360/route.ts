@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
       produtosResp,
       fornecedoresResp,
       historicoResp,
+      clientesResp,
+      obrasResp,
     ] = await Promise.all([
       supabaseAdmin
         .from("compras_necessidades")
@@ -80,6 +82,16 @@ export async function GET(req: NextRequest) {
         .not("produto_id", "is", null)
         .order("created_at", { ascending: false })
         .limit(3000),
+      supabaseAdmin
+        .from("clientes")
+        .select("id,nome,apelido,cidade")
+        .order("nome")
+        .limit(2000),
+      supabaseAdmin
+        .from("obras")
+        .select("id,cliente_id,nome,status")
+        .order("nome")
+        .limit(4000),
     ]);
 
     for (const resposta of [
@@ -88,6 +100,8 @@ export async function GET(req: NextRequest) {
       produtosResp,
       fornecedoresResp,
       historicoResp,
+      clientesResp,
+      obrasResp,
     ]) {
       if (resposta.error) throw new Error(resposta.error.message);
     }
@@ -125,6 +139,8 @@ export async function GET(req: NextRequest) {
       produtos: produtosResp.data || [],
       fornecedores: fornecedoresResp.data || [],
       ultimoPrecoPorProduto: Object.fromEntries(ultimoPorProduto),
+      clientes: clientesResp.data || [],
+      obras: obrasResp.data || [],
     });
   } catch (error) {
     console.error("Erro ao carregar Compras 360:", error);
@@ -154,6 +170,41 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const destino = body.destino === "obra" ? "obra" : "estoque";
+      const clienteId = destino === "obra" ? texto(body.cliente_id, 80) : "";
+      const obraId = destino === "obra" ? texto(body.obra_id, 80) : "";
+      if (destino === "obra" && (!clienteId || !obraId)) {
+        return NextResponse.json(
+          { error: "Selecione o cliente e a obra, ou marque Estoque." },
+          { status: 400 },
+        );
+      }
+
+      let clienteNome: string | null = null;
+      let obraNome: string | null = null;
+      if (destino === "obra") {
+        const [{ data: cliente }, { data: obra }] = await Promise.all([
+          supabaseAdmin
+            .from("clientes")
+            .select("id,nome")
+            .eq("id", clienteId)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("obras")
+            .select("id,nome,cliente_id")
+            .eq("id", obraId)
+            .maybeSingle(),
+        ]);
+        if (!cliente || !obra || obra.cliente_id !== clienteId) {
+          return NextResponse.json(
+            { error: "Cliente ou obra inválidos." },
+            { status: 400 },
+          );
+        }
+        clienteNome = cliente.nome;
+        obraNome = obra.nome;
+      }
+
       const { data, error } = await supabaseAdmin
         .from("compras_necessidades")
         .insert({
@@ -168,7 +219,15 @@ export async function POST(req: NextRequest) {
             ? body.prioridade
             : "normal",
           data_limite: body.data_limite || null,
-          obra_referencia: texto(body.obra_referencia, 160) || null,
+          destino,
+          cliente_id: destino === "obra" ? clienteId : null,
+          cliente_nome: clienteNome,
+          obra_id: destino === "obra" ? obraId : null,
+          obra_nome: obraNome,
+          obra_referencia:
+            destino === "obra"
+              ? obraNome
+              : texto(body.obra_referencia, 160) || null,
           observacoes: texto(body.observacoes, 1000) || null,
           criado_por_id: usuario.id,
           criado_por_nome: usuario.nome,

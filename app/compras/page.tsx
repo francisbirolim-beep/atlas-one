@@ -50,9 +50,26 @@ type Necessidade = {
   prioridade: "baixa" | "normal" | "alta" | "urgente";
   data_limite: string | null;
   obra_referencia: string | null;
+  destino: "obra" | "estoque" | null;
+  cliente_id: string | null;
+  cliente_nome: string | null;
+  obra_id: string | null;
+  obra_nome: string | null;
   observacoes: string | null;
   criado_por_nome: string | null;
   updated_at: string;
+};
+type Cliente = {
+  id: string;
+  nome: string;
+  apelido: string | null;
+  cidade: string | null;
+};
+type Obra = {
+  id: string;
+  cliente_id: string;
+  nome: string;
+  status: string;
 };
 type Cotacao = {
   id: string;
@@ -97,6 +114,8 @@ type Dados = {
   produtos: Produto[];
   fornecedores: Fornecedor[];
   ultimoPrecoPorProduto: Record<string, UltimoPreco>;
+  clientes: Cliente[];
+  obras: Obra[];
 };
 
 const COLUNAS: {
@@ -161,6 +180,9 @@ const vazio = {
   data_limite: "",
   obra_referencia: "",
   observacoes: "",
+  destino: "" as "" | "obra" | "estoque",
+  cliente_id: "",
+  obra_id: "",
 };
 const cotacaoVazia = {
   fornecedor_id: "",
@@ -225,6 +247,7 @@ export default function ComprasPage() {
     [filtroCategoriaProduto, setFiltroCategoriaProduto] =
       useState<FiltroCategoriaProduto>("todos"),
     [buscaProdutoCatalogo, setBuscaProdutoCatalogo] = useState(""),
+    [buscaClienteDestino, setBuscaClienteDestino] = useState(""),
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
     [formCotacao, setFormCotacao] = useState(cotacaoVazia);
   useEffect(() => {
@@ -299,6 +322,23 @@ export default function ComprasPage() {
     dados?.fornecedores.find((f) => f.id === id);
   const produto = (id: string | null) =>
     dados?.produtos.find((p) => p.id === id);
+  const cliente = (id: string | null) =>
+    dados?.clientes.find((c) => c.id === id);
+  const obra = (id: string | null) => dados?.obras.find((o) => o.id === id);
+  const clientesFiltrados = useMemo(
+    () =>
+      buscaClienteDestino.trim()
+        ? (dados?.clientes || []).filter((c) =>
+            correspondeBuscaAtlas(buscaClienteDestino, c.nome, c.apelido, c.cidade),
+          )
+        : dados?.clientes || [],
+    [dados?.clientes, buscaClienteDestino],
+  );
+  const obrasDoCliente = useMemo(
+    () =>
+      (dados?.obras || []).filter((o) => o.cliente_id === form.cliente_id),
+    [dados?.obras, form.cliente_id],
+  );
   function selecionarProduto(id: string) {
     const p = produto(id);
     setForm((v) => ({
@@ -308,6 +348,21 @@ export default function ComprasPage() {
       categoria: p?.categoria || "",
       unidade: p?.unidade || "UN",
     }));
+  }
+  function escolherDestino(destino: "obra" | "estoque") {
+    setForm((v) => ({
+      ...v,
+      destino,
+      cliente_id: destino === "estoque" ? "" : v.cliente_id,
+      obra_id: destino === "estoque" ? "" : v.obra_id,
+    }));
+    setBuscaClienteDestino("");
+  }
+  function escolherClienteDestino(id: string) {
+    setForm((v) => ({ ...v, cliente_id: id, obra_id: "" }));
+  }
+  function escolherObraDestino(id: string) {
+    setForm((v) => ({ ...v, obra_id: id }));
   }
   function alterarFiltroCategoriaProduto(filtro: FiltroCategoriaProduto) {
     setFiltroCategoriaProduto(filtro);
@@ -322,6 +377,14 @@ export default function ComprasPage() {
   }
   async function criar(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.destino) {
+      setErro("Escolha o destino da compra: Cliente/Obra ou Estoque.");
+      return;
+    }
+    if (form.destino === "obra" && (!form.cliente_id || !form.obra_id)) {
+      setErro("Escolha o cliente e a obra, ou marque Estoque.");
+      return;
+    }
     setSalvando(true);
     setErro("");
     try {
@@ -336,6 +399,7 @@ export default function ComprasPage() {
       setForm(vazio);
       setFiltroCategoriaProduto("todos");
       setBuscaProdutoCatalogo("");
+      setBuscaClienteDestino("");
       setNovaAberta(false);
       await carregar();
     } catch (e) {
@@ -450,6 +514,7 @@ export default function ComprasPage() {
               onClick={() => {
                 setFiltroCategoriaProduto("todos");
                 setBuscaProdutoCatalogo("");
+                setBuscaClienteDestino("");
                 setNovaAberta(true);
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
@@ -595,6 +660,7 @@ export default function ComprasPage() {
             setNovaAberta(false);
             setFiltroCategoriaProduto("todos");
             setBuscaProdutoCatalogo("");
+            setBuscaClienteDestino("");
           }}
         >
           <form onSubmit={criar} className="space-y-4">
@@ -676,6 +742,129 @@ export default function ComprasPage() {
                 )}
               </div>
             </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">
+                Destino da compra *
+              </p>
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => escolherDestino("obra")}
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${
+                    form.destino === "obra"
+                      ? "border-blue-600 bg-blue-50 text-blue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Cliente / Obra
+                </button>
+                <button
+                  type="button"
+                  onClick={() => escolherDestino("estoque")}
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${
+                    form.destino === "estoque"
+                      ? "border-blue-600 bg-blue-50 text-blue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Estoque
+                </button>
+              </div>
+              {form.destino === "obra" && (
+                <div className="mt-3 space-y-2">
+                  {!form.cliente_id ? (
+                    <>
+                      <BuscaAtlasInput
+                        value={buscaClienteDestino}
+                        onValueChange={setBuscaClienteDestino}
+                        placeholder="Buscar cliente por nome, apelido ou cidade..."
+                        containerClassName="w-full min-w-0"
+                        inputClassName="w-full rounded-xl border p-3 text-sm"
+                      />
+                      <div className="max-h-40 overflow-y-auto rounded-xl border">
+                        {clientesFiltrados.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => escolherClienteDestino(c.id)}
+                            className="block w-full border-b bg-white px-3 py-2 text-left text-sm text-slate-700 last:border-b-0 hover:bg-slate-50"
+                          >
+                            {c.nome}
+                            {c.apelido ? ` (${c.apelido})` : ""}
+                            {c.cidade ? ` — ${c.cidade}` : ""}
+                          </button>
+                        ))}
+                        {clientesFiltrados.length === 0 && (
+                          <p className="px-3 py-3 text-[11px] text-amber-600">
+                            Nenhum cliente encontrado.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between rounded-xl border bg-blue-50 px-3 py-2 text-sm">
+                        <span className="font-semibold text-blue-700">
+                          {cliente(form.cliente_id)?.nome}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((v) => ({ ...v, cliente_id: "", obra_id: "" }))
+                          }
+                          className="text-xs font-medium text-blue-600 underline"
+                        >
+                          Trocar
+                        </button>
+                      </div>
+                      {!form.obra_id ? (
+                        <div className="max-h-40 overflow-y-auto rounded-xl border">
+                          {obrasDoCliente.map((o) => (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={() => escolherObraDestino(o.id)}
+                              className="block w-full border-b bg-white px-3 py-2 text-left text-sm text-slate-700 last:border-b-0 hover:bg-slate-50"
+                            >
+                              {o.nome}
+                              <span className="ml-1 text-[11px] text-slate-400">
+                                ({o.status})
+                              </span>
+                            </button>
+                          ))}
+                          {obrasDoCliente.length === 0 && (
+                            <p className="px-3 py-3 text-[11px] text-amber-600">
+                              Esse cliente ainda não tem obra cadastrada.
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between rounded-xl border bg-emerald-50 px-3 py-2 text-sm">
+                          <span className="font-semibold text-emerald-700">
+                            {obra(form.obra_id)?.nome}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((v) => ({ ...v, obra_id: "" }))
+                            }
+                            className="text-xs font-medium text-emerald-600 underline"
+                          >
+                            Trocar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {form.destino === "estoque" && (
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Esse material vai direto para o estoque, sem vincular a
+                  cliente/obra.
+                </p>
+              )}
+            </div>
             <label className="block text-xs font-medium text-slate-600">
               Material / necessidade *
               <input
@@ -723,11 +912,15 @@ export default function ComprasPage() {
                 value={form.data_limite}
                 onChange={(v) => setForm((f) => ({ ...f, data_limite: v }))}
               />
-              <Campo
-                label="Obra / referência"
-                value={form.obra_referencia}
-                onChange={(v) => setForm((f) => ({ ...f, obra_referencia: v }))}
-              />
+              {form.destino !== "obra" && (
+                <Campo
+                  label="Obra / referência"
+                  value={form.obra_referencia}
+                  onChange={(v) =>
+                    setForm((f) => ({ ...f, obra_referencia: v }))
+                  }
+                />
+              )}
             </div>
             <label className="block text-xs font-medium text-slate-600">
               Observações
@@ -767,8 +960,16 @@ export default function ComprasPage() {
                 valor={`${selecionada.quantidade} ${selecionada.unidade}`}
               />
               <Info
-                label="Obra / referência"
-                valor={selecionada.obra_referencia || "Sem vínculo"}
+                label="Destino"
+                valor={
+                  selecionada.destino === "obra"
+                    ? `${selecionada.cliente_nome || "Cliente"} · ${
+                        selecionada.obra_nome || "Obra"
+                      }`
+                    : selecionada.destino === "estoque"
+                      ? "Estoque"
+                      : selecionada.obra_referencia || "Sem vínculo"
+                }
               />
               <Info
                 label="Precisa até"
@@ -973,10 +1174,21 @@ function Card({
           <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold">
             {n.quantidade} {n.unidade}
           </span>
-          {n.obra_referencia && (
+          {n.destino === "obra" ? (
             <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">
-              {n.obra_referencia}
+              {n.cliente_nome ? `${n.cliente_nome} · ` : ""}
+              {n.obra_nome || "Obra"}
             </span>
+          ) : n.destino === "estoque" ? (
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+              Estoque
+            </span>
+          ) : (
+            n.obra_referencia && (
+              <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">
+                {n.obra_referencia}
+              </span>
+            )
           )}
         </div>
         {melhor && (
