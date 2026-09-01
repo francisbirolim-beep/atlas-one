@@ -115,7 +115,7 @@ export default function HomeOperationalAttention() {
   ]
 
   const acoes = [
-    { label: 'Novo orçamento', detalhe: 'Cadastrar uma nova proposta', href: '/orcamento-rapido', icon: Plus },
+    { label: 'Novo orçamento', detalhe: 'Escolher obra, sob medida ou balcão', href: '/orcamento/novo', icon: Plus },
     { label: 'Abrir Kanban', detalhe: 'Acompanhar vendas e processos', href: '/kanban', icon: KanbanSquare },
     { label: 'Medição Final', detalhe: 'Ver medições em andamento', href: '/producao/medicao-final', icon: ClipboardCheck },
     { label: 'Clientes', detalhe: 'Consultar cadastros e histórico', href: '/clientes', icon: Users },

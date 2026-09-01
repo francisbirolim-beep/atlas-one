@@ -109,219 +109,162 @@
 - build local completo aprovado com 90 rotas.
 
 
-## 2026-08-26 — Balcão fora do Kanban + data fixa de entrada
+## 2026-08-26 — Balcão fora do Kanban + data fixa de entrada> Histórico anterior permanece no Git e em `docs/ai-handoff/archive/`.
 
-### Isolamento operacional do balcão
-- confirmada a causa do card indevido: `lib/orcamentoBalcao.ts` gravava o orçamento rápido na tabela geral `orcamentos`, que alimenta o Kanban;
-- apenas remover `coluna_id` não resolveria, porque o Kanban legado trata orçamento sem coluna como pertencente à primeira coluna;
-- criada a tabela transacional `balcao_orcamentos` no mesmo Supabase do Atlas, mantendo `clientes`, produtos, preços, estoque, compras e financeiro compartilhados;
-- `lib/orcamentoBalcao.ts` passou a salvar orçamento rápido de balcão em `balcao_orcamentos`;
-- `/api/balcao/orcamentos` passou a consultar a tabela própria;
-- registros históricos com `modo_entrada='balcao'` foram migrados para a tabela própria e removidos de `orcamentos`;
-- regra consolidada: Venda/Orçamento Balcão rápido não alimenta Kanban; orçamento sob medida/obra continua usando o fluxo comercial normal.
+## 2026-08-27 — Novo Orçamento: 3 entradas + catálogo completo de tipologias — PR #280
+Implementado em `/orcamento/novo`:
+- três entradas principais: `Orçamento Obra`, `Novo Orçamento Sob Medida` e `Venda Balcão`;
+- `Orçamento Obra` exibe o catálogo completo de tipologias, com busca em tempo real, filtro por categoria e linha;
+- linha é apenas filtro: sem linha selecionada, todas as tipologias ativas ficam visíveis;
+- removido o limite visual de 40 cards;
+- seleção inicial de tipologia continua sendo repassada ao formulário de orçamento;
+- Venda Balcão permanece fora do Kanban de obra.
 
-### Data de entrada no Kanban
-- adicionada `orcamentos.kanban_entrada_em timestamptz`;
-- feito backfill dos cards existentes usando a melhor data histórica disponível (`coluna_atualizada_em`/`created_at`);
-- criado trigger para preencher automaticamente a data de entrada em novos cards não-balcão;
-- a data é imutável durante movimentações: `kanban_entrada_em` representa entrada no painel e `coluna_atualizada_em` continua representando movimentação/SLA;
-- `/kanban` exibe `📅 Entrada: DD/MM/AAAA` dentro do card, abaixo da descrição da esquadria e antes de criador/valor, conforme validação visual solicitada;
-- o campo de calendário foi identificado como filtro da data de entrada;
-- wrapper do Kanban mantém compatibilidade com as melhorias existentes de W.Vetro/PDF e atualiza a data após mudanças visuais dos cards.
+A tabela `tipologias` já continha 122 tipologias, porém o campo `categoria` aceitava apenas `porta` e `janela`. A migration `20260827171516_tipologias_categorias_completas_v1.sql` ampliou a classificação sem apagar tipologias e redistribuiu os registros em famílias reais: porta, janela, módulo fixo, fachada, box, painel/ripado, ACM, cobertura/clarabóia, contramarco/arremate, espelho, portão/grade, guarda-corpo/corrimão, vidro, tela mosquiteira e outros.
 
-### Banco e segurança
-- migrations aplicadas e versionadas:
-  - `20260826135831_kanban_data_entrada_v1.sql`;
-  - `20260826140437_balcao_orcamentos_separado_v1.sql`;
-  - `20260826140909_kanban_data_entrada_search_path_v1.sql`;
-- `balcao_orcamentos` recebeu RLS/policies e grants compatíveis com o padrão atual do cliente Atlas;
-- `definir_kanban_entrada_em()` recebeu `search_path=public` após advisor apontar o warning;
-- validação final do banco: **49 cards do Kanban, 49 com data de entrada e 0 registros de balcão em `orcamentos`**.
+Validação desta rodada:
+- Build Validation #620: success;
+- Supabase Database Control #343: success;
+- Vercel Preview do HEAD `bd9597fb3462b83bfe54c80381067b4c96ed3bae`: READY;
+- `/orcamento/novo`: HTTP 200.
 
 ---
 
-## 2026-08-25 — Filtros do catálogo do Orçamento Balcão
+## 2026-08-27 — Precificação técnica do orçamento — PR #280
 
-- conferida a rota `/balcao/orcamentos/novo`, que reutiliza `app/orcamento/balcao/novo/page.tsx`;
-- preservada a faixa de categorias do catálogo: Todas, Produto, Acessório, Perfil, Produto pronto, PU e Outro;
-- adicionada a categoria comercial **Vidro** em `CATEGORIAS_PRODUTO_PRINCIPAIS`, posicionada entre Perfil e Produto pronto;
-- o segundo nível por Linha continua baseado em `linhas_tecnicas` + `linha_produtos` e é compatível com Acessórios e Perfis;
-- base atual verificada: 1.174 acessórios vinculados a 36 linhas e 1.307 perfis vinculados a 53 linhas;
-- atualmente não há produtos comerciais com `categoria='vidro'`;
-- as 14 referências de vidro do W.Vetro permanecem apenas como referência técnica: não foram convertidas automaticamente em produto, custo, preço, margem, unidade ou estoque;
-- preview Vercel da branch compilou como `READY`.
+Criadas:
+- `/orcamento/precificacao`;
+- `/orcamento/[id]/precificacao`;
+- `lib/orcamentoPrecificacao.ts`;
+- `orcamento_precificacao_componentes`;
+- `orcamento_item_precificacao`;
+- `catalogo_custos_tecnicos`.
 
----
+Funcionalidades:
+- margem geral e individual por item;
+- cobrança de sobra geral/individual;
+- sobra cobrada somente a custo, sem margem;
+- geração de componentes a partir do pacote técnico;
+- custo de perfil por peso/comprimento quando cadastro permite;
+- custo de produto/catálogo ou pendência explícita;
+- custos extras de mão de obra, instalação, deslocamento, frete, pintura, terceiros, consumíveis e outros;
+- edição do custo no orçamento;
+- opção de salvar custo corrigido no catálogo;
+- `custo_otimizado`, `custo_sobra_cobrada` e snapshot de otimização no orçamento.
 
-## 2026-08-25 — Busca Padrão Atlas V1 — PR #277
-
-### Núcleo compartilhado
-- criado `lib/buscaAtlas.ts` como regra comum de pesquisa operacional;
-- criado `components/system/BuscaAtlasInput.tsx` como campo reutilizável;
-- pesquisa ignora maiúsculas/minúsculas e acentos;
-- aceita várias palavras em qualquer ordem e permite que cada termo seja encontrado em um campo diferente;
-- CPF/CNPJ e telefones podem ser localizados mesmo quando a consulta não contém a pontuação do cadastro;
-- filtros específicos continuam combináveis com a pesquisa geral.
-
-### Clientes e atendimento
-- `/clientes` passou a pesquisar nome, apelido, CPF/CNPJ, WhatsApp, telefone, e-mail, cidade, bairro, endereço, CEP, observações, responsável e origem;
-- adicionados filtros específicos por cidade, bairro, CPF/CNPJ, telefone/WhatsApp e apelido;
-- `/assistencia` usa o mesmo padrão ao selecionar cliente existente e preserva o vínculo ao `clientes.id`;
-- seleção de cliente na assistência preenche os dados já cadastrados sem criar cadastro paralelo.
-
-### Venda e Orçamento Balcão
-- `/orcamento/balcao/novo` ganhou fluxo em cascata `Categoria → Linha → Pesquisa`;
-- produto pode ser localizado por código, código de origem, nome, descrição, categoria, grupo, marca, NCM e dados da linha associada;
-- busca de cliente considera nome, apelido, CPF/CNPJ, WhatsApp, telefone, e-mail, cidade, bairro, endereço e CEP;
-- ao escolher cliente existente, o orçamento mantém o mesmo `clientes.id`, evitando duplicidade;
-- `lib/orcamentoBalcao.ts` aceita `clienteId` existente e só cria/resolve cliente quando nenhum cadastro foi selecionado;
-- API compartilhada `/api/balcao/catalogo` ampliou a busca de clientes para os mesmos campos, preservando o estoque multiunidade e as regras de preço da Venda Balcão.
-
-### Cadastros, estoque e compras
-- pesquisa padronizada em Produtos, Linhas, Produtos por Linha, Precificação, Unidades Pendentes, Materiais e Fornecedores;
-- Estoque da Rede pesquisa produto, código, unidade, local e endereço;
-- Endereçamento pesquisa produto/código, loja/unidade, local e endereço;
-- Transferências pesquisam produtos disponíveis na origem e o histórico por número, status, origem, destino, motivo e produtos;
-- Histórico de NFs usa a regra compartilhada para NF, fornecedor, CNPJ e arquivo;
-- Vínculos de Compra receberam pesquisa dos itens pendentes e uma pesquisa real do catálogo Atlas antes de confirmar o vínculo;
-- Pesquisa e Histórico de Orçamentos usam o mesmo comportamento sem remover filtros existentes de número, data ou status;
-- Central de Cadastros usa a mesma normalização.
-
-### Preservação das regras existentes
-- nenhuma migration nova foi necessária nesta implementação;
-- `clientes.apelido` e `clientes.bairro` já existiam no banco e foram apenas integrados às buscas/fluxos;
-- nenhuma regra de custo, margem, preço mínimo, estoque, reserva, caixa ou financeiro foi alterada;
-- vínculo de NF continua sem alterar custo nessa tela;
-- W.Vetro continua apenas como referência/origem e não ganhou precedência sobre dados Atlas validados;
-- previews sucessivos da branch foram compilados como `READY` na Vercel durante a implementação.
+Migration:
+- `20260827020901_orcamento_margem_sobra_otimizacao_v1.sql`;
+- `20260827021039_orcamento_precificacao_componentes_catalogo_v1.sql`.
 
 ---
 
-## 2026-08-25 — Busca incremental de clientes da Venda Balcão — PR #276
+## 2026-08-27 — Pacote técnico + aproveitamento + estoque + compra — PR #280
 
-- corrigida a busca de cliente na tela principal `/balcao`;
-- busca considera nome, CPF/CNPJ, telefone, WhatsApp e cidade;
-- comparação server-side normaliza acentos, então `JOAO` encontra registros cadastrados como `João`;
-- documentos e telefones também são comparados sem pontuação;
-- campo de cliente usa `onInput` e `onCompositionUpdate` para receber a digitação durante composição do teclado;
-- debounce reduzido de 300 ms para 70 ms;
-- requisição anterior é abortada e respostas fora de ordem são descartadas;
-- indicador de carregamento aparece no próprio campo;
-- campo de produto da tela principal também passa a usar captura nativa;
-- clientes continuam vindo da tabela compartilhada `clientes`; nenhum cadastro paralelo foi criado.
+Criada rota `/obras/[id]/materiais` e navegação da Obra.
 
----
+Estruturas:
+- `pacotes_tecnicos`;
+- `pacote_tecnico_materiais`;
+- `pacote_tecnico_barras`;
+- `pacote_tecnico_cortes`;
+- `pacote_tecnico_separacoes`;
+- `pacote_tecnico_compras`;
+- `estoque_sobras_perfis`.
 
-## 2026-08-25 — Modo Venda Balcão integrado ao Atlas
+Fluxo implementado:
+`Necessidade → otimização de barras → separação de estoque/sobra → compra final`.
 
-- consolidada a decisão de manter **um único Atlas One**, com o PDV como modo operacional e não como sistema/banco separado;
-- `BalcaoShell` passa a identificar explicitamente `Modo Venda Balcão`;
-- adicionado botão `Voltar ao Atlas`, retornando ao ERP completo pela rota `/`;
-- menu móvel também recebe acesso direto `Atlas`;
-- adicionada seção `Gestão compartilhada` no menu do balcão, apontando para as telas existentes do Atlas:
-  - Clientes (`/clientes`);
-  - Produtos / Cadastros (`/cadastros`);
-  - Estoque (`/estoque`);
-  - Compras / NF (`/compras`);
-- esses acessos usam os mesmos produtos, clientes, unidades, estoque, compras e financeiro já existentes; não foi criado dado duplicado;
-- fiscal/NFC-e/NF-e continua evolução posterior, após definição do provedor e das regras fiscais.
+A operação permite ajuste manual com justificativa, separação de barra inteira, reserva de retalho, desfazer separação e recalcular o faltante a comprar.
+
+`Projeto conferido` passa a gerar o pacote técnico automaticamente quando o fluxo é concluído pela interface.
+
+Migration:
+- `20260827015657_material_planejamento_aproveitamento_estoque_v1.sql`.
 
 ---
 
-## 2026-08-23 — PR #260 — Orçamento visual + variáveis W.Vetro
+## 2026-08-27 — Produção e Instalação com gates — PR #280
 
-### Seleção visual de tipologias
-- criado `SeletorEsquadriaInteligenteV2.tsx` e ativado por compatibilidade pelo componente existente;
-- tipologias da Linha passam a aparecer em cards visuais;
-- mantido select textual como fallback/lista rápida;
-- adicionados busca, filtros de status/origem/imagem e ordenação por prioridade técnica;
-- cards exibem status Atlas/W.Vetro, número de configurações validadas, ocorrência histórica e origem da imagem;
-- precedência de imagem: Atlas tipologia → configuração/produto Atlas → W.Vetro → placeholder;
-- lightbox para ampliar imagem sem depender de hover.
+Produção passa a trabalhar com ordens vinculadas a Cliente/Obra/Venda.
 
-### Referência segura de variáveis
-- criada tabela `wvetro_referencias_variaveis` com RLS fechado para cliente e operação server-side;
-- migrations:
-  - `20260824022150_wvetro_variaveis_orcamento_v1`;
-  - `20260824022234_wvetro_variaveis_folhas_normalizacao_v1`;
-- função `fn_wvetro_reconstruir_variaveis_explicitas()` extrai apenas fatos escritos explicitamente no Modelo W.Vetro;
-- nenhum fuzzy/inferência livre é promovido automaticamente;
-- base histórica atual gerou 57 referências explícitas de número de folhas, normalizadas de 1 a 8;
-- catálogo global de opção `folhas` passou a representar 1..8 quando esses valores apareceram explicitamente na origem, sem validar receitas.
+Gate de esquadria:
+- Medição Final aprovada;
+- Perfis `Liberado`;
+- Acessórios `Liberado`;
+- Outros `Liberado`.
 
-### Configurar variáveis
-- criado endpoint autenticado `/api/orcamento/wvetro-referencias` para expor somente referências seguras;
-- UI unifica variáveis Atlas e referências W.Vetro;
-- valor Atlas existente nunca é sobrescrito pela referência;
-- W.Vetro preenche somente valor ainda vazio ao abrir modo assistido;
-- selo distingue `ATLAS`, `WVETRO REFERÊNCIA` e valor `AJUSTADA`;
-- evidência de origem fica visível;
-- ausência de dado permanece `A definir`.
+O card de Produção é sincronizado com as ordens e não aceita movimento manual incompatível.
 
-### Procedência do orçamento
-- `lib/orcamentos.ts` passa a guardar no snapshot de cada item a referência W.Vetro realmente utilizada;
-- snapshot inclui Linha/Modelo, IDs, variáveis usadas, valor bruto, origem e evidência;
-- referência só é marcada `utilizada_como_base` se não houver configuração Atlas validada e algum valor W.Vetro tiver sido efetivamente usado;
-- falha ao obter metadados de procedência não bloqueia criação do orçamento.
+Gate de Instalação:
+- todas as ordens não canceladas concluídas;
+- Vidros `Liberado`.
 
-### Auditoria
-- após cada lote histórico da auditoria W.Vetro e ao finalizar, referências explícitas são reconstruídas;
-- futuras imagens/modelos encontrados pela auditoria passam a alimentar o mesmo fluxo visual, sem sobrescrever conhecimento Atlas validado.
+A automação `Produção concluída → Instalação` está ativa. Instalação nasce com fluxo `Agendada → Em instalação → Concluída` e o fechamento conclui a Obra.
 
-### Validação
-- banco aplicado com sucesso;
-- PR #260 aberta aguardando Build Validation + preview Vercel antes de merge.
+Migrations:
+- `20260827012106_producao_ordens_vinculadas_revisoes_v1.sql`;
+- `20260827013630_fluxo_producao_instalacao_gates_v1.sql`.
 
 ---
 
-## 2026-08-23 — PR #258 — Auditoria completa W.Vetro → Atlas
+## 2026-08-27 — Overrides, versionamento e restauração de Tipologias — PR #280
 
-Implementada a camada de referência completa W.Vetro sem substituir o conhecimento técnico validado no Atlas.
+Criadas:
+- `orcamento_item_componentes_overrides`;
+- `engenharia_tipologia_formulas_historico`;
+- rota `/engenharia/historico-tipologias`.
 
-### Banco / proveniência
-- formalizada a origem W.Vetro das 109 tipologias históricas extraídas de 1.038 vendas/orçamentos;
-- criada referência auditável de linhas, tipologias, componentes, vidros e snapshots de produto da API;
-- eliminada a lacuna de vínculo Linha↔Tipologia: 46/109 antes → 109/109 depois;
-- após a migration: 60 linhas técnicas, 29 ativas, 55 exclusivamente W.Vetro e 4 mistas Atlas+W.Vetro;
-- 64 valores brutos de Linha preservados no staging;
-- catálogos conhecidos preservados: 1.307 perfis e 1.174 acessórios W.Vetro;
-- migrations aplicadas e alinhadas ao histórico remoto:
-  - `20260824012830_wvetro_referencia_completa_v1`;
-  - `20260824012851_wvetro_staging_tipologias_componentes_v1`;
-  - `20260824012908_wvetro_snapshots_api_v1`;
-  - `20260824012923_wvetro_imagens_snapshot_v1`;
-  - `20260824014055_wvetro_referencias_indices_v1`;
-- cinco FKs novas da camada W.Vetro apontadas pelo advisor de desempenho foram indexadas pela última migration.
+Regras:
+- alteração só no orçamento não mexe na tipologia mestre;
+- alteração definitiva de perfil/acessório exige master + justificativa;
+- alteração técnica relevante incrementa versão;
+- restauração cria nova versão baseada na histórica, sem apagar versões anteriores;
+- tipologia pode ser duplicada para desenvolvimento sem alterar original.
 
-### Auditoria viva
-- criada tela Master `/configuracoes/integracoes/wvetro/auditoria`;
-- consulta linhas da API, pedidos/orçamentos em lotes de até 90 dias, produtos por código, componentes, vidros e imagens;
-- tenta descobrir catálogo completo de Perfis/Acessórios; item novo entra apenas como referência importada, sem custo/margem/unidade operacional inventados;
-- snapshots preservam payload, LinhaId/LinhaNome, NCM/unidade de origem e URL;
-- imagens podem ser copiadas para o bucket `fotos`, sem sobrescrever foto Atlas existente;
-- vínculo produto↔linha somente por campo explícito/igualdade exata; fuzzy continua proibido.
+Migration:
+- `20260827021551_orcamento_override_historico_tipologia_v1.sql`.
 
-### Orçamento
-- seletor de tipologia passou a mostrar procedência/estado técnico:
-  - `REFERÊNCIA WVETRO`;
-  - `WVETRO · EM VALIDAÇÃO ATLAS`;
-  - `WVETRO · VALIDADA ATLAS`;
-  - `VALIDADA ATLAS`;
-  - `CADASTRADA ATLAS`.
-- fórmulas/configurações Atlas validadas mantêm prioridade absoluta sobre a referência W.Vetro.
+---
 
-### Segurança / validação
-- tabelas novas com RLS e acesso operacional server-side/service-role;
-- advisor de segurança não apontou ERROR novo específico da camada W.Vetro;
-- nenhuma atualização automática de custo/preço/unidade operacional foi adicionada;
-- execução viva final da API permanece para ser disparada por usuário Master autenticado.
+## 2026-08-27 — Normalização de comprimento de barra
 
-Relatório: `docs/tecnico/auditoria-wvetro-completa-2026-08-23.md`.
+Foi identificado que vários perfis possuíam `tamanho_barra_mm_origem` válido, mas `tamanho_barra_mm` operacional nulo.
 
-## Implementações imediatamente anteriores
+Migration `20260827023133_produtos_backfill_tamanho_barra_origem_v1.sql` copia o valor de origem somente quando o operacional está vazio, sem sobrescrever cadastro já definido.
 
-- PR #255: Compras → fiscal → fornecedores → Contas a Pagar → recebimento → estoque → custo médio + precificação balcão.
-- PR #257: estoque multiunidade, endereçamento, reservas e transferências.
-- PR #256: Venda Balcão multiunidade, caixas, estoque da rede e atendimento de vendas reservadas.
+---
 
-Para o histórico cronológico completo anterior a este checkpoint, consultar o arquivo de archive indicado no topo.
+## 2026-08-26 — Cliente 360 + Motor de Automações — PR #280
+
+Implementado:
+- Central 360 e Andamento;
+- múltiplas Obras por cliente;
+- Financeiro único com recebimentos/alocações por obra;
+- fluxo Venda confirmada → Financeiro + Conferir Projeto;
+- Projeto conferido → Medição + Perfis + Acessórios + Outros;
+- Medição aprovada → Vidros + MEE;
+- motor configurável `workflow_automacoes` + auditoria `workflow_execucoes`;
+- tarefas/notificações reaproveitam o sistema existente;
+- cards carregam cliente/obra/responsável/contexto;
+- venda fechada preservada em `vendas_obras` e base de revisões em `venda_obra_revisoes`;
+- Balcão rápido permanece fora do workflow de obra.
+
+Validação transacional anterior com ROLLBACK confirmou idempotência do fluxo até Medição aprovada e ausência de registros temporários.
+
+---
+
+## Validação técnica da rodada
+
+HEAD anterior de código `22fa0bf81e5ab8132e2b46808a67412dbee81585`:
+- Build Validation #605: success;
+- Supabase Database Control #328: success;
+- Vercel Preview: READY;
+- `/orcamento/precificacao`: HTTP 200.
+
+HEAD atual `bd9597fb3462b83bfe54c80381067b4c96ed3bae`:
+- Build Validation #620: success;
+- Supabase Database Control #343: success;
+- Vercel Preview: READY;
+- `/orcamento/novo`: HTTP 200.
+
+PR #280 continua draft e sem merge.

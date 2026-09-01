@@ -74,19 +74,9 @@ export async function moverCard(
   colunaId: string,
   decisoesAutomacaoSetor?: Record<string, 'substituir' | 'duplicar'>
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('orcamentos')
-    .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
-    .eq('id', orcamentoId)
-    .select('cliente_nome, criado_por_id')
-    .single()
-
-  if (error) return false
-
-  // Colunas marcadas como gera_medicao_final agora representam o inicio da
-  // CONFIRMACAO DE VENDA. Nenhuma automacao operacional nasce apenas porque
-  // o card entrou em Vendido. O usuario completa o cadastro, escolhe a
-  // proposta fechada e confirma explicitamente o inicio do processo.
+  // A coluna marcada com gera_medicao_final é o gatilho visual de "Vendido".
+  // Ela NÃO pode ser persistida antes da confirmação da venda, senão o card
+  // fica parecendo vendido sem existir venda, conta a receber ou projeto.
   const { data: colunaDestino, error: erroColuna } = await supabase
     .from('kanban_colunas')
     .select('gera_medicao_final')
@@ -95,6 +85,7 @@ export async function moverCard(
 
   if (erroColuna) {
     console.error('Erro ao verificar configuracao da coluna:', erroColuna)
+    return false
   }
 
   if (colunaDestino?.gera_medicao_final) {
@@ -103,6 +94,15 @@ export async function moverCard(
     }
     return true
   }
+
+  const { data, error } = await supabase
+    .from('orcamentos')
+    .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
+    .eq('id', orcamentoId)
+    .select('cliente_nome, criado_por_id')
+    .single()
+
+  if (error) return false
 
   executarAutomacoesColuna(colunaId, {
     cliente_nome: data?.cliente_nome || null,

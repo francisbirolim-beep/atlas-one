@@ -3,10 +3,12 @@ import type { Usuario } from './tipos'
 
 export const CADASTROS_360 = [
   { id: 'clientes', label: 'Clientes', grupo: 'Cadastros principais' },
+  { id: 'catalogo_tecnico', label: 'Catálogo Técnico', grupo: 'Cadastros principais' },
   { id: 'produtos', label: 'Produtos', grupo: 'Cadastros principais' },
   { id: 'linhas', label: 'Linhas', grupo: 'Cadastros principais' },
   { id: 'materiais', label: 'Materiais', grupo: 'Cadastros principais' },
   { id: 'fornecedores', label: 'Fornecedores', grupo: 'Cadastros principais' },
+  { id: 'historico', label: 'Histórico de Cadastros e Preços', grupo: 'Produtos e precificação' },
   { id: 'produtos_linha', label: 'Produtos por Linha', grupo: 'Produtos e precificação' },
   { id: 'precificacao', label: 'Precificação', grupo: 'Produtos e precificação' },
   { id: 'unidades', label: 'Unidades Pendentes', grupo: 'Produtos e precificação' },
