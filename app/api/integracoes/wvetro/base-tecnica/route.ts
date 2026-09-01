@@ -146,10 +146,51 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, concluida: terminou, resultado, execucao: atualizada, resumo: await resumoBaseTecnicaWVetro() })
       } catch (e) {
         const mensagem = e instanceof Error ? e.message : 'Falha ao processar o dia.'
-        await supabaseAdmin.from('wvetro_base_tecnica_execucoes').update({
-          status: 'erro', erro: mensagem, ultima_mensagem: `${data}: falha; o cursor foi preservado para retomada.`, updated_at: new Date().toISOString(),
-        }).eq('id', id)
-        throw e
+        const proxima = somarDia(data)
+        const terminou = proxima > String(execucao.periodo_fim)
+
+        const { error: erroPendencia } = await supabaseAdmin
+          .from('wvetro_base_tecnica_pendencias')
+          .upsert({
+            execucao_id: id,
+            data,
+            erro: mensagem,
+            tentativas: 1,
+            status: 'pendente',
+            atualizado_em: new Date().toISOString(),
+          }, { onConflict: 'execucao_id,data' })
+
+        if (erroPendencia) {
+          await supabaseAdmin.from('wvetro_base_tecnica_execucoes').update({
+            status: 'erro',
+            erro: `${mensagem} | Falha ao registrar pendência: ${erroPendencia.message}`,
+            ultima_mensagem: `${data}: falha; o cursor foi preservado porque a pendência não pôde ser registrada.`,
+            updated_at: new Date().toISOString(),
+          }).eq('id', id)
+          throw erroPendencia
+        }
+
+        const { data: atualizada, error: erroUpdate } = await supabaseAdmin.from('wvetro_base_tecnica_execucoes').update({
+          cursor_data: proxima,
+          status: terminou ? 'concluida' : 'em_andamento',
+          dias_processados: Number(execucao.dias_processados || 0) + 1,
+          dias_pendentes: Number(execucao.dias_pendentes || 0) + 1,
+          ultima_mensagem: `${data}: falha registrada como pendência; carga avançou para ${proxima}.`,
+          erro: null,
+          updated_at: new Date().toISOString(),
+          finalizado_em: terminou ? new Date().toISOString() : null,
+        }).eq('id', id).select('*').single()
+
+        if (erroUpdate) throw erroUpdate
+
+        return NextResponse.json({
+          ok: true,
+          concluida: terminou,
+          pendente: true,
+          pendencia: { data, erro: mensagem },
+          execucao: atualizada,
+          resumo: await resumoBaseTecnicaWVetro(),
+        })
       }
     }
     return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 })
