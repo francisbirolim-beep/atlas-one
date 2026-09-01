@@ -347,7 +347,7 @@ export default function UsuariosSenhasPage() {
                     </label>
                   ))}
                 </div>
-                <div className="mb-3 mt-5 flex items-center gap-2"><ShieldCheck size={17} className="text-blue-600"/><div><p className="text-sm font-semibold text-slate-800">Cadastros 360</p><p className="text-xs text-slate-500">Marque somente os cadastros que esta pessoa poderá enxergar.</p></div></div>
+                <div className="mb-3 mt-5 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><ShieldCheck size={17} className="text-blue-600"/><div><p className="text-sm font-semibold text-slate-800">Cadastros 360</p><p className="text-xs text-slate-500">Marque somente os cadastros que esta pessoa poderá enxergar.</p></div></div>{novoRole !== 'master' && <div className="flex gap-2"><button type="button" onClick={() => setNovosCadastros({ visiveis: CADASTROS_360.map(c => c.id) })} className="text-xs font-medium text-blue-700 hover:underline">Marcar todos</button><span className="text-slate-300">·</span><button type="button" onClick={() => setNovosCadastros({ visiveis: [] })} className="text-xs font-medium text-slate-500 hover:underline">Desmarcar todos</button></div>}</div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {CADASTROS_360.map(cadastro => (
                     <label key={cadastro.id} className={`cursor-pointer rounded-xl border p-3 transition ${novosCadastros.visiveis.includes(cadastro.id) ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
@@ -421,7 +421,7 @@ export default function UsuariosSenhasPage() {
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-start gap-2"><ShieldCheck size={18} className="mt-0.5 text-blue-600"/><div><h2 className="font-semibold text-slate-900">Cadastros 360 de {usuarioSelecionado.nome.split(' ')[0]}</h2><p className="text-xs text-slate-500">As opções desmarcadas não aparecem na central deste usuário.</p></div></div>
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-2"><div className="flex items-start gap-2"><ShieldCheck size={18} className="mt-0.5 text-blue-600"/><div><h2 className="font-semibold text-slate-900">Cadastros 360 de {usuarioSelecionado.nome.split(' ')[0]}</h2><p className="text-xs text-slate-500">As opções desmarcadas não aparecem na central deste usuário.</p></div></div>{cadastrosConfig && usuarioSelecionado.role !== 'master' && <div className="flex gap-2"><button type="button" onClick={() => setCadastrosConfig({ visiveis: CADASTROS_360.map(c => c.id) })} className="text-xs font-medium text-blue-700 hover:underline">Marcar todos</button><span className="text-slate-300">·</span><button type="button" onClick={() => setCadastrosConfig({ visiveis: [] })} className="text-xs font-medium text-slate-500 hover:underline">Desmarcar todos</button></div>}</div>
                   {!cadastrosConfig ? <div className="grid place-items-center py-8 text-slate-400"><Loader2 size={20} className="animate-spin"/></div> : (
                     <div className="space-y-2">
                       {CADASTROS_360.map(cadastro => (
