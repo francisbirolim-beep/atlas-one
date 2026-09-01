@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Boxes,
@@ -255,9 +256,26 @@ export default function ComprasPage() {
     [formCotacao, setFormCotacao] = useState(cotacaoVazia),
     [fornecedoresConvite, setFornecedoresConvite] = useState<string[]>([]),
     [convidando, setConvidando] = useState(false);
+  const searchParams = useSearchParams();
   useEffect(() => {
     void carregar();
   }, []);
+  useEffect(() => {
+    if (!dados) return;
+    const clienteId = searchParams.get("cliente");
+    if (!clienteId) return;
+    const c = dados.clientes.find((cl) => cl.id === clienteId);
+    if (!c) return;
+    const obrasCliente = dados.obras.filter((o) => o.cliente_id === clienteId);
+    setForm((v) => ({
+      ...v,
+      destino: "obra",
+      cliente_id: clienteId,
+      obra_id: obrasCliente.length === 1 ? obrasCliente[0].id : "",
+    }));
+    setNovaAberta(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dados]);
   async function requisicao(url: string, init?: RequestInit) {
     const token = await tokenAtual();
     if (!token)
