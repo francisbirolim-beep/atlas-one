@@ -114,6 +114,27 @@ export default function ClienteOperacoes({ clienteId, clienteNome }: ClienteOper
 
   return (
     <section className="space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Vendas</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{medicoes.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Total vendido</p>
+            <p className="mt-1 text-sm font-bold text-brand-teal">{moeda(totalVendido)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Assistências</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{assistencias.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Cliente</p>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-800">{clienteNome}</p>
+          </div>
+        </div>
+      </div>
+
       {carregando ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-400">Carregando histórico operacional...</div>
       ) : (

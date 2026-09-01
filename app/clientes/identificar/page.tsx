@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, ClipboardList, Headphones, Loader2, Pencil, Search, ShoppingCart,
+  ArrowLeft, ClipboardList, Headphones, Loader2, PackagePlus, Pencil, Search, ShoppingCart,
   UserCheck, UserPlus, X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -115,6 +115,12 @@ export default function IdentificarCliente() {
           subtitulo: 'Pós-venda e manutenção',
           icone: Headphones,
           href: `/assistencia?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
+        },
+        {
+          titulo: 'Pedido de compra',
+          subtitulo: 'Enviar necessidade direto ao comprador',
+          icone: PackagePlus,
+          href: `/compras?cliente=${encodeURIComponent(clienteSelecionado.id)}&clienteNome=${encodeURIComponent(clienteSelecionado.nome)}`,
         },
       ]
     : []
