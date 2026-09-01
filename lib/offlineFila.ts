@@ -41,10 +41,20 @@ export interface PendenteAssistencia {
 export type Pendente = PendenteOrcamento | PendenteAssistencia
 
 export async function salvarPendente(item: Pendente): Promise<void> {
+  // Se o pedido/assistência nasceu dentro de uma obra do Cliente 360,
+  // preserva esse contexto também quando o envio ficar para depois.
+  // Assim a sincronização offline não perde o vínculo ao trocar de tela.
+  const obraId = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('obra')
+    : null
+  const itemComContexto: Pendente = obraId && !item.dados?.obraId
+    ? { ...item, dados: { ...item.dados, obraId } }
+    : item
+
   const db = await abrirDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).put(item)
+    tx.objectStore(STORE).put(itemComContexto)
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })

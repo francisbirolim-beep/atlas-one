@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { Tipologia } from './tipos'
+import { CategoriaTipologia, Tipologia } from './tipos'
 
 export type TipologiaTecnica = Tipologia & { ativo: boolean }
 
@@ -26,7 +26,7 @@ function slugTipologia(label: string): string {
     .replace(/^_+|_+$/g, '')
 }
 
-export async function criarTipologia(label: string, categoria: 'porta' | 'janela'): Promise<TipologiaTecnica | null> {
+export async function criarTipologia(label: string, categoria: CategoriaTipologia): Promise<TipologiaTecnica | null> {
   const chave = slugTipologia(label) || ('tipologia_' + Date.now())
 
   const { data: maiorOrdem } = await supabase

@@ -6,6 +6,7 @@ import { OrigemCliente, ItemBalcao } from './tipos'
 
 export interface DadosOrcamentoBalcaoForm {
   clienteId?: string
+  obraId?: string | null
   clienteNome: string
   clienteApelido?: string
   clienteWhatsapp?: string
@@ -37,6 +38,8 @@ export async function criarOrcamentoBalcao(
   if (!dados.clienteNome.trim()) return { ok: false, error: 'Informe o nome do cliente' }
   if (!dados.itens || dados.itens.length === 0) return { ok: false, error: 'Adicione ao menos um produto' }
 
+  const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
+
   const [clienteIdResolvido, usuario] = await Promise.all([
     dados.clienteId
       ? Promise.resolve(dados.clienteId)
@@ -64,6 +67,7 @@ export async function criarOrcamentoBalcao(
     .insert({
       id: novoId,
       cliente_id: clienteIdResolvido,
+      obra_id: obraId || null,
       cliente_nome: dados.clienteNome,
       cliente_whatsapp: dados.clienteWhatsapp || null,
       cidade: dados.cidade || null,
