@@ -297,29 +297,22 @@ Adicionar indicadores/resumo do período filtrado somente se houver necessidade 
 
 ## W.Vetro
 
-Auditoria histórica original encerrada. Nova auditoria da BASE TÉCNICA (composição
-por tipologia, custos refletidos em produtos, imagens) feita em 2026-09-01 e
-registrada em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`.
-**Não executar novamente a auditoria inteira sem necessidade — leia o documento
-acima antes de reauditar.**
+PR #306 (não mexer) corrigiu a carga travar em dia com erro; foi retomada e está
+`em_andamento`. Nova auditoria/tela feita em 2026-09-01 (ver
+`docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md` para a versão
+anterior à retomada). Estado após retomada:
+- 664 dias processados (de ~975), 13 dias em pendência auditável;
+- composição por tipologia: 504 linhas em `wvetro_tipologia_componentes` (264
+  vinculadas a produto Atlas), mas só 17 das 111 tipologias-referência têm
+  alguma composição — ainda é o gargalo para o Orçamento Sob Medida;
+- 34 tipologias com imagem, 2 receitas técnicas oficiais já ativas.
+- Nova tela `/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista) e
+  `/tipologias/[id]` (detalhe) para auditar tipologia por tipologia: composição,
+  vínculos, variáveis e status de receita oficial. Só leitura, PR
+  `feat/wvetro-explorador-tipologias-v1` aguardando Preview/merge.
 
-Resumo (ver documento para detalhe completo):
-- vínculo Linha+Modelo → Tipologia Atlas: 98% (109/111);
-- 1.529 perfis referência (91% mapeados a produto Atlas), 1.294 acessórios (98% mapeados);
-- 111 tipologias referência, 109 mapeadas;
-- 29 linhas distintas identificadas;
-- **gargalo principal**: `wvetro_tipologia_componentes` (BOM por tipologia) só tem
-  97 linhas no total (35 perfis, 59 acessórios, 3 vidros) para 111 tipologias —
-  a carga histórica que preenche essa tabela está parada em erro a 64% do
-  período (ver PR #306, que trata disso separadamente);
-- produtos com custo/venda W.Vetro refletido: só 47 de 2.485 (1,9%);
-- 2.481 produtos consultados na API, 1.287 imagens copiadas, 735 pendentes, 459 em erro;
-- endpoint `/api/orcamento/wvetro-referencias` já existe e expõe tudo isso pronto
-  para o Orçamento Sob Medida consumir assim que a composição estiver completa.### 7. Cliente 360
-1. Abrir Cliente → Central 360 → Andamento.
-2. Conferir que os estados são os mesmos dos setores.
-3. Conferir `Bloqueio atual`.
-4. Confirmar que não há status paralelo/duplicado.
+**Não executar novamente a auditoria inteira sem necessidade — quando a carga
+concluir, reauditar via a nova tela em vez de rodar SQL solto.**
 
 ## Pontos a observar durante o teste
 

@@ -449,12 +449,27 @@ Todas estão aplicadas no Supabase e versionadas no repositório.
 
 ## Base técnica W.Vetro para Orçamento Sob Medida
 
-Auditoria completa em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`.
-Resumo: infraestrutura (tabelas + endpoint) pronta; dado real ainda incompleto
-porque a carga histórica está parada em erro a 64% do período (tratado pela
-PR #306). Composição por tipologia (`wvetro_tipologia_componentes`) tem só 97
-linhas para 111 tipologias — é o bloqueador real para reproduzir o Orçamento
-Sob Medida como o W.Vetro.
+Auditoria original em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`.
+A PR #306 (não mexer) corrigiu a carga histórica travar em dia com erro; ela foi
+retomada e está `em_andamento`, avançando com dias problemáticos virando
+pendência auditável em vez de travar tudo. Números direto do Supabase em
+2026-09-01 (tarde), depois da retomada:
+- 664 dias processados (subiu de 626), 13 dias em pendência (`wvetro_base_tecnica_pendencias`);
+- composição por tipologia (`wvetro_tipologia_componentes`): 504 linhas (subiu de 97), 264 vinculadas a produto Atlas, 17 tipologias já com alguma composição (de 111 referências, 109 vinculadas à tipologia Atlas);
+- 34 tipologias já com imagem (subiu de 12);
+- 2 receitas técnicas oficiais já ativas em `engenharia_tipologia_formulas_corte`.
+
+Nova tela de auditoria por tipologia (Master):
+`/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista com filtros) e
+`/configuracoes/integracoes/wvetro/base-tecnica/tipologias/[id]` (detalhe: imagem,
+linha/modelo, vínculo Atlas, composição perfil/acessório/vidro com
+quantidade/medida/custo/venda/posição/corte/vínculo de produto, variáveis
+observadas, status de receita oficial). Só leitura — implementada na PR
+`feat/wvetro-explorador-tipologias-v1`, aguardando Preview/merge.
+
+Ainda falta para reproduzir o Orçamento Sob Medida como o W.Vetro: a maioria
+das 111 tipologias ainda não tem nenhuma composição (só 17 têm), e a carga
+segue em andamento — reauditar quando ela concluir.
 
 ## Regras técnicas a preservar
 
