@@ -17,6 +17,8 @@ export async function criarFornecedor(dados: {
   endereco?: string | null
   cidade?: string | null
   observacoes?: string | null
+  pedido_minimo?: number | null
+  prazo_entrega_dias?: number | null
   criado_por_id?: string | null
   criado_por_nome?: string | null
 }) {
@@ -34,6 +36,8 @@ export async function atualizarFornecedor(
     endereco: string | null
     cidade: string | null
     observacoes: string | null
+    pedido_minimo: number | null
+    prazo_entrega_dias: number | null
     ativo: boolean
   }>
 ) {

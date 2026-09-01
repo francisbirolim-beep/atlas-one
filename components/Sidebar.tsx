@@ -4,15 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Boxes,
-  Building2,
-  Calculator,
   ChevronDown,
   ChevronRight,
-  Compass,
-  FileText,
-  KeyRound,
-  LayoutGrid,
   LogOut,
   Moon,
   Search,
@@ -22,75 +15,9 @@ import {
 import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { agruparGuias, GUIAS } from '@/lib/guias'
+import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
 
 type TemaAtlas = 'escuro' | 'claro'
-
-type ItemAdmin = {
-  href: string
-  label: string
-  descricao: string
-  icon: typeof Settings
-  palavras: string
-}
-
-const ITENS_ADMIN: ItemAdmin[] = [
-  {
-    href: '/administracao',
-    label: 'Central de Administração',
-    descricao: 'Mapa organizado das configurações',
-    icon: Compass,
-    palavras: 'administracao central mapa encontrar localizar configuracao onde fica',
-  },
-  {
-    href: '/configuracoes/empresa',
-    label: 'Empresa e Identidade',
-    descricao: 'Logo, nome e identidade visual',
-    icon: Building2,
-    palavras: 'empresa logo marca identidade white label cor dados empresa',
-  },
-  {
-    href: '/configuracoes/usuarios',
-    label: 'Usuários e Acesso',
-    descricao: 'Usuários, permissões e tela inicial',
-    icon: KeyRound,
-    palavras: 'usuario acesso senha permissao funcionario home tela inicial keila vendedor',
-  },
-  {
-    href: '/setores',
-    label: 'Setores e Permissões',
-    descricao: 'Estrutura dos setores da empresa',
-    icon: LayoutGrid,
-    palavras: 'setor departamento permissao equipe comercial financeiro produção engenharia',
-  },
-  {
-    href: '/configuracoes/orcamento',
-    label: 'Padrão do Orçamento',
-    descricao: 'Regras e apresentação comercial',
-    icon: FileText,
-    palavras: 'orcamento proposta padrão comercial validade condição pagamento',
-  },
-  {
-    href: '/cadastros',
-    label: 'Central de Cadastros',
-    descricao: 'Produtos, linhas, materiais e fornecedores',
-    icon: Boxes,
-    palavras: 'cadastro produto linha fornecedor material perfil acessorio precificacao unidade receita tipologia',
-  },
-  {
-    href: '/engenharia/formulas-corte',
-    label: 'Fórmulas de Corte',
-    descricao: 'Regras técnicas de produção',
-    icon: Calculator,
-    palavras: 'formula corte engenharia perfil produção receita plano corte',
-  },
-  {
-    href: '/configuracoes',
-    label: 'Configurações Avançadas',
-    descricao: 'Automações, metas, backup e ajustes',
-    icon: Settings,
-    palavras: 'configuracao automacao meta backup kanban sla agente ia checklist avançado campos',
-  },
-]
 
 function normalizar(texto: string) {
   return texto
@@ -160,10 +87,13 @@ export default function Sidebar() {
   const semResultados = gruposVisiveis.length === 0 && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
 
   return (
-    <nav className="atlas-sidebar-shell hidden h-screen w-64 flex-shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-5 md:flex">
-      <div className="px-2 pb-4">
-        <p className="text-base font-bold tracking-tight text-brand-navy">Atlas One</p>
-        <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">Operação Esquadrifácio</p>
+    <nav className="atlas-sidebar-shell hidden h-screen w-60 flex-shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-5 md:flex">
+      <div className="atlas-sidebar-brand flex items-center gap-3 px-2 pb-5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white shadow-lg shadow-blue-950/20">A</span>
+        <span className="min-w-0">
+          <strong className="block text-sm font-bold uppercase tracking-[0.08em] text-white">Atlas One</strong>
+          <span className="mt-0.5 block truncate text-[11px] text-slate-400">Esquadrifácio</span>
+        </span>
       </div>
 
       <div className="mb-4 px-1">
@@ -211,6 +141,7 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={() => setAdminAberto(aberto => !aberto)}
+                aria-expanded={mostrarAdmin}
                 className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
               >
                 <span className="inline-flex items-center gap-2"><Settings size={15} /> Administração</span>

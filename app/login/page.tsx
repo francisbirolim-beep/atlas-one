@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, LogIn, Mail, KeyRound } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, LogIn, Mail, KeyRound } from 'lucide-react'
 import { login, solicitarRedefinicaoSenha } from '@/lib/auth'
 
 export default function Login() {
   const [identificador, setIdentificador] = useState('')
   const [senha, setSenha] = useState('')
+  const [mostrarSenha, setMostrarSenha] = useState(false)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [carregando, setCarregando] = useState(false)
@@ -58,12 +59,14 @@ export default function Login() {
     setErro('')
     setSucesso('')
     setSenha('')
+    setMostrarSenha(false)
   }
 
   function voltarLogin() {
     setModoRecuperar(false)
     setErro('')
     setSucesso('')
+    setMostrarSenha(false)
   }
 
   return (
@@ -125,14 +128,25 @@ export default function Login() {
               autoComplete="username"
               className="w-full border border-slate-300 rounded-xl p-3 text-sm"
             />
-            <input
-              type="password"
-              value={senha}
-              onChange={e => setSenha(e.target.value)}
-              placeholder="Senha"
-              autoComplete="current-password"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
-            />
+            <div className="relative">
+              <input
+                type={mostrarSenha ? 'text' : 'password'}
+                value={senha}
+                onChange={e => setSenha(e.target.value)}
+                placeholder="Senha"
+                autoComplete="current-password"
+                className="w-full border border-slate-300 rounded-xl py-3 pl-3 pr-12 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarSenha(valor => !valor)}
+                aria-label={mostrarSenha ? 'Ocultar senha' : 'Visualizar senha'}
+                title={mostrarSenha ? 'Ocultar senha' : 'Visualizar senha'}
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-400 transition hover:text-brand-navy focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-navy"
+              >
+                {mostrarSenha ? <EyeOff size={19} /> : <Eye size={19} />}
+              </button>
+            </div>
 
             <div className="flex justify-end">
               <button

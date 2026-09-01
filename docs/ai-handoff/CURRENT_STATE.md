@@ -26,6 +26,150 @@ Branch: `feat/cadastros-360-permissoes`
 - esta entrega controla a composição visual do Cadastros 360;
 - autorização profunda por rota e ações separadas (`ver`, `criar`, `editar`, `excluir`, `aprovar`) permanece para a próxima evolução, integrada ao modelo geral de permissões.
 
+## EM VALIDAÇÃO — COMPRAS 360 INTEGRADO À MAIN — 2026-08-30
+
+Branch: `fix/compras-360-main`
+
+### Implementado no código
+
+- `/compras` passou a ser a Central Compras 360, com lista de faltas, cotação, aprovação, pedido, entrega e recebimento;
+- comparação de fornecedores mostra preço unitário, frete, total, prazo e forma de pagamento;
+- o comprador escolhe explicitamente a cotação vencedora antes de aprovar a compra;
+- produtos, fornecedores e último preço real das NFs do Atlas são reutilizados na mesma tela;
+- atalhos preservam Entrada por NF, recebimentos, vínculos pendentes, estoque e contas a pagar;
+- marcar a necessidade como recebida não altera estoque; o saldo continua entrando somente pela conferência da NF;
+- a página recebeu contenção de largura e quebra de textos para não estourar no celular;
+- a API valida a sequência do processo e impede aprovação sem cotação selecionada.
+
+### Ajuste pendente de validação — filtro de categoria ao adicionar falta
+
+- o seletor de produto cadastrado passou a ter filtros rápidos: **Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros**;
+- os filtros usam a categoria já existente em `produtos`, sem criar cadastro, preço ou regra paralela;
+- ao trocar para uma categoria que não contém o produto selecionado, o vínculo é removido para impedir o envio de um item fora do filtro;
+- a opção de digitar material manualmente permanece disponível em todas as categorias.
+
+### Banco e histórico
+
+- tabelas `compras_necessidades` e `compras_cotacoes` já existentes e vazias no Supabase de produção foram conferidas;
+- migration local reconciliada com a versão remota `20260828180539`;
+- 26 migrations já aplicadas no banco, mas ausentes na `main`, foram restauradas a partir do próprio histórico Git para que o controle do Supabase volte a comparar local e remoto corretamente;
+- RLS permanece habilitado nas duas tabelas do Compras 360 e o acesso ocorre pela API autenticada do servidor.
+
+### Validação pendente
+
+- build, TypeScript, preview Vercel e controle de migrations do novo PR;
+- teste no celular e no computador do fluxo completo até `Recebido`;
+- confirmação do deploy de produção após o merge.
+
+## EM VALIDAÇÃO — MENU MOBILE CLARO — 2026-08-30
+
+Branch: `feat/mobile-menu-claro`
+
+### Implementado no código
+
+- a gaveta lateral do celular passou do azul-marinho para uma superfície branca, alinhada à identidade clara da Home;
+- textos, ícones, campo de pesquisa, divisórias, botão de fechar e rodapé receberam contraste adequado no tema claro;
+- o item selecionado continua azul para preservar a orientação visual;
+- fundo externo permanece suavemente escurecido para destacar a gaveta aberta;
+- rotas, grupos, busca, favoritos, permissões por setor e acesso administrativo não foram alterados.
+
+### Conferência funcional pendente
+
+- validar o menu aberto no iPhone;
+- pesquisar e acessar Compras, Estoque, Cadastros e Configurações;
+- conferir o item selecionado e a leitura dos itens não selecionados;
+- conferir um usuário com acesso limitado por setor.
+
+## EM VALIDAÇÃO — CORREÇÃO GLOBAL DE LARGURA NO CELULAR — 2026-08-29
+
+Branch: `feat/mobile-navigation-v2`
+
+### Implementado no código
+
+- `html`, `body`, shell e superfície principal agora respeitam a largura real do viewport e bloqueiam extravasamento horizontal do documento;
+- containers flex/grid internos podem encolher corretamente com `min-width: 0` e `max-width: 100%`;
+- títulos e textos longos quebram linha no celular sem ampliar a página;
+- inputs, selects, textareas e imagens ficam limitados à largura disponível;
+- a Central de Compras recebeu contenção responsiva própria nos cabeçalhos, cards de resumo e atalhos;
+- tabelas e quadros que precisam de largura continuam usando a rolagem horizontal interna já existente;
+- nenhuma rota, permissão, regra operacional, migration ou dado foi alterado.
+
+### Validação concluída
+
+- cache local corrompido do Next.js isolado e regenerado;
+- compilação e TypeScript aprovados;
+- build completo aprovado com geração das 90 rotas;
+- `git diff --check` aprovado.
+
+### Conferência funcional pendente
+
+- validar no preview a Home, Compras, Estoque, Cadastros e Configurações em um iPhone;
+- confirmar que não é mais possível deslocar a página inteira lateralmente;
+- confirmar que tabelas largas continuam rolando apenas dentro do próprio quadro.
+
+## EM VALIDAÇÃO — NAVEGAÇÃO COMPLETA NO CELULAR — 2026-08-28
+
+Branch: `feat/mobile-navigation-v2`
+
+### Implementado no código
+
+- criada barra inferior mobile permanente com **Início, Kanban, Compras, Favoritos e Menu**;
+- atalhos de Kanban e Compras deixam de aparecer quando a permissão correspondente estiver oculta;
+- botão **Menu** abre uma gaveta lateral em tela cheia com a mesma navegação operacional do desktop;
+- gaveta organizada por grupos, com pesquisa por nome do módulo/setor;
+- setores adicionais ativos aparecem somente quando liberados para o usuário;
+- Administração, Cadastros, Usuários, Permissões e Configurações continuam exclusivos do usuário master;
+- Favoritos passou para a barra inferior e o antigo botão flutuante, que cobria indicadores da Home, foi removido;
+- ao abrir a gaveta, a rolagem da página de fundo é bloqueada e pode ser fechada pelo fundo, botão ou tecla Escape;
+- lista administrativa foi extraída para `lib/navegacaoAdmin.ts` e é compartilhada entre desktop e mobile;
+- nenhuma rota, migration, regra operacional ou dado foi alterado.
+
+### Validação concluída
+
+- build local completo aprovado;
+- TypeScript aprovado;
+- 90 rotas geradas;
+- `git diff --check` aprovado.
+
+### Conferência funcional pendente
+
+- validar no preview em celular real;
+- abrir e fechar Menu e Favoritos;
+- acessar Compras, Estoque, Cadastros e Configurações;
+- pesquisar uma opção dentro da gaveta;
+- conferir Francis/master com acesso total e um funcionário com opções limitadas por setor.
+
+## EM VALIDAÇÃO — ATLAS VISUAL V2 — 2026-08-28
+
+Branch: `feat/atlas-visual-v2`
+
+### Implementado no código
+
+- criada uma camada visual transversal inspirada no protótipo do Compras 360;
+- sidebar desktop reduzida para 236 px, com identidade Atlas, fundo azul-marinho e seleção azul;
+- a área principal passou a usar fundo claro e suave, com superfícies brancas e bordas discretas;
+- Home ganhou cabeçalho executivo claro, saudação, empresa, data e atalhos operacionais compactos;
+- indicadores de gestão foram reposicionados logo após o cabeçalho;
+- painéis escuros da Home passaram a superfícies claras sem alterar dados ou ações;
+- topbar reconhece Compras 360, Cadastros 360, Estoque, Assistências e Engenharia;
+- após validação por screenshot real no celular, o topbar mobile foi reduzido e deixou de comprimir grupo/título;
+- no mobile, o bloco de saudação ganhou espaçamentos e tipografia menores e o placeholder de logo sem cadastro não ocupa mais a primeira tela;
+- atalhos e indicadores passaram a uma grade compacta de duas colunas no celular;
+- a área principal bloqueia extravasamento horizontal sem esconder rolagem vertical;
+- preservadas rotas, permissões, busca e regras operacionais.
+
+### Validação concluída
+
+- build local completo aprovado, incluindo TypeScript e geração das 90 rotas;
+- correção mobile recompilada com sucesso, incluindo TypeScript e geração das 90 rotas;
+- nenhuma migration e nenhuma alteração de banco.
+
+### Conferência funcional pendente
+
+- validar visualmente no preview a Home corrigida no desktop e no celular;
+- conferir contraste da sidebar e do tema por usuário;
+- navegar por Compras, Cadastros, Estoque, Kanban e Produção;
+- confirmar que atalhos, busca global e menu do perfil permanecem funcionando.
 
 ## EM VALIDAÇÃO — FILTRO DO KANBAN POR PERÍODO E TIPO DE DATA — 2026-08-28
 

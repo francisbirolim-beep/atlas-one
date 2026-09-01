@@ -1,5 +1,87 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-08-30 — Filtro de produtos ao criar necessidade no Compras 360
+
+- adicionados filtros rápidos de catálogo para Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros;
+- filtro classifica os produtos pela categoria já cadastrada e preserva a opção de necessidade digitada manualmente;
+- o produto selecionado é desvinculado ao escolher uma categoria incompatível, evitando registrar uma necessidade com filtro visual incorreto;
+- nenhuma migration, dado mestre, preço, estoque ou regra de compra foi alterado.
+
+---
+
+## 2026-08-30 — Compras 360 integrado à versão atual do Atlas
+
+- substituída a antiga tela inicial de Compras pela Central Compras 360 sem remover as rotas de NF, recebimento, estoque e financeiro;
+- criado fluxo visual de necessidade, cotação, aprovação, pedido, espera de entrega e recebimento;
+- adicionada comparação de fornecedores por preço, frete, total, prazo e condição de pagamento;
+- adicionada escolha persistida da cotação vencedora e bloqueio de aprovação enquanto nenhuma cotação estiver selecionada;
+- reutilizados cadastros reais de produtos e fornecedores e histórico do último custo observado em NF;
+- mantida a regra de que `Recebido` no planejamento não movimenta estoque; somente a conferência da NF gera entrada física;
+- API autenticada valida dados, sequência de status e vínculo entre necessidade e cotação;
+- página adaptada à contenção global de largura para funcionar no celular sem extravasamento horizontal;
+- migration do Compras 360 alinhada à versão já registrada no Supabase (`20260828180539`);
+- restaurados do histórico Git os 26 arquivos de migrations que já estavam aplicados em produção, mas haviam ficado ausentes da `main`.
+
+---
+
+## 2026-08-30 — Menu mobile claro
+
+- gaveta lateral móvel alinhada ao visual claro já aprovado na Home do Atlas;
+- fundo branco, bordas suaves e textos/ícones escuros com contraste maior;
+- campo de pesquisa e botão de fechar convertidos para superfícies claras;
+- seleção azul preservada para indicar a rota atual;
+- permissões, grupos, busca, navegação e acessos administrativos preservados;
+- nenhuma migration, tabela, dado ou regra operacional alterada.
+
+---
+
+## 2026-08-29 — Correção global de telas estourando no celular
+
+- corrigida a largura do documento, shell e superfície principal para respeitar o viewport móvel;
+- adicionados limites responsivos aos containers internos sem remover a rolagem vertical;
+- textos longos, campos e imagens passaram a respeitar a largura disponível;
+- Central de Compras ajustada especificamente após evidência enviada em iPhone;
+- cards de resumo e atalhos ganharam `min-width: 0`, quebra de texto e ícones sem compressão;
+- tabelas largas preservam a rolagem horizontal dentro do próprio componente;
+- cache local corrompido do Next.js foi isolado e reconstruído;
+- build completo aprovado com TypeScript e geração das 90 rotas;
+- nenhuma migration, tabela, permissão ou regra operacional foi alterada.
+
+---
+
+## 2026-08-28 — Navegação completa no celular
+
+- criada barra inferior mobile com Início, Kanban, Compras, Favoritos e Menu;
+- substituído o botão flutuante de Favoritos que cobria parte dos indicadores;
+- criada gaveta lateral azul-marinho com a navegação operacional agrupada por área;
+- adicionada pesquisa de módulos, setores e configurações dentro do menu;
+- Administração e Configurações permanecem visíveis somente para o usuário master;
+- setores ativos adicionais respeitam o mapa de permissões do usuário;
+- itens fixos relacionados a setores ocultos deixam de aparecer nos atalhos rápidos quando existe associação de rota;
+- extraída a lista administrativa compartilhada para evitar divergência entre desktop e mobile;
+- build local completo aprovado com TypeScript e geração das 90 rotas;
+- nenhuma migration, tabela ou regra operacional alterada.
+
+---
+
+## 2026-08-28 — Atlas Visual V2
+
+- nova identidade visual global inspirada na Central de Compras aprovada por Francis;
+- sidebar compacta azul-marinho com item ativo azul e marca Atlas One;
+- fundo geral mais claro, superfícies brancas e hierarquia tipográfica mais suave;
+- Home reorganizada com cabeçalho executivo, atalhos e indicadores no topo;
+- painéis operacionais da Home clareados por uma camada CSS isolada;
+- títulos contextuais adicionados para Compras 360, Cadastros 360, Estoque, Assistências e Engenharia;
+- screenshot real do celular revelou compressão no cabeçalho e excesso de altura na primeira tela;
+- topbar mobile reduzido para 60 px, com contexto legível e ações compactas;
+- hero mobile compactado e placeholder de logo ocultado no celular enquanto não existir logo cadastrado;
+- atalhos e indicadores reorganizados em duas colunas no mobile;
+- extravasamento horizontal bloqueado na superfície principal;
+- lógica, permissões, rotas e banco preservados;
+- build local completo reaprovado com TypeScript e 90 rotas após a correção mobile.
+
+---
+
 ## 2026-08-28 — PR #281 — Filtro do Kanban por período e tipo de data
 
 - substituído o filtro de dia único por intervalo inclusivo `De` / `Até`;

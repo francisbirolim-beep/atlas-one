@@ -43,6 +43,8 @@ export default function HomeDashboard() {
     <>
       <HomeExecutiveHero modulos={config.modulos} />
 
+      {temModulo(config, 'indicadores') && <HomeManagementOverview />}
+
       {temModulo(config, 'orcamentos') && <HomeRecentQuotes />}
 
       {mostrarNegocio && (
@@ -67,8 +69,6 @@ export default function HomeDashboard() {
           </div>
         </section>
       )}
-
-      {temModulo(config, 'indicadores') && <HomeManagementOverview />}
     </>
   )
 }

@@ -16,6 +16,172 @@ Próxima evolução recomendada: aplicar permissões profundas por rota e ação
 
 
 ## TAREFA ATUAL — validar filtro do Kanban por período e tipo de data
+## ROTEIRO ACORDADO — Compras 360 mais dinâmico (2026-08-31)
+
+Aprovado pelo usuário em 2026-08-31, a executar em PRs separados, nesta ordem:
+
+1. **PR #291 (feat/compras-360-filtro-categoria)** — filtros de produtos por categoria
+   (Perfis, Acessórios, Vidros, Produto pronto, Outros, Todas) + busca por
+   nome/código com lista de sugestões clicáveis. Concluído e aprovado pelo
+   usuário; aguardando merge.
+
+2. **Vínculo necessidade → Cliente/Obra ou Estoque. CONCLUÍDO (PR #297,
+   mesclado em main, migration aplicada em produção em 2026-08-31).**
+   Modal "Adicionar necessidade" tem passo "Destino da compra": Cliente/Obra
+   (busca cliente, depois lista as obras dele) ou Estoque. Necessidade
+   guarda `destino`/`cliente_id`/`cliente_nome`/`obra_id`/`obra_nome`
+   estruturados (colunas novas em `compras_necessidades`, migration
+   20260831113359). Modal também ganhou uma etapa de confirmação/resumo
+   ("Revisar pedido" → mostra material, quantidade, prioridade, prazo,
+   destino e observações → "Confirmar e enviar pedido") antes de gravar,
+   a pedido do usuário. Erros de gravação aparecem dentro do próprio modal
+   (antes ficavam escondidos atrás dele).
+
+3. **Fornecedor 360 — CONCLUÍDO (2026-08-31, PRs #298, #299, #300).**
+   Espelhando o Cliente 360, do lado do fornecedor. Entregue:
+   - Cadastro de fornecedor com **pedido mínimo** e **prazo de entrega**
+     (migration 20260831150000).
+   - Página **Fornecedor 360** (`/fornecedores/[id]`): dados do fornecedor,
+     cotações pendentes, "falta R$X pro pedido mínimo" e histórico de
+     compras recebidas (produto, categoria, preço, data).
+   - **Kanban de aprovação do comprador** dentro do Compras 360 existente:
+     seção "Fornecedores para cotar" no card da necessidade — o comprador
+     marca os fornecedores possíveis e "Convidar para cotação" cria, em
+     lote, uma linha de cotação por fornecedor (`preco_unitario` aceita
+     nulo — migration 20260831190000 — até o preço chegar), avançando a
+     necessidade para a coluna de cotação automaticamente.
+   - No formulário de cotação: ao escolher um fornecedor, se ele vendeu
+     esse mesmo item da última vez, o **preço já vem sugerido**; e um
+     aviso mostra quanto falta (ou se já bateu) o **pedido mínimo** desse
+     fornecedor, somando as cotações pendentes dele em todas as
+     necessidades abertas.
+
+   Nada pendente deste item. Próxima frente do Compras 360 fica em aberto
+   — decidir com o usuário antes de iniciar.
+
+Fluxo final desejado pelo usuário: necessidade pendente → aprovação do
+comprador (kanban) → cotação separada por fornecedor → comprado aguardando
+chegar, com o cliente/obra sempre rastreado (já entregue na etapa 2), e o
+fornecedor também totalmente rastreado com tudo que já foi comprado dele,
+pedido mínimo e prazo de entrega facilitando a decisão de quando comprar.
+
+---
+
+## TAREFA ATUAL — validar e publicar Compras 360
+
+Branch: `fix/compras-360-main`
+
+### Validar no preview
+
+1. no modal de nova necessidade, alternar entre **Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros** e confirmar que a lista de produto cadastrado muda conforme o filtro;
+2. criar uma necessidade com produto cadastrado e outra digitada manualmente;
+3. abrir a necessidade, incluir cotações de dois fornecedores e comparar total, prazo e pagamento;
+4. selecionar a cotação vencedora e confirmar que só então a compra pode ser aprovada;
+5. avançar por pedido emitido, aguardando entrega e recebido;
+6. confirmar que `Recebido` não altera o saldo de estoque;
+7. acessar Entrada por NF, Recebimentos e NFs, Itens sem vínculo, Estoque e Contas a pagar pelos atalhos;
+8. testar no celular e confirmar que página, cards, modal e tabela não estouram horizontalmente;
+9. confirmar Build Validation, Vercel e Supabase Database Control antes do merge.
+
+### Publicação
+
+- integrar somente após todas as verificações automáticas e o preview estarem aprovados;
+- após o merge, conferir `/compras` no domínio normal do Atlas e realizar uma necessidade de teste controlada.
+
+---
+
+## TAREFA ATUAL — validar menu mobile claro
+
+Branch: `feat/mobile-menu-claro`
+
+### Validar no preview
+
+1. abrir o menu completo no iPhone e confirmar o fundo branco;
+2. conferir contraste de marca, busca, grupos, itens, descrições administrativas e rodapé;
+3. navegar para Compras, Estoque, Cadastros e Configurações;
+4. pesquisar uma opção e confirmar o estado vazio quando não houver resultado;
+5. confirmar que o item da rota atual permanece destacado em azul;
+6. validar Francis/master e um funcionário com setores limitados.
+
+### Limite da mudança
+
+- alteração exclusivamente visual da gaveta mobile;
+- nenhuma rota, permissão, regra operacional, migration ou dado alterado.
+
+---
+
+## TAREFA ATUAL — validar correção global de largura no celular
+
+Branch: `feat/mobile-navigation-v2`
+
+### Validar no preview
+
+1. abrir Home, Compras, Estoque, Cadastros e Configurações no celular;
+2. tentar arrastar a página para os lados e confirmar que o conteúdo permanece preso ao viewport;
+3. conferir que títulos, descrições, cards e campos quebram linha sem cortar o início ou o final;
+4. em Estoque e demais telas com tabelas largas, confirmar que somente a tabela possui rolagem horizontal;
+5. confirmar que a barra inferior e a gaveta de navegação continuam funcionando normalmente;
+6. validar em iPhone instalado e também no navegador móvel.
+
+### Estado técnico
+
+- correção implementada sem alteração de dados ou regras operacionais;
+- build completo aprovado, incluindo TypeScript e geração das 90 rotas;
+- próximo passo: atualizar o preview da branch e validar visualmente no aparelho real.
+
+---
+
+## TAREFA ATUAL — validar navegação completa no celular
+
+Branch: `feat/mobile-navigation-v2`
+
+Dependência visual: `feat/atlas-visual-v2` / PR #284.
+
+### Validar no preview
+
+1. confirmar que a barra inferior não cobre cards, botões ou campos;
+2. abrir **Menu** e conferir os grupos Geral, Comercial, Operações e Administração;
+3. pesquisar `compras`, `estoque`, `cadastros` e `configurações`;
+4. abrir um módulo e confirmar que a gaveta fecha automaticamente;
+5. abrir Favoritos pela barra inferior e confirmar que o botão flutuante antigo não aparece;
+6. validar a área segura inferior no iPhone instalado e no navegador;
+7. entrar com usuário master e confirmar Administração completa;
+8. entrar com funcionário limitado e confirmar que setores ocultos não aparecem.
+
+### Ordem de integração
+
+- primeiro validar e integrar o PR #284;
+- depois retargetar esta branch para `main`, validar o diff isolado e integrar manualmente;
+- não misturar correções funcionais de Compras, Estoque ou permissões neste PR visual de navegação.
+
+---
+
+## TAREFA ATUAL — validar Atlas Visual V2
+
+Branch: `feat/atlas-visual-v2`
+
+Objetivo: confirmar a nova identidade visual do Atlas antes de expandi-la para o conteúdo interno de cada módulo.
+
+### Validar no preview
+
+1. abrir a Home no computador e confirmar sidebar, cabeçalho, atalhos e indicadores;
+2. abrir no celular e confirmar que o cabeçalho não comprime o título e que os atalhos aparecem em duas colunas;
+3. confirmar que o placeholder de logo não ocupa espaço no celular quando a empresa ainda não tem logo cadastrado;
+4. confirmar que não existe rolagem horizontal indevida;
+5. testar busca global, notificações e menu do usuário;
+6. navegar por Clientes, Orçamentos, Kanban, Compras, Estoque, Produção e Engenharia;
+7. conferir tema claro/escuro por usuário;
+8. confirmar que nenhuma ação operacional ou permissão mudou.
+
+### Próxima etapa depois da aprovação
+
+- aplicar os mesmos componentes de cabeçalho, métricas, abas, filtros e tabelas aos módulos antigos;
+- migrar um módulo por PR para reduzir risco e permitir validação visual gradual;
+- manter os módulos 360 e a Home como referência oficial do design.
+
+---
+
+## TAREFA ANTERIOR — validar filtro do Kanban por período e tipo de data
 
 Branch: `feat/kanban-filtro-periodo-datas`
 
