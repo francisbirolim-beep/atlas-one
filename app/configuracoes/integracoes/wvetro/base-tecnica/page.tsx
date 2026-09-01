@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Database, Image as ImageIcon, Loader2, PackageSearch, Play, RefreshCw, RotateCcw, Square, Wrench } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Database, Image as ImageIcon, Loader2, PackageSearch, Play, RefreshCw, RotateCcw, Search, Square, Wrench } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 
 type Resumo = {
@@ -188,8 +188,13 @@ export default function BaseTecnicaWVetroPage() {
       <div className="mx-auto max-w-6xl space-y-5">
         <div>
           <Link href="/configuracoes/integracoes/wvetro" className="inline-flex items-center gap-2 text-sm text-slate-600"><ArrowLeft size={16} /> Integração W.Vetro</Link>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900">Base técnica completa W.Vetro → Atlas</h1>
-          <p className="mt-1 text-sm text-slate-600">Carga auditável de tipologias, perfis, acessórios, vidros, códigos, imagens, custos, posições, cortes e composição observada. A engenharia oficial do Atlas continua separada até validação.</p>
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Base técnica completa W.Vetro → Atlas</h1>
+              <p className="mt-1 text-sm text-slate-600">Carga auditável de tipologias, perfis, acessórios, vidros, códigos, imagens, custos, posições, cortes e composição observada. A engenharia oficial do Atlas continua separada até validação.</p>
+            </div>
+            <Link href="/configuracoes/integracoes/wvetro/base-tecnica/tipologias" className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"><Search size={14} /> Explorar por tipologia</Link>
+          </div>
         </div>
 
         {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
