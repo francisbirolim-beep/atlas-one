@@ -268,3 +268,37 @@ HEAD atual `bd9597fb3462b83bfe54c80381067b4c96ed3bae`:
 - `/orcamento/novo`: HTTP 200.
 
 PR #280 continua draft e sem merge.
+
+## 2026-09-01 — Explorador de tipologias da base técnica W.Vetro
+
+Implementado por agente de IA (Claude), branch `feat/wvetro-explorador-tipologias-v1`,
+sobre `main` já com PR #306 (correção da carga histórica) mesclada.
+
+Adicionado:
+- `GET /api/integracoes/wvetro/base-tecnica/tipologias` — lista de referências de
+  tipologia com resumo agregado (total, vinculadas ao Atlas, com imagem, com/sem
+  composição, com receita oficial).
+- `GET /api/integracoes/wvetro/base-tecnica/tipologias/[id]` — detalhe de uma
+  referência: dados da tipologia, componentes (perfil/acessório/vidro) com
+  código Atlas/W.Vetro, cor, NCM, unidade, quantidade min/max/média, medida
+  min/max, custo min/max/último, venda min/max/último, posições, cortes e
+  vínculo com produto Atlas; variáveis observadas; receitas técnicas oficiais
+  ativas em `engenharia_tipologia_formulas_corte` para a tipologia.
+- `/configuracoes/integracoes/wvetro/base-tecnica/tipologias` — tela Master de
+  listagem com busca e filtros (sem composição, sem vínculo, sem imagem, com
+  receita oficial).
+- `/configuracoes/integracoes/wvetro/base-tecnica/tipologias/[id]` — tela de
+  detalhe por tipologia (imagem, linha, modelos, perfis, acessórios, vidros,
+  ocorrências, custos, componentes vinculados/sem vínculo, variáveis, status de
+  validação técnica).
+- Link de acesso adicionado ao painel existente de base técnica (edição
+  aditiva de uma linha, sem tocar na lógica de carga/checkpoint).
+
+Somente leitura. Não escreve em `wvetro_base_tecnica_execucoes`,
+`wvetro_base_tecnica_pendencias` nem em nenhuma tabela de carga histórica.
+Não promove dado observado a receita oficial — isso continua manual em
+`engenharia_tipologia_formulas_corte`.
+
+`npm run build`: compilou com sucesso localmente (typecheck completo do
+projeto historicamente estoura o timeout local — validado via Build
+Validation do CI após o push, padrão já usado nesta sessão).
