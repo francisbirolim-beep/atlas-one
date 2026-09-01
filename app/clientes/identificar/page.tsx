@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Search, UserCheck, UserPlus } from 'lucide-react'
+import {
+  ArrowLeft, ClipboardList, Headphones, Loader2, Pencil, Search, ShoppingCart,
+  UserCheck, UserPlus, X,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import { obterOuCriarCliente } from '@/lib/clientes'
@@ -26,6 +29,7 @@ export default function IdentificarCliente() {
   const [erroBusca, setErroBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [clienteSelecionado, setClienteSelecionado] = useState<{ id: string; nome: string } | null>(null)
 
   useEffect(() => {
     supabase
@@ -83,8 +87,37 @@ export default function IdentificarCliente() {
       setErro('Não foi possível criar o Cliente 360. Tente novamente.')
       return
     }
-    router.push(`/clientes/${id}`)
+    setClienteSelecionado({ id, nome: busca.trim() })
   }
+
+  const acoes = clienteSelecionado
+    ? [
+        {
+          titulo: 'Pedido de orçamento',
+          subtitulo: 'Registrar visita e enviar ao Kanban',
+          icone: ClipboardList,
+          href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
+        },
+        {
+          titulo: 'Orçamento sob medida',
+          subtitulo: 'Montar com tipologia e variáveis',
+          icone: Pencil,
+          href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
+        },
+        {
+          titulo: 'Orçamento balcão',
+          subtitulo: 'Venda de produtos',
+          icone: ShoppingCart,
+          href: `/orcamento/balcao/novo?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
+        },
+        {
+          titulo: 'Assistência',
+          subtitulo: 'Pós-venda e manutenção',
+          icone: Headphones,
+          href: `/assistencia?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
+        },
+      ]
+    : []
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -119,10 +152,9 @@ export default function IdentificarCliente() {
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Comece a digitar o nome: os clientes já cadastrados aparecem
-            abaixo. Clique em um deles para abrir o Cliente 360 — orçamentos,
-            assistências, financeiro e pedidos de compra ficam todos ali
-            dentro. Se o cliente ainda não existir, cadastre pelo menos nome e
-            sobrenome para manter o histórico.
+            abaixo. Clique em um deles para escolher o que fazer — orçamento,
+            venda balcão ou assistência. Se o cliente ainda não existir,
+            cadastre pelo menos nome e sobrenome para manter o histórico.
           </p>
           <div className="relative mt-5">
             <Search
@@ -161,7 +193,7 @@ export default function IdentificarCliente() {
                 <button
                   key={cliente.id}
                   type="button"
-                  onClick={() => router.push(`/clientes/${cliente.id}`)}
+                  onClick={() => setClienteSelecionado({ id: cliente.id, nome: cliente.nome })}
                   className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-slate-50"
                 >
                   <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
@@ -179,7 +211,7 @@ export default function IdentificarCliente() {
                         cliente.cpf_cnpj,
                       ]
                         .filter(Boolean)
-                        .join(' • ') || 'Abrir Cliente 360'}
+                        .join(' • ') || 'Escolher ação'}
                     </span>
                   </span>
                   <span className="text-xs font-semibold text-brand-navy">
@@ -223,6 +255,71 @@ export default function IdentificarCliente() {
           ) : null}
         </section>
       </main>
+
+      {clienteSelecionado ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 px-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setClienteSelecionado(null)}
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-navy">
+                  Cliente 360
+                </p>
+                <h3 className="truncate text-base font-bold text-slate-900">
+                  {clienteSelecionado.nome}
+                </h3>
+              </div>
+              <Link
+                href={`/clientes/${clienteSelecionado.id}`}
+                className="hidden sm:inline text-xs font-medium text-brand-navy hover:underline whitespace-nowrap"
+              >
+                Ver Cliente 360 completo
+              </Link>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2">
+              {acoes.map((acao) => {
+                const Icone = acao.icone
+                return (
+                  <Link
+                    key={acao.titulo}
+                    href={acao.href}
+                    className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-navy hover:shadow-md"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-navyLight text-brand-navy">
+                      <Icone size={18} />
+                    </span>
+                    <span className="text-sm font-semibold text-slate-800">{acao.titulo}</span>
+                    <span className="text-xs text-slate-500">{acao.subtitulo}</span>
+                  </Link>
+                )
+              })}
+            </div>
+
+            <div className="border-t border-slate-100 px-5 py-3 sm:hidden">
+              <Link
+                href={`/clientes/${clienteSelecionado.id}`}
+                className="text-xs font-medium text-brand-navy hover:underline"
+              >
+                Ver Cliente 360 completo
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
