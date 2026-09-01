@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Phone, MapPin, FileText, Camera, Plus, CheckSquare, Square,
   Trash2, Paperclip, MessageCircle, PhoneCall, Handshake, StickyNote, Send,
-  Pencil, X, Save, Mail, Cake, Hash,
+  Pencil, X, Save, Mail, Cake, Hash, ClipboardList, PencilRuler, ShoppingCart,
+  Headphones, PackagePlus,
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -276,6 +277,40 @@ export default function DetalheCliente() {
           </div>
         </div>
       </header>
+
+      <div className="max-w-3xl mx-auto px-4 pt-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-navy">Cliente 360</p>
+          <h2 className="mt-1 text-sm text-slate-500">O que você quer fazer com {cliente.nome.split(' ')[0]}?</h2>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(id)}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-navy hover:shadow-md">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-navyLight text-brand-navy"><ClipboardList size={18} /></span>
+              <span className="text-sm font-semibold text-slate-800">Pedido de orçamento</span>
+              <span className="text-xs text-slate-500">Registrar visita e enviar ao Kanban</span>
+            </Link>
+            <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(id)}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-navy hover:shadow-md">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-navyLight text-brand-navy"><PencilRuler size={18} /></span>
+              <span className="text-sm font-semibold text-slate-800">Orçamento sob medida</span>
+              <span className="text-xs text-slate-500">Montar com tipologia e variáveis</span>
+            </Link>
+            <Link href={`/orcamento/balcao/novo?cliente=${encodeURIComponent(id)}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-navy hover:shadow-md">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-navyLight text-brand-navy"><ShoppingCart size={18} /></span>
+              <span className="text-sm font-semibold text-slate-800">Orçamento balcão</span>
+              <span className="text-xs text-slate-500">Venda de produtos</span>
+            </Link>
+            <Link href={`/assistencia?cliente=${encodeURIComponent(id)}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-navy hover:shadow-md">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-navyLight text-brand-navy"><Headphones size={18} /></span>
+              <span className="text-sm font-semibold text-slate-800">Assistência</span>
+              <span className="text-xs text-slate-500">Pós-venda e manutenção</span>
+            </Link>
+            <Link href={`/compras?cliente=${encodeURIComponent(id)}&clienteNome=${encodeURIComponent(cliente.nome)}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-brand-navy hover:shadow-md">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-navyLight text-brand-navy"><PackagePlus size={18} /></span>
+              <span className="text-sm font-semibold text-slate-800">Pedido de compra</span>
+              <span className="text-xs text-slate-500">Material avulso, vai para o comprador</span>
+            </Link>
+          </div>
+        </div>
+      </div>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6">

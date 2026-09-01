@@ -9,7 +9,6 @@ import {
   CalendarPlus,
   CheckSquare,
   Columns3,
-  FilePlus2,
   ImageIcon,
   UserPlus,
   Wrench,
@@ -108,16 +107,10 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
 
       {modulos.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 lg:grid-cols-3 2xl:grid-cols-6">
-          {tem('orcamentos') && (
-            <Link href="/orcamento-rapido" className={classeAtalho}>
-              <span className={classeIcone}><FilePlus2 size={19} /></span>
-              <span className="min-w-0 flex-1"><strong className={classeTextoAtalho}>Novo orçamento</strong><span className={classeSubtituloAtalho}>Criar orçamento</span></span><ArrowRight size={14} className="hidden text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600 sm:block" />
-            </Link>
-          )}
-          {tem('clientes') && (
-            <Link href="/clientes/novo" className={classeAtalho}>
+          {(tem('orcamentos') || tem('clientes')) && (
+            <Link href="/clientes/identificar" className={classeAtalho}>
               <span className={classeIcone}><UserPlus size={19} /></span>
-              <span className="min-w-0"><strong className={classeTextoAtalho}>Novo cliente</strong><span className={classeSubtituloAtalho}>Cadastrar cliente</span></span>
+              <span className="min-w-0 flex-1"><strong className={classeTextoAtalho}>Cliente 360</strong><span className={classeSubtituloAtalho}>Buscar ou cadastrar cliente</span></span><ArrowRight size={14} className="hidden text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600 sm:block" />
             </Link>
           )}
           {tem('kanban') && (
