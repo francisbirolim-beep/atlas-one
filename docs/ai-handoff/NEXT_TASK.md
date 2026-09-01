@@ -297,18 +297,25 @@ Adicionar indicadores/resumo do período filtrado somente se houver necessidade 
 
 ## W.Vetro
 
-Auditoria histórica completa encerrada. **Não executar novamente a auditoria inteira sem necessidade.**
+Auditoria histórica original encerrada. Nova auditoria da BASE TÉCNICA (composição
+por tipologia, custos refletidos em produtos, imagens) feita em 2026-09-01 e
+registrada em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`.
+**Não executar novamente a auditoria inteira sem necessidade — leia o documento
+acima antes de reauditar.**
 
-Resumo preservado:
-- 1.307 perfis;
-- 1.174 acessórios;
+Resumo (ver documento para detalhe completo):
+- vínculo Linha+Modelo → Tipologia Atlas: 98% (109/111);
+- 1.529 perfis referência (91% mapeados a produto Atlas), 1.294 acessórios (98% mapeados);
 - 111 tipologias referência, 109 mapeadas;
-- 119 linhas referência;
-- 1.529 perfis históricos;
-- 1.294 acessórios históricos;
-- 14 vidros referência;
-- 2.481 produtos consultados;
-- 1.287 imagens copiadas.### 7. Cliente 360
+- 29 linhas distintas identificadas;
+- **gargalo principal**: `wvetro_tipologia_componentes` (BOM por tipologia) só tem
+  97 linhas no total (35 perfis, 59 acessórios, 3 vidros) para 111 tipologias —
+  a carga histórica que preenche essa tabela está parada em erro a 64% do
+  período (ver PR #306, que trata disso separadamente);
+- produtos com custo/venda W.Vetro refletido: só 47 de 2.485 (1,9%);
+- 2.481 produtos consultados na API, 1.287 imagens copiadas, 735 pendentes, 459 em erro;
+- endpoint `/api/orcamento/wvetro-referencias` já existe e expõe tudo isso pronto
+  para o Orçamento Sob Medida consumir assim que a composição estiver completa.### 7. Cliente 360
 1. Abrir Cliente → Central 360 → Andamento.
 2. Conferir que os estados são os mesmos dos setores.
 3. Conferir `Bloqueio atual`.

@@ -427,8 +427,34 @@ Todas estão aplicadas no Supabase e versionadas no repositório.
 - validar Produção completa e gate de Instalação com cenário real;
 - definir responsáveis das etapas além do Financeiro;
 - completar o módulo de custos `Previsto → Otimizado → Comprado → Realizado` com consumo real, devolução e custo realizado;
-- interface completa para revisão financeira pós-venda ainda é evolução posterior;
-- não fazer merge do PR #280 até aprovação do usuário.
+- interface completa para revisão financeira pós-venda ainda é evolução posterior.
+
+## Merges recentes (2026-09-01)
+
+- PR #280 (Cliente 360 completo, obras, financeiro, fluxo operacional): mesclada.
+- PR #305 (base técnica completa W.Vetro: tabela `wvetro_tipologia_componentes`,
+  colunas `custo_wvetro_*`/`venda_wvetro_*` em `produtos`, painel
+  `/configuracoes/integracoes/wvetro/base-tecnica`, endpoint
+  `/api/orcamento/wvetro-referencias`): mesclada.
+- PR #304 (conferência de itens W.Vetro antes de salvar na confirmação de venda,
+  vínculo obra na confirmação de venda): mesclada.
+- Merges feitos em modo fix-forward (sem clique-a-clique manual do checklist do
+  autor), com autorização explícita do usuário, resolvendo conflitos de merge
+  manualmente e cobrindo com CI (Build Validation + Supabase Database Control)
+  antes do merge final. Validação funcional em produção continua pendente do
+  usuário.
+- PR #306 (`fix/wvetro-pendencias-historico-v9`, corrige a carga histórica
+  W.Vetro travar em dia com erro) estava em andamento por outro agente na data
+  desta atualização — não mexer nos arquivos dela.
+
+## Base técnica W.Vetro para Orçamento Sob Medida
+
+Auditoria completa em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`.
+Resumo: infraestrutura (tabelas + endpoint) pronta; dado real ainda incompleto
+porque a carga histórica está parada em erro a 64% do período (tratado pela
+PR #306). Composição por tipologia (`wvetro_tipologia_componentes`) tem só 97
+linhas para 111 tipologias — é o bloqueador real para reproduzir o Orçamento
+Sob Medida como o W.Vetro.
 
 ## Regras técnicas a preservar
 
