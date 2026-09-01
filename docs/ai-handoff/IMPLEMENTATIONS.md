@@ -99,6 +99,16 @@
 
 > Histórico anterior preservado integralmente em `docs/ai-handoff/archive/2026-08-23-pre-pr258-IMPLEMENTATIONS.md`.
 
+## 2026-08-28 — Cadastros 360 por usuário
+
+- renomeada a Central de Cadastros para Cadastros 360;
+- adicionado Clientes à central, apontando para a base única existente;
+- criada configuração individual dos cards visíveis por usuário;
+- integrada a seleção à criação e edição de usuários;
+- preservado acesso total do Master e compatibilidade dos funcionários existentes;
+- build local completo aprovado com 90 rotas.
+
+
 ## 2026-08-26 — Balcão fora do Kanban + data fixa de entrada
 
 ### Isolamento operacional do balcão
