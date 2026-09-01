@@ -1,5 +1,40 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-09-01 (noite) — Segunda auditoria completa da base técnica W.Vetro + extensão do explorador
+
+- Nova auditoria completa (`docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01-v2.md`),
+  cobrindo todos os itens pedidos: linhas, tipologias, modelos, imagens,
+  perfis, acessórios, vidros, códigos W.Vetro/Atlas, vínculos, quantidades,
+  medidas, posições, cortes, NCM, unidade, cores, custos min/max/último,
+  venda observada, composição por tipologia, variáveis. Números direto do
+  Supabase de produção, só leitura — não altera execução/checkpoint/cursor/
+  pendências da carga histórica (PR #306, ChatGPT).
+- `GET /api/integracoes/wvetro/base-tecnica/tipologias` estendido: agora
+  retorna também `catalogo` (perfis/acessórios/vidros do catálogo de
+  referência com contagem de vínculo a produto Atlas, independente da
+  composição por tipologia) e `resumo.componentesBomTotal` /
+  `componentesBomVinculados` / `componentesBomSemVinculo`.
+- Tela de lista (`.../tipologias`): novos cards mostrando catálogo global vs.
+  composição por tipologia, e componentes de BOM sem vínculo.
+- Tela de detalhe (`.../tipologias/[id]`): rótulos explícitos **REFERÊNCIA
+  HISTÓRICA** (nas seções de variáveis e composição) e **RECEITA TÉCNICA
+  VALIDADA** (no painel de status), para não confundir dado observado com
+  fórmula validada. Posições e cortes agora mostram os valores reais
+  observados (antes só indicavam presença/ausência).
+- Nenhuma tabela nova criada — reaproveita `wvetro_referencias_tipologias`,
+  `wvetro_referencias_componentes`, `wvetro_tipologia_componentes`,
+  `wvetro_referencias_variaveis`, `engenharia_tipologia_formulas_corte`,
+  `produtos`, todas já existentes. Nenhuma alteração em
+  `wvetro_base_tecnica_execucoes` / `wvetro_base_tecnica_pendencias` /
+  lógica de checkpoint/cursor/retry.
+- Achado documentado (não corrigido nesta PR, fora de escopo): coluna
+  `unidade_origem` de `wvetro_tipologia_componentes` está sempre nula —
+  pertence à etapa de extração da carga.
+- Validação: `npm run build` compilou e tipou com sucesso localmente
+  (falha apenas na etapa de coleta de dados de página por falta de env vars
+  reais do Supabase no clone local — esperado; o CI/Build Validation da PR
+  usa os secrets reais).
+
 ## 2026-08-30 — Filtro de produtos ao criar necessidade no Compras 360
 
 - adicionados filtros rápidos de catálogo para Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros;

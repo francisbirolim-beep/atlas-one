@@ -449,27 +449,38 @@ Todas estão aplicadas no Supabase e versionadas no repositório.
 
 ## Base técnica W.Vetro para Orçamento Sob Medida
 
-Auditoria original em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`.
-A PR #306 (não mexer) corrigiu a carga histórica travar em dia com erro; ela foi
-retomada e está `em_andamento`, avançando com dias problemáticos virando
-pendência auditável em vez de travar tudo. Números direto do Supabase em
-2026-09-01 (tarde), depois da retomada:
-- 664 dias processados (subiu de 626), 13 dias em pendência (`wvetro_base_tecnica_pendencias`);
-- composição por tipologia (`wvetro_tipologia_componentes`): 504 linhas (subiu de 97), 264 vinculadas a produto Atlas, 17 tipologias já com alguma composição (de 111 referências, 109 vinculadas à tipologia Atlas);
-- 34 tipologias já com imagem (subiu de 12);
-- 2 receitas técnicas oficiais já ativas em `engenharia_tipologia_formulas_corte`.
+Auditoria original em `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md`,
+segunda rodada completa em
+`docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01-v2.md` (esta é a
+referência mais recente). A carga histórica (PR #306, ChatGPT — não mexer)
+está `em_andamento`, com dias problemáticos virando pendência auditável em
+vez de travar tudo. Números direto do Supabase em 2026-09-01 (noite):
+- 859 dias processados de ~987 (87%), 128 dias em pendência (`wvetro_base_tecnica_pendencias`);
+- composição por tipologia (`wvetro_tipologia_componentes`): 668 linhas (subiu de 504), 338 vinculadas a produto Atlas, 21 tipologias já com alguma composição (de 113 referências);
+- catálogo de referência: 1.529 perfis (91% vinculados), 1.294 acessórios (98% vinculados) — estável;
+- 86 tipologias já com imagem (subiu de 34, agora 76% de cobertura);
+- 177 produtos Atlas com `custo_wvetro_ultimo` (subiu de 47);
+- 2 receitas técnicas oficiais ativas em `engenharia_tipologia_formulas_corte` (sem mudança);
+- achado novo: `unidade_origem` nunca preenchida em `wvetro_tipologia_componentes` (gap de extração, não desta frente — documentado, não corrigido aqui).
 
-Nova tela de auditoria por tipologia (Master):
-`/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista com filtros) e
-`/configuracoes/integracoes/wvetro/base-tecnica/tipologias/[id]` (detalhe: imagem,
-linha/modelo, vínculo Atlas, composição perfil/acessório/vidro com
-quantidade/medida/custo/venda/posição/corte/vínculo de produto, variáveis
-observadas, status de receita oficial). Só leitura — implementada na PR
-`feat/wvetro-explorador-tipologias-v1`, aguardando Preview/merge.
+Tela de auditoria por tipologia (Master), mergeada em `main` (PR #308):
+`/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista com
+filtros + cards de catálogo global) e
+`/configuracoes/integracoes/wvetro/base-tecnica/tipologias/[id]` (detalhe:
+imagem, linha/modelo, vínculo Atlas, composição perfil/acessório/vidro com
+quantidade/medida/custo/venda/posições e cortes observados/vínculo de
+produto, variáveis observadas, status de receita oficial com rótulo
+explícito **REFERÊNCIA HISTÓRICA** vs **RECEITA TÉCNICA VALIDADA**). Só
+leitura. Extensão adicional (cards de catálogo global, rótulos explícitos,
+lista real de posições/cortes) na PR `feat/wvetro-auditoria-completa-v2`,
+aguardando Preview/validação.
 
 Ainda falta para reproduzir o Orçamento Sob Medida como o W.Vetro: a maioria
-das 111 tipologias ainda não tem nenhuma composição (só 17 têm), e a carga
-segue em andamento — reauditar quando ela concluir.
+das 113 tipologias ainda não tem nenhuma composição (só 21 têm, 19%), e a
+carga segue em andamento — reauditar quando ela concluir. Não existe
+granularidade de variáveis por pedido individual (só valor agregado por
+tipologia), o que limita mostrar "configurações diferentes entre orçamentos"
+além do que já é exposto (posições/cortes distintos por componente).
 
 ## Regras técnicas a preservar
 

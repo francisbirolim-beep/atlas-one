@@ -125,12 +125,10 @@ function GrupoComponentes({ titulo, itens }: { titulo: string; itens: Componente
             <div className="w-32">
               <p className="text-slate-500">Ocorrências</p>
               <p className="font-medium text-slate-800">{c.ocorrencias}</p>
-              <p className="mt-1 text-slate-500">Posição/corte</p>
-              <p className="font-medium text-slate-800">
-                {Array.isArray(c.posicoes) && c.posicoes.length > 0 ? 'posição' : '—'}
-                {' / '}
-                {Array.isArray(c.cortes) && c.cortes.length > 0 ? 'corte' : '—'}
-              </p>
+              <p className="mt-1 text-slate-500">Posições observadas</p>
+              <p className="font-medium text-slate-800">{Array.isArray(c.posicoes) && c.posicoes.length > 0 ? (c.posicoes as unknown[]).join(', ') : '—'}</p>
+              <p className="mt-1 text-slate-500">Cortes observados</p>
+              <p className="font-medium text-slate-800">{Array.isArray(c.cortes) && c.cortes.length > 0 ? (c.cortes as unknown[]).join(', ') : '—'}</p>
             </div>
           </div>
         ))}
@@ -214,24 +212,34 @@ export default function TipologiaWVetroDetalhePage() {
                     : <span className="inline-flex items-center gap-1 text-amber-700"><XCircle size={13} /> Sem vínculo com tipologia Atlas</span>}
                 </p>
               </div>
-              <div className="w-full sm:w-56">
+              <div className="w-full sm:w-64">
                 <p className="text-xs font-semibold text-slate-600">Status da validação técnica</p>
                 {dados.receitasOficiais.length === 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">Nenhuma receita oficial ainda. Este componente é referência auditável, não fórmula validada.</p>
+                  <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">REFERÊNCIA HISTÓRICA</span>
+                    <p className="mt-0.5 text-[11px] text-amber-800">Nenhuma receita oficial ainda. Tudo abaixo é dado observado, não fórmula validada.</p>
+                  </div>
                 ) : (
-                  <ul className="mt-1 space-y-1">
-                    {dados.receitasOficiais.map(r => (
-                      <li key={r.id} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
-                        <ShieldCheck size={12} /> {(r.configuracaoLabel || r.configuracao_label || r.configuracaoChave || r.configuracao_chave)} · v{r.versao} · {r.status}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-1 space-y-1">
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-800"><ShieldCheck size={12} /> RECEITA TÉCNICA VALIDADA</span>
+                    <ul className="space-y-1">
+                      {dados.receitasOficiais.map(r => (
+                        <li key={r.id} className="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+                          {(r.configuracaoLabel || r.configuracao_label || r.configuracaoChave || r.configuracao_chave)} · v{r.versao} · {r.status}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-slate-400">Demais componentes/variáveis desta tela continuam sendo referência histórica, exceto o que está explicitamente listado acima.</p>
+                  </div>
                 )}
               </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 font-semibold text-slate-900">Variáveis observadas ({dados.variaveis.length})</h2>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold text-slate-900">Variáveis observadas ({dados.variaveis.length})</h2>
+                <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">Referência histórica</span>
+              </div>
               {dados.variaveis.length === 0 ? (
                 <p className="text-sm text-slate-500">Nenhuma variável extraída ainda para esta tipologia.</p>
               ) : (
@@ -248,7 +256,10 @@ export default function TipologiaWVetroDetalhePage() {
             </section>
 
             <section className="space-y-3">
-              <h2 className="font-semibold text-slate-900">Composição observada (BOM)</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold text-slate-900">Composição observada (BOM)</h2>
+                <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">Referência histórica</span>
+              </div>
               <GrupoComponentes titulo="Perfis" itens={perfis} />
               <GrupoComponentes titulo="Acessórios" itens={acessorios} />
               <GrupoComponentes titulo="Vidros" itens={vidros} />

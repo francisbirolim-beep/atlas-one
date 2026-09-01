@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   if (!await master(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
 
   try {
-    const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }] = await Promise.all([
+    const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }, { data: catalogoComponentes, error: erroCatalogo }] = await Promise.all([
       supabaseAdmin
         .from('wvetro_referencias_tipologias')
         .select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,primeiro_visto,ultimo_visto')
@@ -36,11 +36,17 @@ export async function GET(req: NextRequest) {
         .from('engenharia_tipologia_formulas_corte')
         .select('tipologia_id,status')
         .eq('ativo', true),
+      // Catálogo de referência (identidade + histórico de preço) — separado do BOM por
+      // tipologia acima. Reaproveita a mesma tabela já usada pela auditoria/backfill.
+      supabaseAdmin
+        .from('wvetro_referencias_componentes')
+        .select('tipo,produto_atlas_id'),
     ])
     if (erroRefs) throw erroRefs
     if (erroComp) throw erroComp
     if (erroVar) throw erroVar
     if (erroFormulas) throw erroFormulas
+    if (erroCatalogo) throw erroCatalogo
 
     const compPorRef = new Map<string, { total: number; vinculados: number; perfil: number; acessorio: number; vidro: number }>()
     for (const c of componentes || []) {
@@ -86,6 +92,9 @@ export async function GET(req: NextRequest) {
       }
     })
 
+    const componentesBomTotal = (componentes || []).length
+    const componentesBomVinculados = (componentes || []).filter(c => !!c.produto_atlas_id).length
+
     const resumo = {
       totalTipologias: linhas.length,
       vinculadasAtlas: linhas.filter(l => !!l.tipologiaAtlasId).length,
@@ -93,9 +102,29 @@ export async function GET(req: NextRequest) {
       comComposicao: linhas.filter(l => l.componentes.total > 0).length,
       semComposicao: linhas.filter(l => l.componentes.total === 0).length,
       comReceitaOficial: linhas.filter(l => l.temReceitaOficial).length,
+      componentesBomTotal,
+      componentesBomVinculados,
+      componentesBomSemVinculo: componentesBomTotal - componentesBomVinculados,
     }
 
-    return NextResponse.json({ tipologias: linhas, resumo })
+    // Catálogo de referência (perfis/acessórios identificados historicamente, independente
+    // de já terem entrado na composição de alguma tipologia).
+    const catalogo = {
+      perfis: {
+        total: (catalogoComponentes || []).filter(c => c.tipo === 'perfil').length,
+        vinculados: (catalogoComponentes || []).filter(c => c.tipo === 'perfil' && !!c.produto_atlas_id).length,
+      },
+      acessorios: {
+        total: (catalogoComponentes || []).filter(c => c.tipo === 'acessorio').length,
+        vinculados: (catalogoComponentes || []).filter(c => c.tipo === 'acessorio' && !!c.produto_atlas_id).length,
+      },
+      vidros: {
+        total: (catalogoComponentes || []).filter(c => c.tipo === 'vidro').length,
+        vinculados: (catalogoComponentes || []).filter(c => c.tipo === 'vidro' && !!c.produto_atlas_id).length,
+      },
+    }
+
+    return NextResponse.json({ tipologias: linhas, resumo, catalogo })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha ao carregar tipologias.' }, { status: 500 })
   }

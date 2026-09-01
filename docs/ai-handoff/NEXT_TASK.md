@@ -297,22 +297,37 @@ Adicionar indicadores/resumo do período filtrado somente se houver necessidade 
 
 ## W.Vetro
 
-PR #306 (não mexer) corrigiu a carga travar em dia com erro; foi retomada e está
-`em_andamento`. Nova auditoria/tela feita em 2026-09-01 (ver
-`docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01.md` para a versão
-anterior à retomada). Estado após retomada:
-- 664 dias processados (de ~975), 13 dias em pendência auditável;
-- composição por tipologia: 504 linhas em `wvetro_tipologia_componentes` (264
-  vinculadas a produto Atlas), mas só 17 das 111 tipologias-referência têm
-  alguma composição — ainda é o gargalo para o Orçamento Sob Medida;
-- 34 tipologias com imagem, 2 receitas técnicas oficiais já ativas.
-- Nova tela `/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista) e
-  `/tipologias/[id]` (detalhe) para auditar tipologia por tipologia: composição,
-  vínculos, variáveis e status de receita oficial. Só leitura, PR
-  `feat/wvetro-explorador-tipologias-v1` aguardando Preview/merge.
+PR #306 (ChatGPT, não mexer) corrigiu a carga travar em dia com erro; segue
+`em_andamento`, agora reprocessando uma causa adicional ligada a `updated_at`
+em `wvetro_tipologia_componentes` (fora do escopo desta frente — só
+documentar se algo relacionado for encontrado). Segunda auditoria completa em
+2026-09-01 à noite: ver `docs/ai-handoff/WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01-v2.md`
+(substitui a v1 em números, mesma estrutura). Estado:
+- 859 dias processados (de ~987), 128 dias em pendência auditável;
+- composição por tipologia: 668 linhas em `wvetro_tipologia_componentes` (338
+  vinculadas a produto Atlas), mas só 21 das 113 tipologias-referência têm
+  alguma composição (19%) — ainda é o gargalo para o Orçamento Sob Medida;
+- catálogo de referência (perfis/acessórios) estável: 1.529 perfis (91%
+  vinculados), 1.294 acessórios (98% vinculados);
+- 86 tipologias com imagem (76%), 177 produtos com custo W.Vetro backfilled,
+  2 receitas técnicas oficiais já ativas;
+- achado: `unidade_origem` nunca preenchida em `wvetro_tipologia_componentes`
+  — gap de extração da carga, não desta frente, só documentado;
+- não existe granularidade de variáveis por pedido individual — só valor
+  agregado por tipologia-referência (limita "configurações observadas por
+  orçamento" a nível de tipologia, não de pedido).
+- Tela `/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista) e
+  `/tipologias/[id]` (detalhe) mergeada em `main` (PR #308). Extensão com
+  cards de catálogo global e rótulos explícitos REFERÊNCIA HISTÓRICA/RECEITA
+  TÉCNICA VALIDADA na PR `feat/wvetro-auditoria-completa-v2`, aguardando
+  Preview/validação/merge.
 
 **Não executar novamente a auditoria inteira sem necessidade — quando a carga
-concluir, reauditar via a nova tela em vez de rodar SQL solto.**
+concluir, reauditar via a tela do explorador em vez de rodar SQL solto.**
+**Próxima ação recomendada nesta frente**: começar a promover manualmente,
+tipologia por tipologia (usando a tela de detalhe), composições já robustas
+para receita técnica oficial em `engenharia_tipologia_formulas_corte` — nunca
+em lote, nunca automático.
 
 ## Pontos a observar durante o teste
 
