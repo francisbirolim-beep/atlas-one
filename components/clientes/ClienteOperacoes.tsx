@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { BadgeDollarSign, CalendarDays, FileText, Plus, ShoppingBag, Timer, Wrench } from 'lucide-react'
+import { BadgeDollarSign, CalendarDays, FileText, Timer, Wrench } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 interface ClienteOperacoesProps {
@@ -114,45 +114,6 @@ export default function ClienteOperacoes({ clienteId, clienteNome }: ClienteOper
 
   return (
     <section className="space-y-4">
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">Central do cliente</h2>
-            <p className="text-sm text-slate-500">Vendas, assistências e manutenções ficam vinculadas a este cadastro.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(clienteId)}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-medium text-white hover:bg-brand-navyDark">
-              <Plus size={14} /> Orçamento sob medida
-            </Link>
-            <Link href={`/orcamento/balcao/novo?cliente=${encodeURIComponent(clienteId)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-              <ShoppingBag size={14} /> Venda balcão
-            </Link>
-            <Link href={`/assistencia?cliente=${encodeURIComponent(clienteId)}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-              <Wrench size={14} /> Nova assistência / manutenção
-            </Link>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Vendas</p>
-            <p className="mt-1 text-xl font-bold text-slate-800">{medicoes.length}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Total vendido</p>
-            <p className="mt-1 text-sm font-bold text-brand-teal">{moeda(totalVendido)}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Assistências</p>
-            <p className="mt-1 text-xl font-bold text-slate-800">{assistencias.length}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Cliente</p>
-            <p className="mt-1 truncate text-sm font-semibold text-slate-800">{clienteNome}</p>
-          </div>
-        </div>
-      </div>
-
       {carregando ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-400">Carregando histórico operacional...</div>
       ) : (
