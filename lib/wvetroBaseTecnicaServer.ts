@@ -215,6 +215,7 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
           primeiro_visto: data,
           ultimo_visto: data,
           status_mapeamento: produto ? 'mapeada_exata' : (candidatos.size > 1 ? 'pendente_revisao' : 'referencia'),
+          updated_at: new Date().toISOString(),
         }
         atual.ocorrencias += 1
         atual.quantidade_min = min(atual.quantidade_min, c.quantidade)
