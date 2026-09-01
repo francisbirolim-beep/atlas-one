@@ -56,6 +56,7 @@ export default function BaseTecnicaWVetroPage() {
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
   const autoRef = useRef(false)
+  const retryRef = useRef<{ cursor: string; tentativas: number }>({ cursor: '', tentativas: 0 })
 
   async function carregar() {
     setErro('')
@@ -101,23 +102,67 @@ export default function BaseTecnicaWVetroPage() {
 
   async function iniciarHistorico() {
     const json = await acao('historico', { acao: 'iniciar_historico', inicio, fim }, 'Carga histórica preparada.')
+    retryRef.current = { cursor: '', tentativas: 0 }
     if (json.execucao) { setAuto(true); setTimeout(() => continuarAutomatico(json.execucao), 150) }
   }
 
   async function continuarAutomatico(atual?: Execucao) {
     const alvo = atual || execucao
-    if (!alvo || alvo.status !== 'em_andamento') return
+    if (!alvo || alvo.status !== 'em_andamento' || !autoRef.current) return
     try {
       const json = await acao('historico', { acao: 'continuar_historico', execucaoId: alvo.id })
       const nova = json.execucao as Execucao
       if (nova) setExecucao(nova)
-      if (!json.concluida && nova?.status === 'em_andamento' && autoRef.current) setTimeout(() => continuarAutomatico(nova), 250)
-      else if (json.concluida) { setAuto(false); setMensagem('Carga histórica concluída.') }
-    } catch { setAuto(false) }
+      if (nova?.cursor_data !== alvo.cursor_data) retryRef.current = { cursor: nova?.cursor_data || '', tentativas: 0 }
+      if (!json.concluida && nova?.status === 'em_andamento' && autoRef.current) {
+        setTimeout(() => continuarAutomatico(nova), 400)
+      } else if (json.concluida) {
+        setAuto(false)
+        setMensagem('Carga histórica concluída.')
+      }
+    } catch {
+      if (!autoRef.current) return
+      try {
+        const estado = await api('GET')
+        const falha = estado.execucao as Execucao | null
+        if (!falha || falha.id !== alvo.id || falha.status !== 'erro') {
+          setAuto(false)
+          return
+        }
+        setExecucao(falha)
+        const anterior = retryRef.current.cursor === falha.cursor_data ? retryRef.current.tentativas : 0
+        const tentativas = anterior + 1
+        retryRef.current = { cursor: falha.cursor_data, tentativas }
+        if (tentativas > 5) {
+          setAuto(false)
+          setErro(`O dia ${falha.cursor_data} falhou 5 vezes. O checkpoint foi preservado para análise sem perder o restante já importado.`)
+          return
+        }
+        setErro('')
+        setMensagem(`Falha temporária em ${falha.cursor_data}. Nova tentativa automática ${tentativas}/5 em 3 segundos.`)
+        setTimeout(async () => {
+          if (!autoRef.current) return
+          try {
+            const retomada = await api('POST', { acao: 'retomar_historico', execucaoId: falha.id })
+            const execRetomada = retomada.execucao as Execucao
+            if (execRetomada) setExecucao(execRetomada)
+            setErro('')
+            setTimeout(() => continuarAutomatico(execRetomada), 500)
+          } catch (e) {
+            setErro(e instanceof Error ? e.message : 'Falha ao retomar automaticamente.')
+            setTimeout(() => continuarAutomatico(falha), 3000)
+          }
+        }, 3000)
+      } catch (e) {
+        setAuto(false)
+        setErro(e instanceof Error ? e.message : 'Falha ao consultar o checkpoint da carga.')
+      }
+    }
   }
 
   async function retomar() {
     if (!execucao) return
+    retryRef.current = { cursor: execucao.cursor_data, tentativas: 0 }
     const json = await acao('historico', { acao: 'retomar_historico', execucaoId: execucao.id }, 'Execução retomada.')
     if (json.execucao) { setAuto(true); setTimeout(() => continuarAutomatico(json.execucao), 150) }
   }
@@ -182,7 +227,7 @@ export default function BaseTecnicaWVetroPage() {
               {execucao.ultima_mensagem && <p className="mt-3 text-xs text-slate-600">{execucao.ultima_mensagem}</p>}
               {execucao.erro && <p className="mt-2 text-xs text-red-700">{execucao.erro}</p>}
               <div className="mt-4 flex flex-wrap gap-2">
-                {execucao.status === 'em_andamento' && !auto && <button onClick={() => { setAuto(true); setTimeout(() => continuarAutomatico(execucao), 100) }} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white"><Play size={14} /> Continuar automático</button>}
+                {execucao.status === 'em_andamento' && !auto && <button onClick={() => { retryRef.current = { cursor: execucao.cursor_data, tentativas: 0 }; setAuto(true); setTimeout(() => continuarAutomatico(execucao), 100) }} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white"><Play size={14} /> Continuar automático</button>}
                 {execucao.status === 'erro' && <button onClick={retomar} className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white"><RotateCcw size={14} /> Retomar do mesmo dia</button>}
                 {auto && <button onClick={() => setAuto(false)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold"><Square size={13} /> Pausar após este dia</button>}
                 {execucao.status === 'em_andamento' && <button onClick={cancelar} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700">Cancelar carga</button>}
