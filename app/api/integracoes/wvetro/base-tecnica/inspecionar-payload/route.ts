@@ -12,6 +12,11 @@ export const maxDuration = 30
 // variável (largura, altura, tipo de abertura etc.) que a extração atual não usa.
 // Pode ser removido depois da investigação.
 
+// Chave de diagnóstico temporária, só pra facilitar testar direto pela URL no navegador
+// sem precisar extrair token de sessão. Fixa de propósito (endpoint temporário, só
+// leitura, será removido depois da investigação). Aceita master OU esta chave.
+const CHAVE_DIAGNOSTICO = 'wvetro-diagnostico-2026-09-01'
+
 async function master(req: NextRequest) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
@@ -19,6 +24,11 @@ async function master(req: NextRequest) {
   if (error || !data?.user) return null
   const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
   return usuario?.role === 'master' ? usuario : null
+}
+
+function autorizado(req: NextRequest): boolean {
+  const { searchParams } = new URL(req.url)
+  return searchParams.get('chave') === CHAVE_DIAGNOSTICO
 }
 
 function achatarChaves(obj: unknown, prefixo = '', out: Set<string> = new Set()): Set<string> {
@@ -37,7 +47,7 @@ function achatarChaves(obj: unknown, prefixo = '', out: Set<string> = new Set())
 }
 
 export async function GET(req: NextRequest) {
-  if (!await master(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
+  if (!autorizado(req) && !await master(req)) return NextResponse.json({ error: 'Área restrita ao Master (ou informe ?chave=... de diagnóstico).' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const data = searchParams.get('data')
