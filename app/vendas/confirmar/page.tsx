@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, CheckCircle2, FileText, Play, UserRound, AlertTriangle, Paperclip } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, FileText, Play, UserRound, AlertTriangle, Paperclip, Plus, Trash2 } from 'lucide-react'
 import { OrcamentoRapido, Usuario } from '@/lib/tipos'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import {
@@ -40,7 +40,7 @@ function itemEstruturadoValido(item: any) {
   const altura = Number(item?.altura_mm || 0)
   const nomeGenerico = [ambiente, descricao, tipoOutro].some(valor => /^item\s+\d+$/i.test(valor))
   const somenteOutro = String(item?.tipo_esquadria || '').toLowerCase() === 'outro' && !descricao && !tipoOutro
-  return !nomeGenerico && !somenteOutro && largura > 0 && altura > 0 && !!(ambiente || descricao || tipoOutro)
+  return !nomeGenerico && !somenteOutro && largura > 0 && altura > 0 && !!ambiente && !!descricao
 }
 
 export default function ConfirmarVendaPage() {
@@ -56,8 +56,11 @@ export default function ConfirmarVendaPage() {
   const [salvandoCadastro, setSalvandoCadastro] = useState(false)
   const [iniciando, setIniciando] = useState(false)
   const [importandoItens, setImportandoItens] = useState(false)
+  const [salvandoItensPreview, setSalvandoItensPreview] = useState(false)
+  const [itensPreview, setItensPreview] = useState<any[] | null>(null)
   const [cadastroSalvo, setCadastroSalvo] = useState(false)
   const [erro, setErro] = useState('')
+  const [mensagem, setMensagem] = useState('')
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
@@ -100,6 +103,7 @@ export default function ConfirmarVendaPage() {
   const itens = selecionado?.itens || []
   const anexos = selecionado?.anexos || []
   const itensInvalidos = itens.filter(item => !itemEstruturadoValido(item))
+  const previewInvalidos = (itensPreview || []).filter(item => !itemEstruturadoValido(item))
   const temPdf = anexos.some(a => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().split('?')[0].endsWith('.pdf'))
   const prontoCadastro = !!cadastro && faltantes.length === 0 && cadastroSalvo
   const prontoItens = itens.length > 0 && itensInvalidos.length === 0
@@ -109,9 +113,18 @@ export default function ConfirmarVendaPage() {
     setCadastroSalvo(false)
   }
 
+  function selecionarOrcamento(id: string) {
+    setSelecionadoId(id)
+    setCadastroSalvo(false)
+    setItensPreview(null)
+    setErro('')
+    setMensagem('')
+  }
+
   async function salvarCadastro() {
     if (!cadastro || !selecionado) return
     setErro('')
+    setMensagem('')
     setSalvandoCadastro(true)
     const resultado = await salvarCadastroVenda(clienteId, selecionado.id, cadastro, camposConfigurados)
     setSalvandoCadastro(false)
@@ -126,12 +139,13 @@ export default function ConfirmarVendaPage() {
   async function iniciar() {
     if (!selecionado) return
     setErro('')
+    setMensagem('')
     if (!prontoCadastro) {
       setErro('Salve o cadastro completo do cliente antes de iniciar o processo.')
       return
     }
     if (!prontoItens) {
-      setErro('O orçamento escolhido possui itens incompletos ou genéricos. Reimporte o PDF antes de iniciar o processo.')
+      setErro('O orçamento escolhido possui itens incompletos ou genéricos. Revise e confirme a importação do PDF antes de iniciar o processo.')
       return
     }
 
@@ -150,6 +164,7 @@ export default function ConfirmarVendaPage() {
   async function importarItensDoPdf() {
     if (!selecionado) return
     setErro('')
+    setMensagem('')
     setImportandoItens(true)
     try {
       const token = await tokenAtual()
@@ -164,7 +179,7 @@ export default function ConfirmarVendaPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ orcamentoId: selecionado.id, persistirOrcamento: true }),
+        body: JSON.stringify({ orcamentoId: selecionado.id, persistirOrcamento: false }),
       })
       const json = await resp.json()
       if (!resp.ok) {
@@ -173,14 +188,99 @@ export default function ConfirmarVendaPage() {
       }
 
       const novosItens = Array.isArray(json?.itens) ? json.itens : []
-      setOrcamentos(prev => prev.map(o => o.id === selecionado.id ? { ...o, itens: novosItens } : o))
       if (novosItens.length === 0) {
         setErro('O PDF foi lido, mas nenhum item foi identificado. Cadastre os itens manualmente.')
+        return
+      }
+
+      setItensPreview(novosItens)
+      if (Number(json?.itens_incompletos || 0) > 0) {
+        setMensagem(`O Atlas encontrou ${novosItens.length} item(ns). ${json.itens_incompletos} precisam de correção antes de salvar.`)
+      } else {
+        setMensagem(`O Atlas encontrou ${novosItens.length} item(ns). Confira os dados e confirme para salvar no orçamento.`)
       }
     } catch {
       setErro('Erro ao importar os itens do PDF. Tente novamente.')
     } finally {
       setImportandoItens(false)
+    }
+  }
+
+  function atualizarItemPreview(index: number, campo: string, valor: string | number) {
+    setItensPreview(prev => prev ? prev.map((item, idx) => idx === index ? { ...item, [campo]: valor } : item) : prev)
+  }
+
+  function removerItemPreview(index: number) {
+    setItensPreview(prev => prev ? prev.filter((_, idx) => idx !== index) : prev)
+  }
+
+  function adicionarItemPreview() {
+    setItensPreview(prev => [
+      ...(prev || []),
+      {
+        id: `novo-${Date.now()}`,
+        ambiente: '',
+        tipo_esquadria: 'outro',
+        tipo_outro_texto: '',
+        descricao: '',
+        largura_mm: 0,
+        altura_mm: 0,
+        quantidade: 1,
+        cor: '',
+        linha_origem: '',
+        vidro_origem: '',
+      },
+    ])
+  }
+
+  async function confirmarItensDoPdf() {
+    if (!selecionado || !itensPreview) return
+    setErro('')
+    setMensagem('')
+
+    if (itensPreview.length === 0) {
+      setErro('Inclua pelo menos um item antes de confirmar.')
+      return
+    }
+    if (previewInvalidos.length > 0) {
+      setErro(`Ainda existem ${previewInvalidos.length} item(ns) incompletos. Preencha ambiente, descrição, largura e altura.`)
+      return
+    }
+
+    setSalvandoItensPreview(true)
+    try {
+      const token = await tokenAtual()
+      if (!token) {
+        setErro('Sua sessão expirou. Entre novamente no Atlas para salvar os itens.')
+        return
+      }
+
+      const resp = await fetch('/api/importar-itens-orcamento', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orcamentoId: selecionado.id,
+          persistirOrcamento: true,
+          itensConfirmados: itensPreview,
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) {
+        setErro(json?.error || 'Não foi possível salvar os itens conferidos.')
+        return
+      }
+
+      const itensSalvos = Array.isArray(json?.itens) ? json.itens : []
+      setOrcamentos(prev => prev.map(o => o.id === selecionado.id ? { ...o, itens: itensSalvos } : o))
+      setItensPreview(null)
+      setMensagem(`${itensSalvos.length} item(ns) conferidos e salvos no orçamento.`)
+    } catch {
+      setErro('Erro ao salvar os itens conferidos. Tente novamente.')
+    } finally {
+      setSalvandoItensPreview(false)
     }
   }
 
@@ -248,6 +348,12 @@ export default function ConfirmarVendaPage() {
             <span>{erro}</span>
           </div>
         )}
+        {mensagem && (
+          <div className="flex gap-2 items-start rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <CheckCircle2 size={17} className="mt-0.5 flex-shrink-0" />
+            <span>{mensagem}</span>
+          </div>
+        )}
 
         <section className="bg-white border border-slate-200 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -303,7 +409,7 @@ export default function ConfirmarVendaPage() {
             {orcamentos.map(o => (
               <label key={o.id} className={`block rounded-xl border p-3 cursor-pointer ${selecionadoId === o.id ? 'border-brand-navy bg-brand-navyLight' : 'border-slate-200'}`}>
                 <div className="flex gap-3 items-start">
-                  <input type="radio" name="orcamento" checked={selecionadoId === o.id} onChange={() => { setSelecionadoId(o.id); setCadastroSalvo(false) }} className="mt-1" />
+                  <input type="radio" name="orcamento" checked={selecionadoId === o.id} onChange={() => selecionarOrcamento(o.id)} className="mt-1" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-800">{tituloOrcamento(o)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">Valor: R$ {(o.valor_estimado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {o.itens?.length || 0} item(ns) cadastrado(s)</p>
@@ -318,10 +424,14 @@ export default function ConfirmarVendaPage() {
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
               <h2 className="font-semibold text-slate-800">3. Conferência do orçamento vendido</h2>
-              <p className="text-xs text-slate-500">Esses dados serão a base da Medição Final e dos demais setores.</p>
+              <p className="text-xs text-slate-500">O PDF é lido primeiro. Nada é gravado até você revisar e confirmar os itens.</p>
             </div>
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${prontoItens ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-              {prontoItens ? `${itens.length} item(ns) prontos` : itens.length > 0 ? `${itensInvalidos.length} item(ns) precisam revisão` : 'Itens ainda não estruturados'}
+              {itensPreview
+                ? `${itensPreview.length} item(ns) em conferência`
+                : prontoItens
+                  ? `${itens.length} item(ns) prontos`
+                  : itens.length > 0 ? `${itensInvalidos.length} item(ns) precisam revisão` : 'Itens ainda não estruturados'}
             </div>
           </div>
 
@@ -336,7 +446,82 @@ export default function ConfirmarVendaPage() {
                 </div>
               )}
 
-              {!prontoItens ? (
+              {itensPreview ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                    <p className="font-semibold">Confira cada peça antes de salvar.</p>
+                    <p className="mt-1 text-xs text-blue-800">Você pode corrigir os dados, remover um item ou adicionar uma peça que não tenha sido reconhecida pelo PDF.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {itensPreview.map((item, idx) => {
+                      const valido = itemEstruturadoValido(item)
+                      return (
+                        <div key={item.id || idx} className={`rounded-xl border p-4 ${valido ? 'border-slate-200' : 'border-amber-300 bg-amber-50/40'}`}>
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">Item {idx + 1}</p>
+                              <p className={`text-[11px] ${valido ? 'text-emerald-700' : 'text-amber-700'}`}>{valido ? 'Pronto para salvar' : 'Preencha os campos obrigatórios'}</p>
+                            </div>
+                            <button type="button" onClick={() => removerItemPreview(idx)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                              <Trash2 size={13} /> Remover
+                            </button>
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Ambiente *</span>
+                              <input value={item.ambiente || ''} onChange={e => atualizarItemPreview(idx, 'ambiente', e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Ex.: Quarto do fundo" />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Cor</span>
+                              <input value={item.cor || ''} onChange={e => atualizarItemPreview(idx, 'cor', e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Ex.: Preto fosco" />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Linha</span>
+                              <input value={item.linha_origem || ''} onChange={e => atualizarItemPreview(idx, 'linha_origem', e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Ex.: Suprema" />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Vidro</span>
+                              <input value={item.vidro_origem || ''} onChange={e => atualizarItemPreview(idx, 'vidro_origem', e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Ex.: Incolor 6 mm temperado" />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Largura (mm) *</span>
+                              <input type="number" min="1" value={Number(item.largura_mm || 0) || ''} onChange={e => atualizarItemPreview(idx, 'largura_mm', Number(e.target.value || 0))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Altura (mm) *</span>
+                              <input type="number" min="1" value={Number(item.altura_mm || 0) || ''} onChange={e => atualizarItemPreview(idx, 'altura_mm', Number(e.target.value || 0))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Quantidade *</span>
+                              <input type="number" min="1" value={Number(item.quantidade || 1)} onChange={e => atualizarItemPreview(idx, 'quantidade', Math.max(1, Number(e.target.value || 1)))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </label>
+                            <label className="md:col-span-2">
+                              <span className="mb-1 block text-xs font-medium text-slate-600">Descrição / tipo da esquadria *</span>
+                              <textarea value={item.descricao || ''} onChange={e => atualizarItemPreview(idx, 'descricao', e.target.value)} className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Descrição identificada no W.Vetro" />
+                            </label>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <button type="button" onClick={adicionarItemPreview} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                      <Plus size={14} /> Adicionar item
+                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => { setItensPreview(null); setMensagem(''); setErro('') }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                        Cancelar conferência
+                      </button>
+                      <button type="button" onClick={confirmarItensDoPdf} disabled={salvandoItensPreview || previewInvalidos.length > 0 || itensPreview.length === 0} className="rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
+                        {salvandoItensPreview ? 'Salvando...' : `Confirmar e salvar ${itensPreview.length} item(ns)`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : !prontoItens ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   <p className="font-medium">
                     {itens.length > 0
@@ -345,8 +530,8 @@ export default function ConfirmarVendaPage() {
                   </p>
                   <p className="mt-1 text-xs text-amber-800">
                     {itens.length > 0
-                      ? 'Reimporte o PDF para substituir Item 1 / Outro pelos dados reais do orçamento W Vetro.'
-                      : 'Importe os itens do PDF ou abra o orçamento para cadastrar as peças manualmente.'}
+                      ? 'Leia novamente o PDF. O Atlas vai mostrar as peças para conferência antes de substituir os itens atuais.'
+                      : 'Leia o PDF para conferir as peças antes de gravar ou cadastre os itens manualmente.'}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {temPdf && (
@@ -356,7 +541,7 @@ export default function ConfirmarVendaPage() {
                         disabled={importandoItens}
                         className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                       >
-                        {importandoItens ? 'Importando itens...' : itens.length > 0 ? 'Reimportar itens do PDF' : 'Importar itens do PDF'}
+                        {importandoItens ? 'Lendo PDF...' : itens.length > 0 ? 'Ler PDF e conferir novamente' : 'Ler PDF e conferir itens'}
                       </button>
                     )}
                     <button
@@ -369,16 +554,25 @@ export default function ConfirmarVendaPage() {
                   </div>
                 </div>
               ) : (
-                <div className="grid md:grid-cols-2 gap-3">
-                  {itens.map((item, idx) => (
-                    <div key={item.id || idx} className="rounded-xl border border-slate-200 p-3">
-                      <p className="text-xs text-slate-400">Item {idx + 1}</p>
-                      <p className="font-medium text-sm text-slate-800 mt-0.5">{item.ambiente || item.descricao || item.tipo_esquadria}</p>
-                      <p className="text-xs text-slate-500 mt-1">{item.tipo_esquadria} · qtd {item.quantidade || 1}</p>
-                      {(item.largura_mm || item.altura_mm) ? <p className="text-xs text-slate-500">{item.largura_mm || '-'} x {item.altura_mm || '-'} mm</p> : null}
-                      {item.descricao && item.ambiente && <p className="text-xs text-slate-500 mt-1">{item.descricao}</p>}
-                    </div>
-                  ))}
+                <div className="space-y-3">
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {itens.map((item: any, idx) => (
+                      <div key={item.id || idx} className="rounded-xl border border-slate-200 p-3">
+                        <p className="text-xs text-slate-400">Item {idx + 1}</p>
+                        <p className="font-medium text-sm text-slate-800 mt-0.5">{item.ambiente || item.descricao || item.tipo_esquadria}</p>
+                        <p className="text-xs text-slate-500 mt-1">{item.tipo_esquadria} · qtd {item.quantidade || 1}</p>
+                        <p className="text-xs text-slate-500">{item.largura_mm || '-'} x {item.altura_mm || '-'} mm</p>
+                        {item.linha_origem && <p className="text-xs text-slate-500">Linha: {item.linha_origem}</p>}
+                        {item.vidro_origem && <p className="text-xs text-slate-500">Vidro: {item.vidro_origem}</p>}
+                        {item.descricao && item.ambiente && <p className="text-xs text-slate-500 mt-1">{item.descricao}</p>}
+                      </div>
+                    ))}
+                  </div>
+                  {temPdf && (
+                    <button type="button" onClick={importarItensDoPdf} disabled={importandoItens} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                      {importandoItens ? 'Lendo PDF...' : 'Reimportar PDF e revisar itens'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -390,7 +584,7 @@ export default function ConfirmarVendaPage() {
             <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} /> 4. Iniciar processo da venda</div>
             <p className="text-xs text-white/70 mt-1">Somente agora serão criadas Medição Final e automações dos setores.</p>
           </div>
-          <button onClick={iniciar} disabled={!prontoCadastro || !prontoItens || iniciando} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40">
+          <button onClick={iniciar} disabled={!prontoCadastro || !prontoItens || iniciando || !!itensPreview} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40">
             <Play size={16} /> {iniciando ? 'Iniciando...' : 'Iniciar processo da venda'}
           </button>
         </section>
