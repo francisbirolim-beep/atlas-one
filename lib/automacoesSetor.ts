@@ -3,6 +3,15 @@ import { AutomacaoSetor, ItemEsquadria, ItemBalcao, SetorKanbanItem } from './ti
 import { listarColunasSetor, criarItemSetor, editarItemSetor } from './setorKanban'
 
 export async function listarAutomacoesSetor(): Promise<AutomacaoSetor[]> {
+  // A configuração antiga "Automações entre setores" foi substituída pela
+  // Central de Automações do Fluxo. Mantemos este módulo porque o Kanban
+  // Comercial legado ainda usa as funções de execução abaixo, mas a tela de
+  // configuração não deve mais permitir cadastrar regras no motor antigo.
+  if (typeof window !== 'undefined' && window.location.pathname === '/configuracoes') {
+    window.location.assign('/configuracoes/automacoes-fluxo')
+    return []
+  }
+
   const { data, error } = await supabase
   .from('automacoes_setor')
   .select('*')

@@ -4,11 +4,15 @@
 // | 'janela_basculante' | 'vitro' | 'fachada' | 'box' | 'outro' | (qualquer chave criada pelo usuario)
 export type TipoEsquadria = string
 
+// A categoria da tipologia também é dinâmica: além de porta/janela, o Atlas
+// trabalha com fachada, ripado, ACM, vidro, guarda-corpo, portão, box etc.
+export type CategoriaTipologia = string
+
 export interface Tipologia {
       id: string
       chave: string
       label: string
-      categoria: 'porta' | 'janela'
+      categoria: CategoriaTipologia
       ordem: number
       created_at?: string
 }

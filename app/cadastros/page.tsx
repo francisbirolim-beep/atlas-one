@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Boxes, Calculator, CircleDollarSign, FileSliders, Layers3, Loader2, PackageSearch, Ruler, Settings, Truck, Users, Wrench } from 'lucide-react'
+import { ArrowRight, Boxes, Calculator, CircleDollarSign, FileSliders, History, Images, Layers3, Loader2, PackageSearch, Ruler, Settings, Truck, Users, Wrench } from 'lucide-react'
 import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import { usuarioAtual } from '@/lib/auth'
@@ -11,10 +11,12 @@ import { lerCadastrosUsuarioConfig, type Cadastro360Id } from '@/lib/cadastrosUs
 type ItemCadastro = {id:Cadastro360Id;href:string;titulo:string;descricao:string;grupo:'Cadastros principais'|'Produtos e precificação'|'Engenharia'|'Avançado';icon:typeof Boxes;palavras:string}
 const ITENS:ItemCadastro[]=[
 {id:'clientes',href:'/clientes',titulo:'Clientes',descricao:'Cadastro, contatos, obras e histórico completo de cada cliente.',grupo:'Cadastros principais',icon:Users,palavras:'cliente pessoa contato obra cpf cnpj telefone whatsapp'},
-{id:'produtos',href:'/cadastro/produtos',titulo:'Produtos',descricao:'Perfis, acessórios e demais itens usados no Atlas.',grupo:'Cadastros principais',icon:Boxes,palavras:'produto perfil acessorio codigo ncm unidade item'},
+{id:'catalogo_tecnico',href:'/cadastro/catalogo-tecnico',titulo:'Catálogo Técnico',descricao:'Base única de Perfis, Acessórios, Vidros e Outros, com fotos e imagens técnicas.',grupo:'Cadastros principais',icon:Images,palavras:'catalogo tecnico produto perfil acessorio vidro outros foto imagem wvetro desenho'},
+{id:'produtos',href:'/cadastro/produtos',titulo:'Editar Produtos e Materiais',descricao:'Cadastrar e alterar perfis, acessórios, vidros e demais itens usados no Atlas.',grupo:'Cadastros principais',icon:Boxes,palavras:'produto perfil acessorio vidro outro codigo ncm unidade item cadastro editar'},
 {id:'linhas',href:'/cadastro/linhas',titulo:'Linhas',descricao:'Linhas de esquadrias e associação com tipologias.',grupo:'Cadastros principais',icon:Layers3,palavras:'linha suprema gold 30 42 fachada pele vidro tipologia'},
 {id:'materiais',href:'/cadastro/materiais',titulo:'Materiais',descricao:'Base de materiais utilizados em orçamento e produção.',grupo:'Cadastros principais',icon:PackageSearch,palavras:'material vidro aluminio silicone borracha'},
-{id:'fornecedores',href:'/cadastro/fornecedores',titulo:'Fornecedores',descricao:'Empresas fornecedoras de perfis, acessórios e serviços.',grupo:'Cadastros principais',icon:Truck,palavras:'fornecedor compra perfil pintura beneficiamento vidro'},
+{id:'fornecedores',href:'/cadastro/fornecedores',titulo:'Fornecedores',descricao:'Empresas fornecedoras de perfis, acessórios, vidros e serviços.',grupo:'Cadastros principais',icon:Truck,palavras:'fornecedor compra perfil acessorio pintura beneficiamento vidro pedido minimo'},
+{id:'historico',href:'/cadastro/historico',titulo:'Histórico de Cadastros e Preços',descricao:'Versões permanentes dos cadastros e histórico real de preços pagos por fornecedor.',grupo:'Produtos e precificação',icon:History,palavras:'historico versao preco custo compra fornecedor curva crescimento cmv auditoria'},
 {id:'produtos_linha',href:'/cadastro/produtos/por-linha',titulo:'Produtos por Linha',descricao:'Visualizar e organizar produtos vinculados a cada linha.',grupo:'Produtos e precificação',icon:Layers3,palavras:'produto linha associacao catalogo suprema gold'},
 {id:'precificacao',href:'/cadastro/produtos/precificacao',titulo:'Precificação',descricao:'Custos, preços e parâmetros comerciais dos produtos.',grupo:'Produtos e precificação',icon:CircleDollarSign,palavras:'preco custo margem precificacao valor kg metro unidade'},
 {id:'unidades',href:'/cadastro/produtos/unidades-pendentes',titulo:'Unidades Pendentes',descricao:'Revisar produtos que ainda não têm unidade operacional validada.',grupo:'Produtos e precificação',icon:FileSliders,palavras:'unidade pendente un mt pc kg embalagem origem'},

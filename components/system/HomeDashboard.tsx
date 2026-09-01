@@ -27,12 +27,12 @@ export default function HomeDashboard() {
 
   if (!config) {
     return (
-      <>
+      <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
         <HomeExecutiveHero modulos={[]} />
         <section className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-400 shadow-sm">Carregando a tela configurada para este usuário...</div>
         </section>
-      </>
+      </div>
     )
   }
 
@@ -40,7 +40,7 @@ export default function HomeDashboard() {
   const mostrarPessoal = temModulo(config, 'tarefas') || temModulo(config, 'calendario') || temModulo(config, 'notificacoes')
 
   return (
-    <>
+    <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
       <HomeExecutiveHero modulos={config.modulos} />
 
       {temModulo(config, 'indicadores') && <HomeManagementOverview />}
@@ -48,8 +48,8 @@ export default function HomeDashboard() {
       {temModulo(config, 'orcamentos') && <HomeRecentQuotes />}
 
       {mostrarNegocio && (
-        <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
-          <div className="grid gap-4 xl:grid-cols-2">
+        <section className="atlas-home-mobile-full mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
+          <div className="grid w-full min-w-0 gap-4 xl:grid-cols-2">
             {temModulo(config, 'kanban') && <HomeKanbanBlock />}
             {temModulo(config, 'assistencias') && <HomeAssistenciasBlock escopo={config.assistenciasEscopo} />}
           </div>
@@ -57,8 +57,8 @@ export default function HomeDashboard() {
       )}
 
       {mostrarPessoal && (
-        <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
-          <div className="grid gap-4 xl:grid-cols-2">
+        <section className="atlas-home-mobile-full mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
+          <div className="grid w-full min-w-0 gap-4 xl:grid-cols-2">
             {temModulo(config, 'tarefas') && <HomeTasksBlock />}
             {temModulo(config, 'calendario') && <HomeCalendarBlock />}
             {temModulo(config, 'notificacoes') && (
@@ -69,6 +69,6 @@ export default function HomeDashboard() {
           </div>
         </section>
       )}
-    </>
+    </div>
   )
 }
