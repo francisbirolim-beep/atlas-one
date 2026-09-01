@@ -32,15 +32,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
     : ''
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
+    <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
       <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
         <Sidebar />
         <SidebarQuickSearch />
       </div>
       <MobileNavigationControls />
-      <div className="w-full min-w-0 max-w-full flex-1 overflow-x-hidden bg-slate-50 md:h-screen md:overflow-y-auto">
+      <div className="atlas-app-content min-w-0 w-full max-w-full flex-1 overflow-x-hidden bg-slate-50 md:h-screen md:overflow-y-auto">
         <AppTopbar />
-        <main className={`atlas-main-surface min-h-[calc(100vh-60px)] pb-24 sm:min-h-[calc(100vh-68px)] md:pb-0 ${ehHome ? 'atlas-home-v2' : ''}`}>
+        <main className={`atlas-app-main atlas-main-surface min-h-[calc(100vh-68px)] w-full max-w-full overflow-x-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0 ${ehHome ? 'atlas-home-v2' : ''}`}>
           {ehHome && <HomeDashboard />}
           <MobileFavorites mostrarAcessoRapido={ehHome} />
           {ehProducao && <ProducaoEtapasBar />}

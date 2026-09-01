@@ -1,8 +1,5 @@
 import { supabase } from './supabase'
 import { Cliente, OrcamentoRapido, Usuario } from './tipos'
-import { criarMedicaoDoOrcamento } from './medicaoFinal'
-import { executarAutomacoesColuna } from './automacoes'
-import { executarAutomacoesSetor } from './automacoesSetor'
 import { CampoConfiguravel, camposDoContexto } from './camposConfiguraveis'
 
 export type ConfirmacaoVendaDados = {
@@ -164,10 +161,10 @@ export async function iniciarProcessoVenda(
   orcamentoId: string,
   usuario: Usuario | null,
   camposConfigurados: CampoConfiguravel[] = []
-): Promise<{ success: boolean; medicaoId?: string; error?: string }> {
+): Promise<{ success: boolean; projetoCardId?: string; vendaId?: string; contaId?: string; error?: string }> {
   const { data: orcamento, error: erroOrcamento } = await supabase
     .from('orcamentos')
-    .select('id, cliente_id, cliente_nome, criado_por_id, coluna_id, itens')
+    .select('id, cliente_id, cliente_nome, itens')
     .eq('id', orcamentoId)
     .maybeSingle()
 
@@ -189,30 +186,19 @@ export async function iniciarProcessoVenda(
     return { success: false, error: 'Este orçamento ainda nao tem itens estruturados no Atlas. Confira/importa o orçamento antes de iniciar o processo.' }
   }
 
-  let medicaoId: string | undefined
-  const { data: medicaoExistente } = await supabase
-    .from('medicoes_finais')
-    .select('id')
-    .eq('orcamento_id', orcamentoId)
-    .limit(1)
-    .maybeSingle()
+  const { data, error } = await supabase.rpc('fn_iniciar_fluxo_venda_v2', {
+    p_orcamento_id: orcamentoId,
+    p_usuario_id: usuario?.id || null,
+    p_usuario_nome: usuario?.nome || null,
+  })
 
-  if (medicaoExistente?.id) medicaoId = medicaoExistente.id
-  else {
-    const medicao = await criarMedicaoDoOrcamento(orcamentoId, usuario)
-    if (!medicao) return { success: false, error: 'Nao foi possivel criar a Medicao Final.' }
-    medicaoId = medicao.id
+  if (error) return { success: false, error: error.message }
+  const resultado = Array.isArray(data) ? data[0] : data
+
+  return {
+    success: true,
+    projetoCardId: resultado?.projeto_card_id || undefined,
+    vendaId: resultado?.venda_id || undefined,
+    contaId: resultado?.conta_id || undefined,
   }
-
-  if (orcamento.coluna_id) {
-    await Promise.all([
-      executarAutomacoesColuna(orcamento.coluna_id, {
-        cliente_nome: orcamento.cliente_nome || null,
-        criado_por_id: orcamento.criado_por_id || null,
-      }),
-      executarAutomacoesSetor(orcamento.coluna_id, orcamentoId),
-    ])
-  }
-
-  return { success: true, medicaoId }
 }

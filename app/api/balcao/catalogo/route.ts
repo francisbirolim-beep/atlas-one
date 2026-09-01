@@ -35,6 +35,12 @@ function termosBusca(valor: string) {
 function textoNormalizado(valor: unknown) { return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() }
 function textoProduto(p: ProdutoCatalogo) { return textoNormalizado(`${p.codigo || ''} ${p.nome || ''} ${p.descricao || ''} ${p.categoria || ''}`) }
 
+async function buscarClientePorId(id: string): Promise<ClienteCatalogo[]> {
+  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('id', id).maybeSingle()
+  if (error) throw error
+  return data ? [data as ClienteCatalogo] : []
+}
+
 async function buscarClientes(q: string): Promise<ClienteCatalogo[]> {
   const termos = termosBusca(q)
   if (!termos.length) return []
@@ -83,7 +89,10 @@ export async function GET(req: NextRequest) {
   const tipo = req.nextUrl.searchParams.get('tipo') || 'produtos'
   const q = (req.nextUrl.searchParams.get('q') || '').trim()
   try {
-    if (tipo === 'clientes') return NextResponse.json({ ok: true, clientes: await buscarClientes(q) })
+    if (tipo === 'clientes') {
+      const clienteId = (req.nextUrl.searchParams.get('clienteId') || '').trim()
+      return NextResponse.json({ ok: true, clientes: clienteId ? await buscarClientePorId(clienteId) : await buscarClientes(q) })
+    }
     const local = await localPadrao(usuario.id, req.nextUrl.searchParams.get('localId'))
     if (!local?.id) return NextResponse.json({ error: 'Nenhum local de estoque foi configurado para o balcão.' }, { status: 409 })
     const produtos = await buscarProdutos(q)

@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export interface DadosAssistenciaForm {
   clienteId?: string | null
+  obraId?: string | null
   clienteNome: string
   clienteWhatsapp: string
   cidade: string
@@ -36,6 +37,7 @@ export async function criarAssistenciaNoServidor(
   dados: DadosAssistenciaForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const { clienteId: clienteIdInformado, clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
+  const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
 
   const [clienteId, usuario, colunaAssistenciaId, colunaOrcamentoId] = await Promise.all([
     clienteIdInformado
@@ -59,6 +61,7 @@ export async function criarAssistenciaNoServidor(
     id: novaAssistenciaId,
     created_at: criadaEm,
     cliente_id: clienteId,
+    obra_id: obraId || null,
     cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp || null,
     cidade: cidade || null,
@@ -88,6 +91,7 @@ export async function criarAssistenciaNoServidor(
     const { error: erroEspelho } = await supabase.from('orcamentos').insert({
       id: uuidv4(),
       cliente_id: clienteId,
+      obra_id: obraId || null,
       cliente_nome: clienteNome,
       cliente_whatsapp: clienteWhatsapp || null,
       cidade: cidade || null,

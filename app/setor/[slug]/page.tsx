@@ -322,6 +322,14 @@ export default function SetorDetalhe() {
             {selecionado.criado_por_nome && (
               <p className="text-xs text-slate-400">Criado por {selecionado.criado_por_nome}</p>
             )}
+            {slug === 'engenharia-projeto' && selecionado.orcamento_id && (
+              <Link
+                href={`/engenharia/conferir-projeto/${selecionado.orcamento_id}`}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                Abrir conferência do projeto <ArrowRight size={16} />
+              </Link>
+            )}
             {editavel && (
               <div className="flex gap-2 pt-2">
                 <button
