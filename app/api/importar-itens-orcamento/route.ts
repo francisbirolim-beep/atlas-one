@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { v4 as uuidv4 } from 'uuid'
 import { parseItensDoTextoPdf } from '@/lib/pdfOrcamentoImport'
+import { parseOrcamentoWVetroTexto } from '@/lib/wvetroPdf'
 import { Anexo, ItemEsquadria } from '@/lib/tipos'
 
 export const runtime = 'nodejs'
@@ -13,6 +14,56 @@ function itemImportadoValido(it: Partial<ItemEsquadria>) {
   const altura = Number(it.altura_mm || 0)
   const descricaoGenerica = /^item\s+\d+$/i.test(descricao) || /^item\s+\d+$/i.test(it.tipo_outro_texto || '')
   return !!ambiente && !!descricao && !descricaoGenerica && largura > 0 && altura > 0
+}
+
+function pontuarItens(itens: Partial<ItemEsquadria>[]) {
+  const validos = itens.filter(itemImportadoValido).length
+  const comAmbiente = itens.filter(it => !!String(it.ambiente || '').trim()).length
+  const comDescricao = itens.filter(it => !!String(it.descricao || '').trim()).length
+  const comMedidas = itens.filter(it => Number(it.largura_mm || 0) > 0 && Number(it.altura_mm || 0) > 0).length
+  return validos * 1000 + comMedidas * 100 + comAmbiente * 10 + comDescricao
+}
+
+function itensDoResumoWVetro(texto: string): Partial<ItemEsquadria>[] {
+  const resumo = parseOrcamentoWVetroTexto(texto)
+  if (!resumo.parece_wvetro || resumo.itens.length === 0) return []
+
+  return resumo.itens.map(item => {
+    const descricao = [
+      item.descricao,
+      item.linha && !/\bLINHA\s*:/i.test(item.descricao) ? `LINHA: ${item.linha}` : '',
+      item.vidro && !/\bVIDRO\s*:/i.test(item.descricao) ? `VIDRO: ${item.vidro}` : '',
+    ].filter(Boolean).join(' | ')
+
+    return {
+      ambiente: item.ambiente || undefined,
+      tipo_esquadria: item.tipo_esquadria,
+      tipo_outro_texto: item.tipo_outro_texto || undefined,
+      largura_mm: Number(item.largura_mm || 0),
+      altura_mm: Number(item.altura_mm || 0),
+      quantidade: Number(item.quantidade || 1),
+      descricao,
+      cor: item.cor || undefined,
+    }
+  })
+}
+
+function escolherMelhorParser(texto: string) {
+  const legado = parseItensDoTextoPdf(texto)
+  const especializado = itensDoResumoWVetro(texto)
+
+  // O parser legado já foi validado em PDFs reais cuja extração coloca os valores
+  // antes dos rótulos. O parser especializado cobre outras variações do W.Vetro.
+  // Em empate preservamos o legado; só trocamos quando o especializado realmente
+  // recupera mais dados estruturados. Assim ampliamos compatibilidade sem regressão.
+  const scoreLegado = pontuarItens(legado)
+  const scoreEspecializado = pontuarItens(especializado)
+
+  if (scoreEspecializado > scoreLegado) {
+    return { itens: especializado, parser: 'wvetro-especializado' as const, scoreLegado, scoreEspecializado }
+  }
+
+  return { itens: legado, parser: 'wvetro-legado' as const, scoreLegado, scoreEspecializado }
 }
 
 function normalizarTecnico(valor: string) {
@@ -27,6 +78,11 @@ function normalizarTecnico(valor: string) {
 
 function extrairLinhaDaDescricao(descricao?: string) {
   const match = (descricao || '').match(/(?:^|\|)\s*LINHA\s*:\s*([^|]+)/i)
+  return match?.[1]?.trim() || null
+}
+
+function extrairVidroDaDescricao(descricao?: string) {
+  const match = (descricao || '').match(/(?:^|\|)\s*VIDRO\s*:\s*([^|]+)/i)
   return match?.[1]?.trim() || null
 }
 
@@ -102,10 +158,13 @@ export async function POST(req: NextRequest) {
     const dadosPdf = await pdfParse(buffer)
     const texto = dadosPdf.text || ''
 
-    const itensParciais = parseItensDoTextoPdf(texto)
+    const resultadoParser = escolherMelhorParser(texto)
+    const itensParciais = resultadoParser.itens
     if (itensParciais.length === 0) {
       return NextResponse.json({
         error: `Nao foi possivel identificar itens no PDF "${anexoPdf.nome || anexoPdf.titulo}". Verifique o layout do anexo.`,
+        parser_usado: resultadoParser.parser,
+        parser_scores: { legado: resultadoParser.scoreLegado, especializado: resultadoParser.scoreEspecializado },
         anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
       }, { status: 422 })
     }
@@ -116,6 +175,8 @@ export async function POST(req: NextRequest) {
         error: `O PDF "${anexoPdf.nome || anexoPdf.titulo}" foi lido, mas ${invalidos.length} de ${itensParciais.length} item(ns) ficaram incompletos. A importacao foi cancelada para nao criar pecas genericas.`,
         itens_identificados: itensParciais.length,
         itens_incompletos: invalidos.length,
+        parser_usado: resultadoParser.parser,
+        parser_scores: { legado: resultadoParser.scoreLegado, especializado: resultadoParser.scoreEspecializado },
         anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
       }, { status: 422 })
     }
@@ -132,6 +193,7 @@ export async function POST(req: NextRequest) {
 
     const itensCompletos: ItemEsquadria[] = itensParciais.map(it => {
       const linhaOrigem = extrairLinhaDaDescricao(it.descricao)
+      const vidroOrigem = extrairVidroDaDescricao(it.descricao)
       const chaveOrigem = normalizarTecnico(linhaOrigem || '')
       const linhaTecnica = chaveOrigem
         ? linhas.find(linha => {
@@ -155,6 +217,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (linhaOrigem) itemComLinha.linha_origem = linhaOrigem.toUpperCase()
+      if (vidroOrigem) itemComLinha.vidro_origem = vidroOrigem
       if (linhaTecnica) {
         itemComLinha.linha_tecnica_id = linhaTecnica.id
         itemComLinha.linha_tecnica_nome = linhaTecnica.nome
@@ -198,8 +261,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       itens: itensCompletos,
       origem: /w\.vetro/i.test(texto) ? 'wvetro' : 'pdf',
+      parser_usado: resultadoParser.parser,
+      parser_scores: { legado: resultadoParser.scoreLegado, especializado: resultadoParser.scoreEspecializado },
       linhas_associadas: linhasAssociadas,
       linhas_identificadas: itensParciais.map(it => extrairLinhaDaDescricao(it.descricao)).filter(Boolean),
+      vidros_identificados: itensParciais.map(it => extrairVidroDaDescricao(it.descricao)).filter(Boolean),
       anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
     })
   } catch (e: any) {
