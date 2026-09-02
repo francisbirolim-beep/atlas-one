@@ -313,9 +313,18 @@ documentar se algo relacionado for encontrado). Segunda auditoria completa em
   2 receitas técnicas oficiais já ativas;
 - achado: `unidade_origem` nunca preenchida em `wvetro_tipologia_componentes`
   — gap de extração da carga, não desta frente, só documentado;
-- não existe granularidade de variáveis por pedido individual — só valor
-  agregado por tipologia-referência (limita "configurações observadas por
-  orçamento" a nível de tipologia, não de pedido).
+- não existe granularidade de variáveis por pedido individual nas tabelas
+  hoje — só valor agregado por tipologia-referência;
+- **ACHADO 2026-09-02 (investigação ad-hoc, não uma implementação)**: a API
+  W.Vetro (`/vendas/orcamentos`, campo `ListPedidos[].Itens[]`) já fornece
+  `Largura`, `Altura` (100% preenchidos numa amostra de 28 itens) e
+  `Ambiente` (96%) por item individual de orçamento — dado que a extração
+  atual (`itensHistoricos` em `lib/wvetroBaseTecnicaServer.ts`) descarta,
+  usando só `Linha`/`Modelo`. Ver seção 6 de
+  `WVETRO_AUDITORIA_BASE_TECNICA_2026-09-01-v2.md` para o payload de exemplo.
+  Isso é insumo pra uma decisão futura (do usuário/ChatGPT) de expandir a
+  extração da carga — nenhum código de extração foi alterado por esta
+  investigação.
 - Tela `/configuracoes/integracoes/wvetro/base-tecnica/tipologias` (lista) e
   `/tipologias/[id]` (detalhe) mergeada em `main` (PR #308). Extensão com
   cards de catálogo global e rótulos explícitos REFERÊNCIA HISTÓRICA/RECEITA

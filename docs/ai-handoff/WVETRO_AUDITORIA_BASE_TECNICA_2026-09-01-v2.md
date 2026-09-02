@@ -78,16 +78,53 @@ apesar de existir como coluna — não é um problema desta auditoria resolver
 | Total de referências de variável | 59 (sem mudança) |
 | Tipologias-referência com ao menos 1 variável | 59 |
 
-**Continua cobrindo só "número de folhas".** Não há, nesta rodada, evidência
-de novas variáveis extraídas (dimensão, tipo de abertura, montagem etc.) —
-segue não auditado se a API W.Vetro fornece esses dados por pedido
-individual. Nenhuma tabela armazena a combinação completa de variáveis por
+**Continua cobrindo só "número de folhas" nas tabelas hoje** — mas a
+investigação desta rodada (2026-09-02) descobriu que a **API W.Vetro já
+fornece muito mais do que isso, e simplesmente não é usado na extração
+atual**.
+
+### Achado: a API tem Largura/Altura/Ambiente por item, não usados
+
+Chamando `/vendas/orcamentos` diretamente (dia de teste: 2025-09-23, 28
+itens em 1 pedido), cada item de `ListPedidos[].Itens[]` tem, além de
+`Linha`/`Modelo` (já usados):
+
+| Campo | Cobertura na amostra | Observação |
+|---|---|---|
+| `Largura` | 28/28 (100%) | em mm, ex.: `"1550"` |
+| `Altura` | 28/28 (100%) | em mm, ex.: `"2139"` |
+| `Ambiente` | 27/28 (96%) | texto livre, ex.: `"SUITE"`, `"AREA GOURMT"` |
+| `Nome` | 28/28 | mais descritivo que `Modelo`, ex.: `"PORTA DE CORRER 04 FOLHAS MÓVEIS EM 04 PLANOS \| SUPREMA"` (carrega detalhes que `Modelo` sozinho não tem, como "04 PLANOS", "COM VENEZIANA") |
+| `Codigo` | 28/28 | código do item no orçamento (ex.: `"SUCB-PC2-08"`), diferente do código de perfil/acessório |
+
+O código de extração atual (`lib/wvetroBaseTecnicaServer.ts`, função
+`itensHistoricos`) só lê `item.Linha` e `item.Modelo` de cada item — todo o
+resto do objeto (`Largura`, `Altura`, `Ambiente`, `Nome`, `Codigo`,
+`ValorTotal` etc.) é **descartado**, mesmo estando presente e preenchido no
+payload. `/vendas/pedidos` não retornou dados nesse dia de teste (amostra
+vazia), então a comparação foi feita só com `/vendas/orcamentos`.
+
+Isso muda a resposta sobre "por que só folhas": não é que a API não forneça
+dimensão/ambiente — é que a extração de hoje nunca olhou pra esses campos.
+Dá pra registrar `largura_mm`/`altura_mm`/`ambiente` por ocorrência
+histórica sem depender de regex sobre texto livre. Ainda não há evidência de
+campos estruturados de "tipo de abertura", "montagem", "trilho" etc. como
+colunas separadas — essas seguem dependendo do texto de `Modelo`/`Nome`
+(que é onde a regex de `fn_wvetro_reconstruir_variaveis_explicitas` já
+procura, mas raramente encontra correspondência).
+
+**Isto é dado observado, não uma decisão de implementação.** Nenhum código
+foi alterado para passar a gravar esses campos — fica registrado aqui como
+insumo para uma decisão futura, validada pelo usuário, sobre expandir a
+extração da carga (que é frente do ChatGPT/PR #306, não desta PR).
+
+Nenhuma tabela armazena hoje a combinação completa de variáveis por
 orçamento histórico individual — apenas o valor agregado por
-tipologia-referência. Isso limita a seção "configurações diferentes
-encontradas entre orçamentos" pedida para a tela de auditoria: hoje só é
-possível mostrar, por componente, os **valores distintos observados** de
-posição/corte (já expostos na tela), não a combinação completa de variáveis
-por pedido — não existe granularidade de pedido individual nas tabelas atuais.
+tipologia-referência (e, com o achado acima, largura/altura por item
+individual quando/se a extração passar a gravar). Isso segue limitando a
+seção "configurações diferentes encontradas entre orçamentos" da tela de
+auditoria a mostrar, por componente, os **valores distintos observados** de
+posição/corte — já expostos na tela.
 
 ## 7. Receitas técnicas oficiais validadas
 
