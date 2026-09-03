@@ -302,3 +302,46 @@ Não promove dado observado a receita oficial — isso continua manual em
 `npm run build`: compilou com sucesso localmente (typecheck completo do
 projeto historicamente estoura o timeout local — validado via Build
 Validation do CI após o push, padrão já usado nesta sessão).
+
+## 2026-09-02 — Investigação: onde estão as variáveis/fórmulas/receitas das tipologias W.Vetro
+
+Investigação feita por agente de IA (Claude), branch separada
+`investigacao/wvetro-receitas-variaveis-v1` sobre `main` (com PR #309 já
+mesclado), sem tocar em checkpoint/cursor/retry/pendências/execução da carga
+histórica nem na lógica da PR #311 (ChatGPT trabalhando nela em paralelo).
+
+Relatório completo em
+`docs/ai-handoff/WVETRO_INVESTIGACAO_VARIAVEIS_RECEITAS_2026-09-02.md`. Resumo:
+
+- Auditoria de código (`lib/wvetroApi.ts`, `wvetroBaseTecnicaServer.ts`,
+  `wvetroCatalogoCompletoServer.ts`) e do banco de produção confirmou que a
+  API W.Vetro não expõe (nem no que já usamos, nem na documentação pública já
+  mapeada em `WVETRO_API_MAPPING.md`) um endpoint de "cálculo"/"composição
+  paramétrica" que receba `Linha+Modelo+Largura+Altura+Opções` e devolva a
+  receita. O que existe é o resultado já calculado de vendas históricas
+  (`/vendas/pedidos`, `/vendas/orcamentos`) e catálogo de identidade de
+  produto (`/Produtos/produtoByKey`), sem fórmula.
+- Confirmado por leitura da função `fn_wvetro_reconstruir_variaveis_explicitas`
+  no Postgres: as 10 variáveis que o Atlas tenta reconstruir hoje vêm
+  inteiramente de regex sobre o texto livre `modelo_raw` — não há campo
+  estruturado de variável na API. Só "folhas" bate consistentemente.
+- Confirmado que `produtoByKey?Produtotipo=E` sem código não é suportado pela
+  instalação (0 linhas `tipo='E'` em `wvetro_produtos_snapshot`); testar por
+  código específico é uma via ainda não tentada (endpoint novo cobre isso).
+- Endpoint temporário de diagnóstico, só leitura e restrito a Master, criado durante a investigação e **removido antes do merge**: `GET /api/integracoes/wvetro/base-tecnica/investigacao-variaveis`
+  (aceita `?data=`, `?produtoTipo=&produtoCodigo=`, `?linhas=1`; achata chaves
+  do payload e destaca as que batem com palavras-chave de variável/fórmula/
+  regra). Não pôde ser exercitado neste ambiente por falta de credenciais
+  W.Vetro locais — passou no typecheck (`npx tsc --noEmit`).
+- Procedimento detalhado de captura via DevTools/Network do navegador
+  (filtro, o que olhar em Payload/Response, HAR, `Copy as cURL`, dados
+  sensíveis a remover) e roteiro de experimento controlado (5 casos, variando
+  um fator por vez) documentados no relatório — depende de execução humana no
+  sistema W.Vetro real, nenhum agente de IA tem acesso a essa sessão.
+- Proposta de estrutura Tipologia → Variáveis → Regras → Fórmulas →
+  Perfis/Acessórios/Vidros → Cortes → Custos, mantendo a separação já usada na
+  tela do explorador entre referência histórica e receita técnica validada —
+  só proposta, nada implementado.
+
+Nenhuma implementação grande feita nesta rodada, por instrução do usuário.
+Nenhum merge para `main`.

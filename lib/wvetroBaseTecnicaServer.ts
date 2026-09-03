@@ -41,14 +41,35 @@ function objetosProduto(payload: unknown, out: Record<string, unknown>[] = []) {
   return out
 }
 
-type ItemHistorico = { linha: string; modelo: string; raw: Record<string, unknown> }
+type ItemHistorico = {
+  linha: string
+  modelo: string
+  largura: number | null
+  altura: number | null
+  ambiente: string | null
+  nome: string | null
+  raw: Record<string, unknown>
+}
 function itensHistoricos(payload: unknown, out: ItemHistorico[] = []) {
   if (Array.isArray(payload)) { payload.forEach(v => itensHistoricos(v, out)); return out }
   if (!payload || typeof payload !== 'object') return out
   const o = payload as Record<string, unknown>
   const linha = txt(o.Linha ?? o.linha)
   const modelo = txt(o.Modelo ?? o.modelo)
-  if (linha && modelo) out.push({ linha, modelo, raw: o })
+  if (linha && modelo) {
+    out.push({
+      linha,
+      modelo,
+      // Achado da auditoria 2026-09-01/02: a API já entrega Largura/Altura/Ambiente/Nome
+      // por item (100%/100%/96%/100% numa amostra real), mas a extração nunca os lia.
+      // Só leitura/agregação aditiva aqui — não altera checkpoint/cursor/retry/pendências.
+      largura: num(o.Largura ?? o.largura),
+      altura: num(o.Altura ?? o.altura),
+      ambiente: txt(o.Ambiente ?? o.ambiente) || null,
+      nome: txt(o.Nome ?? o.nome) || null,
+      raw: o,
+    })
+  }
   Object.values(o).forEach(v => itensHistoricos(v, out))
   return out
 }
@@ -73,7 +94,7 @@ async function indiceProdutos() {
 
 async function indiceTipologias() {
   const [{ data: refs, error: e1 }, { data: tips, error: e2 }] = await Promise.all([
-    supabaseAdmin.from('wvetro_referencias_tipologias').select('id,chave,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url'),
+    supabaseAdmin.from('wvetro_referencias_tipologias').select('id,chave,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,largura_min_mm,largura_max_mm,altura_min_mm,altura_max_mm,ambientes_observados,nomes_observados'),
     supabaseAdmin.from('tipologias').select('id,label,linha_origem_wvetro,modelo_origem_wvetro,foto_url'),
   ])
   if (e1) throw e1
@@ -163,10 +184,19 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
   const { refsMap, tipMap } = await indiceTipologias()
   const refsUsadas = new Set<string>()
   const agregados = new Map<string, any>()
+  // Agregação em memória de Largura/Altura/Ambiente/Nome por referência (achado
+  // 2026-09-01/02: a API já entrega esses campos por item, não eram capturados).
+  const dimensoes = new Map<string, { largura: number[]; altura: number[]; ambientes: Set<string>; nomes: Set<string> }>()
 
   for (const item of itens) {
     const { ref, tip } = await garantirReferencia(item.linha, item.modelo, urlImagem(item.raw), data, refsMap, tipMap)
     refsUsadas.add(ref.id)
+    const dim = dimensoes.get(ref.id) || { largura: [], altura: [], ambientes: new Set<string>(), nomes: new Set<string>() }
+    if (item.largura != null) dim.largura.push(item.largura)
+    if (item.altura != null) dim.altura.push(item.altura)
+    if (item.ambiente) dim.ambientes.add(item.ambiente)
+    if (item.nome) dim.nomes.add(item.nome)
+    dimensoes.set(ref.id, dim)
     const grupos: Array<['perfil' | 'acessorio' | 'vidro', unknown[]]> = [
       ['perfil', arr(item.raw, ['Perfil', 'Perfis'])],
       ['acessorio', arr(item.raw, ['Acessorios', 'Acessórios'])],
@@ -279,6 +309,32 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
     const { error } = await supabaseAdmin.from('wvetro_tipologia_componentes').upsert(linhas.slice(i, i + 200), { onConflict: 'referencia_tipologia_id,tipo,chave_componente' })
     if (error) throw error
   }
+
+  // Grava Largura/Altura/Ambiente/Nome agregados por referência (achado 2026-09-01/02).
+  // Mescla com o que já estava salvo em refsMap (lido no início desta execução), não
+  // sobrescreve — mesmo cuidado de min/max/união já usado para componentes acima.
+  for (const [refId, dim] of dimensoes) {
+    const refAtual = Array.from(refsMap.values()).find((r: any) => r.id === refId)
+    if (!refAtual) continue
+    const largurasNovas = dim.largura.length ? Math.min(...dim.largura) : null
+    const largurasNovasMax = dim.largura.length ? Math.max(...dim.largura) : null
+    const alturasNovas = dim.altura.length ? Math.min(...dim.altura) : null
+    const alturasNovasMax = dim.altura.length ? Math.max(...dim.altura) : null
+    const ambientesUniao = [...new Set([...(refAtual.ambientes_observados || []), ...dim.ambientes])].slice(0, 20)
+    const nomesUniao = [...new Set([...(refAtual.nomes_observados || []), ...dim.nomes])].slice(0, 20)
+    const patch = {
+      largura_min_mm: min(refAtual.largura_min_mm, largurasNovas),
+      largura_max_mm: max(refAtual.largura_max_mm, largurasNovasMax),
+      altura_min_mm: min(refAtual.altura_min_mm, alturasNovas),
+      altura_max_mm: max(refAtual.altura_max_mm, alturasNovasMax),
+      ambientes_observados: ambientesUniao,
+      nomes_observados: nomesUniao,
+      updated_at: new Date().toISOString(),
+    }
+    const { error } = await supabaseAdmin.from('wvetro_referencias_tipologias').update(patch).eq('id', refId)
+    if (error) throw error
+  }
+
   await sincronizarCustosProdutosWVetro()
   return { data, itens: itens.length, tipologias: refsUsadas.size, componentes: linhas.length }
 }

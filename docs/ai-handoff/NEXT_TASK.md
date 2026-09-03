@@ -314,6 +314,23 @@ anterior à retomada). Estado após retomada:
 **Não executar novamente a auditoria inteira sem necessidade — quando a carga
 concluir, reauditar via a nova tela em vez de rodar SQL solto.**
 
+### Investigação de variáveis/fórmulas/receitas (2026-09-02)
+
+Branch `investigacao/wvetro-receitas-variaveis-v1` (separada, não mexe em
+checkpoint/cursor/retry/pendências/PR #311). Relatório completo em
+`docs/ai-handoff/WVETRO_INVESTIGACAO_VARIAVEIS_RECEITAS_2026-09-02.md`.
+
+Conclusão principal: a API W.Vetro não tem endpoint de "cálculo"/"composição
+paramétrica" — só devolve identidade de produto e o resultado já calculado de
+vendas históricas. As variáveis reconstruídas hoje vêm 100% de regex sobre
+`Modelo`. Foi criado durante a investigação um endpoint temporário de diagnóstico (Master-only) para testar `produtoByKey?Produtotipo=E&Produtocodigo=...` e achatar/filtrar chaves de `vendas/*`. Ele não foi exercitado contra a API real e foi removido antes do merge para não levar uma rota temporária à `main`.
+
+**Próximo passo que só o usuário pode fazer**: capturar o Network do navegador
+(DevTools) enquanto monta um orçamento no próprio W.Vetro — procedimento exato
+e roteiro de experimento controlado (5 casos, variando largura/altura/opção)
+estão no relatório, seção E. É o caminho mais direto para achar a "ponte"
+request→composição calculada, se ela existir como chamada de frontend.
+
 ## Pontos a observar durante o teste
 
 - fórmula não validada deve gerar pendência, nunca material inventado;
