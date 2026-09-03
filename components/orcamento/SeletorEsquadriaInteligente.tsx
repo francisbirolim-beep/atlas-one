@@ -1,8 +1,8 @@
 'use client'
 
-// Entrada estável do Orçamento: V3 adiciona pesquisa global e mantém a configuração técnica da V2.
-export { default } from './SeletorEsquadriaInteligenteV3'
+// Entrada estável do Orçamento: V4 prioriza descrição livre e torna a busca de linha/tipologia opcional e pesquisável.
+export { default } from './SeletorEsquadriaInteligenteV4'
 export type {
   SelecaoEsquadriaOrcamento,
   StatusConfiguracaoOrcamento,
-} from './SeletorEsquadriaInteligenteV3'
+} from './SeletorEsquadriaInteligenteV4'
