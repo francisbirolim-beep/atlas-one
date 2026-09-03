@@ -31,7 +31,7 @@ function ehBoxCantoTexto(texto: string) {
 
 function imagemTipologia(t: Tipologia) {
   const item = t as any
-  return String(item.imagem_url || item.desenho_url || item.thumbnail_url || '').trim() || null
+  return String(item.foto_url || item.imagem_url || item.desenho_url || item.thumbnail_url || '').trim() || null
 }
 
 export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props) {
