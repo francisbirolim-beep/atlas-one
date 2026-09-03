@@ -68,6 +68,12 @@ type Detalhe = {
     statusMapeamento: string | null
     primeiroVisto: string | null
     ultimoVisto: string | null
+    larguraMinMm?: number | null
+    larguraMaxMm?: number | null
+    alturaMinMm?: number | null
+    alturaMaxMm?: number | null
+    ambientesObservados?: string[]
+    nomesObservados?: string[]
   }
   tipologiaAtlas: { id: string; chave: string; label: string; categoria: string | null; foto_url: string | null } | null
   componentes: Componente[]
@@ -208,6 +214,14 @@ export default function TipologiaWVetroDetalhePage() {
                 <h1 className="text-xl font-bold text-slate-900">{dados.referencia.linha}</h1>
                 <p className="text-sm text-slate-600">{dados.referencia.modelo}</p>
                 <p className="mt-2 text-xs text-slate-500">Visto de {dados.referencia.primeiroVisto || '—'} até {dados.referencia.ultimoVisto || '—'} · {dados.referencia.ocorrencias} ocorrência(s) histórica(s)</p>
+                {(dados.referencia.larguraMinMm != null || dados.referencia.alturaMinMm != null) && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    REFERÊNCIA HISTÓRICA — Largura: {dados.referencia.larguraMinMm ?? '—'}–{dados.referencia.larguraMaxMm ?? '—'} mm · Altura: {dados.referencia.alturaMinMm ?? '—'}–{dados.referencia.alturaMaxMm ?? '—'} mm
+                    {dados.referencia.ambientesObservados && dados.referencia.ambientesObservados.length > 0 && (
+                      <> · Ambientes: {dados.referencia.ambientesObservados.join(', ')}</>
+                    )}
+                  </p>
+                )}
                 <p className="mt-1 text-xs">
                   {dados.tipologiaAtlas
                     ? <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 size={13} /> Vinculada à tipologia Atlas: {dados.tipologiaAtlas.label} ({dados.tipologiaAtlas.chave})</span>
