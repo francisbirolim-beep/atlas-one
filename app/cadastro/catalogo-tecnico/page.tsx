@@ -13,6 +13,7 @@ const GRUPOS = [
   { chave: 'perfil', label: 'Perfis' },
   { chave: 'acessorio', label: 'Acessórios' },
   { chave: 'vidro', label: 'Vidros' },
+  { chave: 'kit', label: 'Kits' },
   { chave: 'outros', label: 'Outros' },
 ] as const
 
@@ -22,6 +23,7 @@ function grupoProduto(categoria: string): Grupo {
   if (categoria === 'perfil') return 'perfil'
   if (categoria === 'acessorio') return 'acessorio'
   if (categoria === 'vidro') return 'vidro'
+  if (categoria === 'kit') return 'kit'
   return 'outros'
 }
 
@@ -62,7 +64,7 @@ export default function CatalogoTecnicoPage() {
   }, [imagens])
 
   const contagens = useMemo(() => {
-    const base = { todos: produtos.length, perfil: 0, acessorio: 0, vidro: 0, outros: 0 }
+    const base = { todos: produtos.length, perfil: 0, acessorio: 0, vidro: 0, kit: 0, outros: 0 }
     produtos.forEach(p => { base[grupoProduto(p.categoria)] += 1 })
     return base
   }, [produtos])
@@ -89,8 +91,8 @@ export default function CatalogoTecnicoPage() {
             <Link href="/cadastros" className="mt-0.5 rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft size={18}/></Link>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">Cadastro técnico mestre</p>
-              <h1 className="mt-1 text-2xl font-semibold text-slate-950">Perfis, Acessórios, Vidros e Outros</h1>
-              <p className="mt-1 max-w-3xl text-sm text-slate-500">Uma única base para orçamento, compras, estoque, produção e CMV. Imagens do W.Vetro e imagens técnicas ficam vinculadas ao mesmo cadastro.</p>
+              <h1 className="mt-1 text-2xl font-semibold text-slate-950">Perfis, Acessórios, Vidros, Kits e Outros</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-500">Uma única base para orçamento, compras, estoque, produção e CMV. Kits completos, como Kit Box, usam o mesmo cadastro de produtos e podem ser combinados com vidro no orçamento.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -100,7 +102,7 @@ export default function CatalogoTecnicoPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         {GRUPOS.map(g => (
           <button key={g.chave} onClick={() => { setGrupo(g.chave); setLimite(120) }} className={`rounded-2xl border p-4 text-left transition ${grupo === g.chave ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
             <p className="text-xs font-semibold text-slate-500">{g.label}</p>
