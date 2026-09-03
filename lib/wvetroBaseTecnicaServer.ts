@@ -60,6 +60,9 @@ function itensHistoricos(payload: unknown, out: ItemHistorico[] = []) {
     out.push({
       linha,
       modelo,
+      // Achado da auditoria 2026-09-01/02: a API já entrega Largura/Altura/Ambiente/Nome
+      // por item (100%/100%/96%/100% numa amostra real), mas a extração nunca os lia.
+      // Só leitura/agregação aditiva aqui — não altera checkpoint/cursor/retry/pendências.
       largura: num(o.Largura ?? o.largura),
       altura: num(o.Altura ?? o.altura),
       ambiente: txt(o.Ambiente ?? o.ambiente) || null,
@@ -181,6 +184,8 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
   const { refsMap, tipMap } = await indiceTipologias()
   const refsUsadas = new Set<string>()
   const agregados = new Map<string, any>()
+  // Agregação em memória de Largura/Altura/Ambiente/Nome por referência (achado
+  // 2026-09-01/02: a API já entrega esses campos por item, não eram capturados).
   const dimensoes = new Map<string, { largura: number[]; altura: number[]; ambientes: Set<string>; nomes: Set<string> }>()
 
   for (const item of itens) {
@@ -305,6 +310,9 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
     if (error) throw error
   }
 
+  // Grava Largura/Altura/Ambiente/Nome agregados por referência (achado 2026-09-01/02).
+  // Mescla com o que já estava salvo em refsMap (lido no início desta execução), não
+  // sobrescreve — mesmo cuidado de min/max/união já usado para componentes acima.
   for (const [refId, dim] of dimensoes) {
     const refAtual = Array.from(refsMap.values()).find((r: any) => r.id === refId)
     if (!refAtual) continue

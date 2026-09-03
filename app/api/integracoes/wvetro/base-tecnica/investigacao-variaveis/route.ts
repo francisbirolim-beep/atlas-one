@@ -85,6 +85,9 @@ export async function GET(req: NextRequest) {
       resultado.pedidos = resumoPayload(pedidos)
       resultado.orcamentos = resumoPayload(orcamentos)
 
+      // Segundo nível: se o item de orçamento tem sub-listas (Perfil/Acessorios/Vidro),
+      // olha as chaves de UM componente dentro dele — é onde posição/corte já aparecem
+      // hoje; verifica se há algo além disso (fórmula, condição) que a extração ignora.
       const amostraItem = amostraDe(amostraDe(orcamentos))
       if (amostraItem && typeof amostraItem === 'object') {
         const subchaves: Record<string, unknown> = {}

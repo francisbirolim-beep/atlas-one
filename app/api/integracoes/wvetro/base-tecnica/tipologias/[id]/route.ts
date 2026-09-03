@@ -115,6 +115,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         statusMapeamento: referencia.status_mapeamento,
         primeiroVisto: referencia.primeiro_visto,
         ultimoVisto: referencia.ultimo_visto,
+        // Referência histórica (achado 2026-09-01/02): a API W.Vetro entrega esses
+        // campos por item de venda/orçamento; agregados aqui, nunca usados como
+        // receita validada — só evidência para apoiar a validação manual.
         larguraMinMm: referencia.largura_min_mm,
         larguraMaxMm: referencia.largura_max_mm,
         alturaMinMm: referencia.altura_min_mm,
