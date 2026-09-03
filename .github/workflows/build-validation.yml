@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -32,11 +32,23 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Upload generated package-lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-lock-generated
-          path: package-lock.json
+      - name: Save generated package-lock
+        run: cp package-lock.json /tmp/package-lock.json
+
+      - name: Repair PR 312 branch
+        if: github.event.pull_request.number == 314
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin chore/package-lock-versionado
+          git checkout -B chore/package-lock-versionado origin/chore/package-lock-versionado
+          rm -rf upload2
+          cp /tmp/package-lock.json package-lock.json
+          git add -A
+          git commit -m "fix: manter somente package-lock versionado"
+          git push origin HEAD:chore/package-lock-versionado
 
       - name: Build
         run: npm run build
