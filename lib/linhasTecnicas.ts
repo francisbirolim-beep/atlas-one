@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 
 export interface LinhaTecnica {
   id: string
@@ -73,9 +74,41 @@ export async function salvarLinhaTecnica(dados: {
     const { error } = await supabase.from('linha_tipologias').insert(dados.tipologia_ids.map(tipologia_id => ({ linha_id: linhaId, tipologia_id })))
     if (error) throw error
   }
+
+  registrarEventoAprendizadoAtlas({
+    dominio: 'linha_tecnica',
+    tipo: dados.id ? 'linha_atualizada' : 'linha_criada',
+    entidade_tipo: 'linha_tecnica',
+    entidade_id: linhaId,
+    contexto: {
+      linha_id: linhaId,
+      linha_nome: payload.nome,
+      fabricante: payload.fabricante,
+    },
+    dados: {
+      produto_ids: dados.produto_ids || [],
+      tipologia_ids: dados.tipologia_ids || [],
+      quantidade_produtos: dados.produto_ids?.length || 0,
+      quantidade_tipologias: dados.tipologia_ids?.length || 0,
+    },
+    evidencia: 'observado',
+  }).catch(() => {})
+
   return linhaId
 }
 
 export async function alternarLinhaTecnica(id: string, ativo: boolean) {
-  return supabase.from('linhas_tecnicas').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
+  const resposta = await supabase.from('linhas_tecnicas').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'linha_tecnica',
+      tipo: ativo ? 'linha_ativada' : 'linha_inativada',
+      entidade_tipo: 'linha_tecnica',
+      entidade_id: id,
+      contexto: { linha_id: id },
+      dados: { ativo },
+      evidencia: 'observado',
+    }).catch(() => {})
+  }
+  return resposta
 }
