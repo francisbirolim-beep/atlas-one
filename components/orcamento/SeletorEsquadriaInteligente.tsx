@@ -1,8 +1,8 @@
 'use client'
 
-// Entrada estável do Orçamento: V4 prioriza descrição livre e torna a busca de linha/tipologia opcional e pesquisável.
-export { default } from './SeletorEsquadriaInteligenteV4'
+// Entrada estável do Orçamento: V5 prioriza descrição livre, busca opcional e tratamento específico do Box de Canto.
+export { default } from './SeletorEsquadriaInteligenteV5'
 export type {
   SelecaoEsquadriaOrcamento,
   StatusConfiguracaoOrcamento,
-} from './SeletorEsquadriaInteligenteV4'
+} from './SeletorEsquadriaInteligenteV5'
