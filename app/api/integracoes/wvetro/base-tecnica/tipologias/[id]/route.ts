@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const { data: referencia, error: erroRef } = await supabaseAdmin
       .from('wvetro_referencias_tipologias')
-      .select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,primeiro_visto,ultimo_visto,dados_origem')
+      .select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,primeiro_visto,ultimo_visto,dados_origem,largura_min_mm,largura_max_mm,altura_min_mm,altura_max_mm,ambientes_observados,nomes_observados')
       .eq('id', id)
       .maybeSingle()
     if (erroRef) throw erroRef
@@ -115,6 +115,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         statusMapeamento: referencia.status_mapeamento,
         primeiroVisto: referencia.primeiro_visto,
         ultimoVisto: referencia.ultimo_visto,
+        larguraMinMm: referencia.largura_min_mm,
+        larguraMaxMm: referencia.largura_max_mm,
+        alturaMinMm: referencia.altura_min_mm,
+        alturaMaxMm: referencia.altura_max_mm,
+        ambientesObservados: referencia.ambientes_observados || [],
+        nomesObservados: referencia.nomes_observados || [],
       },
       tipologiaAtlas: tipologiaAtlas || null,
       componentes: componentesResposta,
