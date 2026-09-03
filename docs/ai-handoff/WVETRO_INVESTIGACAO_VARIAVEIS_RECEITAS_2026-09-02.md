@@ -380,8 +380,7 @@ Largura/Altura/Ambiente/Nome. Feito nesta mesma branch:
   já processados sem passar de novo por eles. Não fiz nenhum reprocessamento
   em massa (isso seria mexer em execução histórica, fora do escopo
   autorizado).
-- Ainda não mergeado — segue nesta branch, sem push (proxy desta sessão sem
-  acesso ao repositório no momento).
+- Ainda não mergeado — segue nesta branch para validação final antes do merge manual.
 
 ## O que fica pendente (não fiz e não devo fazer sem autorização)
 
@@ -405,5 +404,4 @@ Largura/Altura/Ambiente/Nome. Feito nesta mesma branch:
    desenhar a tabela de "regras condicionais" nova, ou se a estratégia vira
    "expandir extração histórica (Largura/Altura/Ambiente/Nome) + correlação
    estatística tratada como hipótese".
-4. Remover o endpoint de diagnóstico (`investigacao-variaveis`) quando a
-   investigação terminar, como já foi feito com o anterior.
+4. O endpoint temporário `investigacao-variaveis` já foi removido antes do merge, conforme decidido na revisão de pré-merge.
