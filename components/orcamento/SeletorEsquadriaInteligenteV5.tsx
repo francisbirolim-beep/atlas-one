@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useId, useRef } from 'react'
 import SeletorV4, {
   type SelecaoEsquadriaOrcamento,
   type StatusConfiguracaoOrcamento,
@@ -12,7 +13,50 @@ type Props = {
   onChange: (patch: Partial<SelecaoEsquadriaOrcamento>) => void
 }
 
+const SUGESTOES_AMBIENTE = [
+  'WC', 'Banheiro', 'Banheiro social', 'Lavabo', 'Suíte', 'Quarto', 'Quarto 1', 'Quarto 2',
+  'Sala', 'Sala de estar', 'Sala de jantar', 'Cozinha', 'Área gourmet', 'Lavanderia', 'Garagem',
+  'Escritório', 'Varanda', 'Sacada', 'Hall', 'Corredor', 'Fachada',
+]
+
+const SUGESTOES_DESCRICAO = [
+  'Porta de correr', 'Porta de correr 2 folhas', 'Porta de correr 3 folhas', 'Porta de correr 4 folhas',
+  'Porta de giro', 'Porta pivotante', 'Janela de correr', 'Maxim-ar', 'Quadro fixo',
+  'Box Frontal', 'Box de Canto', 'Box de correr', 'Box de abrir',
+]
+
+function habilitarDigitacaoInteligente(input: HTMLInputElement | null, listId?: string) {
+  if (!input) return
+  input.setAttribute('autocomplete', 'on')
+  input.setAttribute('autocorrect', 'on')
+  input.setAttribute('autocapitalize', 'sentences')
+  input.setAttribute('spellcheck', 'true')
+  input.setAttribute('enterkeyhint', 'next')
+  if (listId) input.setAttribute('list', listId)
+}
+
 export default function SeletorEsquadriaInteligenteV5({ value, onChange }: Props) {
+  const raizRef = useRef<HTMLDivElement>(null)
+  const ambienteListId = `atlas-ambientes-${useId().replace(/:/g, '')}`
+  const descricaoListId = `atlas-descricoes-${useId().replace(/:/g, '')}`
+
+  useEffect(() => {
+    const raiz = raizRef.current
+    if (!raiz) return
+
+    // O campo Ambiente pertence à página e fica imediatamente antes do seletor.
+    // Ligamos nele as sugestões nativas sem duplicar estado nem alterar o fluxo.
+    const blocoAmbiente = raiz.parentElement?.previousElementSibling
+    const inputAmbiente = blocoAmbiente?.querySelector('input[type="text"]') as HTMLInputElement | null
+    habilitarDigitacaoInteligente(inputAmbiente, ambienteListId)
+
+    const inputs = Array.from(raiz.querySelectorAll('input[type="text"]')) as HTMLInputElement[]
+    inputs.forEach(input => habilitarDigitacaoInteligente(input))
+
+    const descricao = inputs.find(input => input.placeholder.startsWith('Ex.: Porta')) || null
+    habilitarDigitacaoInteligente(descricao, descricaoListId)
+  }, [ambienteListId, descricaoListId])
+
   function aplicarPatch(patch: Partial<SelecaoEsquadriaOrcamento>) {
     const ajustado: Partial<SelecaoEsquadriaOrcamento> = { ...patch }
 
@@ -38,5 +82,15 @@ export default function SeletorEsquadriaInteligenteV5({ value, onChange }: Props
     onChange(ajustado)
   }
 
-  return <SeletorV4 value={value} onChange={aplicarPatch} />
+  return (
+    <div ref={raizRef}>
+      <datalist id={ambienteListId}>
+        {SUGESTOES_AMBIENTE.map(opcao => <option key={opcao} value={opcao} />)}
+      </datalist>
+      <datalist id={descricaoListId}>
+        {SUGESTOES_DESCRICAO.map(opcao => <option key={opcao} value={opcao} />)}
+      </datalist>
+      <SeletorV4 value={value} onChange={aplicarPatch} />
+    </div>
+  )
 }
