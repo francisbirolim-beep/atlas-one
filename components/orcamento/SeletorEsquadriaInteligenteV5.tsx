@@ -44,9 +44,9 @@ export default function SeletorEsquadriaInteligenteV5({ value, onChange }: Props
     const raiz = raizRef.current
     if (!raiz) return
 
-    // O campo Ambiente pertence à página e fica imediatamente antes do seletor.
-    // Ligamos nele as sugestões nativas sem duplicar estado nem alterar o fluxo.
-    const blocoAmbiente = raiz.parentElement?.previousElementSibling
+    // O bloco de Ambiente é o irmão imediatamente anterior deste seletor.
+    // Assim o autocomplete funciona sem mudar o estado nem duplicar o campo.
+    const blocoAmbiente = raiz.previousElementSibling
     const inputAmbiente = blocoAmbiente?.querySelector('input[type="text"]') as HTMLInputElement | null
     habilitarDigitacaoInteligente(inputAmbiente, ambienteListId)
 
