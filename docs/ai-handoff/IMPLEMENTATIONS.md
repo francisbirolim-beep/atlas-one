@@ -328,8 +328,7 @@ Relatório completo em
 - Confirmado que `produtoByKey?Produtotipo=E` sem código não é suportado pela
   instalação (0 linhas `tipo='E'` em `wvetro_produtos_snapshot`); testar por
   código específico é uma via ainda não tentada (endpoint novo cobre isso).
-- Endpoint novo de diagnóstico, só leitura, restrito a Master, **não
-  mergeado**: `GET /api/integracoes/wvetro/base-tecnica/investigacao-variaveis`
+- Endpoint temporário de diagnóstico, só leitura e restrito a Master, criado durante a investigação e **removido antes do merge**: `GET /api/integracoes/wvetro/base-tecnica/investigacao-variaveis`
   (aceita `?data=`, `?produtoTipo=&produtoCodigo=`, `?linhas=1`; achata chaves
   do payload e destaca as que batem com palavras-chave de variável/fórmula/
   regra). Não pôde ser exercitado neste ambiente por falta de credenciais

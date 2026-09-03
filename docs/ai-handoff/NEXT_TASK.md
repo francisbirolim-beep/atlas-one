@@ -323,8 +323,7 @@ checkpoint/cursor/retry/pendências/PR #311). Relatório completo em
 Conclusão principal: a API W.Vetro não tem endpoint de "cálculo"/"composição
 paramétrica" — só devolve identidade de produto e o resultado já calculado de
 vendas históricas. As variáveis reconstruídas hoje vêm 100% de regex sobre
-`Modelo`. Criado endpoint de diagnóstico novo (não mergeado, Master-only) para
-testar `produtoByKey?Produtotipo=E&Produtocodigo=...` e achatar/filtrar chaves
+`Modelo`. Foi criado um endpoint temporário de diagnóstico (Master-only) para testar `produtoByKey?Produtotipo=E&Produtocodigo=...` e achatar/filtrar chaves
 de `vendas/*` — ainda não exercitado (sem credenciais W.Vetro neste ambiente).
 
 **Próximo passo que só o usuário pode fazer**: capturar o Network do navegador

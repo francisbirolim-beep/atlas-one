@@ -163,7 +163,7 @@ candidatos mais próximos são:
 
 ### D2. Prova de conceito preparada, ainda não executada
 
-Criei (nesta branch, não mergeada) um endpoint de diagnóstico ampliado —
+Durante a investigação foi criado temporariamente um endpoint de diagnóstico ampliado —
 `GET /api/integracoes/wvetro/base-tecnica/investigacao-variaveis` — que:
 
 - Restrito a Master (mesmo padrão do endpoint de 2026-09-01, já removido).
@@ -180,7 +180,7 @@ Criei (nesta branch, não mergeada) um endpoint de diagnóstico ampliado —
 
 **Este ambiente de investigação não tem as credenciais W.Vetro configuradas**
 (`.env.local` não existe aqui, só `.env.example`) — não consegui chamar a API
-real a partir daqui. O endpoint está pronto e passou no typecheck
+real a partir daqui. O endpoint passou no typecheck durante a investigação
 (`npx tsc --noEmit`), mas só pode ser exercitado por quem tiver acesso ao
 preview/produção autenticado como Master. Sugestão de teste, quando o usuário
 tiver disponibilidade:
@@ -192,9 +192,7 @@ GET /api/integracoes/wvetro/base-tecnica/investigacao-variaveis?data=2025-09-23
 (o segundo repete o dia já testado na rodada anterior, mas agora também abre o
 segundo nível dentro de cada componente do item, e filtra por palavra-chave.)
 
-Isso é só prova de conceito — não deve ser mergeado à main como está; é uma
-ferramenta de investigação, para remover depois (mesmo destino do endpoint
-anterior).
+Isso era apenas prova de conceito e foi removido da branch antes do merge, para não levar uma rota temporária de investigação à `main`.
 
 ## E. O que precisamos capturar manualmente — procedimento DevTools
 
@@ -358,7 +356,7 @@ Depois deste relatório, o usuário aprovou explicitamente (confirmando que a
 frente do ChatGPT/PR #311 estava parada no momento) implementar a captura de
 Largura/Altura/Ambiente/Nome. Feito nesta mesma branch:
 
-- Migration `20260902120000_wvetro_referencias_tipologias_dimensoes_v1.sql`
+- Migration `20260902193714_wvetro_referencias_tipologias_dimensoes_v1.sql`
   (aplicada em produção): adiciona `largura_min_mm`, `largura_max_mm`,
   `altura_min_mm`, `altura_max_mm`, `ambientes_observados` (text[], até 20),
   `nomes_observados` (text[], até 20) em `wvetro_referencias_tipologias`. Só
@@ -389,8 +387,7 @@ Largura/Altura/Ambiente/Nome. Feito nesta mesma branch:
 
 - Não executei o experimento controlado (depende de acesso humano ao sistema
   W.Vetro).
-- Não chamei o endpoint de diagnóstico novo contra a API real (sem credenciais
-  neste ambiente).
+- O endpoint temporário de diagnóstico não foi chamado contra a API real e foi removido antes do merge.
 - Não abri manualmente a documentação Postman completa (renderizada por JS, o
   fetch automatizado não trouxe o conteúdo).
 - Não alterei nada da carga histórica, checkpoint, cursor, retry, pendências ou
@@ -403,10 +400,7 @@ Largura/Altura/Ambiente/Nome. Feito nesta mesma branch:
    seção E para pelo menos os casos A–D do experimento — é o passo com maior
    chance de encontrar a "ponte" (request com Linha+Largura+Altura+Opções →
    response com composição calculada).
-2. Em paralelo, se o Master quiser, exercitar o endpoint de diagnóstico novo
-   (`?produtoTipo=E&produtoCodigo=...` e `?data=...`) no preview desta branch,
-   para ver se `produtoByKey` com código específico de esquadria devolve algo
-   além de identidade.
+2. Se for necessário repetir essa inspeção no futuro, recriar uma ferramenta temporária fora da `main` ou fazer a captura via DevTools descrita acima.
 3. Com qualquer resultado das duas frentes, decidir junto com o usuário se vale
    desenhar a tabela de "regras condicionais" nova, ou se a estratégia vira
    "expandir extração histórica (Largura/Altura/Ambiente/Nome) + correlação
