@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { CategoriaTipologia, Tipologia } from './tipos'
+import { registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 
 export type TipologiaTecnica = Tipologia & { ativo: boolean }
 
@@ -48,12 +49,37 @@ export async function criarTipologia(label: string, categoria: CategoriaTipologi
     console.error('Erro ao criar tipologia:', error)
     return null
   }
+
+  registrarEventoAprendizadoAtlas({
+    dominio: 'tipologia',
+    tipo: 'tipologia_criada',
+    entidade_tipo: 'tipologia',
+    entidade_id: data.id,
+    contexto: { categoria },
+    dados: { chave, label: label.trim(), ordem },
+    evidencia: 'observado',
+  }).catch(() => {})
+
   return data as TipologiaTecnica
 }
 
 export async function alternarTipologiaTecnica(id: string, ativo: boolean) {
-  return supabase
+  const resposta = await supabase
     .from('tipologias')
     .update({ ativo })
     .eq('id', id)
+
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'tipologia',
+      tipo: ativo ? 'tipologia_ativada' : 'tipologia_inativada',
+      entidade_tipo: 'tipologia',
+      entidade_id: id,
+      contexto: { tipologia_id: id },
+      dados: { ativo },
+      evidencia: 'observado',
+    }).catch(() => {})
+  }
+
+  return resposta
 }
