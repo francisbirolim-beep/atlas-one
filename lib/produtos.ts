@@ -14,6 +14,7 @@ export const CATEGORIAS_PRODUTO_PRINCIPAIS: CategoriaProdutoConfig[] = [
   { valor: 'acessorio', label: 'Acessório', ordem: 20 },
   { valor: 'perfil', label: 'Perfil', ordem: 30 },
   { valor: 'vidro', label: 'Vidro', ordem: 40 },
+  { valor: 'kit', label: 'Kit', ordem: 45 },
   { valor: 'porta_janela_padrao', label: 'Produto pronto', ordem: 50 },
 ]
 
@@ -31,6 +32,7 @@ function humanizarCategoria(valor: string): string {
   if (valor === 'porta_janela_padrao') return 'Produto pronto'
   if (valor === 'pu') return 'PU'
   if (valor === 'vidro') return 'Vidro'
+  if (valor === 'kit') return 'Kit'
   return valor
     .replace(/_/g, ' ')
     .replace(/\b\w/g, letra => letra.toUpperCase())

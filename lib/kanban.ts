@@ -17,14 +17,24 @@ export async function listarColunas(): Promise<KanbanColuna[]> {
 }
 
 export async function primeiraColunaId(): Promise<string | null> {
-  const { data } = await supabase
+  // Pedido novo precisa nascer na etapa operacional "Fazer orçamento".
+  // Não depender apenas da ordem evita regressão quando a ordem das colunas
+  // for ajustada no Kanban. A primeira coluna continua como fallback legado.
+  const { data: colunas } = await supabase
     .from('kanban_colunas')
-    .select('id')
+    .select('id,nome,ordem')
     .order('ordem', { ascending: true })
-    .limit(1)
-    .maybeSingle()
 
-  return data?.id || null
+  if (!colunas?.length) return null
+
+  const normalizar = (valor: string) => valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
+  const fazerOrcamento = colunas.find(coluna => normalizar(coluna.nome || '') === 'fazer orcamento')
+  return fazerOrcamento?.id || colunas[0]?.id || null
 }
 
 export async function criarColuna(nome: string): Promise<KanbanColuna | null> {
