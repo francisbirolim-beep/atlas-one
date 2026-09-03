@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { ImageIcon, Search, X } from 'lucide-react'
 import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
@@ -27,6 +27,11 @@ function ehBox(t: Tipologia) {
 function ehBoxCantoTexto(texto: string) {
   const q = normalizar(texto)
   return q.includes('box') && (q.includes('canto') || q.includes('angulo'))
+}
+
+function imagemTipologia(t: Tipologia) {
+  const item = t as any
+  return String(item.imagem_url || item.desenho_url || item.thumbnail_url || '').trim() || null
 }
 
 export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props) {
@@ -108,6 +113,12 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     value.variaveis?.atlas_medida_layout === 'box_canto'
   )
 
+  function linhaDaTipologia(t: Tipologia) {
+    return linhaSelecionada
+      || linhasDisponiveis.find(l => (l.tipologia_ids || []).includes(t.id))
+      || (ehBox(t) ? linhasDisponiveis.find(l => normalizar(l.nome) === 'box') : null)
+  }
+
   function mudarDescricaoLivre(texto: string) {
     const preenchido = Boolean(texto.trim())
     onChange({
@@ -170,9 +181,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   }
 
   function selecionarTipologia(t: Tipologia) {
-    const linhaReal = linhaSelecionada
-      || linhasDisponiveis.find(l => (l.tipologia_ids || []).includes(t.id))
-      || (ehBox(t) ? linhasDisponiveis.find(l => normalizar(l.nome) === 'box') : null)
+    const linhaReal = linhaDaTipologia(t)
     const canto = ehBoxCantoTexto(`${t.label} ${t.chave}`)
 
     if (linhaReal) {
@@ -276,13 +285,27 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
           />
           {buscaTipologia && <button type="button" onClick={() => setBuscaTipologia('')} className="absolute right-2.5 top-2.5 p-1 text-slate-400"><X size={15}/></button>}
           {tipologiaFocada && buscaTipologia.trim() && (
-            <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-              {pesquisaTipologia.length ? pesquisaTipologia.map(t => (
-                <button key={t.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarTipologia(t)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-emerald-50">
-                  <span className="block text-sm font-semibold text-slate-800">{t.label}</span>
-                  <span className="text-[11px] text-slate-500">{(t as any).categoria || 'Tipologia'}{linhaSelecionada ? ` · ${linhaSelecionada.nome}` : ''}</span>
-                </button>
-              )) : (
+            <div className="absolute z-50 mt-1 max-h-[420px] w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+              {pesquisaTipologia.length ? pesquisaTipologia.map(t => {
+                const linhaResultado = linhaDaTipologia(t)
+                const imagem = imagemTipologia(t)
+                return (
+                  <button key={t.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarTipologia(t)} className="mb-1 flex w-full items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-left hover:border-emerald-200 hover:bg-emerald-50">
+                    <span className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                      {imagem ? (
+                        <img src={imagem} alt={`Desenho de ${t.label}`} className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="flex flex-col items-center gap-1 px-1 text-center text-[9px] leading-tight text-slate-400"><ImageIcon size={18}/><span>Desenho pendente</span></span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-slate-800">{t.label}</span>
+                      <span className="mt-0.5 block text-[11px] text-slate-500">{(t as any).categoria || 'Tipologia'}</span>
+                      <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{linhaResultado?.nome || 'Linha não vinculada'}</span>
+                    </span>
+                  </button>
+                )
+              }) : (
                 <div className="p-3 text-xs text-slate-500">
                   {linhaSelecionada
                     ? `Nenhuma tipologia encontrada na linha ${linhaSelecionada.nome}. Você pode continuar pela descrição livre ou limpar a linha.`
