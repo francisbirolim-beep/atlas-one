@@ -52,7 +52,7 @@ export async function salvarLinhaTecnica(dados: {
   etapa_cadastro?: EtapaCadastroLinhaTecnica
   produto_ids?: string[]
   tipologia_ids?: string[]
-}) {
+}): Promise<string> {
   const nova = !dados.id
   const payload = {
     nome: dados.nome.trim().toUpperCase(),
@@ -78,8 +78,10 @@ export async function salvarLinhaTecnica(dados: {
       origem_referencia: 'atlas',
     }).select('id').single()
     if (error) throw error
-    linhaId = data.id
+    linhaId = data?.id
   }
+
+  if (!linhaId) throw new Error('Não foi possível identificar a linha salva.')
 
   await supabase.from('linha_produtos').delete().eq('linha_id', linhaId)
   await supabase.from('linha_tipologias').delete().eq('linha_id', linhaId)
