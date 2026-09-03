@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Layers3, Plus, Save, X } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { listarProdutos, labelCategoriaProduto } from '@/lib/produtos'
 import { listarTipologias } from '@/lib/tipologias'
 import { alternarLinhaTecnica, LinhaTecnica, listarLinhasTecnicas, salvarLinhaTecnica } from '@/lib/linhasTecnicas'
@@ -22,12 +22,34 @@ type FormLinha = {
   tipologia_ids: string[]
 }
 
+type WVetroTipologiaLinha = {
+  id: string
+  linhaRaw: string
+  modeloRaw: string
+  tipologiaAtlasId: string | null
+  tipologiaAtlasLabel: string | null
+  tipologiaAtlasAtiva: boolean
+  imagemUrl: string | null
+  fotoAtlasUrl: string | null
+  ocorrencias: number
+  statusMapeamento: string | null
+  componentes: { total: number; perfis: number; acessorios: number; vidros: number; vinculados: number }
+}
+
+type WVetroLinha = {
+  linhaTecnicaId: string
+  referenciasLinha: Array<{ id: string; linhaRaw: string; statusMapeamento: string | null; qtdTipologias: number; qtdAcessorios: number }>
+  tipologias: WVetroTipologiaLinha[]
+  resumo: { referencias: number; tipologias: number; comImagem: number; mapeadasAtlas: number; componentes: number; perfis: number; acessorios: number; vidros: number }
+}
+
 const vazio: FormLinha = { nome: '', fabricante: '', descricao: '', apelidos: '', ativo: true, produto_ids: [], tipologia_ids: [] }
 
 export default function CadastroLinhas() {
   const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [tipologias, setTipologias] = useState<Tipologia[]>([])
+  const [wvetro, setWvetro] = useState<Map<string, WVetroLinha>>(new Map())
   const [form, setForm] = useState<FormLinha>(vazio)
   const [editando, setEditando] = useState(false)
   const [carregando, setCarregando] = useState(true)
@@ -49,6 +71,18 @@ export default function CadastroLinhas() {
       setLinhas(l)
       setProdutos(p)
       setTipologias(t)
+      try {
+        const token = await tokenAtual()
+        if (token) {
+          const resp = await fetch('/api/integracoes/wvetro/base-tecnica/linhas', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+          if (resp.ok) {
+            const json = await resp.json()
+            setWvetro(new Map((json.linhas || []).map((linha: WVetroLinha) => [linha.linhaTecnicaId, linha])))
+          }
+        }
+      } catch {
+        // A base W.Vetro é complementar ao cadastro: falha nela não bloqueia a edição manual da linha.
+      }
       if (typeof window !== 'undefined') {
         const linhaUrl = new URLSearchParams(window.location.search).get('linha') || ''
         const linhaSelecionada = l.find(linha => linha.id === linhaUrl)
@@ -80,6 +114,8 @@ export default function CadastroLinhas() {
     ))
   }, [produtos, buscaProdutos])
 
+  const wvetroAtual = form.id ? wvetro.get(form.id) || null : null
+
   function abrirNova() { setForm(vazio); setBuscaProdutos(''); setErro(''); setEditando(true) }
   function abrirEdicao(linha: LinhaTecnica) {
     setForm({ id: linha.id, nome: linha.nome, fabricante: linha.fabricante || '', descricao: linha.descricao || '', apelidos: (linha.apelidos || []).join(', '), ativo: linha.ativo, produto_ids: linha.produto_ids || [], tipologia_ids: linha.tipologia_ids || [] })
@@ -102,15 +138,18 @@ export default function CadastroLinhas() {
   if (!autorizado) return <div className="min-h-screen flex items-center justify-center text-slate-500">Apenas o usuário master pode acessar este cadastro.</div>
 
   return <div className="min-h-screen bg-slate-50">
-    <header className="bg-white border-b border-slate-200"><div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3"><Link href="/cadastro" className="p-2 rounded-lg hover:bg-slate-100"><ArrowLeft size={20}/></Link><Layers3 size={24} className="text-brand-navy"/><div className="flex-1"><h1 className="font-bold text-slate-800">Linhas técnicas</h1><p className="text-xs text-slate-500">Associe linhas a perfis, acessórios, produtos e tipologias.</p></div><button onClick={abrirNova} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy text-white px-3 py-2 text-sm font-medium"><Plus size={16}/>Nova linha</button></div></header>
+    <header className="bg-white border-b border-slate-200"><div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3"><Link href="/cadastro" className="p-2 rounded-lg hover:bg-slate-100"><ArrowLeft size={20}/></Link><Layers3 size={24} className="text-brand-navy"/><div className="flex-1"><h1 className="font-bold text-slate-800">Linhas técnicas</h1><p className="text-xs text-slate-500">Associe linhas a perfis, acessórios, produtos e tipologias. Referências W.Vetro aparecem para conferência.</p></div><button onClick={abrirNova} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy text-white px-3 py-2 text-sm font-medium"><Plus size={16}/>Nova linha</button></div></header>
     <main className="max-w-5xl mx-auto p-4 md:py-8 space-y-4">
       <BuscaAtlasInput value={busca} onValueChange={setBusca} placeholder="Pesquisar nome, fabricante, descrição ou apelido da linha..." inputClassName="w-full bg-white border border-slate-200 rounded-xl py-3 pr-4 text-sm outline-none focus:border-brand-navy"/>
-      <div className="grid gap-3 md:grid-cols-2">{filtradas.map(linha => <div key={linha.id} className={`bg-white border rounded-2xl p-4 ${linha.ativo ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}><div className="flex items-start justify-between gap-3"><button onClick={() => abrirEdicao(linha)} className="text-left flex-1"><div className="font-bold text-slate-800">{linha.nome}</div>{linha.fabricante&&<div className="text-xs text-slate-500 mt-0.5">Fabricante: {linha.fabricante}</div>}{linha.descricao&&<div className="mt-1 text-xs text-slate-500 line-clamp-2">{linha.descricao}</div>}{linha.apelidos?.length>0&&<div className="text-xs text-slate-400 mt-1">Também reconhece: {linha.apelidos.join(', ')}</div>}</button><button onClick={() => alternarAtivo(linha)} className={`text-xs rounded-full px-2.5 py-1 ${linha.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{linha.ativo?'ATIVA':'INATIVA'}</button></div><div className="flex gap-2 mt-3 text-xs text-slate-500"><span className="bg-slate-50 rounded-lg px-2 py-1">{linha.produto_ids?.length||0} produtos</span><span className="bg-slate-50 rounded-lg px-2 py-1">{linha.tipologia_ids?.length||0} tipologias</span></div></div>)}</div>
-      {editando&&<div className="fixed inset-0 z-50 bg-slate-900/40 flex items-end md:items-center justify-center"><div className="bg-white w-full md:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl md:rounded-3xl p-5 md:p-7"><div className="flex items-center justify-between mb-5"><div><h2 className="font-bold text-lg text-slate-800">{form.id?'Editar linha':'Nova linha'}</h2><p className="text-xs text-slate-500">Uma linha pode reunir vários nomes usados no W Vetro e no dia a dia.</p></div><button onClick={() => setEditando(false)} className="p-2"><X size={20}/></button></div>
+      <div className="grid gap-3 md:grid-cols-2">{filtradas.map(linha => { const base = wvetro.get(linha.id); return <div key={linha.id} className={`bg-white border rounded-2xl p-4 ${linha.ativo ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}><div className="flex items-start justify-between gap-3"><button onClick={() => abrirEdicao(linha)} className="text-left flex-1"><div className="font-bold text-slate-800">{linha.nome}</div>{linha.fabricante&&<div className="text-xs text-slate-500 mt-0.5">Fabricante: {linha.fabricante}</div>}{linha.descricao&&<div className="mt-1 text-xs text-slate-500 line-clamp-2">{linha.descricao}</div>}{linha.apelidos?.length>0&&<div className="text-xs text-slate-400 mt-1">Também reconhece: {linha.apelidos.join(', ')}</div>}</button><button onClick={() => alternarAtivo(linha)} className={`text-xs rounded-full px-2.5 py-1 ${linha.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{linha.ativo?'ATIVA':'INATIVA'}</button></div><div className="flex flex-wrap gap-2 mt-3 text-xs text-slate-500"><span className="bg-slate-50 rounded-lg px-2 py-1">{linha.produto_ids?.length||0} produtos</span><span className="bg-slate-50 rounded-lg px-2 py-1">{linha.tipologia_ids?.length||0} tipologias Atlas</span>{base&&<span className="bg-blue-50 text-blue-700 rounded-lg px-2 py-1">W.Vetro: {base.resumo.tipologias} tipologias · {base.resumo.componentes} componentes</span>}</div></div>})}</div>
+      {editando&&<div className="fixed inset-0 z-50 bg-slate-900/40 flex items-end md:items-center justify-center"><div className="bg-white w-full md:max-w-4xl max-h-[92vh] overflow-y-auto rounded-t-3xl md:rounded-3xl p-5 md:p-7"><div className="flex items-center justify-between mb-5"><div><h2 className="font-bold text-lg text-slate-800">{form.id?'Editar linha':'Nova linha'}</h2><p className="text-xs text-slate-500">Uma linha pode reunir vários nomes usados no W.Vetro e no dia a dia.</p></div><button onClick={() => setEditando(false)} className="p-2"><X size={20}/></button></div>
         <div className="grid md:grid-cols-2 gap-3"><label className="text-xs font-medium text-slate-600">Nome da linha<input value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} className="mt-1 w-full border rounded-xl px-3 py-2.5" placeholder="EX.: SUPREMA"/></label><label className="text-xs font-medium text-slate-600">Fabricante<input value={form.fabricante} onChange={e=>setForm({...form,fabricante:e.target.value})} className="mt-1 w-full border rounded-xl px-3 py-2.5" placeholder="OPCIONAL"/></label></div>
         <label className="block text-xs font-medium text-slate-600 mt-3">Apelidos / nomes de reconhecimento<input value={form.apelidos} onChange={e=>setForm({...form,apelidos:e.target.value})} className="mt-1 w-full border rounded-xl px-3 py-2.5" placeholder="L. SUPREMA, LINHA SUPREMA"/><span className="font-normal text-slate-400">Separe por vírgula.</span></label>
         <label className="block text-xs font-medium text-slate-600 mt-3">Descrição<textarea value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})} className="mt-1 w-full border rounded-xl px-3 py-2.5 min-h-20"/></label>
-        <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Tipologias associadas</h3><p className="text-xs text-slate-400 mt-0.5">Estas tipologias aparecem quando a linha for escolhida.</p><div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">{tipologias.map(t=><label key={t.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.tipologia_ids.includes(t.id)} onChange={()=>alternarLista('tipologia_ids',t.id)}/>{t.label}</label>)}</div></div>
+
+        {wvetroAtual&&<section className="mt-5 rounded-2xl border border-blue-200 bg-blue-50/40 p-4"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-bold text-slate-800">Base encontrada no W.Vetro</h3><p className="text-xs text-slate-500">Somente leitura nesta etapa. Use esta visão para conferir antes de ativar/desativar ou publicar vínculos.</p></div><div className="text-xs font-semibold text-blue-700">{wvetroAtual.resumo.tipologias} tipologias · {wvetroAtual.resumo.comImagem} desenhos · {wvetroAtual.resumo.componentes} componentes</div></div><div className="mt-3 flex flex-wrap gap-2 text-[11px]"><span className="rounded-lg bg-white px-2 py-1 text-slate-600">{wvetroAtual.resumo.perfis} perfis</span><span className="rounded-lg bg-white px-2 py-1 text-slate-600">{wvetroAtual.resumo.acessorios} acessórios</span><span className="rounded-lg bg-white px-2 py-1 text-slate-600">{wvetroAtual.resumo.vidros} referências de vidro</span><span className="rounded-lg bg-white px-2 py-1 text-slate-600">{wvetroAtual.resumo.mapeadasAtlas} já mapeadas no Atlas</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{wvetroAtual.tipologias.slice(0,24).map(t=><div key={t.id} className="flex gap-3 rounded-xl border border-blue-100 bg-white p-2.5"><div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-50">{t.imagemUrl?<img src={t.imagemUrl} alt="" className="h-full w-full object-contain"/>:<span className="px-1 text-center text-[9px] text-slate-400">Sem desenho</span>}</div><div className="min-w-0 flex-1"><div className="truncate text-xs font-semibold text-slate-800">{t.modeloRaw}</div><div className="mt-0.5 truncate text-[10px] text-slate-500">{t.linhaRaw}</div><div className="mt-1 text-[10px] text-slate-500">{t.componentes.perfis} perfis · {t.componentes.acessorios} acessórios · {t.componentes.vidros} vidros</div><div className={`mt-1 text-[10px] font-medium ${t.tipologiaAtlasId?'text-emerald-700':'text-amber-700'}`}>{t.tipologiaAtlasId?(t.tipologiaAtlasLabel||'Mapeada no Atlas'):'Ainda sem tipologia Atlas'}</div></div></div>)}</div>{wvetroAtual.tipologias.length>24&&<p className="mt-2 text-[11px] text-slate-500">Mostrando 24 de {wvetroAtual.tipologias.length}. A tela completa de gestão W.Vetro será a próxima etapa.</p>}</section>}
+
+        <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Tipologias associadas</h3><p className="text-xs text-slate-400 mt-0.5">Estas tipologias aparecem quando a linha for escolhida no orçamento.</p><div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">{tipologias.map(t=><label key={t.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.tipologia_ids.includes(t.id)} onChange={()=>alternarLista('tipologia_ids',t.id)}/>{t.label}</label>)}</div></div>
         <div className="mt-5"><h3 className="text-sm font-bold text-slate-700">Produtos, perfis e acessórios associados</h3><p className="text-xs text-slate-400">Busque por código, nome, descrição, categoria, marca, grupo, NCM ou unidade.</p><BuscaAtlasInput value={buscaProdutos} onValueChange={setBuscaProdutos} placeholder="Buscar produto, perfil ou acessório..." containerClassName="mt-2" inputClassName="w-full border rounded-xl py-2.5 pr-3 text-xs"/><div className="grid sm:grid-cols-2 gap-2 mt-2 max-h-64 overflow-y-auto">{produtosFiltrados.map(p=><label key={p.id} className="flex items-center gap-2 border rounded-lg px-3 py-2 text-xs"><input type="checkbox" checked={form.produto_ids.includes(p.id)} onChange={()=>alternarLista('produto_ids',p.id)}/><span className="flex-1 min-w-0"><span className="block truncate">{p.nome}</span>{p.codigo&&<span className="block text-[10px] font-mono text-slate-400">{p.codigo}</span>}</span><span className="text-slate-400">{labelCategoriaProduto(p.categoria)}</span></label>)}{produtosFiltrados.length===0&&<p className="sm:col-span-2 text-xs text-slate-400 p-3 text-center">Nenhum item encontrado.</p>}</div></div>
         {erro&&<p className="text-sm text-red-600 mt-4">{erro}</p>}<div className="flex justify-end gap-2 mt-6"><button onClick={()=>setEditando(false)} className="px-4 py-2.5 rounded-xl border text-sm">Cancelar</button><button onClick={salvar} disabled={salvando} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-50"><Save size={16}/>{salvando?'Salvando...':'Salvar linha'}</button></div>
       </div></div>}
