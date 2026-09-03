@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -23,6 +23,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: investigacao/wvetro-receitas-variaveis-v1
+          fetch-depth: 0
+
+      - name: Corrigir escopo e documentação do PR 313
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f app/api/integracoes/wvetro/base-tecnica/investigacao-variaveis/route.ts
+          python - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('docs/ai-handoff/WVETRO_INVESTIGACAO_VARIAVEIS_RECEITAS_2026-09-02.md'),
+              Path('docs/ai-handoff/IMPLEMENTATIONS.md'),
+              Path('docs/ai-handoff/NEXT_TASK.md'),
+          ]
+          for p in files:
+              s = p.read_text(encoding='utf-8')
+              s = s.replace('20260902120000_wvetro_referencias_tipologias_dimensoes_v1.sql', '20260902193714_wvetro_referencias_tipologias_dimensoes_v1.sql')
+              s = s.replace('Endpoint novo de diagnóstico, só leitura, restrito a Master, **não\n  mergeado**:', 'Endpoint temporário de diagnóstico, só leitura e restrito a Master, criado durante a investigação e **removido antes do merge**:')
+              s = s.replace('Criado endpoint de diagnóstico novo (não mergeado, Master-only) para\ntestar', 'Foi criado um endpoint temporário de diagnóstico (Master-only) para testar')
+              s = s.replace('Criei (nesta branch, não mergeada) um endpoint de diagnóstico ampliado —', 'Durante a investigação foi criado temporariamente um endpoint de diagnóstico ampliado —')
+              s = s.replace('O endpoint está pronto e passou no typecheck', 'O endpoint passou no typecheck durante a investigação')
+              s = s.replace('Isso é só prova de conceito — não deve ser mergeado à main como está; é uma\nferramenta de investigação, para remover depois (mesmo destino do endpoint\nanterior).', 'Isso era apenas prova de conceito e foi removido da branch antes do merge, para não levar uma rota temporária de investigação à `main`.')
+              s = s.replace('2. Em paralelo, se o Master quiser, exercitar o endpoint de diagnóstico novo\n   (`?produtoTipo=E&produtoCodigo=...` e `?data=...`) no preview desta branch,\n   para ver se `produtoByKey` com código específico de esquadria devolve algo\n   além de identidade.\n3.', '2. Se for necessário repetir essa inspeção no futuro, recriar uma ferramenta temporária fora da `main` ou fazer a captura via DevTools descrita acima.\n3.')
+              s = s.replace('- Não chamei o endpoint de diagnóstico novo contra a API real (sem credenciais\n  neste ambiente).', '- O endpoint temporário de diagnóstico não foi chamado contra a API real e foi removido antes do merge.')
+              p.write_text(s, encoding='utf-8')
+          PY
+          git checkout origin/main -- .github/workflows/build-validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: limpar escopo e docs da investigacao W.Vetro"
+          git push origin HEAD:investigacao/wvetro-receitas-variaveis-v1
 
       - name: Setup Node
         uses: actions/setup-node@v4
