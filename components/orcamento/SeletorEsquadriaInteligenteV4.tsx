@@ -35,9 +35,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   const [carregando, setCarregando] = useState(true)
   const [buscaTipologia, setBuscaTipologia] = useState('')
   const [buscaLinha, setBuscaLinha] = useState(value.linhaNome || '')
-  const [buscaModelo, setBuscaModelo] = useState('')
   const [linhaFocada, setLinhaFocada] = useState(false)
-  const [modeloFocado, setModeloFocado] = useState(false)
   const [tipologiaFocada, setTipologiaFocada] = useState(false)
   const [linhaSelecionadaId, setLinhaSelecionadaId] = useState<string | null>(value.linhaId)
 
@@ -95,18 +93,13 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     return linhasDisponiveis.filter(l => normalizar(`${l.nome} ${l.chave} ${(l.apelidos || []).join(' ')}`).includes(q)).slice(0, 12)
   }, [buscaLinha, linhasDisponiveis])
 
-  const modelosFiltrados = useMemo(() => {
-    const q = normalizar(buscaModelo)
-    const base = tipologiasDaLinha
-    if (!q) return base.slice(0, 20)
-    return base.filter(t => normalizar(`${t.label} ${t.chave} ${(t as any).categoria || ''}`).includes(q)).slice(0, 20)
-  }, [buscaModelo, tipologiasDaLinha])
-
-  const pesquisaGlobal = useMemo(() => {
+  const pesquisaTipologia = useMemo(() => {
     const q = normalizar(buscaTipologia)
     if (!q) return []
-    return tipologias.filter(t => normalizar(`${t.label} ${t.chave} ${(t as any).categoria || ''}`).includes(q)).slice(0, 15)
-  }, [buscaTipologia, tipologias])
+    return tipologiasDaLinha
+      .filter(t => normalizar(`${t.label} ${t.chave} ${(t as any).categoria || ''}`).includes(q))
+      .slice(0, 20)
+  }, [buscaTipologia, tipologiasDaLinha])
 
   const tipologiaAtual = tipologias.find(t => t.id === value.tipologiaId) || null
   const boxCanto = Boolean(
@@ -131,14 +124,14 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       modoOrigem: 'manual',
       variaveis: ehBoxCantoTexto(texto) ? { ...value.variaveis, atlas_medida_layout: 'box_canto' } : {},
     })
-    setBuscaModelo('')
   }
 
   function selecionarLinha(linha: LinhaBusca) {
     setLinhaSelecionadaId(linha.id)
     setBuscaLinha(linha.nome)
     setLinhaFocada(false)
-    setBuscaModelo('')
+    setBuscaTipologia('')
+    setTipologiaFocada(false)
     onChange({
       linhaId: linha.virtualBox ? null : linha.id,
       linhaNome: linha.nome,
@@ -155,17 +148,40 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     })
   }
 
+  function limparLinha() {
+    setLinhaSelecionadaId(null)
+    setBuscaLinha('')
+    setLinhaFocada(false)
+    setBuscaTipologia('')
+    onChange({
+      linhaId: null,
+      linhaNome: null,
+      tipologiaId: null,
+      produtoId: null,
+      precoUnit: null,
+      configuracaoPresetId: null,
+      configuracaoNome: null,
+      configuracaoValidada: false,
+      configuracaoStatus: 'pendente',
+      modoConfiguracao: 'rapido',
+      modoOrigem: 'manual',
+      variaveis: {},
+    })
+  }
+
   function selecionarTipologia(t: Tipologia) {
-    const linhaReal = linhasDisponiveis.find(l => (l.tipologia_ids || []).includes(t.id)) || (ehBox(t) ? linhasDisponiveis.find(l => normalizar(l.nome) === 'box') : null)
+    const linhaReal = linhaSelecionada
+      || linhasDisponiveis.find(l => (l.tipologia_ids || []).includes(t.id))
+      || (ehBox(t) ? linhasDisponiveis.find(l => normalizar(l.nome) === 'box') : null)
     const canto = ehBoxCantoTexto(`${t.label} ${t.chave}`)
+
     if (linhaReal) {
       setLinhaSelecionadaId(linhaReal.id)
       setBuscaLinha(linhaReal.nome)
     }
-    setBuscaModelo(t.label)
-    setBuscaTipologia('')
-    setModeloFocado(false)
+    setBuscaTipologia(t.label)
     setTipologiaFocada(false)
+
     onChange({
       linhaId: linhaReal?.virtualBox ? null : (linhaReal?.id || value.linhaId || null),
       linhaNome: linhaReal?.nome || value.linhaNome || null,
@@ -209,68 +225,70 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
           type="text"
           value={value.tipoOutroTexto || ''}
           onChange={e => mudarDescricaoLivre(e.target.value)}
-          placeholder="Ex.: Porta de correr 3 folhas - Linha Suprema - Com reforço"
+          placeholder="Ex.: Porta de correr 3 folhas - Com reforço"
           className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm"
         />
-        <p className="mt-1.5 text-[11px] text-blue-800">Você pode seguir somente com esta descrição. A tipologia cadastrada é opcional.</p>
+        <p className="mt-1.5 text-[11px] text-blue-800">Você pode seguir somente com esta descrição. Linha e tipologia cadastradas são opcionais.</p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+        <label className="mb-1 block text-xs font-semibold text-slate-700">3. Linha <span className="font-normal text-slate-400">(opcional)</span></label>
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+          <input
+            value={buscaLinha}
+            onChange={e => {
+              setBuscaLinha(e.target.value)
+              setLinhaFocada(true)
+              setLinhaSelecionadaId(null)
+              onChange({ linhaId: null, linhaNome: null, tipologiaId: null })
+            }}
+            onFocus={() => setLinhaFocada(true)}
+            placeholder="Digite: Suprema, Linha 30, Linha 42, BOX..."
+            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-9 text-sm"
+          />
+          {buscaLinha && <button type="button" onClick={limparLinha} className="absolute right-2.5 top-2.5 p-1 text-slate-400"><X size={15}/></button>}
+          {linhaFocada && (
+            <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+              {linhasFiltradas.map(l => (
+                <button key={l.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarLinha(l)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50">
+                  <span className="block text-sm font-semibold text-slate-800">{l.nome}</span>
+                  {l.fabricante && <span className="text-[11px] text-slate-500">{l.fabricante}</span>}
+                </button>
+              ))}
+              {!linhasFiltradas.length && <div className="p-3 text-xs text-slate-500">Nenhuma linha encontrada. Você pode deixar a linha em branco.</div>}
+            </div>
+          )}
+        </div>
+        {linhaSelecionada && <p className="mt-1.5 text-[11px] text-slate-500">A pesquisa abaixo mostrará somente tipologias vinculadas à linha <strong>{linhaSelecionada.nome}</strong>.</p>}
       </div>
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-        <label className="mb-1 block text-xs font-semibold text-slate-700">3. Pesquisar tipologia <span className="font-normal text-slate-400">(opcional)</span></label>
+        <label className="mb-1 block text-xs font-semibold text-slate-700">4. Pesquisar tipologia <span className="font-normal text-slate-400">(opcional)</span></label>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={buscaTipologia}
             onChange={e => { setBuscaTipologia(e.target.value); setTipologiaFocada(true) }}
             onFocus={() => setTipologiaFocada(true)}
-            placeholder="Digite: porta giro, correr 3, box de canto, maxim-ar..."
+            placeholder={linhaSelecionada ? `Pesquisar somente em ${linhaSelecionada.nome}...` : 'Digite: porta giro, correr 3, box de canto, maxim-ar...'}
             className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-9 text-sm"
           />
           {buscaTipologia && <button type="button" onClick={() => setBuscaTipologia('')} className="absolute right-2.5 top-2.5 p-1 text-slate-400"><X size={15}/></button>}
           {tipologiaFocada && buscaTipologia.trim() && (
             <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-              {pesquisaGlobal.length ? pesquisaGlobal.map(t => (
+              {pesquisaTipologia.length ? pesquisaTipologia.map(t => (
                 <button key={t.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarTipologia(t)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-emerald-50">
                   <span className="block text-sm font-semibold text-slate-800">{t.label}</span>
-                  <span className="text-[11px] text-slate-500">{(t as any).categoria || 'Tipologia'}</span>
+                  <span className="text-[11px] text-slate-500">{(t as any).categoria || 'Tipologia'}{linhaSelecionada ? ` · ${linhaSelecionada.nome}` : ''}</span>
                 </button>
-              )) : <div className="p-3 text-xs text-slate-500">Nenhuma tipologia encontrada. Você pode continuar pela descrição livre.</div>}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="relative">
-          <label className="mb-1 block text-xs font-semibold text-slate-600">1. Linha <span className="font-normal text-slate-400">(opcional)</span></label>
-          <input
-            value={buscaLinha}
-            onChange={e => { setBuscaLinha(e.target.value); setLinhaFocada(true); setLinhaSelecionadaId(null) }}
-            onFocus={() => setLinhaFocada(true)}
-            placeholder="Digite para pesquisar linhas..."
-            className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm"
-          />
-          {linhaFocada && (
-            <div className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-              {linhasFiltradas.map(l => <button key={l.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarLinha(l)} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-blue-50">{l.nome}</button>)}
-              {!linhasFiltradas.length && <div className="p-3 text-xs text-slate-500">Nenhuma linha encontrada.</div>}
-            </div>
-          )}
-        </div>
-
-        <div className="relative">
-          <label className="mb-1 block text-xs font-semibold text-slate-600">2. Modelo / Tipologia <span className="font-normal text-slate-400">(opcional)</span></label>
-          <input
-            value={buscaModelo}
-            onChange={e => { setBuscaModelo(e.target.value); setModeloFocado(true) }}
-            onFocus={() => setModeloFocado(true)}
-            placeholder={linhaSelecionada ? 'Digite para pesquisar modelos...' : 'Escolha uma linha ou pesquise direto acima'}
-            className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm"
-          />
-          {modeloFocado && (
-            <div className="absolute z-40 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-              {modelosFiltrados.map(t => <button key={t.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarTipologia(t)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-blue-50"><span className="block text-sm font-semibold text-slate-800">{t.label}</span><span className="text-[11px] text-slate-500">{(t as any).categoria || 'Tipologia'}</span></button>)}
-              {!modelosFiltrados.length && <div className="p-3 text-xs text-slate-500">Nenhum modelo encontrado.</div>}
+              )) : (
+                <div className="p-3 text-xs text-slate-500">
+                  {linhaSelecionada
+                    ? `Nenhuma tipologia encontrada na linha ${linhaSelecionada.nome}. Você pode continuar pela descrição livre ou limpar a linha.`
+                    : 'Nenhuma tipologia encontrada. Você pode continuar pela descrição livre.'}
+                </div>
+              )}
             </div>
           )}
         </div>
