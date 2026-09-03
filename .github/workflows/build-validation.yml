@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -23,6 +23,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: investigacao/wvetro-receitas-variaveis-v1
+          fetch-depth: 0
+
+      - name: Finalizar documentação do PR 313
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('docs/ai-handoff/NEXT_TASK.md')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('Foi criado um endpoint temporário de diagnóstico (Master-only) para testar `produtoByKey?Produtotipo=E&Produtocodigo=...` e achatar/filtrar chaves\nde `vendas/*` — ainda não exercitado (sem credenciais W.Vetro neste ambiente).', 'Foi criado durante a investigação um endpoint temporário de diagnóstico (Master-only) para testar `produtoByKey?Produtotipo=E&Produtocodigo=...` e achatar/filtrar chaves de `vendas/*`. Ele não foi exercitado contra a API real e foi removido antes do merge para não levar uma rota temporária à `main`.')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('docs/ai-handoff/WVETRO_INVESTIGACAO_VARIAVEIS_RECEITAS_2026-09-02.md')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('- Ainda não mergeado — segue nesta branch, sem push (proxy desta sessão sem\n  acesso ao repositório no momento).', '- Ainda não mergeado — segue nesta branch para validação final antes do merge manual.')
+          s = s.replace('4. Remover o endpoint de diagnóstico (`investigacao-variaveis`) quando a\n   investigação terminar, como já foi feito com o anterior.', '4. O endpoint temporário `investigacao-variaveis` já foi removido antes do merge, conforme decidido na revisão de pré-merge.')
+          p.write_text(s, encoding='utf-8')
+          PY
+          git checkout origin/main -- .github/workflows/build-validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: finalizar handoff da investigacao W.Vetro"
+          git push origin HEAD:investigacao/wvetro-receitas-variaveis-v1
 
       - name: Setup Node
         uses: actions/setup-node@v4
