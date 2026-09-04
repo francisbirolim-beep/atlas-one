@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, ClipboardList, Headphones, Loader2, PackagePlus, Pencil, Search, ShoppingCart,
+  ArrowLeft, ClipboardList, Headphones, LayoutDashboard, Loader2, PackagePlus, Pencil, Search, ShoppingCart,
   UserCheck, UserPlus, X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -105,7 +105,7 @@ export default function IdentificarCliente() {
           href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
         },
         {
-          titulo: 'Orçamento balcão',
+          titulo: 'Balcão',
           subtitulo: 'Venda de produtos',
           icone: ShoppingCart,
           href: `/orcamento/balcao/novo?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
@@ -121,6 +121,12 @@ export default function IdentificarCliente() {
           subtitulo: 'Enviar necessidade direto ao comprador',
           icone: PackagePlus,
           href: `/compras?cliente=${encodeURIComponent(clienteSelecionado.id)}&clienteNome=${encodeURIComponent(clienteSelecionado.nome)}`,
+        },
+        {
+          titulo: 'Painel do cliente',
+          subtitulo: 'Financeiro, orçamentos e histórico completo',
+          icone: LayoutDashboard,
+          href: `/clientes/${clienteSelecionado.id}`,
         },
       ]
     : []
@@ -285,7 +291,7 @@ export default function IdentificarCliente() {
                 href={`/clientes/${clienteSelecionado.id}`}
                 className="hidden sm:inline text-xs font-medium text-brand-navy hover:underline whitespace-nowrap"
               >
-                Ver Cliente 360 completo
+                Painel do cliente
               </Link>
               <button
                 type="button"
@@ -320,7 +326,7 @@ export default function IdentificarCliente() {
                 href={`/clientes/${clienteSelecionado.id}`}
                 className="text-xs font-medium text-brand-navy hover:underline"
               >
-                Ver Cliente 360 completo
+                Painel do cliente
               </Link>
             </div>
           </div>
