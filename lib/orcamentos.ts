@@ -20,6 +20,7 @@ export interface ItemOrcamentoForm {
   descricao: string
   cor: string
   fotos: File[]
+  tipoMedida?: 'comum' | 'final'
   larguraBaixo: string
   larguraMeio: string
   larguraCima: string
@@ -95,7 +96,6 @@ async function carregarReferenciasWvetroSnapshot(): Promise<Record<string, Refer
     const json = await resposta.json().catch(() => ({}))
     return (json?.referencias || {}) as Record<string, ReferenciaTipologiaSnapshot>
   } catch {
-    // Falha de procedência não pode impedir o salvamento do orçamento.
     return {}
   }
 }
@@ -111,27 +111,19 @@ async function lerTrena(url: string, eixo: 'largura' | 'altura'): Promise<number
     if (!token) return []
     const resposta = await fetch('/api/medicao-final/ler-trena', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ imageUrl: url, eixo }),
     })
     const json = await resposta.json().catch(() => ({}))
     if (!resposta.ok || !Array.isArray(json?.medidas_mm)) return []
-    return json.medidas_mm
-      .map((valor: unknown) => Number(valor))
-      .filter((valor: number) => Number.isFinite(valor) && valor > 0)
-      .slice(0, 3)
+    return json.medidas_mm.map((valor: unknown) => Number(valor)).filter((valor: number) => Number.isFinite(valor) && valor > 0).slice(0, 3)
   } catch (erro) {
     console.error('Erro ao ler foto da trena no orçamento:', erro)
     return []
   }
 }
 
-export async function criarOrcamentoNoServidor(
-  dados: DadosOrcamentoForm
-): Promise<{ ok: boolean; id?: string; error?: string }> {
+export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promise<{ ok: boolean; id?: string; error?: string }> {
   const {
     clienteId: clienteIdInformado,
     itens, clienteNome, clienteWhatsapp, cidade, origem,
@@ -141,12 +133,8 @@ export async function criarOrcamentoNoServidor(
   const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
 
   const [clienteId, colunaId, usuario, referenciasWvetro] = await Promise.all([
-    clienteIdInformado
-      ? Promise.resolve(clienteIdInformado)
-      : obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
-    primeiraColunaId(),
-    usuarioAtual(),
-    carregarReferenciasWvetroSnapshot(),
+    clienteIdInformado ? Promise.resolve(clienteIdInformado) : obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
+    primeiraColunaId(), usuarioAtual(), carregarReferenciasWvetroSnapshot(),
   ])
 
   const itensSalvos: ItemEsquadria[] = []
@@ -173,6 +161,7 @@ export async function criarOrcamentoNoServidor(
     const preco_unit = it.modoOrigem === 'produto' && it.precoUnit != null ? it.precoUnit : null
     const quantidadeNum = parseInt(it.quantidade) || 1
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
+    const tipoMedidaItem = it.tipoMedida || tipoMedida || 'comum'
 
     const referencia = it.tipologiaId ? referenciasWvetro[it.tipologiaId] || null : null
     const variaveisUsadasWvetro = !it.configuracaoValidada && referencia
@@ -214,7 +203,7 @@ export async function criarOrcamentoNoServidor(
       referencia_wvetro: referenciaWvetroSnapshot,
     }
 
-    if (tipoMedida === 'final') {
+    if (tipoMedidaItem === 'final') {
       const usaFotoLargura = it.modoLargura === 'foto'
       const usaFotoAltura = it.modoAltura === 'foto'
       const foto_larguras_url = usaFotoLargura && it.fotoLargura ? await uploadFoto(it.fotoLargura) : null
@@ -231,56 +220,29 @@ export async function criarOrcamentoNoServidor(
       const ad = medidasLidasAltura[0] ?? numeroOpcional(it.alturaDireita)
       const am = medidasLidasAltura[1] ?? numeroOpcional(it.alturaMeio)
       const ae = medidasLidasAltura[2] ?? numeroOpcional(it.alturaEsquerda)
-
-      const todasFotosItem = [
-        ...itemFotoUrls,
-        ...(foto_larguras_url ? [foto_larguras_url] : []),
-        ...(foto_alturas_url ? [foto_alturas_url] : []),
-      ]
+      const todasFotosItem = [...itemFotoUrls, ...(foto_larguras_url ? [foto_larguras_url] : []), ...(foto_alturas_url ? [foto_alturas_url] : [])]
 
       itensSalvos.push({
-        id: it.id,
-        ambiente: it.ambiente?.trim() || null,
-        tipo_esquadria: it.tipo as TipoEsquadria,
-        tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-        folhas: it.folhas || null,
-        largura_mm: lm,
-        altura_mm: am,
-        largura_baixo_mm: lb,
-        largura_meio_mm: lm,
-        largura_cima_mm: lc,
-        altura_direita_mm: ad,
-        altura_meio_mm: am,
-        altura_esquerda_mm: ae,
-        foto_larguras_url,
-        foto_alturas_url,
-        quantidade: quantidadeNum,
+        id: it.id, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
+        tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null, folhas: it.folhas || null,
+        tipo_medida: tipoMedidaItem,
+        largura_mm: lm, altura_mm: am,
+        largura_baixo_mm: lb, largura_meio_mm: lm, largura_cima_mm: lc,
+        altura_direita_mm: ad, altura_meio_mm: am, altura_esquerda_mm: ae,
+        foto_larguras_url, foto_alturas_url, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || foto_larguras_url || foto_alturas_url || null,
         foto_urls: todasFotosItem.length ? todasFotosItem : null,
-        descricao: it.descricao || undefined,
-        cor: it.cor || null,
-        produto_id,
-        preco_unit,
-        preco_total,
+        descricao: it.descricao || undefined, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao,
       })
     } else {
       itensSalvos.push({
-        id: it.id,
-        ambiente: it.ambiente?.trim() || null,
-        tipo_esquadria: it.tipo as TipoEsquadria,
-        tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null,
-        folhas: it.folhas || null,
-        largura_mm: parseFloat(it.largura),
-        altura_mm: parseFloat(it.altura),
-        quantidade: quantidadeNum,
-        foto_url: itemFotoUrls[0] || null,
-        foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
-        descricao: it.descricao || undefined,
-        cor: it.cor || null,
-        produto_id,
-        preco_unit,
-        preco_total,
+        id: it.id, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
+        tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null, folhas: it.folhas || null,
+        tipo_medida: tipoMedidaItem,
+        largura_mm: parseFloat(it.largura), altura_mm: parseFloat(it.altura), quantidade: quantidadeNum,
+        foto_url: itemFotoUrls[0] || null, foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
+        descricao: it.descricao || undefined, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao,
       })
     }
@@ -288,49 +250,24 @@ export async function criarOrcamentoNoServidor(
 
   const primeiro = itensSalvos[0]
   const novoId = uuidv4()
+  const tipoMedidaOrcamento = itensSalvos.length > 0 && itensSalvos.every(item => item.tipo_medida === 'final') ? 'final' : 'comum'
 
   const { error } = await supabase.from('orcamentos').insert({
-    id: novoId,
-    cliente_id: clienteId,
-    obra_id: obraId || null,
-    cliente_nome: clienteNome,
-    cliente_whatsapp: clienteWhatsapp,
-    cidade,
-    origem,
-    tipo_esquadria: primeiro?.tipo_esquadria || 'outro',
-    largura_mm: primeiro?.largura_mm || null,
-    altura_mm: primeiro?.altura_mm || null,
-    quantidade: primeiro?.quantidade || 1,
-    acabamento,
-    acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
-    temperatura,
-    contramarco,
-    itens: itensSalvos,
-    fotos_urls: fotosUrls,
-    anexos: anexosSalvos,
-    tipo_medida: tipoMedida,
-    descricao_livre: null,
-    valor_estimado: null,
-    status: 'rascunho',
-    modo_entrada: 'formulario',
-    coluna_id: colunaId,
-    coluna_atualizada_em: new Date().toISOString(),
-    arquiteto_nome: arquitetoNome || null,
-    arquiteto_contato: arquitetoContato || null,
-    criado_por_nome: usuario?.nome || null,
-    criado_por_id: usuario?.id || null,
+    id: novoId, cliente_id: clienteId, obra_id: obraId || null, cliente_nome: clienteNome,
+    cliente_whatsapp: clienteWhatsapp, cidade, origem,
+    tipo_esquadria: primeiro?.tipo_esquadria || 'outro', largura_mm: primeiro?.largura_mm || null,
+    altura_mm: primeiro?.altura_mm || null, quantidade: primeiro?.quantidade || 1,
+    acabamento, acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
+    temperatura, contramarco, itens: itensSalvos, fotos_urls: fotosUrls, anexos: anexosSalvos,
+    tipo_medida: tipoMedidaOrcamento,
+    descricao_livre: null, valor_estimado: null, status: 'rascunho', modo_entrada: 'formulario',
+    coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString(),
+    arquiteto_nome: arquitetoNome || null, arquiteto_contato: arquitetoContato || null,
+    criado_por_nome: usuario?.nome || null, criado_por_id: usuario?.id || null,
   })
 
-  if (error) {
-    return { ok: false, error: error.message }
-  }
-  if (colunaId) {
-    executarAutomacoesColuna(colunaId, {
-      cliente_nome: clienteNome,
-      criado_por_id: usuario?.id || null,
-    }).catch(() => {})
-  }
-
+  if (error) return { ok: false, error: error.message }
+  if (colunaId) executarAutomacoesColuna(colunaId, { cliente_nome: clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true, id: novoId }
 }
