@@ -131,7 +131,7 @@ export default function FornecedorCatalogos({ fornecedorId }: Props) {
             <FileText size={16} className="text-brand-navy" /> Catálogos e documentos
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            PDF textual é analisado localmente. Arquivo visual fica aguardando análise assistida, sem cobrança automática de IA.
+            O arquivo vai direto para o Storage (até 50 MB). PDF textual é analisado localmente; arquivo visual fica aguardando análise assistida, sem cobrança automática de IA.
           </p>
         </div>
         <div>
@@ -152,7 +152,7 @@ export default function FornecedorCatalogos({ fornecedorId }: Props) {
             className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             {enviando ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-            {enviando ? "Analisando..." : "Subir catálogo"}
+            {enviando ? "Enviando e analisando..." : "Subir catálogo"}
           </button>
         </div>
       </div>
