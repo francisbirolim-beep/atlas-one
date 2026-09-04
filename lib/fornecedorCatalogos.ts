@@ -9,18 +9,26 @@ export type ResumoCatalogoFornecedor = {
   revisar: number
 }
 
+const LIMITE_CATALOGO_BYTES = 50 * 1024 * 1024
+
 export async function uploadDocumentoFornecedor(fornecedorId: string, file: File) {
   if (!file || file.size <= 0) throw new Error('Arquivo vazio.')
-  if (file.size > 25 * 1024 * 1024) throw new Error('O arquivo deve ter no máximo 25 MB.')
+  if (file.size > LIMITE_CATALOGO_BYTES) {
+    throw new Error('Este catálogo passa de 50 MB. Para arquivos maiores, use a análise assistida no ChatGPT e importe o resultado no Fornecedor 360.')
+  }
 
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
   const path = `fornecedores/${fornecedorId}/${uuidv4()}.${ext}`
+
+  // O arquivo vai direto do navegador para o Supabase Storage. Ele não é
+  // enviado no corpo da função da Vercel; a API recebe apenas URL e metadados.
   const { error } = await supabase.storage.from('fotos').upload(path, file, {
     contentType: file.type || undefined,
     cacheControl: '3600',
     upsert: false,
   })
   if (error) throw new Error(error.message)
+
   const { data } = supabase.storage.from('fotos').getPublicUrl(path)
   if (!data.publicUrl) throw new Error('Não foi possível gerar a URL do arquivo.')
   return data.publicUrl
