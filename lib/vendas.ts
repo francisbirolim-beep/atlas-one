@@ -116,7 +116,21 @@ export async function salvarCadastroVenda(
     return { success: false, error: `Preencha os campos obrigatorios: ${faltantes.map(c => c.label).join(', ')}.` }
   }
 
+  // A venda deve completar o MESMO Cliente 360 ligado ao orçamento.
+  // O estado da tela pode perder o id em navegação/troca de orçamento; por isso
+  // recuperamos o vínculo diretamente da fonte da verdade antes de cogitar criar cliente.
   let id = clienteId
+  if (!id) {
+    const { data: orcamentoVinculado, error: erroVinculo } = await supabase
+      .from('orcamentos')
+      .select('cliente_id')
+      .eq('id', orcamentoId)
+      .maybeSingle()
+
+    if (erroVinculo) return { success: false, error: erroVinculo.message }
+    if (orcamentoVinculado?.cliente_id) id = orcamentoVinculado.cliente_id
+  }
+
   const clientePayload: Record<string, string | null> = {}
   CAMPOS_CLIENTE.forEach(chave => {
     if (chave in dados) clientePayload[chave] = dados[chave]?.trim() || null
@@ -126,8 +140,17 @@ export async function salvarCadastroVenda(
   if (clientePayload.whatsapp == null && dados.telefone) clientePayload.whatsapp = dados.telefone.trim()
 
   if (id) {
-    const { error } = await supabase.from('clientes').update(clientePayload).eq('id', id)
+    const { data: atualizado, error } = await supabase
+      .from('clientes')
+      .update(clientePayload)
+      .eq('id', id)
+      .select('id')
+      .maybeSingle()
+
     if (error) return { success: false, error: error.message }
+    if (!atualizado) {
+      return { success: false, error: 'O Cliente 360 vinculado ao orçamento não foi encontrado. Revise o cadastro antes de confirmar a venda.' }
+    }
   } else {
     const { data, error } = await supabase
       .from('clientes')
