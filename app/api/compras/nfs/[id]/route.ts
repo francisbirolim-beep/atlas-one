@@ -14,6 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       .from('compras_nfs')
       .select('*')
       .eq('id', params.id)
+      .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
     if (error) throw new Error(error.message)
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const { data: itens, error: itensError } = await supabaseAdmin
       .from('compras_nf_itens')
       .select('*')
+      .eq('empresa_id', usuario.empresa_id)
       .eq('nf_id', nf.id)
       .order('created_at', { ascending: true })
 
@@ -34,6 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const { data: rows, error: produtosError } = await supabaseAdmin
         .from('produtos')
         .select('id,codigo,nome,unidade,custo')
+        .eq('empresa_id', usuario.empresa_id)
         .in('id', produtoIds)
       if (produtosError) throw new Error(produtosError.message)
       for (const p of rows || []) produtos.set(p.id, p)
