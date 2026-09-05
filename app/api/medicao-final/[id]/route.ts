@@ -9,7 +9,7 @@ export async function DELETE(
 ) {
   try {
     const authHeader = req.headers.get('authorization') || ''
-    const token = authHeader.replace('Bearer ', '').trim()
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim()
 
     if (!token) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
@@ -22,14 +22,15 @@ export async function DELETE(
 
     const { data: usuario, error: usuarioError } = await supabaseAdmin
       .from('usuarios')
-      .select('role')
+      .select('role,empresa_id')
       .eq('id', authData.user.id)
       .maybeSingle()
 
-    if (usuarioError || usuario?.role !== 'master') {
+    if (usuarioError || usuario?.role !== 'master' || !usuario.empresa_id) {
       return NextResponse.json({ error: 'Somente usuario Master pode excluir uma Medicao Final.' }, { status: 403 })
     }
 
+    const empresaId = usuario.empresa_id
     const { id } = await context.params
     if (!id) {
       return NextResponse.json({ error: 'ID da medicao e obrigatorio.' }, { status: 400 })
@@ -39,6 +40,7 @@ export async function DELETE(
       .from('medicoes_finais')
       .select('id, cliente_nome, orcamento_id')
       .eq('id', id)
+      .eq('empresa_id', empresaId)
       .maybeSingle()
 
     if (buscaError) {
@@ -54,6 +56,7 @@ export async function DELETE(
       const { error: deleteCardsError } = await supabaseAdmin
         .from('setor_kanban_itens')
         .delete()
+        .eq('empresa_id', empresaId)
         .eq('orcamento_id', medicao.orcamento_id)
 
       if (deleteCardsError) {
@@ -69,6 +72,7 @@ export async function DELETE(
       .from('medicoes_finais')
       .delete()
       .eq('id', id)
+      .eq('empresa_id', empresaId)
 
     if (deleteError) {
       console.error('Erro ao excluir Medicao Final:', deleteError)
