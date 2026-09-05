@@ -37,7 +37,7 @@ declare e uuid; ne uuid; ce uuid;
 begin
   select empresa_b into e from compras_tenant_ctx;
   select empresa_id into ne from public.compras_necessidades where descricao='__NECESSIDADE_B_CI__' limit 1;
-  select empresa_id into ce from public.compras_cotacoes c join public.compras_necessidades n on n.id=c.necessidade_id where n.descricao='__NECESSIDADE_B_CI__' limit 1;
+  select c.empresa_id into ce from public.compras_cotacoes c join public.compras_necessidades n on n.id=c.necessidade_id where n.descricao='__NECESSIDADE_B_CI__' limit 1;
   if ne is distinct from e then raise exception 'Necessidade não herdou empresa correta'; end if;
   if ce is distinct from e then raise exception 'Cotação não herdou empresa correta'; end if;
 end $$;
