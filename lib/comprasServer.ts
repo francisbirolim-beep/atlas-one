@@ -12,8 +12,8 @@ type NivelPermissao = 'oculto' | 'consulta' | 'edicao'
 
 function setorDaRota(req: NextRequest): 'compras' | 'estoque' | 'financeiro' {
   const pathname = req.nextUrl.pathname.toLowerCase()
-  if (pathname.startsWith('/api/estoque/')) return 'estoque'
-  if (pathname.startsWith('/api/financeiro/')) return 'financeiro'
+  if (pathname === '/api/estoque' || pathname.startsWith('/api/estoque/')) return 'estoque'
+  if (pathname === '/api/financeiro' || pathname.startsWith('/api/financeiro/')) return 'financeiro'
   return 'compras'
 }
 
