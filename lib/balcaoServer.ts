@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export type NivelBalcao = 'oculto' | 'consulta' | 'edicao'
-export type UsuarioBalcao = { id: string; nome: string; role: string; nivel: NivelBalcao }
+export type UsuarioBalcao = { id: string; nome: string; role: string; empresa_id: string; nivel: NivelBalcao }
 
 const peso: Record<NivelBalcao, number> = { oculto: 0, consulta: 1, edicao: 2 }
 
@@ -18,10 +18,10 @@ export async function autenticarBalcao(
 
   const { data: usuario } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
-  if (!usuario) return null
+  if (!usuario?.empresa_id) return null
 
   let nivel: NivelBalcao = 'oculto'
   if (usuario.role === 'master') nivel = 'edicao'
