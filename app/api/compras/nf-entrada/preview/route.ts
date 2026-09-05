@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { enriquecerVinculos, lerXmlNFe } from '@/lib/nfeEntradaServer'
+import { lerXmlNFe } from '@/lib/nfeEntradaServer'
+import { enriquecerVinculosTenant } from '@/lib/nfeEntradaTenantServer'
 import { lerPdfDanfeV7 } from '@/lib/danfePdfParserV7'
+import { autenticarCompras } from '@/lib/comprasServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-async function autenticar(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
-  return usuario || null
-}
-
 export async function POST(req: NextRequest) {
-  const usuario = await autenticar(req)
+  const usuario = await autenticarCompras(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 
   try {
@@ -42,7 +34,7 @@ export async function POST(req: NextRequest) {
       console.info('[Compras][DANFE][diagnostico]', nf.diagnostico || 'sem diagnostico')
     }
 
-    nf = await enriquecerVinculos(nf)
+    nf = await enriquecerVinculosTenant(nf, usuario.empresa_id)
     return NextResponse.json({
       ok: true,
       arquivo: { nome: arquivo.name, tamanho: arquivo.size, tipo: arquivo.type || (ehXml ? 'application/xml' : 'application/pdf') },
