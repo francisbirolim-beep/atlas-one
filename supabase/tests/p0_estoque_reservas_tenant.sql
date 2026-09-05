@@ -31,8 +31,7 @@ set empresa_id=(select empresa_b from reserva_tenant_ctx)
 where id=(select user_b from reserva_tenant_ctx);
 
 insert into public.produtos(nome,categoria,preco,empresa_id)
-values ('__PRODUTO_RESERVA_A_CI__','outro',0,(select empresa_a from reserva_tenant_ctx))
-returning id into temp table _nao_usar;
+values ('__PRODUTO_RESERVA_A_CI__','outro',0,(select empresa_a from reserva_tenant_ctx));
 
 update reserva_tenant_ctx
 set produto_a=(select id from public.produtos where nome='__PRODUTO_RESERVA_A_CI__' limit 1);
@@ -51,8 +50,7 @@ insert into public.estoque_saldos(produto_id,local_id,quantidade,quantidade_rese
 select produto_a,local_a,10,1,empresa_a from reserva_tenant_ctx;
 
 insert into public.estoque_reservas(produto_id,local_id,quantidade,status,origem_tipo,empresa_id)
-select produto_a,local_a,1,'ativa','teste_ci',empresa_a from reserva_tenant_ctx
-returning id;
+select produto_a,local_a,1,'ativa','teste_ci',empresa_a from reserva_tenant_ctx;
 
 update reserva_tenant_ctx
 set reserva_a=(select id from public.estoque_reservas where origem_tipo='teste_ci' and empresa_id=empresa_a limit 1);
