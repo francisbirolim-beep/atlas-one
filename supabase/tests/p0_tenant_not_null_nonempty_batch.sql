@@ -6,7 +6,7 @@ begin
   where table_schema='public'
     and column_name='empresa_id'
     and table_name in (
-      'produto_imagens','historico','backups','notificacoes','tarefa_colunas',
+      'produto_imagens','historico','notificacoes','tarefa_colunas',
       'workflow_automacoes','producao_colunas','automacoes_orcamento',
       'setor_kanban_movimentos','workflow_execucoes','agentes_ia',
       'automacoes_assistencia','crm_interacoes','crm_metas','notificacao_preferencias'
