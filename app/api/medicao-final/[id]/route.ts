@@ -9,7 +9,7 @@ export async function DELETE(
 ) {
   try {
     const authHeader = req.headers.get('authorization') || ''
-    const token = authHeader.replace('Bearer ', '').trim()
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim()
 
     if (!token) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
