@@ -116,6 +116,14 @@ jobs:
         shell: bash
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run --include-all
 
+      - name: Test multi-tenant isolation
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f supabase/tests/p0_tenant_isolation.sql
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/p0_tenant_isolation.sql
+
       - name: Require explicit production confirmation
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' }}
         shell: bash

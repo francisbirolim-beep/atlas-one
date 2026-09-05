@@ -1,31 +1,30 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-export type UsuarioCompras = {
+export type UsuarioTenant = {
   id: string
   nome: string
   role: string
   empresa_id: string
 }
 
-export async function autenticarCompras(req: NextRequest): Promise<UsuarioCompras | null> {
+export async function autenticarTenant(req: NextRequest): Promise<UsuarioTenant | null> {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
 
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data?.user) return null
 
-  const { data: usuario } = await supabaseAdmin
+  const { data: usuario, error: perfilError } = await supabaseAdmin
     .from('usuarios')
     .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
 
-  return usuario?.empresa_id ? (usuario as UsuarioCompras) : null
+  if (perfilError || !usuario?.empresa_id) return null
+  return usuario as UsuarioTenant
 }
 
-export function limiteSeguro(valor: string | null, padrao = 100, maximo = 200) {
-  const n = Number(valor)
-  if (!Number.isFinite(n) || n <= 0) return padrao
-  return Math.min(Math.floor(n), maximo)
+export function aplicarEmpresa<T extends Record<string, unknown>>(payload: T, empresaId: string): T & { empresa_id: string } {
+  return { ...payload, empresa_id: empresaId }
 }
