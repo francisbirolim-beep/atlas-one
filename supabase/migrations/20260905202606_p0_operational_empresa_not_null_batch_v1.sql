@@ -1,0 +1,10 @@
+alter table public.kanban_colunas alter column empresa_id set not null;
+alter table public.assistencia_colunas alter column empresa_id set not null;
+alter table public.unidades_operacionais alter column empresa_id set not null;
+alter table public.tarefas alter column empresa_id set not null;
+alter table public.medicao_fotos alter column empresa_id set not null;
+alter table public.medicao_respostas alter column empresa_id set not null;
+alter table public.medicao_pendencias alter column empresa_id set not null;
+alter table public.medicao_revisoes alter column empresa_id set not null;
+alter table public.financeiro_recebimentos alter column empresa_id set not null;
+alter table public.financeiro_recebimento_alocacoes alter column empresa_id set not null;
