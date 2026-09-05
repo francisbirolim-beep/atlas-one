@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarUsuario, rodarLoop, executarPropostaTarefa, executarPropostaEvento, obterOuCriarConversaHoje, salvarMensagem, ACTION_TOOLS } from '@/lib/agente'
+import { verificarUsuario, rodarLoop, executarPropostaTarefa, executarPropostaEvento, ACTION_TOOLS } from '@/lib/agente'
+import { obterOuCriarConversaHoje, salvarMensagem } from '@/lib/agenteHistoricoServer'
 
 export async function POST(req: NextRequest) {
   try {
