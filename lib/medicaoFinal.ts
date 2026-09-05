@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { tokenAtual } from './auth'
+import { salvarConfiguracaoGeralTenant } from './configuracoesGeraisTenant'
 import {
     MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra,
     Usuario, ItemEsquadria,
@@ -435,8 +436,5 @@ export async function lerLimiteAlertaDiferenca(): Promise<number> {
 }
 
 export async function salvarLimiteAlertaDiferenca(mm: number): Promise<boolean> {
-    const { error } = await supabase
-      .from('configuracoes_gerais')
-      .upsert({ chave: CHAVE_LIMITE_DIFERENCA, valor: String(mm), updated_at: new Date().toISOString() })
-    return !error
+    return salvarConfiguracaoGeralTenant(CHAVE_LIMITE_DIFERENCA, String(mm))
 }
