@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { Cliente, OrcamentoRapido, Usuario } from './tipos'
 import { CampoConfiguravel, camposDoContexto } from './camposConfiguraveis'
+import { salvarConfiguracaoGeralTenant } from './configuracoesGeraisTenant'
 
 export type ConfirmacaoVendaDados = {
   orcamentoAtual: OrcamentoRapido
@@ -36,14 +37,7 @@ async function carregarDadosVendaSalvos(orcamentoId: string): Promise<CadastroVe
 }
 
 async function salvarDadosVenda(orcamentoId: string, dados: CadastroVenda): Promise<boolean> {
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: chaveDadosVenda(orcamentoId),
-      valor: JSON.stringify(dados),
-      updated_at: new Date().toISOString(),
-    })
-  return !error
+  return salvarConfiguracaoGeralTenant(chaveDadosVenda(orcamentoId), JSON.stringify(dados))
 }
 
 export async function carregarConfirmacaoVenda(orcamentoId: string): Promise<ConfirmacaoVendaDados | null> {
