@@ -5,6 +5,7 @@ export type UsuarioCompras = {
   id: string
   nome: string
   role: string
+  empresa_id: string
 }
 
 export async function autenticarCompras(req: NextRequest): Promise<UsuarioCompras | null> {
@@ -16,11 +17,11 @@ export async function autenticarCompras(req: NextRequest): Promise<UsuarioCompra
 
   const { data: usuario } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
 
-  return usuario || null
+  return usuario?.empresa_id ? (usuario as UsuarioCompras) : null
 }
 
 export function limiteSeguro(valor: string | null, padrao = 100, maximo = 200) {
