@@ -35,51 +35,51 @@ function termosBusca(valor: string) {
 function textoNormalizado(valor: unknown) { return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() }
 function textoProduto(p: ProdutoCatalogo) { return textoNormalizado(`${p.codigo || ''} ${p.nome || ''} ${p.descricao || ''} ${p.categoria || ''}`) }
 
-async function buscarClientePorId(id: string): Promise<ClienteCatalogo[]> {
-  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('id', id).maybeSingle()
+async function buscarClientePorId(id: string, empresaId: string): Promise<ClienteCatalogo[]> {
+  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('id', id).eq('empresa_id', empresaId).maybeSingle()
   if (error) throw error
   return data ? [data as ClienteCatalogo] : []
 }
 
-async function buscarClientes(q: string): Promise<ClienteCatalogo[]> {
+async function buscarClientes(q: string, empresaId: string): Promise<ClienteCatalogo[]> {
   const termos = termosBusca(q)
   if (!termos.length) return []
-  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).order('nome').limit(1000)
+  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('empresa_id', empresaId).order('nome').limit(1000)
   if (error) throw error
   return ((data || []) as ClienteCatalogo[])
     .filter(c => correspondeBuscaAtlas(q, c.nome, c.apelido, c.cpf_cnpj, c.telefone, c.whatsapp, c.email, c.cidade, c.bairro, c.endereco, c.cep))
     .slice(0, 30)
 }
 
-async function buscarProdutos(q: string): Promise<ProdutoCatalogo[]> {
+async function buscarProdutos(q: string, empresaId: string): Promise<ProdutoCatalogo[]> {
   const termos = termosBusca(q)
   if (!termos.length) return []
   const contagens = await Promise.all(termos.map(async termo => {
     const filtro = `codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%,categoria.ilike.%${termo}%`
-    const { count, error } = await supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).eq('ativo', true).not('unidade', 'is', null).or(filtro)
+    const { count, error } = await supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaId).eq('ativo', true).not('unidade', 'is', null).or(filtro)
     if (error) throw error
     return { termo, count: count ?? Number.MAX_SAFE_INTEGER }
   }))
   contagens.sort((a, b) => a.count - b.count)
   const termoBase = contagens[0]?.termo || termos[0]
   const filtroBase = `codigo.ilike.%${termoBase}%,nome.ilike.%${termoBase}%,descricao.ilike.%${termoBase}%,categoria.ilike.%${termoBase}%`
-  const { data, error } = await supabaseAdmin.from('produtos').select(CAMPOS_PRODUTO).eq('ativo', true).not('unidade', 'is', null).or(filtroBase).order('nome').limit(800)
+  const { data, error } = await supabaseAdmin.from('produtos').select(CAMPOS_PRODUTO).eq('empresa_id', empresaId).eq('ativo', true).not('unidade', 'is', null).or(filtroBase).order('nome').limit(800)
   if (error) throw error
   const termosNorm = termos.map(textoNormalizado)
   return ((data || []) as ProdutoCatalogo[]).filter(p => { const texto = textoProduto(p); return termosNorm.every(termo => texto.includes(termo)) }).slice(0, 120)
 }
 
-async function localPadrao(usuarioId: string, localSolicitado?: string | null) {
+async function localPadrao(usuarioId: string, empresaId: string, localSolicitado?: string | null) {
   if (localSolicitado) {
-    const { data } = await supabaseAdmin.from('estoque_locais').select('id,nome,codigo,unidade_id,unidades_operacionais(id,nome,codigo)').eq('id', localSolicitado).eq('ativo', true).maybeSingle()
+    const { data } = await supabaseAdmin.from('estoque_locais').select('id,nome,codigo,unidade_id,unidades_operacionais(id,nome,codigo)').eq('id', localSolicitado).eq('empresa_id', empresaId).eq('ativo', true).maybeSingle()
     if (data) return data as any
   }
-  const { data: caixa } = await supabaseAdmin.from('balcao_caixas').select('local_estoque_id').eq('operador_id', usuarioId).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
+  const { data: caixa } = await supabaseAdmin.from('balcao_caixas').select('local_estoque_id').eq('empresa_id', empresaId).eq('operador_id', usuarioId).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
   if (caixa?.local_estoque_id) {
-    const { data } = await supabaseAdmin.from('estoque_locais').select('id,nome,codigo,unidade_id,unidades_operacionais(id,nome,codigo)').eq('id', caixa.local_estoque_id).maybeSingle()
+    const { data } = await supabaseAdmin.from('estoque_locais').select('id,nome,codigo,unidade_id,unidades_operacionais(id,nome,codigo)').eq('id', caixa.local_estoque_id).eq('empresa_id', empresaId).maybeSingle()
     if (data) return data as any
   }
-  const { data } = await supabaseAdmin.from('estoque_locais').select('id,nome,codigo,unidade_id,unidades_operacionais!inner(id,nome,codigo)').eq('codigo', 'GERAL').eq('unidades_operacionais.codigo', 'MATRIZ').limit(1).maybeSingle()
+  const { data } = await supabaseAdmin.from('estoque_locais').select('id,nome,codigo,unidade_id,unidades_operacionais!inner(id,nome,codigo)').eq('empresa_id', empresaId).eq('codigo', 'GERAL').eq('unidades_operacionais.codigo', 'MATRIZ').limit(1).maybeSingle()
   return data as any
 }
 
@@ -91,11 +91,11 @@ export async function GET(req: NextRequest) {
   try {
     if (tipo === 'clientes') {
       const clienteId = (req.nextUrl.searchParams.get('clienteId') || '').trim()
-      return NextResponse.json({ ok: true, clientes: clienteId ? await buscarClientePorId(clienteId) : await buscarClientes(q) })
+      return NextResponse.json({ ok: true, clientes: clienteId ? await buscarClientePorId(clienteId, usuario.empresa_id) : await buscarClientes(q, usuario.empresa_id) })
     }
-    const local = await localPadrao(usuario.id, req.nextUrl.searchParams.get('localId'))
+    const local = await localPadrao(usuario.id, usuario.empresa_id, req.nextUrl.searchParams.get('localId'))
     if (!local?.id) return NextResponse.json({ error: 'Nenhum local de estoque foi configurado para o balcão.' }, { status: 409 })
-    const produtos = await buscarProdutos(q)
+    const produtos = await buscarProdutos(q, usuario.empresa_id)
     const ids = produtos.map(p => p.id)
     const { data: rede, error: erroRede } = ids.length
       ? await supabaseAdmin.from('estoque_disponibilidade_rede').select('produto_id,local_id,unidade_id,unidade_codigo,unidade_nome,local_codigo,local_nome,unidade,quantidade_fisica,quantidade_reservada,quantidade_disponivel,custo_medio').in('produto_id', ids)
