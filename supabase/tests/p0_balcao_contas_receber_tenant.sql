@@ -5,6 +5,7 @@ select
   (select id from public.usuarios where role <> 'master' and empresa_id is not null order by created_at limit 1) as user_b,
   null::uuid as empresa_a,
   null::uuid as empresa_b,
+  null::uuid as cliente_a,
   null::uuid as conta_a,
   null::uuid as caixa_b,
   false as bloqueou_baixa_cross;
@@ -27,8 +28,12 @@ update balcao_cr_tenant_ctx set
 update public.usuarios set empresa_id=(select empresa_b from balcao_cr_tenant_ctx)
 where id=(select user_b from balcao_cr_tenant_ctx);
 
-insert into public.financeiro_contas_receber(documento,valor,status,empresa_id)
-values ('__CONTA_A_CI__',100,'aberto',(select empresa_a from balcao_cr_tenant_ctx));
+insert into public.clientes(nome,origem,empresa_id)
+values ('__CLIENTE_CR_A_CI__','outros',(select empresa_a from balcao_cr_tenant_ctx));
+update balcao_cr_tenant_ctx set cliente_a=(select id from public.clientes where nome='__CLIENTE_CR_A_CI__' limit 1);
+
+insert into public.financeiro_contas_receber(cliente_id,cliente_nome,documento,valor,status,empresa_id)
+select cliente_a,'Cliente A','__CONTA_A_CI__',100,'aberto',empresa_a from balcao_cr_tenant_ctx;
 update balcao_cr_tenant_ctx set conta_a=(select id from public.financeiro_contas_receber where documento='__CONTA_A_CI__' limit 1);
 
 insert into public.balcao_caixas(operador_id,operador_nome,status,empresa_id)
