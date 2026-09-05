@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AppShell from '@/components/system/AppShell'
 import BalcaoShell from '@/components/system/BalcaoShell'
+import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
@@ -38,5 +39,5 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (checking) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400">Carregando...</div>
   if (!autenticado) return null
   if (rotaBalcao) return <BalcaoShell>{children}</BalcaoShell>
-  return <AppShell>{children}</AppShell>
+  return <AppShell><Cadastro360RouteGuard>{children}</Cadastro360RouteGuard></AppShell>
 }
