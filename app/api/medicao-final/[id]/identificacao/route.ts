@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { anexoEhPdf, anexoTemArquivo, baixarAnexoPrivadoOuLegado, type AnexoStorage } from '@/lib/anexoPrivadoServer'
 
 export const runtime = 'nodejs'
 
 const MAX_PDF_BYTES = 15 * 1024 * 1024
-
-type Anexo = {
-  titulo?: string | null
-  nome?: string | null
-  url?: string | null
-}
 
 async function usuarioAutenticado(req: NextRequest) {
   const auth = req.headers.get('authorization') || ''
@@ -18,7 +13,14 @@ async function usuarioAutenticado(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data.user) return null
-  return data.user
+
+  const { data: usuarioAtlas } = await supabaseAdmin
+    .from('usuarios')
+    .select('id,nome,empresa_id')
+    .eq('id', data.user.id)
+    .maybeSingle()
+  if (!usuarioAtlas?.empresa_id) return null
+  return usuarioAtlas
 }
 
 function linhasNormalizadas(texto: string) {
@@ -51,14 +53,11 @@ function extrairNomeObra(textoPdf: string) {
 
     if (!/^NOME\s+DA\s+OBRA\s*:\s*$/i.test(linha)) continue
 
-    // Alguns PDFs W.Vetro extraem a tabela fora da ordem visual: o valor de
-    // NOME DA OBRA aparece algumas linhas antes do proprio rotulo.
     for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
       const nome = candidatoNomeObra(linhas[j] || '')
       if (nome) return nome
     }
 
-    // Outros layouts mantem o valor logo depois do rotulo.
     for (let j = i + 1; j <= Math.min(linhas.length - 1, i + 4); j++) {
       const nome = candidatoNomeObra(linhas[j] || '')
       if (nome) return nome
@@ -80,27 +79,21 @@ function obraDoMarcador(descricaoLivre: string | null | undefined) {
   return match?.[1]?.trim() || null
 }
 
-function encontrarPdfWVetro(anexos: unknown): Anexo | null {
+function encontrarPdfWVetro(anexos: unknown): AnexoStorage | null {
   if (!Array.isArray(anexos)) return null
-  const lista = anexos as Anexo[]
+  const lista = anexos as AnexoStorage[]
   return lista.find(anexo => {
     const texto = `${anexo.titulo || ''} ${anexo.nome || ''}`
-    return /w\.?vetro/i.test(texto) && !!anexo.url
-  }) || lista.find(anexo => /\.pdf$/i.test(anexo.nome || '') && !!anexo.url) || null
+    return /w\.?vetro/i.test(texto) && anexoTemArquivo(anexo)
+  }) || lista.find(anexo => anexoEhPdf(anexo) && anexoTemArquivo(anexo)) || null
 }
 
 async function lerNomeObraDoPdf(anexos: unknown) {
   const anexo = encontrarPdfWVetro(anexos)
-  if (!anexo?.url) return null
+  if (!anexo) return null
 
   try {
-    const resp = await fetch(anexo.url, { cache: 'no-store' })
-    if (!resp.ok) return null
-
-    const tamanhoHeader = Number(resp.headers.get('content-length') || 0)
-    if (tamanhoHeader > MAX_PDF_BYTES) return null
-
-    const buffer = Buffer.from(await resp.arrayBuffer())
+    const buffer = await baixarAnexoPrivadoOuLegado(anexo)
     if (buffer.length <= 0 || buffer.length > MAX_PDF_BYTES) return null
 
     const pdfParse = (await import('pdf-parse')).default
@@ -120,6 +113,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .from('medicoes_finais')
     .select('id, cliente_nome, orcamento_id')
     .eq('id', params.id)
+    .eq('empresa_id', usuario.empresa_id)
     .maybeSingle()
 
   if (erroMedicao || !medicao) {
@@ -138,6 +132,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .from('orcamentos')
     .select('numero, descricao_livre, anexos')
     .eq('id', medicao.orcamento_id)
+    .eq('empresa_id', usuario.empresa_id)
     .maybeSingle()
 
   const numeroWVetro = numeroExterno(orcamento?.descricao_livre)
