@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const { data: nfs, error } = await supabaseAdmin
       .from('compras_nfs')
       .select('id,origem_entrada,status,chave_acesso,numero,serie,data_emissao,data_entrada,fornecedor_nome,fornecedor_cnpj,valor_total,arquivo_nome,arquivo_path,criado_por_nome,confirmado_em')
+      .eq('empresa_id', usuario.empresa_id)
       .order('data_entrada', { ascending: false })
       .limit(limite)
 
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
       const { data: itens, error: itensError } = await supabaseAdmin
         .from('compras_nf_itens')
         .select('nf_id,vinculo_status,custo_aplicado')
+        .eq('empresa_id', usuario.empresa_id)
         .in('nf_id', ids)
 
       if (itensError) throw new Error(itensError.message)
@@ -47,9 +49,9 @@ export async function GET(req: NextRequest) {
     }))
 
     const [{ count: totalNfs }, { count: totalPendentes }, { count: totalItens }] = await Promise.all([
-      supabaseAdmin.from('compras_nfs').select('id', { count: 'exact', head: true }).neq('status', 'cancelada'),
-      supabaseAdmin.from('compras_nf_itens').select('id', { count: 'exact', head: true }).neq('vinculo_status', 'vinculado'),
-      supabaseAdmin.from('compras_nf_itens').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('compras_nfs').select('id', { count: 'exact', head: true }).eq('empresa_id', usuario.empresa_id).neq('status', 'cancelada'),
+      supabaseAdmin.from('compras_nf_itens').select('id', { count: 'exact', head: true }).eq('empresa_id', usuario.empresa_id).neq('vinculo_status', 'vinculado'),
+      supabaseAdmin.from('compras_nf_itens').select('id', { count: 'exact', head: true }).eq('empresa_id', usuario.empresa_id),
     ])
 
     return NextResponse.json({
