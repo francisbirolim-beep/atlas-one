@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { Produto, CategoriaProduto } from './tipos'
+import { registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 
 export interface CategoriaProdutoConfig {
   valor: CategoriaProduto
@@ -18,8 +19,6 @@ export const CATEGORIAS_PRODUTO_PRINCIPAIS: CategoriaProdutoConfig[] = [
   { valor: 'porta_janela_padrao', label: 'Produto pronto', ordem: 50 },
 ]
 
-// Mantido por compatibilidade com telas antigas. A listagem nova deve usar
-// listarCategoriasProduto(), que inclui categorias criadas pelo usuario.
 export const CATEGORIAS_PRODUTO: CategoriaProdutoConfig[] = [
   ...CATEGORIAS_PRODUTO_PRINCIPAIS,
   { valor: 'pu', label: 'PU', ordem: 90 },
@@ -64,6 +63,47 @@ function lerExtras(valor: string | null | undefined): CategoriaProdutoConfig[] {
   } catch {
     return []
   }
+}
+
+function dominioProduto(categoria: CategoriaProduto | string | null | undefined) {
+  if (categoria === 'perfil') return 'perfil'
+  if (categoria === 'acessorio') return 'acessorio'
+  if (categoria === 'vidro') return 'vidro'
+  return 'geral'
+}
+
+function registrarAprendizadoProduto(
+  tipo: string,
+  id: string | null,
+  dados: Record<string, unknown>,
+  evidencia: 'observado' | 'validado' = 'observado',
+) {
+  const categoria = String(dados.categoria || '')
+  registrarEventoAprendizadoAtlas({
+    dominio: dominioProduto(categoria),
+    tipo,
+    entidade_tipo: categoria || 'produto',
+    entidade_id: id,
+    contexto: {
+      categoria: categoria || null,
+      linha_id: dados.linha_id || null,
+      marca: dados.marca || null,
+      grupo: dados.grupo || null,
+    },
+    dados: {
+      codigo: dados.codigo || null,
+      nome: dados.nome || null,
+      unidade: dados.unidade || null,
+      peso_kg: dados.peso_kg ?? null,
+      peso_kg_m: dados.peso_kg_m ?? null,
+      tamanho_barra_mm: dados.tamanho_barra_mm ?? null,
+      largura_mm: dados.largura_mm ?? null,
+      altura_mm: dados.altura_mm ?? null,
+      qtde_embalagem_origem: dados.qtde_embalagem_origem ?? null,
+      status_validacao: dados.status_validacao || null,
+    },
+    evidencia,
+  }).catch(() => {})
 }
 
 export async function listarCategoriasProduto(): Promise<CategoriaProdutoConfig[]> {
@@ -202,7 +242,9 @@ export async function criarProduto(dados: {
   ncm_origem?: string | null
   ncm_status?: string | null
 }) {
-  return supabase.from('produtos').insert({ ...dados, ativo: true })
+  const resposta = await supabase.from('produtos').insert({ ...dados, ativo: true })
+  if (!resposta.error) registrarAprendizadoProduto('produto_criado', null, dados as Record<string, unknown>)
+  return resposta
 }
 
 export async function atualizarProduto(
@@ -249,7 +291,9 @@ export async function atualizarProduto(
     ncm_status: string | null
   }>
 ) {
-  return supabase.from('produtos').update({ ...dados, updated_at: new Date().toISOString() }).eq('id', id)
+  const resposta = await supabase.from('produtos').update({ ...dados, updated_at: new Date().toISOString() }).eq('id', id)
+  if (!resposta.error) registrarAprendizadoProduto('produto_atualizado', id, dados as Record<string, unknown>)
+  return resposta
 }
 
 export async function validarUnidadeOperacionalProduto(params: {
@@ -276,6 +320,17 @@ export async function validarUnidadeOperacionalProduto(params: {
     })
     const json = await resp.json().catch(() => ({}))
     if (!resp.ok) return { error: json.error || 'Não foi possível registrar a unidade operacional.' }
+
+    registrarEventoAprendizadoAtlas({
+      dominio: 'geral',
+      tipo: 'unidade_operacional_validada',
+      entidade_tipo: 'produto',
+      entidade_id: params.produtoId,
+      contexto: { produto_id: params.produtoId },
+      dados: { unidade, evidencia },
+      evidencia: 'validado',
+    }).catch(() => {})
+
     return { error: null }
   } catch {
     return { error: 'Não foi possível conectar ao servidor para validar a unidade operacional.' }
@@ -283,7 +338,19 @@ export async function validarUnidadeOperacionalProduto(params: {
 }
 
 export async function alternarAtivoProduto(id: string, ativo: boolean) {
-  return supabase.from('produtos').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
+  const resposta = await supabase.from('produtos').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'geral',
+      tipo: ativo ? 'produto_ativado' : 'produto_inativado',
+      entidade_tipo: 'produto',
+      entidade_id: id,
+      contexto: { produto_id: id },
+      dados: { ativo },
+      evidencia: 'observado',
+    }).catch(() => {})
+  }
+  return resposta
 }
 
 export async function excluirProduto(id: string) {

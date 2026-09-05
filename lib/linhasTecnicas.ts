@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 
 export type EtapaCadastroLinhaTecnica = 'dados_linha' | 'perfis' | 'acessorios' | 'tipologias' | 'formulacoes' | 'revisao'
 export type StatusValidacaoLinhaTecnica = 'referencia_wvetro' | 'em_validacao' | 'validada'
@@ -94,20 +95,54 @@ export async function salvarLinhaTecnica(dados: {
     const { error } = await supabase.from('linha_tipologias').insert(dados.tipologia_ids.map(tipologia_id => ({ linha_id: linhaId, tipologia_id })))
     if (error) throw error
   }
+
+  registrarEventoAprendizadoAtlas({
+    dominio: 'linha_tecnica',
+    tipo: dados.id ? 'linha_atualizada' : 'linha_criada',
+    entidade_tipo: 'linha_tecnica',
+    entidade_id: linhaId,
+    contexto: {
+      linha_id: linhaId,
+      linha_nome: payload.nome,
+      fabricante: payload.fabricante,
+    },
+    dados: {
+      produto_ids: dados.produto_ids || [],
+      tipologia_ids: dados.tipologia_ids || [],
+      quantidade_produtos: dados.produto_ids?.length || 0,
+      quantidade_tipologias: dados.tipologia_ids?.length || 0,
+      etapa_cadastro: payload.etapa_cadastro || null,
+      status_validacao: payload.status_validacao || null,
+    },
+    evidencia: 'observado',
+  }).catch(() => {})
+
   return linhaId
 }
 
 export async function salvarEtapaLinhaTecnica(id: string, etapa: EtapaCadastroLinhaTecnica) {
-  return supabase.from('linhas_tecnicas').update({
+  const resposta = await supabase.from('linhas_tecnicas').update({
     etapa_cadastro: etapa,
     status_validacao: 'em_validacao',
     ativo: false,
     updated_at: new Date().toISOString(),
   }).eq('id', id)
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'linha_tecnica',
+      tipo: 'etapa_cadastro_atualizada',
+      entidade_tipo: 'linha_tecnica',
+      entidade_id: id,
+      contexto: { linha_id: id },
+      dados: { etapa_cadastro: etapa, ativo: false, status_validacao: 'em_validacao' },
+      evidencia: 'observado',
+    }).catch(() => {})
+  }
+  return resposta
 }
 
 export async function validarLinhaTecnica(id: string, usuario?: { id?: string | null; nome?: string | null }) {
-  return supabase.from('linhas_tecnicas').update({
+  const resposta = await supabase.from('linhas_tecnicas').update({
     etapa_cadastro: 'revisao',
     status_validacao: 'validada',
     ativo: true,
@@ -116,10 +151,22 @@ export async function validarLinhaTecnica(id: string, usuario?: { id?: string | 
     validada_por_nome: usuario?.nome || null,
     updated_at: new Date().toISOString(),
   }).eq('id', id)
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'linha_tecnica',
+      tipo: 'linha_validada',
+      entidade_tipo: 'linha_tecnica',
+      entidade_id: id,
+      contexto: { linha_id: id },
+      dados: { ativo: true, status_validacao: 'validada', etapa_cadastro: 'revisao' },
+      evidencia: 'validado',
+    }).catch(() => {})
+  }
+  return resposta
 }
 
 export async function reabrirLinhaTecnica(id: string, etapa: EtapaCadastroLinhaTecnica = 'dados_linha') {
-  return supabase.from('linhas_tecnicas').update({
+  const resposta = await supabase.from('linhas_tecnicas').update({
     etapa_cadastro: etapa,
     status_validacao: 'em_validacao',
     ativo: false,
@@ -128,8 +175,32 @@ export async function reabrirLinhaTecnica(id: string, etapa: EtapaCadastroLinhaT
     validada_por_nome: null,
     updated_at: new Date().toISOString(),
   }).eq('id', id)
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'linha_tecnica',
+      tipo: 'linha_reaberta',
+      entidade_tipo: 'linha_tecnica',
+      entidade_id: id,
+      contexto: { linha_id: id },
+      dados: { ativo: false, status_validacao: 'em_validacao', etapa_cadastro: etapa },
+      evidencia: 'observado',
+    }).catch(() => {})
+  }
+  return resposta
 }
 
 export async function alternarLinhaTecnica(id: string, ativo: boolean) {
-  return supabase.from('linhas_tecnicas').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
+  const resposta = await supabase.from('linhas_tecnicas').update({ ativo, updated_at: new Date().toISOString() }).eq('id', id)
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'linha_tecnica',
+      tipo: ativo ? 'linha_ativada' : 'linha_inativada',
+      entidade_tipo: 'linha_tecnica',
+      entidade_id: id,
+      contexto: { linha_id: id },
+      dados: { ativo },
+      evidencia: 'observado',
+    }).catch(() => {})
+  }
+  return resposta
 }

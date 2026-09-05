@@ -5,6 +5,7 @@ import { uploadFoto, uploadArquivo } from './upload'
 import { usuarioAtual, tokenAtual } from './auth'
 import { registrarHistorico } from './historico'
 import { executarAutomacoesColuna } from './automacoes'
+import { registrarConfiguracaoTecnicaAtlas, registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 import { v4 as uuidv4 } from 'uuid'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead, Anexo } from './tipos'
 
@@ -103,6 +104,16 @@ async function carregarReferenciasWvetroSnapshot(): Promise<Record<string, Refer
 function numeroOpcional(valor: string): number | null {
   const n = parseFloat((valor || '').replace(',', '.'))
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function numeroVariavel(variaveis: Record<string, unknown>, chaves: string[]): number | null {
+  for (const chave of chaves) {
+    const valor = variaveis[chave]
+    if (valor == null || valor === '') continue
+    const n = Number(String(valor).replace(',', '.').replace(/[^0-9.-]/g, ''))
+    if (Number.isFinite(n)) return n
+  }
+  return null
 }
 
 async function lerTrena(url: string, eixo: 'largura' | 'altura'): Promise<number[]> {
@@ -267,6 +278,63 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   })
 
   if (error) return { ok: false, error: error.message }
+
+  for (const item of itensSalvos) {
+    const tecnico = item as any
+    const variaveis = (tecnico.variaveis || {}) as Record<string, unknown>
+    registrarConfiguracaoTecnicaAtlas({
+      tipo: 'configuracao_usada_no_orcamento',
+      entidade_tipo: 'orcamento_item',
+      entidade_id: item.id,
+      evidencia: tecnico.configuracao_validada ? 'validado' : 'observado',
+      configuracao: {
+        linha_id: tecnico.linha_id || null,
+        linha_nome: tecnico.linha_nome || null,
+        tipologia_id: tecnico.tipologia_id || null,
+        tipologia_nome: tecnico.configuracao_nome || tecnico.tipo_esquadria || null,
+        largura_mm: tecnico.largura_mm ?? null,
+        altura_mm: tecnico.altura_mm ?? null,
+        quantidade: tecnico.quantidade ?? null,
+        folhas: tecnico.folhas ?? null,
+        cor: tecnico.cor || null,
+        contramarco: contramarco || null,
+        trilho: String(variaveis.trilho || variaveis.tipo_trilho || '') || null,
+        puxador: String(variaveis.puxador || '') || null,
+        fechadura: String(variaveis.fechadura || '') || null,
+        roldana: String(variaveis.roldana || variaveis.roldanas || '') || null,
+        reforco: String(variaveis.reforco || variaveis.reforco_aba || '') || null,
+        mao_de_amigo: String(variaveis.mao_de_amigo || '') || null,
+        vidro: String(variaveis.vidro || variaveis.tipo_vidro || '') || null,
+        folga_largura_mm: numeroVariavel(variaveis, ['folga_largura_mm', 'folga_largura', 'folga_l']),
+        folga_altura_mm: numeroVariavel(variaveis, ['folga_altura_mm', 'folga_altura', 'folga_a']),
+        variaveis,
+      },
+    }).catch(() => {})
+
+    registrarEventoAprendizadoAtlas({
+      dominio: 'medidas',
+      tipo: tecnico.tipo_medida === 'final' ? 'medida_final_usada' : 'medida_orcamento_usada',
+      entidade_tipo: 'orcamento_item',
+      entidade_id: item.id,
+      contexto: {
+        linha_id: tecnico.linha_id || null,
+        tipologia_id: tecnico.tipologia_id || null,
+        folhas: tecnico.folhas || null,
+      },
+      dados: {
+        largura_mm: tecnico.largura_mm ?? null,
+        altura_mm: tecnico.altura_mm ?? null,
+        largura_baixo_mm: tecnico.largura_baixo_mm ?? null,
+        largura_meio_mm: tecnico.largura_meio_mm ?? null,
+        largura_cima_mm: tecnico.largura_cima_mm ?? null,
+        altura_direita_mm: tecnico.altura_direita_mm ?? null,
+        altura_meio_mm: tecnico.altura_meio_mm ?? null,
+        altura_esquerda_mm: tecnico.altura_esquerda_mm ?? null,
+      },
+      evidencia: tecnico.configuracao_validada ? 'validado' : 'observado',
+    }).catch(() => {})
+  }
+
   if (colunaId) executarAutomacoesColuna(colunaId, { cliente_nome: clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true, id: novoId }
