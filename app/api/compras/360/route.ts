@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Sessão inválida." }, { status: 401 });
 
   try {
+    const empresaId = usuario.empresa_id;
     const [
       necessidadesResp,
       cotacoesResp,
@@ -52,17 +53,20 @@ export async function GET(req: NextRequest) {
       supabaseAdmin
         .from("compras_necessidades")
         .select("*")
+        .eq("empresa_id", empresaId)
         .neq("status", "cancelado")
         .order("updated_at", { ascending: false })
         .limit(500),
       supabaseAdmin
         .from("compras_cotacoes")
         .select("*")
+        .eq("empresa_id", empresaId)
         .order("preco_unitario", { ascending: true })
         .limit(2000),
       supabaseAdmin
         .from("produtos")
         .select("id,nome,codigo,categoria,unidade,custo,ativo")
+        .eq("empresa_id", empresaId)
         .eq("ativo", true)
         .order("nome")
         .limit(5000),
@@ -71,6 +75,7 @@ export async function GET(req: NextRequest) {
         .select(
           "id,nome,cnpj_cpf,contato,telefone,email,cidade,observacoes,ativo,pedido_minimo,prazo_entrega_dias",
         )
+        .eq("empresa_id", empresaId)
         .eq("ativo", true)
         .order("nome")
         .limit(1000),
@@ -79,17 +84,20 @@ export async function GET(req: NextRequest) {
         .select(
           "produto_id,nf_id,valor_unitario,custo_aquisicao_unitario,created_at",
         )
+        .eq("empresa_id", empresaId)
         .not("produto_id", "is", null)
         .order("created_at", { ascending: false })
         .limit(3000),
       supabaseAdmin
         .from("clientes")
         .select("id,nome,apelido,cidade")
+        .eq("empresa_id", empresaId)
         .order("nome")
         .limit(2000),
       supabaseAdmin
         .from("obras")
         .select("id,cliente_id,nome,status")
+        .eq("empresa_id", empresaId)
         .order("nome")
         .limit(4000),
     ]);
@@ -115,6 +123,7 @@ export async function GET(req: NextRequest) {
       ? await supabaseAdmin
           .from("compras_nfs")
           .select("id,fornecedor_id,fornecedor_nome,data_emissao,data_entrada")
+          .eq("empresa_id", empresaId)
           .in("id", nfIds)
       : { data: [], error: null };
     if (nfsError) throw new Error(nfsError.message);
@@ -157,6 +166,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sessão inválida." }, { status: 401 });
 
   try {
+    const empresaId = usuario.empresa_id;
     const body = await req.json();
     const acao = texto(body.acao, 50);
 
@@ -180,6 +190,17 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      let produtoId: string | null = body.produto_id ? texto(body.produto_id, 80) : null;
+      if (produtoId) {
+        const { data: produto } = await supabaseAdmin
+          .from("produtos")
+          .select("id")
+          .eq("id", produtoId)
+          .eq("empresa_id", empresaId)
+          .maybeSingle();
+        if (!produto) return NextResponse.json({ error: "Produto inválido para a empresa atual." }, { status: 400 });
+      }
+
       let clienteNome: string | null = null;
       let obraNome: string | null = null;
       if (destino === "obra") {
@@ -188,11 +209,13 @@ export async function POST(req: NextRequest) {
             .from("clientes")
             .select("id,nome")
             .eq("id", clienteId)
+            .eq("empresa_id", empresaId)
             .maybeSingle(),
           supabaseAdmin
             .from("obras")
             .select("id,nome,cliente_id")
             .eq("id", obraId)
+            .eq("empresa_id", empresaId)
             .maybeSingle(),
         ]);
         if (!cliente || !obra || obra.cliente_id !== clienteId) {
@@ -208,7 +231,8 @@ export async function POST(req: NextRequest) {
       const { data, error } = await supabaseAdmin
         .from("compras_necessidades")
         .insert({
-          produto_id: body.produto_id || null,
+          empresa_id: empresaId,
+          produto_id: produtoId,
           descricao,
           categoria: texto(body.categoria, 80) || null,
           quantidade,
@@ -262,6 +286,7 @@ export async function POST(req: NextRequest) {
         .from("compras_necessidades")
         .select("id,status")
         .eq("id", necessidadeId)
+        .eq("empresa_id", empresaId)
         .maybeSingle();
       if (necessidadeError) throw new Error(necessidadeError.message);
       if (!necessidade) {
@@ -271,7 +296,18 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const { data: fornecedoresValidos, error: fornecedoresError } = await supabaseAdmin
+        .from("fornecedores")
+        .select("id")
+        .eq("empresa_id", empresaId)
+        .in("id", fornecedorIds);
+      if (fornecedoresError) throw new Error(fornecedoresError.message);
+      if ((fornecedoresValidos || []).length !== fornecedorIds.length) {
+        return NextResponse.json({ error: "Um ou mais fornecedores não pertencem à empresa atual." }, { status: 400 });
+      }
+
       const linhas = fornecedorIds.map((fornecedorId) => ({
+        empresa_id: empresaId,
         necessidade_id: necessidadeId,
         fornecedor_id: fornecedorId,
         preco_unitario: null,
@@ -292,6 +328,7 @@ export async function POST(req: NextRequest) {
           .from("compras_necessidades")
           .update({ status: "cotacao", updated_at: new Date().toISOString() })
           .eq("id", necessidadeId)
+          .eq("empresa_id", empresaId)
           .eq("status", "necessidade");
         if (statusError) throw new Error(statusError.message);
       }
@@ -299,6 +336,7 @@ export async function POST(req: NextRequest) {
       const { data: cotacoesAtuais, error: listaError } = await supabaseAdmin
         .from("compras_cotacoes")
         .select("*")
+        .eq("empresa_id", empresaId)
         .eq("necessidade_id", necessidadeId);
       if (listaError) throw new Error(listaError.message);
 
@@ -307,23 +345,27 @@ export async function POST(req: NextRequest) {
 
     if (acao === "adicionar_cotacao") {
       const preco = numero(body.preco_unitario);
-      if (
-        !body.necessidade_id ||
-        !body.fornecedor_id ||
-        preco === null ||
-        preco < 0
-      ) {
+      const necessidadeId = texto(body.necessidade_id, 80);
+      const fornecedorId = texto(body.fornecedor_id, 80);
+      if (!necessidadeId || !fornecedorId || preco === null || preco < 0) {
         return NextResponse.json(
           { error: "Informe fornecedor e preço válido." },
           { status: 400 },
         );
       }
+      const [{ data: necessidade }, { data: fornecedor }] = await Promise.all([
+        supabaseAdmin.from("compras_necessidades").select("id").eq("id", necessidadeId).eq("empresa_id", empresaId).maybeSingle(),
+        supabaseAdmin.from("fornecedores").select("id").eq("id", fornecedorId).eq("empresa_id", empresaId).maybeSingle(),
+      ]);
+      if (!necessidade || !fornecedor) return NextResponse.json({ error: "Necessidade ou fornecedor inválido para a empresa atual." }, { status: 400 });
+
       const { data, error } = await supabaseAdmin
         .from("compras_cotacoes")
         .upsert(
           {
-            necessidade_id: body.necessidade_id,
-            fornecedor_id: body.fornecedor_id,
+            empresa_id: empresaId,
+            necessidade_id: necessidadeId,
+            fornecedor_id: fornecedorId,
             preco_unitario: preco,
             frete: Math.max(0, numero(body.frete) || 0),
             prazo_dias: numero(body.prazo_dias),
@@ -343,11 +385,9 @@ export async function POST(req: NextRequest) {
 
       await supabaseAdmin
         .from("compras_necessidades")
-        .update({
-          status: "cotacao",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", body.necessidade_id)
+        .update({ status: "cotacao", updated_at: new Date().toISOString() })
+        .eq("id", necessidadeId)
+        .eq("empresa_id", empresaId)
         .eq("status", "necessidade");
 
       return NextResponse.json({ cotacao: data });
@@ -367,6 +407,7 @@ export async function POST(req: NextRequest) {
         .from("compras_cotacoes")
         .select("id,necessidade_id")
         .eq("id", cotacaoId)
+        .eq("empresa_id", empresaId)
         .eq("necessidade_id", necessidadeId)
         .maybeSingle();
       if (cotacaoError) throw new Error(cotacaoError.message);
@@ -380,6 +421,7 @@ export async function POST(req: NextRequest) {
       const { error: limparError } = await supabaseAdmin
         .from("compras_cotacoes")
         .update({ selecionada: false, updated_at: new Date().toISOString() })
+        .eq("empresa_id", empresaId)
         .eq("necessidade_id", necessidadeId);
       if (limparError) throw new Error(limparError.message);
 
@@ -387,6 +429,7 @@ export async function POST(req: NextRequest) {
         .from("compras_cotacoes")
         .update({ selecionada: true, updated_at: new Date().toISOString() })
         .eq("id", cotacaoId)
+        .eq("empresa_id", empresaId)
         .select("*")
         .single();
       if (error) throw new Error(error.message);
@@ -409,6 +452,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Sessão inválida." }, { status: 401 });
 
   try {
+    const empresaId = usuario.empresa_id;
     const body = await req.json();
     const status = texto(body.status, 40);
     if (!body.id || !STATUS_VALIDOS.has(status)) {
@@ -422,6 +466,7 @@ export async function PATCH(req: NextRequest) {
       .from("compras_necessidades")
       .select("id,status")
       .eq("id", body.id)
+      .eq("empresa_id", empresaId)
       .maybeSingle();
     if (atualError) throw new Error(atualError.message);
     if (!atual) {
@@ -441,6 +486,7 @@ export async function PATCH(req: NextRequest) {
         await supabaseAdmin
           .from("compras_cotacoes")
           .select("id")
+          .eq("empresa_id", empresaId)
           .eq("necessidade_id", body.id)
           .eq("selecionada", true)
           .maybeSingle();
@@ -461,6 +507,7 @@ export async function PATCH(req: NextRequest) {
       .from("compras_necessidades")
       .update(atualizacao)
       .eq("id", body.id)
+      .eq("empresa_id", empresaId)
       .eq("status", atual.status)
       .select("*")
       .single();
