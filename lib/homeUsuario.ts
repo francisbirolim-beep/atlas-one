@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Usuario } from './tipos'
+import { salvarConfiguracaoGeralTenant } from './configuracoesGeraisTenant'
 
 export const HOME_MODULOS = [
   { id: 'orcamentos', label: 'Orçamentos', descricao: 'Atalho para novo orçamento e bloco de últimos orçamentos.' },
@@ -82,16 +83,9 @@ export async function salvarHomeUsuarioConfig(usuarioId: string, config: HomeUsu
     assistenciasEscopo: config.assistenciasEscopo === 'todas' ? 'todas' : 'proprias',
   }
 
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: chave(usuarioId),
-      valor: JSON.stringify(normalizada),
-      updated_at: new Date().toISOString(),
-    })
-
-  if (error) console.error('Erro ao salvar personalização da Home:', error)
-  return !error
+  const ok = await salvarConfiguracaoGeralTenant(chave(usuarioId), JSON.stringify(normalizada))
+  if (!ok) console.error('Erro ao salvar personalização da Home')
+  return ok
 }
 
 export function temModulo(config: HomeUsuarioConfig, modulo: HomeModuloId) {
