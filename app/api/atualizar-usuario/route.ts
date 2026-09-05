@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
 
     const { data: perfil } = await supabaseAdmin
       .from('usuarios')
-      .select('role')
+      .select('role,empresa_id')
       .eq('id', userData.user.id)
       .maybeSingle()
 
-    if (!perfil || perfil.role !== 'master') {
-      return NextResponse.json({ error: 'Apenas o usuário master pode editar usuários' }, { status: 403 })
+    if (!perfil || perfil.role !== 'master' || !perfil.empresa_id) {
+      return NextResponse.json({ error: 'Apenas o usuário master da empresa pode editar usuários' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -29,6 +29,20 @@ export async function POST(req: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'Usuário inválido' }, { status: 400 })
+    }
+
+    const { data: alvo, error: alvoErr } = await supabaseAdmin
+      .from('usuarios')
+      .select('id,empresa_id')
+      .eq('id', id)
+      .eq('empresa_id', perfil.empresa_id)
+      .maybeSingle()
+
+    if (alvoErr) {
+      return NextResponse.json({ error: alvoErr.message }, { status: 400 })
+    }
+    if (!alvo) {
+      return NextResponse.json({ error: 'Usuário não encontrado nesta empresa' }, { status: 404 })
     }
 
     const nomeInformado = typeof body.nome === 'string' ? body.nome.trim() : undefined
@@ -51,7 +65,7 @@ export async function POST(req: NextRequest) {
       const authUpdate: { email?: string; password?: string } = {}
       if (emailInformado) authUpdate.email = emailInformado
       if (novaSenha) authUpdate.password = novaSenha
-      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(id, authUpdate)
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(alvo.id, authUpdate)
       if (authErr) {
         return NextResponse.json({ error: authErr.message }, { status: 400 })
       }
@@ -67,7 +81,8 @@ export async function POST(req: NextRequest) {
       const { error: updErr } = await supabaseAdmin
         .from('usuarios')
         .update(camposPerfil)
-        .eq('id', id)
+        .eq('id', alvo.id)
+        .eq('empresa_id', perfil.empresa_id)
 
       if (updErr) {
         return NextResponse.json({ error: updErr.message }, { status: 400 })
