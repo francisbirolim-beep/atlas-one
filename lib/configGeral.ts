@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { DadosEmpresa } from './tipos'
+import { salvarConfiguracaoGeralTenant } from './configuracoesGeraisTenant'
 
 const CHAVE_COR_ASSISTENCIA = 'cor_assistencia_kanban'
 const COR_ASSISTENCIA_PADRAO = '#8b5cf6'
@@ -14,10 +15,7 @@ export async function lerCorAssistencia(): Promise<string> {
 }
 
 export async function salvarCorAssistencia(cor: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({ chave: CHAVE_COR_ASSISTENCIA, valor: cor, updated_at: new Date().toISOString() })
-  return !error
+  return salvarConfiguracaoGeralTenant(CHAVE_COR_ASSISTENCIA, cor)
 }
 
 const CHAVE_DADOS_EMPRESA = 'dados_empresa'
@@ -61,14 +59,7 @@ export async function salvarDadosEmpresa(dados: DadosEmpresa): Promise<boolean> 
     configuradoManualmente: true,
   }
 
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: CHAVE_DADOS_EMPRESA,
-      valor: JSON.stringify(dadosPersistidos),
-      updated_at: new Date().toISOString(),
-    })
-  return !error
+  return salvarConfiguracaoGeralTenant(CHAVE_DADOS_EMPRESA, JSON.stringify(dadosPersistidos))
 }
 
 export async function salvarIdentidadeEmpresa(
@@ -84,14 +75,7 @@ export async function salvarIdentidadeEmpresa(
     configuradoManualmente: true,
   }
 
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: CHAVE_DADOS_EMPRESA,
-      valor: JSON.stringify(dadosPersistidos),
-      updated_at: new Date().toISOString(),
-    })
-  return !error
+  return salvarConfiguracaoGeralTenant(CHAVE_DADOS_EMPRESA, JSON.stringify(dadosPersistidos))
 }
 
 export type ConfiguracaoOrcamento = {
@@ -148,12 +132,5 @@ export async function salvarConfiguracaoOrcamento(config: ConfiguracaoOrcamento)
     rodape: config.rodape.trim(),
   }
 
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: CHAVE_CONFIGURACAO_ORCAMENTO,
-      valor: JSON.stringify(normalizada),
-      updated_at: new Date().toISOString(),
-    })
-  return !error
+  return salvarConfiguracaoGeralTenant(CHAVE_CONFIGURACAO_ORCAMENTO, JSON.stringify(normalizada))
 }
