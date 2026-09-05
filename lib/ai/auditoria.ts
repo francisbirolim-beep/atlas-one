@@ -3,8 +3,6 @@
 
 import { supabaseAdmin } from '../supabaseAdmin'
 
-// Remove padroes que parecam chaves/segredos/tokens antes de gravar o erro no log.
-// Nunca deve vazar API keys, tokens Bearer ou dados pessoais completos.
 function sanitizarErro(erro?: string): string | null {
   if (!erro) return null
   let texto = String(erro)
@@ -35,7 +33,16 @@ export async function registrarUsoIA(params: {
   fallbackPolicy?: string
 }) {
   try {
+    const { data: usuario } = await supabaseAdmin
+      .from('usuarios')
+      .select('empresa_id')
+      .eq('id', params.usuarioId)
+      .maybeSingle()
+
+    if (!usuario?.empresa_id) return
+
     await supabaseAdmin.from('ia_uso_log').insert({
+      empresa_id: usuario.empresa_id,
       agente_id: params.agenteId,
       agente_nome: params.agenteNome || null,
       usuario_id: params.usuarioId,
