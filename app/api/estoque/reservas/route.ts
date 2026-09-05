@@ -8,7 +8,13 @@ export const dynamic='force-dynamic'
 export async function GET(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
  try{
-  const {data,error}=await supabaseAdmin.from('estoque_reservas').select('id,produto_id,local_id,endereco_id,quantidade,status,origem_tipo,origem_id,cliente_id,observacoes,reservado_ate,criado_por_nome,created_at,produto:produtos(id,codigo,nome),local:estoque_locais(id,codigo,nome,unidade:unidades_operacionais(id,codigo,nome)),endereco:estoque_enderecos(id,codigo,zona,corredor,estante,prateleira,caixa),cliente:clientes(id,nome)').eq('status','ativa').order('created_at',{ascending:false}).limit(200)
+  const {data,error}=await supabaseAdmin
+   .from('estoque_reservas')
+   .select('id,produto_id,local_id,endereco_id,quantidade,status,origem_tipo,origem_id,cliente_id,observacoes,reservado_ate,criado_por_nome,created_at,produto:produtos(id,codigo,nome),local:estoque_locais(id,codigo,nome,unidade:unidades_operacionais(id,codigo,nome)),endereco:estoque_enderecos(id,codigo,zona,corredor,estante,prateleira,caixa),cliente:clientes(id,nome)')
+   .eq('empresa_id',u.empresa_id)
+   .eq('status','ativa')
+   .order('created_at',{ascending:false})
+   .limit(200)
   if(error)throw error;return NextResponse.json({ok:true,reservas:data||[]})
  }catch(e){console.error(e);return NextResponse.json({error:'Não foi possível carregar reservas.'},{status:500})}
 }
