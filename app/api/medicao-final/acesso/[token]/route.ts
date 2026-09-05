@@ -16,6 +16,7 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
     .from('medicoes_finais')
     .select('status_operacional, iniciado_em, responsavel_nome')
     .eq('id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
     .maybeSingle()
 
   if (!atual) return NextResponse.json({ error: 'Medicao nao encontrada.' }, { status: 404 })
@@ -31,6 +32,7 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
       responsavel_nome: atual.responsavel_nome || acesso.nome_convidado || 'Acesso externo',
     })
     .eq('id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
 
   if (error) return NextResponse.json({ error: 'Nao foi possivel iniciar a medicao.' }, { status: 500 })
   return NextResponse.json({ ok: true })
