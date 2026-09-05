@@ -39,7 +39,7 @@ const ACOES_VALIDAS = new Set<Cadastro360Acao>(CADASTRO_360_ACOES.map(item => it
 const TODOS = CADASTROS_360.map(item => item.id) as Cadastro360Id[]
 const TODAS_ACOES = CADASTRO_360_ACOES.map(item => item.id)
 
-function chave(usuarioId: string) {
+function chaveLegada(usuarioId: string) {
   return `cadastros_360_usuario:${usuarioId}`
 }
 
@@ -62,8 +62,6 @@ function normalizarAcoes(valor: unknown, visiveis: Cadastro360Id[], legadoSemMat
     const validas = Array.from(new Set(lista.filter(
       (acao): acao is Cadastro360Acao => typeof acao === 'string' && ACOES_VALIDAS.has(acao as Cadastro360Acao)
     )))
-    // Uma ação operacional sem leitura não faz sentido. Se houver qualquer ação,
-    // o acesso de leitura acompanha automaticamente.
     if (validas.length && !validas.includes('ver')) validas.unshift('ver')
     saida[id] = validas
   }
@@ -84,10 +82,21 @@ function normalizar(valor: unknown, role: Usuario['role']): CadastrosUsuarioConf
 
 export async function lerCadastrosUsuarioConfig(usuario: Pick<Usuario, 'id' | 'role'>): Promise<CadastrosUsuarioConfig> {
   if (usuario.role === 'master') return cadastrosConfigPadrao('master')
+
+  const { data: segura, error: erroSegura } = await supabase
+    .from('usuario_cadastros_360_permissoes')
+    .select('config')
+    .eq('usuario_id', usuario.id)
+    .maybeSingle()
+
+  if (!erroSegura && segura?.config) return normalizar(segura.config, usuario.role)
+
+  // Fallback temporário para instalações/usuários ainda não migrados. A gravação
+  // nova nunca volta para configuracoes_gerais porque essa tabela possui legado amplo.
   const { data, error } = await supabase
     .from('configuracoes_gerais')
     .select('valor')
-    .eq('chave', chave(usuario.id))
+    .eq('chave', chaveLegada(usuario.id))
     .maybeSingle()
   if (error || !data?.valor) return cadastrosConfigPadrao(usuario.role)
   try {
@@ -100,12 +109,12 @@ export async function lerCadastrosUsuarioConfig(usuario: Pick<Usuario, 'id' | 'r
 
 export async function salvarCadastrosUsuarioConfig(usuarioId: string, config: CadastrosUsuarioConfig): Promise<boolean> {
   const normalizada = normalizar(config, 'funcionario')
-  const { error } = await supabase.from('configuracoes_gerais').upsert({
-    chave: chave(usuarioId),
-    valor: JSON.stringify(normalizada),
+  const { error } = await supabase.from('usuario_cadastros_360_permissoes').upsert({
+    usuario_id: usuarioId,
+    config: normalizada,
     updated_at: new Date().toISOString(),
   })
-  if (error) console.error('Erro ao salvar Cadastros 360 do usuário:', error)
+  if (error) console.error('Erro ao salvar permissões dos Cadastros 360:', error)
   return !error
 }
 
@@ -118,7 +127,6 @@ export function temPermissaoCadastro360(
   if (usuario?.role === 'master') return true
   if (!config?.visiveis.includes(cadastro)) return false
   const acoes = config.acoes?.[cadastro]
-  // Configuração legada sem matriz: preserva o acesso já existente.
   if (!acoes) return true
   return acoes.includes(acao)
 }
