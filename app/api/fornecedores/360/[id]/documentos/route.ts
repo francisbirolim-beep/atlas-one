@@ -65,7 +65,7 @@ function extrairItensTextoPdf(textoPdf: string): ItemImportado[] {
     const codNorm = normalizarCodigo(codigo)
     if (!/[0-9]/.test(codNorm) || codNorm.length < 3) continue
 
-    let descricao = texto(m[2], 180)
+    const descricao = texto(m[2], 180)
     if (!descricao || /^PAG(?:INA)?\b/i.test(descricao)) continue
 
     let preco: number | null = null
@@ -91,10 +91,11 @@ async function reconciliarItens(params: {
   fornecedorId: string
   documentoId: string
   itens: ItemImportado[]
-  usuario: { id: string; nome: string }
+  usuario: { id: string; nome: string; empresa_id: string }
   origem: 'pdf_local' | 'analise_assistida'
 }) {
   const { fornecedorId, documentoId, usuario, origem } = params
+  const empresaId = usuario.empresa_id
   const itens = params.itens
     .map(i => ({
       codigo: texto(i.codigo, 80) || null,
@@ -114,6 +115,7 @@ async function reconciliarItens(params: {
   const { data: produtos, error: produtosError } = await supabaseAdmin
     .from('produtos')
     .select('id,nome,codigo,codigo_origem,categoria,unidade,ativo,status_validacao')
+    .eq('empresa_id', empresaId)
     .limit(10000)
   if (produtosError) throw new Error(produtosError.message)
 
@@ -142,7 +144,7 @@ async function reconciliarItens(params: {
     }
 
     let status = 'revisar'
-    let confianca = produto ? 0.99 : origem === 'analise_assistida' ? 0.9 : codigoNorm ? 0.82 : 0.55
+    const confianca = produto ? 0.99 : origem === 'analise_assistida' ? 0.9 : codigoNorm ? 0.82 : 0.55
 
     if (!produto && (origem === 'analise_assistida' || codigoNorm)) {
       const categoria = ['perfil','acessorio','vidro','kit','produto','outro'].includes(item.categoria || '')
@@ -151,6 +153,7 @@ async function reconciliarItens(params: {
       const { data: criado, error: criarError } = await supabaseAdmin
         .from('produtos')
         .insert({
+          empresa_id: empresaId,
           nome: item.descricao.toUpperCase(),
           codigo: item.codigo || null,
           categoria: categoria || 'outro',
@@ -185,6 +188,7 @@ async function reconciliarItens(params: {
     const { data: catalogoItem, error: itemError } = await supabaseAdmin
       .from('fornecedor_catalogo_itens')
       .insert({
+        empresa_id: empresaId,
         documento_id: documentoId,
         fornecedor_id: fornecedorId,
         produto_id: produto?.id || null,
@@ -213,6 +217,7 @@ async function reconciliarItens(params: {
       const { data, error } = await supabaseAdmin
         .from('produto_fornecedores')
         .upsert({
+          empresa_id: empresaId,
           produto_id: produto.id,
           fornecedor_id: fornecedorId,
           codigo_fornecedor: item.codigo,
@@ -237,6 +242,7 @@ async function reconciliarItens(params: {
       const { data, error } = await supabaseAdmin
         .from('produto_fornecedores')
         .insert({
+          empresa_id: empresaId,
           produto_id: produto.id,
           fornecedor_id: fornecedorId,
           codigo_fornecedor: null,
@@ -259,7 +265,8 @@ async function reconciliarItens(params: {
     }
 
     if (item.preco != null && produtoFornecedor?.id) {
-      await supabaseAdmin.from('produto_fornecedor_precos_historico').insert({
+      const { error: historicoError } = await supabaseAdmin.from('produto_fornecedor_precos_historico').insert({
+        empresa_id: empresaId,
         produto_fornecedor_id: produtoFornecedor.id,
         fornecedor_id: fornecedorId,
         produto_id: produto.id,
@@ -269,12 +276,14 @@ async function reconciliarItens(params: {
         criado_por_id: usuario.id,
         criado_por_nome: usuario.nome,
       })
+      if (historicoError) throw new Error(historicoError.message)
     }
 
     await supabaseAdmin
       .from('fornecedor_catalogo_itens')
       .update({ produto_id: produto.id, status, updated_at: new Date().toISOString() })
       .eq('id', catalogoItem.id)
+      .eq('empresa_id', empresaId)
   }
 
   return { total: itens.length, vinculados, criados, revisar }
@@ -285,10 +294,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 
   const fornecedorId = params.id
+  const { data: fornecedor } = await supabaseAdmin
+    .from('fornecedores')
+    .select('id')
+    .eq('id', fornecedorId)
+    .eq('empresa_id', usuario.empresa_id)
+    .maybeSingle()
+  if (!fornecedor) return NextResponse.json({ error: 'Fornecedor não encontrado.' }, { status: 404 })
+
   const [{ data: documentos, error: docError }, { data: itens, error: itensError }, { data: vinculos, error: vincError }] = await Promise.all([
-    supabaseAdmin.from('fornecedor_documentos').select('*').eq('fornecedor_id', fornecedorId).order('created_at', { ascending: false }).limit(200),
-    supabaseAdmin.from('fornecedor_catalogo_itens').select('*').eq('fornecedor_id', fornecedorId).order('created_at', { ascending: false }).limit(3000),
-    supabaseAdmin.from('produto_fornecedores').select('*, produtos(id,nome,codigo,categoria,ativo,status_validacao)').eq('fornecedor_id', fornecedorId).eq('ativo', true).order('updated_at', { ascending: false }).limit(3000),
+    supabaseAdmin.from('fornecedor_documentos').select('*').eq('empresa_id', usuario.empresa_id).eq('fornecedor_id', fornecedorId).order('created_at', { ascending: false }).limit(200),
+    supabaseAdmin.from('fornecedor_catalogo_itens').select('*').eq('empresa_id', usuario.empresa_id).eq('fornecedor_id', fornecedorId).order('created_at', { ascending: false }).limit(3000),
+    supabaseAdmin.from('produto_fornecedores').select('*, produtos(id,nome,codigo,categoria,ativo,status_validacao)').eq('empresa_id', usuario.empresa_id).eq('fornecedor_id', fornecedorId).eq('ativo', true).order('updated_at', { ascending: false }).limit(3000),
   ])
   if (docError || itensError || vincError) {
     return NextResponse.json({ error: docError?.message || itensError?.message || vincError?.message }, { status: 500 })
@@ -306,7 +323,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const body = await req.json()
     const acao = texto(body.acao, 50)
 
-    const { data: fornecedor } = await supabaseAdmin.from('fornecedores').select('id').eq('id', fornecedorId).maybeSingle()
+    const { data: fornecedor } = await supabaseAdmin
+      .from('fornecedores')
+      .select('id')
+      .eq('id', fornecedorId)
+      .eq('empresa_id', usuario.empresa_id)
+      .maybeSingle()
     if (!fornecedor) return NextResponse.json({ error: 'Fornecedor não encontrado.' }, { status: 404 })
 
     if (acao === 'registrar_documento') {
@@ -318,6 +340,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const { data: documento, error: inserirError } = await supabaseAdmin
         .from('fornecedor_documentos')
         .insert({
+          empresa_id: usuario.empresa_id,
           fornecedor_id: fornecedorId,
           tipo: texto(body.tipo, 60) || 'catalogo',
           nome_arquivo: nomeArquivo,
@@ -335,7 +358,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       const ehPdf = mimeType === 'application/pdf' || nomeArquivo.toLowerCase().endsWith('.pdf')
       if (!ehPdf) {
-        await supabaseAdmin.from('fornecedor_documentos').update({ status: 'precisa_analise_ia', extracao_metodo: 'arquivo_visual', updated_at: new Date().toISOString() }).eq('id', documento.id)
+        await supabaseAdmin.from('fornecedor_documentos').update({ status: 'precisa_analise_ia', extracao_metodo: 'arquivo_visual', updated_at: new Date().toISOString() }).eq('id', documento.id).eq('empresa_id', usuario.empresa_id)
         return NextResponse.json({ documento: { ...documento, status: 'precisa_analise_ia' }, resumo: { total: 0, vinculados: 0, criados: 0, revisar: 0 }, custo_modelo: 0 }, { status: 201 })
       }
 
@@ -346,17 +369,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const parsed = await pdfParse(buffer)
         const textoExtraido = texto(parsed.text, 250000)
         if (textoExtraido.length < 80) {
-          await supabaseAdmin.from('fornecedor_documentos').update({ status: 'precisa_analise_ia', extracao_metodo: 'pdf_sem_texto', texto_extraido: textoExtraido || null, updated_at: new Date().toISOString() }).eq('id', documento.id)
+          await supabaseAdmin.from('fornecedor_documentos').update({ status: 'precisa_analise_ia', extracao_metodo: 'pdf_sem_texto', texto_extraido: textoExtraido || null, updated_at: new Date().toISOString() }).eq('id', documento.id).eq('empresa_id', usuario.empresa_id)
           return NextResponse.json({ documento: { ...documento, status: 'precisa_analise_ia' }, resumo: { total: 0, vinculados: 0, criados: 0, revisar: 0 }, custo_modelo: 0 }, { status: 201 })
         }
 
         const candidatos = extrairItensTextoPdf(textoExtraido)
         const resumo = await reconciliarItens({ fornecedorId, documentoId: documento.id, itens: candidatos, usuario, origem: 'pdf_local' })
         const status = candidatos.length ? 'processado' : 'extraido'
-        await supabaseAdmin.from('fornecedor_documentos').update({ status, texto_extraido: textoExtraido, extracao_metodo: 'pdf_parse_local', custo_modelo: 0, updated_at: new Date().toISOString() }).eq('id', documento.id)
+        await supabaseAdmin.from('fornecedor_documentos').update({ status, texto_extraido: textoExtraido, extracao_metodo: 'pdf_parse_local', custo_modelo: 0, updated_at: new Date().toISOString() }).eq('id', documento.id).eq('empresa_id', usuario.empresa_id)
         return NextResponse.json({ documento: { ...documento, status }, resumo, custo_modelo: 0 }, { status: 201 })
       } catch (e) {
-        await supabaseAdmin.from('fornecedor_documentos').update({ status: 'precisa_analise_ia', extracao_metodo: 'pdf_falha_local', erro: e instanceof Error ? e.message.slice(0, 500) : 'Falha na extração local', updated_at: new Date().toISOString() }).eq('id', documento.id)
+        await supabaseAdmin.from('fornecedor_documentos').update({ status: 'precisa_analise_ia', extracao_metodo: 'pdf_falha_local', erro: e instanceof Error ? e.message.slice(0, 500) : 'Falha na extração local', updated_at: new Date().toISOString() }).eq('id', documento.id).eq('empresa_id', usuario.empresa_id)
         return NextResponse.json({ documento: { ...documento, status: 'precisa_analise_ia' }, resumo: { total: 0, vinculados: 0, criados: 0, revisar: 0 }, custo_modelo: 0 }, { status: 201 })
       }
     }
@@ -366,12 +389,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const itens = Array.isArray(body.itens) ? body.itens as ItemImportado[] : []
       if (!documentoId || !itens.length) return NextResponse.json({ error: 'Informe o documento e os itens analisados.' }, { status: 400 })
 
-      const { data: documento } = await supabaseAdmin.from('fornecedor_documentos').select('id').eq('id', documentoId).eq('fornecedor_id', fornecedorId).maybeSingle()
+      const { data: documento } = await supabaseAdmin
+        .from('fornecedor_documentos')
+        .select('id')
+        .eq('id', documentoId)
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('fornecedor_id', fornecedorId)
+        .maybeSingle()
       if (!documento) return NextResponse.json({ error: 'Documento não encontrado.' }, { status: 404 })
 
-      await supabaseAdmin.from('fornecedor_catalogo_itens').delete().eq('documento_id', documentoId).eq('status', 'revisar')
+      await supabaseAdmin.from('fornecedor_catalogo_itens').delete().eq('empresa_id', usuario.empresa_id).eq('documento_id', documentoId).eq('status', 'revisar')
       const resumo = await reconciliarItens({ fornecedorId, documentoId, itens, usuario, origem: 'analise_assistida' })
-      await supabaseAdmin.from('fornecedor_documentos').update({ status: 'processado', extracao_metodo: 'analise_assistida_importada', custo_modelo: 0, erro: null, updated_at: new Date().toISOString() }).eq('id', documentoId)
+      await supabaseAdmin.from('fornecedor_documentos').update({ status: 'processado', extracao_metodo: 'analise_assistida_importada', custo_modelo: 0, erro: null, updated_at: new Date().toISOString() }).eq('id', documentoId).eq('empresa_id', usuario.empresa_id)
       return NextResponse.json({ resumo, custo_modelo: 0 })
     }
 
