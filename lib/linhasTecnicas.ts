@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
 
+export type EtapaCadastroLinhaTecnica = 'dados_linha' | 'perfis' | 'acessorios' | 'tipologias' | 'formulacoes' | 'revisao'
+export type StatusValidacaoLinhaTecnica = 'referencia_wvetro' | 'em_validacao' | 'validada'
+
 export interface LinhaTecnica {
   id: string
   chave: string
@@ -9,6 +12,12 @@ export interface LinhaTecnica {
   apelidos: string[]
   ativo: boolean
   ordem: number
+  origem_referencia?: 'atlas' | 'wvetro' | 'misto' | null
+  status_validacao?: StatusValidacaoLinhaTecnica | null
+  etapa_cadastro?: EtapaCadastroLinhaTecnica | null
+  validada_em?: string | null
+  validada_por_id?: string | null
+  validada_por_nome?: string | null
   produto_ids?: string[]
   tipologia_ids?: string[]
 }
@@ -39,15 +48,20 @@ export async function salvarLinhaTecnica(dados: {
   descricao?: string
   apelidos?: string[]
   ativo?: boolean
+  status_validacao?: StatusValidacaoLinhaTecnica
+  etapa_cadastro?: EtapaCadastroLinhaTecnica
   produto_ids?: string[]
   tipologia_ids?: string[]
-}) {
+}): Promise<string> {
+  const nova = !dados.id
   const payload = {
     nome: dados.nome.trim().toUpperCase(),
     fabricante: dados.fabricante?.trim().toUpperCase() || null,
     descricao: dados.descricao?.trim().toUpperCase() || null,
     apelidos: (dados.apelidos || []).map(a => a.trim().toUpperCase()).filter(Boolean),
-    ativo: dados.ativo !== false,
+    ativo: nova ? false : dados.ativo === true,
+    status_validacao: dados.status_validacao || (nova ? 'em_validacao' : undefined),
+    etapa_cadastro: dados.etapa_cadastro || (nova ? 'dados_linha' : undefined),
     updated_at: new Date().toISOString(),
   }
 
@@ -57,10 +71,17 @@ export async function salvarLinhaTecnica(dados: {
     if (error) throw error
   } else {
     const { data: ultima } = await supabase.from('linhas_tecnicas').select('ordem').order('ordem', { ascending: false }).limit(1).maybeSingle()
-    const { data, error } = await supabase.from('linhas_tecnicas').insert({ ...payload, chave: slugLinha(dados.nome) || `linha_${Date.now()}`, ordem: (ultima?.ordem || 0) + 1 }).select('id').single()
+    const { data, error } = await supabase.from('linhas_tecnicas').insert({
+      ...payload,
+      chave: slugLinha(dados.nome) || `linha_${Date.now()}`,
+      ordem: (ultima?.ordem || 0) + 1,
+      origem_referencia: 'atlas',
+    }).select('id').single()
     if (error) throw error
-    linhaId = data.id
+    linhaId = data?.id
   }
+
+  if (!linhaId) throw new Error('Não foi possível identificar a linha salva.')
 
   await supabase.from('linha_produtos').delete().eq('linha_id', linhaId)
   await supabase.from('linha_tipologias').delete().eq('linha_id', linhaId)
@@ -74,6 +95,39 @@ export async function salvarLinhaTecnica(dados: {
     if (error) throw error
   }
   return linhaId
+}
+
+export async function salvarEtapaLinhaTecnica(id: string, etapa: EtapaCadastroLinhaTecnica) {
+  return supabase.from('linhas_tecnicas').update({
+    etapa_cadastro: etapa,
+    status_validacao: 'em_validacao',
+    ativo: false,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id)
+}
+
+export async function validarLinhaTecnica(id: string, usuario?: { id?: string | null; nome?: string | null }) {
+  return supabase.from('linhas_tecnicas').update({
+    etapa_cadastro: 'revisao',
+    status_validacao: 'validada',
+    ativo: true,
+    validada_em: new Date().toISOString(),
+    validada_por_id: usuario?.id || null,
+    validada_por_nome: usuario?.nome || null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id)
+}
+
+export async function reabrirLinhaTecnica(id: string, etapa: EtapaCadastroLinhaTecnica = 'dados_linha') {
+  return supabase.from('linhas_tecnicas').update({
+    etapa_cadastro: etapa,
+    status_validacao: 'em_validacao',
+    ativo: false,
+    validada_em: null,
+    validada_por_id: null,
+    validada_por_nome: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id)
 }
 
 export async function alternarLinhaTecnica(id: string, ativo: boolean) {

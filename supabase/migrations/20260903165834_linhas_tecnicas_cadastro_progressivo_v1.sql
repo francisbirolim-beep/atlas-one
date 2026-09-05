@@ -1,0 +1,3 @@
+-- Migration reconciliada com produção em 2026-09-03.
+-- O DDL desta versão já foi aplicado no projeto Supabase de produção antes da abertura do PR #318.
+-- Arquivo mantido para preservar o histórico de migrations e evitar reaplicação do schema.
