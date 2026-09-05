@@ -11,20 +11,20 @@ export async function GET(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id')
     if (id) {
-      const { data: venda, error } = await supabaseAdmin.from('balcao_vendas').select('*').eq('id', id).maybeSingle()
+      const { data: venda, error } = await supabaseAdmin.from('balcao_vendas').select('*').eq('id', id).eq('empresa_id', usuario.empresa_id).maybeSingle()
       if (error) throw error
       if (!venda) return NextResponse.json({ error: 'Venda não encontrada.' }, { status: 404 })
       const [{ data: itens }, { data: pagamentos }, { data: eventos }, { data: locais }, nivelGestao, { data: caixaAberto }] = await Promise.all([
-        supabaseAdmin.from('balcao_venda_itens').select('*').eq('venda_id', id).order('created_at'),
-        supabaseAdmin.from('balcao_pagamentos').select('*').eq('venda_id', id).order('created_at'),
-        supabaseAdmin.from('balcao_venda_eventos').select('*').eq('venda_id', id).order('created_at', { ascending: false }),
-        supabaseAdmin.from('estoque_locais').select('id,codigo,nome,unidade_id').eq('ativo', true).order('nome'),
+        supabaseAdmin.from('balcao_venda_itens').select('*').eq('empresa_id', usuario.empresa_id).eq('venda_id', id).order('created_at'),
+        supabaseAdmin.from('balcao_pagamentos').select('*').eq('empresa_id', usuario.empresa_id).eq('venda_id', id).order('created_at'),
+        supabaseAdmin.from('balcao_venda_eventos').select('*').eq('empresa_id', usuario.empresa_id).eq('venda_id', id).order('created_at', { ascending: false }),
+        supabaseAdmin.from('estoque_locais').select('id,codigo,nome,unidade_id').eq('empresa_id', usuario.empresa_id).eq('ativo', true).order('nome'),
         nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao'),
-        supabaseAdmin.from('balcao_caixas').select('id').eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle(),
+        supabaseAdmin.from('balcao_caixas').select('id').eq('empresa_id', usuario.empresa_id).eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle(),
       ])
       const eventoIds = (eventos || []).map((e: any) => e.id)
       const { data: eventoItens } = eventoIds.length
-        ? await supabaseAdmin.from('balcao_venda_evento_itens').select('*').in('evento_id', eventoIds).order('created_at')
+        ? await supabaseAdmin.from('balcao_venda_evento_itens').select('*').eq('empresa_id', usuario.empresa_id).in('evento_id', eventoIds).order('created_at')
         : { data: [] as any[] }
       return NextResponse.json({
         ok: true,
@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     let query = supabaseAdmin
       .from('balcao_vendas')
       .select('id,numero,status,atendimento_status,cliente_nome,vendedor_nome,subtotal,desconto,total,finalizada_em')
+      .eq('empresa_id', usuario.empresa_id)
       .order('finalizada_em', { ascending: false })
       .limit(150)
     if (q) {
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
         .from('obras')
         .select('id,cliente_id,nome')
         .eq('id', obraId)
+        .eq('empresa_id', usuario.empresa_id)
         .maybeSingle()
       if (erroObra) throw erroObra
       if (!obra) return NextResponse.json({ error: 'Obra informada não foi encontrada.' }, { status: 400 })
@@ -96,9 +98,10 @@ export async function POST(req: NextRequest) {
       clienteId = obra.cliente_id
     }
 
-    if (clienteId && !clienteNome) {
-      const { data: clienteCadastro } = await supabaseAdmin.from('clientes').select('nome').eq('id', clienteId).maybeSingle()
-      clienteNome = clienteCadastro?.nome || null
+    if (clienteId) {
+      const { data: clienteCadastro } = await supabaseAdmin.from('clientes').select('nome').eq('id', clienteId).eq('empresa_id', usuario.empresa_id).maybeSingle()
+      if (!clienteCadastro) return NextResponse.json({ error: 'Cliente não pertence à empresa atual.' }, { status: 400 })
+      if (!clienteNome) clienteNome = clienteCadastro.nome || null
     }
 
     const itens = Array.isArray(body.itens) ? body.itens : []
@@ -111,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     const { data: caixa, error: erroCaixa } = await supabaseAdmin.from('balcao_caixas')
       .select('id,status,operador_id,ponto_caixa_id,unidade_id,local_estoque_id')
-      .eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
+      .eq('empresa_id', usuario.empresa_id).eq('operador_id', usuario.id).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
     if (erroCaixa) throw erroCaixa
     if (!caixa) return NextResponse.json({ error: 'Abra o caixa antes de finalizar a venda.' }, { status: 409 })
     if (!caixa.local_estoque_id || !caixa.unidade_id || !caixa.ponto_caixa_id) return NextResponse.json({ error: 'O caixa aberto não está vinculado a uma unidade/local de estoque.' }, { status: 409 })
@@ -129,7 +132,13 @@ export async function POST(req: NextRequest) {
     const nivelGestao = await nivelBalcaoUsuario(usuario.id, usuario.role, 'relatorios-balcao')
     const podeAutorizarAbaixoMinimo = nivelGestao === 'edicao'
     const ids = [...new Set(payloadItens.map((i: any) => i.produtoId).filter(Boolean))]
-    const { data: produtos } = ids.length ? await supabaseAdmin.from('produtos').select('id,nome,preco_minimo').in('id', ids) : { data: [] as any[] }
+    const { data: produtos } = ids.length ? await supabaseAdmin.from('produtos').select('id,nome,preco_minimo').eq('empresa_id', usuario.empresa_id).in('id', ids) : { data: [] as any[] }
+    if ((produtos || []).length !== ids.length) return NextResponse.json({ error: 'Um ou mais produtos não pertencem à empresa atual.' }, { status: 400 })
+
+    const localIds = [...new Set(payloadItens.map((i: any) => i.localOrigemId).filter(Boolean))]
+    const { data: locaisValidos } = localIds.length ? await supabaseAdmin.from('estoque_locais').select('id').eq('empresa_id', usuario.empresa_id).in('id', localIds) : { data: [] as any[] }
+    if ((locaisValidos || []).length !== localIds.length) return NextResponse.json({ error: 'Um ou mais locais de estoque não pertencem à empresa atual.' }, { status: 400 })
+
     const mapa = new Map((produtos || []).map((p: any) => [p.id, p]))
     const subtotal = payloadItens.reduce((s: number, i: any) => s + i.quantidade * i.precoUnitario, 0)
     const desconto = Math.max(0, parseNumero(body.desconto))
@@ -152,11 +161,18 @@ export async function POST(req: NextRequest) {
 
     const retorno = (data || { ok: true }) as Record<string, any>
     const vendaId = String(retorno.vendaId || retorno.venda_id || '').trim()
-    if (obraId && vendaId) {
-      const { error: erroVinculo } = await supabaseAdmin.from('balcao_vendas').update({ obra_id: obraId }).eq('id', vendaId)
-      if (erroVinculo) throw erroVinculo
-      const { error: erroFinanceiro } = await supabaseAdmin.from('financeiro_contas_receber').update({ obra_id: obraId }).eq('venda_balcao_id', vendaId)
-      if (erroFinanceiro) throw erroFinanceiro
+    if (vendaId) {
+      const atualizacoes = await Promise.all([
+        supabaseAdmin.from('balcao_vendas').update({ empresa_id: usuario.empresa_id, ...(obraId ? { obra_id: obraId } : {}) }).eq('id', vendaId),
+        supabaseAdmin.from('balcao_venda_itens').update({ empresa_id: usuario.empresa_id }).eq('venda_id', vendaId),
+        supabaseAdmin.from('balcao_pagamentos').update({ empresa_id: usuario.empresa_id }).eq('venda_id', vendaId),
+        supabaseAdmin.from('balcao_caixa_movimentos').update({ empresa_id: usuario.empresa_id }).eq('venda_id', vendaId),
+        supabaseAdmin.from('financeiro_contas_receber').update({ empresa_id: usuario.empresa_id, ...(obraId ? { obra_id: obraId } : {}) }).eq('venda_balcao_id', vendaId),
+        supabaseAdmin.from('estoque_reservas').update({ empresa_id: usuario.empresa_id }).eq('origem_tipo', 'venda_balcao').eq('origem_id', vendaId),
+        supabaseAdmin.from('estoque_movimentos').update({ empresa_id: usuario.empresa_id }).eq('origem_tipo', 'venda_balcao').eq('origem_id', vendaId),
+      ])
+      const erroTenant = atualizacoes.find((r: any) => r.error)?.error
+      if (erroTenant) throw erroTenant
     }
 
     return NextResponse.json({ ...retorno, clienteId, clienteNome, obraId })

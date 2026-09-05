@@ -116,13 +116,21 @@ jobs:
         shell: bash
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run --include-all
 
-      - name: Test multi-tenant isolation
+      - name: Test Supabase security suite
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
         shell: bash
         run: |
           set -euo pipefail
-          test -f supabase/tests/p0_tenant_isolation.sql
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/p0_tenant_isolation.sql
+          shopt -s nullglob
+          tests=(supabase/tests/*.sql)
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "ERRO: nenhuma prova SQL encontrada em supabase/tests."
+            exit 1
+          fi
+          for test_file in "${tests[@]}"; do
+            echo "Executando $test_file"
+            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$test_file"
+          done
 
       - name: Require explicit production confirmation
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' }}
