@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
 
     const { data: perfil } = await supabaseAdmin
       .from('usuarios')
-      .select('role')
+      .select('role,empresa_id')
       .eq('id', userData.user.id)
       .maybeSingle()
 
-    if (!perfil || perfil.role !== 'master') {
-      return NextResponse.json({ error: 'Apenas o usuário master pode cadastrar novos usuários' }, { status: 403 })
+    if (!perfil || perfil.role !== 'master' || !perfil.empresa_id) {
+      return NextResponse.json({ error: 'Apenas o usuário master da empresa pode cadastrar novos usuários' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -93,9 +93,11 @@ export async function POST(req: NextRequest) {
       email: emailFinal,
       role,
       whatsapp,
+      empresa_id: perfil.empresa_id,
     })
 
     if (perfilErr) {
+      await supabaseAdmin.auth.admin.deleteUser(novo.user.id)
       return NextResponse.json({ error: perfilErr.message }, { status: 400 })
     }
 
