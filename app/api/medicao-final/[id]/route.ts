@@ -22,12 +22,12 @@ export async function DELETE(
 
     const { data: usuario, error: usuarioError } = await supabaseAdmin
       .from('usuarios')
-      .select('role')
+      .select('role,empresa_id')
       .eq('id', authData.user.id)
       .maybeSingle()
 
-    if (usuarioError || usuario?.role !== 'master') {
-      return NextResponse.json({ error: 'Somente usuario Master pode excluir uma Medicao Final.' }, { status: 403 })
+    if (usuarioError || usuario?.role !== 'master' || !usuario.empresa_id) {
+      return NextResponse.json({ error: 'Somente usuario Master da empresa pode excluir uma Medicao Final.' }, { status: 403 })
     }
 
     const { id } = await context.params
@@ -39,6 +39,7 @@ export async function DELETE(
       .from('medicoes_finais')
       .select('id, cliente_nome, orcamento_id')
       .eq('id', id)
+      .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
     if (buscaError) {
@@ -49,11 +50,12 @@ export async function DELETE(
     }
 
     // Regra Master: preserva o orçamento original e remove os cards derivados
-    // que foram criados nos Kanbans de setor para o mesmo orçamento.
+    // que foram criados nos Kanbans de setor para o mesmo orçamento e empresa.
     if (medicao.orcamento_id) {
       const { error: deleteCardsError } = await supabaseAdmin
         .from('setor_kanban_itens')
         .delete()
+        .eq('empresa_id', usuario.empresa_id)
         .eq('orcamento_id', medicao.orcamento_id)
 
       if (deleteCardsError) {
@@ -69,6 +71,7 @@ export async function DELETE(
       .from('medicoes_finais')
       .delete()
       .eq('id', id)
+      .eq('empresa_id', usuario.empresa_id)
 
     if (deleteError) {
       console.error('Erro ao excluir Medicao Final:', deleteError)
