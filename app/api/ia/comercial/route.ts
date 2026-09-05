@@ -47,7 +47,7 @@ function resumirOrcamento(o: any) {
 
 async function autenticar(req: NextRequest): Promise<UsuarioMin | null> {
   const auth = req.headers.get('authorization') || ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const token = auth.replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
   const { data: authData } = await supabaseAdmin.auth.getUser(token)
   if (!authData.user) return null
@@ -57,13 +57,25 @@ async function autenticar(req: NextRequest): Promise<UsuarioMin | null> {
     .eq('id', authData.user.id)
     .maybeSingle()
   if (!data?.empresa_id) return null
+
+  if (data.role !== 'master') {
+    const { data: permissao, error: permissaoError } = await supabaseAdmin
+      .from('permissoes')
+      .select('nivel')
+      .eq('empresa_id', data.empresa_id)
+      .eq('usuario_id', data.id)
+      .eq('setor_id', 'crm')
+      .maybeSingle()
+    if (permissaoError || !permissao || !['consulta', 'edicao'].includes(String(permissao.nivel))) return null
+  }
+
   return data as UsuarioMin
 }
 
 export async function POST(req: NextRequest) {
   try {
     const usuario = await autenticar(req)
-    if (!usuario) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
+    if (!usuario) return NextResponse.json({ error: 'Sem acesso à IA Comercial' }, { status: 403 })
 
     const body = await req.json()
     const pergunta = String(body?.pergunta || '').trim()
