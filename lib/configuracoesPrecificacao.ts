@@ -1,7 +1,9 @@
 import { supabase } from './supabase'
+import { usuarioAtual } from './auth'
 
 export interface ConfiguracaoPrecificacao {
   id: string
+  empresa_id?: string
   chave: string
   valor: number | null
   updated_at?: string
@@ -17,9 +19,16 @@ export async function lerConfiguracao(chave: string): Promise<number | null> {
 }
 
 export async function salvarConfiguracao(chave: string, valor: number) {
+  const usuario = await usuarioAtual()
+  const empresaId = (usuario as any)?.empresa_id as string | undefined
+  if (!empresaId) throw new Error('Usuário sem empresa vinculada')
+
   return supabase
     .from('configuracoes_precificacao')
-    .upsert({ chave, valor, updated_at: new Date().toISOString() }, { onConflict: 'chave' })
+    .upsert(
+      { empresa_id: empresaId, chave, valor, updated_at: new Date().toISOString() },
+      { onConflict: 'empresa_id,chave' },
+    )
 }
 
 export async function lerPrecoKgAluminio(): Promise<number> {
