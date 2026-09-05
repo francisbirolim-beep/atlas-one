@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
 
-type UsuarioMin = { id: string; nome?: string | null; role?: string | null }
+type UsuarioMin = { id: string; nome?: string | null; role?: string | null; empresa_id: string }
 
 function extrairTextoResposta(data: any): string {
   if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim()
@@ -53,10 +53,11 @@ async function autenticar(req: NextRequest): Promise<UsuarioMin | null> {
   if (!authData.user) return null
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
-  return (data as UsuarioMin | null) || { id: authData.user.id }
+  if (!data?.empresa_id) return null
+  return data as UsuarioMin
 }
 
 export async function POST(req: NextRequest) {
@@ -81,13 +82,14 @@ export async function POST(req: NextRequest) {
       supabaseAdmin
         .from('orcamentos')
         .select('id,cliente_nome,cidade,temperatura,acabamento,contramarco,tipo_medida,itens,valor_estimado,status,created_at,criado_por_nome')
+        .eq('empresa_id', usuario.empresa_id)
         .order('created_at', { ascending: false })
         .limit(18),
-      supabaseAdmin.from('produtos').select('*').eq('ativo', true).not('unidade', 'is', null).neq('unidade', '').limit(50),
+      supabaseAdmin.from('produtos').select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).not('unidade', 'is', null).neq('unidade', '').limit(50),
       supabaseAdmin.from('tipologias').select('*').limit(80),
-      supabaseAdmin.from('ai_memorias').select('titulo,conteudo,updated_at').eq('escopo', 'comercial').eq('ativo', true).order('updated_at', { ascending: false }).limit(20),
-      supabaseAdmin.from('ai_interacoes').select('id,pergunta,resposta,created_at').eq('contexto', 'comercial').eq('status', 'ok').order('created_at', { ascending: false }).limit(20),
-      supabaseAdmin.from('ai_feedback').select('interacao_id,avaliacao,correcao,created_at').order('created_at', { ascending: false }).limit(30),
+      supabaseAdmin.from('ai_memorias').select('titulo,conteudo,updated_at').eq('empresa_id', usuario.empresa_id).eq('escopo', 'comercial').eq('ativo', true).order('updated_at', { ascending: false }).limit(20),
+      supabaseAdmin.from('ai_interacoes').select('id,pergunta,resposta,created_at').eq('empresa_id', usuario.empresa_id).eq('contexto', 'comercial').eq('status', 'ok').order('created_at', { ascending: false }).limit(20),
+      supabaseAdmin.from('ai_feedback').select('interacao_id,avaliacao,correcao,created_at').eq('empresa_id', usuario.empresa_id).order('created_at', { ascending: false }).limit(30),
     ])
 
     const feedbackMap = new Map((feedbackResp.data || []).map((f: any) => [f.interacao_id, f]))
@@ -152,6 +154,7 @@ export async function POST(req: NextRequest) {
     if (!openaiResp.ok) {
       const detalhe = openaiData?.error?.message || `OpenAI respondeu ${openaiResp.status}`
       await supabaseAdmin.from('ai_interacoes').insert({
+        empresa_id: usuario.empresa_id,
         contexto: 'comercial',
         usuario_id: usuario.id,
         usuario_nome: usuario.nome || null,
@@ -170,6 +173,7 @@ export async function POST(req: NextRequest) {
     const { data: interacao, error: erroInsert } = await supabaseAdmin
       .from('ai_interacoes')
       .insert({
+        empresa_id: usuario.empresa_id,
         contexto: 'comercial',
         usuario_id: usuario.id,
         usuario_nome: usuario.nome || null,
