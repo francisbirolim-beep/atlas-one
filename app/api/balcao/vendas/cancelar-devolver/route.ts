@@ -13,9 +13,9 @@ async function usuarioGerencial(req: NextRequest) {
   return nivel === 'edicao' ? usuario : null
 }
 
-async function caixaAbertoDoUsuario(usuarioId: string) {
+async function caixaAbertoDoUsuario(usuarioId: string, empresaId: string) {
   const { data } = await supabaseAdmin.from('balcao_caixas').select('id,status,operador_id')
-    .eq('operador_id', usuarioId).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
+    .eq('empresa_id', empresaId).eq('operador_id', usuarioId).eq('status', 'aberto').order('aberto_em', { ascending: false }).limit(1).maybeSingle()
   return data?.id || null
 }
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       const eventoId = String(body.eventoId || '')
       if (!eventoId) return NextResponse.json({ error: 'Informe o reembolso pendente.' }, { status: 400 })
       const movimentarCaixa = Boolean(body.movimentarCaixa)
-      const caixaId = movimentarCaixa ? (String(body.caixaId || '') || await caixaAbertoDoUsuario(usuario.id)) : null
+      const caixaId = movimentarCaixa ? (String(body.caixaId || '') || await caixaAbertoDoUsuario(usuario.id, usuario.empresa_id)) : null
       const { data, error } = await supabaseAdmin.rpc('concluir_reembolso_balcao', {
         p_evento_id: eventoId, p_usuario_id: usuario.id, p_usuario_nome: usuario.nome,
         p_movimentar_caixa: movimentarCaixa, p_caixa_id: caixaId,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     if (!motivo) return NextResponse.json({ error: 'O motivo é obrigatório.' }, { status: 400 })
 
     const reembolsarCaixa = Boolean(body.reembolsarCaixa)
-    const caixaId = reembolsarCaixa ? (String(body.caixaId || '') || await caixaAbertoDoUsuario(usuario.id)) : null
+    const caixaId = reembolsarCaixa ? (String(body.caixaId || '') || await caixaAbertoDoUsuario(usuario.id, usuario.empresa_id)) : null
     const itens = Array.isArray(body.itens) ? body.itens.map((i: any) => ({
       itemId: String(i.itemId || ''), quantidade: Number(i.quantidade || 0), localRetornoId: String(i.localRetornoId || '') || null,
     })).filter((i: any) => i.itemId && i.quantidade > 0) : []
