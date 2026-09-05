@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { salvarConfiguracaoGeralTenant } from './configuracoesGeraisTenant'
 
 export type TipoCampoConfiguravel =
   | 'texto'
@@ -238,15 +239,7 @@ export async function salvarCamposConfiguraveis(campos: CampoConfiguravel[]): Pr
     .map((campo, index) => ({ ...campo, ordem: (index + 1) * 10 }))
     .sort((a, b) => a.ordem - b.ordem)
 
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: CHAVE_CAMPOS,
-      valor: JSON.stringify(ordenados),
-      updated_at: new Date().toISOString(),
-    })
-
-  return !error
+  return salvarConfiguracaoGeralTenant(CHAVE_CAMPOS, JSON.stringify(ordenados))
 }
 
 export function camposDoContexto(

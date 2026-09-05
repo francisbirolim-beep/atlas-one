@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { Produto, CategoriaProduto } from './tipos'
 import { registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
+import { salvarConfiguracaoGeralTenant } from './configuracoesGeraisTenant'
 
 export interface CategoriaProdutoConfig {
   valor: CategoriaProduto
@@ -156,15 +157,12 @@ export async function criarCategoriaProduto(nome: string): Promise<{ categoria: 
   const extras = lerExtras(config?.valor)
   const maiorOrdem = atuais.reduce((maior, item) => Math.max(maior, item.ordem), 100)
   const nova: CategoriaProdutoConfig = { valor, label, ordem: maiorOrdem + 10 }
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: CHAVE_CATEGORIAS_PRODUTO,
-      valor: JSON.stringify([...extras, nova]),
-      updated_at: new Date().toISOString(),
-    })
+  const ok = await salvarConfiguracaoGeralTenant(
+    CHAVE_CATEGORIAS_PRODUTO,
+    JSON.stringify([...extras, nova]),
+  )
 
-  if (error) return { categoria: null, erro: 'Não foi possível salvar a categoria.' }
+  if (!ok) return { categoria: null, erro: 'Não foi possível salvar a categoria.' }
   categoriasProdutoCache = [...atuais, nova].sort((a, b) => a.ordem - b.ordem)
   return { categoria: nova, erro: null }
 }
