@@ -25,12 +25,22 @@ type Resumo = {
   comComposicao: number
   semComposicao: number
   comReceitaOficial: number
+  componentesBomTotal: number
+  componentesBomVinculados: number
+  componentesBomSemVinculo: number
+}
+
+type Catalogo = {
+  perfis: { total: number; vinculados: number }
+  acessorios: { total: number; vinculados: number }
+  vidros: { total: number; vinculados: number }
 }
 
 export default function ExploradorTipologiasWVetroPage() {
   const [master, setMaster] = useState<boolean | null>(null)
   const [tipologias, setTipologias] = useState<LinhaTipologia[]>([])
   const [resumo, setResumo] = useState<Resumo | null>(null)
+  const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [busca, setBusca] = useState('')
@@ -52,6 +62,7 @@ export default function ExploradorTipologiasWVetroPage() {
         if (!resp.ok) throw new Error(json?.error || 'Falha ao carregar.')
         setTipologias(json.tipologias || [])
         setResumo(json.resumo || null)
+        setCatalogo(json.catalogo || null)
       } catch (e) {
         setErro(e instanceof Error ? e.message : 'Falha ao carregar tipologias.')
       } finally {
@@ -113,6 +124,34 @@ export default function ExploradorTipologiasWVetroPage() {
                 <p className="mt-1 text-2xl font-bold text-slate-900">{total}</p>
               </div>
             ))}
+          </section>
+        )}
+
+        {!carregando && resumo && catalogo && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Catálogo de referência (identidade + histórico de preço) vs. composição por tipologia (BOM)</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <p className="text-xs text-slate-500">Perfis no catálogo</p>
+                <p className="text-lg font-bold text-slate-900">{catalogo.perfis.total}</p>
+                <p className="text-[11px] text-slate-400">{catalogo.perfis.vinculados} vinculados a produto Atlas</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Acessórios no catálogo</p>
+                <p className="text-lg font-bold text-slate-900">{catalogo.acessorios.total}</p>
+                <p className="text-[11px] text-slate-400">{catalogo.acessorios.vinculados} vinculados a produto Atlas</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Linhas de composição (BOM)</p>
+                <p className="text-lg font-bold text-slate-900">{resumo.componentesBomTotal}</p>
+                <p className="text-[11px] text-slate-400">{resumo.componentesBomVinculados} vinculadas a produto Atlas</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Componentes de BOM sem vínculo</p>
+                <p className="text-lg font-bold text-amber-700">{resumo.componentesBomSemVinculo}</p>
+                <p className="text-[11px] text-slate-400">precisam de vínculo manual com produto Atlas</p>
+              </div>
+            </div>
           </section>
         )}
 
