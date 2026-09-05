@@ -3,6 +3,7 @@ import { supabaseAdmin } from './supabaseAdmin'
 
 export type AcessoExternoAssistencia = {
   id: string
+  empresa_id: string
   assistencia_id: string
   nome_tecnico: string | null
   telefone_tecnico: string | null
@@ -32,13 +33,21 @@ export async function buscarAcessoValidoAssistencia(
   const tokenHash = hashTokenAcessoAssistencia(token)
   const { data, error } = await supabaseAdmin
     .from('assistencia_acessos_externos')
-    .select('id, assistencia_id, nome_tecnico, telefone_tecnico, expira_em, revogado_em, primeiro_acesso_em, ultimo_acesso_em, criado_por_id, criado_por_nome, created_at')
+    .select('id, empresa_id, assistencia_id, nome_tecnico, telefone_tecnico, expira_em, revogado_em, primeiro_acesso_em, ultimo_acesso_em, criado_por_id, criado_por_nome, created_at')
     .eq('token_hash', tokenHash)
     .maybeSingle()
 
-  if (error || !data) return null
+  if (error || !data?.empresa_id) return null
   if (data.revogado_em) return null
   if (data.expira_em && new Date(data.expira_em).getTime() < Date.now()) return null
+
+  const { data: assistencia } = await supabaseAdmin
+    .from('assistencias')
+    .select('id')
+    .eq('id', data.assistencia_id)
+    .eq('empresa_id', data.empresa_id)
+    .maybeSingle()
+  if (!assistencia) return null
 
   if (tocar) {
     const agora = new Date().toISOString()
@@ -49,6 +58,7 @@ export async function buscarAcessoValidoAssistencia(
         ultimo_acesso_em: agora,
       })
       .eq('id', data.id)
+      .eq('empresa_id', data.empresa_id)
   }
 
   return data as AcessoExternoAssistencia
@@ -73,10 +83,12 @@ export async function carregarDadosExternosAssistencia(token: string) {
       .from('assistencias')
       .select('id, created_at, cliente_nome, cliente_whatsapp, cidade, endereco, numero, bairro, descricao_problema, fotos_urls, status, coluna_id, criado_por_nome, tecnico_nome, data_atendimento, servico_realizado, materiais_utilizados, observacoes_atendimento, assinatura_tecnico, assinatura_cliente, atendimento_iniciado_em, atendimento_concluido_em, duracao_atendimento_segundos, gps_inicio_latitude, gps_inicio_longitude, gps_inicio_precisao_m, gps_inicio_capturado_em, gps_fim_latitude, gps_fim_longitude, gps_fim_precisao_m, gps_fim_capturado_em')
       .eq('id', acesso.assistencia_id)
+      .eq('empresa_id', acesso.empresa_id)
       .maybeSingle(),
     supabaseAdmin
       .from('configuracoes_gerais')
       .select('valor')
+      .eq('empresa_id', acesso.empresa_id)
       .eq('chave', 'dados_empresa')
       .maybeSingle(),
   ])
@@ -90,6 +102,7 @@ export async function carregarDadosExternosAssistencia(token: string) {
       .from('assistencia_colunas')
       .select('nome')
       .eq('id', colunaId)
+      .eq('empresa_id', acesso.empresa_id)
       .maybeSingle()
     etapa = coluna?.nome || ''
   }
