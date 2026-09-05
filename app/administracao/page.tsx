@@ -28,6 +28,7 @@ const GRUPOS: { titulo: string; descricao: string; itens: Atalho[] }[] = [
     itens: [
       { href: '/configuracoes/empresa', titulo: 'Empresa e Identidade', descricao: 'Nome, logo, cor principal e personalização white-label.', icon: Building2 },
       { href: '/configuracoes/usuarios', titulo: 'Usuários e Acesso', descricao: 'Criar usuários, definir acesso e montar a Home de cada pessoa.', icon: KeyRound },
+      { href: '/configuracoes/permissoes-cadastros', titulo: 'Permissões dos Cadastros 360', descricao: 'Definir por usuário quem pode ver, criar, editar, excluir e aprovar em cada cadastro.', icon: ShieldCheck },
       { href: '/setores', titulo: 'Setores e Permissões', descricao: 'Organizar setores, responsabilidades e níveis de acesso.', icon: LayoutGrid },
     ],
   },
