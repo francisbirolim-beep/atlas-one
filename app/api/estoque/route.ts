@@ -14,6 +14,7 @@ export async function GET(req:NextRequest){
     const {data,error}=await supabaseAdmin
       .from('estoque_saldos')
       .select('id,produto_id,local_id,endereco_id,unidade,quantidade,quantidade_reservada,custo_medio,valor_estoque,updated_at,produto:produtos(id,codigo,nome,categoria),local:estoque_locais(id,codigo,nome,tipo,permite_venda,unidade:unidades_operacionais(id,codigo,nome,tipo,cidade)),endereco:estoque_enderecos(id,codigo,zona,corredor,estante,prateleira,caixa,descricao)')
+      .eq('empresa_id',usuario.empresa_id)
       .order('updated_at',{ascending:false}).limit(limite)
     if(error)throw error
     let saldos=(data||[]) as any[]
@@ -22,8 +23,14 @@ export async function GET(req:NextRequest){
     const {data:movimentos}=await supabaseAdmin
       .from('estoque_movimentos')
       .select('id,produto_id,tipo,quantidade,unidade,custo_unitario,valor_total,origem_tipo,local_origem_id,local_destino_id,nf_id,recebimento_id,criado_por_nome,created_at')
+      .eq('empresa_id',usuario.empresa_id)
       .order('created_at',{ascending:false}).limit(100)
-    const {data:unidades}=await supabaseAdmin.from('unidades_operacionais').select('id,codigo,nome,tipo,cidade,ativo').eq('ativo',true).order('nome')
+    const {data:unidades}=await supabaseAdmin
+      .from('unidades_operacionais')
+      .select('id,codigo,nome,tipo,cidade,ativo')
+      .eq('empresa_id',usuario.empresa_id)
+      .eq('ativo',true)
+      .order('nome')
     return NextResponse.json({ok:true,saldos,movimentos:movimentos||[],unidades:unidades||[]})
   }catch(e){console.error('Erro estoque',e);return NextResponse.json({error:'Não foi possível carregar o estoque.'},{status:500})}
 }
