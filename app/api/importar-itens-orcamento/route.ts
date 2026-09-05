@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { v4 as uuidv4 } from 'uuid'
 import { parseItensDoTextoPdf } from '@/lib/pdfOrcamentoImport'
 import { parseOrcamentoWVetroTexto } from '@/lib/wvetroPdf'
-import { Anexo, ItemEsquadria } from '@/lib/tipos'
+import { ItemEsquadria } from '@/lib/tipos'
+import { anexoEhPdf, baixarAnexoPrivadoOuLegado, type AnexoStorage } from '@/lib/anexoPrivadoServer'
 
 export const runtime = 'nodejs'
 
@@ -81,14 +82,8 @@ function extrairVidroDaDescricao(descricao?: string) {
   return match?.[1]?.trim() || null
 }
 
-function ehPdf(anexo: Anexo) {
-  const nome = (anexo.nome || '').toLowerCase()
-  const url = (anexo.url || '').toLowerCase().split('?')[0].split('#')[0]
-  return nome.endsWith('.pdf') || url.endsWith('.pdf')
-}
-
-function ehPdfGeradoPeloAtlas(anexo: Anexo) {
-  const titulo = (anexo.titulo || '').trim()
+function ehPdfGeradoPeloAtlas(anexo: AnexoStorage) {
+  const titulo = String(anexo.titulo || '').trim()
   return titulo === 'Orçamento (PDF)' || /^Orçamento — Versão \d+/i.test(titulo)
 }
 
@@ -96,8 +91,8 @@ function ultimo<T>(lista: T[]): T | undefined {
   return lista.length > 0 ? lista[lista.length - 1] : undefined
 }
 
-function escolherPdfParaImportacao(anexos: Anexo[], urlSolicitada?: string) {
-  const pdfsAtivos = anexos.filter(anexo => !anexo.excluido_em && ehPdf(anexo))
+function escolherPdfParaImportacao(anexos: AnexoStorage[], urlSolicitada?: string) {
+  const pdfsAtivos = anexos.filter(anexo => !anexo.excluido_em && anexoEhPdf(anexo))
 
   if (urlSolicitada) {
     return pdfsAtivos.find(anexo => anexo.url === urlSolicitada) || null
@@ -133,6 +128,13 @@ export async function POST(req: NextRequest) {
     const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token)
     if (userErr || !userData?.user) return NextResponse.json({ error: 'Sessao invalida' }, { status: 401 })
 
+    const { data: usuarioAtlas } = await supabaseAdmin
+      .from('usuarios')
+      .select('id,empresa_id')
+      .eq('id', userData.user.id)
+      .maybeSingle()
+    if (!usuarioAtlas?.empresa_id) return NextResponse.json({ error: 'Usuario sem empresa vinculada.' }, { status: 403 })
+
     const body = await req.json()
     const orcamentoId = body?.orcamentoId
     const persistirOrcamento = body?.persistirOrcamento !== false
@@ -145,11 +147,12 @@ export async function POST(req: NextRequest) {
       .from('orcamentos')
       .select('id, itens, anexos')
       .eq('id', orcamentoId)
+      .eq('empresa_id', usuarioAtlas.empresa_id)
       .maybeSingle()
 
     if (erroOrcamento || !orcamento) return NextResponse.json({ error: 'Orcamento nao encontrado' }, { status: 404 })
 
-    const anexos: Anexo[] = orcamento.anexos || []
+    const anexos: AnexoStorage[] = Array.isArray(orcamento.anexos) ? orcamento.anexos : []
     const anexoPdf = escolherPdfParaImportacao(anexos, anexoUrl || undefined)
 
     if (anexoUrl && !anexoPdf) {
@@ -169,10 +172,13 @@ export async function POST(req: NextRequest) {
       itensParciais = itensConfirmados
       origem = 'wvetro'
     } else {
-      const resposta = await fetch(anexoPdf.url)
-      if (!resposta.ok) return NextResponse.json({ error: 'Nao foi possivel baixar o PDF anexado.' }, { status: 502 })
+      let buffer: Buffer
+      try {
+        buffer = await baixarAnexoPrivadoOuLegado(anexoPdf)
+      } catch {
+        return NextResponse.json({ error: 'Nao foi possivel baixar o PDF anexado.' }, { status: 502 })
+      }
 
-      const buffer = Buffer.from(await resposta.arrayBuffer())
       const pdfParse = (await import('pdf-parse')).default
       const dadosPdf = await pdfParse(buffer)
       const texto = dadosPdf.text || ''
@@ -189,7 +195,7 @@ export async function POST(req: NextRequest) {
           error: `Nao foi possivel identificar itens no PDF "${anexoPdf.nome || anexoPdf.titulo}". Verifique o layout do anexo.`,
           parser_usado: parserUsado,
           parser_scores: { legado: scoreLegado, especializado: scoreEspecializado },
-          anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
+          anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url || null, privado: !!anexoPdf.storage_path },
         }, { status: 422 })
       }
     }
@@ -206,7 +212,7 @@ export async function POST(req: NextRequest) {
         itens_incompletos: invalidos.length,
         parser_usado: parserUsado,
         parser_scores: { legado: scoreLegado, especializado: scoreEspecializado },
-        anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
+        anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url || null, privado: !!anexoPdf.storage_path },
       }, { status: 422 })
     }
 
@@ -254,13 +260,18 @@ export async function POST(req: NextRequest) {
     })
 
     if (persistirOrcamento) {
-      const { error: erroUpdate } = await supabaseAdmin.from('orcamentos').update({ itens: itensCompletos }).eq('id', orcamentoId)
+      const { error: erroUpdate } = await supabaseAdmin
+        .from('orcamentos')
+        .update({ itens: itensCompletos })
+        .eq('id', orcamentoId)
+        .eq('empresa_id', usuarioAtlas.empresa_id)
       if (erroUpdate) return NextResponse.json({ error: 'Erro ao salvar itens no orcamento.' }, { status: 500 })
 
       const { data: medicao } = await supabaseAdmin
         .from('medicoes_finais')
         .select('id')
         .eq('orcamento_id', orcamentoId)
+        .eq('empresa_id', usuarioAtlas.empresa_id)
         .maybeSingle()
 
       if (medicao) {
@@ -295,7 +306,7 @@ export async function POST(req: NextRequest) {
       linhas_associadas: linhasAssociadas,
       linhas_identificadas: itensCompletos.map((it: any) => it.linha_origem).filter(Boolean),
       vidros_identificados: itensCompletos.map((it: any) => it.vidro_origem).filter(Boolean),
-      anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url },
+      anexo_usado: { titulo: anexoPdf.titulo, nome: anexoPdf.nome, url: anexoPdf.url || null, privado: !!anexoPdf.storage_path },
     })
   } catch (e: any) {
     console.error('Erro ao importar itens do PDF:', e)
