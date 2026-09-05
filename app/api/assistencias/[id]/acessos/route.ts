@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { gerarTokenAcessoAssistencia, hashTokenAcessoAssistencia } from '@/lib/assistenciaAcessoExternoServer'
 
-type UsuarioAcesso = { id: string; nome: string; role: string }
+type UsuarioAcesso = { id: string; nome: string; role: string; empresa_id: string }
 
 async function usuarioAutenticado(req: NextRequest): Promise<UsuarioAcesso | null> {
   const auth = req.headers.get('authorization') || ''
@@ -14,17 +14,19 @@ async function usuarioAutenticado(req: NextRequest): Promise<UsuarioAcesso | nul
 
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id, nome, role')
+    .select('id, nome, role, empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
 
-  return (data as UsuarioAcesso | null) || null
+  if (!data?.empresa_id) return null
+  return data as UsuarioAcesso
 }
 
 async function podeGerenciarAssistencia(usuario: UsuarioAcesso, assistenciaId: string) {
   const { data: assistencia } = await supabaseAdmin
     .from('assistencias')
     .select('id, criado_por_id')
+    .eq('empresa_id', usuario.empresa_id)
     .eq('id', assistenciaId)
     .maybeSingle()
 
@@ -34,6 +36,7 @@ async function podeGerenciarAssistencia(usuario: UsuarioAcesso, assistenciaId: s
   const { data: configRow } = await supabaseAdmin
     .from('configuracoes_gerais')
     .select('valor')
+    .eq('empresa_id', usuario.empresa_id)
     .eq('chave', `home_usuario:${usuario.id}`)
     .maybeSingle()
 
