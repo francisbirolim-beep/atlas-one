@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     let itensQuery = supabaseAdmin
       .from('balcao_venda_itens')
       .select('id,venda_id,produto_id,produto_codigo,produto_nome,unidade,quantidade,local_origem_id,atendimento_status,separado_em,separado_por_nome,enviado_em,enviado_por_nome,entregue_em,entregue_por_nome,atendimento_observacoes,created_at')
+      .eq('empresa_id', usuario.empresa_id)
       .in('atendimento_status', STATUS_PENDENTES)
       .order('created_at', { ascending: true })
       .limit(300)
@@ -32,10 +33,16 @@ export async function GET(req: NextRequest) {
 
     const [{ data: vendas, error: erroVendas }, { data: locais, error: erroLocais }] = await Promise.all([
       vendaIds.length
-        ? supabaseAdmin.from('balcao_vendas').select('id,numero,cliente_nome,vendedor_nome,unidade_id,atendimento_status,previsao_entrega,finalizada_em').in('id', vendaIds)
+        ? supabaseAdmin.from('balcao_vendas')
+            .select('id,numero,cliente_nome,vendedor_nome,unidade_id,atendimento_status,previsao_entrega,finalizada_em')
+            .eq('empresa_id', usuario.empresa_id)
+            .in('id', vendaIds)
         : Promise.resolve({ data: [] as any[], error: null }),
       localIds.length
-        ? supabaseAdmin.from('estoque_locais').select('id,codigo,nome,unidade_id').in('id', localIds)
+        ? supabaseAdmin.from('estoque_locais')
+            .select('id,codigo,nome,unidade_id')
+            .eq('empresa_id', usuario.empresa_id)
+            .in('id', localIds)
         : Promise.resolve({ data: [] as any[], error: null }),
     ])
     if (erroVendas) throw erroVendas
@@ -47,7 +54,10 @@ export async function GET(req: NextRequest) {
     ].filter(Boolean))]
 
     const { data: unidades, error: erroUnidades } = unidadeIds.length
-      ? await supabaseAdmin.from('unidades_operacionais').select('id,codigo,nome').in('id', unidadeIds)
+      ? await supabaseAdmin.from('unidades_operacionais')
+          .select('id,codigo,nome')
+          .eq('empresa_id', usuario.empresa_id)
+          .in('id', unidadeIds)
       : { data: [] as any[], error: null }
     if (erroUnidades) throw erroUnidades
 
@@ -114,6 +124,14 @@ export async function POST(req: NextRequest) {
 
     if (!itemId) return NextResponse.json({ error: 'Item do atendimento não informado.' }, { status: 400 })
     if (!ACOES.includes(acao)) return NextResponse.json({ error: 'Ação de atendimento inválida.' }, { status: 400 })
+
+    const { data: item } = await supabaseAdmin
+      .from('balcao_venda_itens')
+      .select('id')
+      .eq('id', itemId)
+      .eq('empresa_id', usuario.empresa_id)
+      .maybeSingle()
+    if (!item) return NextResponse.json({ error: 'Item do atendimento não encontrado.' }, { status: 404 })
 
     const { data, error } = await supabaseAdmin.rpc('avancar_atendimento_venda_balcao', {
       p_item_id: itemId,
