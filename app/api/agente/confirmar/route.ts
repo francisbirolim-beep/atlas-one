@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarUsuario, rodarLoop, executarPropostaTarefa, executarPropostaEvento, obterOuCriarConversaHoje, salvarMensagem, ACTION_TOOLS, commitArquivoCodigo } from '@/lib/agente'
+import { verificarUsuario, rodarLoop, executarPropostaTarefa, executarPropostaEvento, obterOuCriarConversaHoje, salvarMensagem, ACTION_TOOLS } from '@/lib/agente'
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,11 +32,10 @@ export async function POST(req: NextRequest) {
     } else if (proposta.name === 'propor_criar_evento') {
       resultadoExecucao = await executarPropostaEvento(usuario.id, proposta.input || {})
     } else if (proposta.name === 'propor_editar_arquivo_codigo') {
-      if (usuario.role !== 'master') {
-        resultadoExecucao = { ok: false, erro: 'Apenas o usuario master pode confirmar alteracoes de codigo.' }
-      } else {
-        const input = proposta.input || {}
-        resultadoExecucao = await commitArquivoCodigo(input.caminho, input.novo_conteudo, input.mensagem_commit)
+      resultadoExecucao = {
+        ok: false,
+        bloqueado: true,
+        erro: 'Execucao de alteracao de codigo pela IA esta bloqueada por seguranca. O Atlas exige branch, PR, CI e aprovacao antes de qualquer merge.',
       }
     } else {
       resultadoExecucao = { ok: false, erro: 'Acao nao implementada.' }
