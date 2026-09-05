@@ -9,11 +9,11 @@ export async function GET(req:NextRequest){
   const hoje=new Date();const inicioDefault=new Date(hoje);inicioDefault.setDate(hoje.getDate()-30)
   const de=req.nextUrl.searchParams.get('de')||inicioDefault.toISOString().slice(0,10);const ate=req.nextUrl.searchParams.get('ate')||hoje.toISOString().slice(0,10)
   const inicio=`${de}T00:00:00`;const fim=`${ate}T23:59:59.999`
-  const {data:vendas,error}=await supabaseAdmin.from('balcao_vendas').select('id,numero,status,cliente_nome,vendedor_nome,subtotal,desconto,total,finalizada_em').eq('status','finalizada').gte('finalizada_em',inicio).lte('finalizada_em',fim).order('finalizada_em')
+  const {data:vendas,error}=await supabaseAdmin.from('balcao_vendas').select('id,numero,status,cliente_nome,vendedor_nome,subtotal,desconto,total,finalizada_em').eq('empresa_id',u.empresa_id).eq('status','finalizada').gte('finalizada_em',inicio).lte('finalizada_em',fim).order('finalizada_em')
   if(error)throw error;const ids=(vendas||[]).map(v=>v.id)
   const [{data:itens},{data:pagamentos}]=ids.length?await Promise.all([
-   supabaseAdmin.from('balcao_venda_itens').select('venda_id,produto_id,produto_codigo,produto_nome,quantidade,custo_unitario_snapshot,preco_unitario,total_item,margem_real_percentual').in('venda_id',ids),
-   supabaseAdmin.from('balcao_pagamentos').select('venda_id,forma,valor').in('venda_id',ids),
+   supabaseAdmin.from('balcao_venda_itens').select('venda_id,produto_id,produto_codigo,produto_nome,quantidade,custo_unitario_snapshot,preco_unitario,total_item,margem_real_percentual').eq('empresa_id',u.empresa_id).in('venda_id',ids),
+   supabaseAdmin.from('balcao_pagamentos').select('venda_id,forma,valor').eq('empresa_id',u.empresa_id).in('venda_id',ids),
   ]):[{data:[]},{data:[]}]
   const faturamento=(vendas||[]).reduce((s,v)=>s+Number(v.total||0),0);const ticket=(vendas||[]).length?faturamento/(vendas||[]).length:0
   let custo=0;const produtos=new Map<string,{codigo:string;nome:string;qtd:number;faturamento:number}>();
