@@ -9,8 +9,8 @@ export async function GET(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
  try{
   const [{data:transferencias,error},{data:locais}]=await Promise.all([
-   supabaseAdmin.from('estoque_transferencias').select('id,numero,status,motivo,previsao,solicitado_por_nome,recebido_por_nome,enviado_em,recebido_em,created_at,origem:estoque_locais!estoque_transferencias_local_origem_id_fkey(id,codigo,nome,unidade:unidades_operacionais(id,codigo,nome)),destino:estoque_locais!estoque_transferencias_local_destino_id_fkey(id,codigo,nome,unidade:unidades_operacionais(id,codigo,nome)),itens:estoque_transferencia_itens(id,produto_id,quantidade_solicitada,quantidade_separada,quantidade_recebida,unidade,custo_unitario,produto:produtos(id,codigo,nome))').order('created_at',{ascending:false}).limit(100),
-   supabaseAdmin.from('estoque_locais').select('id,codigo,nome,tipo,ativo,unidade:unidades_operacionais(id,codigo,nome,ativo)').eq('ativo',true).order('nome')
+   supabaseAdmin.from('estoque_transferencias').select('id,numero,status,motivo,previsao,solicitado_por_nome,recebido_por_nome,enviado_em,recebido_em,created_at,origem:estoque_locais!estoque_transferencias_local_origem_id_fkey(id,codigo,nome,unidade:unidades_operacionais(id,codigo,nome)),destino:estoque_locais!estoque_transferencias_local_destino_id_fkey(id,codigo,nome,unidade:unidades_operacionais(id,codigo,nome)),itens:estoque_transferencia_itens(id,produto_id,quantidade_solicitada,quantidade_separada,quantidade_recebida,unidade,custo_unitario,produto:produtos(id,codigo,nome))').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(100),
+   supabaseAdmin.from('estoque_locais').select('id,codigo,nome,tipo,ativo,unidade:unidades_operacionais(id,codigo,nome,ativo)').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome')
   ])
   if(error)throw error
   return NextResponse.json({ok:true,transferencias:transferencias||[],locais:(locais||[]).filter((l:any)=>l.unidade?.ativo!==false)})
