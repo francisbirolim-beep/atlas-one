@@ -4,6 +4,7 @@ import { chamarProvider } from './ai/providerManager'
 import { carregarConfigAgente } from './ai/agentManager'
 import { registrarUsoIA } from './ai/auditoria'
 import { estimarCustoUSD } from './ai/custo'
+import { buscarBaseTecnicaAgente, validarConhecimentoTecnicoAgente } from './ai/baseTecnicaAgente'
 
 export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'propor_editar_arquivo_codigo']
 
@@ -70,6 +71,20 @@ export const TOOLS = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'buscar_base_tecnica',
+    description: 'Pesquisa a base tecnica real do Atlas: perfis, acessorios, vidros, produtos e linhas. Use SEMPRE para perguntas tecnicas como "trilho de 3 planos da Suprema", "perfil mao de amigo", codigos e aplicacoes. Conhecimento validado pelo usuario tem prioridade; sem validacao, apresente apenas como candidato e nunca como certeza.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        busca: { type: 'string', description: 'Descricao livre do que procurar, por exemplo: trilho 3 planos' },
+        linha: { type: 'string', description: 'Linha tecnica quando conhecida, por exemplo: Suprema' },
+        categoria: { type: 'string', description: 'perfil, acessorio, vidro ou outra categoria, opcional' },
+        limite: { type: 'number', description: 'Numero maximo de candidatos, padrao 8' },
+      },
+      required: ['busca'],
+    },
+  },
+  {
     name: 'lembrar_fato',
     description: 'Salva um fato ou preferencia sobre o usuario para lembrar em conversas futuras (aprendizado continuo). Use quando o usuario pedir para voce lembrar algo, ou notar uma preferencia clara e recorrente.',
     input_schema: {
@@ -113,6 +128,23 @@ export const TOOLS = [
 
 export const MASTER_TOOLS = [
   {
+    name: 'validar_conhecimento_tecnico',
+    description: 'Somente para o usuario master. Salva uma classificacao tecnica como conhecimento VALIDADO do Atlas quando o usuario confirmar ou corrigir explicitamente um item mostrado pela busca tecnica. Use para ensinar, por exemplo, que determinado codigo e trilho de 3 planos da Suprema. Nunca valide por inferencia propria.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        produto_id: { type: 'string', description: 'ID do produto retornado por buscar_base_tecnica' },
+        codigo: { type: 'string', description: 'Codigo do perfil/produto, alternativa ao produto_id' },
+        tipo_perfil: { type: 'string', description: 'Classificacao: trilho, marco, montante, mao de amigo etc.' },
+        numero_planos: { type: 'number', description: 'Numero de planos quando aplicavel: 2, 3, 5 etc.' },
+        linha: { type: 'string', description: 'Linha tecnica validada, por exemplo Suprema' },
+        aplicacao: { type: 'string', description: 'Aplicacao tecnica conhecida' },
+        observacao: { type: 'string', description: 'Observacao tecnica do validador' },
+        atributos: { type: 'object', description: 'Outros atributos tecnicos confirmados' },
+      },
+    },
+  },
+  {
     name: 'ler_arquivo_codigo',
     description: 'Somente para o usuario master. Le o conteudo de um arquivo do codigo-fonte do sistema Atlas One (repositorio no GitHub). Use para entender o codigo antes de propor uma alteracao.',
     input_schema: {
@@ -144,7 +176,7 @@ export const MASTER_TOOLS = [
   },
 ]
 
-export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string): Promise<any> {
+export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string, usuarioNome?: string): Promise<any> {
   const limite = Math.min(Number(input && input.limite) || 20, 50)
   try {
     if (nome === 'buscar_tarefas') {
@@ -205,6 +237,13 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
         .eq('ativo', true)
         .order('ordem', { ascending: true })
       return error ? { erro: error.message } : { setores: data }
+    }
+    if (nome === 'buscar_base_tecnica') {
+      return await buscarBaseTecnicaAgente(input)
+    }
+    if (nome === 'validar_conhecimento_tecnico') {
+      if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
+      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId)
     }
     if (nome === 'lembrar_fato') {
       const fato = input && input.fato
@@ -360,9 +399,10 @@ function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: str
   let prompt = 'Voce e o Agente IA do Atlas One, sistema interno da Esquadrifacio (esquadrias de aluminio e vidro).\n'
   prompt += 'Data de hoje: ' + hoje + '.\n'
   prompt += 'Usuario atual: ' + usuarioNome + ' (' + (usuarioRole === 'master' ? 'administrador' : 'funcionario') + ').\n'
-  prompt += 'REGRA MAIS IMPORTANTE: voce SO responde sobre o sistema Atlas One (dados internos da empresa: tarefas, orcamentos, assistencias, clientes/CRM, calendario, setores). Se perguntarem qualquer coisa fora disso (conhecimento geral, noticias, outros assuntos), recuse educadamente em uma frase curta e redirecione para o que voce pode ajudar no sistema. Nao gaste tempo nem tokens respondendo perguntas fora do escopo.\n'
+  prompt += 'REGRA MAIS IMPORTANTE: voce SO responde sobre o sistema Atlas One e a base tecnica interna da Esquadrifacio: tarefas, orcamentos, assistencias, clientes/CRM, calendario, setores, linhas, perfis, acessorios, vidros, tipologias, medidas, formulacoes e demais dados tecnicos cadastrados. Se perguntarem qualquer coisa fora disso, recuse educadamente em uma frase curta e redirecione para o que voce pode ajudar no sistema.\n'
   if (usuarioRole === 'master') {
-    prompt += 'Este usuario e o administrador master: voce tem acesso total a todos os setores do sistema, sem restricao. Alem disso, voce pode ler e propor alteracoes no proprio codigo-fonte do sistema Atlas One usando as ferramentas ler_arquivo_codigo, listar_arquivos_codigo e propor_editar_arquivo_codigo. TODA alteracao de codigo deve ser proposta com propor_editar_arquivo_codigo (nunca aplicada direto) e so acontece apos o usuario confirmar explicitamente. Ao propor uma alteracao de codigo, explique em poucas palavras o que vai mudar e por que.\n'
+    prompt += 'Este usuario e o administrador master: voce tem acesso total a todos os setores do sistema. Alem disso, pode ler e propor alteracoes no codigo-fonte usando ler_arquivo_codigo, listar_arquivos_codigo e propor_editar_arquivo_codigo. TODA alteracao de codigo deve ser proposta e so acontece apos confirmacao explicita.\n'
+    prompt += 'Quando este usuario confirmar ou corrigir explicitamente uma classificacao tecnica de um perfil/produto mostrado por buscar_base_tecnica, use validar_conhecimento_tecnico para gravar esse conhecimento como VALIDADO. Exemplos: "esse e trilho de 3 planos", "na verdade e 2 planos", "esse e da linha Suprema". Nunca transforme sua propria inferencia em conhecimento validado.\n'
   } else if (setoresInfo && setoresInfo.length > 0) {
     prompt += 'Voce e especialista SOMENTE nos setores que este usuario tem acesso, listados abaixo. Se perguntarem sobre outro setor do sistema que nao esta nessa lista, informe que voce so pode ajudar com os setores abaixo e sugira falar com o administrador para liberar acesso.\n'
     for (const s of setoresInfo) {
@@ -371,9 +411,10 @@ function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: str
   } else {
     prompt += 'Este usuario ainda nao tem setores liberados. Informe que ele deve pedir ao administrador para liberar acesso a algum setor.\n'
   }
-  prompt += 'Use as ferramentas de busca para responder com dados reais, nunca invente numeros, nomes ou datas.\n'
-  prompt += 'Quando o usuario pedir algo que muda dados (criar tarefa, criar evento, editar codigo), use a ferramenta propor_* sozinha nessa resposta. O sistema vai pedir confirmacao ao usuario antes de executar de verdade. Nunca diga que ja fez algo que so foi proposto.\n'
-  prompt += 'Se perceber uma preferencia clara e util do usuario, ou se ele pedir para voce lembrar de algo, guarde com lembrar_fato.\n'
+  prompt += 'Use as ferramentas de busca para responder com dados reais, nunca invente numeros, nomes, codigos, linhas ou datas.\n'
+  prompt += 'Para qualquer pergunta sobre perfil, acessorio, vidro, linha, codigo, trilho, numero de planos, aplicacao ou outro conhecimento tecnico, use buscar_base_tecnica antes de responder. Se o resultado tiver conhecimento_validado, ele tem prioridade. Sem conhecimento validado, diga claramente que sao candidatos para validacao, nao uma certeza.\n'
+  prompt += 'Quando o usuario pedir algo que muda dados (criar tarefa, criar evento, editar codigo), use a ferramenta propor_* sozinha nessa resposta. O sistema vai pedir confirmacao antes de executar. Nunca diga que ja fez algo que so foi proposto.\n'
+  prompt += 'Se perceber uma preferencia clara e util do usuario, ou se ele pedir para voce lembrar de algo, guarde com lembrar_fato. Para conhecimento TECNICO de produto/perfil use validar_conhecimento_tecnico, nao lembrar_fato.\n'
   prompt += 'Responda sempre em portugues do Brasil, de forma direta e objetiva, sem enrolacao.\n'
   if (fatos && fatos.length > 0) {
     prompt += '\nO que voce ja sabe sobre este usuario (memoria de conversas anteriores):\n'
@@ -482,7 +523,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
 
     const toolResults = []
     for (const t of toolUses) {
-      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole)
+      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole, usuarioNome)
       toolResults.push({ type: 'tool_result', tool_use_id: t.id, content: JSON.stringify(resultado) })
     }
     msgs = [...msgs, { role: 'user', content: toolResults }]
