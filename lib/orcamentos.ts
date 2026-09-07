@@ -271,6 +271,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     acabamento, acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
     temperatura, contramarco, itens: itensSalvos, fotos_urls: fotosUrls, anexos: anexosSalvos,
     tipo_medida: tipoMedidaOrcamento,
+    revisao_grupo_id: novoId,
     descricao_livre: null, valor_estimado: null, status: 'rascunho', modo_entrada: 'formulario',
     coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString(),
     arquiteto_nome: arquitetoNome || null, arquiteto_contato: arquitetoContato || null,
