@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { autenticarCompras } from '@/lib/comprasServer'
+import { autenticarCompras, type UsuarioCompras } from '@/lib/comprasServer'
 import { arredondarMoeda, precoPorMargemReal } from '@/lib/precificacaoBalcao'
 
 export const runtime = 'nodejs'
@@ -14,21 +14,31 @@ function numero(v: unknown) {
   return Number.isFinite(n) ? n : null
 }
 
-async function fornecedor(body: any, usuario: { id: string; nome: string }) {
+async function fornecedor(body: any, usuario: UsuarioCompras) {
   const id = texto(body.fornecedorId, 80)
   if (id) {
-    const { data } = await supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf').eq('id', id).maybeSingle()
+    const { data } = await supabaseAdmin
+      .from('fornecedores')
+      .select('id,nome,cnpj_cpf')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('id', id)
+      .maybeSingle()
     if (data) return data
   }
   const cnpj = digitos(body.fornecedorCnpj)
   if (cnpj) {
-    const { data } = await supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf').not('cnpj_cpf','is',null)
+    const { data } = await supabaseAdmin
+      .from('fornecedores')
+      .select('id,nome,cnpj_cpf')
+      .eq('empresa_id', usuario.empresa_id)
+      .not('cnpj_cpf','is',null)
     const achou = (data || []).find(f => digitos(f.cnpj_cpf) === cnpj)
     if (achou) return achou
   }
   const nome = texto(body.fornecedorNome, 250)
   if (!nome && !cnpj) throw new Error('Informe o fornecedor antes de cadastrar/vincular o produto.')
   const { data, error } = await supabaseAdmin.from('fornecedores').insert({
+    empresa_id: usuario.empresa_id,
     nome: nome || `Fornecedor ${cnpj}`, cnpj_cpf: cnpj || null, ativo: true,
     criado_por_id: usuario.id, criado_por_nome: usuario.nome,
     observacoes: 'Criado a partir do vínculo de item de NF de compra.',
@@ -69,8 +79,13 @@ export async function POST(req: NextRequest) {
     let produtoId = texto(body.produtoId, 80)
     let criado = false
     if (produtoId) {
-      const { data } = await supabaseAdmin.from('produtos').select('id,codigo,nome,unidade').eq('id', produtoId).maybeSingle()
-      if (!data) return NextResponse.json({ error: 'Produto escolhido não existe mais.' }, { status: 404 })
+      const { data } = await supabaseAdmin
+        .from('produtos')
+        .select('id,codigo,nome,unidade')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('id', produtoId)
+        .maybeSingle()
+      if (!data) return NextResponse.json({ error: 'Produto escolhido não existe nesta empresa.' }, { status: 404 })
     } else {
       const categoria = texto(body.categoria, 80)
       if (!descricao) return NextResponse.json({ error: 'Descrição é obrigatória para cadastrar novo produto.' }, { status: 400 })
@@ -79,10 +94,16 @@ export async function POST(req: NextRequest) {
       if (unidadeCompra && unidadeCompra !== unidadeEstoque && (!fator || fator <= 0)) {
         return NextResponse.json({ error: 'Defina o fator de conversão entre unidade de compra e unidade de estoque.' }, { status: 400 })
       }
-      const { data: duplicado } = await supabaseAdmin.from('produtos').select('id,codigo,nome').ilike('codigo', codigoFornecedor).maybeSingle()
+      const { data: duplicado } = await supabaseAdmin
+        .from('produtos')
+        .select('id,codigo,nome')
+        .eq('empresa_id', usuario.empresa_id)
+        .ilike('codigo', codigoFornecedor)
+        .maybeSingle()
       if (duplicado) produtoId = duplicado.id
       else {
         const { data, error } = await supabaseAdmin.from('produtos').insert({
+          empresa_id: usuario.empresa_id,
           nome: descricao,
           descricao,
           categoria,
@@ -120,10 +141,12 @@ export async function POST(req: NextRequest) {
     const { data: produto } = await supabaseAdmin
       .from('produtos')
       .select('id,codigo,nome,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,ultimo_preco_vendido')
+      .eq('empresa_id', usuario.empresa_id)
       .eq('id', produtoId)
       .single()
 
     const { error: mapError } = await supabaseAdmin.from('produto_fornecedores').upsert({
+      empresa_id: usuario.empresa_id,
       produto_id: produtoId, fornecedor_id: f.id, codigo_fornecedor: codigoFornecedor,
       descricao_fornecedor: descricao || null, ncm_fornecedor: ncm, unidade_compra: unidadeCompra,
       fator_conversao: fator, preferencial: true, ativo: true,
