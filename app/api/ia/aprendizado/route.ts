@@ -47,7 +47,9 @@ function contextoCompativel(registrado: Record<string, unknown>, procurado: Reco
   )
 }
 
-async function autenticar(req: NextRequest) {
+type UsuarioAprendizado = { id: string; nome: string; role: string; empresa_id: string }
+
+async function autenticar(req: NextRequest): Promise<UsuarioAprendizado | null> {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
   const { data, error } = await supabaseAdmin.auth.getUser(token)
@@ -55,11 +57,12 @@ async function autenticar(req: NextRequest) {
 
   const { data: usuario } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
 
-  return usuario || null
+  if (!usuario?.empresa_id) return null
+  return usuario as UsuarioAprendizado
 }
 
 type EventoSalvo = {
@@ -108,6 +111,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error } = await supabaseAdmin.from('agente_memorias').insert({
+      empresa_id: usuario.empresa_id,
       usuario_id: usuario.id,
       chave: `${PREFIXO}${dominio}`,
       valor: JSON.stringify(evento),
@@ -141,9 +145,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    let query = supabaseAdmin
+    const query = supabaseAdmin
       .from('agente_memorias')
       .select('valor,created_at')
+      .eq('empresa_id', usuario.empresa_id)
       .eq('chave', `${PREFIXO}${dominio}`)
       .order('created_at', { ascending: false })
       .limit(1500)
