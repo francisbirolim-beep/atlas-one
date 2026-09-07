@@ -6,6 +6,8 @@ import { autenticarCompras } from '@/lib/comprasServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const LIMITE_CATALOGO_BYTES = 50 * 1024 * 1024
+
 type ItemImportado = {
   codigo?: string | null
   descricao?: string | null
@@ -25,6 +27,31 @@ function numero(v: unknown): number | null {
   if (v == null || v === '') return null
   const n = Number(String(v).replace(/\./g, '').replace(',', '.'))
   return Number.isFinite(n) ? n : null
+}
+
+function validarUrlCatalogo(urlInformada: string, fornecedorId: string) {
+  const supabaseBase = String(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim()
+  if (!supabaseBase) throw new Error('URL do Supabase não configurada no servidor.')
+
+  let url: URL
+  let base: URL
+  try {
+    url = new URL(urlInformada)
+    base = new URL(supabaseBase)
+  } catch {
+    throw new Error('URL do documento inválida.')
+  }
+
+  if (url.protocol !== 'https:') throw new Error('O documento deve usar HTTPS.')
+  if (url.username || url.password) throw new Error('URL do documento inválida.')
+  if (url.origin !== base.origin) throw new Error('A URL do documento não pertence ao Storage autorizado do Atlas.')
+
+  const prefixo = `/storage/v1/object/public/fotos/fornecedores/${encodeURIComponent(fornecedorId)}/`
+  if (!url.pathname.startsWith(prefixo)) {
+    throw new Error('O documento não pertence à pasta autorizada deste fornecedor.')
+  }
+
+  return url.toString()
 }
 
 function normalizarCodigo(v: unknown) {
@@ -337,6 +364,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const mimeType = texto(body.mime_type, 160) || null
       if (!nomeArquivo || !url) return NextResponse.json({ error: 'Arquivo inválido.' }, { status: 400 })
 
+      let urlPermitida: string
+      try {
+        urlPermitida = validarUrlCatalogo(url, fornecedorId)
+      } catch (e) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : 'URL do documento não autorizada.' }, { status: 400 })
+      }
+
       const { data: documento, error: inserirError } = await supabaseAdmin
         .from('fornecedor_documentos')
         .insert({
@@ -344,7 +378,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           fornecedor_id: fornecedorId,
           tipo: texto(body.tipo, 60) || 'catalogo',
           nome_arquivo: nomeArquivo,
-          url,
+          url: urlPermitida,
           mime_type: mimeType,
           tamanho_bytes: numero(body.tamanho_bytes),
           status: 'enviado',
@@ -363,9 +397,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
 
       try {
-        const resposta = await fetch(url)
+        const resposta = await fetch(urlPermitida, { redirect: 'error', cache: 'no-store' })
         if (!resposta.ok) throw new Error(`Falha ao baixar PDF (${resposta.status}).`)
+        const tamanhoResposta = Number(resposta.headers.get('content-length') || '0')
+        if (Number.isFinite(tamanhoResposta) && tamanhoResposta > LIMITE_CATALOGO_BYTES) {
+          throw new Error('O catálogo ultrapassa o limite de 50 MB.')
+        }
         const buffer = Buffer.from(await resposta.arrayBuffer())
+        if (buffer.length > LIMITE_CATALOGO_BYTES) throw new Error('O catálogo ultrapassa o limite de 50 MB.')
         const parsed = await pdfParse(buffer)
         const textoExtraido = texto(parsed.text, 250000)
         if (textoExtraido.length < 80) {
