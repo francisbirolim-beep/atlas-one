@@ -1,0 +1,15 @@
+alter table public.produto_imagens alter column empresa_id set not null;
+alter table public.historico alter column empresa_id set not null;
+alter table public.backups alter column empresa_id set not null;
+alter table public.notificacoes alter column empresa_id set not null;
+alter table public.tarefa_colunas alter column empresa_id set not null;
+alter table public.workflow_automacoes alter column empresa_id set not null;
+alter table public.producao_colunas alter column empresa_id set not null;
+alter table public.automacoes_orcamento alter column empresa_id set not null;
+alter table public.setor_kanban_movimentos alter column empresa_id set not null;
+alter table public.workflow_execucoes alter column empresa_id set not null;
+alter table public.agentes_ia alter column empresa_id set not null;
+alter table public.automacoes_assistencia alter column empresa_id set not null;
+alter table public.crm_interacoes alter column empresa_id set not null;
+alter table public.crm_metas alter column empresa_id set not null;
+alter table public.notificacao_preferencias alter column empresa_id set not null;
