@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || ''
     const usuario = await verificarUsuario(authHeader)
-    if (!usuario) {
+    if (!usuario?.empresa_id) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
@@ -18,12 +18,16 @@ export async function GET(req: NextRequest) {
     const escopo: 'setor' | 'master' = usuario.role === 'master' ? 'master' : 'setor'
 
     if (escopo === 'setor') {
-      const { data: permData } = await supabaseAdmin.from('permissoes').select('setor_id').eq('usuario_id', usuario.id)
+      const { data: permData } = await supabaseAdmin
+        .from('permissoes')
+        .select('setor_id')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('usuario_id', usuario.id)
       const setorIds = (permData || []).map((p: any) => p.setor_id)
       setorIdPrincipal = setorIds[0] || null
     }
 
-    const configAgente = await carregarConfigAgente(setorIdPrincipal, escopo)
+    const configAgente = await carregarConfigAgente(setorIdPrincipal, escopo, usuario.empresa_id)
     const apiKeyPresente = !!process.env.ANTHROPIC_API_KEY
     const resultado = await checarProvider(configAgente.provider, configAgente.modelo, apiKeyPresente)
 
