@@ -41,6 +41,28 @@ function validarUrlCatalogo(urlInformada: string, fornecedorId: string) {
   return url.toString()
 }
 
+async function lerRespostaComLimite(resposta: Response): Promise<Buffer> {
+  if (!resposta.body) return Buffer.alloc(0)
+  const reader = resposta.body.getReader()
+  const partes: Uint8Array[] = []
+  let total = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > LIMITE_CATALOGO_BYTES) {
+        await reader.cancel()
+        throw new Error('O catálogo ultrapassa o limite de 50 MB.')
+      }
+      partes.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return Buffer.concat(partes.map((parte) => Buffer.from(parte)), total)
+}
+
 function normalizarCodigo(v: unknown) {
   return texto(v, 80).toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
@@ -386,8 +408,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const tamanhoResposta = Number(resposta.headers.get('content-length') || '0')
         if (Number.isFinite(tamanhoResposta) && tamanhoResposta > LIMITE_CATALOGO_BYTES) throw new Error('O catálogo ultrapassa o limite de 50 MB.')
         if (!resposta.ok) throw new Error(`Falha ao baixar PDF (${resposta.status}).`)
-        const buffer = Buffer.from(await resposta.arrayBuffer())
-        if (buffer.length > LIMITE_CATALOGO_BYTES) throw new Error('O catálogo ultrapassa o limite de 50 MB.')
+        const buffer = await lerRespostaComLimite(resposta)
         const parsed = await pdfParse(buffer)
         const textoExtraido = texto(parsed.text, 250000)
         if (textoExtraido.length < 80) {
