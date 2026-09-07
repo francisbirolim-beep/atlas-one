@@ -8,24 +8,11 @@ import {
 import { resumoAuditoriaWVetroExato } from '@/lib/wvetroResumoExatoServer'
 import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
 import { processarLoteImagensWVetro } from '@/lib/wvetroImagensServer'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
-
-async function master(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin
-    .from('usuarios')
-    .select('id,nome,role')
-    .eq('id', data.user.id)
-    .maybeSingle()
-  if (!usuario || usuario.role !== 'master') return null
-  return usuario
-}
 
 function dataOk(valor: unknown): valor is string {
   return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor) && !Number.isNaN(Date.parse(`${valor}T00:00:00Z`))
@@ -84,7 +71,7 @@ async function reconstruirVariaveisExplicitas() {
 }
 
 export async function GET(req: NextRequest) {
-  if (!await master(req)) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
+  if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Acesso W.Vetro não autorizado para esta empresa.' }, { status: 403 })
   try {
     const [resumo, retomavel] = await Promise.all([
       resumoAuditoriaWVetroExato(),
@@ -97,8 +84,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const usuario = await master(req)
-  if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
+  const usuario = await autenticarMasterWVetro(req)
+  if (!usuario) return NextResponse.json({ error: 'Acesso W.Vetro não autorizado para esta empresa.' }, { status: 403 })
 
   let body: any = {}
   try { body = await req.json() } catch {}
