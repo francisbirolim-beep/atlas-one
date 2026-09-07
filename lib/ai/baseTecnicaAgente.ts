@@ -47,7 +47,9 @@ type MemoriaTecnica = {
   registrado_em?: string
 }
 
-export async function buscarBaseTecnicaAgente(input: any) {
+export async function buscarBaseTecnicaAgente(input: any, empresaId: string) {
+  if (!empresaId) return { erro: 'Usuário sem empresa vinculada.' }
+
   const busca = String(input?.busca || input?.descricao || '').trim()
   const categoria = String(input?.categoria || '').trim().toLowerCase()
   const linhaSolicitada = String(input?.linha || '').trim()
@@ -55,12 +57,13 @@ export async function buscarBaseTecnicaAgente(input: any) {
   const termos = tokensBusca(`${busca} ${linhaSolicitada}`)
 
   const [produtosResp, linhasResp, vinculosResp, memoriasResp] = await Promise.all([
-    supabaseAdmin.from('produtos').select('*').eq('ativo', true).limit(5000),
+    supabaseAdmin.from('produtos').select('*').eq('empresa_id', empresaId).eq('ativo', true).limit(5000),
     supabaseAdmin.from('linhas_tecnicas').select('*').limit(1000),
     supabaseAdmin.from('linha_produtos').select('produto_id,linha_id').limit(20000),
     supabaseAdmin
       .from('agente_memorias')
       .select('chave,valor,created_at')
+      .eq('empresa_id', empresaId)
       .like('chave', `${PREFIXO_APRENDIZADO}%`)
       .order('created_at', { ascending: false })
       .limit(5000),
@@ -167,17 +170,19 @@ export async function buscarBaseTecnicaAgente(input: any) {
   }
 }
 
-export async function validarConhecimentoTecnicoAgente(input: any, usuarioId: string, usuarioNome: string) {
+export async function validarConhecimentoTecnicoAgente(input: any, usuarioId: string, usuarioNome: string, empresaId: string) {
+  if (!empresaId) return { erro: 'Usuário sem empresa vinculada.' }
+
   const produtoId = String(input?.produto_id || '').trim()
   const codigoInformado = String(input?.codigo || '').trim()
   if (!produtoId && !codigoInformado) return { erro: 'Informe produto_id ou código do perfil/produto que está sendo validado.' }
 
-  let query = supabaseAdmin.from('produtos').select('*')
+  let query = supabaseAdmin.from('produtos').select('*').eq('empresa_id', empresaId)
   if (produtoId) query = query.eq('id', produtoId)
   else query = query.or(`codigo.eq.${codigoInformado},codigo_origem.eq.${codigoInformado}`)
   const { data: produto, error } = await query.limit(1).maybeSingle()
   if (error) return { erro: error.message }
-  if (!produto) return { erro: 'Produto/perfil não encontrado na base técnica.' }
+  if (!produto) return { erro: 'Produto/perfil não encontrado na base técnica desta empresa.' }
 
   const atributos = {
     tipo_perfil: input?.tipo_perfil || input?.tipo || null,
@@ -211,6 +216,7 @@ export async function validarConhecimentoTecnicoAgente(input: any, usuarioId: st
   }
 
   const { error: memoriaError } = await supabaseAdmin.from('agente_memorias').insert({
+    empresa_id: empresaId,
     usuario_id: usuarioId,
     chave: `${PREFIXO_APRENDIZADO}${evento.dominio}`,
     valor: JSON.stringify(evento),

@@ -8,7 +8,6 @@ import { buscarBaseTecnicaAgente, validarConhecimentoTecnicoAgente } from './ai/
 
 export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'propor_editar_arquivo_codigo']
 
-// Nome fixo da empresa para fins de auditoria. Ainda nao existe conceito de multi-tenant no schema atual.
 const EMPRESA_PADRAO = 'Atlas One'
 
 export const TOOLS = [
@@ -163,7 +162,7 @@ export const MASTER_TOOLS = [
   },
   {
     name: 'propor_editar_arquivo_codigo',
-    description: 'Somente para o usuario master. Propoe criar ou substituir o conteudo de um arquivo do codigo-fonte do sistema. NAO aplica direto: o usuario confirma antes. Apos confirmar, o commit e feito no GitHub e o deploy acontece automaticamente. Use ler_arquivo_codigo antes para ver o conteudo atual do arquivo, e sempre proponha o conteudo COMPLETO e final do arquivo, nao apenas o trecho alterado.',
+    description: 'Somente para o usuario master. Propoe uma alteracao de codigo para revisao. A execucao direta permanece bloqueada: qualquer mudanca real exige branch, PR, CI e aprovacao.',
     input_schema: {
       type: 'object',
       properties: {
@@ -176,9 +175,22 @@ export const MASTER_TOOLS = [
   },
 ]
 
+async function empresaDoUsuario(usuarioId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('usuarios')
+    .select('empresa_id')
+    .eq('id', usuarioId)
+    .maybeSingle()
+  if (error || !data?.empresa_id) return null
+  return String(data.empresa_id)
+}
+
 export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string, usuarioNome?: string): Promise<any> {
   const limite = Math.min(Number(input && input.limite) || 20, 50)
   try {
+    const empresaId = await empresaDoUsuario(usuarioId)
+    if (!empresaId) return { erro: 'Usuario sem empresa vinculada.' }
+
     if (nome === 'buscar_tarefas') {
       let q = supabaseAdmin
         .from('tarefas')
@@ -203,6 +215,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('orcamentos')
         .select('cliente_nome,tipo_esquadria,status,temperatura,valor_estimado,created_at')
+        .eq('empresa_id', empresaId)
         .order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca_cliente) q = q.ilike('cliente_nome', '%' + input.busca_cliente + '%')
@@ -214,6 +227,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('clientes')
         .select('nome,whatsapp,cidade,origem,responsavel')
+        .eq('empresa_id', empresaId)
         .order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca) q = q.ilike('nome', '%' + input.busca + '%')
@@ -224,6 +238,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('assistencias')
         .select('cliente_nome,descricao_problema,status,cidade,created_at')
+        .eq('empresa_id', empresaId)
         .order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.status) q = q.eq('status', input.status)
@@ -239,17 +254,17 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       return error ? { erro: error.message } : { setores: data }
     }
     if (nome === 'buscar_base_tecnica') {
-      return await buscarBaseTecnicaAgente(input)
+      return await buscarBaseTecnicaAgente(input, empresaId)
     }
     if (nome === 'validar_conhecimento_tecnico') {
       if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
-      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId)
+      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId, empresaId)
     }
     if (nome === 'lembrar_fato') {
       const fato = input && input.fato
       if (!fato) return { erro: 'fato vazio' }
-      await supabaseAdmin.from('agente_memorias').insert({ usuario_id: usuarioId, chave: 'fato', valor: fato })
-      return { ok: true, salvo: fato }
+      const { error } = await supabaseAdmin.from('agente_memorias').insert({ empresa_id: empresaId, usuario_id: usuarioId, chave: 'fato', valor: fato })
+      return error ? { erro: error.message } : { ok: true, salvo: fato }
     }
     if (nome === 'ler_arquivo_codigo') {
       if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
@@ -293,33 +308,11 @@ async function listarArquivosCodigo(caminho: string): Promise<any> {
   return { itens: data.map((i: any) => ({ nome: i.name, tipo: i.type, caminho: i.path })) }
 }
 
-export async function commitArquivoCodigo(caminho: string, novoConteudo: string, mensagem: string): Promise<any> {
-  if (!process.env.GITHUB_PAT) return { erro: 'GITHUB_PAT nao configurado no servidor' }
-  if (!novoConteudo || typeof novoConteudo !== 'string') return { erro: 'Conteudo do arquivo veio vazio ou incompleto (resposta da IA truncada). Peca uma mudanca menor, em um arquivo por vez.' }
-  const headers = githubHeaders()
-  let sha: string | undefined
-  const getResp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, { headers })
-  if (getResp.ok) {
-    const getData = await getResp.json()
-    sha = getData.sha
+export async function commitArquivoCodigo(_caminho: string, _novoConteudo: string, _mensagem: string): Promise<any> {
+  return {
+    erro: 'Alteracao direta de codigo pela IA esta bloqueada. Use branch, Pull Request, CI e aprovacao antes de qualquer merge.',
+    bloqueado: true,
   }
-  const body: any = {
-    message: mensagem || 'Alteracao via Agente IA',
-    content: Buffer.from(novoConteudo, 'utf-8').toString('base64'),
-    branch: 'main',
-  }
-  if (sha) body.sha = sha
-  const putResp = await fetch('https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + caminho, {
-    method: 'PUT',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!putResp.ok) {
-    const errText = await putResp.text()
-    return { erro: 'Falha ao commitar (' + putResp.status + '): ' + errText.slice(0, 300) }
-  }
-  const putData = await putResp.json()
-  return { ok: true, commitSha: putData.commit ? putData.commit.sha : null }
 }
 
 export async function executarPropostaTarefa(usuarioId: string, input: any): Promise<any> {
@@ -401,7 +394,7 @@ function montarSystemPrompt(usuarioNome: string, usuarioRole: string, fatos: str
   prompt += 'Usuario atual: ' + usuarioNome + ' (' + (usuarioRole === 'master' ? 'administrador' : 'funcionario') + ').\n'
   prompt += 'REGRA MAIS IMPORTANTE: voce SO responde sobre o sistema Atlas One e a base tecnica interna da Esquadrifacio: tarefas, orcamentos, assistencias, clientes/CRM, calendario, setores, linhas, perfis, acessorios, vidros, tipologias, medidas, formulacoes e demais dados tecnicos cadastrados. Se perguntarem qualquer coisa fora disso, recuse educadamente em uma frase curta e redirecione para o que voce pode ajudar no sistema.\n'
   if (usuarioRole === 'master') {
-    prompt += 'Este usuario e o administrador master: voce tem acesso total a todos os setores do sistema. Alem disso, pode ler e propor alteracoes no codigo-fonte usando ler_arquivo_codigo, listar_arquivos_codigo e propor_editar_arquivo_codigo. TODA alteracao de codigo deve ser proposta e so acontece apos confirmacao explicita.\n'
+    prompt += 'Este usuario e o administrador master: voce tem acesso total a todos os setores do sistema. Pode ler arquivos do codigo-fonte para diagnostico, mas qualquer alteracao real exige branch, Pull Request, CI e aprovacao; commit direto em main e proibido.\n'
     prompt += 'Quando este usuario confirmar ou corrigir explicitamente uma classificacao tecnica de um perfil/produto mostrado por buscar_base_tecnica, use validar_conhecimento_tecnico para gravar esse conhecimento como VALIDADO. Exemplos: "esse e trilho de 3 planos", "na verdade e 2 planos", "esse e da linha Suprema". Nunca transforme sua propria inferencia em conhecimento validado.\n'
   } else if (setoresInfo && setoresInfo.length > 0) {
     prompt += 'Voce e especialista SOMENTE nos setores que este usuario tem acesso, listados abaixo. Se perguntarem sobre outro setor do sistema que nao esta nessa lista, informe que voce so pode ajudar com os setores abaixo e sugira falar com o administrador para liberar acesso.\n'
@@ -456,9 +449,13 @@ function sanitizarMensagens(mensagens: any[]): any[] {
 }
 
 export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string): Promise<any> {
+  const empresaId = await empresaDoUsuario(usuarioId)
+  if (!empresaId) return { done: true, text: 'Usuario sem empresa vinculada.', erro: true, messages }
+
   const { data: memoriasData } = await supabaseAdmin
     .from('agente_memorias')
     .select('valor')
+    .eq('empresa_id', empresaId)
     .eq('usuario_id', usuarioId)
     .order('created_at', { ascending: false })
     .limit(30)
@@ -537,7 +534,7 @@ export async function verificarUsuario(authHeader: string | null): Promise<any> 
   const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token)
   if (authError || !userData || !userData.user) return null
   const { data: usuario } = await supabaseAdmin.from('usuarios').select('*').eq('id', userData.user.id).maybeSingle()
-  return usuario || null
+  return usuario?.empresa_id ? usuario : null
 }
 
 export async function obterOuCriarConversaHoje(usuarioId: string): Promise<string | null> {
