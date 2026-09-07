@@ -14,10 +14,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const produtoId = String(body.produtoId || '').trim()
 
     if (!produtoId) {
+      const { data: item, error: itemError } = await supabaseAdmin
+        .from('compras_nf_itens')
+        .select('id')
+        .eq('id', params.id)
+        .eq('empresa_id', usuario.empresa_id)
+        .maybeSingle()
+      if (itemError) throw new Error(itemError.message)
+      if (!item) return NextResponse.json({ error: 'Item da nota não encontrado.' }, { status: 404 })
+
       const { error } = await supabaseAdmin
         .from('compras_nf_itens')
         .update({ produto_id: null, vinculo_status: 'pendente' })
-        .eq('id', params.id)
+        .eq('id', item.id)
+        .eq('empresa_id', usuario.empresa_id)
       if (error) throw new Error(error.message)
       return NextResponse.json({ ok: true, produto: null, vinculoStatus: 'pendente' })
     }
@@ -26,6 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('produtos')
       .select('id,codigo,nome,unidade,custo')
       .eq('id', produtoId)
+      .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
     if (produtoError) throw new Error(produtoError.message)
@@ -35,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('compras_nf_itens')
       .select('id,custo_aplicado')
       .eq('id', params.id)
+      .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
     if (itemError) throw new Error(itemError.message)
@@ -44,6 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('compras_nf_itens')
       .update({ produto_id: produto.id, vinculo_status: 'vinculado' })
       .eq('id', item.id)
+      .eq('empresa_id', usuario.empresa_id)
 
     if (error) throw new Error(error.message)
 
