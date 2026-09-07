@@ -36,10 +36,11 @@ function normalizarNome(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
-async function colunaPorFinalidade(finalidade: 'andamento' | 'resolvido') {
+async function colunaPorFinalidade(finalidade: 'andamento' | 'resolvido', empresaId: string) {
   const { data } = await supabaseAdmin
     .from('assistencia_colunas')
     .select('id, nome, ordem')
+    .eq('empresa_id', empresaId)
     .order('ordem', { ascending: true })
 
   const colunas = data || []
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('assistencias')
     .select('id, atendimento_iniciado_em, atendimento_concluido_em, gps_inicio_capturado_em, gps_fim_capturado_em')
     .eq('id', acesso.assistencia_id)
+    .eq('empresa_id', acesso.empresa_id)
     .maybeSingle()
 
   if (erroAtual || !assistenciaAtual) {
@@ -111,7 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       return NextResponse.json({ error: 'Informe a data do atendimento.' }, { status: 400 })
     }
 
-    const coluna = await colunaPorFinalidade('andamento')
+    const coluna = await colunaPorFinalidade('andamento', acesso.empresa_id)
     const atualizacao: Record<string, unknown> = {
       tecnico_nome: tecnicoNome,
       data_atendimento: dataAtendimento,
@@ -132,6 +134,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       .from('assistencias')
       .update(atualizacao)
       .eq('id', acesso.assistencia_id)
+      .eq('empresa_id', acesso.empresa_id)
 
     if (error) {
       return NextResponse.json({ error: 'Nao foi possivel iniciar a assistencia.' }, { status: 500 })
@@ -141,6 +144,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       .from('assistencia_acessos_externos')
       .update({ ultimo_acesso_em: agora })
       .eq('id', acesso.id)
+      .eq('empresa_id', acesso.empresa_id)
 
     return NextResponse.json({
       ok: true,
@@ -171,7 +175,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const iniciadoEm = assistenciaAtual.atendimento_iniciado_em || agora
   const concluidoEm = assistenciaAtual.atendimento_concluido_em || agora
   const duracaoSegundos = Math.max(0, Math.round((new Date(concluidoEm).getTime() - new Date(iniciadoEm).getTime()) / 1000))
-  const coluna = await colunaPorFinalidade('resolvido')
+  const coluna = await colunaPorFinalidade('resolvido', acesso.empresa_id)
 
   const atualizacao: Record<string, unknown> = {
     tecnico_nome: tecnicoNome,
@@ -200,6 +204,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('assistencias')
     .update(atualizacao)
     .eq('id', acesso.assistencia_id)
+    .eq('empresa_id', acesso.empresa_id)
 
   if (error) {
     return NextResponse.json({ error: 'Nao foi possivel salvar o atendimento.' }, { status: 500 })
@@ -209,6 +214,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('assistencia_acessos_externos')
     .update({ ultimo_acesso_em: agora })
     .eq('id', acesso.id)
+    .eq('empresa_id', acesso.empresa_id)
 
   return NextResponse.json({
     ok: true,

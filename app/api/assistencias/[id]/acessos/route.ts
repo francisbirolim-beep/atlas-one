@@ -76,6 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data, error } = await supabaseAdmin
     .from('assistencia_acessos_externos')
     .select('id, assistencia_id, nome_tecnico, telefone_tecnico, expira_em, revogado_em, primeiro_acesso_em, ultimo_acesso_em, criado_por_nome, created_at')
+    .eq('empresa_id', usuario.empresa_id)
     .eq('assistencia_id', params.id)
     .order('created_at', { ascending: false })
 
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { data, error } = await supabaseAdmin
     .from('assistencia_acessos_externos')
     .insert({
+      empresa_id: usuario.empresa_id,
       assistencia_id: params.id,
       token_hash: tokenHash,
       nome_tecnico: nome,
@@ -139,6 +141,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     .from('assistencia_acessos_externos')
     .update({ revogado_em: new Date().toISOString() })
     .eq('id', acessoId)
+    .eq('empresa_id', usuario.empresa_id)
     .eq('assistencia_id', params.id)
 
   if (error) return NextResponse.json({ error: 'Nao foi possivel revogar o link.' }, { status: 500 })
