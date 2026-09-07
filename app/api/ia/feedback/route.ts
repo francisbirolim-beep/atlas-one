@@ -3,7 +3,9 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
 
-async function autenticar(req: NextRequest) {
+type UsuarioIA = { id: string; nome: string | null; empresa_id: string }
+
+async function autenticar(req: NextRequest): Promise<UsuarioIA | null> {
   const auth = req.headers.get('authorization') || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   if (!token) return null
@@ -11,10 +13,11 @@ async function autenticar(req: NextRequest) {
   if (!authData.user) return null
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome')
+    .select('id,nome,empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
-  return data || { id: authData.user.id, nome: null }
+  if (!data?.empresa_id) return null
+  return data as UsuarioIA
 }
 
 export async function POST(req: NextRequest) {
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
     const { data: interacao } = await supabaseAdmin
       .from('ai_interacoes')
       .select('id,pergunta,resposta,contexto')
+      .eq('empresa_id', usuario.empresa_id)
       .eq('id', interacaoId)
       .maybeSingle()
 
@@ -47,6 +51,7 @@ export async function POST(req: NextRequest) {
       .from('ai_feedback')
       .upsert(
         {
+          empresa_id: usuario.empresa_id,
           interacao_id: interacaoId,
           usuario_id: usuario.id,
           usuario_nome: usuario.nome || null,
@@ -58,10 +63,9 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Uma correção explícita vira memória ativa. Aprovação simples fica como
-    // exemplo supervisionado no histórico, sem lotar a memória com duplicatas.
     if (avaliacao === 'corrigido' && correcao) {
       await supabaseAdmin.from('ai_memorias').insert({
+        empresa_id: usuario.empresa_id,
         escopo: interacao.contexto || 'comercial',
         titulo: `Correção humana: ${String(interacao.pergunta).slice(0, 120)}`,
         conteudo: correcao,
