@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || ''
-    const token = authHeader.replace('Bearer ', '').trim()
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim()
     if (!token) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     }
@@ -16,11 +16,11 @@ export async function POST(req: NextRequest) {
 
     const { data: perfil, error: perfilErr } = await supabaseAdmin
       .from('usuarios')
-      .select('nome, role')
+      .select('nome, role, empresa_id')
       .eq('id', userData.user.id)
       .maybeSingle()
 
-    if (perfilErr || !perfil || perfil.role !== 'master') {
+    if (perfilErr || !perfil || perfil.role !== 'master' || !perfil.empresa_id) {
       return NextResponse.json({ error: 'Apenas o usuário master pode validar unidade operacional' }, { status: 403 })
     }
 
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       .from('produtos')
       .select('id, nome, categoria, unidade, unidade_origem, qtde_embalagem_origem, observacao_validacao')
       .eq('id', produtoId)
+      .eq('empresa_id', perfil.empresa_id)
       .maybeSingle()
 
     if (erroLeitura || !atual) {
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
         updated_at: agoraIso,
       })
       .eq('id', produtoId)
+      .eq('empresa_id', perfil.empresa_id)
       .is('unidade', null)
       .select('id')
       .maybeSingle()
