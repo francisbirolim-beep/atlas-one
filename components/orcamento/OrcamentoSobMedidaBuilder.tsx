@@ -69,15 +69,18 @@ export default function OrcamentoSobMedidaBuilder(){
 
   const categorias=useMemo(()=>Array.from(new Set(tipologias.map(t=>t.categoria).filter(Boolean))).sort(),[tipologias])
   const filtradas=useMemo(()=>{
-    const q=normalizar(busca); const linha=linhas.find(l=>l.id===linhaFiltro)
+    const q=normalizar(busca)
+    const linhaPadrao=linhas.find(l=>l.id===linhaPadraoId)
+    const linhaBusca=linhas.find(l=>l.id===linhaFiltro)
     return tipologias.filter(t=>{
       const texto=normalizar(`${t.label} ${t.chave} ${ROTULOS_CATEGORIA[t.categoria]||t.categoria}`)
       if(q&&!texto.includes(q)) return false
       if(categoria&&t.categoria!==categoria) return false
-      if(linha&&!(linha.tipologia_ids||[]).includes(t.id)) return false
+      if(linhaPadrao&&!(linhaPadrao.tipologia_ids||[]).includes(t.id)) return false
+      if(linhaBusca&&!(linhaBusca.tipologia_ids||[]).includes(t.id)) return false
       return true
     })
-  },[busca,categoria,linhaFiltro,linhas,tipologias])
+  },[busca,categoria,linhaFiltro,linhaPadraoId,linhas,tipologias])
 
   function selecionarCliente(c:ClienteResumo){ setCliente(c); setBuscaCliente(c.nome); setCidade(c.cidade||''); setClientesEncontrados([]) }
   function adicionar(t:Tipologia){
@@ -113,7 +116,7 @@ export default function OrcamentoSobMedidaBuilder(){
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="mb-4 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">2</span><div><h2 className="font-bold">Dados técnicos iniciais</h2><p className="text-xs text-slate-500">São apenas padrões. Cada tipologia pode ter linha, cor, contramarco, vidro e arremate diferentes.</p></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-600">Linha padrão</label><select value={linhaPadraoId} onChange={e=>setLinhaPadraoId(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">Automática pela tipologia</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></div>
+          <div><label className="mb-1 block text-xs font-semibold text-slate-600">Linha padrão</label><select value={linhaPadraoId} onChange={e=>{setLinhaPadraoId(e.target.value); setLinhaFiltro(e.target.value)}} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">Automática pela tipologia</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-600">Cor</label><select value={corPadrao} onChange={e=>setCorPadrao(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="preto">Preto</option><option value="branco">Branco</option><option value="madeirado">Amadeirado</option><option value="outro">Outra cor</option></select></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-600">Contramarco</label><select value={contramarcoPadrao} onChange={e=>setContramarcoPadrao(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-600">Vidro</label><input value={vidroPadrao} onChange={e=>setVidroPadrao(e.target.value)} placeholder="Ex.: temperado 8 mm" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>
@@ -123,7 +126,7 @@ export default function OrcamentoSobMedidaBuilder(){
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="mb-4 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">3</span><div><h2 className="font-bold">Adicionar tipologias</h2><p className="text-xs text-slate-500">Clique em + para incluir quantas peças forem necessárias no mesmo orçamento.</p></div></div><div className="grid gap-2 sm:grid-cols-3">
           <div className="relative"><Search size={16} className="absolute left-3 top-3 text-slate-400"/><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Pesquisar tipologia..." className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm"/></div>
           <select value={categoria} onChange={e=>setCategoria(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">Todas as categorias</option>{categorias.map(c=><option key={c} value={c}>{ROTULOS_CATEGORIA[c]||c}</option>)}</select>
-          <select value={linhaFiltro} onChange={e=>setLinhaFiltro(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">Todas as linhas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select>
+          <select value={linhaPadraoId||linhaFiltro} disabled={Boolean(linhaPadraoId)} onChange={e=>setLinhaFiltro(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50 disabled:text-slate-600"><option value="">Todas as linhas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select>
         </div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{filtradas.slice(0,80).map(t=><div key={t.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-blue-300 hover:shadow-sm"><div className="h-28 bg-slate-50"><TipologiaMiniatura nome={t.label} className="h-full w-full"/></div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{t.label}</p><p className="truncate text-xs text-slate-500">{ROTULOS_CATEGORIA[t.categoria]||t.categoria}</p></div><button type="button" onClick={()=>adicionar(t)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700" title="Adicionar"><Plus size={18}/></button></div></div></div>)}</div></div>
       </section>
 
