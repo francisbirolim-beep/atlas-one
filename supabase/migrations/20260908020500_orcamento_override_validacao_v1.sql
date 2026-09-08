@@ -161,16 +161,19 @@ begin
     v_evento := 'inclusao_manual';
   elsif tg_op = 'UPDATE' then
     v_manual := (
-      new.status_calculo = 'manual'
-      and (
-        new.quantidade_ajustada is distinct from old.quantidade_ajustada
-        or new.comprimento_corte_mm is distinct from old.comprimento_corte_mm
-        or new.comprimento_barra_mm is distinct from old.comprimento_barra_mm
-        or new.codigo is distinct from old.codigo
-        or new.descricao is distinct from old.descricao
-        or new.produto_id is distinct from old.produto_id
-        or new.excluido is distinct from old.excluido
-        or new.justificativa_ajuste is distinct from old.justificativa_ajuste
+      (new.excluido = true and old.excluido is distinct from true)
+      or (
+        new.status_calculo = 'manual'
+        and (
+          new.quantidade_ajustada is distinct from old.quantidade_ajustada
+          or new.comprimento_corte_mm is distinct from old.comprimento_corte_mm
+          or new.comprimento_barra_mm is distinct from old.comprimento_barra_mm
+          or new.codigo is distinct from old.codigo
+          or new.descricao is distinct from old.descricao
+          or new.produto_id is distinct from old.produto_id
+          or new.excluido is distinct from old.excluido
+          or new.justificativa_ajuste is distinct from old.justificativa_ajuste
+        )
       )
     );
     v_evento := case when new.excluido = true and old.excluido is distinct from true
