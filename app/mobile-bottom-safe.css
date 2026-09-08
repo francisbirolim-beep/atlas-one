@@ -17,13 +17,42 @@
     z-index: 70 !important;
     align-items: flex-start !important;
     overflow-y: auto !important;
-    padding-top: max(1rem, env(safe-area-inset-top)) !important;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    padding-top: max(0.75rem, env(safe-area-inset-top)) !important;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
   }
 
   .fixed.inset-0.z-30 > div {
-    max-height: calc(100dvh - max(2rem, env(safe-area-inset-top)) - max(2rem, env(safe-area-inset-bottom))) !important;
+    max-height: calc(100dvh - max(1.5rem, env(safe-area-inset-top)) - max(1.5rem, env(safe-area-inset-bottom))) !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Cliente 360: ações compactas em 2 colunas, mantendo rolagem para futuras ações. */
+  .fixed.inset-0.z-30 > div > div.grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.625rem !important;
+    padding: 0.75rem !important;
+  }
+
+  .fixed.inset-0.z-30 > div > div.grid > a {
+    min-width: 0 !important;
+    min-height: 7.2rem !important;
+    gap: 0.4rem !important;
+    padding: 0.75rem !important;
+  }
+
+  .fixed.inset-0.z-30 > div > div.grid > a > span:first-child {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+
+  .fixed.inset-0.z-30 > div > div.grid > a > span:nth-child(2) {
+    font-size: 0.82rem !important;
+    line-height: 1.05rem !important;
+  }
+
+  .fixed.inset-0.z-30 > div > div.grid > a > span:nth-child(3) {
+    font-size: 0.7rem !important;
+    line-height: 0.95rem !important;
   }
 }
