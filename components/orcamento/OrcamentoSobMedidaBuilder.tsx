@@ -64,7 +64,7 @@ export default function OrcamentoSobMedidaBuilder(){
       if(seq!==buscaSeq.current) return
       setClientesEncontrados((data||[]) as ClienteResumo[])
       setBuscandoCliente(false)
-    }).catch(()=>{ if(seq===buscaSeq.current){ setClientesEncontrados([]); setBuscandoCliente(false) } })
+    },()=>{ if(seq===buscaSeq.current){ setClientesEncontrados([]); setBuscandoCliente(false) } })
   },[buscaCliente,cliente])
 
   const categorias=useMemo(()=>Array.from(new Set(tipologias.map(t=>t.categoria).filter(Boolean))).sort(),[tipologias])
