@@ -1,0 +1,29 @@
+@media (max-width: 767px) {
+  body {
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+
+  nav[aria-label="Navegação principal no celular"] {
+    z-index: 60 !important;
+  }
+
+  /* Fluxos longos precisam conseguir rolar até os botões finais. */
+  main {
+    scroll-margin-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+
+  /* Modais do Cliente 360 não podem ficar presos atrás da barra inferior. */
+  .fixed.inset-0.z-30 {
+    z-index: 70 !important;
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    padding-top: max(1rem, env(safe-area-inset-top)) !important;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .fixed.inset-0.z-30 > div {
+    max-height: calc(100dvh - max(2rem, env(safe-area-inset-top)) - max(2rem, env(safe-area-inset-bottom))) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
