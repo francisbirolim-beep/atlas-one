@@ -19,7 +19,12 @@ create table if not exists public.orcamento_margens_cidade (
   updated_at timestamptz not null default now(),
   constraint orcamento_margens_cidade_uf_check check (uf = upper(uf) and char_length(uf) = 2),
   constraint orcamento_margens_cidade_chave_check check (cidade_chave = lower(btrim(cidade_chave)) and cidade_chave <> ''),
+  constraint orcamento_margens_cidade_motivo_check check (btrim(motivo) <> ''),
   constraint orcamento_margens_cidade_vigencia_check check (vigencia_fim is null or vigencia_fim >= vigencia_inicio),
+  constraint orcamento_margens_cidade_estado_vigencia_check check (
+    (vigente = true and vigencia_fim is null)
+    or (vigente = false and vigencia_fim is not null)
+  ),
   unique (empresa_id, cidade_chave, uf, versao)
 );
 
@@ -42,10 +47,10 @@ create table if not exists public.orcamento_precificacao_historico (
   orcamento_id uuid references public.orcamentos(id) on delete set null,
   item_ref text,
   tipo_alteracao text not null check (tipo_alteracao in ('margem','desconto','custo','sobra')),
-  campo text not null,
+  campo text not null check (btrim(campo) <> ''),
   valor_anterior jsonb,
   valor_novo jsonb,
-  motivo text not null,
+  motivo text not null check (btrim(motivo) <> ''),
   usuario_id uuid,
   usuario_nome text,
   created_at timestamptz not null default now()
