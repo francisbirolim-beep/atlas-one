@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { ArrowLeft, Check, ChevronRight, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { ArrowLeft, Check, ChevronRight, Loader2, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { tokenAtual } from '@/lib/auth'
 import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
@@ -68,9 +68,11 @@ export default function OrcamentoSobMedidaBuilder() {
   const searchParams = useSearchParams()
   const clienteIdParam = searchParams.get('cliente')
 
-  const [clientes, setClientes] = useState<ClienteResumo[]>([])
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [buscaCliente, setBuscaCliente] = useState('')
+  const [clientesEncontrados, setClientesEncontrados] = useState<ClienteResumo[]>([])
+  const [buscandoClientes, setBuscandoClientes] = useState(false)
+  const [erroBuscaCliente, setErroBuscaCliente] = useState('')
   const [cidade, setCidade] = useState('')
   const [temperatura, setTemperatura] = useState('')
 
@@ -90,51 +92,86 @@ export default function OrcamentoSobMedidaBuilder() {
 
   useEffect(() => {
     async function carregar() {
-      const [ts, ls, clientesResp, catalogoVidros] = await Promise.all([
+      const [ts, ls, catalogoVidros] = await Promise.all([
         listarTipologias(),
         listarLinhasTecnicas(),
-        supabase
-          .from('clientes')
-          .select('id,nome,apelido,telefone,whatsapp,cpf_cnpj,email,cidade,bairro,endereco,cep')
-          .order('nome')
-          .limit(1000),
         listarVidrosPlanoCorte(),
       ])
-
       setTipologias(ts as TipologiaOrcamento[])
       setLinhas(ls.filter(l => l.ativo))
       setVidros(catalogoVidros)
-      const listaClientes = (clientesResp.data || []) as ClienteResumo[]
-      setClientes(listaClientes)
+    }
+    carregar()
+  }, [])
 
-      if (clienteIdParam) {
-        const encontrado = listaClientes.find(c => c.id === clienteIdParam)
-        if (encontrado) selecionarCliente(encontrado)
+  useEffect(() => {
+    if (!clienteIdParam) return
+    let cancelado = false
+    async function carregarClienteInicial() {
+      const token = await tokenAtual()
+      if (!token) return
+      try {
+        const resp = await fetch(`/api/clientes/busca?id=${encodeURIComponent(clienteIdParam)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        const json = await resp.json()
+        if (!cancelado && resp.ok && json.cliente) selecionarCliente(json.cliente as ClienteResumo)
+      } catch {
+        // O usuário ainda pode pesquisar manualmente se a carga inicial falhar.
       }
     }
-
-    carregar()
+    carregarClienteInicial()
+    return () => { cancelado = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteIdParam])
 
-  const clientesEncontrados = useMemo(() => {
-    if (cliente || buscaCliente.trim().length < 2) return []
-    return clientes
-      .filter(c => correspondeBuscaAtlas(
-        buscaCliente,
-        c.nome,
-        c.apelido,
-        c.cpf_cnpj,
-        c.whatsapp,
-        c.telefone,
-        c.email,
-        c.cidade,
-        c.bairro,
-        c.endereco,
-        c.cep,
-      ))
-      .slice(0, 12)
-  }, [buscaCliente, cliente, clientes])
+  useEffect(() => {
+    const termo = buscaCliente.trim()
+    if (cliente || termo.length < 2) {
+      setClientesEncontrados([])
+      setBuscandoClientes(false)
+      setErroBuscaCliente('')
+      return
+    }
+
+    let cancelado = false
+    const timer = window.setTimeout(async () => {
+      setBuscandoClientes(true)
+      setErroBuscaCliente('')
+      try {
+        const token = await tokenAtual()
+        if (!token) {
+          if (!cancelado) setErroBuscaCliente('Sessão expirada. Entre novamente no Atlas.')
+          return
+        }
+        const resp = await fetch(`/api/clientes/busca?q=${encodeURIComponent(termo)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        const json = await resp.json()
+        if (cancelado) return
+        if (!resp.ok) {
+          setClientesEncontrados([])
+          setErroBuscaCliente(json.error || 'Não foi possível pesquisar clientes.')
+          return
+        }
+        setClientesEncontrados((json.clientes || []) as ClienteResumo[])
+      } catch {
+        if (!cancelado) {
+          setClientesEncontrados([])
+          setErroBuscaCliente('Não foi possível pesquisar clientes.')
+        }
+      } finally {
+        if (!cancelado) setBuscandoClientes(false)
+      }
+    }, 120)
+
+    return () => {
+      cancelado = true
+      window.clearTimeout(timer)
+    }
+  }, [buscaCliente, cliente])
 
   const linhaSelecionada = useMemo(
     () => linhas.find(l => l.id === linhaSelecionadaId) || null,
@@ -155,7 +192,6 @@ export default function OrcamentoSobMedidaBuilder() {
   const filtradas = useMemo(() => {
     if (!linhaSelecionada) return []
     const permitidas = new Set(linhaSelecionada.tipologia_ids || [])
-
     return tipologias.filter(t => {
       if (!permitidas.has(t.id)) return false
       if (categoria && t.categoria !== categoria) return false
@@ -181,12 +217,15 @@ export default function OrcamentoSobMedidaBuilder() {
   function selecionarCliente(c: ClienteResumo) {
     setCliente(c)
     setBuscaCliente(c.nome)
+    setClientesEncontrados([])
+    setErroBuscaCliente('')
     setCidade(c.cidade || '')
   }
 
   function limparCliente() {
     setCliente(null)
     setBuscaCliente('')
+    setClientesEncontrados([])
     setCidade('')
   }
 
@@ -228,11 +267,7 @@ export default function OrcamentoSobMedidaBuilder() {
   function atualizarContramarcoItem(id: string, valor: 'sim' | 'nao') {
     setItens(prev => prev.map(item => {
       if (item.uid !== id) return item
-      return {
-        ...item,
-        contramarco: valor,
-        arremate: valor === 'sim' ? 'sim' : item.arremate,
-      }
+      return { ...item, contramarco: valor, arremate: valor === 'sim' ? 'sim' : item.arremate }
     }))
     setSalvo(false)
   }
@@ -243,9 +278,7 @@ export default function OrcamentoSobMedidaBuilder() {
 
   function sugestoesVidro(item: ItemSelecionado) {
     if (!item.vidro.trim()) return vidros.slice(0, 20)
-    return vidros
-      .filter(v => correspondeBuscaAtlas(item.vidro, v.nome, v.codigo))
-      .slice(0, 20)
+    return vidros.filter(v => correspondeBuscaAtlas(item.vidro, v.nome, v.codigo)).slice(0, 20)
   }
 
   function salvarPreview() {
@@ -275,12 +308,9 @@ export default function OrcamentoSobMedidaBuilder() {
             <p className="text-xs text-slate-500">Escolha o cliente, defina os padrões e depois selecione linha e tipologias.</p>
           </div>
           <div className="hidden items-center gap-2 md:flex">
-            <span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">1 Dados</span>
-            <ChevronRight size={15} className="text-slate-300"/>
-            <span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">2 Tipologias</span>
-            <ChevronRight size={15} className="text-slate-300"/>
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">3 Configurar</span>
-            <ChevronRight size={15} className="text-slate-300"/>
+            <span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">1 Dados</span><ChevronRight size={15} className="text-slate-300"/>
+            <span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">2 Tipologias</span><ChevronRight size={15} className="text-slate-300"/>
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">3 Configurar</span><ChevronRight size={15} className="text-slate-300"/>
             <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">4 Precificar</span>
           </div>
         </div>
@@ -309,19 +339,20 @@ export default function OrcamentoSobMedidaBuilder() {
                     placeholder="Digite nome, telefone, CPF/CNPJ..."
                     className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-9 text-sm outline-none focus:border-blue-500"
                   />
+                  {buscandoClientes && !cliente && <Loader2 size={17} className="absolute right-3 top-2.5 animate-spin text-blue-500"/>}
                   {cliente && <button type="button" onClick={limparCliente} className="absolute right-3 top-2.5 text-slate-400"><X size={18}/></button>}
                 </div>
-                {!cliente && buscaCliente.trim().length >= 2 && <div className="absolute z-40 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
-                  {clientesEncontrados.length === 0 && <div className="px-3 py-3 text-xs text-slate-500">Nenhum cliente encontrado.</div>}
+                {!cliente && buscaCliente.trim().length >= 2 && <div className="absolute z-50 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                  {buscandoClientes && clientesEncontrados.length === 0 && <div className="px-3 py-3 text-xs text-slate-500">Pesquisando clientes...</div>}
+                  {!buscandoClientes && erroBuscaCliente && <div className="px-3 py-3 text-xs font-medium text-red-600">{erroBuscaCliente}</div>}
+                  {!buscandoClientes && !erroBuscaCliente && clientesEncontrados.length === 0 && <div className="px-3 py-3 text-xs text-slate-500">Nenhum cliente encontrado.</div>}
                   {clientesEncontrados.map(c => <button type="button" key={c.id} onMouseDown={e => e.preventDefault()} onClick={() => selecionarCliente(c)} className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-blue-50"><span className="block text-sm font-semibold">{c.nome}</span><span className="text-xs text-slate-500">{c.cidade || 'Cidade não informada'} · {c.whatsapp || c.telefone || 'Sem telefone'}</span></button>)}
                 </div>}
               </div>
               <div><label className="mb-1 block text-xs font-semibold text-slate-600">Cidade</label><input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Temperatura</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(['quente', 'morno', 'frio'] as const).map(valor => <button key={valor} type="button" onClick={() => setTemperatura(valor)} className={`rounded-xl border px-2 py-2.5 text-xs font-semibold capitalize transition ${temperatura === valor ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}>{valor}</button>)}
-                </div>
+                <div className="grid grid-cols-3 gap-1.5">{(['quente', 'morno', 'frio'] as const).map(valor => <button key={valor} type="button" onClick={() => setTemperatura(valor)} className={`rounded-xl border px-2 py-2.5 text-xs font-semibold capitalize transition ${temperatura === valor ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}>{valor}</button>)}</div>
               </div>
             </div>
             {!cliente && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600"><span>Não encontrou o cliente? Cadastre antes de montar o orçamento.</span><Link href="/clientes/novo" className="inline-flex items-center gap-1.5 font-semibold text-blue-700"><UserPlus size={15}/>Cadastrar novo cliente</Link></div>}
@@ -347,12 +378,9 @@ export default function OrcamentoSobMedidaBuilder() {
               <div className="relative"><Search size={16} className="absolute left-3 top-3 text-slate-400"/><input value={busca} disabled={!linhaSelecionadaId} onChange={e => setBusca(e.target.value)} placeholder={linhaSelecionadaId ? '2. Ex.: porta 3, porta correr, maxim-ar...' : 'Escolha a linha primeiro'} className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm disabled:bg-slate-50 disabled:text-slate-400"/></div>
               <select value={categoria} disabled={!linhaSelecionadaId} onChange={e => setCategoria(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50 disabled:text-slate-400"><option value="">Todas as categorias da linha</option>{categoriasDaLinha.map(c => <option key={c} value={c}>{ROTULOS_CATEGORIA[c] || c}</option>)}</select>
             </div>
-
             {!linhaSelecionadaId && <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Escolha uma linha para ver as tipologias disponíveis.</div>}
             {linhaSelecionadaId && filtradas.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Nenhuma tipologia encontrada com esses termos nessa linha.</div>}
-            {linhaSelecionadaId && filtradas.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {filtradas.slice(0, 80).map(t => <div key={t.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-blue-300 hover:shadow-sm"><div className="h-28 bg-slate-50"><TipologiaMiniatura nome={t.label} className="h-full w-full"/></div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{t.label}</p><p className="truncate text-xs text-slate-500">{ROTULOS_CATEGORIA[t.categoria] || t.categoria}</p></div><button type="button" onClick={() => adicionar(t)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700" title="Adicionar"><Plus size={18}/></button></div></div></div>)}
-            </div>}
+            {linhaSelecionadaId && filtradas.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{filtradas.slice(0, 80).map(t => <div key={t.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-blue-300 hover:shadow-sm"><div className="h-28 bg-slate-50"><TipologiaMiniatura nome={t.label} className="h-full w-full"/></div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{t.label}</p><p className="truncate text-xs text-slate-500">{ROTULOS_CATEGORIA[t.categoria] || t.categoria}</p></div><button type="button" onClick={() => adicionar(t)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700" title="Adicionar"><Plus size={18}/></button></div></div></div>)}</div>}
           </div>
         </section>
 
@@ -372,15 +400,7 @@ export default function OrcamentoSobMedidaBuilder() {
                     <select value={item.arremate} disabled={item.contramarco === 'sim'} onChange={e => atualizarItem(item.uid, { arremate: e.target.value as 'sim' | 'nao' })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs disabled:bg-slate-100 disabled:text-slate-600"><option value="sim">Com arremate</option><option value="nao">Sem arremate</option></select>
                     {item.usaVidro !== false && <div className="relative sm:col-span-2 lg:col-span-1 xl:col-span-2">
                       <Search size={14} className="absolute left-2.5 top-2.5 z-10 text-slate-400"/>
-                      <input
-                        value={item.vidro}
-                        autoComplete="off"
-                        onFocus={() => setVidroAbertoUid(item.uid)}
-                        onBlur={() => window.setTimeout(() => setVidroAbertoUid(atual => atual === item.uid ? null : atual), 120)}
-                        onChange={e => { atualizarItem(item.uid, { vidro: e.target.value }); setVidroAbertoUid(item.uid) }}
-                        placeholder={item.usaVidro === true ? 'Vidro obrigatório: digite 6, 8, temperado...' : 'Vidro: digite 6, 8, temperado...'}
-                        className={`w-full rounded-lg border py-2 pl-8 pr-2 text-xs ${item.usaVidro === true && !item.vidro.trim() ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}
-                      />
+                      <input value={item.vidro} autoComplete="off" onFocus={() => setVidroAbertoUid(item.uid)} onBlur={() => window.setTimeout(() => setVidroAbertoUid(atual => atual === item.uid ? null : atual), 120)} onChange={e => { atualizarItem(item.uid, { vidro: e.target.value }); setVidroAbertoUid(item.uid) }} placeholder={item.usaVidro === true ? 'Vidro obrigatório: digite 6, 8, temperado...' : 'Vidro: digite 6, 8, temperado...'} className={`w-full rounded-lg border py-2 pl-8 pr-2 text-xs ${item.usaVidro === true && !item.vidro.trim() ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}/>
                       {vidroAbertoUid === item.uid && <div className="absolute z-50 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
                         {vidros.length === 0 && <div className="px-3 py-2.5 text-xs text-slate-500">Nenhuma referência de vidro W.Vetro disponível.</div>}
                         {vidros.length > 0 && sugestoes.length === 0 && <div className="px-3 py-2.5 text-xs text-slate-500">Nenhum vidro corresponde à busca.</div>}
