@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         ? supabaseAdmin.from('tipologias').select('id,label,categoria').in('id', tipologiaIds)
         : Promise.resolve({ data: [] as any[] }),
       linhaIds.length
-        ? supabaseAdmin.from('linhas_tecnicas').select('id,nome').eq('empresa_id', usuario.empresa_id).in('id', linhaIds)
+        ? supabaseAdmin.from('linhas_tecnicas').select('id,nome').in('id', linhaIds)
         : Promise.resolve({ data: [] as any[] }),
     ])
 
