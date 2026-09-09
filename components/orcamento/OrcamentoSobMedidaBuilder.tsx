@@ -1,21 +1,28 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Check, ChevronRight, Plus, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
+import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import type { Tipologia } from '@/lib/tipos'
 import TipologiaMiniatura from './TipologiaMiniatura'
 
 type ClienteResumo = {
   id: string
   nome: string
+  apelido?: string | null
   telefone?: string | null
   whatsapp?: string | null
+  cpf_cnpj?: string | null
+  email?: string | null
   cidade?: string | null
+  bairro?: string | null
+  endereco?: string | null
+  cep?: string | null
 }
 
 type ItemSelecionado = {
@@ -49,10 +56,6 @@ const ROTULOS_CATEGORIA: Record<string, string> = {
   outros: 'Outros',
 }
 
-function normalizar(valor: string) {
-  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-}
-
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
@@ -60,12 +63,10 @@ function uid() {
 export default function OrcamentoSobMedidaBuilder() {
   const searchParams = useSearchParams()
   const clienteIdParam = searchParams.get('cliente')
-  const buscaSeq = useRef(0)
 
+  const [clientes, setClientes] = useState<ClienteResumo[]>([])
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [buscaCliente, setBuscaCliente] = useState('')
-  const [clientesEncontrados, setClientesEncontrados] = useState<ClienteResumo[]>([])
-  const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [cidade, setCidade] = useState('')
   const [temperatura, setTemperatura] = useState('')
 
@@ -77,55 +78,55 @@ export default function OrcamentoSobMedidaBuilder() {
 
   const [corPadrao, setCorPadrao] = useState('preto')
   const [contramarcoPadrao, setContramarcoPadrao] = useState('sim')
-  const [vidroPadrao, setVidroPadrao] = useState('')
   const [arrematePadrao, setArrematePadrao] = useState('padrao')
   const [itens, setItens] = useState<ItemSelecionado[]>([])
   const [salvo, setSalvo] = useState(false)
 
   useEffect(() => {
-    Promise.all([listarTipologias(), listarLinhasTecnicas()]).then(([ts, ls]) => {
+    async function carregar() {
+      const [ts, ls, clientesResp] = await Promise.all([
+        listarTipologias(),
+        listarLinhasTecnicas(),
+        supabase
+          .from('clientes')
+          .select('id,nome,apelido,telefone,whatsapp,cpf_cnpj,email,cidade,bairro,endereco,cep')
+          .order('nome')
+          .limit(1000),
+      ])
+
       setTipologias(ts)
       setLinhas(ls.filter(l => l.ativo))
-    })
-  }, [])
+      const listaClientes = (clientesResp.data || []) as ClienteResumo[]
+      setClientes(listaClientes)
 
-  useEffect(() => {
-    if (!clienteIdParam) return
-    supabase.from('clientes').select('id,nome,telefone,whatsapp,cidade').eq('id', clienteIdParam).maybeSingle().then(({ data }) => {
-      if (!data) return
-      const c = data as ClienteResumo
-      setCliente(c)
-      setBuscaCliente(c.nome || '')
-      setCidade(c.cidade || '')
-    })
-  }, [clienteIdParam])
-
-  useEffect(() => {
-    const termo = buscaCliente.trim()
-    const seq = ++buscaSeq.current
-    if (cliente || termo.length < 3) {
-      setClientesEncontrados([])
-      setBuscandoCliente(false)
-      return
+      if (clienteIdParam) {
+        const encontrado = listaClientes.find(c => c.id === clienteIdParam)
+        if (encontrado) selecionarCliente(encontrado)
+      }
     }
 
-    setBuscandoCliente(true)
-    supabase.from('clientes')
-      .select('id,nome,telefone,whatsapp,cidade')
-      .ilike('nome', `%${termo}%`)
-      .order('nome')
-      .limit(10)
-      .then(({ data }) => {
-        if (seq !== buscaSeq.current) return
-        setClientesEncontrados((data || []) as ClienteResumo[])
-        setBuscandoCliente(false)
-      }, () => {
-        if (seq === buscaSeq.current) {
-          setClientesEncontrados([])
-          setBuscandoCliente(false)
-        }
-      })
-  }, [buscaCliente, cliente])
+    carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteIdParam])
+
+  const clientesEncontrados = useMemo(() => {
+    if (cliente || buscaCliente.trim().length < 2) return []
+    return clientes
+      .filter(c => correspondeBuscaAtlas(
+        buscaCliente,
+        c.nome,
+        c.apelido,
+        c.cpf_cnpj,
+        c.whatsapp,
+        c.telefone,
+        c.email,
+        c.cidade,
+        c.bairro,
+        c.endereco,
+        c.cep,
+      ))
+      .slice(0, 12)
+  }, [buscaCliente, cliente, clientes])
 
   const linhaSelecionada = useMemo(
     () => linhas.find(l => l.id === linhaSelecionadaId) || null,
@@ -135,20 +136,32 @@ export default function OrcamentoSobMedidaBuilder() {
   const categoriasDaLinha = useMemo(() => {
     if (!linhaSelecionada) return []
     const permitidas = new Set(linhaSelecionada.tipologia_ids || [])
-    return Array.from(new Set(tipologias.filter(t => permitidas.has(t.id)).map(t => t.categoria).filter(Boolean))).sort()
+    return Array.from(new Set(
+      tipologias
+        .filter(t => permitidas.has(t.id))
+        .map(t => t.categoria)
+        .filter(Boolean),
+    )).sort()
   }, [linhaSelecionada, tipologias])
 
   const filtradas = useMemo(() => {
     if (!linhaSelecionada) return []
     const permitidas = new Set(linhaSelecionada.tipologia_ids || [])
-    const q = normalizar(busca)
 
     return tipologias.filter(t => {
       if (!permitidas.has(t.id)) return false
-      const texto = normalizar(`${t.label} ${t.chave} ${ROTULOS_CATEGORIA[t.categoria] || t.categoria}`)
-      if (q && !texto.includes(q)) return false
       if (categoria && t.categoria !== categoria) return false
-      return true
+      if (!busca.trim()) return true
+      return correspondeBuscaAtlas(
+        busca,
+        t.label,
+        t.chave,
+        ROTULOS_CATEGORIA[t.categoria] || t.categoria,
+        linhaSelecionada.nome,
+        linhaSelecionada.fabricante,
+        linhaSelecionada.descricao,
+        ...(linhaSelecionada.apelidos || []),
+      )
     })
   }, [busca, categoria, linhaSelecionada, tipologias])
 
@@ -156,7 +169,12 @@ export default function OrcamentoSobMedidaBuilder() {
     setCliente(c)
     setBuscaCliente(c.nome)
     setCidade(c.cidade || '')
-    setClientesEncontrados([])
+  }
+
+  function limparCliente() {
+    setCliente(null)
+    setBuscaCliente('')
+    setCidade('')
   }
 
   function trocarLinha(id: string) {
@@ -175,7 +193,7 @@ export default function OrcamentoSobMedidaBuilder() {
       linhaId: linhaSelecionadaId,
       cor: corPadrao,
       contramarco: contramarcoPadrao,
-      vidro: vidroPadrao,
+      vidro: '',
       arremate: arrematePadrao,
       quantidade: 1,
     }])
@@ -200,7 +218,6 @@ export default function OrcamentoSobMedidaBuilder() {
       padroes: {
         cor: corPadrao,
         contramarco: contramarcoPadrao,
-        vidro: vidroPadrao,
         arremate: arrematePadrao,
       },
       itens,
@@ -239,41 +256,57 @@ export default function OrcamentoSobMedidaBuilder() {
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Cliente</label>
                 <div className="relative">
                   <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                  <input value={buscaCliente} autoComplete="off" autoCorrect="off" spellCheck={false} inputMode="search" onChange={e => { const valor = e.target.value; setBuscaCliente(valor); if (cliente && valor !== cliente.nome) setCliente(null) }} placeholder="Digite pelo menos 3 letras..." className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-9 text-sm outline-none focus:border-blue-500"/>
-                  {cliente && <button type="button" onClick={() => { setCliente(null); setBuscaCliente('') }} className="absolute right-3 top-2.5 text-slate-400"><X size={18}/></button>}
+                  <input
+                    value={buscaCliente}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode="search"
+                    onChange={e => {
+                      const valor = e.target.value
+                      setBuscaCliente(valor)
+                      if (cliente && valor !== cliente.nome) setCliente(null)
+                    }}
+                    placeholder="Digite nome, telefone, CPF/CNPJ..."
+                    className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-9 text-sm outline-none focus:border-blue-500"
+                  />
+                  {cliente && <button type="button" onClick={limparCliente} className="absolute right-3 top-2.5 text-slate-400"><X size={18}/></button>}
                 </div>
-                {!cliente && buscaCliente.trim().length >= 3 && <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                  {buscandoCliente && <div className="px-3 py-3 text-xs text-slate-500">Buscando clientes...</div>}
-                  {!buscandoCliente && clientesEncontrados.length === 0 && <div className="px-3 py-3 text-xs text-slate-500">Nenhum cliente encontrado.</div>}
+                {!cliente && buscaCliente.trim().length >= 2 && <div className="absolute z-40 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                  {clientesEncontrados.length === 0 && <div className="px-3 py-3 text-xs text-slate-500">Nenhum cliente encontrado.</div>}
                   {clientesEncontrados.map(c => <button type="button" key={c.id} onMouseDown={e => e.preventDefault()} onClick={() => selecionarCliente(c)} className="block w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-blue-50"><span className="block text-sm font-semibold">{c.nome}</span><span className="text-xs text-slate-500">{c.cidade || 'Cidade não informada'} · {c.whatsapp || c.telefone || 'Sem telefone'}</span></button>)}
                 </div>}
               </div>
               <div><label className="mb-1 block text-xs font-semibold text-slate-600">Cidade</label><input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>
-              <div><label className="mb-1 block text-xs font-semibold text-slate-600">Temperatura</label><select value={temperatura} onChange={e => setTemperatura(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">Selecione</option><option value="quente">Quente</option><option value="morno">Morno</option><option value="frio">Frio</option></select></div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Temperatura</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['quente', 'morno', 'frio'] as const).map(valor => <button key={valor} type="button" onClick={() => setTemperatura(valor)} className={`rounded-xl border px-2 py-2.5 text-xs font-semibold capitalize transition ${temperatura === valor ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}>{valor}</button>)}
+                </div>
+              </div>
             </div>
             {!cliente && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600"><span>Não encontrou o cliente? Cadastre antes de montar o orçamento.</span><Link href="/clientes/novo" className="inline-flex items-center gap-1.5 font-semibold text-blue-700"><UserPlus size={15}/>Cadastrar novo cliente</Link></div>}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="mb-4 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">2</span><div><h2 className="font-bold">Dados técnicos iniciais</h2><p className="text-xs text-slate-500">São apenas padrões. Cada tipologia pode ter valores próprios depois.</p></div></div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div><label className="mb-1 block text-xs font-semibold text-slate-600">Cor</label><select value={corPadrao} onChange={e => setCorPadrao(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="preto">Preto</option><option value="branco">Branco</option><option value="madeirado">Amadeirado</option><option value="outro">Outra cor</option></select></div>
+            <div className="mb-4 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">2</span><div><h2 className="font-bold">Padrões do orçamento</h2><p className="text-xs text-slate-500">Servem como padrão inicial. Cada tipologia pode receber valores próprios depois.</p></div></div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div><label className="mb-1 block text-xs font-semibold text-slate-600">Cor geral</label><select value={corPadrao} onChange={e => setCorPadrao(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="preto">Preto</option><option value="branco">Branco</option><option value="madeirado">Amadeirado</option><option value="outro">Outra cor</option></select></div>
               <div><label className="mb-1 block text-xs font-semibold text-slate-600">Contramarco</label><select value={contramarcoPadrao} onChange={e => setContramarcoPadrao(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="sim">Sim</option><option value="nao">Não</option></select></div>
-              <div><label className="mb-1 block text-xs font-semibold text-slate-600">Vidro</label><input value={vidroPadrao} onChange={e => setVidroPadrao(e.target.value)} placeholder="Ex.: temperado 8 mm" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>
               <div><label className="mb-1 block text-xs font-semibold text-slate-600">Arremate</label><select value={arrematePadrao} onChange={e => setArrematePadrao(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="padrao">Padrão</option><option value="sim">Sim</option><option value="nao">Não</option></select></div>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="mb-4 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">3</span><div><h2 className="font-bold">Adicionar tipologias</h2><p className="text-xs text-slate-500">Primeiro escolha a linha. Depois pesquise ou veja tudo que pertence a ela.</p></div></div>
+            <div className="mb-4 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">3</span><div><h2 className="font-bold">Adicionar tipologias</h2><p className="text-xs text-slate-500">Primeiro escolha a linha. Depois pesquise livremente no cadastro da tipologia ou veja tudo que pertence à linha.</p></div></div>
             <div className="grid gap-2 sm:grid-cols-3">
               <select value={linhaSelecionadaId} onChange={e => trocarLinha(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">1. Escolha a linha</option>{linhas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}</select>
-              <div className="relative"><Search size={16} className="absolute left-3 top-3 text-slate-400"/><input value={busca} disabled={!linhaSelecionadaId} onChange={e => setBusca(e.target.value)} placeholder={linhaSelecionadaId ? '2. Ex.: porta de correr' : 'Escolha a linha primeiro'} className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm disabled:bg-slate-50 disabled:text-slate-400"/></div>
+              <div className="relative"><Search size={16} className="absolute left-3 top-3 text-slate-400"/><input value={busca} disabled={!linhaSelecionadaId} onChange={e => setBusca(e.target.value)} placeholder={linhaSelecionadaId ? '2. Ex.: porta 3, porta correr, maxim-ar...' : 'Escolha a linha primeiro'} className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm disabled:bg-slate-50 disabled:text-slate-400"/></div>
               <select value={categoria} disabled={!linhaSelecionadaId} onChange={e => setCategoria(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50 disabled:text-slate-400"><option value="">Todas as categorias da linha</option>{categoriasDaLinha.map(c => <option key={c} value={c}>{ROTULOS_CATEGORIA[c] || c}</option>)}</select>
             </div>
 
             {!linhaSelecionadaId && <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Escolha uma linha para ver as tipologias disponíveis.</div>}
-            {linhaSelecionadaId && filtradas.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Nenhuma tipologia encontrada com esses filtros nessa linha.</div>}
+            {linhaSelecionadaId && filtradas.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Nenhuma tipologia encontrada com esses termos nessa linha.</div>}
             {linhaSelecionadaId && filtradas.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filtradas.slice(0, 80).map(t => <div key={t.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-blue-300 hover:shadow-sm"><div className="h-28 bg-slate-50"><TipologiaMiniatura nome={t.label} className="h-full w-full"/></div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{t.label}</p><p className="truncate text-xs text-slate-500">{ROTULOS_CATEGORIA[t.categoria] || t.categoria}</p></div><button type="button" onClick={() => adicionar(t)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700" title="Adicionar"><Plus size={18}/></button></div></div></div>)}
             </div>}
@@ -285,11 +318,11 @@ export default function OrcamentoSobMedidaBuilder() {
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4"><div><h2 className="font-bold">Tipologias no orçamento</h2><p className="text-xs text-slate-500">{itens.length} {itens.length === 1 ? 'item adicionado' : 'itens adicionados'}</p></div><span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-blue-50 px-2 text-sm font-bold text-blue-700">{itens.length}</span></div>
             <div className="max-h-[62vh] space-y-3 overflow-y-auto p-4">
               {itens.length === 0 && <div className="py-10 text-center text-sm text-slate-500">Nenhuma tipologia adicionada ainda.</div>}
-              {itens.map((item, index) => <div key={item.uid} className="rounded-xl border border-slate-200 p-3"><div className="mb-3 flex items-start gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{item.nome}</p><p className="text-[11px] text-slate-500">Cada peça pode ter variáveis próprias.</p></div><button type="button" onClick={() => setItens(prev => prev.filter(i => i.uid !== item.uid))} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {itens.map((item, index) => <div key={item.uid} className="rounded-xl border border-slate-200 p-3"><div className="mb-3 flex items-start gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{item.nome}</p><p className="text-[11px] text-slate-500">Linha, vidro, cor e demais variáveis podem ser próprios desta peça.</p></div><button type="button" onClick={() => setItens(prev => prev.filter(i => i.uid !== item.uid))} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <select value={item.linhaId} onChange={e => atualizarItem(item.uid, { linhaId: e.target.value })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="">Linha</option>{linhasDoItem(item).map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}</select>
-                <select value={item.cor} onChange={e => atualizarItem(item.uid, { cor: e.target.value })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="preto">Preto</option><option value="branco">Branco</option><option value="madeirado">Amadeirado</option><option value="outro">Outra cor</option></select>
+                <select value={item.cor} onChange={e => atualizarItem(item.uid, { cor: e.target.value })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="preto">Cor: Preto</option><option value="branco">Cor: Branco</option><option value="madeirado">Cor: Amadeirado</option><option value="outro">Cor: Outra</option></select>
                 <select value={item.contramarco} onChange={e => atualizarItem(item.uid, { contramarco: e.target.value })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="sim">Com contramarco</option><option value="nao">Sem contramarco</option></select>
-                <input value={item.vidro} onChange={e => atualizarItem(item.uid, { vidro: e.target.value })} placeholder="Vidro" className="min-w-0 rounded-lg border border-slate-200 px-2 py-2 text-xs"/>
+                <input value={item.vidro} onChange={e => atualizarItem(item.uid, { vidro: e.target.value })} placeholder="Vidro desta tipologia" className="min-w-0 rounded-lg border border-slate-200 px-2 py-2 text-xs"/>
                 <select value={item.arremate} onChange={e => atualizarItem(item.uid, { arremate: e.target.value })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="padrao">Arremate padrão</option><option value="sim">Com arremate</option><option value="nao">Sem arremate</option></select>
                 <input type="number" min={1} value={item.quantidade} onChange={e => atualizarItem(item.uid, { quantidade: Math.max(1, Number(e.target.value) || 1) })} className="min-w-0 rounded-lg border border-slate-200 px-2 py-2 text-xs"/>
               </div></div>)}
