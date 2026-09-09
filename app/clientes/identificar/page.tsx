@@ -145,7 +145,7 @@ export default function IdentificarCliente() {
               <button type="button" onClick={() => router.push('/')} className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100" aria-label="Fechar"><X size={18} /></button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-5">
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
                 {acoes.map((acao) => {
                   const Icone = acao.icone
