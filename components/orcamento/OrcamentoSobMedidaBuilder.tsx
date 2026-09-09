@@ -26,6 +26,8 @@ type ClienteResumo = {
   cep?: string | null
 }
 
+type TipologiaOrcamento = Tipologia & { usa_vidro?: boolean | null }
+
 type ItemSelecionado = {
   uid: string
   tipologiaId: string
@@ -35,6 +37,7 @@ type ItemSelecionado = {
   cor: string
   contramarco: 'sim' | 'nao'
   vidro: string
+  usaVidro: boolean | null
   arremate: 'sim' | 'nao'
   quantidade: number
 }
@@ -71,7 +74,7 @@ export default function OrcamentoSobMedidaBuilder() {
   const [cidade, setCidade] = useState('')
   const [temperatura, setTemperatura] = useState('')
 
-  const [tipologias, setTipologias] = useState<Tipologia[]>([])
+  const [tipologias, setTipologias] = useState<TipologiaOrcamento[]>([])
   const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
   const [linhaSelecionadaId, setLinhaSelecionadaId] = useState('')
   const [busca, setBusca] = useState('')
@@ -98,7 +101,7 @@ export default function OrcamentoSobMedidaBuilder() {
         listarVidrosPlanoCorte(),
       ])
 
-      setTipologias(ts)
+      setTipologias(ts as TipologiaOrcamento[])
       setLinhas(ls.filter(l => l.ativo))
       setVidros(catalogoVidros)
       const listaClientes = (clientesResp.data || []) as ClienteResumo[]
@@ -170,6 +173,11 @@ export default function OrcamentoSobMedidaBuilder() {
     })
   }, [busca, categoria, linhaSelecionada, tipologias])
 
+  const vidroObrigatorioPendente = useMemo(
+    () => itens.some(item => item.usaVidro === true && !item.vidro.trim()),
+    [itens],
+  )
+
   function selecionarCliente(c: ClienteResumo) {
     setCliente(c)
     setBuscaCliente(c.nome)
@@ -194,7 +202,7 @@ export default function OrcamentoSobMedidaBuilder() {
     setSalvo(false)
   }
 
-  function adicionar(t: Tipologia) {
+  function adicionar(t: TipologiaOrcamento) {
     if (!linhaSelecionadaId) return
     setItens(prev => [...prev, {
       uid: uid(),
@@ -205,6 +213,7 @@ export default function OrcamentoSobMedidaBuilder() {
       cor: corPadrao,
       contramarco: contramarcoPadrao,
       vidro: '',
+      usaVidro: typeof t.usa_vidro === 'boolean' ? t.usa_vidro : null,
       arremate: contramarcoPadrao === 'sim' ? 'sim' : arrematePadrao,
       quantidade: 1,
     }])
@@ -240,7 +249,7 @@ export default function OrcamentoSobMedidaBuilder() {
   }
 
   function salvarPreview() {
-    if (!cliente || !itens.length) return
+    if (!cliente || !itens.length || vidroObrigatorioPendente) return
     window.sessionStorage.setItem('atlas_orcamento_sob_medida_builder_v1', JSON.stringify({
       clienteId: cliente.id,
       cidade,
@@ -361,7 +370,7 @@ export default function OrcamentoSobMedidaBuilder() {
                     <select value={item.cor} onChange={e => atualizarItem(item.uid, { cor: e.target.value })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="preto">Cor: Preto</option><option value="branco">Cor: Branco</option><option value="madeirado">Cor: Amadeirado</option><option value="outro">Cor: Outra</option></select>
                     <select value={item.contramarco} onChange={e => atualizarContramarcoItem(item.uid, e.target.value as 'sim' | 'nao')} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"><option value="sim">Com contramarco</option><option value="nao">Sem contramarco</option></select>
                     <select value={item.arremate} disabled={item.contramarco === 'sim'} onChange={e => atualizarItem(item.uid, { arremate: e.target.value as 'sim' | 'nao' })} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs disabled:bg-slate-100 disabled:text-slate-600"><option value="sim">Com arremate</option><option value="nao">Sem arremate</option></select>
-                    <div className="relative sm:col-span-2 lg:col-span-1 xl:col-span-2">
+                    {item.usaVidro !== false && <div className="relative sm:col-span-2 lg:col-span-1 xl:col-span-2">
                       <Search size={14} className="absolute left-2.5 top-2.5 z-10 text-slate-400"/>
                       <input
                         value={item.vidro}
@@ -369,22 +378,28 @@ export default function OrcamentoSobMedidaBuilder() {
                         onFocus={() => setVidroAbertoUid(item.uid)}
                         onBlur={() => window.setTimeout(() => setVidroAbertoUid(atual => atual === item.uid ? null : atual), 120)}
                         onChange={e => { atualizarItem(item.uid, { vidro: e.target.value }); setVidroAbertoUid(item.uid) }}
-                        placeholder="Vidro: digite 6, 8, temperado..."
-                        className="w-full rounded-lg border border-slate-200 py-2 pl-8 pr-2 text-xs"
+                        placeholder={item.usaVidro === true ? 'Vidro obrigatório: digite 6, 8, temperado...' : 'Vidro: digite 6, 8, temperado...'}
+                        className={`w-full rounded-lg border py-2 pl-8 pr-2 text-xs ${item.usaVidro === true && !item.vidro.trim() ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}
                       />
                       {vidroAbertoUid === item.uid && <div className="absolute z-50 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
-                        {vidros.length === 0 && <div className="px-3 py-2.5 text-xs text-slate-500">Nenhum vidro cadastrado no catálogo de produtos.</div>}
-                        {vidros.length > 0 && sugestoes.length === 0 && <div className="px-3 py-2.5 text-xs text-slate-500">Nenhum vidro cadastrado corresponde à busca.</div>}
+                        {vidros.length === 0 && <div className="px-3 py-2.5 text-xs text-slate-500">Nenhuma referência de vidro W.Vetro disponível.</div>}
+                        {vidros.length > 0 && sugestoes.length === 0 && <div className="px-3 py-2.5 text-xs text-slate-500">Nenhum vidro corresponde à busca.</div>}
                         {sugestoes.map(v => <button key={v.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => { atualizarItem(item.uid, { vidro: v.nome }); setVidroAbertoUid(null) }} className="block w-full border-b border-slate-100 px-3 py-2 text-left text-xs last:border-0 hover:bg-blue-50"><span className="font-semibold">{v.nome}</span>{v.codigo && <span className="ml-2 text-slate-400">{v.codigo}</span>}</button>)}
                       </div>}
-                    </div>
+                      {item.usaVidro === true && <p className="mt-1 text-[11px] font-semibold text-amber-700">Vidro obrigatório nesta tipologia.</p>}
+                      {item.usaVidro == null && <p className="mt-1 text-[11px] text-slate-500">Uso de vidro ainda não classificado: exibindo todas as referências W.Vetro.</p>}
+                    </div>}
                     <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">Qtd.</span><input type="number" min={1} value={item.quantidade} onChange={e => atualizarItem(item.uid, { quantidade: Math.max(1, Number(e.target.value) || 1) })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-2 text-xs"/></div>
                   </div>
                   {item.contramarco === 'sim' && <p className="mt-2 text-[11px] font-medium text-blue-700">Arremate obrigatório porque esta tipologia está com contramarco.</p>}
                 </div>
               })}
             </div>
-            <div className="border-t border-slate-100 p-4"><button disabled={!cliente || itens.length === 0} onClick={salvarPreview} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{salvo ? <><Check size={17}/>Seleção salva para próxima etapa</> : <>Avançar para configurar tipologias <ChevronRight size={17}/></>}</button>{salvo && <p className="mt-2 text-center text-xs text-emerald-700">Preview validável: os dados ficaram guardados nesta sessão. A próxima etapa conectará cada tipologia às variáveis técnicas e à precificação.</p>}</div>
+            <div className="border-t border-slate-100 p-4">
+              <button disabled={!cliente || itens.length === 0 || vidroObrigatorioPendente} onClick={salvarPreview} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{salvo ? <><Check size={17}/>Seleção salva para próxima etapa</> : <>Avançar para configurar tipologias <ChevronRight size={17}/></>}</button>
+              {vidroObrigatorioPendente && <p className="mt-2 text-center text-xs font-semibold text-amber-700">Selecione o vidro obrigatório das tipologias marcadas antes de avançar.</p>}
+              {salvo && <p className="mt-2 text-center text-xs text-emerald-700">Preview validável: os dados ficaram guardados nesta sessão. A próxima etapa conectará cada tipologia às variáveis técnicas e à precificação.</p>}
+            </div>
           </div>
         </aside>
       </main>
