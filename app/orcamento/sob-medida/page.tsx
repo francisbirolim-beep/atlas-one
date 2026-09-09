@@ -13,7 +13,7 @@ export default function OrcamentoSobMedidaPage() {
     if (criando) return
     const alvo = event.target as HTMLElement
     const botao = alvo.closest('button')
-    if (!botao || !botao.textContent?.includes('Avançar para configurar tipologias')) return
+    if (!botao || !botao.textContent?.includes('Salvar e ir para custos')) return
 
     window.setTimeout(async () => {
       const bruto = sessionStorage.getItem('atlas_orcamento_sob_medida_builder_v1')
