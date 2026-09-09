@@ -64,7 +64,7 @@ export default function IdentificarCliente() {
       setErro('Não foi possível criar o Cliente 360. Tente novamente.')
       return
     }
-    setClienteSelecionado({ id, nome: busca.trim(), whatsapp: null, telefone: null, cidade: null, bairro: null, cpf_cnpj: null })
+    setClienteSelecionado({ id, nome: busca.trim() })
   }
 
   const acoes = clienteSelecionado ? [
