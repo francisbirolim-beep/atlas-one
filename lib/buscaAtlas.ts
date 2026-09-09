@@ -22,7 +22,9 @@ export function termosBuscaAtlas(consulta: string): string[] {
  * - ignora maiúsculas/minúsculas e acentos;
  * - aceita várias palavras em qualquer ordem;
  * - cada termo pode estar em um campo diferente;
- * - números podem ser encontrados mesmo que CPF/CNPJ/telefone estejam formatados.
+ * - números podem ser encontrados mesmo que estejam formatados;
+ * - aceita também um único dígito para buscas operacionais como quantidade de folhas
+ *   (ex.: "2", "porta 2", "janela 4").
  */
 export function correspondeBuscaAtlas(consulta: string, ...campos: unknown[]): boolean {
   const termos = termosBuscaAtlas(consulta)
@@ -34,7 +36,7 @@ export function correspondeBuscaAtlas(consulta: string, ...campos: unknown[]): b
   return termos.every(termo => {
     if (texto.includes(termo)) return true
     const digitos = somenteNumerosAtlas(termo)
-    return digitos.length >= 2 && numeros.includes(digitos)
+    return digitos.length >= 1 && numeros.includes(digitos)
   })
 }
 

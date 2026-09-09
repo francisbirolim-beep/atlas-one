@@ -102,7 +102,7 @@ export default function IdentificarCliente() {
           titulo: 'Orçamento sob medida',
           subtitulo: 'Montar com tipologia e variáveis',
           icone: Pencil,
-          href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
+          href: `/orcamento/sob-medida?cliente=${encodeURIComponent(clienteSelecionado.id)}`,
         },
         {
           titulo: 'Balcão',

@@ -1,15 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { WalletCards } from 'lucide-react'
 import Cliente360DashboardV2 from '@/components/clientes/Cliente360DashboardV2'
 
 export default function DetalheCliente() {
   const params = useParams()
+  const router = useRouter()
   const id = params?.id as string
 
   if (!id) return null
+
+  function corrigirAtalhoSobMedida(event: React.MouseEvent<HTMLDivElement>) {
+    const alvo = event.target as HTMLElement
+    const link = alvo.closest('a')
+    if (!link) return
+    const texto = (link.textContent || '').toLowerCase()
+    if (!texto.includes('orçamento sob medida')) return
+    event.preventDefault()
+    router.push(`/orcamento/sob-medida?cliente=${encodeURIComponent(id)}`)
+  }
 
   return <>
     <div className="border-b border-emerald-100 bg-emerald-50/70 px-4 py-2 sm:px-6">
@@ -19,6 +30,8 @@ export default function DetalheCliente() {
         </Link>
       </div>
     </div>
-    <Cliente360DashboardV2 clienteId={id} />
+    <div onClick={corrigirAtalhoSobMedida}>
+      <Cliente360DashboardV2 clienteId={id} />
+    </div>
   </>
 }
