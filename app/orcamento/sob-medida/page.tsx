@@ -1,3 +1,3 @@
 'use client'
 
-export { default } from '@/components/orcamento/OrcamentoSobMedidaBuilder'
+export { default } from '@/components/orcamento/OrcamentoSobMedidaBuilderV2'
