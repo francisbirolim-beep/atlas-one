@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Calculator, History, LayoutDashboard, PackageOpen, Settings2, Wrench } from 'lucide-react'
+import EngenhariaProdutoQuickView from '@/components/engenharia/EngenhariaProdutoQuickView'
 
 export default function EngenhariaLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -31,6 +32,7 @@ export default function EngenhariaLayout({ children }: { children: React.ReactNo
         </div>
       </nav>
       {children}
+      <EngenhariaProdutoQuickView />
     </div>
   )
 }
