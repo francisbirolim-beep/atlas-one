@@ -54,6 +54,7 @@ export default function ProdutoTecnicoDrawer({ produto, onClose, onSaved }: Prop
   const unidadeCusto = ehVidro ? 'R$/m²' : `R$/${produto.unidade || 'un'}`
 
   async function salvar() {
+    if (!produto) return
     setSalvando(true)
     setErro('')
     const patch: Record<string, unknown> = {
