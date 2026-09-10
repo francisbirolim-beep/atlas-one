@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ExternalLink, Loader2, Save, X } from 'lucide-react'
+import { AlertTriangle, ExternalLink, ImageIcon, Loader2, Save, X } from 'lucide-react'
 import { atualizarProduto } from '@/lib/produtos'
 import type { Produto } from '@/lib/tipos'
 
@@ -48,15 +48,18 @@ export default function ProdutoTecnicoDrawer({ produto, onClose, onSaved }: Prop
   const categoria = String(produto.categoria || '')
   const ehPerfil = categoria === 'perfil'
   const ehVidro = categoria === 'vidro'
-  const unidadeCusto = ehVidro ? 'R$/m²' : ehPerfil ? 'R$/kg ou unidade operacional' : `R$/${produto.unidade || 'un'}`
+  const ehAcessorio = categoria === 'acessorio'
+  const exigeDesenho = ehPerfil || ehAcessorio
+  const desenhoUrl = String(produto.foto_url || p.imagem_atlas_url || '')
+  const unidadeCusto = ehVidro ? 'R$/m²' : `R$/${produto.unidade || 'un'}`
 
   async function salvar() {
     setSalvando(true)
     setErro('')
     const patch: Record<string, unknown> = {
-      custo: numero(custo),
       unidade: unidade.trim() || null,
     }
+    if (!ehPerfil) patch.custo = numero(custo)
     if (ehPerfil) {
       patch.peso_kg_m = numero(pesoKgM)
       patch.tamanho_barra_mm = numero(tamanhoBarra)
@@ -69,7 +72,7 @@ export default function ProdutoTecnicoDrawer({ produto, onClose, onSaved }: Prop
     }
     onSaved({
       ...produto,
-      custo: patch.custo as number | null,
+      ...(!ehPerfil ? { custo: patch.custo as number | null } : {}),
       unidade: patch.unidade as string | null,
       ...(ehPerfil ? {
         peso_kg_m: patch.peso_kg_m as number | null,
@@ -92,6 +95,11 @@ export default function ProdutoTecnicoDrawer({ produto, onClose, onSaved }: Prop
 
       <div className="space-y-5 p-5">
         <section className="rounded-2xl border border-slate-200 p-4">
+          <div className="flex items-center justify-between gap-3"><h3 className="font-bold text-slate-800">Desenho / imagem técnica</h3>{exigeDesenho&&<span className={`rounded-full px-2 py-1 text-[10px] font-bold ${desenhoUrl?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{desenhoUrl?'DESENHO OK':'PENDENTE'}</span>}</div>
+          {desenhoUrl ? <div className="mt-3 rounded-xl border bg-white p-3"><img src={desenhoUrl} alt={`Desenho técnico ${produto.codigo || produto.nome}`} className="mx-auto max-h-60 max-w-full object-contain"/></div> : <div className="mt-3 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><ImageIcon size={24}/><div><b>Sem desenho cadastrado.</b><p className="mt-1">Perfil e acessório precisam de desenho/imagem antes de serem considerados prontos para produção e impressão técnica.</p></div></div>}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 p-4">
           <h3 className="font-bold text-slate-800">Identificação</h3>
           <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
             <div><span className="text-slate-400">Código</span><div className="font-semibold">{produto.codigo || '—'}</div></div>
@@ -107,11 +115,11 @@ export default function ProdutoTecnicoDrawer({ produto, onClose, onSaved }: Prop
             <label>Peso kg/m<input inputMode="decimal" value={pesoKgM} onChange={e=>setPesoKgM(e.target.value)} placeholder="0,000" className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
             <label>Barra (mm)<input inputMode="numeric" value={tamanhoBarra} onChange={e=>setTamanhoBarra(e.target.value)} placeholder="6000" className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
           </div>
-          <p className="mt-2 text-[11px] text-slate-500">O peso salvo aqui é o dado mestre usado para calcular consumo por kg e custo dos perfis.</p>
+          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800"><b>Perfil sem preço individual nesta ficha.</b><p className="mt-1">O Atlas calcula o custo pelo peso consumido e pela tabela do alumínio natural + beneficiamento da cor (preto, branco, amadeirado, bronze, anodizado etc.).</p></div>
         </section>}
 
-        <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
-          <h3 className="font-bold text-slate-800">Custo</h3>
+        {!ehPerfil && <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+          <h3 className="font-bold text-slate-800">Custo mestre</h3>
           <label className="mt-3 block text-xs font-semibold text-slate-700">Custo atual ({unidadeCusto})
             <div className="mt-1 flex items-center rounded-xl border border-blue-200 bg-white px-3"><span className="text-slate-400">R$</span><input inputMode="decimal" value={custo} onChange={e=>setCusto(e.target.value)} className="w-full px-2 py-2.5 outline-none" placeholder="0,00"/></div>
           </label>
@@ -120,14 +128,16 @@ export default function ProdutoTecnicoDrawer({ produto, onClose, onSaved }: Prop
             <div className="rounded-lg bg-white p-2"><span className="text-slate-400">W.Vetro máx.</span><div className="font-semibold">{moeda(p.custo_wvetro_max)}</div></div>
             <div className="rounded-lg bg-white p-2"><span className="text-slate-400">W.Vetro último</span><div className="font-semibold">{moeda(p.custo_wvetro_ultimo)}</div></div>
           </div>
-          <p className="mt-2 text-[11px] text-slate-500">O valor W.Vetro é referência histórica. O custo oficial do Atlas é o campo acima.</p>
-        </section>
+          {ehVidro&&<p className="mt-2 text-[11px] text-slate-500">Para vidro, o custo operacional deve ser informado por m².</p>}
+        </section>}
+
+        {exigeDesenho&&!desenhoUrl&&<div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><AlertTriangle size={17} className="mt-0.5"/><span>Este item continua editável, mas deve permanecer como pendência técnica até o desenho ser cadastrado.</span></div>}
 
         <section className="rounded-2xl border border-slate-200 p-4">
           <h3 className="font-bold text-slate-800">Atalhos</h3>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <a href="/cadastro/produtos/precificacao" className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700"><ExternalLink size={14}/>Tabela de preços</a>
-            <a href="/cadastro/produtos" className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700"><ExternalLink size={14}/>Cadastro completo</a>
+            {!ehPerfil&&<a href="/cadastro/produtos/precificacao" className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700"><ExternalLink size={14}/>Tabela de preços</a>}
+            <a href="/cadastro/produtos" className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700"><ExternalLink size={14}/>Cadastro completo / desenho</a>
           </div>
         </section>
 
