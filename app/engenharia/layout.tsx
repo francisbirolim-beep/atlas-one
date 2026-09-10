@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Calculator, History, LayoutDashboard, PackageOpen, Settings2, Wrench } from 'lucide-react'
 import EngenhariaProdutoQuickView from '@/components/engenharia/EngenhariaProdutoQuickView'
 import ModeloVidrosPermitidos from '@/components/engenharia/ModeloVidrosPermitidos'
+import ModelosMateriaisEnhancer from '@/components/engenharia/ModelosMateriaisEnhancer'
 
 export default function EngenhariaLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -35,6 +36,7 @@ export default function EngenhariaLayout({ children }: { children: React.ReactNo
       {children}
       <EngenhariaProdutoQuickView />
       <ModeloVidrosPermitidos />
+      <ModelosMateriaisEnhancer />
     </div>
   )
 }
