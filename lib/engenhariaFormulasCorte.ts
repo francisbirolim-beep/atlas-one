@@ -26,6 +26,14 @@ export type AcessorioFormulaCorte = {
   fonte?: string
 }
 
+export type MetadadosEditorModelo = {
+  descricao_orcamento?: string
+  descricao_pesquisa?: string
+  folga_largura?: number
+  folga_altura?: number
+  origem?: string
+}
+
 type TipologiaFormula = { id: string; label: string; chave: string; ativo: boolean }
 
 export type RegistroFormulaCorte = TipologiaFormulasCorte & {
@@ -38,6 +46,7 @@ export type RegistroFormulaCorte = TipologiaFormulasCorte & {
   observacoes?: string | null
   vidro: VidroFormulaCorte
   acessorios: AcessorioFormulaCorte[]
+  metadados_editor: MetadadosEditorModelo
   tipologia?: TipologiaFormula | null
 }
 
@@ -54,6 +63,7 @@ type FormulaBanco = {
   observacoes?: string | null
   vidro?: unknown
   acessorios?: unknown
+  metadados_editor?: unknown
   tipologia?: TipologiaFormula | TipologiaFormula[] | null
 }
 
@@ -79,11 +89,14 @@ function normalizar(item: FormulaBanco): RegistroFormulaCorte {
       ? item.vidro as VidroFormulaCorte
       : {},
     acessorios: Array.isArray(item.acessorios) ? item.acessorios as AcessorioFormulaCorte[] : [],
+    metadados_editor: item.metadados_editor && typeof item.metadados_editor === 'object' && !Array.isArray(item.metadados_editor)
+      ? item.metadados_editor as MetadadosEditorModelo
+      : {},
     tipologia,
   }
 }
 
-const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, acessorios, tipologia:tipologias(id,label,chave,ativo)'
+const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, acessorios, metadados_editor, tipologia:tipologias(id,label,chave,ativo)'
 
 export async function listarFormulasCorteAtivas(): Promise<RegistroFormulaCorte[]> {
   const [formulasResp, linhas] = await Promise.all([
@@ -134,6 +147,7 @@ export async function salvarFormulaCorte(
     pecas: PecaFormula[]
     vidro: VidroFormulaCorte
     acessorios?: AcessorioFormulaCorte[]
+    metadados_editor?: MetadadosEditorModelo
     status: StatusFormulaCorte
     ativo: boolean
     observacoes?: string | null
@@ -151,6 +165,7 @@ export async function salvarFormulaCorte(
     updated_at: new Date().toISOString(),
   }
   if (dados.acessorios !== undefined) atualizacao.acessorios = dados.acessorios
+  if (dados.metadados_editor !== undefined) atualizacao.metadados_editor = dados.metadados_editor
 
   const { data, error } = await supabase
     .from('engenharia_tipologia_formulas_corte')
