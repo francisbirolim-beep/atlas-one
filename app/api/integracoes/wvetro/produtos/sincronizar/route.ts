@@ -121,12 +121,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}))
     const maxNotas = Number(body?.maxNotas || 50)
 
-    // Atualiza identidade/URL dos acessórios antes de tentar copiar desenhos.
     const catalogo = await descobrirEImportarCatalogoWVetro('A')
 
-    // Custo de produto não vem no catálogo de identidade do W.Vetro. O Atlas usa
-    // o custo unitário observado nas notas de entrada, sem inventar valor e sem
-    // sobrescrever custo já cadastrado manualmente.
     const { mapa, notasConsultadas } = await custosComprasWVetro(maxNotas)
     const { data: produtos, error: erroProdutos } = await supabaseAdmin
       .from('produtos')
@@ -142,23 +138,21 @@ export async function POST(req: NextRequest) {
       const custo = chaves.map(chave => mapa.get(chave)).find(Boolean)
       if (!custo) continue
       custosAtualizados += 1
-      atualizacoes.push(
-        supabaseAdmin.from('produtos').update({
-          custo: custo.ultimo,
-          custo_wvetro_ultimo: custo.ultimo,
-          custo_wvetro_min: custo.minimo,
-          custo_wvetro_max: custo.maximo,
-          custo_wvetro_atualizado_em: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).eq('id', produto.id).then(() => undefined),
-      )
+      const atualizacao = supabaseAdmin.from('produtos').update({
+        custo: custo.ultimo,
+        custo_wvetro_ultimo: custo.ultimo,
+        custo_wvetro_min: custo.minimo,
+        custo_wvetro_max: custo.maximo,
+        custo_wvetro_atualizado_em: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', produto.id)
+      atualizacoes.push(Promise.resolve(atualizacao).then(() => undefined))
       if (atualizacoes.length >= 20) {
         await Promise.all(atualizacoes.splice(0, atualizacoes.length))
       }
     }
     if (atualizacoes.length) await Promise.all(atualizacoes)
 
-    // URLs antigas com erro podem ter sido corrigidas pelo catálogo atual.
     await supabaseAdmin
       .from('wvetro_produtos_snapshot')
       .update({ imagem_status: 'pendente', imagem_erro: null })
