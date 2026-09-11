@@ -51,24 +51,20 @@ export default function ModeloLayoutTecnico() {
 
   useEffect(() => {
     let ativo = true
-
-    void carregarTodosProdutos().then(lista => {
-      if (!ativo) return
-      produtosRef.current = new Map(lista.filter(p => p.codigo).map(p => [compacto(p.codigo), p]))
-      decorar()
-    })
+    let raf = 0
+    let observer: MutationObserver | null = null
 
     function cardDoTitulo(h2: Element) {
       return h2.closest('div.rounded-2xl, section') as HTMLElement | null
     }
 
     function ampliar(card: HTMLElement) {
-      card.style.gridColumn = '1 / -1'
-      card.style.width = '100%'
+      if (card.style.gridColumn !== '1 / -1') card.style.gridColumn = '1 / -1'
+      if (card.style.width !== '100%') card.style.width = '100%'
       const pai = card.parentElement
       if (pai) {
-        pai.style.gridTemplateColumns = 'minmax(0, 1fr)'
-        pai.style.width = '100%'
+        if (pai.style.gridTemplateColumns !== 'minmax(0, 1fr)') pai.style.gridTemplateColumns = 'minmax(0, 1fr)'
+        if (pai.style.width !== '100%') pai.style.width = '100%'
       }
     }
 
@@ -95,6 +91,10 @@ export default function ModeloLayoutTecnico() {
       return td
     }
 
+    function setTexto(td: HTMLTableCellElement, texto: string) {
+      if (td.textContent !== texto) td.textContent = texto
+    }
+
     function decorarTabela(card: HTMLElement, tipo: 'perfil' | 'acessorio') {
       const table = card.querySelector('table')
       const head = table?.querySelector('thead tr') as HTMLTableRowElement | null
@@ -116,11 +116,11 @@ export default function ModeloLayoutTecnico() {
 
         if (tipo === 'perfil') {
           const peso = produto?.peso_kg_m ?? produto?.peso_kg ?? null
-          celula(row, 'kgm').textContent = peso == null ? 'kg/m pendente' : `${numero(peso, 4)} kg/m`
+          setTexto(celula(row, 'kgm'), peso == null ? 'kg/m pendente' : `${numero(peso, 4)} kg/m`)
         } else {
-          celula(row, 'custo').textContent = moeda(produto?.custo)
-          celula(row, 'margem').textContent = produto?.margem_percentual == null ? '—' : `${numero(produto.margem_percentual, 2)}%`
-          celula(row, 'venda').textContent = produto?.preco == null ? '—' : moeda(produto.preco)
+          setTexto(celula(row, 'custo'), moeda(produto?.custo))
+          setTexto(celula(row, 'margem'), produto?.margem_percentual == null ? '—' : `${numero(produto.margem_percentual, 2)}%`)
+          setTexto(celula(row, 'venda'), produto?.preco == null ? '—' : moeda(produto.preco))
         }
       }
     }
@@ -135,12 +135,12 @@ export default function ModeloLayoutTecnico() {
         if (!card) continue
 
         if (titulo.includes('perfis calculados plano de corte')) {
-          card.style.display = 'none'
+          if (card.style.display !== 'none') card.style.display = 'none'
           continue
         }
 
         if (titulo.includes('acessorios da simulacao atual')) {
-          card.style.display = 'none'
+          if (card.style.display !== 'none') card.style.display = 'none'
           continue
         }
 
@@ -156,13 +156,34 @@ export default function ModeloLayoutTecnico() {
       }
     }
 
-    const observer = new MutationObserver(() => requestAnimationFrame(decorar))
-    observer.observe(document.body, { childList: true, subtree: true })
-    decorar()
+    function observar() {
+      observer?.observe(document.body, { childList: true, subtree: true })
+    }
+
+    function decorarSemLoop() {
+      observer?.disconnect()
+      decorar()
+      observar()
+    }
+
+    observer = new MutationObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(decorarSemLoop)
+    })
+    observar()
+
+    void carregarTodosProdutos().then(lista => {
+      if (!ativo) return
+      produtosRef.current = new Map(lista.filter(p => p.codigo).map(p => [compacto(p.codigo), p]))
+      decorarSemLoop()
+    })
+
+    decorarSemLoop()
 
     return () => {
       ativo = false
-      observer.disconnect()
+      cancelAnimationFrame(raf)
+      observer?.disconnect()
     }
   }, [])
 
