@@ -49,21 +49,57 @@ export default function ModeloMateriaisPicker() {
 
   useEffect(() => {
     void (async () => {
-      const [{ data: ps }, { data: imgs }, { data: ls }] = await Promise.all([
-        supabase.from('produtos').select('*').eq('ativo', true).in('categoria', ['perfil', 'acessorio']).order('categoria').order('nome'),
-        supabase.from('produto_imagens').select('produto_id,url,principal,status_validacao,ativo').eq('ativo', true).neq('status_validacao', 'rejeitada'),
+      async function carregarProdutos(categoria: Tipo) {
+        const todos: Produto[] = []
+        for (let inicio = 0; ; inicio += 1000) {
+          const { data, error } = await supabase
+            .from('produtos')
+            .select('*')
+            .eq('ativo', true)
+            .eq('categoria', categoria)
+            .order('nome')
+            .range(inicio, inicio + 999)
+          if (error) throw error
+          const lote = (data || []) as Produto[]
+          todos.push(...lote)
+          if (lote.length < 1000) break
+        }
+        return todos
+      }
+
+      async function carregarImagens() {
+        const todas: any[] = []
+        for (let inicio = 0; ; inicio += 1000) {
+          const { data, error } = await supabase
+            .from('produto_imagens')
+            .select('produto_id,url,principal,status_validacao,ativo')
+            .eq('ativo', true)
+            .neq('status_validacao', 'rejeitada')
+            .range(inicio, inicio + 999)
+          if (error) throw error
+          const lote = (data || []) as any[]
+          todas.push(...lote)
+          if (lote.length < 1000) break
+        }
+        return todas
+      }
+
+      const [perfis, acessorios, imgs, { data: ls }] = await Promise.all([
+        carregarProdutos('perfil'),
+        carregarProdutos('acessorio'),
+        carregarImagens(),
         supabase.from('linhas_tecnicas').select('id,nome,linha_produtos(produto_id)').order('nome'),
       ])
+
       const imgMap = new Map<string, string>()
-      for (const img of (imgs || []) as any[]) {
+      for (const img of imgs) {
         if (!imgMap.has(img.produto_id) || img.principal) imgMap.set(img.produto_id, img.url)
       }
-      setProdutos(((ps || []) as Produto[]).map(p => ({ ...p, imagem_tecnica_url: imgMap.get(p.id) || p.foto_url || null })))
+
+      setProdutos([...perfis, ...acessorios].map(p => ({ ...p, imagem_tecnica_url: imgMap.get(p.id) || p.foto_url || null })))
       const lista = ((ls || []) as any[]).map(l => ({ id: l.id, nome: l.nome, produto_ids: (l.linha_produtos || []).map((x: any) => x.produto_id) }))
       setLinhas(lista)
 
-      // Só pré-seleciona Suprema quando existir uma linha canônica/exata.
-      // Evita prender a busca em variantes como "L. Suprema Sem Baguete".
       const supremaExata = lista.find(l => ['suprema', 'l suprema', 'linha suprema'].includes(norm(l.nome)))
       setLinhaId(supremaExata?.id || '')
     })()
