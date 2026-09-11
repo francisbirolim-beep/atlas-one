@@ -48,15 +48,45 @@ function credenciaisWVetro(): WVetroCredenciais {
   }
 }
 
-function tokenJwtDaString(valorBruto: string): string | null {
-  const valor = valorBruto
+function limparToken(valorBruto: string) {
+  return valorBruto
     .trim()
     .replace(/^"|"$/g, '')
     .replace(/^Bearer\s+/i, '')
     .trim()
+}
 
+function tokenJwtDaString(valorBruto: string): string | null {
+  const valor = limparToken(valorBruto)
   const jwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
   return jwt.test(valor) ? valor : null
+}
+
+function tokenOpacoDaString(valorBruto: string): string | null {
+  const valor = limparToken(valorBruto)
+  if (!valor) return null
+  if (/^(true|false|sim|nao|não|s|n|ok|1|0)$/i.test(valor)) return null
+  // Algumas instalações W.Vetro retornam em ValidaUsuario um token opaco,
+  // e não um JWT com três segmentos. O header da API aceita esse valor como token.
+  return valor.length >= 8 ? valor : null
+}
+
+function extrairTokenOpaco(payload: unknown, profundidade = 0): string | null {
+  if (profundidade > 6) return null
+  if (typeof payload === 'string') return tokenOpacoDaString(payload)
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const token = extrairTokenOpaco(item, profundidade + 1)
+      if (token) return token
+    }
+    return null
+  }
+  if (!payload || typeof payload !== 'object') return null
+  for (const valor of Object.values(payload as Record<string, unknown>)) {
+    const token = extrairTokenOpaco(valor, profundidade + 1)
+    if (token) return token
+  }
+  return null
 }
 
 function extrairToken(payload: unknown, profundidade = 0): string | null {
@@ -75,6 +105,15 @@ function extrairToken(payload: unknown, profundidade = 0): string | null {
   if (!payload || typeof payload !== 'object') return null
 
   const obj = payload as Record<string, unknown>
+
+  // Resposta observada no W.Vetro: { ValidaUsuario: <token opaco> }.
+  // Primeiro tenta esse contrato específico sem exigir formato JWT.
+  const chaveValidaUsuario = Object.keys(obj).find((chave) => /^validausuario$/i.test(chave.replace(/[^a-z0-9]/gi, '')))
+  if (chaveValidaUsuario) {
+    const tokenOpaco = extrairTokenOpaco(obj[chaveValidaUsuario], profundidade + 1)
+    if (tokenOpaco) return tokenOpaco
+  }
+
   const chavesPrioritarias = Object.keys(obj).filter((chave) => /token|jwt|access|auth/i.test(chave))
 
   for (const chave of chavesPrioritarias) {
@@ -134,13 +173,13 @@ async function autenticarWVetro(force = false): Promise<string> {
   try {
     payload = JSON.parse(texto)
   } catch {
-    // Algumas APIs legadas retornam o JWT como texto puro.
+    // Algumas APIs legadas retornam o token como texto puro.
   }
 
   const token = extrairToken(payload)
   if (!token) {
     throw new Error(
-      `A API W.Vetro respondeu, mas não retornou um JWT reconhecível (${descreverEstruturaAutenticacao(payload)}).`,
+      `A API W.Vetro respondeu, mas não retornou um token reconhecível (${descreverEstruturaAutenticacao(payload)}).`,
     )
   }
 
