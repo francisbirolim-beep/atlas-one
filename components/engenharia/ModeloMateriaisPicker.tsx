@@ -25,6 +25,16 @@ function findSection(el: Element | null) {
   return el?.closest('section') || null
 }
 
+function targetDoCampo(input: HTMLInputElement): { tipo: Tipo; row: HTMLTableRowElement } | null {
+  const row = input.closest('tr') as HTMLTableRowElement | null
+  const section = findSection(input)
+  if (!row || !section || input !== row.querySelector('input')) return null
+  const title = norm(section.querySelector('h2')?.textContent)
+  if (title.includes('planilha tecnica perfis')) return { tipo: 'perfil', row }
+  if (title.includes('planilha tecnica acessorios')) return { tipo: 'acessorio', row }
+  return null
+}
+
 export default function ModeloMateriaisPicker() {
   const [produtos, setProdutos] = useState<ProdutoComImagem[]>([])
   const [linhas, setLinhas] = useState<Linha[]>([])
@@ -93,8 +103,10 @@ export default function ModeloMateriaisPicker() {
   function aplicarNaLinha(row: HTMLTableRowElement, produto: ProdutoComImagem) {
     const inputs = Array.from(row.querySelectorAll('input')) as HTMLInputElement[]
     if (!inputs.length) return
+    bypass.current = true
     setInputValue(inputs[0], produto.codigo || produto.nome || '')
     if (inputs[1]) setInputValue(inputs[1], produto.nome || produto.descricao || '')
+    bypass.current = false
     row.dataset.produtoId = produto.id
     row.dataset.imagemUrl = produto.imagem_tecnica_url || ''
     requestAnimationFrame(() => decorar())
@@ -170,6 +182,7 @@ export default function ModeloMateriaisPicker() {
 
   useEffect(() => {
     if (!produtos.length) return
+
     const onClick = (ev: MouseEvent) => {
       const el = ev.target as HTMLElement | null
       if (!el || bypass.current || !location.pathname.startsWith('/engenharia/modelos')) return
@@ -189,20 +202,34 @@ export default function ModeloMateriaisPicker() {
       }
       const input = el.closest('input') as HTMLInputElement | null
       if (input) {
-        const row = input.closest('tr') as HTMLTableRowElement | null
-        const section = findSection(input)
-        if (row && section && input === row.querySelector('input')) {
-          const title = norm(section.querySelector('h2')?.textContent)
-          if (title.includes('planilha tecnica perfis')) abrir({ tipo: 'perfil', mode: 'replace', row }, input.value)
-          if (title.includes('planilha tecnica acessorios')) abrir({ tipo: 'acessorio', mode: 'replace', row }, input.value)
-        }
+        const alvo = targetDoCampo(input)
+        if (alvo) abrir({ tipo: alvo.tipo, mode: 'replace', row: alvo.row }, input.value)
       }
     }
+
+    const onInput = (ev: Event) => {
+      const input = ev.target as HTMLInputElement | null
+      if (!input || bypass.current || !location.pathname.startsWith('/engenharia/modelos')) return
+      const alvo = targetDoCampo(input)
+      if (!alvo) return
+
+      setTarget(prev => {
+        if (prev?.mode === 'replace' && prev.row === alvo.row && prev.tipo === alvo.tipo) return prev
+        return { tipo: alvo.tipo, mode: 'replace', row: alvo.row }
+      })
+      setBusca(input.value)
+    }
+
     document.addEventListener('click', onClick, true)
+    document.addEventListener('input', onInput, true)
     const observer = new MutationObserver(() => requestAnimationFrame(decorar))
     observer.observe(document.body, { childList: true, subtree: true })
     decorar()
-    return () => { document.removeEventListener('click', onClick, true); observer.disconnect() }
+    return () => {
+      document.removeEventListener('click', onClick, true)
+      document.removeEventListener('input', onInput, true)
+      observer.disconnect()
+    }
   }, [produtos, linhas])
 
   if (!target) return null
@@ -210,7 +237,7 @@ export default function ModeloMateriaisPicker() {
   return <div className="fixed inset-0 z-[110] grid place-items-center bg-slate-950/45 p-3" onMouseDown={e=>{if(e.currentTarget===e.target)setTarget(null)}}>
     <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
       <div className="flex items-start justify-between border-b px-5 py-4">
-        <div><div className="text-[11px] font-bold uppercase tracking-[.15em] text-blue-600">{target.mode === 'add' ? 'Adicionar' : 'Substituir'} {target.tipo}</div><h2 className="mt-1 text-xl font-bold text-slate-900">Pesquisar no banco de dados</h2><p className="mt-1 text-xs text-slate-500">Escolha uma linha para reduzir a lista ou deixe Todas as linhas para pesquisar livremente.</p></div>
+        <div><div className="text-[11px] font-bold uppercase tracking-[.15em] text-blue-600">{target.mode === 'add' ? 'Adicionar' : 'Substituir'} {target.tipo}</div><h2 className="mt-1 text-xl font-bold text-slate-900">Pesquisar no banco de dados</h2><p className="mt-1 text-xs text-slate-500">Digite código ou descrição. Os resultados são filtrados em tempo real pela linha selecionada.</p></div>
         <button onClick={()=>setTarget(null)} className="rounded-lg p-2 hover:bg-slate-100"><X size={19}/></button>
       </div>
       <div className="grid gap-3 border-b p-4 md:grid-cols-[240px_1fr]">
@@ -218,7 +245,7 @@ export default function ModeloMateriaisPicker() {
           <select value={linhaId} onChange={e=>setLinhaId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm"><option value="">Todas as linhas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select>
         </label>
         <label className="text-xs font-semibold text-slate-600">Pesquisar código ou descrição
-          <div className="mt-1 flex items-center rounded-xl border px-3"><Search size={16} className="text-slate-400"/><input autoFocus value={busca} onChange={e=>setBusca(e.target.value)} placeholder={target.tipo==='perfil'?'Ex.: SU008, marco, travessa...':'Ex.: FRA820, fechadura, roldana...'} className="w-full px-2 py-2.5 text-sm outline-none"/></div>
+          <div className="mt-1 flex items-center rounded-xl border px-3"><Search size={16} className="text-slate-400"/><input autoFocus value={busca} onChange={e=>setBusca(e.target.value)} placeholder={target.tipo==='perfil'?'Ex.: SU00, marco, travessa...':'Ex.: FRA, fechadura, roldana...'} className="w-full px-2 py-2.5 text-sm outline-none"/></div>
         </label>
       </div>
       <div className="overflow-y-auto p-3">
