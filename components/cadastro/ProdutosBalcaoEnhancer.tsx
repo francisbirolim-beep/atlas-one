@@ -9,6 +9,48 @@ function acharSecaoProdutos() {
   return secoes.find(secao => secao.querySelector('h2')?.textContent?.trim() === 'Produtos cadastrados') || null
 }
 
+function decorarCards() {
+  const secao = acharSecaoProdutos()
+  if (!secao) return
+  const botoesEditar = Array.from(secao.querySelectorAll('button')).filter(b => b.textContent?.trim() === 'Editar')
+
+  for (const botao of botoesEditar) {
+    const card = botao.closest<HTMLElement>('.rounded-xl')
+    if (!card || card.dataset.atlasDecorado === '1') continue
+    card.dataset.atlasDecorado = '1'
+
+    const spans = Array.from(card.querySelectorAll('span'))
+    const rotuloCusto = spans.find(s => s.textContent?.trim() === 'Custo')
+    const caixaCusto = rotuloCusto?.parentElement
+    const valorCusto = caixaCusto?.querySelector('div')
+    if (valorCusto?.textContent?.trim() === '—') {
+      valorCusto.textContent = 'Sem custo cadastrado'
+      valorCusto.classList.add('text-amber-700')
+      const acao = document.createElement('button')
+      acao.type = 'button'
+      acao.textContent = 'Cadastrar custo'
+      acao.className = 'mt-1 text-[11px] font-semibold text-brand-navy underline'
+      acao.addEventListener('click', () => (botao as HTMLButtonElement).click())
+      caixaCusto?.appendChild(acao)
+    }
+
+    const img = card.querySelector<HTMLImageElement>('img')
+    if (img) {
+      const falhou = () => {
+        if (img.dataset.atlasFalhou === '1') return
+        img.dataset.atlasFalhou = '1'
+        img.style.display = 'none'
+        const aviso = document.createElement('div')
+        aviso.className = 'w-14 h-12 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-1 text-[9px] leading-tight text-amber-700 flex items-center justify-center text-center'
+        aviso.textContent = 'Desenho pendente'
+        img.parentElement?.insertBefore(aviso, img)
+      }
+      img.addEventListener('error', falhou, { once: true })
+      if (img.complete && img.naturalWidth === 0) falhou()
+    }
+  }
+}
+
 export default function ProdutosBalcaoEnhancer() {
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [margem, setMargem] = useState('')
@@ -17,23 +59,33 @@ export default function ProdutosBalcaoEnhancer() {
 
   useEffect(() => {
     let atual: HTMLElement | null = null
+    let timer: number | null = null
     const montar = () => {
       const secao = acharSecaoProdutos()
       if (!secao) return
       const existente = secao.querySelector<HTMLElement>('[data-atlas-margem-balcao-geral="1"]')
-      if (existente) { atual = existente; setHost(existente); return }
-      const alvo = document.createElement('div')
-      alvo.dataset.atlasMargemBalcaoGeral = '1'
-      const filhos = Array.from(secao.children)
-      secao.insertBefore(alvo, filhos[1] || null)
-      atual = alvo
-      setHost(alvo)
+      if (existente) { atual = existente; setHost(existente) }
+      else {
+        const alvo = document.createElement('div')
+        alvo.dataset.atlasMargemBalcaoGeral = '1'
+        const filhos = Array.from(secao.children)
+        secao.insertBefore(alvo, filhos[1] || null)
+        atual = alvo
+        setHost(alvo)
+      }
+      decorarCards()
     }
 
     montar()
-    const observer = new MutationObserver(() => { if (!atual?.isConnected) montar() })
+    const observer = new MutationObserver(() => {
+      if (timer) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        if (!atual?.isConnected) montar()
+        else decorarCards()
+      }, 80)
+    })
     observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); if (timer) window.clearTimeout(timer) }
   }, [])
 
   const conteudo = useMemo(() => {
