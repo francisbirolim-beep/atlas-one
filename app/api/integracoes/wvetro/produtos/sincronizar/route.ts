@@ -10,35 +10,22 @@ import {
 import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
 import { processarPendenciasImagensWVetro } from '@/lib/wvetroImagensServer'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-export const maxDuration = 60
-
-async function master(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,role').eq('id', data.user.id).maybeSingle()
-  return usuario?.role === 'master' ? usuario : null
-}
-
-function numero(valor: unknown): number | null {
-  if (typeof valor === 'number' && Number.isFinite(valor)) return valor
-  const bruto = String(valor ?? '').trim()
-  if (!bruto) return null
-  if (/^-?\d+(?:\.\d+)?$/.test(bruto)) {
-    const n = Number(bruto)
-    return Number.isFinite(n) ? n : null
-  }
-  const n = Number(bruto.replace(/\./g, '').replace(',', '.'))
+function numero(valor: unknown) {
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null
+  if (typeof valor !== 'string') return null
+  const texto = valor.trim()
+  if (!texto) return null
+  const normalizado = texto.includes(',')
+    ? texto.replace(/\./g, '').replace(',', '.')
+    : texto
+  const n = Number(normalizado)
   return Number.isFinite(n) ? n : null
 }
 
 function texto(obj: Record<string, unknown>, chaves: string[]) {
   for (const chave of chaves) {
     const valor = obj[chave]
-    if (valor !== undefined && valor !== null && String(valor).trim()) return String(valor).trim()
+    if (valor !== null && valor !== undefined && String(valor).trim()) return String(valor).trim()
   }
   return ''
 }
@@ -51,8 +38,23 @@ function valorNumerico(obj: Record<string, unknown>, chaves: string[]) {
   return null
 }
 
-function normalizarCodigo(v: unknown) {
-  return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').toUpperCase().trim()
+function normalizarCodigo(valor: unknown) {
+  return String(valor ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+}
+
+async function master(req: NextRequest) {
+  const authorization = req.headers.get('authorization') || ''
+  if (process.env.CRON_SECRET && authorization === `Bearer ${process.env.CRON_SECRET}`) return true
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
+  if (!token) return false
+  const { data } = await supabaseAdmin.auth.getUser(token)
+  const user = data.user
+  if (!user) return false
+  const role = String(user.user_metadata?.role || user.app_metadata?.role || '').toLowerCase()
+  return role === 'master'
 }
 
 function extrairIdsNotas(payload: unknown) {
@@ -61,13 +63,8 @@ function extrairIdsNotas(payload: unknown) {
     if (Array.isArray(valor)) return valor.forEach(visitar)
     if (!valor || typeof valor !== 'object') return
     const obj = valor as Record<string, unknown>
-    for (const [chave, conteudo] of Object.entries(obj)) {
-      const k = chave.toLowerCase().replace(/[^a-z0-9]/g, '')
-      if (['nfid', 'idnf', 'notafiscalid'].includes(k)) {
-        const id = String(conteudo ?? '').trim()
-        if (/^\d+$/.test(id)) ids.add(id)
-      }
-    }
+    const id = texto(obj, ['NotaEntradaId','notaEntradaId','NfId','nfId','Id','id'])
+    if (id) ids.add(id)
     Object.values(obj).forEach(visitar)
   }
   visitar(payload)
@@ -90,6 +87,19 @@ function atualizarMinMax(atual: number | null, valor: number | null, modo: 'min'
   return modo === 'min' ? Math.min(atual, valor) : Math.max(atual, valor)
 }
 
+function primeiroNumeroProfundo(obj: Record<string, unknown>, chaves: string[]) {
+  const direto = valorNumerico(obj, chaves)
+  if (direto !== null) return direto
+  const alvo = new Set(chaves.map(chave => chave.toLowerCase()))
+  for (const [chave, valor] of Object.entries(obj)) {
+    if (alvo.has(chave.toLowerCase())) {
+      const n = numero(valor)
+      if (n !== null) return n
+    }
+  }
+  return null
+}
+
 function extrairValores(payload: unknown, acumulado: Map<string, Observado>) {
   const visitar = (valor: unknown) => {
     if (Array.isArray(valor)) return valor.forEach(visitar)
@@ -97,17 +107,27 @@ function extrairValores(payload: unknown, acumulado: Map<string, Observado>) {
     const obj = valor as Record<string, unknown>
     const codigo = texto(obj, [
       'ProdutoSeuCodigo','produtoSeuCodigo','SeuCodigo','seuCodigo',
-      'ProdutoCodigo','produtoCodigo','Produtocodigo','CodigoProduto','codigoProduto','Codigo','codigo',
+      'ProdutoCodigo','produtoCodigo','Produtocodigo','CodigoProduto','codigoProduto',
+      'Codigo','codigo','CodProduto','codProduto','ItemCodigo','itemCodigo',
     ])
     const chave = normalizarCodigo(codigo)
     if (chave) {
-      const quantidade = valorNumerico(obj, ['ItemNfQtde','ItemNFQtde','Quantidade','quantidade','Qtde','qtde'])
-      let custo = valorNumerico(obj, [
-        'CustoVlr','custoVlr','CustoUnitario','custoUnitario','ItemNfValorUnitario','ItemNFValorUnitario','ValorUnitario','valorUnitario','ItemNfValor','ItemNFValor',
+      const quantidade = primeiroNumeroProfundo(obj, [
+        'ItemNfQtde','ItemNFQtde','Quantidade','quantidade','Qtde','qtde','Qtd','qtd',
       ])
-      const custoTotal = valorNumerico(obj, ['ItemNfValorTotal','ItemNFValorTotal','ValorTotal','valorTotal'])
+      let custo = primeiroNumeroProfundo(obj, [
+        'CustoVlr','custoVlr','CustoUnitario','custoUnitario',
+        'ItemNfValorUnitario','ItemNFValorUnitario','ValorUnitario','valorUnitario',
+        'ItemNfValor','ItemNFValor','PrecoCusto','precoCusto','ValorCusto','valorCusto',
+      ])
+      const custoTotal = primeiroNumeroProfundo(obj, [
+        'ItemNfValorTotal','ItemNFValorTotal','ValorTotal','valorTotal','Total','total',
+      ])
       if (custo === null && custoTotal !== null && quantidade !== null && quantidade > 0) custo = custoTotal / quantidade
-      const venda = valorNumerico(obj, ['VendaVlr','vendaVlr','PrecoVenda','precoVenda','ValorVenda','valorVenda','Preco','preco'])
+      const venda = primeiroNumeroProfundo(obj, [
+        'VendaVlr','vendaVlr','PrecoVenda','precoVenda','ValorVenda','valorVenda',
+        'Preco','preco','ValorUnitarioVenda','valorUnitarioVenda','VlrUnitario','vlrUnitario',
+      ])
       if ((custo !== null && custo > 0) || (venda !== null && venda > 0)) {
         const atual = acumulado.get(chave) || {
           codigo,
@@ -151,10 +171,10 @@ function mesclarMapa(destino: Map<string, Observado>, origem: Map<string, Observ
 
 function isoData(d: Date) { return d.toISOString().slice(0, 10) }
 
-async function valoresHistoricosVendasWVetro(dias = 90) {
+async function valoresHistoricosVendasWVetro(dias = 365) {
   const fim = new Date()
   const inicio = new Date(fim)
-  inicio.setDate(inicio.getDate() - Math.max(7, Math.min(365, dias)))
+  inicio.setDate(inicio.getDate() - Math.max(7, Math.min(730, dias)))
   const mapa = new Map<string, Observado>()
   const [pedidos, orcamentos] = await Promise.all([
     listarPedidosWVetro<unknown>(isoData(inicio), isoData(fim)),
@@ -168,9 +188,9 @@ async function valoresHistoricosVendasWVetro(dias = 90) {
 async function valoresComprasWVetro(maxNotas = 50) {
   const fim = new Date()
   const inicio = new Date(fim)
-  inicio.setDate(inicio.getDate() - 90)
+  inicio.setDate(inicio.getDate() - 365)
   const notas = await listarNotasEntradaWVetro<unknown>(isoData(inicio), isoData(fim))
-  const ids = extrairIdsNotas(notas).slice(0, Math.max(1, Math.min(50, maxNotas)))
+  const ids = extrairIdsNotas(notas).slice(0, Math.max(1, Math.min(100, maxNotas)))
   const mapa = new Map<string, Observado>()
   for (let i = 0; i < ids.length; i += 5) {
     const lote = ids.slice(i, i + 5)
@@ -212,8 +232,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}))
-    const maxNotas = Number(body?.maxNotas || 50)
-    const diasHistorico = Number(body?.diasHistorico || 90)
+    const maxNotas = Number(body?.maxNotas || 100)
+    const diasHistorico = Number(body?.diasHistorico || 365)
 
     let catalogo: unknown = null
     let catalogoErro: string | null = null
@@ -223,7 +243,6 @@ export async function POST(req: NextRequest) {
       catalogoErro = e instanceof Error ? e.message : 'Falha ao consultar catálogo W.Vetro.'
     }
 
-    // Começa pela base histórica já preservada no Atlas; isso não depende do módulo Compras.
     const mapa = await carregarReferenciasLocais()
 
     let vendasErro: string | null = null
@@ -254,11 +273,19 @@ export async function POST(req: NextRequest) {
 
     let custosAtualizados = 0
     let referenciasVendaAtualizadas = 0
+    let produtosComCorrespondencia = 0
+    const codigosSemCorrespondencia: string[] = []
     const atualizacoes: Promise<unknown>[] = []
     for (const produto of produtos || []) {
-      const chaves = [produto.codigo, produto.codigo_origem, produto.id_externo_wvetro].map(normalizarCodigo).filter(Boolean)
+      const chaves = [produto.codigo, produto.codigo_origem, produto.id_externo_wvetro]
+        .map(normalizarCodigo)
+        .filter(Boolean)
       const observado = chaves.map(chave => mapa.get(chave)).find(Boolean)
-      if (!observado) continue
+      if (!observado) {
+        if (codigosSemCorrespondencia.length < 30 && produto.codigo) codigosSemCorrespondencia.push(String(produto.codigo))
+        continue
+      }
+      produtosComCorrespondencia += 1
 
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
       if (observado.custoUltimo != null && observado.custoUltimo > 0) {
@@ -279,13 +306,13 @@ export async function POST(req: NextRequest) {
       }
       if (Object.keys(patch).length <= 1) continue
       const atualizacao = supabaseAdmin.from('produtos').update(patch).eq('id', produto.id)
-      atualizacoes.push(Promise.resolve(atualizacao).then(() => undefined))
+      atualizacoes.push(Promise.resolve(atualizacao).then(({ error }) => {
+        if (error) throw error
+      }))
       if (atualizacoes.length >= 20) await Promise.all(atualizacoes.splice(0, atualizacoes.length))
     }
     if (atualizacoes.length) await Promise.all(atualizacoes)
 
-    // Só reabre erros transitórios. Itens comprovadamente 404 ficam como nao_disponivel
-    // e não entram em loop infinito a cada sincronização.
     await supabaseAdmin
       .from('wvetro_produtos_snapshot')
       .update({ imagem_status: 'pendente', imagem_erro: null })
@@ -317,11 +344,13 @@ export async function POST(req: NextRequest) {
         notasConsultadas,
         referenciasHistoricas: mapa.size,
         encontradosEmVendasOrcamentos: encontradosVendas,
+        produtosComCorrespondencia,
         atualizados: custosAtualizados,
         semCusto: semCusto || 0,
         comprasErro,
         vendasErro,
         acessoCompras: comprasErro?.includes('403') ? 'sem_permissao' : comprasErro ? 'erro' : 'ok',
+        codigosSemCorrespondencia,
       },
       tabelaPreco: {
         referenciasVendaAtualizadas,
@@ -331,7 +360,13 @@ export async function POST(req: NextRequest) {
       },
       imagens,
       imagensErro,
-      observacao: 'A sincronização agora procura variações de nome/pasta para imagens, usa a base histórica local e também tenta custos/valores de venda em vendas e orçamentos. Compras/NF continua opcional enquanto houver 403.',
+      diagnostico: {
+        produtosAnalisados: (produtos || []).length,
+        produtosComCorrespondencia,
+        produtosSemCorrespondencia: Math.max(0, (produtos || []).length - produtosComCorrespondencia),
+        amostraSemCorrespondencia: codigosSemCorrespondencia,
+      },
+      observacao: 'Sincronização ampliada para 365 dias, normalização de códigos mais tolerante e diagnóstico de correspondência. Compras/NF continua opcional enquanto houver 403.',
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha ao sincronizar produtos W.Vetro.' }, { status: 500 })
