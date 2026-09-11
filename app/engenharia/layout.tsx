@@ -3,6 +3,7 @@ import { Calculator, History, LayoutDashboard, PackageOpen, Settings2, Wrench } 
 import EngenhariaProdutoQuickView from '@/components/engenharia/EngenhariaProdutoQuickView'
 import ModeloVidrosPermitidos from '@/components/engenharia/ModeloVidrosPermitidos'
 import ModeloMateriaisPicker from '@/components/engenharia/ModeloMateriaisPicker'
+import ModelosImpressaoComDesenhos from '@/components/engenharia/ModelosImpressaoComDesenhos'
 
 export default function EngenhariaLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +24,7 @@ export default function EngenhariaLayout({ children }: { children: React.ReactNo
       <EngenhariaProdutoQuickView />
       <ModeloVidrosPermitidos />
       <ModeloMateriaisPicker />
+      <ModelosImpressaoComDesenhos />
     </div>
   )
 }
