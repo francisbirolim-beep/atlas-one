@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { listarItensNotaEntradaWVetro, listarNotasEntradaWVetro, statusConfiguracaoWVetro } from '@/lib/wvetroApi'
+import {
+  listarItensNotaEntradaWVetro,
+  listarNotasEntradaWVetro,
+  listarOrcamentosWVetro,
+  listarPedidosWVetro,
+  statusConfiguracaoWVetro,
+} from '@/lib/wvetroApi'
 import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
 import { processarPendenciasImagensWVetro } from '@/lib/wvetroImagensServer'
 
@@ -68,48 +74,135 @@ function extrairIdsNotas(payload: unknown) {
   return Array.from(ids)
 }
 
-type CustoObservado = { codigo: string; ultimo: number; minimo: number; maximo: number }
+type Observado = {
+  codigo: string
+  custoUltimo: number | null
+  custoMin: number | null
+  custoMax: number | null
+  vendaUltimo: number | null
+  vendaMin: number | null
+  vendaMax: number | null
+}
 
-function extrairCustos(payload: unknown, acumulado: Map<string, CustoObservado>) {
+function atualizarMinMax(atual: number | null, valor: number | null, modo: 'min' | 'max') {
+  if (valor === null || valor <= 0) return atual
+  if (atual === null) return valor
+  return modo === 'min' ? Math.min(atual, valor) : Math.max(atual, valor)
+}
+
+function extrairValores(payload: unknown, acumulado: Map<string, Observado>) {
   const visitar = (valor: unknown) => {
     if (Array.isArray(valor)) return valor.forEach(visitar)
     if (!valor || typeof valor !== 'object') return
     const obj = valor as Record<string, unknown>
-    const codigo = texto(obj, ['ProdutoSeuCodigo','produtoSeuCodigo','SeuCodigo','seuCodigo','ProdutoCodigo','produtoCodigo','Produtocodigo','CodigoProduto','codigoProduto'])
-    const quantidade = valorNumerico(obj, ['ItemNfQtde','ItemNFQtde','Quantidade','quantidade','Qtde','qtde'])
-    let unitario = valorNumerico(obj, ['ItemNfValorUnitario','ItemNFValorUnitario','ValorUnitario','valorUnitario','CustoUnitario','custoUnitario','CustoVlr','custoVlr','ItemNfValor','ItemNFValor'])
-    const total = valorNumerico(obj, ['ItemNfValorTotal','ItemNFValorTotal','ValorTotal','valorTotal','Total','total'])
-    if (unitario === null && total !== null && quantidade !== null && quantidade > 0) unitario = total / quantidade
+    const codigo = texto(obj, [
+      'ProdutoSeuCodigo','produtoSeuCodigo','SeuCodigo','seuCodigo',
+      'ProdutoCodigo','produtoCodigo','Produtocodigo','CodigoProduto','codigoProduto','Codigo','codigo',
+    ])
     const chave = normalizarCodigo(codigo)
-    if (chave && unitario !== null && unitario > 0) {
-      const atual = acumulado.get(chave)
-      acumulado.set(chave, atual ? {
-        codigo: atual.codigo || codigo,
-        ultimo: unitario,
-        minimo: Math.min(atual.minimo, unitario),
-        maximo: Math.max(atual.maximo, unitario),
-      } : { codigo, ultimo: unitario, minimo: unitario, maximo: unitario })
+    if (chave) {
+      const quantidade = valorNumerico(obj, ['ItemNfQtde','ItemNFQtde','Quantidade','quantidade','Qtde','qtde'])
+      let custo = valorNumerico(obj, [
+        'CustoVlr','custoVlr','CustoUnitario','custoUnitario','ItemNfValorUnitario','ItemNFValorUnitario','ValorUnitario','valorUnitario','ItemNfValor','ItemNFValor',
+      ])
+      const custoTotal = valorNumerico(obj, ['ItemNfValorTotal','ItemNFValorTotal','ValorTotal','valorTotal'])
+      if (custo === null && custoTotal !== null && quantidade !== null && quantidade > 0) custo = custoTotal / quantidade
+      const venda = valorNumerico(obj, ['VendaVlr','vendaVlr','PrecoVenda','precoVenda','ValorVenda','valorVenda','Preco','preco'])
+      if ((custo !== null && custo > 0) || (venda !== null && venda > 0)) {
+        const atual = acumulado.get(chave) || {
+          codigo,
+          custoUltimo: null,
+          custoMin: null,
+          custoMax: null,
+          vendaUltimo: null,
+          vendaMin: null,
+          vendaMax: null,
+        }
+        if (custo !== null && custo > 0) {
+          atual.custoUltimo = custo
+          atual.custoMin = atualizarMinMax(atual.custoMin, custo, 'min')
+          atual.custoMax = atualizarMinMax(atual.custoMax, custo, 'max')
+        }
+        if (venda !== null && venda > 0) {
+          atual.vendaUltimo = venda
+          atual.vendaMin = atualizarMinMax(atual.vendaMin, venda, 'min')
+          atual.vendaMax = atualizarMinMax(atual.vendaMax, venda, 'max')
+        }
+        acumulado.set(chave, atual)
+      }
     }
     Object.values(obj).forEach(visitar)
   }
   visitar(payload)
 }
 
+function mesclarMapa(destino: Map<string, Observado>, origem: Map<string, Observado>) {
+  for (const [chave, novo] of origem) {
+    const atual = destino.get(chave)
+    if (!atual) { destino.set(chave, novo); continue }
+    if (novo.custoUltimo != null) atual.custoUltimo = novo.custoUltimo
+    atual.custoMin = atualizarMinMax(atual.custoMin, novo.custoMin, 'min')
+    atual.custoMax = atualizarMinMax(atual.custoMax, novo.custoMax, 'max')
+    if (novo.vendaUltimo != null) atual.vendaUltimo = novo.vendaUltimo
+    atual.vendaMin = atualizarMinMax(atual.vendaMin, novo.vendaMin, 'min')
+    atual.vendaMax = atualizarMinMax(atual.vendaMax, novo.vendaMax, 'max')
+  }
+}
+
 function isoData(d: Date) { return d.toISOString().slice(0, 10) }
 
-async function custosComprasWVetro(maxNotas = 50) {
+async function valoresHistoricosVendasWVetro(dias = 90) {
+  const fim = new Date()
+  const inicio = new Date(fim)
+  inicio.setDate(inicio.getDate() - Math.max(7, Math.min(365, dias)))
+  const mapa = new Map<string, Observado>()
+  const [pedidos, orcamentos] = await Promise.all([
+    listarPedidosWVetro<unknown>(isoData(inicio), isoData(fim)),
+    listarOrcamentosWVetro<unknown>(isoData(inicio), isoData(fim)),
+  ])
+  extrairValores(pedidos, mapa)
+  extrairValores(orcamentos, mapa)
+  return mapa
+}
+
+async function valoresComprasWVetro(maxNotas = 50) {
   const fim = new Date()
   const inicio = new Date(fim)
   inicio.setDate(inicio.getDate() - 90)
   const notas = await listarNotasEntradaWVetro<unknown>(isoData(inicio), isoData(fim))
   const ids = extrairIdsNotas(notas).slice(0, Math.max(1, Math.min(50, maxNotas)))
-  const mapa = new Map<string, CustoObservado>()
+  const mapa = new Map<string, Observado>()
   for (let i = 0; i < ids.length; i += 5) {
     const lote = ids.slice(i, i + 5)
     const detalhes = await Promise.all(lote.map(id => listarItensNotaEntradaWVetro<unknown>(id)))
-    detalhes.forEach(payload => extrairCustos(payload, mapa))
+    detalhes.forEach(payload => extrairValores(payload, mapa))
   }
   return { mapa, notasConsultadas: ids.length }
+}
+
+async function carregarReferenciasLocais() {
+  const mapa = new Map<string, Observado>()
+  const { data, error } = await supabaseAdmin
+    .from('wvetro_tipologia_componentes')
+    .select('codigo,codigo_wvetro,custo_min,custo_max,custo_ultimo,venda_min,venda_max,venda_ultimo,ultimo_visto')
+    .eq('tipo', 'acessorio')
+    .order('ultimo_visto', { ascending: true })
+  if (error) throw error
+  for (const item of data || []) {
+    const base: Observado = {
+      codigo: String(item.codigo || item.codigo_wvetro || ''),
+      custoUltimo: numero(item.custo_ultimo),
+      custoMin: numero(item.custo_min),
+      custoMax: numero(item.custo_max),
+      vendaUltimo: numero(item.venda_ultimo),
+      vendaMin: numero(item.venda_min),
+      vendaMax: numero(item.venda_max),
+    }
+    for (const cod of [item.codigo, item.codigo_wvetro].map(normalizarCodigo).filter(Boolean)) {
+      mesclarMapa(mapa, new Map([[cod, base]]))
+    }
+  }
+  return mapa
 }
 
 export async function POST(req: NextRequest) {
@@ -120,9 +213,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
     const maxNotas = Number(body?.maxNotas || 50)
+    const diasHistorico = Number(body?.diasHistorico || 90)
 
-    // Catálogo/imagens e Compras são independentes. Um 403 em Compras não pode
-    // bloquear a importação de produtos, códigos e desenhos.
     let catalogo: unknown = null
     let catalogoErro: string | null = null
     try {
@@ -131,45 +223,69 @@ export async function POST(req: NextRequest) {
       catalogoErro = e instanceof Error ? e.message : 'Falha ao consultar catálogo W.Vetro.'
     }
 
-    let mapa = new Map<string, CustoObservado>()
+    // Começa pela base histórica já preservada no Atlas; isso não depende do módulo Compras.
+    const mapa = await carregarReferenciasLocais()
+
+    let vendasErro: string | null = null
+    let encontradosVendas = 0
+    try {
+      const vendas = await valoresHistoricosVendasWVetro(diasHistorico)
+      encontradosVendas = vendas.size
+      mesclarMapa(mapa, vendas)
+    } catch (e) {
+      vendasErro = e instanceof Error ? e.message : 'Falha ao consultar vendas/orçamentos no W.Vetro.'
+    }
+
     let notasConsultadas = 0
     let comprasErro: string | null = null
     try {
-      const compras = await custosComprasWVetro(maxNotas)
-      mapa = compras.mapa
+      const compras = await valoresComprasWVetro(maxNotas)
       notasConsultadas = compras.notasConsultadas
+      mesclarMapa(mapa, compras.mapa)
     } catch (e) {
       comprasErro = e instanceof Error ? e.message : 'Falha ao consultar Compras/NF no W.Vetro.'
     }
 
     const { data: produtos, error: erroProdutos } = await supabaseAdmin
       .from('produtos')
-      .select('id,codigo,codigo_origem,id_externo_wvetro,custo')
+      .select('id,codigo,codigo_origem,id_externo_wvetro,custo,custo_wvetro_min,custo_wvetro_max,custo_wvetro_ultimo,venda_wvetro_min,venda_wvetro_max,venda_wvetro_ultimo')
       .eq('categoria', 'acessorio')
     if (erroProdutos) throw erroProdutos
 
     let custosAtualizados = 0
+    let referenciasVendaAtualizadas = 0
     const atualizacoes: Promise<unknown>[] = []
     for (const produto of produtos || []) {
-      if (Number(produto.custo) > 0) continue
       const chaves = [produto.codigo, produto.codigo_origem, produto.id_externo_wvetro].map(normalizarCodigo).filter(Boolean)
-      const custo = chaves.map(chave => mapa.get(chave)).find(Boolean)
-      if (!custo) continue
-      custosAtualizados += 1
-      const atualizacao = supabaseAdmin.from('produtos').update({
-        custo: custo.ultimo,
-        custo_wvetro_ultimo: custo.ultimo,
-        custo_wvetro_min: custo.minimo,
-        custo_wvetro_max: custo.maximo,
-        custo_wvetro_atualizado_em: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq('id', produto.id)
+      const observado = chaves.map(chave => mapa.get(chave)).find(Boolean)
+      if (!observado) continue
+
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (observado.custoUltimo != null && observado.custoUltimo > 0) {
+        patch.custo_wvetro_ultimo = observado.custoUltimo
+        patch.custo_wvetro_min = observado.custoMin ?? observado.custoUltimo
+        patch.custo_wvetro_max = observado.custoMax ?? observado.custoUltimo
+        patch.custo_wvetro_atualizado_em = new Date().toISOString()
+        if (!(Number(produto.custo) > 0)) {
+          patch.custo = observado.custoUltimo
+          custosAtualizados += 1
+        }
+      }
+      if (observado.vendaUltimo != null && observado.vendaUltimo > 0) {
+        patch.venda_wvetro_ultimo = observado.vendaUltimo
+        patch.venda_wvetro_min = observado.vendaMin ?? observado.vendaUltimo
+        patch.venda_wvetro_max = observado.vendaMax ?? observado.vendaUltimo
+        referenciasVendaAtualizadas += 1
+      }
+      if (Object.keys(patch).length <= 1) continue
+      const atualizacao = supabaseAdmin.from('produtos').update(patch).eq('id', produto.id)
       atualizacoes.push(Promise.resolve(atualizacao).then(() => undefined))
       if (atualizacoes.length >= 20) await Promise.all(atualizacoes.splice(0, atualizacoes.length))
     }
     if (atualizacoes.length) await Promise.all(atualizacoes)
 
-    // Reprocessa imagens mesmo quando Compras/NF estiver sem permissão.
+    // Só reabre erros transitórios. Itens comprovadamente 404 ficam como nao_disponivel
+    // e não entram em loop infinito a cada sincronização.
     await supabaseAdmin
       .from('wvetro_produtos_snapshot')
       .update({ imagem_status: 'pendente', imagem_erro: null })
@@ -199,17 +315,23 @@ export async function POST(req: NextRequest) {
       catalogoErro,
       custos: {
         notasConsultadas,
-        encontradosNoWVetro: mapa.size,
+        referenciasHistoricas: mapa.size,
+        encontradosEmVendasOrcamentos: encontradosVendas,
         atualizados: custosAtualizados,
         semCusto: semCusto || 0,
-        erro: comprasErro,
+        comprasErro,
+        vendasErro,
         acessoCompras: comprasErro?.includes('403') ? 'sem_permissao' : comprasErro ? 'erro' : 'ok',
+      },
+      tabelaPreco: {
+        referenciasVendaAtualizadas,
+        origem: 'VendaVlr observado em vendas/orçamentos do W.Vetro',
+        aplicadoComoPrecoBalcao: false,
+        observacao: 'O Atlas guarda o valor de venda W.Vetro como referência histórica. Não substitui automaticamente o preço balcão nem a margem.',
       },
       imagens,
       imagensErro,
-      observacao: comprasErro
-        ? 'Catálogo e imagens continuam sendo sincronizados. O W.Vetro bloqueou a consulta de Compras/NF; custos novos dependem dessa permissão ou da base histórica já importada.'
-        : 'Custos existentes no Atlas não são sobrescritos. Itens sem histórico de compra no W.Vetro permanecem pendentes.',
+      observacao: 'A sincronização agora procura variações de nome/pasta para imagens, usa a base histórica local e também tenta custos/valores de venda em vendas e orçamentos. Compras/NF continua opcional enquanto houver 403.',
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha ao sincronizar produtos W.Vetro.' }, { status: 500 })
