@@ -121,9 +121,27 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}))
     const maxNotas = Number(body?.maxNotas || 50)
 
-    const catalogo = await descobrirEImportarCatalogoWVetro('A')
+    // Catálogo/imagens e Compras são independentes. Um 403 em Compras não pode
+    // bloquear a importação de produtos, códigos e desenhos.
+    let catalogo: unknown = null
+    let catalogoErro: string | null = null
+    try {
+      catalogo = await descobrirEImportarCatalogoWVetro('A')
+    } catch (e) {
+      catalogoErro = e instanceof Error ? e.message : 'Falha ao consultar catálogo W.Vetro.'
+    }
 
-    const { mapa, notasConsultadas } = await custosComprasWVetro(maxNotas)
+    let mapa = new Map<string, CustoObservado>()
+    let notasConsultadas = 0
+    let comprasErro: string | null = null
+    try {
+      const compras = await custosComprasWVetro(maxNotas)
+      mapa = compras.mapa
+      notasConsultadas = compras.notasConsultadas
+    } catch (e) {
+      comprasErro = e instanceof Error ? e.message : 'Falha ao consultar Compras/NF no W.Vetro.'
+    }
+
     const { data: produtos, error: erroProdutos } = await supabaseAdmin
       .from('produtos')
       .select('id,codigo,codigo_origem,id_externo_wvetro,custo')
@@ -147,12 +165,11 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
       }).eq('id', produto.id)
       atualizacoes.push(Promise.resolve(atualizacao).then(() => undefined))
-      if (atualizacoes.length >= 20) {
-        await Promise.all(atualizacoes.splice(0, atualizacoes.length))
-      }
+      if (atualizacoes.length >= 20) await Promise.all(atualizacoes.splice(0, atualizacoes.length))
     }
     if (atualizacoes.length) await Promise.all(atualizacoes)
 
+    // Reprocessa imagens mesmo quando Compras/NF estiver sem permissão.
     await supabaseAdmin
       .from('wvetro_produtos_snapshot')
       .update({ imagem_status: 'pendente', imagem_erro: null })
@@ -161,7 +178,13 @@ export async function POST(req: NextRequest) {
       .not('produto_atlas_id', 'is', null)
       .not('url_origem', 'is', null)
 
-    const imagens = await processarPendenciasImagensWVetro(15)
+    let imagens: unknown = null
+    let imagensErro: string | null = null
+    try {
+      imagens = await processarPendenciasImagensWVetro(15)
+    } catch (e) {
+      imagensErro = e instanceof Error ? e.message : 'Falha ao processar desenhos W.Vetro.'
+    }
 
     const { count: semCusto } = await supabaseAdmin
       .from('produtos')
@@ -173,9 +196,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       catalogo,
-      custos: { notasConsultadas, encontradosNoWVetro: mapa.size, atualizados: custosAtualizados, semCusto: semCusto || 0 },
+      catalogoErro,
+      custos: {
+        notasConsultadas,
+        encontradosNoWVetro: mapa.size,
+        atualizados: custosAtualizados,
+        semCusto: semCusto || 0,
+        erro: comprasErro,
+        acessoCompras: comprasErro?.includes('403') ? 'sem_permissao' : comprasErro ? 'erro' : 'ok',
+      },
       imagens,
-      observacao: 'Custos existentes no Atlas não são sobrescritos. Itens sem histórico de compra no W.Vetro permanecem pendentes.',
+      imagensErro,
+      observacao: comprasErro
+        ? 'Catálogo e imagens continuam sendo sincronizados. O W.Vetro bloqueou a consulta de Compras/NF; custos novos dependem dessa permissão ou da base histórica já importada.'
+        : 'Custos existentes no Atlas não são sobrescritos. Itens sem histórico de compra no W.Vetro permanecem pendentes.',
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha ao sincronizar produtos W.Vetro.' }, { status: 500 })
