@@ -13,6 +13,21 @@ function hash(v: string) {
   return createHash('sha1').update(v).digest('hex').slice(0, 12)
 }
 
+function ehUrlWVetro(url: string | null | undefined) {
+  const valor = String(url || '').toLowerCase()
+  return valor.includes('api.wvetro.com.br') || valor.includes('/wvetro/fotos/')
+}
+
+function ehImagemAtlas(url: string | null | undefined) {
+  const valor = String(url || '').toLowerCase()
+  return valor.includes('/storage/v1/object/public/fotos/wvetro/') || valor.includes('/storage/v1/object/public/wvetro-imagens/')
+}
+
+function normalizarUrlOrigemWVetro(url: string) {
+  const limpa = String(url || '').trim()
+  return limpa.replace(/\/fotos\/\s*(\d+)\//i, (_match, pasta: string) => `/fotos/${String(pasta).padStart(5, '0')}/`)
+}
+
 type SnapshotImagem = {
   id: string
   tipo: string
@@ -33,15 +48,16 @@ async function copiarSnapshotImagem(snap: SnapshotImagem) {
     .eq('id', snap.produto_atlas_id)
     .maybeSingle()
 
-  if (produto?.foto_url && produto.foto_url !== snap.url_origem && !produto.foto_url.includes('/storage/v1/object/public/fotos/wvetro/')) {
+  if (produto?.foto_url && !ehUrlWVetro(produto.foto_url) && !ehImagemAtlas(produto.foto_url)) {
     await supabaseAdmin.from('wvetro_produtos_snapshot').update({ imagem_status: 'preservada_atlas', imagem_erro: null }).eq('id', snap.id)
     return { copiada: 0, preservada: 1, erro: 0 }
   }
 
   try {
-    const origem = encodeURI(String(snap.url_origem).trim())
+    const origemNormalizada = normalizarUrlOrigemWVetro(snap.url_origem)
+    const origem = encodeURI(origemNormalizada)
     const resp = await fetch(origem, { cache: 'no-store' })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) throw new Error(resp.status === 404 ? 'Imagem não disponível no W.Vetro (404)' : `HTTP ${resp.status}`)
     const tipoConteudo = resp.headers.get('content-type') || ''
     if (!tipoConteudo.toLowerCase().startsWith('image/')) throw new Error(`Conteúdo não é imagem (${tipoConteudo || 'sem content-type'})`)
     const buffer = await resp.arrayBuffer()
@@ -49,7 +65,7 @@ async function copiarSnapshotImagem(snap: SnapshotImagem) {
     if (buffer.byteLength > 12 * 1024 * 1024) throw new Error('Imagem acima de 12 MB')
 
     const ext = extensao(tipoConteudo.toLowerCase())
-    const caminho = `wvetro/produtos/${snap.tipo}/${snap.produto_atlas_id}-${hash(snap.url_origem)}.${ext}`
+    const caminho = `wvetro/produtos/${snap.tipo}/${snap.produto_atlas_id}-${hash(origemNormalizada)}.${ext}`
     const { error: uploadError } = await supabaseAdmin.storage.from('fotos').upload(caminho, buffer, {
       contentType: tipoConteudo,
       upsert: true,
