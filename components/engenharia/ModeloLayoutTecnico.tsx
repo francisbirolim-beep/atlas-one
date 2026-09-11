@@ -58,21 +58,18 @@ export default function ModeloLayoutTecnico() {
       decorar()
     })
 
-    function ocultarDuplicada(section: HTMLElement, titulo: string) {
-      if (
-        titulo.includes('perfis calculados plano de corte') ||
-        titulo.includes('acessorios da simulacao atual')
-      ) {
-        section.style.display = 'none'
-      }
+    function cardDoTitulo(h2: Element) {
+      return h2.closest('div.rounded-2xl, section') as HTMLElement | null
     }
 
-    function ampliar(section: HTMLElement, titulo: string) {
-      if (!titulo.includes('planilha tecnica perfis') && !titulo.includes('planilha tecnica acessorios')) return
-      section.style.gridColumn = '1 / -1'
-      section.style.width = '100%'
-      const pai = section.parentElement
-      if (pai) pai.style.gridTemplateColumns = 'minmax(0, 1fr)'
+    function ampliar(card: HTMLElement) {
+      card.style.gridColumn = '1 / -1'
+      card.style.width = '100%'
+      const pai = card.parentElement
+      if (pai) {
+        pai.style.gridTemplateColumns = 'minmax(0, 1fr)'
+        pai.style.width = '100%'
+      }
     }
 
     function garantirColuna(head: HTMLTableRowElement, chave: string, texto: string) {
@@ -98,8 +95,8 @@ export default function ModeloLayoutTecnico() {
       return td
     }
 
-    function decorarTabela(section: HTMLElement, tipo: 'perfil' | 'acessorio') {
-      const table = section.querySelector('table')
+    function decorarTabela(card: HTMLElement, tipo: 'perfil' | 'acessorio') {
+      const table = card.querySelector('table')
       const head = table?.querySelector('thead tr') as HTMLTableRowElement | null
       if (!table || !head) return
 
@@ -123,26 +120,46 @@ export default function ModeloLayoutTecnico() {
         } else {
           celula(row, 'custo').textContent = moeda(produto?.custo)
           celula(row, 'margem').textContent = produto?.margem_percentual == null ? '—' : `${numero(produto.margem_percentual, 2)}%`
-          celula(row, 'venda').textContent = moeda(produto?.preco)
+          celula(row, 'venda').textContent = produto?.preco == null ? '—' : moeda(produto.preco)
         }
       }
     }
 
     function decorar() {
       if (!location.pathname.startsWith('/engenharia/modelos')) return
-      const sections = Array.from(document.querySelectorAll('section')) as HTMLElement[]
-      for (const section of sections) {
-        const titulo = norm(section.querySelector('h2')?.textContent)
-        ocultarDuplicada(section, titulo)
-        ampliar(section, titulo)
-        if (titulo.includes('planilha tecnica perfis')) decorarTabela(section, 'perfil')
-        if (titulo.includes('planilha tecnica acessorios')) decorarTabela(section, 'acessorio')
+
+      const titulos = Array.from(document.querySelectorAll('h2'))
+      for (const h2 of titulos) {
+        const titulo = norm(h2.textContent)
+        const card = cardDoTitulo(h2)
+        if (!card) continue
+
+        if (titulo.includes('perfis calculados plano de corte')) {
+          card.style.display = 'none'
+          continue
+        }
+
+        if (titulo.includes('acessorios da simulacao atual')) {
+          card.style.display = 'none'
+          continue
+        }
+
+        if (titulo.includes('planilha tecnica perfis')) {
+          ampliar(card)
+          decorarTabela(card, 'perfil')
+        }
+
+        if (titulo.includes('planilha tecnica acessorios')) {
+          ampliar(card)
+          decorarTabela(card, 'acessorio')
+        }
       }
     }
 
     const observer = new MutationObserver(() => requestAnimationFrame(decorar))
     observer.observe(document.body, { childList: true, subtree: true })
     decorar()
+
     return () => {
       ativo = false
       observer.disconnect()
