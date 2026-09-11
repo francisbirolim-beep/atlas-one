@@ -4,6 +4,7 @@ import EngenhariaProdutoQuickView from '@/components/engenharia/EngenhariaProdut
 import ModeloVidrosPermitidos from '@/components/engenharia/ModeloVidrosPermitidos'
 import ModeloMateriaisPicker from '@/components/engenharia/ModeloMateriaisPicker'
 import ModelosImpressaoComDesenhos from '@/components/engenharia/ModelosImpressaoComDesenhos'
+import ModeloLayoutTecnico from '@/components/engenharia/ModeloLayoutTecnico'
 
 export default function EngenhariaLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -25,6 +26,7 @@ export default function EngenhariaLayout({ children }: { children: React.ReactNo
       <ModeloVidrosPermitidos />
       <ModeloMateriaisPicker />
       <ModelosImpressaoComDesenhos />
+      <ModeloLayoutTecnico />
     </div>
   )
 }
