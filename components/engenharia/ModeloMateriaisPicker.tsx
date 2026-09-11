@@ -120,20 +120,20 @@ export default function ModeloMateriaisPicker() {
       const porCodigo = Boolean(qCompacto) && codigo.includes(qCompacto)
       const porTexto = termos.every(t => texto.includes(t))
       return porCodigo || porTexto
-    }).slice(0, 160)
+    }).slice(0, 60)
   }, [produtos, target, busca])
 
   const disponiveis = useMemo(() => {
     const linha = linhas.find(l => l.id === linhaId)
-    if (!linha) return resultadosGlobais.slice(0, 120)
-    return resultadosGlobais.filter(p => linha.produto_ids.includes(p.id)).slice(0, 120)
+    if (!linha) return resultadosGlobais.slice(0, 40)
+    return resultadosGlobais.filter(p => linha.produto_ids.includes(p.id)).slice(0, 40)
   }, [resultadosGlobais, linhaId, linhas])
 
   const outrasLinhas = useMemo(() => {
     if (!linhaId || !busca.trim() || disponiveis.length > 0) return []
     const linha = linhas.find(l => l.id === linhaId)
     if (!linha) return []
-    return resultadosGlobais.filter(p => !linha.produto_ids.includes(p.id)).slice(0, 30)
+    return resultadosGlobais.filter(p => !linha.produto_ids.includes(p.id)).slice(0, 12)
   }, [resultadosGlobais, linhaId, linhas, busca, disponiveis.length])
 
   function nomesLinhas(produtoId: string) {
@@ -212,18 +212,25 @@ export default function ModeloMateriaisPicker() {
           row.insertBefore(cell, row.children[1] || null)
         }
         const url = row.dataset.imagemUrl || imagemPorCodigo(codigo)
-        cell.innerHTML = ''
-        if (url) {
-          const img = document.createElement('img')
-          img.src = url
-          img.alt = `Desenho ${codigo}`
-          img.className = 'h-12 w-16 rounded border bg-white object-contain p-1'
-          cell.appendChild(img)
-        } else {
-          const span = document.createElement('span')
-          span.className = 'text-[10px] font-semibold text-amber-600'
-          span.textContent = 'Desenho pendente'
-          cell.appendChild(span)
+        const atual = cell.dataset.atlasImagemUrl || ''
+        const desejado = url || '__pendente__'
+        if (atual !== desejado) {
+          cell.dataset.atlasImagemUrl = desejado
+          cell.innerHTML = ''
+          if (url) {
+            const img = document.createElement('img')
+            img.src = url
+            img.alt = `Desenho ${codigo}`
+            img.loading = 'lazy'
+            img.decoding = 'async'
+            img.className = 'h-12 w-16 rounded border bg-white object-contain p-1'
+            cell.appendChild(img)
+          } else {
+            const span = document.createElement('span')
+            span.className = 'text-[10px] font-semibold text-amber-600'
+            span.textContent = 'Desenho pendente'
+            cell.appendChild(span)
+          }
         }
 
         if (!row.querySelector('[data-atlas-substituir]')) {
@@ -247,6 +254,8 @@ export default function ModeloMateriaisPicker() {
 
   useEffect(() => {
     if (!produtos.length) return
+    let raf = 0
+    let observer: MutationObserver | null = null
 
     const onClick = (ev: MouseEvent) => {
       const el = ev.target as HTMLElement | null
@@ -285,15 +294,29 @@ export default function ModeloMateriaisPicker() {
       setBusca(input.value)
     }
 
+    function observar() {
+      observer?.observe(document.body, { childList: true, subtree: true })
+    }
+
+    function decorarSemLoop() {
+      observer?.disconnect()
+      decorar()
+      observar()
+    }
+
     document.addEventListener('click', onClick, true)
     document.addEventListener('input', onInput, true)
-    const observer = new MutationObserver(() => requestAnimationFrame(decorar))
-    observer.observe(document.body, { childList: true, subtree: true })
-    decorar()
+    observer = new MutationObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(decorarSemLoop)
+    })
+    observar()
+    decorarSemLoop()
     return () => {
       document.removeEventListener('click', onClick, true)
       document.removeEventListener('input', onInput, true)
-      observer.disconnect()
+      cancelAnimationFrame(raf)
+      observer?.disconnect()
     }
   }, [produtos, linhas])
 
@@ -305,7 +328,7 @@ export default function ModeloMateriaisPicker() {
     <button key={p.id} onClick={() => aplicar(p)} className="flex min-h-[92px] items-center gap-3 rounded-xl border p-3 text-left hover:border-blue-300 hover:bg-blue-50">
       <div className="grid h-20 w-24 shrink-0 place-items-center overflow-hidden rounded-lg border bg-white">
         {p.imagem_tecnica_url ? (
-          <img src={p.imagem_tecnica_url} alt={p.codigo || p.nome} className="h-full w-full object-contain p-1" />
+          <img src={p.imagem_tecnica_url} alt={p.codigo || p.nome} loading="lazy" decoding="async" className="h-full w-full object-contain p-1" />
         ) : (
           <div className="grid place-items-center gap-1 text-center text-[9px] font-semibold text-amber-600"><ImageIcon size={24} className="text-slate-300" /><span>Desenho pendente</span></div>
         )}
