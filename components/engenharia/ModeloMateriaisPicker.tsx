@@ -14,6 +14,10 @@ function norm(v: string | null | undefined) {
   return (v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
+function compacto(v: string | null | undefined) {
+  return norm(v).replace(/\s+/g, '')
+}
+
 function setInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
   setter?.call(input, value)
@@ -57,23 +61,48 @@ export default function ModeloMateriaisPicker() {
       setProdutos(((ps || []) as Produto[]).map(p => ({ ...p, imagem_tecnica_url: imgMap.get(p.id) || p.foto_url || null })))
       const lista = ((ls || []) as any[]).map(l => ({ id: l.id, nome: l.nome, produto_ids: (l.linha_produtos || []).map((x: any) => x.produto_id) }))
       setLinhas(lista)
-      const suprema = lista.find(l => norm(l.nome).includes('suprema'))
-      if (suprema) setLinhaId(suprema.id)
+
+      // Só pré-seleciona Suprema quando existir uma linha canônica/exata.
+      // Evita prender a busca em variantes como "L. Suprema Sem Baguete".
+      const supremaExata = lista.find(l => ['suprema', 'l suprema', 'linha suprema'].includes(norm(l.nome)))
+      setLinhaId(supremaExata?.id || '')
     })()
   }, [])
 
-  const disponiveis = useMemo(() => {
+  const resultadosGlobais = useMemo(() => {
     if (!target) return []
     const q = norm(busca)
-    const linha = linhas.find(l => l.id === linhaId)
+    const qCompacto = compacto(busca)
+    const termos = q.split(' ').filter(Boolean)
+
     return produtos.filter(p => {
       if (p.categoria !== target.tipo) return false
-      if (linha && !linha.produto_ids.includes(p.id)) return false
       if (!q) return true
+
+      const codigo = compacto(p.codigo)
       const texto = norm(`${p.codigo || ''} ${p.nome || ''} ${p.descricao || ''} ${p.grupo || ''}`)
-      return texto.includes(q)
-    }).slice(0, 120)
-  }, [produtos, target, busca, linhaId, linhas])
+      const porCodigo = Boolean(qCompacto) && codigo.includes(qCompacto)
+      const porTexto = termos.every(t => texto.includes(t))
+      return porCodigo || porTexto
+    }).slice(0, 160)
+  }, [produtos, target, busca])
+
+  const disponiveis = useMemo(() => {
+    const linha = linhas.find(l => l.id === linhaId)
+    if (!linha) return resultadosGlobais.slice(0, 120)
+    return resultadosGlobais.filter(p => linha.produto_ids.includes(p.id)).slice(0, 120)
+  }, [resultadosGlobais, linhaId, linhas])
+
+  const outrasLinhas = useMemo(() => {
+    if (!linhaId || !busca.trim() || disponiveis.length > 0) return []
+    const linha = linhas.find(l => l.id === linhaId)
+    if (!linha) return []
+    return resultadosGlobais.filter(p => !linha.produto_ids.includes(p.id)).slice(0, 30)
+  }, [resultadosGlobais, linhaId, linhas, busca, disponiveis.length])
+
+  function nomesLinhas(produtoId: string) {
+    return linhas.filter(l => l.produto_ids.includes(produtoId)).map(l => l.nome).slice(0, 3)
+  }
 
   function abrir(t: Target, inicial = '') {
     setTarget(t)
@@ -113,8 +142,8 @@ export default function ModeloMateriaisPicker() {
   }
 
   function imagemPorCodigo(codigo: string) {
-    const c = norm(codigo).replace(/ /g, '')
-    return produtos.find(p => norm(p.codigo).replace(/ /g, '') === c)?.imagem_tecnica_url || null
+    const c = compacto(codigo)
+    return produtos.find(p => compacto(p.codigo) === c)?.imagem_tecnica_url || null
   }
 
   function decorar() {
@@ -156,8 +185,8 @@ export default function ModeloMateriaisPicker() {
           cell.appendChild(img)
         } else {
           const span = document.createElement('span')
-          span.className = 'text-[10px] text-amber-600'
-          span.textContent = 'Sem desenho'
+          span.className = 'text-[10px] font-semibold text-amber-600'
+          span.textContent = 'Desenho pendente'
           cell.appendChild(span)
         }
 
@@ -234,10 +263,31 @@ export default function ModeloMateriaisPicker() {
 
   if (!target) return null
 
+  const linhaAtual = linhas.find(l => l.id === linhaId)
+
+  const cardProduto = (p: ProdutoComImagem, fora = false) => (
+    <button key={p.id} onClick={() => aplicar(p)} className="flex min-h-[92px] items-center gap-3 rounded-xl border p-3 text-left hover:border-blue-300 hover:bg-blue-50">
+      <div className="grid h-20 w-24 shrink-0 place-items-center overflow-hidden rounded-lg border bg-white">
+        {p.imagem_tecnica_url ? (
+          <img src={p.imagem_tecnica_url} alt={p.codigo || p.nome} className="h-full w-full object-contain p-1" />
+        ) : (
+          <div className="grid place-items-center gap-1 text-center text-[9px] font-semibold text-amber-600"><ImageIcon size={24} className="text-slate-300" /><span>Desenho pendente</span></div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-base font-bold text-slate-900">{p.codigo || 'Sem código'}</div>
+        <div className="text-sm text-slate-700">{p.nome || p.descricao}</div>
+        {p.descricao && p.descricao !== p.nome && <div className="mt-0.5 line-clamp-2 text-xs text-slate-500">{p.descricao}</div>}
+        <div className="mt-1 text-[10px] text-slate-400">{nomesLinhas(p.id).join(' • ') || 'Sem linha vinculada'}</div>
+        {fora && <div className="mt-1 text-[10px] font-semibold text-amber-600">Encontrado fora da linha selecionada</div>}
+      </div>
+    </button>
+  )
+
   return <div className="fixed inset-0 z-[110] grid place-items-center bg-slate-950/45 p-3" onMouseDown={e=>{if(e.currentTarget===e.target)setTarget(null)}}>
     <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
       <div className="flex items-start justify-between border-b px-5 py-4">
-        <div><div className="text-[11px] font-bold uppercase tracking-[.15em] text-blue-600">{target.mode === 'add' ? 'Adicionar' : 'Substituir'} {target.tipo}</div><h2 className="mt-1 text-xl font-bold text-slate-900">Pesquisar no banco de dados</h2><p className="mt-1 text-xs text-slate-500">Digite código ou descrição. Os resultados são filtrados em tempo real pela linha selecionada.</p></div>
+        <div><div className="text-[11px] font-bold uppercase tracking-[.15em] text-blue-600">{target.mode === 'add' ? 'Adicionar' : 'Substituir'} {target.tipo}</div><h2 className="mt-1 text-xl font-bold text-slate-900">Pesquisar no banco de dados</h2><p className="mt-1 text-xs text-slate-500">Digite código ou descrição. A lista abaixo mostra o desenho, código e descrição enquanto você filtra.</p></div>
         <button onClick={()=>setTarget(null)} className="rounded-lg p-2 hover:bg-slate-100"><X size={19}/></button>
       </div>
       <div className="grid gap-3 border-b p-4 md:grid-cols-[240px_1fr]">
@@ -245,20 +295,28 @@ export default function ModeloMateriaisPicker() {
           <select value={linhaId} onChange={e=>setLinhaId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm"><option value="">Todas as linhas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select>
         </label>
         <label className="text-xs font-semibold text-slate-600">Pesquisar código ou descrição
-          <div className="mt-1 flex items-center rounded-xl border px-3"><Search size={16} className="text-slate-400"/><input autoFocus value={busca} onChange={e=>setBusca(e.target.value)} placeholder={target.tipo==='perfil'?'Ex.: SU00, marco, travessa...':'Ex.: FRA, fechadura, roldana...'} className="w-full px-2 py-2.5 text-sm outline-none"/></div>
+          <div className="mt-1 flex items-center rounded-xl border px-3"><Search size={16} className="text-slate-400"/><input autoFocus value={busca} onChange={e=>setBusca(e.target.value)} placeholder={target.tipo==='perfil'?'Ex.: SU00, marco, travessa...':'Ex.: RPCS1, fechadura, roldana...'} className="w-full px-2 py-2.5 text-sm outline-none"/></div>
         </label>
       </div>
       <div className="overflow-y-auto p-3">
-        <div className="mb-2 text-xs text-slate-500">{disponiveis.length} resultado(s)</div>
-        <div className="grid gap-2 md:grid-cols-2">
-          {disponiveis.map(p=><button key={p.id} onClick={()=>aplicar(p)} className="flex items-center gap-3 rounded-xl border p-3 text-left hover:border-blue-300 hover:bg-blue-50">
-            <div className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg border bg-white">{p.imagem_tecnica_url?<img src={p.imagem_tecnica_url} alt={p.codigo||p.nome} className="h-full w-full object-contain p-1"/>:<ImageIcon size={22} className="text-slate-300"/>}</div>
-            <div className="min-w-0"><div className="font-bold text-slate-900">{p.codigo || 'Sem código'}</div><div className="truncate text-sm text-slate-700">{p.nome}</div><div className="mt-1 text-[10px] text-slate-400">{p.imagem_tecnica_url?'Desenho cadastrado':'Sem desenho técnico'}</div></div>
-          </button>)}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>{disponiveis.length} resultado(s) {linhaAtual ? `em ${linhaAtual.nome}` : 'em todas as linhas'}</span>
+          {busca.trim() && <span className="rounded-full bg-slate-100 px-2 py-1">Filtrando por: <strong className="text-slate-700">{busca}</strong></span>}
         </div>
-        {!disponiveis.length&&<div className="grid min-h-40 place-items-center text-sm text-slate-500">Nenhum item encontrado com esses filtros.</div>}
+        <div className="grid gap-2 md:grid-cols-2">{disponiveis.map(p => cardProduto(p))}</div>
+
+        {!disponiveis.length && outrasLinhas.length > 0 && <div className="mt-2">
+          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Não encontrei esse item em <strong>{linhaAtual?.nome}</strong>, mas encontrei no banco de dados em outras linhas. Você pode escolher abaixo ou trocar para “Todas as linhas”.
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">{outrasLinhas.map(p => cardProduto(p, true))}</div>
+        </div>}
+
+        {!disponiveis.length && !outrasLinhas.length && <div className="grid min-h-40 place-items-center text-center text-sm text-slate-500">
+          <div><ImageIcon size={28} className="mx-auto mb-2 text-slate-300"/><div>Nenhum item encontrado com esses filtros.</div><div className="mt-1 text-xs">Tente parte do código, uma palavra da descrição ou selecione “Todas as linhas”.</div></div>
+        </div>}
       </div>
-      <div className="flex justify-between border-t bg-slate-50 px-4 py-3 text-xs text-slate-500"><span>Filtro atual: {linhas.find(l=>l.id===linhaId)?.nome || 'Todas as linhas'}</span><button onClick={()=>setLinhaId('')} className="font-semibold text-blue-700">Limpar filtro de linha</button></div>
+      <div className="flex justify-between border-t bg-slate-50 px-4 py-3 text-xs text-slate-500"><span>Filtro atual: {linhaAtual?.nome || 'Todas as linhas'}</span><button onClick={()=>setLinhaId('')} className="font-semibold text-blue-700">Limpar filtro de linha</button></div>
     </div>
   </div>
 }
