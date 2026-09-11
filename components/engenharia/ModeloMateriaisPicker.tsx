@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ImageIcon, Plus, Search, X } from 'lucide-react'
+import { ImageIcon, Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Produto } from '@/lib/tipos'
 
@@ -72,18 +72,19 @@ export default function ModeloMateriaisPicker() {
 
   function aplicar(produto: ProdutoComImagem) {
     if (!target) return
-    if (target.mode === 'add' && target.sourceButton) {
+    const currentTarget = target
+    if (currentTarget.mode === 'add' && currentTarget.sourceButton) {
       bypass.current = true
-      target.sourceButton.click()
+      currentTarget.sourceButton.click()
       bypass.current = false
       requestAnimationFrame(() => {
-        const section = findSection(target.sourceButton)
+        const section = findSection(currentTarget.sourceButton ?? null)
         const rows = Array.from(section?.querySelectorAll('tbody tr') || []) as HTMLTableRowElement[]
         const row = rows.at(-1)
         if (row) aplicarNaLinha(row, produto)
       })
-    } else if (target.row) {
-      aplicarNaLinha(target.row, produto)
+    } else if (currentTarget.row) {
+      aplicarNaLinha(currentTarget.row, produto)
     }
     setTarget(null)
     setBusca('')
@@ -149,7 +150,7 @@ export default function ModeloMateriaisPicker() {
         }
 
         if (!row.querySelector('[data-atlas-substituir]')) {
-          const actionCell = (row.lastElementChild as HTMLElement | null)
+          const actionCell = row.lastElementChild as HTMLElement | null
           if (actionCell) {
             const btn = document.createElement('button')
             btn.type = 'button'
