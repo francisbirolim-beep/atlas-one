@@ -46,15 +46,17 @@ function normalizarCodigo(valor: unknown) {
 }
 
 async function master(req: NextRequest) {
-  const authorization = req.headers.get('authorization') || ''
-  if (process.env.CRON_SECRET && authorization === `Bearer ${process.env.CRON_SECRET}`) return true
-  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
+  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return false
-  const { data } = await supabaseAdmin.auth.getUser(token)
-  const user = data.user
-  if (!user) return false
-  const role = String(user.user_metadata?.role || user.app_metadata?.role || '').toLowerCase()
-  return role === 'master'
+  const { data, error } = await supabaseAdmin.auth.getUser(token)
+  if (error || !data?.user) return false
+  // O perfil do Atlas pertence ao cadastro de usuários, não aos metadados do login.
+  const { data: usuario, error: erroUsuario } = await supabaseAdmin
+    .from('usuarios')
+    .select('id,role')
+    .eq('id', data.user.id)
+    .maybeSingle()
+  return !erroUsuario && usuario?.role === 'master'
 }
 
 function extrairIdsNotas(payload: unknown) {
