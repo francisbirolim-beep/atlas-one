@@ -71,6 +71,10 @@ export default function ProdutosBalcaoEnhancer() {
   const [aplicando, setAplicando] = useState(false)
   const [sincronizando, setSincronizando] = useState(false)
   const [mensagem, setMensagem] = useState('')
+  useEffect(() => {
+    const anterior = sessionStorage.getItem('atlas-wvetro-ultimo-diagnostico')
+    if (anterior) setMensagem(anterior)
+  }, [])
 
   const sincronizar = useCallback(async (automatico = false) => {
     if (sincronizando) return
@@ -89,7 +93,14 @@ export default function ProdutosBalcaoEnhancer() {
       const custos = Number(json?.custos?.atualizados || 0)
       const imagens = Number(json?.imagens?.copiadas || 0)
       const restantes = Number(json?.custos?.semCusto || 0)
-      setMensagem(`W.Vetro sincronizado: ${custos} custo(s) importado(s) e ${imagens} desenho(s) copiado(s). ${restantes} acessório(s) ainda sem histórico de custo.`)
+      const avisos = [
+        json?.custos?.comprasErro ? `Compras/NF indisponível: ${json.custos.comprasErro}` : `Notas de compra consultadas: ${Number(json?.custos?.notasConsultadas || 0)}.`,
+        json?.custos?.vendasErro ? `Vendas/orçamentos indisponíveis: ${json.custos.vendasErro}` : '',
+        json?.catalogoErro || json?.catalogo?.erro ? `Catálogo: ${json.catalogoErro || json.catalogo.erro}` : '',
+      ].filter(Boolean).join(' ')
+      const resumo = `Última tentativa (${new Date().toLocaleString('pt-BR')}): ${custos} custo(s) importado(s), ${imagens} desenho(s) copiado(s), ${Number(json?.linhas?.atualizadas || 0)} vínculo(s) de linha atualizado(s). ${restantes} acessório(s) continuam sem custo. ${avisos}`
+      setMensagem(resumo)
+      sessionStorage.setItem('atlas-wvetro-ultimo-diagnostico', resumo)
       window.setTimeout(() => window.location.reload(), 1400)
     } catch (e) {
       setMensagem(e instanceof Error ? e.message : 'Não foi possível sincronizar o W.Vetro.')
