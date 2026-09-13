@@ -18,6 +18,7 @@ interface WVetroCredenciais {
 }
 
 let tokenCache: { token: string; expiraEm: number } | null = null
+let autenticacaoEmAndamento: Promise<string> | null = null
 
 export function statusConfiguracaoWVetro(): WVetroConfiguracaoStatus {
   const licenca = String(process.env.WVETRO_LICENSE_ID || '').trim()
@@ -155,6 +156,14 @@ async function fetchWVetro(url: URL, init: RequestInit, contexto: string) {
 }
 
 async function autenticarWVetro(force = false): Promise<string> {
+  if (autenticacaoEmAndamento) return autenticacaoEmAndamento
+  const pendente = obterTokenWVetro(force)
+  autenticacaoEmAndamento = pendente
+  try { return await pendente }
+  finally { if (autenticacaoEmAndamento === pendente) autenticacaoEmAndamento = null }
+}
+
+async function obterTokenWVetro(force = false): Promise<string> {
   const agora = Date.now()
   if (!force && tokenCache && tokenCache.expiraEm > agora + 60_000) return tokenCache.token
 
@@ -203,10 +212,13 @@ async function requisicaoWVetro<T>(caminho: string, query?: Record<string, strin
     }, caminho)
   }
 
-  let resposta = await executar(await autenticarWVetro())
+  const tokenUsado = await autenticarWVetro()
+  let resposta = await executar(tokenUsado)
   if (resposta.status === 401 || resposta.status === 403) {
-    tokenCache = null
-    resposta = await executar(await autenticarWVetro(true))
+    // Outra consulta pode ter renovado o token enquanto esta aguardava a resposta.
+    const renovado = tokenCache && tokenCache.token !== tokenUsado ? tokenCache.token : null
+    if (!renovado && tokenCache?.token === tokenUsado) tokenCache = null
+    resposta = await executar(renovado || await autenticarWVetro(true))
   }
 
   const texto = await resposta.text()
