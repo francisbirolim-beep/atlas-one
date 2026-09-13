@@ -7,7 +7,8 @@ import {
   listarPedidosWVetro,
   statusConfiguracaoWVetro,
 } from '@/lib/wvetroApi'
-import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
+import { descobrirEImportarCatalogoWVetro, reconciliarLinhasCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
+import { lerTodasPaginas, mensagemErroWVetro } from '@/lib/wvetroSyncDados'
 import { processarPendenciasImagensWVetro } from '@/lib/wvetroImagensServer'
 
 function numero(valor: unknown) {
@@ -204,12 +205,11 @@ async function valoresComprasWVetro(maxNotas = 50) {
 
 async function carregarReferenciasLocais() {
   const mapa = new Map<string, Observado>()
-  const { data, error } = await supabaseAdmin
+  const data = await lerTodasPaginas<any>((inicio, fim) => supabaseAdmin
     .from('wvetro_tipologia_componentes')
     .select('codigo,codigo_wvetro,custo_min,custo_max,custo_ultimo,venda_min,venda_max,venda_ultimo,ultimo_visto')
     .eq('tipo', 'acessorio')
-    .order('ultimo_visto', { ascending: true })
-  if (error) throw error
+    .order('ultimo_visto', { ascending: true }).order('id').range(inicio, fim))
   for (const item of data || []) {
     const base: Observado = {
       codigo: String(item.codigo || item.codigo_wvetro || ''),
@@ -267,11 +267,10 @@ export async function POST(req: NextRequest) {
       comprasErro = e instanceof Error ? e.message : 'Falha ao consultar Compras/NF no W.Vetro.'
     }
 
-    const { data: produtos, error: erroProdutos } = await supabaseAdmin
+    const produtos = await lerTodasPaginas<any>((inicio, fim) => supabaseAdmin
       .from('produtos')
       .select('id,codigo,codigo_origem,id_externo_wvetro,custo,custo_wvetro_min,custo_wvetro_max,custo_wvetro_ultimo,venda_wvetro_min,venda_wvetro_max,venda_wvetro_ultimo')
-      .eq('categoria', 'acessorio')
-    if (erroProdutos) throw erroProdutos
+      .eq('categoria', 'acessorio').order('id').range(inicio, fim))
 
     let custosAtualizados = 0
     let referenciasVendaAtualizadas = 0
@@ -315,6 +314,8 @@ export async function POST(req: NextRequest) {
     }
     if (atualizacoes.length) await Promise.all(atualizacoes)
 
+    const linhas = await reconciliarLinhasCatalogoWVetro()
+
     await supabaseAdmin
       .from('wvetro_produtos_snapshot')
       .update({ imagem_status: 'pendente', imagem_erro: null })
@@ -342,6 +343,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       catalogo,
       catalogoErro,
+      linhas,
       custos: {
         notasConsultadas,
         referenciasHistoricas: mapa.size,
@@ -371,6 +373,8 @@ export async function POST(req: NextRequest) {
       observacao: 'Sincronização ampliada para 365 dias, normalização de códigos mais tolerante e diagnóstico de correspondência. Compras/NF continua opcional enquanto houver 403.',
     })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Falha ao sincronizar produtos W.Vetro.' }, { status: 500 })
+    const mensagem = mensagemErroWVetro(e)
+    console.error('Falha sincronização W.Vetro', { mensagem })
+    return NextResponse.json({ error: `Falha ao sincronizar W.Vetro: ${mensagem}` }, { status: 500 })
   }
 }

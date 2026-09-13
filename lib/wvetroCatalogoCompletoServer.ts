@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { lerTodasPaginas, candidatosUnicos, mensagemErroWVetro, normalizarLinhaWVetro } from './wvetroSyncDados'
 import { listarProdutosWVetroPorTipo, type WVetroProdutoTipo } from '@/lib/wvetroApi'
 
 function txt(v: unknown) { return String(v ?? '').trim() }
@@ -33,11 +34,10 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
     }
 
     const categoria = tipo === 'P' ? 'perfil' : 'acessorio'
-    const { data: produtos, error } = await supabaseAdmin
+    const produtos = await lerTodasPaginas<any>((inicio, fim) => supabaseAdmin
       .from('produtos')
       .select('id,codigo,codigo_origem,id_externo_wvetro')
-      .eq('categoria', categoria)
-    if (error) throw error
+      .eq('categoria', categoria).order('id').range(inicio, fim))
 
     const indice = new Map<string, any[]>()
     for (const p of produtos || []) {
@@ -53,7 +53,7 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
 
     for (const [codigoNorm, o] of unicos) {
       const codigo = txt(o.ProdutoCodigo ?? o.ProdutoSeuCodigo)
-      const candidatos = indice.get(codigoNorm) || []
+      const candidatos = candidatosUnicos(indice.get(codigoNorm) || [])
       let produtoId: string | null = null
       if (candidatos.length === 1) {
         existentes += 1
@@ -138,7 +138,39 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
       existentes: 0,
       importados: 0,
       ambiguos: 0,
-      erro: e instanceof Error ? e.message : 'Falha na descoberta do catálogo.',
+      erro: mensagemErroWVetro(e),
     }
   }
+}
+
+// Usa somente a linha declarada na origem e uma correspondência única no Atlas.
+export async function reconciliarLinhasCatalogoWVetro() {
+  const linhas = await lerTodasPaginas<any>((a, b) => supabaseAdmin.from('linhas').select('id,nome').order('id').range(a, b))
+  const snapshots = await lerTodasPaginas<any>((a, b) => supabaseAdmin.from('wvetro_produtos_snapshot')
+    .select('produto_atlas_id,linha_nome_wvetro').eq('tipo', 'A').not('produto_atlas_id', 'is', null).order('id').range(a, b))
+  const porNome = new Map<string, Set<string>>()
+  for (const linha of linhas) {
+    const nome = normalizarLinhaWVetro(linha.nome)
+    const ids = porNome.get(nome) || new Set<string>()
+    ids.add(linha.id); porNome.set(nome, ids)
+  }
+  const porProduto = new Map<string, Set<string>>()
+  for (const snapshot of snapshots) {
+    const nome = normalizarLinhaWVetro(snapshot.linha_nome_wvetro)
+    if (!nome) continue
+    const nomes = porProduto.get(snapshot.produto_atlas_id) || new Set<string>()
+    nomes.add(nome); porProduto.set(snapshot.produto_atlas_id, nomes)
+  }
+  let atualizadas = 0
+  for (const [produtoId, nomes] of porProduto) {
+    if (nomes.size !== 1) continue
+    const ids = porNome.get(Array.from(nomes)[0])
+    if (ids?.size !== 1) continue
+    const { data, error } = await supabaseAdmin.from('produtos')
+      .update({ linha_id: Array.from(ids)[0] }).eq('id', produtoId)
+      .eq('categoria', 'acessorio').is('linha_id', null).select('id')
+    if (error) throw error
+    atualizadas += data?.length || 0
+  }
+  return { atualizadas }
 }
