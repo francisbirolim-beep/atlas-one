@@ -1,5 +1,9 @@
 # NEXT_TASK.md — Atlas One
 
+## PRIORIDADE — testar piloto Sob Medida Porta de Correr 2F
+
+Abrir o Preview de `feat/configurador-porta-2f` e seguir `CONFIGURADOR_SOB_MEDIDA_PILOTO.md`. Conferir medidas primeiro, condicionais, fechadura/Largo e reforços independentes; enviar pedido controlado e conferir snapshot. Confirmar CI/Vercel antes de merge manual. Não cadastrar limites, montagens, receitas, custos ou corte sem validação, nem avançar para 3F/4F. Após Francis testar, continuar os cadastros e cálculo passo a passo.
+
 ## TAREFA ATUAL — validar Cadastros 360 por usuário
 
 Branch: `feat/cadastros-360-permissoes`

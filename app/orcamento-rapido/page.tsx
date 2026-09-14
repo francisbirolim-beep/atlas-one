@@ -9,6 +9,11 @@ import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { salvarPendente } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
+import dynamic from 'next/dynamic'
+import { avaliar, PILOTO, resumoPiloto } from '@/lib/configuradorSobMedida'
+import { requisicaoConfigurador } from '@/lib/configuradorSobMedidaClient'
+
+const ConfiguradorSobMedidaPiloto = dynamic(() => import('@/components/orcamento/ConfiguradorSobMedidaPiloto'))
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
@@ -84,6 +89,7 @@ function resumoMedidas(item: ItemForm) {
 }
 
 export default function OrcamentoRapido() {
+  const [piloto, setPiloto] = useState<boolean | null>(null)
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
@@ -107,6 +113,7 @@ export default function OrcamentoRapido() {
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
 
   useEffect(() => {
+    setPiloto(new URLSearchParams(window.location.search).get('piloto') === 'porta-2f')
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
     if (!clienteId) return
     supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle().then(({ data }) => {
@@ -185,6 +192,17 @@ export default function OrcamentoRapido() {
   }
 
   async function salvar() {
+    if (piloto) {
+      try {
+        const { cadastro, linhas } = await requisicaoConfigurador()
+        for (let i = 0; i < itens.length; i++) {
+          const item = itens[i]
+          if (item.variaveis.configurador !== PILOTO) return setErro(`Preencha o piloto da esquadria ${i + 1}.`)
+          const resultado = avaliar(cadastro, { ...item.variaveis, largura: item.largura, altura: item.altura, quantidade: item.quantidade, linha: item.linhaId || '' }, linhas)
+          if (!resultado.completa) return setErro(`Esquadria ${i + 1}: ${resultado.pendencias.join(' ')}`)
+        }
+      } catch (e) { return setErro(e instanceof Error ? e.message : 'Não foi possível validar o piloto.') }
+    }
     if (!clienteNome.trim()) return setErro('Informe o nome do cliente')
     if (!cidade.trim()) return setErro('Informe a cidade da obra')
     if (!temperatura) return setErro('Selecione a temperatura do orçamento (quente, morno ou frio)')
@@ -212,7 +230,7 @@ export default function OrcamentoRapido() {
           const medidas = [it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
           if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) return setErro(`Preencha as 3 alturas de ${referencia} (mínimo 100mm)`)
         }
-      } else {
+      } else if (!piloto) {
         const l = parseFloat(it.largura.replace(',', '.'))
         const a = parseFloat(it.altura.replace(',', '.'))
         if (!l || !a || l < 100 || a < 100) return setErro(`Preencha largura e altura de ${referencia} (mínimo 100mm x 100mm)`)
@@ -249,6 +267,7 @@ export default function OrcamentoRapido() {
         <div className="space-y-4"><h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>{itens.map((item,idx) => <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
           <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>{itens.length > 1 && <button onClick={() => removerItem(item.id)} className="text-red-400"><Trash2 size={16} /></button>}</div>
           <div><label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label><input value={item.ambiente} onChange={e => atualizarItem(item.id,'ambiente',e.target.value)} placeholder="Ex: Sala, Quarto 1, Cozinha..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
+          {piloto === null ? <p>Carregando configurador…</p> : piloto ? <ConfiguradorSobMedidaPiloto value={item} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <>
           <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} />
           {item.tipo && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
 
@@ -261,6 +280,7 @@ export default function OrcamentoRapido() {
             <div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div>
           </div> : <div className="grid grid-cols-3 gap-3"><div><label className="block text-xs text-slate-500 mb-1">Largura (mm)</label><input type="number" value={item.largura} onChange={e => atualizarItem(item.id,'largura',e.target.value)} placeholder="1800" className="w-full border rounded-lg p-2.5 text-sm"/></div><div><label className="block text-xs text-slate-500 mb-1">Altura (mm)</label><input type="number" value={item.altura} onChange={e => atualizarItem(item.id,'altura',e.target.value)} placeholder="2100" className="w-full border rounded-lg p-2.5 text-sm"/></div><div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div></div>}
 
+          </>}
           <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotosPreviews.map((src,i) => <div key={i} className="relative w-24 h-24"><img src={src} alt="Foto" onClick={() => setFotoAmpliada(src)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
           <div><label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label><input value={item.cor} onChange={e => atualizarItem(item.id,'cor',e.target.value)} placeholder="Só preencha se for diferente da cor geral" className="w-full border rounded-lg p-2.5 text-sm"/></div>
           <div><label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label><textarea value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Alguma observação da obra pro orçamentista saber..." className="w-full h-16 border rounded-lg p-2.5 text-sm resize-none"/></div>
@@ -268,7 +288,7 @@ export default function OrcamentoRapido() {
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}<button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium flex items-center justify-center gap-2"><Send size={18}/>{salvando ? 'Enviando...' : 'Enviar pedido'}</button>
       </main>
 
-      {conferenciaAberta && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">Conferência final do orçamento</h2><p className="mt-1 text-sm text-slate-500">Confira cada esquadria e o tipo de medida.</p></div><button onClick={() => setConferenciaAberta(false)}><X size={18}/></button></div><div className="max-h-[65vh] overflow-y-auto px-5 py-4"><div className="mb-4 grid gap-3 rounded-xl border bg-slate-50 p-4 sm:grid-cols-3"><div><p className="text-[11px] uppercase text-slate-400">Cliente</p><p className="font-semibold">{clienteNome}</p></div><div><p className="text-[11px] uppercase text-slate-400">Cidade</p><p className="font-semibold">{cidade}</p></div><div><p className="text-[11px] uppercase text-slate-400">Resumo</p><p className="font-semibold">{itens.length} {itens.length===1?'item':'itens'} • {totalEsquadrias} esquadria(s)</p></div></div><div className="space-y-3">{itens.map((item,idx) => <div key={item.id} className="rounded-xl border-2 border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="text-xs uppercase text-slate-400">Item {idx+1}</p><p className="font-bold">{item.quantidade || '1'}x {nomeTipologia(item)}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${item.tipoMedida === 'final' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.tipoMedida === 'final' ? 'Medida final' : 'Medida comum'}</span></div><div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p><b>Medidas:</b> {resumoMedidas(item)}</p><p><b>Linha:</b> {item.linhaNome || 'Não informada'}</p><p><b>Folhas:</b> {item.folhas || 'Não informado'}</p><p><b>Cor:</b> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p></div>{item.ambiente && <p className="mt-2 text-xs"><b>Ambiente:</b> {item.ambiente}</p>}{item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs"><b>Observação:</b> {item.descricao}</p>}</div>)}</div></div><div className="grid gap-3 border-t bg-slate-50 px-5 py-4 sm:grid-cols-2"><button onClick={() => setConferenciaAberta(false)} className="rounded-xl border bg-white px-4 py-3 text-sm font-semibold">Voltar e corrigir</button><button onClick={() => void confirmarEnvio()} disabled={salvando} className="flex items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-semibold text-white"><Send size={17}/>{salvando?'Enviando...':'Confirmar e enviar'}</button></div></div></div>}
+      {conferenciaAberta && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">Conferência final do orçamento</h2><p className="mt-1 text-sm text-slate-500">Confira cada esquadria e o tipo de medida.</p></div><button onClick={() => setConferenciaAberta(false)}><X size={18}/></button></div><div className="max-h-[65vh] overflow-y-auto px-5 py-4"><div className="mb-4 grid gap-3 rounded-xl border bg-slate-50 p-4 sm:grid-cols-3"><div><p className="text-[11px] uppercase text-slate-400">Cliente</p><p className="font-semibold">{clienteNome}</p></div><div><p className="text-[11px] uppercase text-slate-400">Cidade</p><p className="font-semibold">{cidade}</p></div><div><p className="text-[11px] uppercase text-slate-400">Resumo</p><p className="font-semibold">{itens.length} {itens.length===1?'item':'itens'} • {totalEsquadrias} esquadria(s)</p></div></div><div className="space-y-3">{itens.map((item,idx) => <div key={item.id} className="rounded-xl border-2 border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="text-xs uppercase text-slate-400">Item {idx+1}</p><p className="font-bold">{item.quantidade || '1'}x {nomeTipologia(item)}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${item.tipoMedida === 'final' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.tipoMedida === 'final' ? 'Medida final' : 'Medida comum'}</span></div><div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p><b>Medidas:</b> {resumoMedidas(item)}</p><p><b>Linha:</b> {item.linhaNome || 'Não informada'}</p><p><b>Folhas:</b> {item.folhas || 'Não informado'}</p><p><b>Cor:</b> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p></div>{item.variaveis.configurador === PILOTO && <p className="mt-2 text-xs text-slate-700">{resumoPiloto(item.variaveis)} · Validação técnica pendente.</p>}{item.ambiente && <p className="mt-2 text-xs"><b>Ambiente:</b> {item.ambiente}</p>}{item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs"><b>Observação:</b> {item.descricao}</p>}</div>)}</div></div><div className="grid gap-3 border-t bg-slate-50 px-5 py-4 sm:grid-cols-2"><button onClick={() => setConferenciaAberta(false)} className="rounded-xl border bg-white px-4 py-3 text-sm font-semibold">Voltar e corrigir</button><button onClick={() => void confirmarEnvio()} disabled={salvando} className="flex items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-semibold text-white"><Send size={17}/>{salvando?'Enviando...':'Confirmar e enviar'}</button></div></div></div>}
       {fotoAmpliada && <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setFotoAmpliada(null)}><button className="absolute top-4 right-4 text-white" onClick={() => setFotoAmpliada(null)}><X size={20}/></button><img src={fotoAmpliada} alt="Foto ampliada" onClick={e => e.stopPropagation()} className="max-w-full max-h-full object-contain rounded-lg"/></div>}
     </div>
   )

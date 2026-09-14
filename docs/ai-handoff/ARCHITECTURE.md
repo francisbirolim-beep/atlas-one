@@ -1,5 +1,9 @@
 # ARCHITECTURE.md — Atlas One
 
+## Piloto Sob Medida Porta 2F (2026-09-14)
+
+`lib/configuradorSobMedida.ts` contém contrato declarativo, validação do cadastro e motor puro. `ConfiguradorSobMedidaPiloto` substitui apenas o seletor/medidas por item quando a URL contém `piloto=porta-2f`. `app/api/orcamento/configurador` verifica sessão Supabase real e perfil; gravação exclusiva Master, configuração vinculada à empresa em `configuracoes_gerais`. `lib/orcamentos.ts` revalida antes de efeitos e grava snapshot sem validar receita. Cadastro visual em `/configuracoes/configurador-sob-medida`. Veja `CONFIGURADOR_SOB_MEDIDA_PILOTO.md` para semântica, limites e testes.
+
 ## Stack
 - Next.js 14 (App Router), React 18, TypeScript. Sem framework de estado global (useState/useEffect direto nas paginas).
 - Tailwind CSS para estilo.

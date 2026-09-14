@@ -1,5 +1,11 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — PILOTO SOB MEDIDA PORTA DE CORRER 2F — 2026-09-14
+
+Branch `feat/configurador-porta-2f`, baseada na main `fcf4451`. Entrada opt-in em `/orcamento-rapido?piloto=porta-2f`; fluxo original preservado. Medidas primeiro, categorias cadastráveis, perguntas condicionais, exposição, regras com quatro níveis, fechadura exigindo montante Largo sem implicar reforço de aba e três reforços independentes com decisão explícita. Cadastro Master por empresa, sem limites dimensionais iniciais. Snapshot persistido pelo fluxo existente, nunca validado automaticamente nem ligado a receita/preço/corte.
+
+Detalhes e roteiro: `CONFIGURADOR_SOB_MEDIDA_PILOTO.md`. Não expandir para outras quantidades de folhas. Teste real de Francis no Preview pendente.
+
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
 ## EM VALIDAÇÃO — CADASTROS 360 POR USUÁRIO — 2026-08-28
