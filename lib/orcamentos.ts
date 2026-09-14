@@ -7,6 +7,8 @@ import { registrarHistorico } from './historico'
 import { executarAutomacoesColuna } from './automacoes'
 import { registrarConfiguracaoTecnicaAtlas, registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 import { v4 as uuidv4 } from 'uuid'
+import { avaliar, PILOTO } from './configuradorSobMedida'
+import { requisicaoConfigurador } from './configuradorSobMedidaClient'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead, Anexo } from './tipos'
 
 export interface ItemOrcamentoForm {
@@ -135,6 +137,24 @@ async function lerTrena(url: string, eixo: 'largura' | 'altura'): Promise<number
 }
 
 export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promise<{ ok: boolean; id?: string; error?: string }> {
+  // Também cobre reenvio offline. Revalida antes de criar cliente, uploads ou orçamento.
+  if (dados.itens.some(it => it.variaveis?.configurador === PILOTO)) {
+    try {
+      const { cadastro, linhas } = await requisicaoConfigurador()
+      const itens = dados.itens.map(it => {
+        if (it.variaveis?.configurador !== PILOTO) return it
+        const resultado = avaliar(cadastro, { ...it.variaveis, largura: it.largura, altura: it.altura, quantidade: it.quantidade, linha: it.linhaId || '' }, linhas)
+        if (!resultado.completa || it.tipoMedida === 'final') throw new Error(resultado.pendencias.join(' ') || 'O piloto usa medidas comuns.')
+        return { ...it, tipo: 'outro', tipoOutroTexto: 'Porta de Correr 2 Folhas', folhas: '2',
+          modoOrigem: 'manual' as const, produtoId: null, precoUnit: null, tipologiaId: null,
+          configuracaoPresetId: null, configuracaoValidada: false, configuracaoStatus: 'preenchida' as const,
+          modoConfiguracao: 'assistido' as const,
+          variaveis: { ...it.variaveis, cadastro_snapshot: JSON.stringify(cadastro), regras_aplicadas: JSON.stringify(resultado.avisos), validacao_tecnica: 'pendente' },
+        }
+      })
+      dados = { ...dados, itens }
+    } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Não foi possível validar o piloto.' } }
+  }
   const {
     clienteId: clienteIdInformado,
     itens, clienteNome, clienteWhatsapp, cidade, origem,

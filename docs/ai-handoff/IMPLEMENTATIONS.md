@@ -345,3 +345,6 @@ Relatório completo em
 
 Nenhuma implementação grande feita nesta rodada, por instrução do usuário.
 Nenhum merge para `main`.
+# 2026-09-14 — Piloto Sob Medida Porta de Correr 2F
+
+Implementado em `feat/configurador-porta-2f`: entrada isolada no formulário aprovado, medidas primeiro, categorias cadastráveis, perguntas condicionais, exposição e motor de regras com níveis Recomendação/Alerta forte/Obrigatória/Análise técnica. Montante lateral móvel Estreito/Largo; fechadura Sim exige Largo sem exigir aba. Reforços separados e explícitos. Cadastro Master por empresa e snapshot no pedido; sem fórmulas, limites ou receitas inventados. Roteiro completo em `CONFIGURADOR_SOB_MEDIDA_PILOTO.md`. Validação de Francis pendente.

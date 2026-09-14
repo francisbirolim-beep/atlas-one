@@ -304,6 +304,7 @@ export default function NovoOrcamentoHub() {
                     <button type="button" onClick={() => router.push('/orcamento-rapido')} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 sm:mt-5 sm:w-auto sm:px-5">
                       Abrir orçamento sob medida <ChevronRight size={17} />
                     </button>
+                    <Link href="/orcamento-rapido?piloto=porta-2f" className="mt-3 block text-sm font-semibold text-blue-700 underline">Testar novo configurador · Porta de Correr 2 Folhas</Link>
                   </div>
                 </div>
               </div>
