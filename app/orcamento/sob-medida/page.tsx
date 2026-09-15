@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import OrcamentoSobMedidaBuilderV2 from '@/components/orcamento/OrcamentoSobMedidaBuilderV2'
+import OrcamentoSobMedidaBuilderV3 from '@/components/orcamento/OrcamentoSobMedidaBuilderV3'
 import { tokenAtual } from '@/lib/auth'
 
 export default function OrcamentoSobMedidaPage() {
@@ -52,5 +52,5 @@ export default function OrcamentoSobMedidaPage() {
     }, 0)
   }
 
-  return <div onClick={continuarParaCustos}><OrcamentoSobMedidaBuilderV2 /></div>
+  return <div onClick={continuarParaCustos}><OrcamentoSobMedidaBuilderV3 /></div>
 }
