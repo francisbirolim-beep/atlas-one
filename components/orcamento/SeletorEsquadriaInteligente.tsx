@@ -1,8 +1,9 @@
 'use client'
 
-// Entrada estável do Orçamento: V5 prioriza descrição livre, busca opcional e tratamento específico do Box de Canto.
-export { default } from './SeletorEsquadriaInteligenteV5'
+// Entrada estável do Orçamento: V6 testa o fluxo guiado começando por medidas
+// e valida primeiro a Porta de Correr 2 Folhas antes de expandir as demais tipologias.
+export { default } from './SeletorEsquadriaInteligenteV6'
 export type {
   SelecaoEsquadriaOrcamento,
   StatusConfiguracaoOrcamento,
-} from './SeletorEsquadriaInteligenteV5'
+} from './SeletorEsquadriaInteligenteV6'
