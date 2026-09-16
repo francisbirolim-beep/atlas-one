@@ -2,6 +2,16 @@
 
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
+## EM VALIDAÇÃO — CONFERÊNCIA DO ORÇAMENTO NO CELULAR — 2026-09-16
+
+Branch: `fix/orcamento-rapido-modal-mobile`
+
+- o modal final de `/orcamento-rapido` respeita a altura visível do celular;
+- cabeçalho e ações permanecem fixos, enquanto somente a lista de itens rola;
+- `Voltar e corrigir` e `Confirmar e enviar` ficam acima da navegação mobile;
+- a área segura inferior do iPhone é respeitada;
+- nenhuma regra de orçamento, envio ou persistência foi alterada.
+
 ## EM VALIDAÇÃO — CADASTROS 360 POR USUÁRIO — 2026-08-28
 
 Branch: `feat/cadastros-360-permissoes`
