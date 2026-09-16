@@ -132,6 +132,8 @@ doc.text(`Nome: ${card.cliente_nome || '-'}`, margem, y)
 linhaNova()
 if (card.cliente_whatsapp) { doc.text(`WhatsApp: ${card.cliente_whatsapp}`, margem, y); linhaNova() }
 if (card.cidade) { doc.text(`Cidade: ${card.cidade}`, margem, y); linhaNova() }
+if (card.obra_nome) { doc.text(`Obra: ${card.obra_nome}`, margem, y); linhaNova() }
+if (card.obra_endereco) { doc.text(`Endereço da obra: ${card.obra_endereco}`, margem, y); linhaNova() }
 if (card.arquiteto_nome) { doc.text(`Arquiteto/Engenheiro: ${card.arquiteto_nome}${card.arquiteto_contato ? ' — ' + card.arquiteto_contato : ''}`, margem, y); linhaNova() }
 linhaNova(4)
 
@@ -765,6 +767,8 @@ function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): strin
 const partes: string[] = []
 if (original.cliente_nome !== novo.cliente_nome) partes.push('nome')
 if (original.cidade !== novo.cidade) partes.push('cidade')
+if (original.obra_nome !== novo.obra_nome) partes.push('obra')
+if (original.obra_endereco !== novo.obra_endereco) partes.push('endereço da obra')
 if (original.acabamento !== novo.acabamento) partes.push('cor')
 if (original.contramarco !== novo.contramarco) partes.push('contramarco')
 if (original.tipo_medida !== novo.tipo_medida) partes.push('tipo de medida')
@@ -790,6 +794,9 @@ const { error } = await supabase
 cliente_nome: editando.cliente_nome,
 cliente_whatsapp: editando.cliente_whatsapp,
 cidade: editando.cidade,
+obra_nome: editando.obra_nome,
+obra_endereco: editando.obra_endereco,
+obra_cidade: editando.cidade,
 acabamento: editando.acabamento,
 acabamento_outro_texto: editando.acabamento === 'outro' ? editando.acabamento_outro_texto : null,
 contramarco: editando.contramarco,
@@ -992,6 +999,11 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </span>
 )}
 </div>
+{!card.eh_assistencia && card.obra_nome && (
+<p className="mb-1 truncate text-xs" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
+<Building2 size={11} className="mr-1 inline" />{card.obra_nome}
+</p>
+)}
 {card.eh_assistencia ? (
 <>
 <span
@@ -1080,6 +1092,8 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 <div className="text-center py-10 space-y-4">
 <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
 <p className="text-2xl font-bold text-slate-800">{cardSelecionado.cliente_nome}</p>
+{cardSelecionado.obra_nome && <p className="text-sm font-medium text-slate-500">Obra: {cardSelecionado.obra_nome}</p>}
+{cardSelecionado.obra_endereco && <p className="text-xs text-slate-400">{cardSelecionado.obra_endereco}</p>}
 {editando.orcamento_iniciado_em && (
 <p className="text-xs text-brand-navy">
 Em andamento há {formatarDuracao(editando.orcamento_iniciado_em, new Date(agora).toISOString())}
@@ -1159,6 +1173,29 @@ type="text"
 value={editando.cidade || ''}
 onChange={e => atualizarCampo('cidade', e.target.value)}
 className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+/>
+</div>
+</div>
+
+<div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+<div>
+<label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12} /> Obra (opcional)</label>
+<input
+type="text"
+value={editando.obra_nome || ''}
+onChange={e => atualizarCampo('obra_nome', e.target.value)}
+placeholder="Nome ou identificação da obra"
+className="w-full border border-slate-300 rounded-xl p-3 text-sm bg-white"
+/>
+</div>
+<div>
+<label className="block text-xs text-slate-500 mb-1 flex items-center gap-1"><MapPin size={12} /> Endereço da obra (opcional)</label>
+<input
+type="text"
+value={editando.obra_endereco || ''}
+onChange={e => atualizarCampo('obra_endereco', e.target.value)}
+placeholder="Rua, número, bairro ou referência"
+className="w-full border border-slate-300 rounded-xl p-3 text-sm bg-white"
 />
 </div>
 </div>

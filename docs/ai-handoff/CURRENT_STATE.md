@@ -2,6 +2,15 @@
 
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
+## EM VALIDAÇÃO — OBRA E ENDEREÇO NO PEDIDO DE ORÇAMENTO — 2026-09-16
+
+Branch: `feat/orcamento-obra-endereco`
+
+- o bloco Dados do cliente em `/orcamento-rapido` inclui nome/identificação da obra e endereço da obra;
+- os dois campos são opcionais e não alteram as validações obrigatórias existentes;
+- quando o pedido nasce de uma obra do Cliente 360, os campos são preenchidos automaticamente;
+- os dados ficam no orçamento, podem ser editados no Kanban e aparecem no PDF gerado.
+
 ## EM VALIDAÇÃO — PROSPECÇÃO EM CAMPO V1 — 2026-09-16
 
 Branch: `feat/prospeccao-campo-v1`

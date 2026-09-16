@@ -53,6 +53,8 @@ export interface DadosOrcamentoForm {
   clienteNome: string
   clienteWhatsapp: string
   cidade: string
+  obraNome?: string
+  obraEndereco?: string
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
   acabamento: Acabamento | ''
@@ -137,7 +139,7 @@ async function lerTrena(url: string, eixo: 'largura' | 'altura'): Promise<number
 export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promise<{ ok: boolean; id?: string; error?: string }> {
   const {
     clienteId: clienteIdInformado,
-    itens, clienteNome, clienteWhatsapp, cidade, origem,
+    itens, clienteNome, clienteWhatsapp, cidade, obraNome, obraEndereco, origem,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
@@ -266,6 +268,9 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   const { error } = await supabase.from('orcamentos').insert({
     id: novoId, cliente_id: clienteId, obra_id: obraId || null, cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp, cidade, origem,
+    obra_nome: obraNome?.trim() || null,
+    obra_endereco: obraEndereco?.trim() || null,
+    obra_cidade: cidade.trim() || null,
     tipo_esquadria: primeiro?.tipo_esquadria || 'outro', largura_mm: primeiro?.largura_mm || null,
     altura_mm: primeiro?.altura_mm || null, quantidade: primeiro?.quantidade || 1,
     acabamento, acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,

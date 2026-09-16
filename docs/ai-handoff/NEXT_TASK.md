@@ -1,5 +1,15 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar obra e endereço no pedido de orçamento
+
+Branch: `feat/orcamento-obra-endereco`
+
+1. abrir Pedido de orçamento pelo Cliente 360;
+2. preencher ou deixar vazios os campos Obra e Endereço da obra;
+3. enviar o pedido e conferir os dados no Kanban;
+4. editar os campos no painel do orçamento;
+5. gerar o PDF e conferir a identificação da obra.
+
 ## TAREFA ATUAL — validar Prospecção em Campo V1
 
 Branch: `feat/prospeccao-campo-v1`

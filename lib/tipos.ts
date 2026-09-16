@@ -147,6 +147,10 @@ export interface OrcamentoRapido {
       cliente_nome: string
       cliente_whatsapp?: string
       cidade?: string
+      obra_id?: string | null
+      obra_nome?: string | null
+      obra_endereco?: string | null
+      obra_cidade?: string | null
       origem?: OrigemCliente
       tipo_esquadria: TipoEsquadria
       largura_mm: number
