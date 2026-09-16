@@ -1,5 +1,15 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar conferência final do orçamento no celular
+
+Branch: `fix/orcamento-rapido-modal-mobile`
+
+1. concluir um orçamento com vários itens em `/orcamento-rapido`;
+2. confirmar que a lista interna rola sem mover a tela de fundo;
+3. confirmar que `Voltar e corrigir` e `Confirmar e enviar` ficam sempre visíveis;
+4. testar o envio e conferir o estado `Enviando...`;
+5. validar em iPhone instalado e no navegador móvel.
+
 ## TAREFA ATUAL — validar Cadastros 360 por usuário
 
 Branch: `feat/cadastros-360-permissoes`
