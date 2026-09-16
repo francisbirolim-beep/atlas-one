@@ -345,3 +345,11 @@ Relatório completo em
 
 Nenhuma implementação grande feita nesta rodada, por instrução do usuário.
 Nenhum merge para `main`.
+# 2026-09-16 — Conferência final do orçamento responsiva
+
+- corrigido o modal de conferência de `/orcamento-rapido` no celular;
+- modal agora usa altura dinâmica do viewport e estrutura flexível;
+- somente a relação de esquadrias possui rolagem;
+- cabeçalho e rodapé de ações permanecem visíveis;
+- camada do modal foi posicionada acima da navegação inferior do Atlas;
+- adicionada proteção para a área segura inferior do iPhone.
