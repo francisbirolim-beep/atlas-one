@@ -10,6 +10,7 @@ import {
   CheckSquare,
   Columns3,
   ImageIcon,
+  MapPinned,
   UserPlus,
   Wrench,
 } from 'lucide-react'
@@ -111,6 +112,12 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
             <Link href="/clientes/identificar" className={classeAtalho}>
               <span className={classeIcone}><UserPlus size={19} /></span>
               <span className="min-w-0 flex-1"><strong className={classeTextoAtalho}>Cliente 360</strong><span className={classeSubtituloAtalho}>Buscar ou cadastrar cliente</span></span><ArrowRight size={14} className="hidden text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600 sm:block" />
+            </Link>
+          )}
+          {(tem('orcamentos') || tem('clientes')) && (
+            <Link href="/prospeccao/nova" className={classeAtalho}>
+              <span className={classeIcone}><MapPinned size={19} /></span>
+              <span className="min-w-0"><strong className={classeTextoAtalho}>Nova prospecção</strong><span className={classeSubtituloAtalho}>Registrar obra em campo</span></span>
             </Link>
           )}
           {tem('kanban') && (

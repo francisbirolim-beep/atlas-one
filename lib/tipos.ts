@@ -27,7 +27,7 @@ export type StatusOrcamento =
 export type OrigemCliente =
       | 'indicacao' | 'arquiteto' | 'engenheiro' | 'construtora'
 | 'instagram' | 'facebook' | 'google' | 'whatsapp'
-| 'cliente_antigo' | 'passou_na_frente' | 'outros'
+| 'cliente_antigo' | 'passou_na_frente' | 'prospeccao_campo' | 'outros'
 
 export type RoleUsuario = 'master' | 'funcionario'
 
@@ -35,6 +35,7 @@ export type TemperaturaLead = 'quente' | 'morno' | 'frio'
 
 export interface Usuario {
       id: string
+      empresa_id?: string
       nome: string
       email: string
       role: RoleUsuario

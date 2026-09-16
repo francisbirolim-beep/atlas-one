@@ -2,6 +2,38 @@
 
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
+## EM VALIDAÇÃO — PROSPECÇÃO EM CAMPO V1 — 2026-09-16
+
+Branch: `feat/prospeccao-campo-v1`
+
+### Implementado
+
+- pré-cadastro rápido pelo celular com nome/identificação obrigatória e demais dados opcionais;
+- captura da localização atual com latitude, longitude, precisão e link para mapa;
+- cadastro de pessoas da obra: cliente, pedreiro, mestre de obras, arquiteto, engenheiro, construtora e outros;
+- fase da obra, interesses, temperatura, observações e próxima ação;
+- Kanban próprio com nove etapas e movimentação por arrastar;
+- filtros por vendedor (Master), cidade, bairro e busca textual;
+- agenda de retornos com identificação de atrasados;
+- integração da próxima ação com a agenda pessoal do vendedor;
+- ficha da prospecção com edição posterior, contatos e diário cronológico;
+- conversão segura para Cliente 360, com busca de possíveis duplicidades e criação opcional da obra;
+- Master vê o geral; funcionário acessa somente as prospecções sob sua responsabilidade;
+- tabelas protegidas por empresa, RLS e grants explícitos somente para usuários autenticados.
+
+### Banco aplicado
+
+- migration `20260916151751_prospeccao_campo_v1.sql` aplicada no projeto Supabase de produção;
+- tabelas `prospeccoes`, `prospeccao_contatos` e `prospeccao_interacoes`;
+- RPC transacional `fn_converter_prospeccao_v1`.
+
+### Validação pendente
+
+- build e Preview da Vercel;
+- teste com Francis/Master e um vendedor;
+- captura real do GPS no iPhone;
+- criação de prospecção, retorno na agenda, movimentação no Kanban e conversão controlada.
+
 ## EM VALIDAÇÃO — CONFERÊNCIA DO ORÇAMENTO NO CELULAR — 2026-09-16
 
 Branch: `fix/orcamento-rapido-modal-mobile`

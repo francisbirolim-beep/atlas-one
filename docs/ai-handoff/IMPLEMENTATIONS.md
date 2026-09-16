@@ -353,3 +353,14 @@ Nenhum merge para `main`.
 - cabeçalho e rodapé de ações permanecem visíveis;
 - camada do modal foi posicionada acima da navegação inferior do Atlas;
 - adicionada proteção para a área segura inferior do iPhone.
+# 2026-09-16 — Prospecção em Campo V1
+
+- criado módulo `/prospeccao` com Kanban, filtros e agenda;
+- criado pré-cadastro mobile em `/prospeccao/nova`, incluindo captura GPS;
+- criada ficha `/prospeccao/[id]` com contatos, edição posterior, diário e próximas ações;
+- próximos retornos podem ser sincronizados com a agenda pessoal do vendedor;
+- conversão pesquisa possíveis clientes duplicados, vincula um existente ou cria Cliente 360 e obra;
+- conversão usa RPC transacional e preserva o diário da prospecção;
+- Master possui visão geral; vendedor fica limitado às próprias oportunidades por RLS;
+- navegação, busca global e Home receberam acesso à Prospecção;
+- migration `20260916151751_prospeccao_campo_v1.sql` aplicada no Supabase.
