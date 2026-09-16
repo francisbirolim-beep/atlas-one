@@ -1,5 +1,9 @@
 # CURRENT_STATE.md — Atlas One
 
+## 2026-09-16 — Atalhos de Orçamento Sob Medida
+
+Corrigidos os atalhos com rótulo Orçamento sob medida no Cliente 360, na obra e no hub de novo orçamento para `/orcamento/sob-medida`. Cliente e obra selecionados são preservados; o vínculo da obra segue a validação já existente na API. Conferir no preview do PR #446 os acessos pelo cartão, menu Nova ação e hub.
+
 ## EM VALIDAÇÃO — PC2 SUPREMA V1 — 2026-09-15
 
 Branch `feat/orcamento-custos-gate-v1`, PR #446. O cadastro existente em Engenharia > Cadastro de Modelos usa a receita técnica em `engenharia_tipologia_formulas_corte` para simulação, vidro, listas e impressão. O cálculo fixo `calcularPc2` saiu da página. O único registro `PC2-SUPREMA` permanece inativo para produção e status `em_validacao`. Migration remota `20260916011453_pc2_suprema_receita_v1` e `20260916012340_pc2_suprema_variaveis_v1` aplicada somente ao registro existente, sem executar o histórico local divergente. Produtos mestres fornecem descrição, desenho e custo técnico; custos ou desenhos ausentes ficam pendentes. O editor permite atualizar custo mestre com origem e data.

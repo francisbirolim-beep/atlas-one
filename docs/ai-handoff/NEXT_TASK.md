@@ -1,5 +1,9 @@
 # NEXT_TASK.md — Atlas One
 
+## 2026-09-16 — Atalhos de Orçamento Sob Medida
+
+Corrigidos os atalhos com rótulo Orçamento sob medida no Cliente 360, na obra e no hub de novo orçamento para `/orcamento/sob-medida`. Cliente e obra selecionados são preservados; o vínculo da obra segue a validação já existente na API. Conferir no preview do PR #446 os acessos pelo cartão, menu Nova ação e hub.
+
 ## PC2 Suprema V1 — conferência no preview
 
 Abrir Engenharia > Cadastro de Modelos no preview do PR #446, executar o teste 2000×2200 e conferir lista de corte, acessórios, vidro e impressão com desenhos. Comparar as demais configurações com os relatórios W.Vetro antes de validar fórmulas de mão-de-amigo larga, concha, trilho convencional, roldana 200 kg ou consumos de FIT/GUA/SIL-PU. Manter o registro inativo para produção e não mesclar a PR na main nesta etapa.

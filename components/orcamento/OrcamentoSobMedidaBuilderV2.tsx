@@ -22,6 +22,7 @@ const novoUid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
 export default function OrcamentoSobMedidaBuilderV2() {
   const searchParams = useSearchParams()
   const clienteIdParam = searchParams.get('cliente')
+  const obraIdParam = searchParams.get('obra')
   const [cliente,setCliente] = useState<ClienteResumo|null>(null)
   const [buscaCliente,setBuscaCliente] = useState('')
   const [clientesEncontrados,setClientesEncontrados] = useState<ClienteResumo[]>([])
@@ -87,7 +88,7 @@ export default function OrcamentoSobMedidaBuilderV2() {
   function contramarcoItem(uid:string,v:'sim'|'nao'){setItens(p=>p.map(i=>i.uid===uid?{...i,contramarco:v,arremate:v==='sim'?'sim':i.arremate}:i))}
   function sugestoes(i:ItemSelecionado){return (i.vidro.trim()?vidros.filter(v=>correspondeBuscaAtlas(i.vidro,v.nome,v.codigo)):vidros).slice(0,20)}
   function adicionarMais(){document.getElementById('adicionar-tipologias')?.scrollIntoView({behavior:'smooth',block:'start'});window.setTimeout(()=>document.getElementById('busca-tipologias')?.focus(),350)}
-  function salvar(){if(!podeSalvar||!cliente)return;sessionStorage.setItem('atlas_orcamento_sob_medida_builder_v1',JSON.stringify({clienteId:cliente.id,cidade,temperatura,padroes:{cor:corPadrao,contramarco:contramarcoPadrao,arremate:contramarcoPadrao==='sim'?'sim':arrematePadrao},itens}))}
+  function salvar(){if(!podeSalvar||!cliente)return;sessionStorage.setItem('atlas_orcamento_sob_medida_builder_v1',JSON.stringify({clienteId:cliente.id,obraId:cliente.id===clienteIdParam?obraIdParam:null,cidade,temperatura,padroes:{cor:corPadrao,contramarco:contramarcoPadrao,arremate:contramarcoPadrao==='sim'?'sim':arrematePadrao},itens}))}
 
   return <div className="min-h-screen bg-slate-50 text-slate-900">
     <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-[1500px] items-center gap-3 px-4 py-4 lg:px-6"><Link href={cliente?`/clientes/${cliente.id}`:'/clientes/identificar'} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft size={20}/></Link><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Cliente 360 · Orçamento</p><h1 className="truncate text-xl font-bold">Novo Orçamento Sob Medida</h1><p className="text-xs text-slate-500">Escolha o cliente, defina os padrões e depois selecione linha e tipologias.</p></div><div className="hidden items-center gap-2 md:flex"><span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">1 Dados</span><ChevronRight size={15} className="text-slate-300"/><span className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">2 Tipologias</span><ChevronRight size={15} className="text-slate-300"/><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">3 Custos</span><ChevronRight size={15} className="text-slate-300"/><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">4 Configurar</span><ChevronRight size={15} className="text-slate-300"/><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">5 Precificar</span></div></div></header>

@@ -351,7 +351,7 @@ export default function Cliente360Dashboard({ clienteId }: Props) {
             <Link href={`/clientes/${cliente.id}`} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cadastro / CRM</Link>
             {menuAcao && <div className="absolute right-0 top-12 z-40 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
               <button onClick={() => { setModalObra(true); setMenuAcao(false) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"><Building2 size={15}/> Nova obra</button>
-              <Link href={`/orcamento-rapido?cliente=${cliente.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><FileText size={15}/> Orçamento sob medida</Link>
+              <Link href={`/orcamento/sob-medida?cliente=${cliente.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><FileText size={15}/> Orçamento sob medida</Link>
               <Link href={`/balcao/orcamentos/novo?cliente=${cliente.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><Receipt size={15}/> Orçamento Balcão</Link>
               <Link href={`/balcao?cliente=${cliente.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><ShoppingCart size={15}/> Venda Balcão</Link>
               <Link href={`/assistencia?cliente=${cliente.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><Wrench size={15}/> Nova assistência</Link>

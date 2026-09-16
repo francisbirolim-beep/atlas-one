@@ -1,5 +1,9 @@
 # IMPLEMENTATIONS.md — Atlas One
 
+## 2026-09-16 — Atalhos de Orçamento Sob Medida
+
+Corrigidos os atalhos com rótulo Orçamento sob medida no Cliente 360, na obra e no hub de novo orçamento para `/orcamento/sob-medida`. Cliente e obra selecionados são preservados; o vínculo da obra segue a validação já existente na API. Conferir no preview do PR #446 os acessos pelo cartão, menu Nova ação e hub.
+
 ## 2026-08-30 — Filtro de produtos ao criar necessidade no Compras 360
 
 - adicionados filtros rápidos de catálogo para Todos, Perfis, Acessórios, Vidros, Produto pronto e Outros;

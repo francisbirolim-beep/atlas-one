@@ -301,7 +301,7 @@ export default function NovoOrcamentoHub() {
                   <div className="min-w-0 flex-1">
                     <h2 className="text-sm font-bold text-slate-900 sm:text-base">Novo Orçamento Sob Medida</h2>
                     <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">Abre diretamente o formulário para montar uma esquadria personalizada, com linha e tipologia opcionais, medidas, configuração técnica e itens.</p>
-                    <button type="button" onClick={() => router.push('/orcamento-rapido')} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 sm:mt-5 sm:w-auto sm:px-5">
+                    <button type="button" onClick={() => router.push('/orcamento/sob-medida')} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 sm:mt-5 sm:w-auto sm:px-5">
                       Abrir orçamento sob medida <ChevronRight size={17} />
                     </button>
                   </div>
@@ -360,7 +360,7 @@ export default function NovoOrcamentoHub() {
                   <DraftingCompass size={42} className="mx-auto text-slate-300" />
                   <p className="mt-4 text-sm font-semibold text-slate-700">Orçamento Sob Medida</p>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">Fluxo direto para uma esquadria personalizada.</p>
-                  <button type="button" onClick={() => router.push('/orcamento-rapido')} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">Continuar</button>
+                  <button type="button" onClick={() => router.push('/orcamento/sob-medida')} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">Continuar</button>
                 </div>
               ) : (
                 <div className="py-10 text-center">
