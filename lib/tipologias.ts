@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { CategoriaTipologia, Tipologia } from './tipos'
 import { registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
 
-export type TipologiaTecnica = Tipologia & { ativo: boolean }
+export type TipologiaTecnica = Tipologia & { ativo: boolean; usa_vidro?: boolean | null }
 
 export async function listarTipologias(incluirInativas = false): Promise<TipologiaTecnica[]> {
   let query = supabase
@@ -41,7 +41,7 @@ export async function criarTipologia(label: string, categoria: CategoriaTipologi
 
   const { data, error } = await supabase
     .from('tipologias')
-    .insert({ chave, label: label.trim(), categoria, ordem, ativo: true })
+    .insert({ chave, label: label.trim(), categoria, ordem, ativo: true, usa_vidro: null })
     .select()
     .single()
 
@@ -61,6 +61,27 @@ export async function criarTipologia(label: string, categoria: CategoriaTipologi
   }).catch(() => {})
 
   return data as TipologiaTecnica
+}
+
+export async function atualizarUsoVidroTipologia(id: string, usaVidro: boolean | null) {
+  const resposta = await supabase
+    .from('tipologias')
+    .update({ usa_vidro: usaVidro })
+    .eq('id', id)
+
+  if (!resposta.error) {
+    registrarEventoAprendizadoAtlas({
+      dominio: 'tipologia',
+      tipo: 'tipologia_uso_vidro_atualizado',
+      entidade_tipo: 'tipologia',
+      entidade_id: id,
+      contexto: { tipologia_id: id },
+      dados: { usa_vidro: usaVidro },
+      evidencia: 'validado',
+    }).catch(() => {})
+  }
+
+  return resposta
 }
 
 export async function alternarTipologiaTecnica(id: string, ativo: boolean) {

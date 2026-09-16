@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { tokenAtual } from './auth'
 import type { LinhaPlanoCorte } from './planoCortePerfis'
 
 export type VidroCatalogoPlano = {
@@ -26,46 +26,34 @@ export type ResultadoVidroPlano = {
 
 const TIPOLOGIA_PC3_SUPREMA = 'dce9da1d-7e03-4c1c-ad1b-2f101b51a52e'
 
-function normalizar(valor: string | null | undefined) {
-  return String(valor || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-}
-
 /**
- * Lista produtos que ja estejam organizados como vidro no cadastro.
- * O campo continua livre na tela para nao bloquear operacao enquanto o
- * catalogo de vidros ainda estiver incompleto.
+ * Catálogo de vidro usado no orçamento/engenharia.
+ *
+ * A fonte real disponível hoje é wvetro_referencias_vidros, formada a partir
+ * dos Vidros[] observados nos pedidos/orçamentos W.Vetro. Essa tabela é lida
+ * somente server-side; o client recebe apenas os campos necessários por API.
+ *
+ * Não confundir com produtos cujo nome menciona "vidro" (perfil, gaxeta,
+ * fechadura, suporte etc.). Esses itens não são panos de vidro e não entram
+ * neste seletor.
  */
 export async function listarVidrosPlanoCorte(): Promise<VidroCatalogoPlano[]> {
-  const { data, error } = await supabase
-    .from('produtos')
-    .select('id,codigo,nome,categoria,grupo')
-    .eq('ativo', true)
-    .order('nome')
+  try {
+    const token = await tokenAtual()
+    if (!token) return []
 
-  if (error) {
-    console.error('Erro ao carregar vidros do plano de corte:', error)
+    const resposta = await fetch('/api/orcamento/vidros-referencia', {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+
+    if (!resposta.ok) return []
+    const json = await resposta.json()
+    return Array.isArray(json?.vidros) ? json.vidros as VidroCatalogoPlano[] : []
+  } catch (error) {
+    console.error('Erro ao carregar referências de vidro W.Vetro:', error)
     return []
   }
-
-  return ((data as Array<{
-    id: string
-    codigo?: string | null
-    nome?: string | null
-    categoria?: string | null
-    grupo?: string | null
-  }>) || [])
-    .filter(item => item.nome && (
-      normalizar(item.categoria).includes('vidro') ||
-      normalizar(item.grupo).includes('vidro')
-    ))
-    .map(item => ({
-      id: item.id,
-      codigo: item.codigo || null,
-      nome: String(item.nome),
-    }))
 }
 
 function linhaBaguete(
