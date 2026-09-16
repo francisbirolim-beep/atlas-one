@@ -18,6 +18,7 @@ type ItemEntrada = {
   usaVidro?: boolean | null
   arremate?: 'sim' | 'nao'
   quantidade?: number
+  configuracao?: Record<string, string>
 }
 
 function texto(v: unknown, max = 300) {
@@ -79,6 +80,9 @@ export async function POST(req: NextRequest) {
     const linhaMap = new Map((linhas || []).map(l => [String(l.id), l]))
 
     for (const item of itens) {
+      if (item.configuracao && (![item.configuracao.largura, item.configuracao.altura].every(v => Number.isFinite(Number(v)) && Number(v) > 0))) {
+        return NextResponse.json({ error: 'Informe largura e altura válidas.' }, { status: 400 })
+      }
       const tid = texto(item.tipologiaId, 80)
       const lid = texto(item.linhaId, 80)
       if (!tid || !tipologiaMap.has(tid)) return NextResponse.json({ error: 'Existe tipologia inválida na seleção.' }, { status: 400 })
@@ -99,6 +103,8 @@ export async function POST(req: NextRequest) {
         tipo_esquadria: categoria,
         tipo_outro_texto: nome,
         quantidade: qtd(item.quantidade),
+        largura_mm: item.configuracao ? Number(item.configuracao.largura) : null,
+        altura_mm: item.configuracao ? Number(item.configuracao.altura) : null,
         cor: texto(item.cor, 80) || null,
         linha_id: lid,
         linha_nome: texto(linha?.nome, 180) || null,
@@ -108,6 +114,10 @@ export async function POST(req: NextRequest) {
         configuracao_status: 'pendente',
         modo_configuracao: 'assistido',
         variaveis: {
+          ...(item.configuracao ? Object.fromEntries(
+            ['produto', 'abertura', 'folhas', 'exposicao', 'perfil', 'fechadura', 'montante', 'reforcoAba', 'reforcoInterno', 'reforcoExterno']
+              .map(chave => [chave, texto(item.configuracao?.[chave], 80)])
+          ) : {}),
           contramarco: item.contramarco === 'sim' ? 'sim' : 'nao',
           arremate: item.arremate === 'sim' ? 'sim' : 'nao',
           vidro: texto(item.vidro, 200) || null,

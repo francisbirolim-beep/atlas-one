@@ -1,5 +1,10 @@
 # NEXT_TASK.md — Atlas One
 
+## 2026-09-16 — Recuperação do configurador guiado
+
+A rota Sob Medida agora usa o Builder V3 recuperado da branch feat/sob-medida-porta-2f-preview (980ca7c), com medidas antes dos filtros de produto, abertura e folhas. Quantidade inicial, vínculo da obra e independência do arremate preservados. O piloto ainda exige conferir o cadastro técnico correspondente; não representa validação completa da receita ou do custo.
+
+
 ## 2026-09-16 — Atalhos de Orçamento Sob Medida
 
 Corrigidos os atalhos com rótulo Orçamento sob medida no Cliente 360, na obra e no hub de novo orçamento para `/orcamento/sob-medida`. Cliente e obra selecionados são preservados; o vínculo da obra segue a validação já existente na API. Conferir no preview do PR #446 os acessos pelo cartão, menu Nova ação e hub.
