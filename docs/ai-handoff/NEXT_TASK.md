@@ -1,5 +1,22 @@
 # NEXT_TASK.md — Atlas One
 
+## TAREFA ATUAL — validar Prospecção em Campo V1
+
+Branch: `feat/prospeccao-campo-v1`
+
+1. abrir `Nova prospecção` pela Home e pelo menu Comercial;
+2. salvar somente com uma identificação básica e depois completar a ficha;
+3. autorizar o GPS no iPhone e abrir o ponto salvo no mapa;
+4. adicionar pedreiro, mestre de obras, arquiteto ou engenheiro;
+5. registrar ligação/WhatsApp/visita no diário e agendar próximo retorno;
+6. confirmar o compromisso na agenda pessoal e o atraso na agenda da prospecção;
+7. mover cards entre as etapas do Kanban;
+8. como vendedor, confirmar acesso somente às próprias prospecções;
+9. como Master, filtrar o geral por vendedor, cidade e bairro;
+10. converter uma prospecção controlada, conferindo duplicidade, Cliente 360, obra e histórico.
+
+Não adicionar automações de IA, áudio ou fotos antes desta validação operacional da V1.
+
 ## TAREFA ATUAL — validar conferência final do orçamento no celular
 
 Branch: `fix/orcamento-rapido-modal-mobile`
