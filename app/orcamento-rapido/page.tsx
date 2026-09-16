@@ -89,6 +89,8 @@ export default function OrcamentoRapido() {
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
+  const [obraNome, setObraNome] = useState('')
+  const [obraEndereco, setObraEndereco] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [temperatura, setTemperatura] = useState<TemperaturaLead | ''>('')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
@@ -107,17 +109,28 @@ export default function OrcamentoRapido() {
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
 
   useEffect(() => {
-    const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    if (!clienteId) return
-    supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle().then(({ data }) => {
-      if (!data) return
-      const cliente = data as Cliente
-      setClienteIdOrigem(cliente.id)
-      setClienteNome(cliente.nome || '')
-      setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
-      setCidade(cliente.cidade || '')
-      if (cliente.origem) setOrigem(cliente.origem)
-    })
+    const params = new URLSearchParams(window.location.search)
+    const clienteId = params.get('cliente')
+    const obraId = params.get('obra')
+    if (clienteId) {
+      supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle().then(({ data }) => {
+        if (!data) return
+        const cliente = data as Cliente
+        setClienteIdOrigem(cliente.id)
+        setClienteNome(cliente.nome || '')
+        setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
+        setCidade(cliente.cidade || '')
+        if (cliente.origem) setOrigem(cliente.origem)
+      })
+    }
+    if (obraId) {
+      supabase.from('obras').select('nome,endereco,numero,complemento,bairro,cidade').eq('id', obraId).maybeSingle().then(({ data }) => {
+        if (!data) return
+        setObraNome(data.nome || '')
+        setObraEndereco([data.endereco, data.numero, data.complemento, data.bairro].filter(Boolean).join(', '))
+        if (data.cidade) setCidade(data.cidade)
+      })
+    }
   }, [])
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
@@ -169,7 +182,7 @@ export default function OrcamentoRapido() {
     setSalvando(true)
     const tipoMedida = itens.every(item => item.tipoMedida === 'final') ? 'final' : 'comum'
     const dadosForm: DadosOrcamentoForm = {
-      clienteId: clienteIdOrigem, itens, clienteNome, clienteWhatsapp, cidade, origem,
+      clienteId: clienteIdOrigem, itens, clienteNome, clienteWhatsapp, cidade, obraNome, obraEndereco, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
@@ -238,7 +251,7 @@ export default function OrcamentoRapido() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200"><div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div></div></header>
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div><div className="border-t border-slate-100 pt-3"><p className="mb-2 text-xs font-medium text-slate-500">Dados da obra <span className="font-normal text-slate-400">(opcionais)</span></p><div className="space-y-3"><input value={obraNome} onChange={e => setObraNome(e.target.value)} placeholder="Obra — nome ou identificação (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input value={obraEndereco} onChange={e => setObraEndereco(e.target.value)} placeholder="Endereço da obra (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /></div></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => setTemperatura(t)} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => setAcabamento(a.value)} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input value={acabamentoOutroTexto} onChange={e => setAcabamentoOutroTexto(e.target.value)} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>

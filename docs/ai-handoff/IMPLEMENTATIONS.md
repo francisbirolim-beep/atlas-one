@@ -364,3 +364,10 @@ Nenhum merge para `main`.
 - Master possui visão geral; vendedor fica limitado às próprias oportunidades por RLS;
 - navegação, busca global e Home receberam acesso à Prospecção;
 - migration `20260916151751_prospeccao_campo_v1.sql` aplicada no Supabase.
+
+# 2026-09-16 — Obra e endereço no pedido de orçamento
+
+- adicionados campos opcionais de nome/identificação da obra e endereço da obra em `/orcamento-rapido`;
+- dados separados do cadastro residencial do cliente e persistidos no orçamento;
+- preenchimento automático quando o pedido parte de uma obra cadastrada;
+- edição disponível no Kanban e identificação incluída no PDF do orçamento.
