@@ -1,5 +1,9 @@
 # NEXT_TASK.md — Atlas One
 
+## PC2 Suprema V1 — conferência no preview
+
+Abrir Engenharia > Cadastro de Modelos no preview do PR #446, executar o teste 2000×2200 e conferir lista de corte, acessórios, vidro e impressão com desenhos. Comparar as demais configurações com os relatórios W.Vetro antes de validar fórmulas de mão-de-amigo larga, concha, trilho convencional, roldana 200 kg ou consumos de FIT/GUA/SIL-PU. Manter o registro inativo para produção e não mesclar a PR na main nesta etapa.
+
 ## TAREFA ATUAL — validar Cadastros 360 por usuário
 
 Branch: `feat/cadastros-360-permissoes`

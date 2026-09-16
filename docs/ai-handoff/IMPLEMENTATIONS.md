@@ -345,3 +345,6 @@ Relatório completo em
 
 Nenhuma implementação grande feita nesta rodada, por instrução do usuário.
 Nenhum merge para `main`.
+# 2026-09-15 — PC2 Suprema V1 no cadastro técnico
+
+Na branch `feat/orcamento-custos-gate-v1` / PR #446, a simulação da PC2 passou a ler a receita editável do cadastro técnico em vez do cálculo fixo da página. A migration `20260916011453_pc2_suprema_receita_v1` e `20260916012340_pc2_suprema_variaveis_v1` atualiza o único registro PC2-SUPREMA, separa CM200 de MP347 e mantém consumos não comprovados pendentes. O motor declarativo ganhou suporte a FLOOR. Produtos mestres fornecem descrição, desenho e custo técnico; o editor registra custo mestre real com origem e data. Testes de geometria 2000×2200 e regressão CM200 larga passam.

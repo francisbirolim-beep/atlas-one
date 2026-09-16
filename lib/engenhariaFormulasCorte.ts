@@ -12,6 +12,8 @@ export type VidroFormulaCorte = {
   arredondamento?: string
   composicao_largura?: string
   composicao_altura?: string
+  condicoes_largura?: Array<{ quando: Record<string, string[]>; formula: string }>
+  condicoes_altura?: Array<{ quando: Record<string, string[]>; formula: string }>
 }
 
 export type AcessorioFormulaCorte = {
@@ -24,6 +26,7 @@ export type AcessorioFormulaCorte = {
   status?: StatusFormulaAcessorio
   composicao_calculo?: string
   fonte?: string
+  condicao_ativa?: Record<string, string[]>
 }
 
 export type MetadadosEditorModelo = {

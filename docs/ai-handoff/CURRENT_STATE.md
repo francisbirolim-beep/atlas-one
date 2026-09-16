@@ -1,5 +1,11 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM VALIDAÇÃO — PC2 SUPREMA V1 — 2026-09-15
+
+Branch `feat/orcamento-custos-gate-v1`, PR #446. O cadastro existente em Engenharia > Cadastro de Modelos usa a receita técnica em `engenharia_tipologia_formulas_corte` para simulação, vidro, listas e impressão. O cálculo fixo `calcularPc2` saiu da página. O único registro `PC2-SUPREMA` permanece inativo para produção e status `em_validacao`. Migration remota `20260916011453_pc2_suprema_receita_v1` e `20260916012340_pc2_suprema_variaveis_v1` aplicada somente ao registro existente, sem executar o histórico local divergente. Produtos mestres fornecem descrição, desenho e custo técnico; custos ou desenhos ausentes ficam pendentes. O editor permite atualizar custo mestre com origem e data.
+
+Validação automatizada: configuração 2000×2200 sem CM200, comum com ambos os reforços e regressão 2137×2419 CM200 larga passaram. Combinações concha, trilho convencional, roldana 200 kg, mão-de-amigo larga sem CM200 e consumos de FIT/GUA/SIL-PU permanecem em validação ou pendentes. Perfis com custo mestre por barra (`BR`) não recebem conversão inventada para custo por corte; o custo parcial mostra pendências até o aproveitamento ser comprovado.
+
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
 ## EM VALIDAÇÃO — CADASTROS 360 POR USUÁRIO — 2026-08-28
