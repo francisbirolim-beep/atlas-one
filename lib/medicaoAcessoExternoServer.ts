@@ -3,6 +3,7 @@ import { supabaseAdmin } from './supabaseAdmin'
 
 export type AcessoExternoMedicao = {
   id: string
+  empresa_id: string
   medicao_id: string
   nome_convidado: string | null
   telefone_convidado: string | null
@@ -29,13 +30,21 @@ export async function buscarAcessoValidoMedicao(token: string, tocar = true): Pr
   const tokenHash = hashTokenAcessoMedicao(token)
   const { data, error } = await supabaseAdmin
     .from('medicao_acessos_externos')
-    .select('id, medicao_id, nome_convidado, telefone_convidado, expira_em, revogado_em, primeiro_acesso_em, ultimo_acesso_em, criado_por_id, criado_por_nome, created_at')
+    .select('id, empresa_id, medicao_id, nome_convidado, telefone_convidado, expira_em, revogado_em, primeiro_acesso_em, ultimo_acesso_em, criado_por_id, criado_por_nome, created_at')
     .eq('token_hash', tokenHash)
     .maybeSingle()
 
-  if (error || !data) return null
+  if (error || !data?.empresa_id) return null
   if (data.revogado_em) return null
   if (data.expira_em && new Date(data.expira_em).getTime() < Date.now()) return null
+
+  const { data: medicao } = await supabaseAdmin
+    .from('medicoes_finais')
+    .select('id')
+    .eq('id', data.medicao_id)
+    .eq('empresa_id', data.empresa_id)
+    .maybeSingle()
+  if (!medicao) return null
 
   if (tocar) {
     const agora = new Date().toISOString()
@@ -46,6 +55,7 @@ export async function buscarAcessoValidoMedicao(token: string, tocar = true): Pr
         ultimo_acesso_em: agora,
       })
       .eq('id', data.id)
+      .eq('empresa_id', data.empresa_id)
   }
 
   return data as AcessoExternoMedicao
@@ -60,10 +70,12 @@ export async function carregarDadosExternosMedicao(token: string) {
       .from('medicoes_finais')
       .select('id, cliente_nome, cliente_whatsapp, endereco, bairro, cidade, cep, status_operacional, responsavel_nome, iniciado_em, concluido_em, observacoes')
       .eq('id', acesso.medicao_id)
+      .eq('empresa_id', acesso.empresa_id)
       .maybeSingle(),
     supabaseAdmin
       .from('medicao_itens')
       .select('id, medicao_id, tipo_esquadria, tipo_outro_texto, descricao, quantidade, ordem, largura_baixo_mm, largura_meio_mm, largura_cima_mm, altura_direita_mm, altura_meio_mm, altura_esquerda_mm, foto_larguras_url, foto_alturas_url, campos_extras, medido, medido_em, medido_por_nome')
+      .eq('empresa_id', acesso.empresa_id)
       .eq('medicao_id', acesso.medicao_id)
       .order('ordem', { ascending: true }),
     supabaseAdmin
@@ -74,10 +86,12 @@ export async function carregarDadosExternosMedicao(token: string) {
     supabaseAdmin
       .from('medicao_respostas')
       .select('id, medicao_id, item_id, campo_id, campo_chave, valor, observacao, foto_urls, respondido_por_nome, respondido_em, updated_at')
+      .eq('empresa_id', acesso.empresa_id)
       .eq('medicao_id', acesso.medicao_id),
     supabaseAdmin
       .from('medicao_fotos')
       .select('id, medicao_id, item_id, categoria, url, legenda, criado_por_nome, created_at')
+      .eq('empresa_id', acesso.empresa_id)
       .eq('medicao_id', acesso.medicao_id)
       .order('created_at', { ascending: true }),
   ])
