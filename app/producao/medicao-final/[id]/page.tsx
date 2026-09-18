@@ -66,6 +66,7 @@ export default function DetalheMedicaoFinal() {
   const [carregando, setCarregando] = useState(true)
   const [importandoPdf, setImportandoPdf] = useState(false)
   const [erroImportarPdf, setErroImportarPdf] = useState('')
+  const [processandoConferencia, setProcessandoConferencia] = useState(false)
 
   const master = usuario?.role === 'master'
 
@@ -399,6 +400,41 @@ export default function DetalheMedicaoFinal() {
     }
   }
 
+  async function executarConferencia(action: 'enviar' | 'aprovar' | 'remediar', itemId?: string) {
+    if (!medicao) return
+    if (action === 'remediar' && !itemId) return
+
+    let motivo = ''
+    if (action === 'remediar') {
+      motivo = window.prompt('Informe o motivo da nova medição:')?.trim() || ''
+      if (!motivo) return
+    }
+
+    if (action === 'enviar' && !window.confirm('Enviar todas as posições medidas para conferência?')) return
+    if (action === 'aprovar' && !window.confirm('Aprovar esta posição e confirmar a Medida Final?')) return
+
+    setProcessandoConferencia(true)
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch(`/api/medicao-final/${medicao.id}/conferencia`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + (token || ''),
+        },
+        body: JSON.stringify({ action, itemId, motivo }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        alert(json.error || 'Não foi possível processar a conferência.')
+        return
+      }
+      await carregar()
+    } finally {
+      setProcessandoConferencia(false)
+    }
+  }
+
   async function reabrir(item: MedicaoItem) {
     if (!window.confirm('Reabrir esta tipologia para editar a medida?')) return
     const ok = await reabrirItemMedicao(item.id)
@@ -436,9 +472,16 @@ export default function DetalheMedicaoFinal() {
               </p>
             )}
           </div>
-          <span className="text-xs font-medium text-brand-navy bg-brand-navyLight rounded-full px-3 py-1 flex-shrink-0">
-            {medidos}/{itens.length} medidas
-          </span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs font-medium text-brand-navy bg-brand-navyLight rounded-full px-3 py-1">
+              {medidos}/{itens.length} medidas
+            </span>
+            {medicao.status_operacional && (
+              <span className="hidden sm:inline-flex text-[11px] font-medium rounded-full px-2.5 py-1 bg-slate-100 text-slate-600">
+                {String(medicao.status_operacional).replaceAll('_', ' ')}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -507,6 +550,38 @@ export default function DetalheMedicaoFinal() {
                 )}
               </div>
 
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className={`text-[11px] font-semibold rounded-full px-2 py-1 ${
+                  item.status_medicao === 'aprovada' ? 'bg-emerald-50 text-emerald-700' :
+                  item.status_medicao === 'aguardando_conferencia' ? 'bg-amber-50 text-amber-700' :
+                  item.status_medicao === 'remedicao_solicitada' ? 'bg-red-50 text-red-700' :
+                  item.medido ? 'bg-slate-100 text-slate-600' : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {item.status_medicao === 'aprovada' ? 'Medida aprovada' :
+                   item.status_medicao === 'aguardando_conferencia' ? 'Aguardando conferência' :
+                   item.status_medicao === 'remedicao_solicitada' ? 'Nova medição solicitada' :
+                   item.medido ? 'Medido' : 'A medir'}
+                </span>
+                {master && item.status_medicao === 'aguardando_conferencia' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => void executarConferencia('aprovar', item.id)}
+                      disabled={processandoConferencia}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      Aprovar
+                    </button>
+                    <button
+                      onClick={() => void executarConferencia('remediar', item.id)}
+                      disabled={processandoConferencia}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-50"
+                    >
+                      Pedir nova medição
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={() => abrirMedicaoItem(item)}
@@ -531,6 +606,21 @@ export default function DetalheMedicaoFinal() {
             </div>
           ))
         )}
+        {master && itens.length > 0 && medidos === itens.length && medicao.status_operacional !== 'concluido' && (
+          <div className="sticky bottom-3 z-20 rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+            <button
+              onClick={() => void executarConferencia('enviar')}
+              disabled={processandoConferencia}
+              className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {processandoConferencia ? 'Enviando...' : 'Enviar Medidas Finais para Conferência'}
+            </button>
+            <p className="mt-1 text-center text-[11px] text-slate-400">
+              Todas as {itens.length} posições estão medidas.
+            </p>
+          </div>
+        )}
+
       </main>
 
       {/* Modal: adicionar/editar tipologia */}
