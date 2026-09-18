@@ -29,10 +29,25 @@ export async function listarMensagens(conversaId:string):Promise<ChatMensagem[]>
 export async function criarConversa(nome:string,tipo:'direta'|'grupo',participantes:{id:string;nome:string}[]):Promise<ChatConversa|null> {
   const usuario=await usuarioAtual()
   if(!usuario) return null
+  if(tipo==='direta'&&participantes.length===1){
+    const outro=participantes[0]
+    const {data:minhas}=await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id',usuario.id)
+    const ids=(minhas||[]).map((p:any)=>p.conversa_id)
+    if(ids.length){
+      const {data:dele}=await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id',outro.id).in('conversa_id',ids)
+      for(const p of dele||[]){
+        const {data:conv}=await supabase.from('chat_conversas').select('*').eq('id',p.conversa_id).eq('tipo','direta').maybeSingle()
+        if(!conv) continue
+        const {count}=await supabase.from('chat_participantes').select('id',{count:'exact',head:true}).eq('conversa_id',conv.id)
+        if(count===2) return conv as ChatConversa
+      }
+    }
+  }
   const { data,error }=await supabase.from('chat_conversas').insert({nome:nome.trim()||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome}).select('*').single()
   if(error||!data) return null
   const unicos=new Map([[usuario.id,{id:usuario.id,nome:usuario.nome}],...participantes.map(p=>[p.id,p] as const)])
-  await supabase.from('chat_participantes').insert([...unicos.values()].map(p=>({conversa_id:data.id,usuario_id:p.id,usuario_nome:p.nome})))
+  const {error:participantesError}=await supabase.from('chat_participantes').insert([...unicos.values()].map(p=>({conversa_id:data.id,usuario_id:p.id,usuario_nome:p.nome})))
+  if(participantesError){await supabase.from('chat_conversas').delete().eq('id',data.id);return null}
   return data as ChatConversa
 }
 
