@@ -8,7 +8,7 @@ import {
 const COLUNA_1 = 'Aguardando medida final'
 const COLUNA_2 = 'Liberado para medir'
 const CHAVE_LIMITE_DIFERENCA = 'medicao_alerta_diferenca_mm'
-const LIMITE_DIFERENCA_PADRAO = 100
+const LIMITE_DIFERENCA_PADRAO = 10
 
 // ---------- Colunas do quadro ----------
 
@@ -226,6 +226,52 @@ export async function criarMedicaoDoOrcamento(
   return medicao as MedicaoFinal
 }
 
+export async function criarMedicaoManualCliente(
+    clienteId: string,
+    obraId: string | null,
+    usuario: Usuario | null
+  ): Promise<MedicaoFinal | null> {
+    const { data: cliente, error: erroCliente } = await supabase
+      .from('clientes')
+      .select('id,nome,whatsapp,telefone,endereco,bairro,cep,cidade')
+      .eq('id', clienteId)
+      .maybeSingle()
+
+    if (erroCliente || !cliente) {
+      console.error('Erro ao buscar cliente para Medida Final manual:', erroCliente)
+      return null
+    }
+
+    const colunas = await listarColunasMedicao()
+    const primeiraColuna = colunas[0]
+    const { data: medicao, error } = await supabase
+      .from('medicoes_finais')
+      .insert({
+        orcamento_id: null,
+        cliente_id: cliente.id,
+        cliente_nome: cliente.nome,
+        cliente_whatsapp: cliente.whatsapp || cliente.telefone || null,
+        obra_id: obraId || null,
+        endereco: cliente.endereco || null,
+        bairro: cliente.bairro || null,
+        cep: cliente.cep || null,
+        cidade: cliente.cidade || null,
+        coluna_id: primeiraColuna?.id || null,
+        coluna_atualizada_em: new Date().toISOString(),
+        status_operacional: 'a_medir',
+        criado_por_id: usuario?.id || null,
+        criado_por_nome: usuario?.nome || null,
+      })
+      .select()
+      .single()
+
+    if (error || !medicao) {
+      console.error('Erro ao criar Medida Final manual:', error)
+      return null
+    }
+    return medicao as MedicaoFinal
+}
+
 async function importarItensDoPdfDoOrcamento(orcamentoId: string): Promise<ItemEsquadria[]> {
   try {
     const token = await tokenAtual()
@@ -331,6 +377,10 @@ export interface DadosMedidaItem {
     altura_direita_mm: number | null
     altura_meio_mm: number | null
     altura_esquerda_mm: number | null
+    referencia_vista: 'interna' | 'externa' | null
+    contramarco: string | null
+    cadeirinha: string | null
+    observacoes_medicao: string | null
     foto_larguras_url: string | null
     foto_alturas_url: string | null
     campos_extras: Record<string, string | number>
@@ -341,11 +391,19 @@ export async function salvarMedidaItem(
     dados: DadosMedidaItem,
     usuario: Usuario | null
   ): Promise<boolean> {
+    const medidas = [dados.largura_baixo_mm, dados.largura_meio_mm, dados.largura_cima_mm, dados.altura_direita_mm, dados.altura_meio_mm, dados.altura_esquerda_mm]
+    if (medidas.some(valor => valor == null || !Number.isFinite(valor) || valor <= 0) || !dados.referencia_vista) {
+      console.error('Medida Final incompleta: informe as 3 larguras, 3 alturas e a referencia de vista.')
+      return false
+    }
+
     const { error } = await supabase
       .from('medicao_itens')
       .update({
               ...dados,
               medido: true,
+              status_medicao: 'concluida',
+              updated_at: new Date().toISOString(),
               medido_em: new Date().toISOString(),
               medido_por_id: usuario?.id || null,
               medido_por_nome: usuario?.nome || null,
@@ -355,7 +413,7 @@ export async function salvarMedidaItem(
 }
 
 export async function reabrirItemMedicao(itemId: string): Promise<boolean> {
-    const { error } = await supabase.from('medicao_itens').update({ medido: false }).eq('id', itemId)
+    const { error } = await supabase.from('medicao_itens').update({ medido: false, status_medicao: 'rascunho', updated_at: new Date().toISOString() }).eq('id', itemId)
     return !error
 }
 

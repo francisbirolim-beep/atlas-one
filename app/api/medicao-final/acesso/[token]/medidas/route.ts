@@ -24,6 +24,9 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const body = await req.json().catch(() => ({}))
   const itemId = String(body?.itemId || '')
   const medidas = body?.medidas || {}
+  const referenciaVista = body?.referenciaVista === 'interna' || body?.referenciaVista === 'externa'
+    ? body.referenciaVista
+    : null
 
   const { data: item } = await supabaseAdmin
     .from('medicao_itens')
@@ -46,11 +49,17 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   if (Object.values(valores).some(v => v === null)) {
     return NextResponse.json({ error: 'Preencha as 3 larguras e as 3 alturas com valores validos.' }, { status: 400 })
   }
+  if (!referenciaVista) {
+    return NextResponse.json({ error: 'Selecione a referencia das alturas: vista interna ou vista externa.' }, { status: 400 })
+  }
 
   const { error } = await supabaseAdmin
     .from('medicao_itens')
     .update({
       ...valores,
+      referencia_vista: referenciaVista,
+      status_medicao: 'concluida',
+      updated_at: new Date().toISOString(),
       medido: true,
       medido_em: new Date().toISOString(),
       medido_por_id: null,

@@ -5,10 +5,13 @@ import Link from 'next/link'
 import {
   Activity, ArrowLeft, Building2, CalendarDays, FileText, GitBranch, Mail,
   MapPin, MessageCircle, Phone, Plus, Receipt, Save, ShoppingCart, Upload,
-  Wallet, Wrench, X,
+  Wallet, Wrench, X, Ruler, FileUp,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/tipos'
+import { criarMedicaoDoOrcamento, criarMedicaoManualCliente } from '@/lib/medicaoFinal'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   adicionarDocumentoCliente,
   alocarRecebimentoEmObra,
@@ -51,6 +54,8 @@ function Box({titulo,acao,children}:{titulo:string;acao?:React.ReactNode;childre
 }
 
 export default function Cliente360DashboardV2({clienteId}:Props){
+  const router=useRouter()
+  const {usuario}=useAuth()
   const [cliente,setCliente]=useState<Cliente|null>(null)
   const [obras,setObras]=useState<ObraCliente360[]>([])
   const [orcamentos,setOrcamentos]=useState<Orcamento[]>([])
@@ -74,6 +79,9 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [obraForm,setObraForm]=useState<NovaObraCliente360>({nome:'',status:'planejamento'})
   const [documentoForm,setDocumentoForm]=useState({titulo:'',obraId:'',observacoes:''})
   const [arquivo,setArquivo]=useState<File|null>(null)
+  const [modalMedidaFinal,setModalMedidaFinal]=useState(false)
+  const [obraMedidaId,setObraMedidaId]=useState('')
+  const [orcamentoMedidaId,setOrcamentoMedidaId]=useState('')
 
   useEffect(()=>{void carregar()},[clienteId])
   async function carregar(){
@@ -114,6 +122,23 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   async function salvarObs(){ if(!cliente)return;setSalvando(true);const {error}=await supabase.from('clientes').update({observacoes:obs.trim()||null,updated_at:new Date().toISOString()}).eq('id',cliente.id);setSalvando(false);if(error)setErro(error.message);else await carregar() }
   async function salvarRecebimento(){ if(!cliente)return;const valor=Number(recebimentoForm.valor.replace(',','.'));setSalvando(true);const r=await registrarRecebimentoCliente({clienteId:cliente.id,clienteNome:cliente.nome,valor,dataRecebimento:recebimentoForm.data,forma:recebimentoForm.forma,referencia:recebimentoForm.referencia,observacoes:recebimentoForm.observacoes,obraId:recebimentoForm.obraId||null});setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao registrar recebimento.');return}setModalRecebimento(false);setRecebimentoForm({valor:'',forma:'pix',data:new Date().toISOString().slice(0,10),obraId:'',referencia:'',observacoes:''});await carregar() }
   async function salvarObra(){ if(!cliente)return;setSalvando(true);const r=await criarObraCliente(cliente.id,obraForm);setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao criar obra.');return}setModalObra(false);setObraForm({nome:'',status:'planejamento'});await carregar() }
+  async function iniciarMedidaFinalDoOrcamento(){
+    if(!orcamentoMedidaId)return
+    setSalvando(true);setErro('')
+    const medicao=await criarMedicaoDoOrcamento(orcamentoMedidaId,usuario)
+    setSalvando(false)
+    if(!medicao){setErro('Não foi possível criar a Medida Final a partir do orçamento.');return}
+    setModalMedidaFinal(false)
+    router.push(`/producao/medicao-final/${medicao.id}`)
+  }
+  async function iniciarMedidaFinalManual(){
+    setSalvando(true);setErro('')
+    const medicao=await criarMedicaoManualCliente(clienteId,obraMedidaId||null,usuario)
+    setSalvando(false)
+    if(!medicao){setErro('Não foi possível criar a Medida Final manual.');return}
+    setModalMedidaFinal(false)
+    router.push(`/producao/medicao-final/${medicao.id}`)
+  }
   async function salvarDocumento(){ if(!cliente||!arquivo)return;setSalvando(true);const r=await adicionarDocumentoCliente({clienteId:cliente.id,obraId:documentoForm.obraId||null,titulo:documentoForm.titulo,arquivo,observacoes:documentoForm.observacoes});setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao anexar documento.');return}setDocumentoForm({titulo:'',obraId:'',observacoes:''});setArquivo(null);await carregar() }
 
   if(carregando)return <div className="min-h-screen bg-slate-50 p-8 text-slate-400">Carregando Cliente 360...</div>
@@ -144,7 +169,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
         {aba==='financeiro'&&<div className="space-y-5"><Box titulo="Contas a receber / parcelas" acao={<button onClick={()=>setModalRecebimento(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||`Parcela ${c.parcela}/${c.total_parcelas}`}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(saldo(c))}</td><td>{status(c.status)}</td></tr>)}</tbody></table></div></Box><Box titulo="Recebimentos"><div className="space-y-2">{recebimentos.map(r=><div key={r.id} className="rounded-xl border p-3"><b>{moeda(r.valor)} · {r.forma||'—'}</b><p className="text-xs text-slate-500">{dataBR(r.data_recebimento)}{r.referencia?` · ${r.referencia}`:''}</p></div>)}</div></Box></div>}
 
-        {aba==='medicoes'&&<Box titulo="Medições finais"><div className="space-y-2">{medicoes.map(m=><div key={m.id} className="flex justify-between rounded-xl border p-3"><div><b>Medição {dataBR(m.created_at)}</b><p className="text-xs text-slate-500">{m.obra_id&&obraPorId[m.obra_id]?obraPorId[m.obra_id].nome:'Sem obra vinculada'}</p></div><span className="rounded-full bg-cyan-50 px-2 py-1 text-xs text-cyan-700">{status(m.status_operacional)}</span></div>)}{!medicoes.length&&<p className="text-sm text-slate-400">Nenhuma medição final.</p>}</div></Box>}
+        {aba==='medicoes'&&<Box titulo="Medida Final" acao={<button onClick={()=>setModalMedidaFinal(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white"><Plus size={13}/>Nova Medida Final</button>}><div className="space-y-2">{medicoes.map(m=><Link href={`/producao/medicao-final/${m.id}`} key={m.id} className="flex justify-between rounded-xl border p-3 hover:border-brand-navy"><div><b>Medida Final {dataBR(m.created_at)}</b><p className="text-xs text-slate-500">{m.obra_id&&obraPorId[m.obra_id]?obraPorId[m.obra_id].nome:'Sem obra vinculada'}</p></div><span className="rounded-full bg-cyan-50 px-2 py-1 text-xs text-cyan-700">{status(m.status_operacional)}</span></Link>)}{!medicoes.length&&<p className="text-sm text-slate-400">Nenhuma Medida Final. Clique em Nova Medida Final para começar.</p>}</div></Box>}
 
         {aba==='assistencias'&&<Box titulo="Assistências" acao={<Link href={`/assistencia?cliente=${cliente.id}`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Nova assistência</Link>}><div className="space-y-2">{assistencias.map(a=><div key={a.id} className="rounded-xl border p-3"><div className="flex justify-between gap-3"><b>{a.numero?`#${a.numero} · `:''}{a.descricao_problema||'Assistência'}</b><span className="text-xs">{status(a.status)}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(a.created_at)}</p></div>)}</div></Box>}
 
@@ -159,6 +184,13 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     </main>
 
     {modalRecebimento&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"><div className="flex justify-between"><div><h2 className="font-bold">Registrar recebimento</h2><p className="text-xs text-slate-500">Pode ser parcial ou total. Se escolher uma obra, o Atlas aplica nas parcelas abertas.</p></div><button onClick={()=>setModalRecebimento(false)}><X size={18}/></button></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-sm">Valor<input value={recebimentoForm.valor} onChange={e=>setRecebimentoForm(f=>({...f,valor:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="0,00"/></label><label className="text-sm">Data<input type="date" value={recebimentoForm.data} onChange={e=>setRecebimentoForm(f=>({...f,data:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"/></label><label className="text-sm">Forma<select value={recebimentoForm.forma} onChange={e=>setRecebimentoForm(f=>({...f,forma:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="boleto">Boleto</option><option value="cartao">Cartão</option><option value="transferencia">Transferência</option><option value="cheque">Cheque</option></select></label><label className="text-sm">Obra<select value={recebimentoForm.obraId} onChange={e=>setRecebimentoForm(f=>({...f,obraId:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"><option value="">Crédito geral do cliente</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label></div><input value={recebimentoForm.referencia} onChange={e=>setRecebimentoForm(f=>({...f,referencia:e.target.value}))} className="mt-3 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Referência / comprovante"/><textarea value={recebimentoForm.observacoes} onChange={e=>setRecebimentoForm(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalRecebimento(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} onClick={salvarRecebimento} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white">Registrar</button></div></div></div>}
+
+    {modalMedidaFinal&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-start justify-between gap-3"><div><h2 className="font-bold text-slate-900">Nova Medida Final</h2><p className="mt-1 text-xs text-slate-500">Escolha a origem. Depois todos os caminhos usam o mesmo fluxo de posições e medição.</p></div><button onClick={()=>setModalMedidaFinal(false)}><X size={18}/></button></div>
+      <div className="mt-4 space-y-3">
+        <div className="rounded-xl border p-4"><div className="flex items-center gap-2 font-bold text-slate-800"><FileText size={16}/>Usar orçamento do Atlas</div><p className="mt-1 text-xs text-slate-500">Puxa as tipologias já cadastradas no orçamento e preserva as medidas orçadas.</p><select value={orcamentoMedidaId} onChange={e=>setOrcamentoMedidaId(e.target.value)} className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"><option value="">Selecione o orçamento</option>{versoesAtuais.map(o=><option key={o.id} value={o.id}>Orçamento #{o.numero||'—'} · V{o.revisao_versao||1}</option>)}</select><button disabled={!orcamentoMedidaId||salvando} onClick={iniciarMedidaFinalDoOrcamento} className="mt-2 w-full rounded-lg bg-brand-navy py-2 text-sm font-bold text-white disabled:opacity-40">Criar a partir do orçamento</button></div>
+        <div className="rounded-xl border p-4"><div className="flex items-center gap-2 font-bold text-slate-800"><FileUp size={16}/>Importar PDF do W.Vetro</div><p className="mt-1 text-xs text-slate-500">Usa o importador W.Vetro existente para ler o PDF e montar as tipologias. O PDF original permanece como evidência.</p><Link href="/producao/medicao-final" className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-brand-navy py-2 text-sm font-bold text-brand-navy">Abrir importação W.Vetro</Link></div>
+        <div className="rounded-xl border p-4"><div className="flex items-center gap-2 font-bold text-slate-800"><Ruler size={16}/>Criar Medida Final manual</div><p className="mt-1 text-xs text-slate-500">Para cliente sem orçamento. Você adiciona as tipologias diretamente na Medida Final.</p><select value={obraMedidaId} onChange={e=>setObraMedidaId(e.target.value)} className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"><option value="">Sem obra vinculada</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select><button disabled={salvando} onClick={iniciarMedidaFinalManual} className="mt-2 w-full rounded-lg bg-brand-teal py-2 text-sm font-bold text-white disabled:opacity-40">Criar manualmente</button></div>
+      </div></div></div>}
 
     {modalObra&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5"><div className="flex justify-between"><h2 className="font-bold">Nova obra</h2><button onClick={()=>setModalObra(false)}><X size={18}/></button></div><input value={obraForm.nome} onChange={e=>setObraForm(f=>({...f,nome:e.target.value}))} className="mt-4 w-full rounded-lg border px-3 py-2" placeholder="Nome da obra"/><textarea value={obraForm.observacoes||''} onChange={e=>setObraForm(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalObra(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} onClick={salvarObra} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white">Criar obra</button></div></div></div>}
   </div>

@@ -19,6 +19,7 @@ import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medicaoFoto'
 import { listarTipologias } from '@/lib/tipologias'
+import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 
 let tiposCache: Tipologia[] = []
 
@@ -66,6 +67,7 @@ export default function DetalheMedicaoFinal() {
   const [carregando, setCarregando] = useState(true)
   const [importandoPdf, setImportandoPdf] = useState(false)
   const [erroImportarPdf, setErroImportarPdf] = useState('')
+  const [processandoConferencia, setProcessandoConferencia] = useState(false)
 
   const master = usuario?.role === 'master'
 
@@ -88,6 +90,10 @@ export default function DetalheMedicaoFinal() {
   const [alturaDireita, setAlturaDireita] = useState('')
   const [alturaMeio, setAlturaMeio] = useState('')
   const [alturaEsquerda, setAlturaEsquerda] = useState('')
+  const [referenciaVista, setReferenciaVista] = useState<'interna' | 'externa' | ''>('')
+  const [contramarco, setContramarco] = useState('')
+  const [cadeirinha, setCadeirinha] = useState('')
+  const [observacoesMedicao, setObservacoesMedicao] = useState('')
   const [fotoLargurasUrl, setFotoLargurasUrl] = useState<string | null>(null)
   const [fotoAlturasUrl, setFotoAlturasUrl] = useState<string | null>(null)
   const [enviandoFotoLargura, setEnviandoFotoLargura] = useState(false)
@@ -211,6 +217,10 @@ export default function DetalheMedicaoFinal() {
     setAlturaDireita(item.altura_direita_mm != null ? String(item.altura_direita_mm) : '')
     setAlturaMeio(item.altura_meio_mm != null ? String(item.altura_meio_mm) : '')
     setAlturaEsquerda(item.altura_esquerda_mm != null ? String(item.altura_esquerda_mm) : '')
+    setReferenciaVista(item.referencia_vista || '')
+    setContramarco(item.contramarco || '')
+    setCadeirinha(item.cadeirinha || '')
+    setObservacoesMedicao(item.observacoes_medicao || '')
     setFotoLargurasUrl(item.foto_larguras_url || null)
     setFotoAlturasUrl(item.foto_alturas_url || null)
     setValoresExtras(item.campos_extras || {})
@@ -336,11 +346,21 @@ export default function DetalheMedicaoFinal() {
 
   const diffLargura = modoLargura === 'digitar' ? diferenca(larguraBaixo, larguraMeio, larguraCima) : null
   const diffAltura = modoAltura === 'digitar' ? diferenca(alturaDireita, alturaMeio, alturaEsquerda) : null
-  const alertaLargura = diffLargura !== null && diffLargura > limiteAlerta
-  const alertaAltura = diffAltura !== null && diffAltura > limiteAlerta
+  const alertaLargura = diffLargura !== null && diffLargura >= limiteAlerta
+  const alertaAltura = diffAltura !== null && diffAltura >= limiteAlerta
 
   async function salvarMedicaoAtual() {
     if (!itemMedindo) return
+
+    const medidasObrigatorias = [larguraBaixo, larguraMeio, larguraCima, alturaDireita, alturaMeio, alturaEsquerda]
+    if (medidasObrigatorias.some(valor => !valor || Number(valor) <= 0)) {
+      alert('Preencha as 3 larguras e as 3 alturas com valores válidos.')
+      return
+    }
+    if (!referenciaVista) {
+      alert('Selecione a referência das alturas: vista interna ou vista externa.')
+      return
+    }
 
     const faltando = camposExtrasItem.filter(c => c.obrigatorio && (valoresExtras[c.chave] === undefined || valoresExtras[c.chave] === '' || valoresExtras[c.chave] === null))
     if (faltando.length > 0) {
@@ -357,6 +377,10 @@ export default function DetalheMedicaoFinal() {
       altura_direita_mm: parseFloat(alturaDireita) || null,
       altura_meio_mm: parseFloat(alturaMeio) || null,
       altura_esquerda_mm: parseFloat(alturaEsquerda) || null,
+      referencia_vista: referenciaVista || null,
+      contramarco: contramarco.trim() || null,
+      cadeirinha: cadeirinha.trim() || null,
+      observacoes_medicao: observacoesMedicao.trim() || null,
       foto_larguras_url: fotoLargurasUrl,
       foto_alturas_url: fotoAlturasUrl,
       campos_extras: valoresExtras,
@@ -374,6 +398,41 @@ export default function DetalheMedicaoFinal() {
       setItemMedindo(null)
     } else {
       alert('Erro ao salvar a medição. Tenta de novo.')
+    }
+  }
+
+  async function executarConferencia(action: 'enviar' | 'aprovar' | 'remediar', itemId?: string) {
+    if (!medicao) return
+    if (action === 'remediar' && !itemId) return
+
+    let motivo = ''
+    if (action === 'remediar') {
+      motivo = window.prompt('Informe o motivo da nova medição:')?.trim() || ''
+      if (!motivo) return
+    }
+
+    if (action === 'enviar' && !window.confirm('Enviar todas as posições medidas para conferência?')) return
+    if (action === 'aprovar' && !window.confirm('Aprovar esta posição e confirmar a Medida Final?')) return
+
+    setProcessandoConferencia(true)
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch(`/api/medicao-final/${medicao.id}/conferencia`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + (token || ''),
+        },
+        body: JSON.stringify({ action, itemId, motivo }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        alert(json.error || 'Não foi possível processar a conferência.')
+        return
+      }
+      await carregar()
+    } finally {
+      setProcessandoConferencia(false)
     }
   }
 
@@ -414,21 +473,38 @@ export default function DetalheMedicaoFinal() {
               </p>
             )}
           </div>
-          <span className="text-xs font-medium text-brand-navy bg-brand-navyLight rounded-full px-3 py-1 flex-shrink-0">
-            {medidos}/{itens.length} medidas
-          </span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs font-medium text-brand-navy bg-brand-navyLight rounded-full px-3 py-1">
+              {medidos}/{itens.length} medidas
+            </span>
+            {medicao.status_operacional && (
+              <span className="hidden sm:inline-flex text-[11px] font-medium rounded-full px-2.5 py-1 bg-slate-100 text-slate-600">
+                {String(medicao.status_operacional).replaceAll('_', ' ')}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
-        {master && (
-          <button
-            onClick={abrirNovoItem}
+        <div className="flex flex-wrap items-center gap-2">
+          {master && (
+            <button
+              onClick={abrirNovoItem}
             className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline mb-1"
           >
             <Plus size={16} /> Adicionar tipologia
-          </button>
-        )}
+            </button>
+          )}
+          {itens.length > 0 && (
+            <button
+              onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-brand-navy hover:bg-slate-50"
+            >
+              <FileText size={16} /> Gerar PDF da Medida Final
+            </button>
+          )}
+        </div>
 
         {itens.length === 0 ? (
           <div className="text-center py-10 px-4 text-slate-400 text-sm bg-white rounded-2xl border border-slate-200 space-y-3">
@@ -485,6 +561,38 @@ export default function DetalheMedicaoFinal() {
                 )}
               </div>
 
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className={`text-[11px] font-semibold rounded-full px-2 py-1 ${
+                  item.status_medicao === 'aprovada' ? 'bg-emerald-50 text-emerald-700' :
+                  item.status_medicao === 'aguardando_conferencia' ? 'bg-amber-50 text-amber-700' :
+                  item.status_medicao === 'remedicao_solicitada' ? 'bg-red-50 text-red-700' :
+                  item.medido ? 'bg-slate-100 text-slate-600' : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {item.status_medicao === 'aprovada' ? 'Medida aprovada' :
+                   item.status_medicao === 'aguardando_conferencia' ? 'Aguardando conferência' :
+                   item.status_medicao === 'remedicao_solicitada' ? 'Nova medição solicitada' :
+                   item.medido ? 'Medido' : 'A medir'}
+                </span>
+                {master && item.status_medicao === 'aguardando_conferencia' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => void executarConferencia('aprovar', item.id)}
+                      disabled={processandoConferencia}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      Aprovar
+                    </button>
+                    <button
+                      onClick={() => void executarConferencia('remediar', item.id)}
+                      disabled={processandoConferencia}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-50"
+                    >
+                      Pedir nova medição
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={() => abrirMedicaoItem(item)}
@@ -509,6 +617,22 @@ export default function DetalheMedicaoFinal() {
             </div>
           ))
         )}
+        {master && itens.some(i => i.status_medicao === 'concluida') &&
+          !['aguardando_conferencia', 'aprovado'].includes(String(medicao.status_operacional || '')) && (
+          <div className="sticky bottom-3 z-20 rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+            <button
+              onClick={() => void executarConferencia('enviar')}
+              disabled={processandoConferencia}
+              className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {processandoConferencia ? 'Enviando...' : 'Enviar Medidas Finais para Conferência'}
+            </button>
+            <p className="mt-1 text-center text-[11px] text-slate-400">
+              Envia somente as posições concluídas. O que ainda não foi medido permanece pendente para a próxima visita.
+            </p>
+          </div>
+        )}
+
       </main>
 
       {/* Modal: adicionar/editar tipologia */}
@@ -652,6 +776,26 @@ export default function DetalheMedicaoFinal() {
               )}
             </div>
 
+            {/* Referência obrigatória das alturas */}
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <label className="text-xs font-medium text-slate-700">
+                Referência das alturas <span className="text-red-500">*</span>
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Direita e esquerda dependem do lado de onde a esquadria está sendo observada.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setReferenciaVista('interna')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${referenciaVista === 'interna' ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-300 bg-white text-slate-600'}`}>
+                  Vista interna
+                </button>
+                <button type="button" onClick={() => setReferenciaVista('externa')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${referenciaVista === 'externa' ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-300 bg-white text-slate-600'}`}>
+                  Vista externa
+                </button>
+              </div>
+            </div>
+
             {/* Alturas */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -713,6 +857,31 @@ export default function DetalheMedicaoFinal() {
                   <AlertTriangle size={13} /> Diferença de {diffAltura}mm entre a menor e a maior altura (acima de {limiteAlerta}mm). Confira as medidas.
                 </p>
               )}
+            </div>
+
+            {/* Informações universais da Medida Final */}
+            <div className="space-y-3 border-t border-slate-100 pt-3">
+              <label className="text-xs font-medium text-slate-600">Informações gerais</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Contramarco</label>
+                  <input value={contramarco} onChange={e => setContramarco(e.target.value)}
+                    placeholder="Informar quando aplicável"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Cadeirinha</label>
+                  <input value={cadeirinha} onChange={e => setCadeirinha(e.target.value)}
+                    placeholder="Informar quando aplicável"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-400 mb-0.5">Observações</label>
+                <textarea value={observacoesMedicao} onChange={e => setObservacoesMedicao(e.target.value)}
+                  rows={3} className="w-full resize-y border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="Observações da medição desta posição" />
+              </div>
             </div>
 
             {/* Campos extras da tipologia */}
