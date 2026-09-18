@@ -84,11 +84,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         .eq('medicao_id', id)
 
       if (!itens?.length) return NextResponse.json({ error: 'A medicao nao possui posicoes.' }, { status: 400 })
-      if (itens.some(i => !i.medido)) {
-        return NextResponse.json({ error: 'Ainda existem posicoes sem Medida Final concluida.' }, { status: 409 })
+      const prontas = itens.filter(i => i.medido && i.status_medicao === 'concluida')
+      if (!prontas.length) {
+        return NextResponse.json({ error: 'Nao existem posicoes concluidas aguardando envio.' }, { status: 409 })
       }
 
-      await criarSnapshot(id, usuario, 'Envio para conferencia')
+      await criarSnapshot(id, usuario, prontas.length === itens.length ? 'Envio para conferencia' : 'Envio parcial para conferencia')
       const { error } = await supabaseAdmin
         .from('medicoes_finais')
         .update({ status_operacional: 'aguardando_conferencia' })
@@ -101,8 +102,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         .update({ status_medicao: 'aguardando_conferencia', updated_at: new Date().toISOString() })
         .eq('medicao_id', id)
         .eq('medido', true)
+        .eq('status_medicao', 'concluida')
 
-      return NextResponse.json({ ok: true, action })
+      return NextResponse.json({ ok: true, action, enviados: prontas.length, pendentes: itens.length - prontas.length })
     }
 
     const itemId = String(body?.itemId || '')
