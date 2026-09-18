@@ -38,6 +38,7 @@ export default function AcessoExternoMedicaoPage() {
   const [salvando, setSalvando] = useState(false)
   const [itemId, setItemId] = useState('')
   const [medidas, setMedidas] = useState<Record<string, string>>({})
+  const [referenciaVista, setReferenciaVista] = useState<'interna' | 'externa' | ''>('')
   const [valores, setValores] = useState<Record<string, string>>({})
   const [mensagem, setMensagem] = useState('')
   const [enviandoFoto, setEnviandoFoto] = useState(false)
@@ -78,6 +79,7 @@ export default function AcessoExternoMedicaoPage() {
       altura_meio_mm: item.altura_meio_mm != null ? String(item.altura_meio_mm) : '',
       altura_esquerda_mm: item.altura_esquerda_mm != null ? String(item.altura_esquerda_mm) : '',
     })
+    setReferenciaVista(item.referencia_vista || '')
     const novos: Record<string, string> = {}
     for (const campo of campos) {
       const resposta = dados.respostas.find(r => r.item_id === item.id && r.campo_chave === campo.chave)
@@ -99,11 +101,15 @@ export default function AcessoExternoMedicaoPage() {
 
   async function salvarMedidas() {
     if (!item) return
+    if (!referenciaVista) {
+      setMensagem('Selecione a referencia das alturas: vista interna ou vista externa.')
+      return
+    }
     setSalvando(true); setMensagem('')
     const resp = await fetch(`/api/medicao-final/acesso/${token}/medidas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: item.id, medidas }),
+      body: JSON.stringify({ itemId: item.id, medidas, referenciaVista }),
     })
     const json = await resp.json().catch(() => ({}))
     setSalvando(false)
@@ -214,6 +220,16 @@ export default function AcessoExternoMedicaoPage() {
                 <div className="mb-2 flex items-center gap-2"><Ruler size={16} className="text-slate-500" /><h3 className="text-sm font-semibold text-slate-700">Medidas finais em milimetros</h3></div>
                 <div className="grid grid-cols-3 gap-2">
                   {['largura_baixo_mm','largura_meio_mm','largura_cima_mm'].map((chave, idx) => <label key={chave} className="text-[11px] text-slate-500">{['Larg. baixo','Larg. meio','Larg. cima'][idx]}<input type="number" value={medidas[chave] || ''} onChange={e => setMedidas(p => ({ ...p, [chave]: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" /></label>)}
+                </div>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-700">Referencia das alturas *</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Direita e esquerda dependem do lado de observacao.</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setReferenciaVista('interna')} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${referenciaVista === 'interna' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-600'}`}>Vista interna</button>
+                    <button type="button" onClick={() => setReferenciaVista('externa')} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${referenciaVista === 'externa' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-600'}`}>Vista externa</button>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   {['altura_direita_mm','altura_meio_mm','altura_esquerda_mm'].map((chave, idx) => <label key={chave} className="text-[11px] text-slate-500">{['Alt. direita','Alt. meio','Alt. esquerda'][idx]}<input type="number" value={medidas[chave] || ''} onChange={e => setMedidas(p => ({ ...p, [chave]: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" /></label>)}
                 </div>
                 <button onClick={() => void salvarMedidas()} disabled={salvando} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save size={15} /> Salvar medidas</button>
