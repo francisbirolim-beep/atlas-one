@@ -1,4 +1,4 @@
-import { Home, Users, FileText, Columns3, Ruler, Factory, Wrench, ShoppingCart, Store, Building2, MapPinned } from 'lucide-react'
+import { Home, Users, FileText, Columns3, Ruler, Factory, Wrench, ShoppingCart, Store, Building2, MapPinned, MessageCircle, Share2 } from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -13,6 +13,8 @@ export type Guia = {
 // o menu/favoritos. Administracao fica concentrada no menu do usuario.
 export const GUIAS: Guia[] = [
   { href: '/', label: 'Início', icon: Home, grupo: 'Geral' },
+  { href: '/chat', label: 'Chat interno', icon: MessageCircle, grupo: 'Comercial' },
+  { href: '/compartilhar', label: 'Enviar para o Atlas', icon: Share2, grupo: 'Comercial' },
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
   { href: '/prospeccao', label: 'Prospecção', icon: MapPinned, grupo: 'Comercial' },
