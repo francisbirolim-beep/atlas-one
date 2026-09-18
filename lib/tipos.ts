@@ -538,6 +538,19 @@ export interface MedicaoFinal {
       coluna_atualizada_em?: string | null
       criado_por_id?: string | null
       criado_por_nome?: string | null
+      status_operacional?: string | null
+      responsavel_id?: string | null
+      responsavel_nome?: string | null
+      liberado_em?: string | null
+      liberado_por_id?: string | null
+      liberado_por_nome?: string | null
+      iniciado_em?: string | null
+      concluido_em?: string | null
+      aprovado_em?: string | null
+      aprovado_por_id?: string | null
+      aprovado_por_nome?: string | null
+      versao?: number
+      observacoes?: string | null
 }
 
 // Categoria de produto e dinamica. Os valores historicos continuam validos,
