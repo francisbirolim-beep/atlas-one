@@ -19,6 +19,7 @@ import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medicaoFoto'
 import { listarTipologias } from '@/lib/tipologias'
+import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 
 let tiposCache: Tipologia[] = []
 
@@ -486,14 +487,24 @@ export default function DetalheMedicaoFinal() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
-        {master && (
-          <button
-            onClick={abrirNovoItem}
+        <div className="flex flex-wrap items-center gap-2">
+          {master && (
+            <button
+              onClick={abrirNovoItem}
             className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline mb-1"
           >
             <Plus size={16} /> Adicionar tipologia
-          </button>
-        )}
+            </button>
+          )}
+          {itens.length > 0 && (
+            <button
+              onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-brand-navy hover:bg-slate-50"
+            >
+              <FileText size={16} /> Gerar PDF da Medida Final
+            </button>
+          )}
+        </div>
 
         {itens.length === 0 ? (
           <div className="text-center py-10 px-4 text-slate-400 text-sm bg-white rounded-2xl border border-slate-200 space-y-3">
