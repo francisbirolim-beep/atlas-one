@@ -14,6 +14,7 @@ create table if not exists public.chat_participantes (
   conversa_id uuid not null references public.chat_conversas(id) on delete cascade,
   usuario_id uuid not null,
   usuario_nome text,
+  ultima_leitura_em timestamptz,
   created_at timestamptz not null default now(),
   unique (conversa_id, usuario_id)
 );
