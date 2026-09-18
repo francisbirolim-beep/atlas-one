@@ -88,6 +88,10 @@ export default function DetalheMedicaoFinal() {
   const [alturaDireita, setAlturaDireita] = useState('')
   const [alturaMeio, setAlturaMeio] = useState('')
   const [alturaEsquerda, setAlturaEsquerda] = useState('')
+  const [referenciaVista, setReferenciaVista] = useState<'interna' | 'externa' | ''>('')
+  const [contramarco, setContramarco] = useState('')
+  const [cadeirinha, setCadeirinha] = useState('')
+  const [observacoesMedicao, setObservacoesMedicao] = useState('')
   const [fotoLargurasUrl, setFotoLargurasUrl] = useState<string | null>(null)
   const [fotoAlturasUrl, setFotoAlturasUrl] = useState<string | null>(null)
   const [enviandoFotoLargura, setEnviandoFotoLargura] = useState(false)
@@ -211,6 +215,10 @@ export default function DetalheMedicaoFinal() {
     setAlturaDireita(item.altura_direita_mm != null ? String(item.altura_direita_mm) : '')
     setAlturaMeio(item.altura_meio_mm != null ? String(item.altura_meio_mm) : '')
     setAlturaEsquerda(item.altura_esquerda_mm != null ? String(item.altura_esquerda_mm) : '')
+    setReferenciaVista(item.referencia_vista || '')
+    setContramarco(item.contramarco || '')
+    setCadeirinha(item.cadeirinha || '')
+    setObservacoesMedicao(item.observacoes_medicao || '')
     setFotoLargurasUrl(item.foto_larguras_url || null)
     setFotoAlturasUrl(item.foto_alturas_url || null)
     setValoresExtras(item.campos_extras || {})
@@ -342,6 +350,16 @@ export default function DetalheMedicaoFinal() {
   async function salvarMedicaoAtual() {
     if (!itemMedindo) return
 
+    const medidasObrigatorias = [larguraBaixo, larguraMeio, larguraCima, alturaDireita, alturaMeio, alturaEsquerda]
+    if (medidasObrigatorias.some(valor => !valor || Number(valor) <= 0)) {
+      alert('Preencha as 3 larguras e as 3 alturas com valores válidos.')
+      return
+    }
+    if (!referenciaVista) {
+      alert('Selecione a referência das alturas: vista interna ou vista externa.')
+      return
+    }
+
     const faltando = camposExtrasItem.filter(c => c.obrigatorio && (valoresExtras[c.chave] === undefined || valoresExtras[c.chave] === '' || valoresExtras[c.chave] === null))
     if (faltando.length > 0) {
       alert('Preencha os campos obrigatórios do checklist: ' + faltando.map(c => c.nome).join(', '))
@@ -357,6 +375,10 @@ export default function DetalheMedicaoFinal() {
       altura_direita_mm: parseFloat(alturaDireita) || null,
       altura_meio_mm: parseFloat(alturaMeio) || null,
       altura_esquerda_mm: parseFloat(alturaEsquerda) || null,
+      referencia_vista: referenciaVista || null,
+      contramarco: contramarco.trim() || null,
+      cadeirinha: cadeirinha.trim() || null,
+      observacoes_medicao: observacoesMedicao.trim() || null,
       foto_larguras_url: fotoLargurasUrl,
       foto_alturas_url: fotoAlturasUrl,
       campos_extras: valoresExtras,
@@ -652,6 +674,26 @@ export default function DetalheMedicaoFinal() {
               )}
             </div>
 
+            {/* Referência obrigatória das alturas */}
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <label className="text-xs font-medium text-slate-700">
+                Referência das alturas <span className="text-red-500">*</span>
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Direita e esquerda dependem do lado de onde a esquadria está sendo observada.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setReferenciaVista('interna')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${referenciaVista === 'interna' ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-300 bg-white text-slate-600'}`}>
+                  Vista interna
+                </button>
+                <button type="button" onClick={() => setReferenciaVista('externa')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${referenciaVista === 'externa' ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-300 bg-white text-slate-600'}`}>
+                  Vista externa
+                </button>
+              </div>
+            </div>
+
             {/* Alturas */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -713,6 +755,31 @@ export default function DetalheMedicaoFinal() {
                   <AlertTriangle size={13} /> Diferença de {diffAltura}mm entre a menor e a maior altura (acima de {limiteAlerta}mm). Confira as medidas.
                 </p>
               )}
+            </div>
+
+            {/* Informações universais da Medida Final */}
+            <div className="space-y-3 border-t border-slate-100 pt-3">
+              <label className="text-xs font-medium text-slate-600">Informações gerais</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Contramarco</label>
+                  <input value={contramarco} onChange={e => setContramarco(e.target.value)}
+                    placeholder="Informar quando aplicável"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Cadeirinha</label>
+                  <input value={cadeirinha} onChange={e => setCadeirinha(e.target.value)}
+                    placeholder="Informar quando aplicável"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-400 mb-0.5">Observações</label>
+                <textarea value={observacoesMedicao} onChange={e => setObservacoesMedicao(e.target.value)}
+                  rows={3} className="w-full resize-y border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="Observações da medição desta posição" />
+              </div>
             </div>
 
             {/* Campos extras da tipologia */}
