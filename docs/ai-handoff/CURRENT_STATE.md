@@ -1,5 +1,20 @@
 # CURRENT_STATE.md — Atlas One
 
+## EM IMPLEMENTAÇÃO — CHAT INTERNO + COMPARTILHAR PARA O ATLAS V1 — 2026-09-18
+
+Branch: `feat/chat-interno-compartilhar-atlas-v1`
+
+- criada rota `/chat` com conversas individuais e grupos internos;
+- mensagens em tempo real via Supabase Realtime, com vínculo opcional futuro a Cliente/Orçamento já previsto no schema;
+- criada rota `/compartilhar`: cola/recebe texto do WhatsApp, vincula Cliente 360 e cria card diretamente em `Fazer orçamento`, ou acrescenta informação a pedido já aberto;
+- o card criado usa a base oficial `orcamentos`, sem Kanban paralelo;
+- PWA recebeu `share_target` para permitir compartilhamento de texto para o Atlas onde o sistema operacional/navegador suportar Web Share Target;
+- menu Comercial recebeu Chat interno e Enviar para o Atlas;
+- migration `20260918203000_chat_interno_compartilhar_atlas_v1.sql` cria conversas, participantes e mensagens;
+- V1 ainda não recebe anexos do share target; fotos/áudios/arquivos ficam para evolução após validar texto e fluxo operacional;
+- migration ainda precisa passar pelo Supabase Database Control antes de qualquer uso do chat no preview.
+
+
 > Checkpoints anteriores permanecem no histórico Git e em `docs/ai-handoff/archive/`.
 
 ## EM VALIDAÇÃO — PROSPECÇÃO EM CAMPO V1 — 2026-09-16
