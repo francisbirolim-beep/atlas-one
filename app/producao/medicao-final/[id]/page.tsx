@@ -346,8 +346,8 @@ export default function DetalheMedicaoFinal() {
 
   const diffLargura = modoLargura === 'digitar' ? diferenca(larguraBaixo, larguraMeio, larguraCima) : null
   const diffAltura = modoAltura === 'digitar' ? diferenca(alturaDireita, alturaMeio, alturaEsquerda) : null
-  const alertaLargura = diffLargura !== null && diffLargura > limiteAlerta
-  const alertaAltura = diffAltura !== null && diffAltura > limiteAlerta
+  const alertaLargura = diffLargura !== null && diffLargura >= limiteAlerta
+  const alertaAltura = diffAltura !== null && diffAltura >= limiteAlerta
 
   async function salvarMedicaoAtual() {
     if (!itemMedindo) return
@@ -617,7 +617,8 @@ export default function DetalheMedicaoFinal() {
             </div>
           ))
         )}
-        {master && itens.length > 0 && medidos === itens.length && medicao.status_operacional !== 'concluido' && (
+        {master && itens.some(i => i.status_medicao === 'concluida') &&
+          !['aguardando_conferencia', 'aprovado'].includes(String(medicao.status_operacional || '')) && (
           <div className="sticky bottom-3 z-20 rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-lg backdrop-blur">
             <button
               onClick={() => void executarConferencia('enviar')}
@@ -627,7 +628,7 @@ export default function DetalheMedicaoFinal() {
               {processandoConferencia ? 'Enviando...' : 'Enviar Medidas Finais para Conferência'}
             </button>
             <p className="mt-1 text-center text-[11px] text-slate-400">
-              Todas as {itens.length} posições estão medidas.
+              Envia somente as posições concluídas. O que ainda não foi medido permanece pendente para a próxima visita.
             </p>
           </div>
         )}
