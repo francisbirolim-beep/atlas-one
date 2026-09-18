@@ -4,7 +4,7 @@ import { registrarHistorico } from './historico'
 import { usuarioAtual } from './auth'
 import { v4 as uuidv4 } from 'uuid'
 
-export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string }
+export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string; ultima_mensagem?:string|null; ultima_mensagem_em?:string|null }
 export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|null; usuario_nome?:string|null; texto?:string|null; anexo_url?:string|null; anexo_nome?:string|null; cliente_id?:string|null; orcamento_id?:string|null; mensagem_pai_id?:string|null; created_at:string }
 export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null; ultima_leitura_em?:string|null }
 
@@ -13,7 +13,8 @@ export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> 
   const ids=(participacoes||[]).map((p:any)=>p.conversa_id)
   if(!ids.length) return []
   const { data }=await supabase.from('chat_conversas').select('*').in('id',ids).order('updated_at',{ascending:false})
-  return (data||[]) as ChatConversa[]
+  const conversas=(data||[]) as ChatConversa[]
+  return await Promise.all(conversas.map(async c=>{const {data:m}=await supabase.from('chat_mensagens').select('texto,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle();return {...c,ultima_mensagem:m?.texto||null,ultima_mensagem_em:m?.created_at||null}}))
 }
 
 export async function listarParticipantes(conversaId:string):Promise<ChatParticipante[]> {
