@@ -226,6 +226,52 @@ export async function criarMedicaoDoOrcamento(
   return medicao as MedicaoFinal
 }
 
+export async function criarMedicaoManualCliente(
+    clienteId: string,
+    obraId: string | null,
+    usuario: Usuario | null
+  ): Promise<MedicaoFinal | null> {
+    const { data: cliente, error: erroCliente } = await supabase
+      .from('clientes')
+      .select('id,nome,whatsapp,telefone,endereco,bairro,cep,cidade')
+      .eq('id', clienteId)
+      .maybeSingle()
+
+    if (erroCliente || !cliente) {
+      console.error('Erro ao buscar cliente para Medida Final manual:', erroCliente)
+      return null
+    }
+
+    const colunas = await listarColunasMedicao()
+    const primeiraColuna = colunas[0]
+    const { data: medicao, error } = await supabase
+      .from('medicoes_finais')
+      .insert({
+        orcamento_id: null,
+        cliente_id: cliente.id,
+        cliente_nome: cliente.nome,
+        cliente_whatsapp: cliente.whatsapp || cliente.telefone || null,
+        obra_id: obraId || null,
+        endereco: cliente.endereco || null,
+        bairro: cliente.bairro || null,
+        cep: cliente.cep || null,
+        cidade: cliente.cidade || null,
+        coluna_id: primeiraColuna?.id || null,
+        coluna_atualizada_em: new Date().toISOString(),
+        status_operacional: 'a_medir',
+        criado_por_id: usuario?.id || null,
+        criado_por_nome: usuario?.nome || null,
+      })
+      .select()
+      .single()
+
+    if (error || !medicao) {
+      console.error('Erro ao criar Medida Final manual:', error)
+      return null
+    }
+    return medicao as MedicaoFinal
+}
+
 async function importarItensDoPdfDoOrcamento(orcamentoId: string): Promise<ItemEsquadria[]> {
   try {
     const token = await tokenAtual()
