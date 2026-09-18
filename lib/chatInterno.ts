@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string }
 export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|null; usuario_nome?:string|null; texto?:string|null; anexo_url?:string|null; anexo_nome?:string|null; cliente_id?:string|null; orcamento_id?:string|null; mensagem_pai_id?:string|null; created_at:string }
-export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null }
+export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null; ultima_leitura_em?:string|null }
 
 export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> {
   const { data: participacoes } = await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id', usuarioId)
@@ -19,6 +19,18 @@ export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> 
 export async function listarParticipantes(conversaId:string):Promise<ChatParticipante[]> {
   const { data }=await supabase.from('chat_participantes').select('*').eq('conversa_id',conversaId).order('usuario_nome')
   return (data||[]) as ChatParticipante[]
+}
+
+export async function marcarConversaComoLida(conversaId:string,usuarioId:string):Promise<void> {
+  await supabase.from('chat_participantes').update({ultima_leitura_em:new Date().toISOString()}).eq('conversa_id',conversaId).eq('usuario_id',usuarioId)
+}
+
+export async function contarNaoLidas(conversaId:string,usuarioId:string):Promise<number> {
+  const {data:p}=await supabase.from('chat_participantes').select('ultima_leitura_em').eq('conversa_id',conversaId).eq('usuario_id',usuarioId).maybeSingle()
+  let q=supabase.from('chat_mensagens').select('id',{count:'exact',head:true}).eq('conversa_id',conversaId).neq('usuario_id',usuarioId)
+  if(p?.ultima_leitura_em) q=q.gt('created_at',p.ultima_leitura_em)
+  const {count}=await q
+  return count||0
 }
 
 export async function listarMensagens(conversaId:string):Promise<ChatMensagem[]> {
