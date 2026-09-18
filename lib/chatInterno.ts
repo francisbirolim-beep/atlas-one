@@ -56,7 +56,7 @@ export async function criarPedidoCompartilhado(params:{clienteId:string;texto:st
   const id=uuidv4()
   const { error }=await supabase.from('orcamentos').insert({
     id,cliente_id:cliente.id,cliente_nome:cliente.nome,cliente_whatsapp:cliente.whatsapp||null,cidade:cliente.cidade||null,
-    origem:'whatsapp',tipo_esquadria:'outro',largura_mm:null,altura_mm:null,quantidade:1,itens:[],
+    origem:'whatsapp',tipo_esquadria:'outro',largura_mm:0,altura_mm:0,quantidade:1,itens:[],
     descricao_livre:params.texto.trim(),observacoes:params.texto.trim(),valor_estimado:null,status:'rascunho',
     modo_entrada:'texto_livre',coluna_id:colunaId,coluna_atualizada_em:new Date().toISOString(),
     revisao_grupo_id:id,criado_por_nome:usuario?.nome||null,criado_por_id:usuario?.id||null,
