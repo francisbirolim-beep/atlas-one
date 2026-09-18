@@ -1,0 +1,79 @@
+import { supabase } from './supabase'
+import { primeiraColunaId } from './kanban'
+import { registrarHistorico } from './historico'
+import { usuarioAtual } from './auth'
+import { v4 as uuidv4 } from 'uuid'
+
+export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string }
+export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|null; usuario_nome?:string|null; texto?:string|null; anexo_url?:string|null; anexo_nome?:string|null; cliente_id?:string|null; orcamento_id?:string|null; mensagem_pai_id?:string|null; created_at:string }
+export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null }
+
+export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> {
+  const { data: participacoes } = await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id', usuarioId)
+  const ids=(participacoes||[]).map((p:any)=>p.conversa_id)
+  if(!ids.length) return []
+  const { data }=await supabase.from('chat_conversas').select('*').in('id',ids).order('updated_at',{ascending:false})
+  return (data||[]) as ChatConversa[]
+}
+
+export async function listarParticipantes(conversaId:string):Promise<ChatParticipante[]> {
+  const { data }=await supabase.from('chat_participantes').select('*').eq('conversa_id',conversaId).order('usuario_nome')
+  return (data||[]) as ChatParticipante[]
+}
+
+export async function listarMensagens(conversaId:string):Promise<ChatMensagem[]> {
+  const { data }=await supabase.from('chat_mensagens').select('*').eq('conversa_id',conversaId).order('created_at',{ascending:true}).limit(500)
+  return (data||[]) as ChatMensagem[]
+}
+
+export async function criarConversa(nome:string,tipo:'direta'|'grupo',participantes:{id:string;nome:string}[]):Promise<ChatConversa|null> {
+  const usuario=await usuarioAtual()
+  if(!usuario) return null
+  const { data,error }=await supabase.from('chat_conversas').insert({nome:nome.trim()||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome}).select('*').single()
+  if(error||!data) return null
+  const unicos=new Map([[usuario.id,{id:usuario.id,nome:usuario.nome}],...participantes.map(p=>[p.id,p] as const)])
+  await supabase.from('chat_participantes').insert([...unicos.values()].map(p=>({conversa_id:data.id,usuario_id:p.id,usuario_nome:p.nome})))
+  return data as ChatConversa
+}
+
+export async function enviarMensagem(conversaId:string,texto:string,extras?:{clienteId?:string|null;orcamentoId?:string|null;mensagemPaiId?:string|null}):Promise<boolean> {
+  const usuario=await usuarioAtual()
+  if(!usuario||!texto.trim()) return false
+  const { error }=await supabase.from('chat_mensagens').insert({conversa_id:conversaId,usuario_id:usuario.id,usuario_nome:usuario.nome,texto:texto.trim(),cliente_id:extras?.clienteId||null,orcamento_id:extras?.orcamentoId||null,mensagem_pai_id:extras?.mensagemPaiId||null})
+  if(error) return false
+  await supabase.from('chat_conversas').update({updated_at:new Date().toISOString()}).eq('id',conversaId)
+  return true
+}
+
+export async function criarPedidoCompartilhado(params:{clienteId:string;texto:string}):Promise<{ok:boolean;id?:string;error?:string}> {
+  const usuario=await usuarioAtual()
+  const [{data:cliente},colunaId]=await Promise.all([
+    supabase.from('clientes').select('id,nome,whatsapp,cidade').eq('id',params.clienteId).maybeSingle(),
+    primeiraColunaId(),
+  ])
+  if(!cliente) return {ok:false,error:'Cliente não encontrado.'}
+  if(!params.texto.trim()) return {ok:false,error:'Cole ou compartilhe a mensagem do cliente.'}
+  const id=uuidv4()
+  const { error }=await supabase.from('orcamentos').insert({
+    id,cliente_id:cliente.id,cliente_nome:cliente.nome,cliente_whatsapp:cliente.whatsapp||null,cidade:cliente.cidade||null,
+    origem:'whatsapp',tipo_esquadria:'outro',largura_mm:null,altura_mm:null,quantidade:1,itens:[],
+    descricao_livre:params.texto.trim(),observacoes:params.texto.trim(),valor_estimado:null,status:'rascunho',
+    modo_entrada:'texto_livre',coluna_id:colunaId,coluna_atualizada_em:new Date().toISOString(),
+    revisao_grupo_id:id,criado_por_nome:usuario?.nome||null,criado_por_id:usuario?.id||null,
+  })
+  if(error) return {ok:false,error:error.message}
+  await registrarHistorico(id,usuario,'Recebeu pedido compartilhado do WhatsApp',params.texto.trim().slice(0,1000))
+  return {ok:true,id}
+}
+
+export async function anexarAoPedido(orcamentoId:string,texto:string):Promise<boolean> {
+  const usuario=await usuarioAtual()
+  const { data }=await supabase.from('orcamentos').select('observacoes').eq('id',orcamentoId).maybeSingle()
+  if(!data||!texto.trim()) return false
+  const bloco=`[${new Date().toLocaleString('pt-BR')}] ${usuario?.nome||'Usuário'}\n${texto.trim()}`
+  const observacoes=[data.observacoes,bloco].filter(Boolean).join('\n\n')
+  const { error }=await supabase.from('orcamentos').update({observacoes}).eq('id',orcamentoId)
+  if(error) return false
+  await registrarHistorico(orcamentoId,usuario,'Adicionou informação compartilhada',texto.trim().slice(0,1000))
+  return true
+}
