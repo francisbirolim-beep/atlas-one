@@ -140,7 +140,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         await supabaseAdmin
           .from('medicoes_finais')
           .update({
-            status_operacional: 'concluido',
+            status_operacional: 'aprovado',
             aprovado_em: new Date().toISOString(),
             aprovado_por_id: usuario.id,
             aprovado_por_nome: usuario.nome,
