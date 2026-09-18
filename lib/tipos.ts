@@ -508,6 +508,12 @@ export interface MedicaoItem {
       altura_direita_mm?: number | null
       altura_meio_mm?: number | null
       altura_esquerda_mm?: number | null
+      referencia_vista?: 'interna' | 'externa' | null
+      contramarco?: string | null
+      cadeirinha?: string | null
+      observacoes_medicao?: string | null
+      status_medicao?: 'rascunho' | 'concluida' | 'aguardando_conferencia' | 'remedicao_solicitada' | 'aprovada'
+      updated_at?: string | null
       foto_larguras_url?: string | null
       foto_alturas_url?: string | null
       campos_extras: Record<string, string | number>
