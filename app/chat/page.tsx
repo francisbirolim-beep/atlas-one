@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { MessageCircle, Plus, Search, Send, Users, ArrowLeft, ClipboardList } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -11,9 +11,11 @@ export default function ChatInternoPage(){
  const [eu,setEu]=useState<UsuarioLista|null>(null),[conversas,setConversas]=useState<ChatConversa[]>([]),[ativa,setAtiva]=useState<ChatConversa|null>(null)
  const [mensagens,setMensagens]=useState<ChatMensagem[]>([]),[texto,setTexto]=useState(''),[busca,setBusca]=useState(''),[erro,setErro]=useState('')
  const [usuarios,setUsuarios]=useState<UsuarioLista[]>([]),[novo,setNovo]=useState(false),[nomeGrupo,setNomeGrupo]=useState(''),[selecionados,setSelecionados]=useState<string[]>([])
+ const fimMensagens=useRef<HTMLDivElement|null>(null)
  async function carregar(){const u=await usuarioAtual();if(!u)return;setEu(u);const [cs,us]=await Promise.all([listarConversas(u.id),supabase.from('usuarios').select('id,nome').order('nome')]);setConversas(cs);setUsuarios((us.data||[]) as UsuarioLista[]);if(!ativa&&cs[0])setAtiva(cs[0])}
  useEffect(()=>{void carregar()},[])
  useEffect(()=>{if(!ativa)return;listarMensagens(ativa.id).then(setMensagens);const canal=supabase.channel('chat-'+ativa.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens',filter:`conversa_id=eq.${ativa.id}`},p=>setMensagens(m=>m.some(x=>x.id===(p.new as any).id)?m:[...m,p.new as ChatMensagem])).subscribe();return()=>{void supabase.removeChannel(canal)}},[ativa?.id])
+ useEffect(()=>{fimMensagens.current?.scrollIntoView({behavior:'smooth',block:'end'})},[mensagens.length,ativa?.id])
  const filtradas=useMemo(()=>conversas.filter(c=>(c.nome||'Conversa').toLowerCase().includes(busca.toLowerCase())),[conversas,busca])
  async function mandar(){if(!ativa||!texto.trim())return;const t=texto;setTexto('');setErro('');if(!await enviarMensagem(ativa.id,t)){setTexto(t);setErro('Não foi possível enviar a mensagem. Tente novamente.')}}
  async function criar(){const ps=usuarios.filter(u=>selecionados.includes(u.id));const c=await criarConversa(nomeGrupo||ps.map(p=>p.nome).join(', '),ps.length>1?'grupo':'direta',ps);if(c){setNovo(false);setNomeGrupo('');setSelecionados([]);await carregar();setAtiva(c)}}
