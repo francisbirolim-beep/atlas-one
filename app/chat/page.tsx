@@ -9,7 +9,7 @@ import { ChatConversa, ChatMensagem, criarConversa, enviarMensagem, listarConver
 type UsuarioLista={id:string;nome:string}
 export default function ChatInternoPage(){
  const [eu,setEu]=useState<UsuarioLista|null>(null),[conversas,setConversas]=useState<ChatConversa[]>([]),[ativa,setAtiva]=useState<ChatConversa|null>(null)
- const [mensagens,setMensagens]=useState<ChatMensagem[]>([]),[texto,setTexto]=useState(''),[busca,setBusca]=useState(''),[buscaMensagem,setBuscaMensagem]=useState(''),[respondendo,setRespondendo]=useState<ChatMensagem|null>(null),[copiado,setCopiado]=useState<string|null>(null),[erro,setErro]=useState('')
+ const [mensagens,setMensagens]=useState<ChatMensagem[]>([]),[texto,setTexto]=useState(''),[busca,setBusca]=useState(''),[buscaMensagem,setBuscaMensagem]=useState(''),[respondendo,setRespondendo]=useState<ChatMensagem|null>(null),[copiado,setCopiado]=useState<string|null>(null),[enviando,setEnviando]=useState(false),[erro,setErro]=useState('')
  const [usuarios,setUsuarios]=useState<UsuarioLista[]>([]),[participantesAtivos,setParticipantesAtivos]=useState<UsuarioLista[]>([]),[buscaUsuario,setBuscaUsuario]=useState(''),[novo,setNovo]=useState(false),[nomeGrupo,setNomeGrupo]=useState(''),[selecionados,setSelecionados]=useState<string[]>([])
  const fimMensagens=useRef<HTMLDivElement|null>(null)
  async function carregar(){const u=await usuarioAtual();if(!u)return;setEu(u);const [cs,us]=await Promise.all([listarConversas(u.id),supabase.from('usuarios').select('id,nome').order('nome')]);setConversas(cs);setUsuarios((us.data||[]) as UsuarioLista[]);if(!ativa&&cs[0])setAtiva(cs[0])}
