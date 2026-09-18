@@ -7,7 +7,7 @@ type Action = 'enviar' | 'aprovar' | 'remediar'
 
 async function autenticar(req: NextRequest) {
   const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.replace(/^Bearer\\s+/i, '').trim()
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
 
   const { data: authData } = await supabaseAdmin.auth.getUser(token)
