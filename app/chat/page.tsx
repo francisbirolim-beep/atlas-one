@@ -7,7 +7,7 @@ import { usuarioAtual } from '@/lib/auth'
 import { ChatConversa, ChatMensagem, contarNaoLidas, criarConversa, enviarMensagem, listarConversas, listarMensagens, marcarConversaComoLida } from '@/lib/chatInterno'
 
 type UsuarioLista={id:string;nome:string}
-function chaveDia(data:string|Date){return new Date(data).toLocaleDateString('en-CA')}
+function chaveDia(data:string|Date){const d=new Date(data);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function diaRotulo(data:string){const d=new Date(data),hoje=new Date(),ontem=new Date();ontem.setDate(hoje.getDate()-1);return chaveDia(d)===chaveDia(hoje)?'Hoje':chaveDia(d)===chaveDia(ontem)?'Ontem':d.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:d.getFullYear()===hoje.getFullYear()?undefined:'numeric'})}
 export default function ChatInternoPage(){
  const [eu,setEu]=useState<UsuarioLista|null>(null),[conversas,setConversas]=useState<ChatConversa[]>([]),[naoLidas,setNaoLidas]=useState<Record<string,number>>({}),[ativa,setAtiva]=useState<ChatConversa|null>(null),[mostrarBuscaMensagem,setMostrarBuscaMensagem]=useState(false),[mostrarListaMobile,setMostrarListaMobile]=useState(true),[carregandoMensagens,setCarregandoMensagens]=useState(false)
