@@ -26,11 +26,19 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (!ativo) return
       setAutenticado(!!session)
       setChecking(false)
-      if (!session && !rotaPublica) router.replace('/login')
+      if (!session && !rotaPublica && navigator.onLine) router.replace('/login')
+    }).catch(() => {
+      if (!ativo) return
+      // Sem rede, o Supabase pode não conseguir validar/renovar a sessão.
+      // Não deixamos o Atlas preso em "Carregando..."; o app abre com o estado
+      // local já persistido e sincroniza novamente quando a conexão voltar.
+      setChecking(false)
+      if (!navigator.onLine) setAutenticado(true)
+      else if (!rotaPublica) router.replace('/login')
     })
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAutenticado(!!session)
-      if (!session && !rotaPublica) router.replace('/login')
+      if (!session && !rotaPublica && navigator.onLine) router.replace('/login')
     })
     return () => { ativo = false; listener.subscription.unsubscribe() }
   }, [rotaPublica, router])
