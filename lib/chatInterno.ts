@@ -25,8 +25,9 @@ export async function listarParticipantes(conversaId:string):Promise<ChatPartici
   return (data||[]) as ChatParticipante[]
 }
 
-export async function marcarConversaComoLida(conversaId:string,usuarioId:string):Promise<void> {
-  await supabase.from('chat_participantes').update({ultima_leitura_em:new Date().toISOString()}).eq('conversa_id',conversaId).eq('usuario_id',usuarioId)
+export async function marcarConversaComoLida(conversaId:string,usuarioId:string):Promise<boolean> {
+  const {error}=await supabase.from('chat_participantes').update({ultima_leitura_em:new Date().toISOString()}).eq('conversa_id',conversaId).eq('usuario_id',usuarioId)
+  return !error
 }
 
 export async function contarNaoLidas(conversaId:string,usuarioId:string):Promise<number> {
