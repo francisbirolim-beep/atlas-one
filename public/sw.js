@@ -1,5 +1,5 @@
-const CACHE_NAME = 'atlas-one-v3'
-const OFFLINE_URLS = ['/', '/orcamento-rapido', '/assistencia']
+const CACHE_NAME = 'atlas-one-v4'
+const OFFLINE_URLS = ['/', '/orcamento/novo', '/orcamento-rapido', '/assistencia']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
