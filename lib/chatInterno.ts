@@ -69,10 +69,11 @@ export async function criarConversa(nome:string,tipo:'direta'|'grupo',participan
 
 export async function enviarMensagem(conversaId:string,texto:string,extras?:{clienteId?:string|null;orcamentoId?:string|null;mensagemPaiId?:string|null}):Promise<boolean> {
   const usuario=await usuarioAtual()
-  if(!usuario||!texto.trim()) return false
+  const mensagem=texto.trim()
+  if(!usuario||!mensagem||mensagem.length>10000) return false
   const {data:participacao}=await supabase.from('chat_participantes').select('id').eq('conversa_id',conversaId).eq('usuario_id',usuario.id).maybeSingle()
   if(!participacao) return false
-  const { error }=await supabase.from('chat_mensagens').insert({conversa_id:conversaId,usuario_id:usuario.id,usuario_nome:usuario.nome,texto:texto.trim(),cliente_id:extras?.clienteId||null,orcamento_id:extras?.orcamentoId||null,mensagem_pai_id:extras?.mensagemPaiId||null})
+  const { error }=await supabase.from('chat_mensagens').insert({conversa_id:conversaId,usuario_id:usuario.id,usuario_nome:usuario.nome,texto:mensagem,cliente_id:extras?.clienteId||null,orcamento_id:extras?.orcamentoId||null,mensagem_pai_id:extras?.mensagemPaiId||null})
   if(error) return false
   await supabase.from('chat_conversas').update({updated_at:new Date().toISOString()}).eq('id',conversaId)
   return true
