@@ -17,7 +17,7 @@ export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> 
   const {data:todosParticipantes}=await supabase.from('chat_participantes').select('conversa_id,usuario_id,usuario_nome').in('conversa_id',ids)
   const nomesDiretos=new Map<string,string>()
   for(const p of todosParticipantes||[]) if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
-  return await Promise.all(conversas.map(async c=>{const {data:m}=await supabase.from('chat_mensagens').select('texto,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle();return {...c,nome:c.tipo==='direta'?(nomesDiretos.get(c.id)||c.nome):c.nome,ultima_mensagem:m?.texto||null,ultima_mensagem_em:m?.created_at||null}}))
+  return await Promise.all(conversas.map(async c=>{const {data:m}=await supabase.from('chat_mensagens').select('texto,anexo_nome,anexo_url,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle();return {...c,nome:c.tipo==='direta'?(nomesDiretos.get(c.id)||c.nome):c.nome,ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,ultima_mensagem_em:m?.created_at||null}}))
 }
 
 export async function listarParticipantes(conversaId:string):Promise<ChatParticipante[]> {
