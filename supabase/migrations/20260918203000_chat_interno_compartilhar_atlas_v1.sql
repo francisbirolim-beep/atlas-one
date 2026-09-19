@@ -1,7 +1,7 @@
 -- Chat interno + caixa de entrada de compartilhamentos do Atlas One V1
 create table if not exists public.chat_conversas (
   id uuid primary key default gen_random_uuid(),
-  nome text,
+  nome text check (nome is null or length(trim(nome)) <= 100),
   tipo text not null default 'direta' check (tipo in ('direta','grupo')),
   criado_por_id uuid,
   criado_por_nome text,
@@ -13,7 +13,7 @@ create table if not exists public.chat_participantes (
   id uuid primary key default gen_random_uuid(),
   conversa_id uuid not null references public.chat_conversas(id) on delete cascade,
   usuario_id uuid not null,
-  usuario_nome text,
+  usuario_nome text check (usuario_nome is null or length(trim(usuario_nome)) <= 200),
   ultima_leitura_em timestamptz,
   created_at timestamptz not null default now(),
   unique (conversa_id, usuario_id)
@@ -23,7 +23,7 @@ create table if not exists public.chat_mensagens (
   id uuid primary key default gen_random_uuid(),
   conversa_id uuid not null references public.chat_conversas(id) on delete cascade,
   usuario_id uuid,
-  usuario_nome text,
+  usuario_nome text check (usuario_nome is null or length(trim(usuario_nome)) <= 200),
   texto text,
   anexo_url text,
   anexo_nome text,
