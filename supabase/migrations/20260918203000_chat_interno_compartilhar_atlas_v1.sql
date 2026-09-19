@@ -31,7 +31,8 @@ create table if not exists public.chat_mensagens (
   orcamento_id uuid,
   mensagem_pai_id uuid references public.chat_mensagens(id) on delete set null,
   created_at timestamptz not null default now(),
-  check (coalesce(length(trim(texto)),0) > 0 or anexo_url is not null)
+  check (coalesce(length(trim(texto)),0) > 0 or anexo_url is not null),
+  check (texto is null or length(trim(texto)) <= 10000)
 );
 
 create index if not exists chat_participantes_usuario_idx on public.chat_participantes(usuario_id);
