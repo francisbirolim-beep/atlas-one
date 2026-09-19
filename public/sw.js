@@ -1,9 +1,13 @@
-const CACHE_NAME = 'atlas-one-v4'
+const CACHE_NAME = 'atlas-one-v5'
+const APP_SHELL_CACHE = 'atlas-one-shell-v1'
 const OFFLINE_URLS = ['/', '/orcamento/novo', '/orcamento-rapido', '/assistencia']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS))
+    Promise.all([
+      caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS)),
+      caches.open(APP_SHELL_CACHE),
+    ])
   )
   self.skipWaiting()
 })
@@ -11,7 +15,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME && key !== APP_SHELL_CACHE)
+          .map((key) => caches.delete(key))
+      )
     )
   )
   self.clients.claim()
@@ -21,9 +29,6 @@ self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
 })
 
-// O Atlas é um ERP: dados de API nunca devem ir para Cache Storage.
-// Também deixamos assets versionados do Next.js sob responsabilidade do navegador/CDN.
-// O service worker existe apenas para dar fallback offline às navegações HTML.
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
@@ -31,25 +36,52 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
   if (url.pathname.startsWith('/api/')) return
-  if (url.pathname.startsWith('/_next/')) return
-  if (url.pathname.startsWith('/icons/')) return
-  if (url.pathname === '/manifest.json' || url.pathname === '/sw.js') return
-  if (request.mode !== 'navigate') return
+  if (url.pathname === '/sw.js') return
 
-  event.respondWith(
-    fetch(new Request(request, { cache: 'no-store' }))
-      .then((response) => {
-        if (response.ok) {
-          const copy = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
-        }
-        return response
+  // Navegação: tenta rede primeiro e usa a página previamente instalada se estiver offline.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(new Request(request, { cache: 'no-store' }))
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
+          }
+          return response
+        })
+        .catch(async () => {
+          const exact = await caches.match(request)
+          if (exact) return exact
+          const pathname = new URL(request.url).pathname
+          const porCaminho = await caches.match(pathname)
+          if (porCaminho) return porCaminho
+          const fallback = await caches.match('/orcamento-rapido')
+          return fallback || (await caches.match('/')) || Response.error()
+        })
+    )
+    return
+  }
+
+  // Para o Atlas abrir do zero sem internet, os chunks JS/CSS/fontes/imagens do
+  // app shell também precisam estar disponíveis. Cache-first para recursos locais,
+  // preenchendo o cache enquanto o usuário usa o sistema online.
+  const ehShell =
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/') ||
+    /\.(?:js|css|woff2?|png|jpg|jpeg|webp|svg|ico)$/i.test(url.pathname)
+
+  if (ehShell) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const copy = response.clone()
+            caches.open(APP_SHELL_CACHE).then((cache) => cache.put(request, copy))
+          }
+          return response
+        })
       })
-      .catch(async () => {
-        const exact = await caches.match(request)
-        if (exact) return exact
-        const fallback = await caches.match('/')
-        return fallback || Response.error()
-      })
-  )
+    )
+  }
 })
