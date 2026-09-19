@@ -78,7 +78,8 @@ export async function enviarMensagem(conversaId:string,texto:string,extras?:{cli
   const mensagem=texto.trim()
   const anexoUrl=extras?.anexoUrl?.trim()||null
   const anexoNome=extras?.anexoNome?.trim()||null
-  if(!usuario||(!mensagem&&!anexoUrl)||mensagem.length>10000) return false
+  if(!usuario||(!mensagem&&!anexoUrl)||mensagem.length>10000||(anexoNome?.length||0)>255) return false
+  if(anexoUrl){try{const url=new URL(anexoUrl);if(url.protocol!=='https:')return false}catch{return false}}
   const {data:participacao}=await supabase.from('chat_participantes').select('id').eq('conversa_id',conversaId).eq('usuario_id',usuario.id).maybeSingle()
   if(!participacao) return false
   const { error }=await supabase.from('chat_mensagens').insert({conversa_id:conversaId,usuario_id:usuario.id,usuario_nome:usuario.nome,texto:mensagem||null,anexo_url:anexoUrl,anexo_nome:anexoNome,cliente_id:extras?.clienteId||null,orcamento_id:extras?.orcamentoId||null,mensagem_pai_id:extras?.mensagemPaiId||null})
