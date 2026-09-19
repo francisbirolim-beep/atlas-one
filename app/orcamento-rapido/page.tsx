@@ -6,9 +6,11 @@ import Link from 'next/link'
 import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
-import { salvarPendente } from '@/lib/offlineFila'
+import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
+
+const RASCUNHO_ID = 'orcamento-rapido-atual'
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
@@ -83,6 +85,21 @@ function resumoMedidas(item: ItemForm) {
   return `${larguras} • ${alturas}`
 }
 
+interface RascunhoOrcamentoRapido {
+  itens: ItemForm[]
+  clienteIdOrigem: string | null
+  clienteNome: string
+  clienteWhatsapp: string
+  cidade: string
+  origem: OrigemCliente
+  temperatura: TemperaturaLead | ''
+  acabamento: Acabamento | ''
+  acabamentoOutroTexto: string
+  contramarco: Contramarco | ''
+  arquitetoNome: string
+  arquitetoContato: string
+}
+
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
@@ -105,6 +122,46 @@ export default function OrcamentoRapido() {
   const [erro, setErro] = useState('')
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
+  const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
+  const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ativo = true
+    obterRascunho<RascunhoOrcamentoRapido>(RASCUNHO_ID).then(rascunho => {
+      if (!ativo) return
+      if (rascunho?.dados) {
+        const d = rascunho.dados
+        if (Array.isArray(d.itens) && d.itens.length) setItens(d.itens.map(item => ({ ...item, fotos: [], fotosPreviews: [], fotoLargura: undefined, fotoLarguraPreview: undefined, fotoAltura: undefined, fotoAlturaPreview: undefined })))
+        setClienteIdOrigem(d.clienteIdOrigem || null)
+        setClienteNome(d.clienteNome || '')
+        setClienteWhatsapp(d.clienteWhatsapp || '')
+        setCidade(d.cidade || '')
+        if (d.origem) setOrigem(d.origem)
+        setTemperatura(d.temperatura || '')
+        setAcabamento(d.acabamento || '')
+        setAcabamentoOutroTexto(d.acabamentoOutroTexto || '')
+        setContramarco(d.contramarco || '')
+        setArquitetoNome(d.arquitetoNome || '')
+        setArquitetoContato(d.arquitetoContato || '')
+        setRascunhoSalvoEm(rascunho.atualizadoEm)
+      }
+      setRascunhoCarregado(true)
+    }).catch(() => setRascunhoCarregado(true))
+    return () => { ativo = false }
+  }, [])
+
+  useEffect(() => {
+    if (!rascunhoCarregado || salvo || salvoOffline) return
+    const timer = window.setTimeout(() => {
+      const dados: RascunhoOrcamentoRapido = {
+        itens: itens.map(item => ({ ...item, fotos: [], fotosPreviews: [], fotoLargura: undefined, fotoLarguraPreview: undefined, fotoAltura: undefined, fotoAlturaPreview: undefined })),
+        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura,
+        acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
+      }
+      salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, salvo, salvoOffline])
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
@@ -158,6 +215,8 @@ export default function OrcamentoRapido() {
 
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm) {
     await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
+    await removerRascunho(RASCUNHO_ID).catch(() => {})
+    setRascunhoSalvoEm(null)
     setSalvando(false)
     setSalvoOffline(true)
   }
@@ -177,7 +236,7 @@ export default function OrcamentoRapido() {
     try {
       const resultado = await criarOrcamentoNoServidor(dadosForm)
       setSalvando(false)
-      if (resultado.ok) { setPedidoEnviadoId(resultado.id || null); setSalvo(true) }
+      if (resultado.ok) { await removerRascunho(RASCUNHO_ID).catch(() => {}); setRascunhoSalvoEm(null); setPedidoEnviadoId(resultado.id || null); setSalvo(true) }
       else setErro('Erro ao salvar: ' + resultado.error)
     } catch {
       await salvarComoPendente(dadosForm)
@@ -223,6 +282,8 @@ export default function OrcamentoRapido() {
   }
 
   function resetar() {
+    void removerRascunho(RASCUNHO_ID).catch(() => {})
+    setRascunhoSalvoEm(null)
     setSalvo(false); setPedidoEnviadoId(null); setSalvoOffline(false); setErro(''); setConferenciaAberta(false)
     setItens([novoItem()]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
@@ -237,7 +298,7 @@ export default function OrcamentoRapido() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200"><div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div></div></header>
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento salvo automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => setTemperatura(t)} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
