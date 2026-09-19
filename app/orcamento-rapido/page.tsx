@@ -85,6 +85,8 @@ function resumoMedidas(item: ItemForm) {
   return `${larguras} • ${alturas}`
 }
 
+type ArquivoRascunho = { nome: string; tipo: string; ultimaModificacao: number; blob: Blob }
+
 interface RascunhoOrcamentoRapido {
   itens: ItemForm[]
   clienteIdOrigem: string | null
@@ -98,6 +100,7 @@ interface RascunhoOrcamentoRapido {
   contramarco: Contramarco | ''
   arquitetoNome: string
   arquitetoContato: string
+  arquivos?: ArquivoRascunho[]
 }
 
 export default function OrcamentoRapido() {
@@ -125,13 +128,26 @@ export default function OrcamentoRapido() {
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
   const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
 
+  function arquivoParaRascunho(file: File): ArquivoRascunho {
+    return { nome: file.name, tipo: file.type, ultimaModificacao: file.lastModified, blob: file }
+  }
+
+  function arquivoDoRascunho(item: ArquivoRascunho): File {
+    return new File([item.blob], item.nome, { type: item.tipo, lastModified: item.ultimaModificacao })
+  }
+
   useEffect(() => {
     let ativo = true
     obterRascunho<RascunhoOrcamentoRapido>(RASCUNHO_ID).then(rascunho => {
       if (!ativo) return
       if (rascunho?.dados) {
         const d = rascunho.dados
-        if (Array.isArray(d.itens) && d.itens.length) setItens(d.itens.map(item => ({ ...item, fotos: [], fotosPreviews: [], fotoLargura: undefined, fotoLarguraPreview: undefined, fotoAltura: undefined, fotoAlturaPreview: undefined })))
+        if (Array.isArray(d.itens) && d.itens.length) setItens(d.itens.map(item => {
+          const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
+          const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
+          const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
+          return { ...item, fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined }
+        }))
         setClienteIdOrigem(d.clienteIdOrigem || null)
         setClienteNome(d.clienteNome || '')
         setClienteWhatsapp(d.clienteWhatsapp || '')
@@ -143,6 +159,7 @@ export default function OrcamentoRapido() {
         setContramarco(d.contramarco || '')
         setArquitetoNome(d.arquitetoNome || '')
         setArquitetoContato(d.arquitetoContato || '')
+        if (Array.isArray(d.arquivos)) setArquivos(d.arquivos.map(arquivoDoRascunho))
         setRascunhoSalvoEm(rascunho.atualizadoEm)
       }
       setRascunhoCarregado(true)
@@ -154,14 +171,15 @@ export default function OrcamentoRapido() {
     if (!rascunhoCarregado || salvo || salvoOffline) return
     const timer = window.setTimeout(() => {
       const dados: RascunhoOrcamentoRapido = {
-        itens: itens.map(item => ({ ...item, fotos: [], fotosPreviews: [], fotoLargura: undefined, fotoLarguraPreview: undefined, fotoAltura: undefined, fotoAlturaPreview: undefined })),
+        itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
         clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura,
         acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
+        arquivos: arquivos.map(arquivoParaRascunho),
       }
       salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
@@ -298,7 +316,7 @@ export default function OrcamentoRapido() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200"><div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div></div></header>
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento salvo automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
+      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => setTemperatura(t)} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
