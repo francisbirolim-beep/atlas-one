@@ -14,6 +14,14 @@ import {
   lerOcultos,
 } from '@/lib/guias'
 
+function hrefOfflineSeguro(href: string) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    window.location.assign(href)
+    return true
+  }
+  return false
+}
+
 export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostrarAcessoRapido?: boolean }) {
   const [aberto, setAberto] = useState(false)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -71,6 +79,12 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Link
                   href="/orcamento-rapido"
+                  onClick={(event) => {
+                    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                      event.preventDefault()
+                      hrefOfflineSeguro('/orcamento-rapido')
+                    }
+                  }}
                   className="col-span-2 flex min-h-16 items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm">

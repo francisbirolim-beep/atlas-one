@@ -1,5 +1,5 @@
-const CACHE_NAME = 'atlas-one-v6'
-const APP_SHELL_CACHE = 'atlas-one-shell-v1'
+const CACHE_NAME = 'atlas-one-v7'
+const APP_SHELL_CACHE = 'atlas-one-shell-v2'
 const OFFLINE_URLS = ['/', '/orcamento', '/orcamento/novo', '/orcamento/rapido', '/assistencia']
 
 self.addEventListener('install', (event) => {
@@ -37,6 +37,25 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   if (url.pathname.startsWith('/api/')) return
   if (url.pathname === '/sw.js') return
+
+  // O App Router do Next usa requisições RSC/Flight ao navegar por <Link>.
+  // Offline, uma resposta HTML cacheada para esse fetch quebra o parser do cliente
+  // e causa "Application error: a client-side exception has occurred".
+  // Forçamos navegação de documento quando não há rede; assim o service worker
+  // entrega o HTML correto da rota e o app hidrata com os chunks já cacheados.
+  const ehRsc = request.headers.get('RSC') === '1' || url.searchParams.has('_rsc')
+  if (ehRsc) {
+    event.respondWith(
+      fetch(request).catch(() =>
+        new Response('', {
+          status: 503,
+          statusText: 'Offline',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        })
+      )
+    )
+    return
+  }
 
   // Navegação: tenta rede primeiro e usa a página previamente instalada se estiver offline.
   if (request.mode === 'navigate') {
