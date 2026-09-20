@@ -1,6 +1,6 @@
-const CACHE_NAME = 'atlas-one-v13'
+const CACHE_NAME = 'atlas-one-v14'
 const APP_SHELL_CACHE = 'atlas-one-shell-v8'
-const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final']
+const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final', '/compartilhar']
 
 function ehAssetLocal(pathname) {
   return pathname.startsWith('/_next/static/') ||
@@ -58,6 +58,9 @@ self.addEventListener('message', (event) => {
 })
 
 self.addEventListener('fetch', (event) => {
+  // Web Share Target: recebe texto/link compartilhado por outros apps
+  // e entrega a tela /compartilhar preservando os parâmetros.
+
   const request = event.request
   if (request.method !== 'GET') return
 
