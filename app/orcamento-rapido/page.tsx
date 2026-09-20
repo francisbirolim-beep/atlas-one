@@ -185,8 +185,9 @@ export default function OrcamentoRapido() {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
     if (!clienteId || !navigator.onLine) return
 
-    supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle()
-      .then(({ data }) => {
+    void (async () => {
+      try {
+        const { data } = await supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle()
         if (!data) return
         const cliente = data as Cliente
         setClienteIdOrigem(cliente.id)
@@ -194,8 +195,10 @@ export default function OrcamentoRapido() {
         setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
         setCidade(cliente.cidade || '')
         if (cliente.origem) setOrigem(cliente.origem)
-      })
-      .catch(() => {})
+      } catch {
+        // A consulta é apenas conveniência; falha de rede não bloqueia o formulário.
+      }
+    })()
   }, [])
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
