@@ -24,6 +24,7 @@ export async function GET(
     const { data: fornecedor, error: fornecedorError } = await supabaseAdmin
       .from("fornecedores")
       .select("*")
+      .eq("empresa_id", usuario.empresa_id)
       .eq("id", fornecedorId)
       .maybeSingle();
     if (fornecedorError) throw new Error(fornecedorError.message);
@@ -36,6 +37,7 @@ export async function GET(
     const { data: cotacoes, error: cotacoesError } = await supabaseAdmin
       .from("compras_cotacoes")
       .select("*")
+      .eq("empresa_id", usuario.empresa_id)
       .eq("fornecedor_id", fornecedorId)
       .order("created_at", { ascending: false })
       .limit(1000);
@@ -49,6 +51,7 @@ export async function GET(
         ? await supabaseAdmin
             .from("compras_necessidades")
             .select("*")
+            .eq("empresa_id", usuario.empresa_id)
             .in("id", necessidadeIds)
         : { data: [], error: null };
     if (necessidadesError) throw new Error(necessidadesError.message);
