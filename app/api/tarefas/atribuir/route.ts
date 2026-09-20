@@ -4,25 +4,28 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 const COLUNAS_PADRAO = ['A fazer', 'Em andamento', 'Concluido']
 const PRIORIDADES = new Set(['baixa', 'normal', 'alta', 'urgente'])
 
-async function autenticar(req: NextRequest) {
+type UsuarioTarefa = { id: string; nome: string; role: string; empresa_id: string }
+
+async function autenticar(req: NextRequest): Promise<UsuarioTarefa | null> {
   const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data?.user) return null
   const { data: perfil } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
-  if (!perfil) return null
-  return perfil as { id: string; nome: string; role: string }
+  if (!perfil?.empresa_id) return null
+  return perfil as UsuarioTarefa
 }
 
-async function primeiraColunaDoUsuario(usuarioId: string) {
+async function primeiraColunaDoUsuario(usuarioId: string, empresaId: string) {
   const { data: existente, error } = await supabaseAdmin
     .from('tarefa_colunas')
     .select('id,ordem')
+    .eq('empresa_id', empresaId)
     .eq('usuario_id', usuarioId)
     .order('ordem', { ascending: true })
     .limit(1)
@@ -31,7 +34,7 @@ async function primeiraColunaDoUsuario(usuarioId: string) {
 
   const { data: criadas, error: criarErro } = await supabaseAdmin
     .from('tarefa_colunas')
-    .insert(COLUNAS_PADRAO.map((nome, ordem) => ({ usuario_id: usuarioId, nome, ordem })))
+    .insert(COLUNAS_PADRAO.map((nome, ordem) => ({ empresa_id: empresaId, usuario_id: usuarioId, nome, ordem })))
     .select('id,ordem')
     .order('ordem', { ascending: true })
   if (criarErro) throw criarErro
@@ -65,16 +68,18 @@ export async function POST(req: NextRequest) {
       .from('usuarios')
       .select('id,nome')
       .eq('id', responsavelId)
+      .eq('empresa_id', solicitante.empresa_id)
       .maybeSingle()
     if (responsavelErro) throw responsavelErro
-    if (!responsavel) return NextResponse.json({ error: 'Responsável não encontrado' }, { status: 404 })
+    if (!responsavel) return NextResponse.json({ error: 'Responsável não encontrado nesta empresa' }, { status: 404 })
 
-    const colunaId = await primeiraColunaDoUsuario(responsavelId)
+    const colunaId = await primeiraColunaDoUsuario(responsavelId, solicitante.empresa_id)
     const atribuidaParaOutro = responsavelId !== solicitante.id
 
     const { data: tarefa, error: tarefaErro } = await supabaseAdmin
       .from('tarefas')
       .insert({
+        empresa_id: solicitante.empresa_id,
         usuario_id: responsavelId,
         coluna_id: colunaId,
         titulo,
