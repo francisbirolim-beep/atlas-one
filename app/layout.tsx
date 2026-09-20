@@ -12,6 +12,7 @@ import './mobile-bottom-safe.css'
 import AuthGate from '@/components/AuthGate'
 import SincronizadorOffline from '@/components/SincronizadorOffline'
 import UppercaseInputProvider from '@/components/system/UppercaseInputProvider'
+import BotaoChatGlobal from '@/components/BotaoChatGlobal'
 
 export const metadata: Metadata = {
   title: 'Atlas One - Esquadrifácio',
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <UppercaseInputProvider>
           <AuthGate>{children}</AuthGate>
         </UppercaseInputProvider>
+        <BotaoChatGlobal />
         <SincronizadorOffline />
         <script
           dangerouslySetInnerHTML={{
