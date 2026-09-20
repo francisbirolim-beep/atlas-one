@@ -11,7 +11,8 @@ import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/tipos'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente } from '@/lib/medicaoFinal'
 import { useRouter } from 'next/navigation'
-import { usuarioAtual } from '@/lib/auth'\nimport type { Usuario } from '@/lib/tipos'
+import { usuarioAtual } from '@/lib/auth'
+import type { Usuario } from '@/lib/tipos'
 import {
   adicionarDocumentoCliente,
   alocarRecebimentoEmObra,
