@@ -296,9 +296,18 @@ export default function DetalheMedicaoFinal() {
     setEnviandoFotoLargura(true)
     setStatusLargura('Enviando e salvando foto...')
     try {
+      if (!navigator.onLine) {
+        const localUrl = URL.createObjectURL(file)
+        setFotoLargurasUrl(localUrl)
+        await salvarPendente({ id: `medicao-foto-largura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'larguras', arquivo: file } })
+        setStatusLargura('Foto salva neste aparelho. Será enviada quando a internet voltar.')
+        return
+      }
       const url = await uploadFotoMedicao(file)
       if (!url) {
-        setStatusLargura('Não foi possível enviar a foto. Tente novamente.')
+        await salvarPendente({ id: `medicao-foto-largura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'larguras', arquivo: file } })
+        setFotoLargurasUrl(URL.createObjectURL(file))
+        setStatusLargura('Foto salva neste aparelho. Será enviada automaticamente.')
         return
       }
       setFotoLargurasUrl(url)
@@ -320,9 +329,18 @@ export default function DetalheMedicaoFinal() {
     setEnviandoFotoAltura(true)
     setStatusAltura('Enviando e salvando foto...')
     try {
+      if (!navigator.onLine) {
+        const localUrl = URL.createObjectURL(file)
+        setFotoAlturasUrl(localUrl)
+        await salvarPendente({ id: `medicao-foto-altura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'alturas', arquivo: file } })
+        setStatusAltura('Foto salva neste aparelho. Será enviada quando a internet voltar.')
+        return
+      }
       const url = await uploadFotoMedicao(file)
       if (!url) {
-        setStatusAltura('Não foi possível enviar a foto. Tente novamente.')
+        await salvarPendente({ id: `medicao-foto-altura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'alturas', arquivo: file } })
+        setFotoAlturasUrl(URL.createObjectURL(file))
+        setStatusAltura('Foto salva neste aparelho. Será enviada automaticamente.')
         return
       }
       setFotoAlturasUrl(url)
