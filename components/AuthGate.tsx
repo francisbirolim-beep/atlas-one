@@ -22,25 +22,51 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let ativo = true
+
+    // No iPhone/PWA, getSession pode ficar pendente indefinidamente quando o app
+    // nasce já sem rede. O estado offline precisa ser decidido imediatamente,
+    // antes de qualquer chamada que possa depender de renovação da sessão.
+    if (!navigator.onLine) {
+      setAutenticado(true)
+      setChecking(false)
+      return () => { ativo = false }
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (!ativo) return
+      // Se a rede caiu durante a abertura, libera o shell local em vez de
+      // manter o usuário preso em "Carregando...".
+      if (!navigator.onLine) {
+        setAutenticado(true)
+        setChecking(false)
+      }
+    }, 2500)
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!ativo) return
+      window.clearTimeout(timeout)
       setAutenticado(!!session)
       setChecking(false)
       if (!session && !rotaPublica && navigator.onLine) router.replace('/login')
     }).catch(() => {
       if (!ativo) return
-      // Sem rede, o Supabase pode não conseguir validar/renovar a sessão.
-      // Não deixamos o Atlas preso em "Carregando..."; o app abre com o estado
-      // local já persistido e sincroniza novamente quando a conexão voltar.
+      window.clearTimeout(timeout)
       setChecking(false)
       if (!navigator.onLine) setAutenticado(true)
       else if (!rotaPublica) router.replace('/login')
     })
+
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!ativo) return
       setAutenticado(!!session)
       if (!session && !rotaPublica && navigator.onLine) router.replace('/login')
     })
-    return () => { ativo = false; listener.subscription.unsubscribe() }
+
+    return () => {
+      ativo = false
+      window.clearTimeout(timeout)
+      listener.subscription.unsubscribe()
+    }
   }, [rotaPublica, router])
 
   if (rotaPublica) return <>{children}</>
