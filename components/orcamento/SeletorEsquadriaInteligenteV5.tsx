@@ -123,13 +123,25 @@ export default function SeletorEsquadriaInteligenteV5({ value, onChange }: Props
 
   useEffect(() => {
     let ativo = true
-    supabase.auth.getSession().then(({ data }) => {
+
+    const carregarLocal = (id = 'dispositivo') => {
       if (!ativo) return
-      const id = data.session?.user.id || 'dispositivo'
       setUsuarioId(id)
       setAprendidasAmbiente(lerAprendizado(id, 'ambiente'))
       setAprendidasDescricao(lerAprendizado(id, 'descricao'))
-    })
+    }
+
+    // O seletor precisa montar imediatamente em campo, mesmo quando a PWA
+    // nasce sem rede. Não esperamos o Supabase para recursos de conveniência.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      carregarLocal()
+      return () => { ativo = false }
+    }
+
+    supabase.auth.getSession()
+      .then(({ data }) => carregarLocal(data.session?.user.id || 'dispositivo'))
+      .catch(() => carregarLocal())
+
     return () => { ativo = false }
   }, [])
 
