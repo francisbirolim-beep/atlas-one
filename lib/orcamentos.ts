@@ -49,6 +49,7 @@ export interface ItemOrcamentoForm {
 export interface DadosOrcamentoForm {
   clienteId?: string | null
   obraId?: string | null
+  orcamentoIdDestino?: string | null
   itens: ItemOrcamentoForm[]
   clienteNome: string
   clienteWhatsapp: string
@@ -263,7 +264,31 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   const novoId = uuidv4()
   const tipoMedidaOrcamento = itensSalvos.length > 0 && itensSalvos.every(item => item.tipo_medida === 'final') ? 'final' : 'comum'
 
-  const { error } = await supabase.from('orcamentos').insert({
+  const orcamentoIdDestino = dados.orcamentoIdDestino || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('adicionarAo') : null)
+  let error: any = null
+  let idResultado = novoId
+
+  if (orcamentoIdDestino) {
+    const { data: existente, error: erroLeitura } = await supabase
+      .from('orcamentos')
+      .select('id,itens,fotos_urls,anexos')
+      .eq('id', orcamentoIdDestino)
+      .maybeSingle()
+    if (erroLeitura || !existente) return { ok: false, error: erroLeitura?.message || 'Orçamento original não encontrado' }
+
+    const itensExistentes = Array.isArray(existente.itens) ? existente.itens : []
+    const fotosExistentes = Array.isArray(existente.fotos_urls) ? existente.fotos_urls : []
+    const anexosExistentes = Array.isArray(existente.anexos) ? existente.anexos : []
+    const atualizado = await supabase.from('orcamentos').update({
+      itens: [...itensExistentes, ...itensSalvos],
+      fotos_urls: [...fotosExistentes, ...fotosUrls],
+      anexos: [...anexosExistentes, ...anexosSalvos],
+      tipo_medida: [...itensExistentes, ...itensSalvos].every((item: any) => item?.tipo_medida === 'final') ? 'final' : 'comum',
+    }).eq('id', orcamentoIdDestino)
+    error = atualizado.error
+    idResultado = orcamentoIdDestino
+  } else {
+    const inserido = await supabase.from('orcamentos').insert({
     id: novoId, cliente_id: clienteId, obra_id: obraId || null, cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp, cidade, origem,
     tipo_esquadria: primeiro?.tipo_esquadria || 'outro', largura_mm: primeiro?.largura_mm || null,
@@ -276,7 +301,9 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString(),
     arquiteto_nome: arquitetoNome || null, arquiteto_contato: arquitetoContato || null,
     criado_por_nome: usuario?.nome || null, criado_por_id: usuario?.id || null,
-  })
+    })
+    error = inserido.error
+  }
 
   if (error) return { ok: false, error: error.message }
 
@@ -338,5 +365,5 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
 
   if (colunaId) executarAutomacoesColuna(colunaId, { cliente_nome: clienteNome, criado_por_id: usuario?.id || null }).catch(() => {})
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
-  return { ok: true, id: novoId }
+  return { ok: true, id: idResultado }
 }
