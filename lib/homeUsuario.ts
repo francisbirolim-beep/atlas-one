@@ -60,18 +60,33 @@ function normalizarConfig(valor: unknown, role: Usuario['role']): HomeUsuarioCon
 }
 
 export async function lerHomeUsuarioConfig(usuario: Pick<Usuario, 'id' | 'role'>): Promise<HomeUsuarioConfig> {
-  const { data, error } = await supabase
-    .from('configuracoes_gerais')
-    .select('valor')
-    .eq('chave', chave(usuario.id))
-    .maybeSingle()
+  const chaveLocal = `atlas_home_config:${usuario.id}:v1`
 
-  if (error || !data?.valor) return homeConfigPadrao(usuario.role)
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    try {
+      const salvo = window.localStorage.getItem(chaveLocal)
+      if (salvo) return normalizarConfig(JSON.parse(salvo), usuario.role)
+    } catch {}
+    return homeConfigPadrao(usuario.role)
+  }
 
   try {
+    const { data, error } = await supabase
+      .from('configuracoes_gerais')
+      .select('valor')
+      .eq('chave', chave(usuario.id))
+      .maybeSingle()
+
+    if (error || !data?.valor) return homeConfigPadrao(usuario.role)
     const parsed = typeof data.valor === 'string' ? JSON.parse(data.valor) : data.valor
-    return normalizarConfig(parsed, usuario.role)
+    const config = normalizarConfig(parsed, usuario.role)
+    try { window.localStorage.setItem(chaveLocal, JSON.stringify(config)) } catch {}
+    return config
   } catch {
+    try {
+      const salvo = window.localStorage.getItem(chaveLocal)
+      if (salvo) return normalizarConfig(JSON.parse(salvo), usuario.role)
+    } catch {}
     return homeConfigPadrao(usuario.role)
   }
 }
