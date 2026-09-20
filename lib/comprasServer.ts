@@ -8,6 +8,20 @@ export type UsuarioCompras = {
   empresa_id: string
 }
 
+type NivelPermissao = 'oculto' | 'consulta' | 'edicao'
+
+function setorDaRota(req: NextRequest): 'compras' | 'estoque' | 'financeiro' {
+  const pathname = req.nextUrl.pathname.toLowerCase()
+  if (pathname === '/api/estoque' || pathname.startsWith('/api/estoque/')) return 'estoque'
+  if (pathname === '/api/financeiro' || pathname.startsWith('/api/financeiro/')) return 'financeiro'
+  return 'compras'
+}
+
+function nivelSuficiente(nivel: NivelPermissao, precisaEdicao: boolean) {
+  if (precisaEdicao) return nivel === 'edicao'
+  return nivel === 'consulta' || nivel === 'edicao'
+}
+
 export async function autenticarCompras(req: NextRequest): Promise<UsuarioCompras | null> {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
@@ -21,7 +35,24 @@ export async function autenticarCompras(req: NextRequest): Promise<UsuarioCompra
     .eq('id', data.user.id)
     .maybeSingle()
 
-  return usuario?.empresa_id ? (usuario as UsuarioCompras) : null
+  if (!usuario?.empresa_id) return null
+  if (usuario.role === 'master') return usuario as UsuarioCompras
+
+  const setorId = setorDaRota(req)
+  const precisaEdicao = req.method !== 'GET' && req.method !== 'HEAD'
+  const { data: permissao, error: permissaoError } = await supabaseAdmin
+    .from('permissoes')
+    .select('nivel')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('setor_id', setorId)
+    .maybeSingle()
+
+  if (permissaoError) return null
+  const nivel = (permissao?.nivel || 'oculto') as NivelPermissao
+  if (!nivelSuficiente(nivel, precisaEdicao)) return null
+
+  return usuario as UsuarioCompras
 }
 
 export function limiteSeguro(valor: string | null, padrao = 100, maximo = 200) {
