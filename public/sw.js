@@ -1,6 +1,6 @@
-const CACHE_NAME = 'atlas-one-v12'
-const APP_SHELL_CACHE = 'atlas-one-shell-v7'
-const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia']
+const CACHE_NAME = 'atlas-one-v13'
+const APP_SHELL_CACHE = 'atlas-one-shell-v8'
+const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final']
 
 function ehAssetLocal(pathname) {
   return pathname.startsWith('/_next/static/') ||
