@@ -56,7 +56,18 @@ export interface PendenteMedicaoFinal {
   }
 }
 
-export type Pendente = PendenteOrcamento | PendenteAssistencia | PendenteMedicaoFinal
+export interface PendenteMedicaoFoto {
+  id: string
+  tipo: 'medicao_foto'
+  criadoEm: string
+  dados: {
+    itemId: string
+    campo: 'larguras' | 'alturas'
+    arquivo: Blob
+  }
+}
+
+export type Pendente = PendenteOrcamento | PendenteAssistencia | PendenteMedicaoFinal | PendenteMedicaoFoto
 
 export interface RascunhoOffline<T = any> {
   id: string
