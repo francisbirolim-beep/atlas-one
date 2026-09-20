@@ -46,12 +46,25 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
 
   useEffect(() => {
     let ativo = true
-    Promise.all([listarTipologias(), listarLinhasTecnicas()]).then(([ts, ls]) => {
-      if (!ativo) return
-      setTipologias(ts.filter((t: any) => t.ativo !== false))
-      setLinhas(ls.filter(l => l.ativo))
+
+    // Linha/tipologia são opcionais no levantamento. Offline, não fazemos
+    // consultas Supabase: descrição livre + medidas continuam disponíveis.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setCarregando(false)
-    })
+      return () => { ativo = false }
+    }
+
+    Promise.all([listarTipologias(), listarLinhasTecnicas()])
+      .then(([ts, ls]) => {
+        if (!ativo) return
+        setTipologias(ts.filter((t: any) => t.ativo !== false))
+        setLinhas(ls.filter(l => l.ativo))
+        setCarregando(false)
+      })
+      .catch(() => {
+        if (ativo) setCarregando(false)
+      })
+
     return () => { ativo = false }
   }, [])
 
