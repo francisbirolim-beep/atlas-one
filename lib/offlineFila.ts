@@ -44,7 +44,19 @@ export interface PendenteAssistencia {
   dados: any
 }
 
-export type Pendente = PendenteOrcamento | PendenteAssistencia
+export interface PendenteMedicaoFinal {
+  id: string
+  tipo: 'medicao_final'
+  criadoEm: string
+  dados: {
+    itemId: string
+    medicaoId: string
+    medidas: any
+    usuario: any
+  }
+}
+
+export type Pendente = PendenteOrcamento | PendenteAssistencia | PendenteMedicaoFinal
 
 export interface RascunhoOffline<T = any> {
   id: string
