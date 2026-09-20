@@ -183,16 +183,19 @@ export default function OrcamentoRapido() {
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    if (!clienteId) return
-    supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle().then(({ data }) => {
-      if (!data) return
-      const cliente = data as Cliente
-      setClienteIdOrigem(cliente.id)
-      setClienteNome(cliente.nome || '')
-      setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
-      setCidade(cliente.cidade || '')
-      if (cliente.origem) setOrigem(cliente.origem)
-    })
+    if (!clienteId || !navigator.onLine) return
+
+    supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        const cliente = data as Cliente
+        setClienteIdOrigem(cliente.id)
+        setClienteNome(cliente.nome || '')
+        setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
+        setCidade(cliente.cidade || '')
+        if (cliente.origem) setOrigem(cliente.origem)
+      })
+      .catch(() => {})
   }, [])
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
