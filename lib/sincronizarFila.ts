@@ -1,6 +1,9 @@
 import { listarPendentes, removerPendente } from './offlineFila'
 import { criarOrcamentoNoServidor } from './orcamentos'
 import { criarAssistenciaNoServidor } from './assistencias'
+import { salvarMedidaItem } from './medicaoFinal'
+import { uploadFotoMedicao } from './upload'
+import { salvarFotoMedicaoItem } from './medicaoFoto'
 
 let sincronizando = false
 
@@ -23,11 +26,19 @@ export async function sincronizarFilaOffline(): Promise<{ enviados: number; rest
     const pendentes = await listarPendentes()
     for (const item of pendentes) {
       try {
-        const resultado =
-          item.tipo === 'orcamento'
-            ? await criarOrcamentoNoServidor(item.dados)
-            : await criarAssistenciaNoServidor(item.dados)
-        if (resultado.ok) {
+        let ok = false
+        if (item.tipo === 'orcamento') {
+          ok = (await criarOrcamentoNoServidor(item.dados)).ok
+        } else if (item.tipo === 'assistencia') {
+          ok = (await criarAssistenciaNoServidor(item.dados)).ok
+        } else if (item.tipo === 'medicao_final') {
+          ok = await salvarMedidaItem(item.dados.itemId, item.dados.medidas, item.dados.usuario)
+        } else if (item.tipo === 'medicao_foto') {
+          const arquivo = new File([item.dados.arquivo], `medicao-${item.dados.itemId}.jpg`, { type: item.dados.arquivo.type || 'image/jpeg' })
+          const url = await uploadFotoMedicao(arquivo)
+          ok = !!url && await salvarFotoMedicaoItem(item.dados.itemId, item.dados.campo, url)
+        }
+        if (ok) {
           await removerPendente(item.id)
           enviados++
         }

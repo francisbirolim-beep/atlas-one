@@ -20,6 +20,7 @@ import { uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medicaoFoto'
 import { listarTipologias } from '@/lib/tipologias'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { obterRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 
 let tiposCache: Tipologia[] = []
 
@@ -114,15 +115,28 @@ export default function DetalheMedicaoFinal() {
 
   async function carregar() {
     setCarregando(true)
-    const [med, its, limite] = await Promise.all([
-      buscarMedicao(id),
-      listarItensMedicao(id),
-      lerLimiteAlertaDiferenca(),
-    ])
-    setMedicao(med)
-    setItens(its)
-    setLimiteAlerta(limite)
-    setCarregando(false)
+    const snapshotId = `medicao-final-${id}`
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('offline')
+      const [med, its, limite] = await Promise.all([
+        buscarMedicao(id),
+        listarItensMedicao(id),
+        lerLimiteAlertaDiferenca(),
+      ])
+      setMedicao(med)
+      setItens(its)
+      setLimiteAlerta(limite)
+      if (med) await salvarRascunho(snapshotId, { medicao: med, itens: its, limite })
+    } catch {
+      const local = await obterRascunho<{ medicao: MedicaoFinal; itens: MedicaoItem[]; limite: number }>(snapshotId)
+      if (local?.dados) {
+        setMedicao(local.dados.medicao)
+        setItens(local.dados.itens || [])
+        setLimiteAlerta(local.dados.limite || 10)
+      }
+    } finally {
+      setCarregando(false)
+    }
   }
 
   async function importarItensDoPdf() {
@@ -282,9 +296,18 @@ export default function DetalheMedicaoFinal() {
     setEnviandoFotoLargura(true)
     setStatusLargura('Enviando e salvando foto...')
     try {
+      if (!navigator.onLine) {
+        const localUrl = URL.createObjectURL(file)
+        setFotoLargurasUrl(localUrl)
+        await salvarPendente({ id: `medicao-foto-largura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'larguras', arquivo: file } })
+        setStatusLargura('Foto salva neste aparelho. Será enviada quando a internet voltar.')
+        return
+      }
       const url = await uploadFotoMedicao(file)
       if (!url) {
-        setStatusLargura('Não foi possível enviar a foto. Tente novamente.')
+        await salvarPendente({ id: `medicao-foto-largura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'larguras', arquivo: file } })
+        setFotoLargurasUrl(URL.createObjectURL(file))
+        setStatusLargura('Foto salva neste aparelho. Será enviada automaticamente.')
         return
       }
       setFotoLargurasUrl(url)
@@ -306,9 +329,18 @@ export default function DetalheMedicaoFinal() {
     setEnviandoFotoAltura(true)
     setStatusAltura('Enviando e salvando foto...')
     try {
+      if (!navigator.onLine) {
+        const localUrl = URL.createObjectURL(file)
+        setFotoAlturasUrl(localUrl)
+        await salvarPendente({ id: `medicao-foto-altura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'alturas', arquivo: file } })
+        setStatusAltura('Foto salva neste aparelho. Será enviada quando a internet voltar.')
+        return
+      }
       const url = await uploadFotoMedicao(file)
       if (!url) {
-        setStatusAltura('Não foi possível enviar a foto. Tente novamente.')
+        await salvarPendente({ id: `medicao-foto-altura-${itemMedindo.id}-${Date.now()}`, tipo: 'medicao_foto', criadoEm: new Date().toISOString(), dados: { itemId: itemMedindo.id, campo: 'alturas', arquivo: file } })
+        setFotoAlturasUrl(URL.createObjectURL(file))
+        setStatusAltura('Foto salva neste aparelho. Será enviada automaticamente.')
         return
       }
       setFotoAlturasUrl(url)
@@ -386,15 +418,36 @@ export default function DetalheMedicaoFinal() {
       campos_extras: valoresExtras,
     }
 
-    const ok = await salvarMedidaItemApi(itemMedindo.id, dados, usuario)
+    let ok = false
+    const agora = new Date().toISOString()
+    const itemAtualizado = { ...itemMedindo, ...dados, medido: true, status_medicao: 'concluida', medido_em: agora, medido_por_nome: usuario?.nome || null } as MedicaoItem
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await salvarPendente({
+        id: `medicao-final-${itemMedindo.id}-${Date.now()}`,
+        tipo: 'medicao_final',
+        criadoEm: agora,
+        dados: { itemId: itemMedindo.id, medicaoId: id, medidas: dados, usuario },
+      })
+      ok = true
+    } else {
+      ok = await salvarMedidaItemApi(itemMedindo.id, dados, usuario)
+      if (!ok) {
+        await salvarPendente({
+          id: `medicao-final-${itemMedindo.id}-${Date.now()}`,
+          tipo: 'medicao_final',
+          criadoEm: agora,
+          dados: { itemId: itemMedindo.id, medicaoId: id, medidas: dados, usuario },
+        })
+        ok = true
+      }
+    }
     setSalvandoMedida(false)
 
     if (ok) {
-      setItens(prev => prev.map(i => (
-        i.id === itemMedindo.id
-          ? { ...i, ...dados, medido: true, medido_em: new Date().toISOString(), medido_por_nome: usuario?.nome || null }
-          : i
-      )))
+      const novosItens = itens.map(i => i.id === itemMedindo.id ? itemAtualizado : i)
+      setItens(novosItens)
+      if (medicao) await salvarRascunho(`medicao-final-${id}`, { medicao, itens: novosItens, limite: limiteAlerta })
       setItemMedindo(null)
     } else {
       alert('Erro ao salvar a medição. Tenta de novo.')
