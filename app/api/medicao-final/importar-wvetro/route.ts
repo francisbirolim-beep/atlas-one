@@ -10,14 +10,60 @@ export const runtime = 'nodejs'
 const MAX_PDF_BYTES = 15 * 1024 * 1024
 const BUCKET_INTERNO = 'atlas-interno'
 
-async function autenticar(req: NextRequest) {
+type UsuarioMedicao = {
+  id: string
+  nome: string | null
+  role: string
+  empresa_id: string
+  email: string | null
+  nivel: 'oculto' | 'consulta' | 'edicao'
+}
+
+async function autenticarMedicao(req: NextRequest): Promise<UsuarioMedicao | null> {
   const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.replace('Bearer ', '').trim()
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
 
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  return data.user
+  const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token)
+  if (authError || !authData?.user) return null
+
+  const { data: usuario, error: usuarioError } = await supabaseAdmin
+    .from('usuarios')
+    .select('id, nome, role, empresa_id')
+    .eq('id', authData.user.id)
+    .maybeSingle()
+  if (usuarioError || !usuario?.empresa_id) return null
+
+  if (usuario.role === 'master') {
+    return {
+      ...usuario,
+      email: authData.user.email || null,
+      nivel: 'edicao',
+    } as UsuarioMedicao
+  }
+
+  const { data: setor } = await supabaseAdmin
+    .from('setores')
+    .select('id')
+    .eq('rota', '/producao/medicao-final')
+    .eq('ativo', true)
+    .maybeSingle()
+  if (!setor?.id) return null
+
+  const { data: permissao } = await supabaseAdmin
+    .from('permissoes')
+    .select('nivel')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('setor_id', setor.id)
+    .maybeSingle()
+
+  const nivel = (permissao?.nivel as UsuarioMedicao['nivel'] | undefined) || 'oculto'
+  return {
+    ...usuario,
+    email: authData.user.email || null,
+    nivel,
+  } as UsuarioMedicao
 }
 
 function descricaoMedicao(item: ReturnType<typeof parseOrcamentoWVetroTexto>['itens'][number]) {
@@ -61,8 +107,11 @@ function anexoOriginalWVetro(anexos: unknown): AnexoStorage | null {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await autenticar(req)
-  if (!user) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+  const usuarioAtlas = await autenticarMedicao(req)
+  if (!usuarioAtlas) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+  if (usuarioAtlas.nivel === 'oculto') {
+    return NextResponse.json({ error: 'Sem permissão para acessar a Medição Final.' }, { status: 403 })
+  }
 
   try {
     const formData = await req.formData()
@@ -110,21 +159,15 @@ export async function POST(req: NextRequest) {
     if (acao !== 'confirmar') {
       return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 })
     }
+    if (usuarioAtlas.nivel !== 'edicao') {
+      return NextResponse.json({ error: 'Você não tem permissão de edição para importar uma Medição Final.' }, { status: 403 })
+    }
 
     const clienteNome = String(formData.get('cliente_nome') || resumo.cliente_nome || '').trim()
     const cidade = String(formData.get('cidade') || resumo.cidade || '').trim()
-    const { data: usuarioAtlas } = await supabaseAdmin
-      .from('usuarios')
-      .select('id, nome, empresa_id')
-      .eq('id', user.id)
-      .maybeSingle()
-    if (!usuarioAtlas?.empresa_id) {
-      return NextResponse.json({ error: 'Usuário sem empresa vinculada.' }, { status: 403 })
-    }
-
     const empresaId = usuarioAtlas.empresa_id
-    const criadoPorId = user.id
-    const criadoPorNome = usuarioAtlas.nome || user.email || null
+    const criadoPorId = usuarioAtlas.id
+    const criadoPorNome = usuarioAtlas.nome || usuarioAtlas.email || null
 
     if (!clienteNome) {
       return NextResponse.json({ error: 'Confirme o nome do cliente antes de criar a Medição Final.' }, { status: 422 })
@@ -292,7 +335,7 @@ export async function POST(req: NextRequest) {
 
     const { error: erroItens } = await supabaseAdmin.from('medicao_itens').insert(itensMedicao)
     if (erroItens) {
-      console.error('Erro ao criar itens da Medição Final importada:', erroItens)
+      console.error('Erro ao criar itens da Medição Final importada do W.Vetro:', erroItens)
       await supabaseAdmin.from('medicoes_finais').delete().eq('id', medicao.id).eq('empresa_id', empresaId)
       if (!orcamentoExistenteId) {
         await supabaseAdmin.from('orcamentos').delete().eq('id', orcamentoId).eq('empresa_id', empresaId)
