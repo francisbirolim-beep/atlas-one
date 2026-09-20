@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Boxes, FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
+import { Boxes, FilePlus2, FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
@@ -69,6 +69,15 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
 
             {favoritos.length > 0 ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
+                <Link
+                  href="/orcamento-rapido"
+                  className="col-span-2 flex min-h-16 items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm">
+                    <FilePlus2 size={18} />
+                  </span>
+                  <span className="min-w-0">Novo pedido de orçamento</span>
+                </Link>
                 {favoritos.slice(0, 6).map(guia => {
                   const Icon = guia.icon
                   return (
