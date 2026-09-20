@@ -1096,6 +1096,12 @@ className="w-full py-3 flex items-center justify-center gap-2 bg-brand-navy text
 ? 'Clique para continuar de onde parou.'
 : 'Os detalhes do pedido liberam depois de iniciar.'}
 </p>
+<Link
+href={`/orcamento-rapido?cliente=${encodeURIComponent(cardSelecionado.cliente_id || '')}&adicionarAo=${encodeURIComponent(cardSelecionado.id)}`}
+className="w-full py-3 flex items-center justify-center gap-2 border border-brand-navy text-brand-navy bg-white rounded-xl font-medium hover:bg-slate-50 transition"
+>
+<Plus size={16} /> Adicionar tipologia
+</Link>
 {usuario?.role === 'master' && (
 <button
 onClick={excluirCard}
