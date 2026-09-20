@@ -28,9 +28,35 @@ function padrao(escopo: 'setor' | 'master'): ConfigAgente {
   }
 }
 
-export async function carregarConfigAgente(setorId: string | null, escopo: 'setor' | 'master'): Promise<ConfigAgente> {
+async function resolverEmpresaSegura(empresaId?: string | null): Promise<string | null> {
+  if (empresaId) return empresaId
+
+  const { data, error } = await supabaseAdmin
+    .from('empresas')
+    .select('id')
+    .eq('ativo', true)
+    .limit(2)
+
+  if (error || !data || data.length !== 1) return null
+  return data[0].id
+}
+
+export async function carregarConfigAgente(
+  setorId: string | null,
+  escopo: 'setor' | 'master',
+  empresaId?: string | null,
+): Promise<ConfigAgente> {
   try {
-    let query = supabaseAdmin.from('agentes_ia').select('*').eq('ativo', true).eq('escopo', escopo)
+    const tenant = await resolverEmpresaSegura(empresaId)
+    if (!tenant) return padrao(escopo)
+
+    let query = supabaseAdmin
+      .from('agentes_ia')
+      .select('*')
+      .eq('empresa_id', tenant)
+      .eq('ativo', true)
+      .eq('escopo', escopo)
+
     if (escopo === 'setor' && setorId) {
       query = query.eq('setor_id', setorId)
     }

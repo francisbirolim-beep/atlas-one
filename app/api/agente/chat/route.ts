@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarUsuario, rodarLoop, obterOuCriarConversaHoje, salvarMensagem } from '@/lib/agente'
+import { verificarUsuario, rodarLoop } from '@/lib/agente'
+import { obterOuCriarConversaHoje, salvarMensagem } from '@/lib/agenteHistoricoServer'
 
 const TAMANHO_MAX_BASE64 = 12_000_000
 
