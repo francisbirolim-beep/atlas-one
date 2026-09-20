@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/tipos'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente } from '@/lib/medicaoFinal'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/AuthContext'
+import { usuarioAtual } from '@/lib/auth'\nimport type { Usuario } from '@/lib/tipos'
 import {
   adicionarDocumentoCliente,
   alocarRecebimentoEmObra,
@@ -55,7 +55,7 @@ function Box({titulo,acao,children}:{titulo:string;acao?:React.ReactNode;childre
 
 export default function Cliente360DashboardV2({clienteId}:Props){
   const router=useRouter()
-  const {usuario}=useAuth()
+  const [usuario,setUsuario]=useState<Usuario|null>(null)
   const [cliente,setCliente]=useState<Cliente|null>(null)
   const [obras,setObras]=useState<ObraCliente360[]>([])
   const [orcamentos,setOrcamentos]=useState<Orcamento[]>([])
@@ -83,7 +83,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [obraMedidaId,setObraMedidaId]=useState('')
   const [orcamentoMedidaId,setOrcamentoMedidaId]=useState('')
 
-  useEffect(()=>{void carregar()},[clienteId])
+  useEffect(()=>{void carregar(); void usuarioAtual().then(setUsuario)},[clienteId])
   async function carregar(){
     setCarregando(true);setErro('')
     const [c,os,orc,ass,med,comp,int,cr,rec,docs]=await Promise.all([
