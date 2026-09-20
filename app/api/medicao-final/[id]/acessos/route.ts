@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { gerarTokenAcessoMedicao, hashTokenAcessoMedicao } from '@/lib/medicaoAcessoExternoServer'
 
-type UsuarioAcesso = { id: string; nome: string; role: string }
+type UsuarioAcesso = { id: string; nome: string; role: string; empresa_id: string }
 
 async function usuarioAutenticado(req: NextRequest): Promise<UsuarioAcesso | null> {
   const auth = req.headers.get('authorization') || ''
@@ -14,11 +14,12 @@ async function usuarioAutenticado(req: NextRequest): Promise<UsuarioAcesso | nul
 
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id, nome, role')
+    .select('id, nome, role, empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
 
-  return (data as UsuarioAcesso | null) || null
+  if (!data?.empresa_id) return null
+  return data as UsuarioAcesso
 }
 
 async function nivelAcessoMedicao(usuario: UsuarioAcesso): Promise<'oculto' | 'consulta' | 'edicao'> {
@@ -43,11 +44,23 @@ async function nivelAcessoMedicao(usuario: UsuarioAcesso): Promise<'oculto' | 'c
   return (permissao?.nivel as 'oculto' | 'consulta' | 'edicao' | undefined) || 'oculto'
 }
 
+async function medicaoDaEmpresa(usuario: UsuarioAcesso, medicaoId: string) {
+  const { data } = await supabaseAdmin
+    .from('medicoes_finais')
+    .select('id, status_operacional')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('id', medicaoId)
+    .maybeSingle()
+  return data || null
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
   const nivel = await nivelAcessoMedicao(usuario)
   if (nivel === 'oculto') return NextResponse.json({ error: 'Sem permissao para acessar a Medicao Final.' }, { status: 403 })
+  const medicao = await medicaoDaEmpresa(usuario, params.id)
+  if (!medicao) return NextResponse.json({ error: 'Medicao nao encontrada.' }, { status: 404 })
 
   const { data, error } = await supabaseAdmin
     .from('medicao_acessos_externos')
@@ -73,12 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (!nome) return NextResponse.json({ error: 'Informe o nome de quem vai fazer a medicao.' }, { status: 400 })
 
-  const { data: medicao } = await supabaseAdmin
-    .from('medicoes_finais')
-    .select('id, status_operacional')
-    .eq('id', params.id)
-    .maybeSingle()
-
+  const medicao = await medicaoDaEmpresa(usuario, params.id)
   if (!medicao) return NextResponse.json({ error: 'Medicao nao encontrada.' }, { status: 404 })
   if (!['liberado', 'em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
     return NextResponse.json({ error: 'Libere a Medicao Final antes de gerar um link externo.' }, { status: 409 })
@@ -115,6 +123,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (await nivelAcessoMedicao(usuario) !== 'edicao') {
     return NextResponse.json({ error: 'Voce nao tem permissao de edicao para revogar links de Medicao Final.' }, { status: 403 })
   }
+  const medicao = await medicaoDaEmpresa(usuario, params.id)
+  if (!medicao) return NextResponse.json({ error: 'Medicao nao encontrada.' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
   const acessoId = String(body?.acessoId || '')
