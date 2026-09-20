@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, ChevronRight, ClipboardList, Headphones, LayoutDashboard, Loader2,
-  PackagePlus, Pencil, Search, ShoppingCart, UserCheck, UserPlus,
+  PackagePlus, Pencil, Ruler, Search, ShoppingCart, UserCheck, UserPlus,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
@@ -71,6 +71,7 @@ export default function IdentificarCliente() {
     { titulo: 'Pedido de orçamento', subtitulo: 'Registrar visita e enviar ao Kanban', icone: ClipboardList, href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-blue-50 text-blue-600' },
     { titulo: 'Orçamento sob medida', subtitulo: 'Montar com tipologia e variáveis', icone: Pencil, href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-emerald-50 text-emerald-600' },
     { titulo: 'Balcão', subtitulo: 'Venda de produtos', icone: ShoppingCart, href: `/orcamento/balcao/novo?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-amber-50 text-amber-700' },
+    { titulo: 'Medida final', subtitulo: 'Registrar medidas finais da obra', icone: Ruler, href: `/clientes/${encodeURIComponent(clienteSelecionado.id)}?aba=medicoes`, cor: 'bg-rose-50 text-rose-500' },
     { titulo: 'Assistência', subtitulo: 'Pós-venda e manutenção', icone: Headphones, href: `/assistencia?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-violet-50 text-violet-700' },
     { titulo: 'Pedido de compra', subtitulo: 'Enviar necessidade direto ao comprador', icone: PackagePlus, href: `/compras?cliente=${encodeURIComponent(clienteSelecionado.id)}&clienteNome=${encodeURIComponent(clienteSelecionado.nome)}`, cor: 'bg-red-50 text-red-700' },
     { titulo: 'Abrir cliente', subtitulo: 'Ver histórico, orçamentos, pedidos e finanças', icone: LayoutDashboard, href: `/clientes/${clienteSelecionado.id}`, cor: 'bg-slate-100 text-brand-navy' },
