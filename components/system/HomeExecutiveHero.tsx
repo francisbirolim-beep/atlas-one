@@ -109,7 +109,7 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
       {modulos.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 lg:grid-cols-3 2xl:grid-cols-6">
           {(tem('orcamentos') || tem('clientes')) && (
-            <Link href="/clientes/identificar" className={classeAtalho}>
+            <Link href="/clientes/identificar" onClick={(e) => { if (!navigator.onLine) { e.preventDefault(); window.location.assign('/orcamento-rapido?offline=1') } }} className={classeAtalho}>
               <span className={classeIcone}><UserPlus size={19} /></span>
               <span className="min-w-0 flex-1"><strong className={classeTextoAtalho}>Cliente 360</strong><span className={classeSubtituloAtalho}>Buscar ou cadastrar cliente</span></span><ArrowRight size={14} className="hidden text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600 sm:block" />
             </Link>
