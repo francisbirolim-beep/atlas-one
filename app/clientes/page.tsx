@@ -31,8 +31,29 @@ export default function Clientes() {
 
   async function carregar() {
     setCarregando(true)
-    const { data } = await supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(1000)
-    if (data) setClientes(data as ClienteComApelido[])
+    const chave = 'atlas_clientes_offline_v1'
+
+    if (!navigator.onLine) {
+      try {
+        const salvos = JSON.parse(localStorage.getItem(chave) || '[]')
+        if (Array.isArray(salvos)) setClientes(salvos as ClienteComApelido[])
+      } catch {}
+      setCarregando(false)
+      return
+    }
+
+    try {
+      const { data } = await supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(1000)
+      if (data) {
+        setClientes(data as ClienteComApelido[])
+        try { localStorage.setItem(chave, JSON.stringify(data)) } catch {}
+      }
+    } catch {
+      try {
+        const salvos = JSON.parse(localStorage.getItem(chave) || '[]')
+        if (Array.isArray(salvos)) setClientes(salvos as ClienteComApelido[])
+      } catch {}
+    }
     setCarregando(false)
   }
 
