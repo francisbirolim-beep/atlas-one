@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import {
   listarItensNotaEntradaWVetro,
   listarNotasEntradaWVetro,
@@ -8,24 +8,6 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-async function autenticarMaster(req: NextRequest) {
-  const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-
-  const { data: usuario } = await supabaseAdmin
-    .from('usuarios')
-    .select('id,nome,role')
-    .eq('id', data.user.id)
-    .maybeSingle()
-
-  if (!usuario || usuario.role !== 'master') return null
-  return usuario
-}
 
 function dataIsoValida(valor: string | null): valor is string {
   if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false
@@ -119,63 +101,23 @@ function extrairItensCompra(payload: unknown, nfId: string): ItemCompra[] {
 
     const obj = valor as Record<string, unknown>
     const codigo = texto(obj, [
-      'ProdutoSeuCodigo',
-      'produtoSeuCodigo',
-      'SeuCodigo',
-      'seuCodigo',
-      'ProdutoCodigo',
-      'produtoCodigo',
-      'Produtocodigo',
-      'CodigoProduto',
-      'codigoProduto',
+      'ProdutoSeuCodigo','produtoSeuCodigo','SeuCodigo','seuCodigo','ProdutoCodigo','produtoCodigo','Produtocodigo','CodigoProduto','codigoProduto',
     ])
     const nome = texto(obj, [
-      'ProdutoDescricao',
-      'produtoDescricao',
-      'DescricaoProduto',
-      'descricaoProduto',
-      'Descricao',
-      'descricao',
-      'Nome',
-      'nome',
+      'ProdutoDescricao','produtoDescricao','DescricaoProduto','descricaoProduto','Descricao','descricao','Nome','nome',
     ])
     const unidade = texto(obj, ['Unidade', 'unidade', 'ProdutoUnidade', 'produtoUnidade'])
     const ncm = texto(obj, ['ProdutoNCM', 'produtoNCM', 'Ncm', 'NCM', 'ncm'])
-    const quantidade = valorNumerico(obj, [
-      'ItemNfQtde',
-      'ItemNFQtde',
-      'Quantidade',
-      'quantidade',
-      'Qtde',
-      'qtde',
-    ])
+    const quantidade = valorNumerico(obj, ['ItemNfQtde','ItemNFQtde','Quantidade','quantidade','Qtde','qtde'])
     let valorUnitario = valorNumerico(obj, [
-      'ItemNfValorUnitario',
-      'ItemNFValorUnitario',
-      'ValorUnitario',
-      'valorUnitario',
-      'CustoUnitario',
-      'custoUnitario',
-      'CustoVlr',
-      'custoVlr',
-      'ItemNfValor',
-      'ItemNFValor',
+      'ItemNfValorUnitario','ItemNFValorUnitario','ValorUnitario','valorUnitario','CustoUnitario','custoUnitario','CustoVlr','custoVlr','ItemNfValor','ItemNFValor',
     ])
-    const valorTotal = valorNumerico(obj, [
-      'ItemNfValorTotal',
-      'ItemNFValorTotal',
-      'ValorTotal',
-      'valorTotal',
-      'Total',
-      'total',
-    ])
+    const valorTotal = valorNumerico(obj, ['ItemNfValorTotal','ItemNFValorTotal','ValorTotal','valorTotal','Total','total'])
 
     if (valorUnitario === null && valorTotal !== null && quantidade !== null && quantidade > 0) {
       valorUnitario = valorTotal / quantidade
     }
 
-    // Um item de compra precisa ter um identificador de produto. Não usamos "Codigo"
-    // genérico para evitar classificar número de NF/documento como produto.
     if (codigo) {
       const assinatura = [nfId, codigo, nome, unidade, quantidade, valorUnitario, valorTotal].join('|')
       if (!vistos.has(assinatura)) {
@@ -214,19 +156,7 @@ function amostraEstrutura(payload: unknown) {
 }
 
 function agregarCustos(itens: ItemCompra[]) {
-  const mapa = new Map<
-    string,
-    {
-      codigo: string
-      nome: string
-      unidade: string
-      ocorrencias: number
-      notas: Set<string>
-      custoMin: number | null
-      custoMax: number | null
-      ultimoCustoObservado: number | null
-    }
-  >()
+  const mapa = new Map<string, { codigo: string; nome: string; unidade: string; ocorrencias: number; notas: Set<string>; custoMin: number | null; custoMax: number | null; ultimoCustoObservado: number | null }>()
 
   for (const item of itens) {
     const chave = item.codigo.trim().toUpperCase().replace(/\s+/g, '')
@@ -272,8 +202,8 @@ async function emLotes<T, R>(itens: T[], tamanho: number, executar: (item: T) =>
 }
 
 export async function GET(req: NextRequest) {
-  const usuario = await autenticarMaster(req)
-  if (!usuario) return NextResponse.json({ error: 'Acesso restrito a usuário master.' }, { status: 401 })
+  const usuario = await autenticarMasterWVetro(req)
+  if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master da empresa autorizada.' }, { status: 403 })
 
   const status = statusConfiguracaoWVetro()
   if (!status.pronto) {
@@ -301,11 +231,7 @@ export async function GET(req: NextRequest) {
 
     const detalhes = await emLotes(selecionados, 5, async nfId => {
       const payload = await listarItensNotaEntradaWVetro(nfId)
-      return {
-        nfId,
-        itens: extrairItensCompra(payload, nfId),
-        chaves: amostraEstrutura(payload),
-      }
+      return { nfId, itens: extrairItensCompra(payload, nfId), chaves: amostraEstrutura(payload) }
     })
 
     const itens = detalhes.flatMap(item => item.itens)

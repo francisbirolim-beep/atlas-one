@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -7,17 +8,8 @@ export const dynamic = 'force-dynamic'
 // Endpoint só de leitura. Não interfere na carga histórica (execuções/pendências/cursor) —
 // lê exclusivamente as tabelas de referência já preenchidas por ela.
 
-async function master(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
-  return usuario?.role === 'master' ? usuario : null
-}
-
 export async function GET(req: NextRequest) {
-  if (!await master(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
+  if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Área restrita ao Master da empresa autorizada.' }, { status: 403 })
 
   try {
     const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }, { data: catalogoComponentes, error: erroCatalogo }] = await Promise.all([
@@ -36,8 +28,6 @@ export async function GET(req: NextRequest) {
         .from('engenharia_tipologia_formulas_corte')
         .select('tipologia_id,status')
         .eq('ativo', true),
-      // Catálogo de referência (identidade + histórico de preço) — separado do BOM por
-      // tipologia acima. Reaproveita a mesma tabela já usada pela auditoria/backfill.
       supabaseAdmin
         .from('wvetro_referencias_componentes')
         .select('tipo,produto_atlas_id'),
@@ -107,8 +97,6 @@ export async function GET(req: NextRequest) {
       componentesBomSemVinculo: componentesBomTotal - componentesBomVinculados,
     }
 
-    // Catálogo de referência (perfis/acessórios identificados historicamente, independente
-    // de já terem entrado na composição de alguma tipologia).
     const catalogo = {
       perfis: {
         total: (catalogoComponentes || []).filter(c => c.tipo === 'perfil').length,

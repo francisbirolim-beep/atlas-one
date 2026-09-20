@@ -7,19 +7,11 @@ import {
   sincronizarCatalogoEsquadriasWVetro,
   sincronizarCustosProdutosWVetro,
 } from '@/lib/wvetroBaseTecnicaServer'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
-
-async function master(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
-  return usuario?.role === 'master' ? usuario : null
-}
 
 function dataOk(v: unknown): v is string {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
@@ -43,7 +35,7 @@ async function ultimaExecucao() {
 }
 
 export async function GET(req: NextRequest) {
-  if (!await master(req)) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
+  if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Acesso W.Vetro não autorizado para esta empresa.' }, { status: 403 })
   try {
     return NextResponse.json({
       ok: true,
@@ -56,8 +48,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const usuario = await master(req)
-  if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
+  const usuario = await autenticarMasterWVetro(req)
+  if (!usuario) return NextResponse.json({ error: 'Acesso W.Vetro não autorizado para esta empresa.' }, { status: 403 })
   let body: any = {}
   try { body = await req.json() } catch {}
   const acao = String(body?.acao || '')

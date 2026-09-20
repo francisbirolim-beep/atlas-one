@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -7,17 +8,9 @@ export const dynamic = 'force-dynamic'
 // Endpoint só de leitura, escopo de UMA referência de tipologia. Não altera nada
 // da carga histórica (execuções/pendências/cursor/retry) — nem escreve em nenhuma tabela.
 
-async function master(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
-  return usuario?.role === 'master' ? usuario : null
-}
-
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!await master(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
+  const usuario = await autenticarMasterWVetro(req)
+  if (!usuario) return NextResponse.json({ error: 'Área restrita ao Master da empresa autorizada.' }, { status: 403 })
 
   const { id } = params
   if (!id) return NextResponse.json({ error: 'Id não informado.' }, { status: 400 })
@@ -56,6 +49,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const { data: produtos, error: erroProdutos } = await supabaseAdmin
         .from('produtos')
         .select('id,nome,ativo')
+        .eq('empresa_id', usuario.empresa_id)
         .in('id', produtoIds)
       if (erroProdutos) throw erroProdutos
       produtosPorId = new Map((produtos || []).map(p => [p.id, p]))
@@ -115,9 +109,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         statusMapeamento: referencia.status_mapeamento,
         primeiroVisto: referencia.primeiro_visto,
         ultimoVisto: referencia.ultimo_visto,
-        // Referência histórica (achado 2026-09-01/02): a API W.Vetro entrega esses
-        // campos por item de venda/orçamento; agregados aqui, nunca usados como
-        // receita validada — só evidência para apoiar a validação manual.
         larguraMinMm: referencia.largura_min_mm,
         larguraMaxMm: referencia.largura_max_mm,
         alturaMinMm: referencia.altura_min_mm,
