@@ -179,41 +179,84 @@ export default function Cliente360Dashboard({ clienteId }: Props) {
   async function carregar() {
     setCarregando(true)
     setErro('')
-    const [clienteResp, obrasData, orcResp, balcOrcResp, vendasResp, assResp, medResp, intResp, contasData, recData, docsData] = await Promise.all([
-      supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle(),
-      listarObrasCliente(clienteId),
-      supabase.from('orcamentos').select('id,numero,created_at,obra_id,valor_estimado,status,tipo_esquadria,modo_entrada').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
-      supabase.from('balcao_orcamentos').select('id,numero,created_at,obra_id,valor_estimado,status').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
-      supabase.from('balcao_vendas').select('id,numero,created_at,finalizada_em,obra_id,total,status').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
-      supabase.from('assistencias').select('id,numero,created_at,obra_id,descricao_problema,status,data_atendimento').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
-      supabase.from('medicoes_finais').select('id,created_at,obra_id,orcamento_id,status_operacional').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
-      supabase.from('crm_interacoes').select('id,created_at,tipo,descricao,usuario_nome').eq('cliente_id', clienteId).order('created_at', { ascending: false }).limit(100),
-      listarContasReceberCliente(clienteId),
-      listarRecebimentosCliente(clienteId),
-      listarDocumentosCliente(clienteId),
-    ])
+    const chave = `atlas_cliente360_offline:${clienteId}:v1`
 
-    if (clienteResp.error || !clienteResp.data) {
-      setErro('Cliente não encontrado.')
+    const aplicarCache = () => {
+      try {
+        const cache = JSON.parse(localStorage.getItem(chave) || 'null')
+        if (!cache?.cliente) return false
+        setCliente(cache.cliente as Cliente)
+        setObras(cache.obras || [])
+        setOrcamentos(cache.orcamentos || [])
+        setBalcaoOrcamentos(cache.balcaoOrcamentos || [])
+        setVendasBalcao(cache.vendasBalcao || [])
+        setAssistencias(cache.assistencias || [])
+        setMedicoes(cache.medicoes || [])
+        setInteracoes(cache.interacoes || [])
+        setContas(cache.contas || [])
+        setRecebimentos(cache.recebimentos || [])
+        setAlocacoes(cache.alocacoes || [])
+        setDocumentos(cache.documentos || [])
+        setCarregando(false)
+        return true
+      } catch { return false }
+    }
+
+    if (!navigator.onLine) {
+      if (!aplicarCache()) setErro('Este cliente ainda não foi sincronizado para uso offline.')
       setCarregando(false)
       return
     }
 
-    const rec = recData || []
-    const alo = await listarAlocacoesCliente(rec.map(r => r.id))
-    setCliente(clienteResp.data as Cliente)
-    setObras(obrasData)
-    setOrcamentos((orcResp.data || []) as OrcamentoResumo[])
-    setBalcaoOrcamentos((balcOrcResp.data || []) as BalcaoOrcamentoResumo[])
-    setVendasBalcao((vendasResp.data || []) as VendaBalcaoResumo[])
-    setAssistencias((assResp.data || []) as AssistenciaResumo[])
-    setMedicoes((medResp.data || []) as MedicaoResumo[])
-    setInteracoes((intResp.data || []) as InteracaoResumo[])
-    setContas(contasData)
-    setRecebimentos(rec)
-    setAlocacoes(alo)
-    setDocumentos(docsData)
-    setCarregando(false)
+    try {
+      const [clienteResp, obrasData, orcResp, balcOrcResp, vendasResp, assResp, medResp, intResp, contasData, recData, docsData] = await Promise.all([
+        supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle(),
+        listarObrasCliente(clienteId),
+        supabase.from('orcamentos').select('id,numero,created_at,obra_id,valor_estimado,status,tipo_esquadria,modo_entrada').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+        supabase.from('balcao_orcamentos').select('id,numero,created_at,obra_id,valor_estimado,status').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+        supabase.from('balcao_vendas').select('id,numero,created_at,finalizada_em,obra_id,total,status').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+        supabase.from('assistencias').select('id,numero,created_at,obra_id,descricao_problema,status,data_atendimento').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+        supabase.from('medicoes_finais').select('id,created_at,obra_id,orcamento_id,status_operacional').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+        supabase.from('crm_interacoes').select('id,created_at,tipo,descricao,usuario_nome').eq('cliente_id', clienteId).order('created_at', { ascending: false }).limit(100),
+        listarContasReceberCliente(clienteId),
+        listarRecebimentosCliente(clienteId),
+        listarDocumentosCliente(clienteId),
+      ])
+
+      if (clienteResp.error || !clienteResp.data) {
+        if (!aplicarCache()) setErro('Cliente não encontrado.')
+        setCarregando(false)
+        return
+      }
+
+      const rec = recData || []
+      const alo = await listarAlocacoesCliente(rec.map(r => r.id))
+      const snapshot = {
+        cliente: clienteResp.data, obras: obrasData, orcamentos: orcResp.data || [],
+        balcaoOrcamentos: balcOrcResp.data || [], vendasBalcao: vendasResp.data || [],
+        assistencias: assResp.data || [], medicoes: medResp.data || [], interacoes: intResp.data || [],
+        contas: contasData, recebimentos: rec, alocacoes: alo, documentos: docsData,
+        sincronizadoEm: new Date().toISOString(),
+      }
+      try { localStorage.setItem(chave, JSON.stringify(snapshot)) } catch {}
+
+      setCliente(snapshot.cliente as Cliente)
+      setObras(snapshot.obras)
+      setOrcamentos(snapshot.orcamentos as OrcamentoResumo[])
+      setBalcaoOrcamentos(snapshot.balcaoOrcamentos as BalcaoOrcamentoResumo[])
+      setVendasBalcao(snapshot.vendasBalcao as VendaBalcaoResumo[])
+      setAssistencias(snapshot.assistencias as AssistenciaResumo[])
+      setMedicoes(snapshot.medicoes as MedicaoResumo[])
+      setInteracoes(snapshot.interacoes as InteracaoResumo[])
+      setContas(snapshot.contas)
+      setRecebimentos(snapshot.recebimentos)
+      setAlocacoes(snapshot.alocacoes)
+      setDocumentos(snapshot.documentos)
+      setCarregando(false)
+    } catch {
+      if (!aplicarCache()) setErro('Sem conexão e sem dados sincronizados deste cliente.')
+      setCarregando(false)
+    }
   }
 
   const obraPorId = useMemo(() => Object.fromEntries(obras.map(o => [o.id, o])), [obras])
