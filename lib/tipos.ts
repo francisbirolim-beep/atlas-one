@@ -508,6 +508,12 @@ export interface MedicaoItem {
       altura_direita_mm?: number | null
       altura_meio_mm?: number | null
       altura_esquerda_mm?: number | null
+      referencia_vista?: 'interna' | 'externa' | null
+      contramarco?: string | null
+      cadeirinha?: string | null
+      observacoes_medicao?: string | null
+      status_medicao?: 'rascunho' | 'concluida' | 'aguardando_conferencia' | 'remedicao_solicitada' | 'aprovada'
+      updated_at?: string | null
       foto_larguras_url?: string | null
       foto_alturas_url?: string | null
       campos_extras: Record<string, string | number>
@@ -532,6 +538,19 @@ export interface MedicaoFinal {
       coluna_atualizada_em?: string | null
       criado_por_id?: string | null
       criado_por_nome?: string | null
+      status_operacional?: string | null
+      responsavel_id?: string | null
+      responsavel_nome?: string | null
+      liberado_em?: string | null
+      liberado_por_id?: string | null
+      liberado_por_nome?: string | null
+      iniciado_em?: string | null
+      concluido_em?: string | null
+      aprovado_em?: string | null
+      aprovado_por_id?: string | null
+      aprovado_por_nome?: string | null
+      versao?: number
+      observacoes?: string | null
 }
 
 // Categoria de produto e dinamica. Os valores historicos continuam validos,
