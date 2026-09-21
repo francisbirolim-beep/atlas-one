@@ -245,6 +245,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
         <label className="mb-1 block text-xs font-semibold text-slate-700">2. Descrição livre da esquadria <span className="font-normal text-slate-400">(opcional)</span></label>
         <input
           type="text"
+          data-preserve-case="true"
           value={value.tipoOutroTexto || ''}
           onChange={e => mudarDescricaoLivre(e.target.value)}
           placeholder="Ex.: Porta de correr 3 folhas - Com reforço"
@@ -258,6 +259,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
+            data-preserve-case="true"
             value={buscaLinha}
             onChange={e => {
               setBuscaLinha(e.target.value)
@@ -290,6 +292,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
+            data-preserve-case="true"
             value={buscaTipologia}
             onChange={e => { setBuscaTipologia(e.target.value); setTipologiaFocada(true) }}
             onFocus={() => setTipologiaFocada(true)}
