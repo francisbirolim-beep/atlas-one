@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 
 const TIPOS_PRESERVAR = new Set([
@@ -63,6 +64,21 @@ function devePreservar(elemento: HTMLInputElement | HTMLTextAreaElement) {
 }
 
 export default function UppercaseInputProvider({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const aplicar = (raiz: ParentNode) => {
+      raiz.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach(el => {
+        if (el.type === 'hidden' || el.type === 'password' || el.type === 'file' || el.type === 'checkbox' || el.type === 'radio') return
+        if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'on')
+        if (!el.hasAttribute('autocapitalize') && el.type !== 'email' && el.type !== 'url') el.setAttribute('autocapitalize', 'sentences')
+        if (!el.hasAttribute('spellcheck') && el.type !== 'number' && el.type !== 'tel') el.setAttribute('spellcheck', 'true')
+      })
+    }
+    aplicar(document)
+    const observer = new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(n => { if (n instanceof HTMLElement) aplicar(n) })))
+    observer.observe(document.body,{childList:true,subtree:true})
+    return () => observer.disconnect()
+  }, [])
+
   function padronizar(evento: FormEvent<HTMLDivElement>) {
     const alvo = evento.target
     if (!(alvo instanceof HTMLInputElement) && !(alvo instanceof HTMLTextAreaElement)) return
