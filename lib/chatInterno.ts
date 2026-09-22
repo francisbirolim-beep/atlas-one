@@ -87,7 +87,7 @@ export async function enviarMensagem(conversaId:string,texto:string,extras?:{cli
   if(anexoUrl){try{const url=new URL(anexoUrl);if(url.protocol!=='https:')return false}catch{return false}}
   const {data:participacao}=await supabase.from('chat_participantes').select('id').eq('conversa_id',conversaId).eq('usuario_id',usuario.id).maybeSingle()
   if(!participacao) return false
-  const { error }=await supabase.from('chat_mensagens').insert({conversa_id:conversaId,usuario_id:usuario.id,usuario_nome:usuario.nome,texto:mensagem||null,anexo_url:anexoUrl,anexo_nome:anexoNome,cliente_id:extras?.clienteId||null,orcamento_id:extras?.orcamentoId||null,mensagem_pai_id:extras?.mensagemPaiId||null})
+  const { error }=await supabase.rpc('atlas_chat_enviar_mensagem',{p_conversa_id:conversaId,p_texto:mensagem||null,p_anexo_url:anexoUrl,p_anexo_nome:anexoNome,p_cliente_id:extras?.clienteId||null,p_orcamento_id:extras?.orcamentoId||null,p_mensagem_pai_id:extras?.mensagemPaiId||null})
   if(error) return false
   await supabase.from('chat_conversas').update({updated_at:new Date().toISOString()}).eq('id',conversaId)
   return true
