@@ -109,6 +109,7 @@ export interface ItemEsquadria {
       material_categoria?: 'perfil' | 'acessorio' | 'vidro' | 'outros' | null
       material_unidade?: string | null
       produto_nome?: string | null
+      contramarco?: Contramarco | null
       // Ambiente/cômodo onde essa esquadria vai ser instalada (ex: Sala, Quarto 1,
 // Cozinha, Banheiro social...). Ajuda quem elabora o orçamento a saber onde
 // fica cada item, sem depender só da ordem ou da descrição livre.
