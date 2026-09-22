@@ -65,12 +65,17 @@ export async function criarConversa(nome:string,tipo:'direta'|'grupo',participan
       }
     }
   }
-  const { data,error }=await supabase.from('chat_conversas').insert({nome:nomeSeguro||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome}).select('*').single()
-  if(error||!data) return null
+  // Gere o id no cliente: com RLS, o INSERT pode ser permitido mas o .select()
+  // imediato ainda não enxerga a conversa porque o criador só vira participante no passo seguinte.
+  const conversaId=uuidv4()
+  const agora=new Date().toISOString()
+  const novaConversa:ChatConversa={id:conversaId,nome:nomeSeguro||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome,created_at:agora,updated_at:agora}
+  const {error}=await supabase.from('chat_conversas').insert({id:conversaId,nome:nomeSeguro||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome})
+  if(error) return null
   const unicos=new Map([[usuario.id,{id:usuario.id,nome:usuario.nome}],...participantesValidos.map(p=>[p.id,p] as const)])
-  const {error:participantesError}=await supabase.from('chat_participantes').insert([...unicos.values()].map(p=>({conversa_id:data.id,usuario_id:p.id,usuario_nome:p.nome})))
-  if(participantesError){await supabase.from('chat_conversas').delete().eq('id',data.id);return null}
-  return data as ChatConversa
+  const {error:participantesError}=await supabase.from('chat_participantes').insert([...unicos.values()].map(p=>({conversa_id:conversaId,usuario_id:p.id,usuario_nome:p.nome})))
+  if(participantesError){await supabase.from('chat_conversas').delete().eq('id',conversaId);return null}
+  return novaConversa
 }
 
 export async function enviarMensagem(conversaId:string,texto:string,extras?:{clienteId?:string|null;orcamentoId?:string|null;mensagemPaiId?:string|null;anexoUrl?:string|null;anexoNome?:string|null}):Promise<boolean> {
