@@ -14,11 +14,16 @@ export const HOME_MODULOS = [
 
 export type HomeModuloId = typeof HOME_MODULOS[number]['id']
 export type EscopoAssistencias = 'proprias' | 'todas'
-export type DashboardId = 'geral' | 'comercial' | 'pessoal' | 'assistencias'
+export type DashboardId = 'geral' | 'comercial' | 'orcamentos' | 'engenharia' | 'producao' | 'instalacao' | 'financeiro' | 'pessoal' | 'assistencias'
 
 export const DASHBOARDS = [
   { id: 'geral', label: 'Geral' },
   { id: 'comercial', label: 'Comercial' },
+  { id: 'orcamentos', label: 'Orçamentos' },
+  { id: 'engenharia', label: 'Engenharia' },
+  { id: 'producao', label: 'Produção' },
+  { id: 'instalacao', label: 'Instalação' },
+  { id: 'financeiro', label: 'Financeiro' },
   { id: 'pessoal', label: 'Pessoal' },
   { id: 'assistencias', label: 'Assistências' },
 ] as const
