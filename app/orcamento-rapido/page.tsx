@@ -102,17 +102,17 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
     if(busca.trim().length<2){setResultados([]);return}
     const timer=window.setTimeout(async()=>{
       setCarregando(true)
-      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao').eq('ativo',true).or(\`codigo.ilike.%\${busca.trim()}%,nome.ilike.%\${busca.trim()}%,descricao.ilike.%\${busca.trim()}%\`).limit(20)
-      if(item.itemTipo==='material_avulso'&&item.materialCategoria){ q=q.ilike('categoria',\`%\${item.materialCategoria}%\`) }
+      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao').eq('ativo',true).or(`codigo.ilike.%${busca.trim()}%,nome.ilike.%${busca.trim()}%,descricao.ilike.%${busca.trim()}%`).limit(20)
+      if(item.itemTipo==='material_avulso'&&item.materialCategoria){ q=q.ilike('categoria',`%${item.materialCategoria}%`) }
       const {data}=await q
       setResultados((data||[]) as ProdutoAtlasBusca[]);setCarregando(false)
     },250)
     return()=>window.clearTimeout(timer)
   },[busca,item.itemTipo,item.materialCategoria])
   return <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-    {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>onChange({materialCategoria:v,produtoId:null,produtoNome:null})} className={\`rounded-lg border px-2 py-2 text-xs \${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}\`}>{l}</button>)}</div></div>}
+    {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>onChange({materialCategoria:v,produtoId:null,produtoNome:null})} className={`rounded-lg border px-2 py-2 text-xs ${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>{l}</button>)}</div></div>}
     <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='material_avulso'?'Produto / material':'Produto cadastrado'}</label><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Digite código ou nome..." className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
-    {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?\`\${p.codigo} · \${p.nome}\`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?\`\${p.codigo} · \`:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?\` · R$ \${Number(p.preco).toFixed(2)}\`:''}</p></button>)}</div>}
+    {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
     {item.produtoId&&<div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Selecionado: {item.produtoNome}</div>}
   </div>
 }
@@ -310,8 +310,8 @@ export default function OrcamentoRapido() {
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i]
       const referencia = it.ambiente.trim() || `Esquadria ${i + 1}`
-      if (it.itemTipo !== 'sob_medida' && !it.produtoId) return setErro(\`Selecione um produto cadastrado em \${referencia}\`)
-      if (it.itemTipo === 'material_avulso') { if (!it.materialCategoria) return setErro(\`Selecione a categoria de \${referencia}\`); continue }
+      if (it.itemTipo !== 'sob_medida' && !it.produtoId) return setErro(`Selecione um produto cadastrado em ${referencia}`)
+      if (it.itemTipo === 'material_avulso') { if (!it.materialCategoria) return setErro(`Selecione a categoria de ${referencia}`); continue }
       if (it.modoOrigem === 'produto' && !it.produtoId) return setErro(`Selecione um produto cadastrado em ${referencia}, ou troque para digitar manualmente`)
       if (!it.tipo) return setErro(`Selecione o tipo de ${referencia}`)
       if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) return setErro(`Escreva qual é o tipo de ${referencia}`)
