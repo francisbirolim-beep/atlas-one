@@ -20,7 +20,6 @@ export default function HomeSectorOverview({ dashboard }: Props) {
       supabase.from('medicoes_finais').select('id,status_operacional'),
       supabase.from('producao_itens').select('id,coluna_id'),
       supabase.from('financeiro_contas_receber').select('valor,valor_pago,status,vencimento'),
-    ,
       supabase.from('producao_colunas').select('id,nome,ordem').order('ordem',{ascending:true}),
       supabase.from('setor_kanban_colunas').select('id,nome,ordem').eq('setor_id','engenharia-projeto').order('ordem',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id').eq('setor_id','engenharia-projeto'),
