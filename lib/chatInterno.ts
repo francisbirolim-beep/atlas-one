@@ -85,11 +85,8 @@ export async function enviarMensagem(conversaId:string,texto:string,extras?:{cli
   const anexoNome=extras?.anexoNome?.trim()||null
   if(!usuario||(!mensagem&&!anexoUrl)||mensagem.length>10000||(anexoNome?.length||0)>255) return false
   if(anexoUrl){try{const url=new URL(anexoUrl);if(url.protocol!=='https:')return false}catch{return false}}
-  const {data:participacao}=await supabase.from('chat_participantes').select('id').eq('conversa_id',conversaId).eq('usuario_id',usuario.id).maybeSingle()
-  if(!participacao) return false
   const { error }=await supabase.rpc('atlas_chat_enviar_mensagem',{p_conversa_id:conversaId,p_texto:mensagem||null,p_anexo_url:anexoUrl,p_anexo_nome:anexoNome,p_cliente_id:extras?.clienteId||null,p_orcamento_id:extras?.orcamentoId||null,p_mensagem_pai_id:extras?.mensagemPaiId||null})
   if(error) return false
-  await supabase.from('chat_conversas').update({updated_at:new Date().toISOString()}).eq('id',conversaId)
   return true
 }
 
