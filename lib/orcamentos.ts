@@ -11,6 +11,11 @@ import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, T
 
 export interface ItemOrcamentoForm {
   id: string
+  itemTipo?: 'sob_medida' | 'medida_padrao' | 'kit_porta_pronta' | 'material_avulso'
+  materialCategoria?: 'perfil' | 'acessorio' | 'vidro' | 'outros' | null
+  materialUnidade?: string | null
+  produtoNome?: string | null
+  contramarcoOverride?: Contramarco | null
   ambiente?: string
   tipo: TipoEsquadria | ''
   tipoOutroTexto: string
@@ -174,6 +179,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     const quantidadeNum = parseInt(it.quantidade) || 1
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
     const tipoMedidaItem = it.tipoMedida || tipoMedida || 'comum'
+    const itemTipo = it.itemTipo || 'sob_medida'
 
     const referencia = it.tipologiaId ? referenciasWvetro[it.tipologiaId] || null : null
     const variaveisUsadasWvetro = !it.configuracaoValidada && referencia
@@ -235,7 +241,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
       const todasFotosItem = [...itemFotoUrls, ...(foto_larguras_url ? [foto_larguras_url] : []), ...(foto_alturas_url ? [foto_alturas_url] : [])]
 
       itensSalvos.push({
-        id: it.id, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
+        id: it.id, item_tipo: itemTipo, material_categoria: it.materialCategoria || null, material_unidade: it.materialUnidade || null, produto_nome: it.produtoNome || null, contramarco: it.contramarcoOverride || contramarco || null, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
         tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null, folhas: it.folhas || null,
         tipo_medida: tipoMedidaItem,
         largura_mm: lm, altura_mm: am,
@@ -249,7 +255,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
       })
     } else {
       itensSalvos.push({
-        id: it.id, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
+        id: it.id, item_tipo: itemTipo, material_categoria: it.materialCategoria || null, material_unidade: it.materialUnidade || null, produto_nome: it.produtoNome || null, contramarco: it.contramarcoOverride || contramarco || null, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
         tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null, folhas: it.folhas || null,
         tipo_medida: tipoMedidaItem,
         largura_mm: parseFloat(it.largura), altura_mm: parseFloat(it.altura), quantidade: quantidadeNum,
@@ -325,7 +331,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         quantidade: tecnico.quantidade ?? null,
         folhas: tecnico.folhas ?? null,
         cor: tecnico.cor || null,
-        contramarco: contramarco || null,
+        contramarco: tecnico.contramarco || contramarco || null,
         trilho: String(variaveis.trilho || variaveis.tipo_trilho || '') || null,
         puxador: String(variaveis.puxador || '') || null,
         fechadura: String(variaveis.fechadura || '') || null,
