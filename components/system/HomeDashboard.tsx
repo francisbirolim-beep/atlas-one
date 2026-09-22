@@ -12,6 +12,7 @@ import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
 import HomeAlertsBlock from '@/components/system/HomeAlertsBlock'
 import HomeSectorOverview from '@/components/system/HomeSectorOverview'
+import HomeQuotesOverview from '@/components/system/HomeQuotesOverview'
 
 export default function HomeDashboard() {
   const [config, setConfig] = useState<HomeUsuarioConfig | null>(null)
@@ -64,7 +65,9 @@ export default function HomeDashboard() {
         </section>
       )}
 
-      {(atual === 'geral' || atual === 'comercial' || atual === 'orcamentos') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
+      {(atual === 'geral' || atual === 'comercial') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
+
+      {atual === 'orcamentos' && <HomeQuotesOverview />}
 
       {mostrarOperacional && <HomeSectorOverview dashboard={atual as DashboardId} />}
 
