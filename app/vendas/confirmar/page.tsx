@@ -119,7 +119,8 @@ export default function ConfirmarVendaPage() {
   const previewInvalidos = (itensPreview || []).filter(item => !itemEstruturadoValido(item))
   const temPdf = anexos.some(a => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().split('?')[0].endsWith('.pdf'))
   const prontoCadastro = !!cadastro && faltantes.length === 0 && cadastroSalvo
-  const prontoItens = itens.length > 0 && itensInvalidos.length === 0
+  // Itens legados não bloqueiam a confirmação comercial da venda.
+  const prontoItens = itens.length > 0
 
   function atualizarCampo(chave: string, valor: string) {
     setCadastro(prev => prev ? { ...prev, [chave]: valor } : prev)
@@ -171,7 +172,7 @@ export default function ConfirmarVendaPage() {
       return
     }
     if (!prontoItens) {
-      setErro('O orçamento escolhido possui itens incompletos ou genéricos. Revise e confirme a importação do PDF antes de iniciar o processo.')
+      setErro('O orçamento escolhido não possui itens. Inclua pelo menos um item antes de confirmar a venda.')
       return
     }
 
@@ -414,7 +415,7 @@ export default function ConfirmarVendaPage() {
                 ? `${itensPreview.length} item(ns) em conferência`
                 : prontoItens
                   ? `${itens.length} item(ns) prontos`
-                  : itens.length > 0 ? `${itensInvalidos.length} item(ns) precisam revisão` : 'Itens ainda não estruturados'}
+                  : itens.length > 0 ? `${itens.length} item(ns) do orçamento` : 'Itens ainda não estruturados'}
             </div>
           </div>
 
