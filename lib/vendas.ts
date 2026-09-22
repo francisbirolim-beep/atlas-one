@@ -197,7 +197,14 @@ export async function iniciarProcessoVenda(
   if (camposConfigurados.length > 0) {
     const dadosVenda = await carregarDadosVendaSalvos(orcamentoId)
     const { data: cliente } = await supabase.from('clientes').select('*').eq('id', orcamento.cliente_id).maybeSingle()
-    const combinados = { ...cadastroVendaDoCliente((cliente as Cliente) || null, orcamento as OrcamentoRapido), ...dadosVenda }
+    // A confirmação da venda deve validar a fonte persistida mais recente.
+    // Dados salvos na tela têm prioridade quando preenchidos; valores vazios antigos
+    // não podem apagar campos válidos já gravados no Cliente 360.
+    const basePersistida = cadastroVendaDoCliente((cliente as Cliente) || null, orcamento as OrcamentoRapido)
+    const dadosVendaPreenchidos = Object.fromEntries(
+      Object.entries(dadosVenda).filter(([, valor]) => String(valor ?? '').trim() !== '')
+    ) as CadastroVenda
+    const combinados = { ...basePersistida, ...dadosVendaPreenchidos }
     const faltantes = camposFaltantesCadastroVenda(combinados, camposConfigurados)
     if (faltantes.length > 0) {
       return { success: false, error: `Cadastro incompleto: ${faltantes.map(c => c.label).join(', ')}.` }
