@@ -119,7 +119,8 @@ export default function ConfirmarVendaPage() {
   const previewInvalidos = (itensPreview || []).filter(item => !itemEstruturadoValido(item))
   const temPdf = anexos.some(a => (a.nome || '').toLowerCase().endsWith('.pdf') || (a.url || '').toLowerCase().split('?')[0].endsWith('.pdf'))
   const prontoCadastro = !!cadastro && faltantes.length === 0 && cadastroSalvo
-  // A confirmação da venda não pode ser bloqueada por itens legados/genéricos.\n  // A estrutura técnica detalhada (medidas/tipologia) é conferida depois pela Engenharia/Medida Final.\n  // Aqui exigimos apenas que o orçamento vendido tenha ao menos um item, preservando o snapshot original.\n  const prontoItens = itens.length > 0
+  // Itens legados não bloqueiam a confirmação comercial da venda.
+  const prontoItens = itens.length > 0
 
   function atualizarCampo(chave: string, valor: string) {
     setCadastro(prev => prev ? { ...prev, [chave]: valor } : prev)
