@@ -7,10 +7,10 @@ import { supabase } from '@/lib/supabase'
 import type { DashboardId } from '@/lib/homeUsuario'
 
 type Props = { dashboard: DashboardId }
-type Dados = { obras: number; medicoes: number; producao: number; receber: number; vencido: number; contasAbertas: number; etapasProducao: { nome:string; total:number }[] }
+type Dados = { obras: number; medicoes: number; producao: number; receber: number; vencido: number; contasAbertas: number; etapasProducao: { nome:string; total:number }[]; etapasEngenharia: { nome:string; total:number }[] }
 
 export default function HomeSectorOverview({ dashboard }: Props) {
-  const [dados, setDados] = useState<Dados>({ obras: 0, medicoes: 0, producao: 0, receber: 0, vencido: 0, contasAbertas: 0, etapasProducao: [] })
+  const [dados, setDados] = useState<Dados>({ obras: 0, medicoes: 0, producao: 0, receber: 0, vencido: 0, contasAbertas: 0, etapasProducao: [], etapasEngenharia: [] })
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
@@ -22,7 +22,9 @@ export default function HomeSectorOverview({ dashboard }: Props) {
       supabase.from('financeiro_contas_receber').select('valor,valor_pago,status,vencimento'),
     ,
       supabase.from('producao_colunas').select('id,nome,ordem').order('ordem',{ascending:true}),
-    ]).then(([obras, medicoes, producao, contas, colunas]) => {
+      supabase.from('setor_kanban_colunas').select('id,nome,ordem').eq('setor_id','engenharia-projeto').order('ordem',{ascending:true}),
+      supabase.from('setor_kanban_itens').select('id,coluna_id').eq('setor_id','engenharia-projeto'),
+    ]).then(([obras, medicoes, producao, contas, colunas, colunasEng, itensEng]) => {
       if (!ativo) return
       const statusObra = dashboard === 'engenharia' ? 'engenharia' : dashboard === 'producao' ? 'producao' : dashboard === 'instalacao' ? 'instalacao' : ''
       const abertas = (contas.data || []).filter(c => !['cancelado','pago'].includes(c.status || ''))
@@ -38,6 +40,7 @@ export default function HomeSectorOverview({ dashboard }: Props) {
         vencido,
         contasAbertas: abertas.length,
         etapasProducao: (colunas.data || []).map(coluna => ({ nome: coluna.nome, total: (producao.data || []).filter(item => item.coluna_id === coluna.id).length })),
+        etapasEngenharia: (colunasEng.data || []).map(coluna => ({ nome: coluna.nome, total: (itensEng.data || []).filter(item => item.coluna_id === coluna.id).length })),
       })
       setCarregando(false)
     })
@@ -67,5 +70,5 @@ export default function HomeSectorOverview({ dashboard }: Props) {
             { label:'Obras acompanhadas', value:dados.obras, href:'/obras', icon:Building2 },
           ]
 
-  return <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6"><div className="grid gap-3 sm:grid-cols-2">{base.map(card => { const Icon=card.icon; return <Link key={card.label} href={card.href} className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"><div className="flex items-center justify-between"><span className="rounded-xl bg-slate-100 p-2 text-slate-700"><Icon size={18}/></span><ArrowUpRight size={15} className="text-slate-300"/></div><p className="mt-3 text-xs font-medium text-slate-500">{card.label}</p><p className="mt-1 text-2xl font-bold text-slate-900">{carregando ? '—' : card.value}</p></Link>})}</div>{dashboard === 'producao' && dados.etapasProducao.length > 0 && <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-3"><h3 className="text-sm font-bold text-slate-900">Produção por etapa</h3><p className="text-xs text-slate-500">Quantidade de itens em cada coluna do quadro.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{dados.etapasProducao.map(etapa => <Link href="/producao" key={etapa.nome} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="truncate text-xs font-medium text-slate-500">{etapa.nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{carregando ? '—' : etapa.total}</p></Link>)}</div></div>}</section>
+  return <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6"><div className="grid gap-3 sm:grid-cols-2">{base.map(card => { const Icon=card.icon; return <Link key={card.label} href={card.href} className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"><div className="flex items-center justify-between"><span className="rounded-xl bg-slate-100 p-2 text-slate-700"><Icon size={18}/></span><ArrowUpRight size={15} className="text-slate-300"/></div><p className="mt-3 text-xs font-medium text-slate-500">{card.label}</p><p className="mt-1 text-2xl font-bold text-slate-900">{carregando ? '—' : card.value}</p></Link>})}</div>{dashboard === 'engenharia' && dados.etapasEngenharia.length > 0 && <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-3"><h3 className="text-sm font-bold text-slate-900">Engenharia por etapa</h3><p className="text-xs text-slate-500">Cards reais do fluxo Conferir Projeto.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{dados.etapasEngenharia.map(etapa => <Link href="/setor/engenharia-projeto" key={etapa.nome} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="truncate text-xs font-medium text-slate-500">{etapa.nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{carregando ? '—' : etapa.total}</p></Link>)}</div></div>}{dashboard === 'producao' && dados.etapasProducao.length > 0 && <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-3"><h3 className="text-sm font-bold text-slate-900">Produção por etapa</h3><p className="text-xs text-slate-500">Quantidade de itens em cada coluna do quadro.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{dados.etapasProducao.map(etapa => <Link href="/producao" key={etapa.nome} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="truncate text-xs font-medium text-slate-500">{etapa.nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{carregando ? '—' : etapa.total}</p></Link>)}</div></div>}</section>
 }
