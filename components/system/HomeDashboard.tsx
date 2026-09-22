@@ -11,6 +11,7 @@ import HomeAssistenciasBlock from '@/components/system/HomeAssistenciasBlock'
 import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
 import HomeAlertsBlock from '@/components/system/HomeAlertsBlock'
+import HomeSectorOverview from '@/components/system/HomeSectorOverview'
 
 export default function HomeDashboard() {
   const [config, setConfig] = useState<HomeUsuarioConfig | null>(null)
@@ -63,7 +64,9 @@ export default function HomeDashboard() {
         </section>
       )}
 
-      {(atual === 'geral' || atual === 'comercial' || atual === 'orcamentos' || mostrarOperacional) && temModulo(config, 'indicadores') && <HomeManagementOverview />}
+      {(atual === 'geral' || atual === 'comercial' || atual === 'orcamentos') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
+
+      {mostrarOperacional && <HomeSectorOverview dashboard={atual as DashboardId} />}
 
       {mostrarComercial && temModulo(config, 'orcamentos') && <HomeRecentQuotes />}
 
@@ -72,7 +75,7 @@ export default function HomeDashboard() {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dashboard do setor</p>
             <h2 className="mt-1 text-lg font-bold text-slate-900">{DASHBOARDS.find(item => item.id === atual)?.label}</h2>
-            <p className="mt-1 text-sm text-slate-500">Indicadores específicos deste setor serão consolidados aqui sem misturar as informações dos demais departamentos.</p>
+            <p className="mt-1 text-sm text-slate-500">Acompanhamento objetivo das pendências e do volume atual deste setor.</p>
           </div>
         </section>
       )}
