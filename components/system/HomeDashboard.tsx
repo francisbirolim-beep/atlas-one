@@ -62,7 +62,7 @@ export default function HomeDashboard() {
         </section>
       )}
 
-      {(atual === 'geral') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
+      {(atual === 'geral' || atual === 'comercial') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
 
       {mostrarComercial && temModulo(config, 'orcamentos') && <HomeRecentQuotes />}
 
