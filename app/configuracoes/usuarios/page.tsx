@@ -19,10 +19,12 @@ import {
 import { supabase } from '@/lib/supabase'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import {
+  DASHBOARDS,
   HOME_MODULOS,
   homeConfigPadrao,
   lerHomeUsuarioConfig,
   salvarHomeUsuarioConfig,
+  type DashboardId,
   type HomeModuloId,
   type HomeUsuarioConfig,
 } from '@/lib/homeUsuario'
@@ -125,6 +127,17 @@ export default function UsuariosSenhasPage() {
       ...config,
       modulos: existe ? config.modulos.filter(id => id !== modulo) : [...config.modulos, modulo],
     })
+  }
+
+  function alternarDashboard(config: HomeUsuarioConfig, setConfig: (valor: HomeUsuarioConfig) => void, dashboard: DashboardId) {
+    const atuais = config.dashboards || []
+    const existe = atuais.includes(dashboard)
+    if (existe && atuais.length === 1) return
+    const dashboards = existe ? atuais.filter(id => id !== dashboard) : [...atuais, dashboard]
+    const dashboardPrincipal = dashboards.includes(config.dashboardPrincipal as DashboardId)
+      ? config.dashboardPrincipal
+      : dashboards[0]
+    setConfig({ ...config, dashboards, dashboardPrincipal })
   }
 
   function alternarCadastro(config: CadastrosUsuarioConfig, setConfig: (valor: CadastrosUsuarioConfig) => void, cadastro: Cadastro360Id) {
@@ -340,6 +353,13 @@ export default function UsuariosSenhasPage() {
 
               <div>
                 <div className="mb-3 flex items-center gap-2"><LayoutDashboard size={17} className="text-emerald-600"/><div><p className="text-sm font-semibold text-slate-800">Tela inicial</p><p className="text-xs text-slate-500">Marque os módulos que essa pessoa deve enxergar na Home.</p></div></div>
+                <div className="mb-5 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Dashboards permitidos</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {DASHBOARDS.map(item => <label key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm"><input type="checkbox" disabled={novoRole === 'master'} checked={novoRole === 'master' || (novaHome.dashboards || []).includes(item.id)} onChange={() => alternarDashboard(novaHome, setNovaHome, item.id)}/>{item.label}</label>)}
+                  </div>
+                  {(novoRole === 'master' || (novaHome.dashboards || []).length > 0) && <label className="mt-3 block text-xs font-medium text-violet-800">Dashboard principal<select value={novaHome.dashboardPrincipal || 'geral'} onChange={e => setNovaHome({ ...novaHome, dashboardPrincipal: e.target.value as DashboardId })} className="mt-1 w-full rounded-lg border border-violet-200 bg-white p-2 text-sm text-slate-800">{(novoRole === 'master' ? DASHBOARDS.map(d => d.id) : (novaHome.dashboards || [])).map(id => <option key={id} value={id}>{DASHBOARDS.find(d => d.id === id)?.label}</option>)}</select></label>}
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {HOME_MODULOS.map(modulo => (
                     <label key={modulo.id} className={`cursor-pointer rounded-xl border p-3 transition ${novaHome.modulos.includes(modulo.id) ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
@@ -404,6 +424,12 @@ export default function UsuariosSenhasPage() {
                   <div className="mb-4 flex items-start gap-2"><LayoutDashboard size={18} className="mt-0.5 text-emerald-600"/><div><h2 className="font-semibold text-slate-900">Tela inicial de {usuarioSelecionado.nome.split(' ')[0]}</h2><p className="text-xs text-slate-500">Escolha os blocos que vão aparecer quando este usuário entrar no Atlas.</p></div></div>
                   {carregandoHome || !homeConfig ? <div className="grid place-items-center py-8 text-slate-400"><Loader2 size={20} className="animate-spin"/></div> : (
                     <div className="space-y-2">
+                      <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Dashboards permitidos</p>
+                        <div className="mt-2 flex flex-wrap gap-2">{DASHBOARDS.map(item => <label key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-xs"><input type="checkbox" disabled={usuarioSelecionado.role === 'master'} checked={usuarioSelecionado.role === 'master' || (homeConfig.dashboards || []).includes(item.id)} onChange={() => alternarDashboard(homeConfig, setHomeConfig, item.id)}/>{item.label}</label>)}</div>
+                        {(usuarioSelecionado.role === 'master' || (homeConfig.dashboards || []).length > 0) && <label className="mt-3 block text-xs font-medium text-violet-800">Abre primeiro<select value={homeConfig.dashboardPrincipal || ''} onChange={e => setHomeConfig({ ...homeConfig, dashboardPrincipal: e.target.value as DashboardId })} className="mt-1 w-full rounded-lg border border-violet-200 bg-white p-2 text-sm text-slate-800">{(usuarioSelecionado.role === 'master' ? DASHBOARDS.map(d => d.id) : (homeConfig.dashboards || [])).map(id => <option key={id} value={id}>{DASHBOARDS.find(d => d.id === id)?.label}</option>)}</select></label>}
+                        {usuarioSelecionado.role === 'master' && <p className="mt-2 text-xs text-violet-700">Master tem acesso a todos os dashboards.</p>}
+                      </div>
                       {HOME_MODULOS.map(modulo => (
                         <label key={modulo.id} className={`block cursor-pointer rounded-xl border p-3 transition ${homeConfig.modulos.includes(modulo.id) ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
                           <div className="flex items-start gap-2"><input type="checkbox" checked={homeConfig.modulos.includes(modulo.id)} onChange={() => alternarModulo(homeConfig, setHomeConfig, modulo.id)} className="mt-0.5"/><span><span className="block text-sm font-medium text-slate-800">{modulo.label}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-slate-500">{modulo.descricao}</span></span></div>
