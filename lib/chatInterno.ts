@@ -39,8 +39,9 @@ export async function contarNaoLidas(conversaId:string,usuarioId:string):Promise
 }
 
 export async function listarMensagens(conversaId:string):Promise<ChatMensagem[]> {
-  const { data }=await supabase.from('chat_mensagens').select('*').eq('conversa_id',conversaId).order('created_at',{ascending:false}).limit(500)
-  return ((data||[]) as ChatMensagem[]).reverse()
+  const { data,error }=await supabase.rpc('atlas_chat_listar_mensagens',{p_conversa_id:conversaId})
+  if(error) return []
+  return (data||[]) as ChatMensagem[]
 }
 
 export async function criarConversa(nome:string,tipo:'direta'|'grupo',participantes:{id:string;nome:string}[]):Promise<ChatConversa|null> {
