@@ -380,6 +380,15 @@ export default function OrcamentoRapido() {
           {item.tipo && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
 
           {item.itemTipo==='sob_medida' ? <>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-semibold text-slate-700">Contramarco desta tipologia</p>
+            <p className="mb-2 text-[11px] text-slate-500">Segue o padrão geral da obra, mas você pode alterar somente esta tipologia.</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride',null)} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride===null?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Padrão da obra ({contramarco==='com'?'Com':'Sem'})</button>
+              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button>
+              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button>
+            </div>
+          </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-center justify-between gap-3 mb-2"><div><p className="text-xs font-semibold text-slate-700">Tipo de medida desta esquadria</p><p className="text-[11px] text-slate-500">Padrão: medida comum. Use medida final somente se o vão já estiver pronto.</p></div></div><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => atualizarItem(item.id,'tipoMedida','comum')} className={`rounded-lg border px-3 py-2 text-sm ${item.tipoMedida === 'comum' ? 'border-brand-navy bg-brand-navy text-white font-medium' : 'border-slate-300 bg-white text-slate-600'}`}>Medida comum</button><button type="button" onClick={() => atualizarItem(item.id,'tipoMedida','final')} className={`rounded-lg border px-3 py-2 text-sm ${item.tipoMedida === 'final' ? 'border-emerald-600 bg-emerald-600 text-white font-medium' : 'border-slate-300 bg-white text-slate-600'}`}>Medida final</button></div></div>
 
           {item.tipoMedida === 'final' ? <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
