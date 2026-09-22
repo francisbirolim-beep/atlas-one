@@ -132,6 +132,7 @@ export default function UsuariosSenhasPage() {
   function alternarDashboard(config: HomeUsuarioConfig, setConfig: (valor: HomeUsuarioConfig) => void, dashboard: DashboardId) {
     const atuais = config.dashboards || []
     const existe = atuais.includes(dashboard)
+    if (existe && atuais.length === 1) return
     const dashboards = existe ? atuais.filter(id => id !== dashboard) : [...atuais, dashboard]
     const dashboardPrincipal = dashboards.includes(config.dashboardPrincipal as DashboardId)
       ? config.dashboardPrincipal
@@ -357,7 +358,7 @@ export default function UsuariosSenhasPage() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     {DASHBOARDS.map(item => <label key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm"><input type="checkbox" disabled={novoRole === 'master'} checked={novoRole === 'master' || (novaHome.dashboards || []).includes(item.id)} onChange={() => alternarDashboard(novaHome, setNovaHome, item.id)}/>{item.label}</label>)}
                   </div>
-                  {novoRole !== 'master' && (novaHome.dashboards || []).length > 0 && <label className="mt-3 block text-xs font-medium text-violet-800">Dashboard principal<select value={novaHome.dashboardPrincipal || ''} onChange={e => setNovaHome({ ...novaHome, dashboardPrincipal: e.target.value as DashboardId })} className="mt-1 w-full rounded-lg border border-violet-200 bg-white p-2 text-sm text-slate-800">{(novaHome.dashboards || []).map(id => <option key={id} value={id}>{DASHBOARDS.find(d => d.id === id)?.label}</option>)}</select></label>}
+                  {(novoRole === 'master' || (novaHome.dashboards || []).length > 0) && <label className="mt-3 block text-xs font-medium text-violet-800">Dashboard principal<select value={novaHome.dashboardPrincipal || 'geral'} onChange={e => setNovaHome({ ...novaHome, dashboardPrincipal: e.target.value as DashboardId })} className="mt-1 w-full rounded-lg border border-violet-200 bg-white p-2 text-sm text-slate-800">{(novoRole === 'master' ? DASHBOARDS.map(d => d.id) : (novaHome.dashboards || [])).map(id => <option key={id} value={id}>{DASHBOARDS.find(d => d.id === id)?.label}</option>)}</select></label>}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {HOME_MODULOS.map(modulo => (
@@ -426,7 +427,7 @@ export default function UsuariosSenhasPage() {
                       <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3">
                         <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Dashboards permitidos</p>
                         <div className="mt-2 flex flex-wrap gap-2">{DASHBOARDS.map(item => <label key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-xs"><input type="checkbox" disabled={usuarioSelecionado.role === 'master'} checked={usuarioSelecionado.role === 'master' || (homeConfig.dashboards || []).includes(item.id)} onChange={() => alternarDashboard(homeConfig, setHomeConfig, item.id)}/>{item.label}</label>)}</div>
-                        {usuarioSelecionado.role !== 'master' && (homeConfig.dashboards || []).length > 0 && <label className="mt-3 block text-xs font-medium text-violet-800">Abre primeiro<select value={homeConfig.dashboardPrincipal || ''} onChange={e => setHomeConfig({ ...homeConfig, dashboardPrincipal: e.target.value as DashboardId })} className="mt-1 w-full rounded-lg border border-violet-200 bg-white p-2 text-sm text-slate-800">{(homeConfig.dashboards || []).map(id => <option key={id} value={id}>{DASHBOARDS.find(d => d.id === id)?.label}</option>)}</select></label>}
+                        {(usuarioSelecionado.role === 'master' || (homeConfig.dashboards || []).length > 0) && <label className="mt-3 block text-xs font-medium text-violet-800">Abre primeiro<select value={homeConfig.dashboardPrincipal || ''} onChange={e => setHomeConfig({ ...homeConfig, dashboardPrincipal: e.target.value as DashboardId })} className="mt-1 w-full rounded-lg border border-violet-200 bg-white p-2 text-sm text-slate-800">{(usuarioSelecionado.role === 'master' ? DASHBOARDS.map(d => d.id) : (homeConfig.dashboards || [])).map(id => <option key={id} value={id}>{DASHBOARDS.find(d => d.id === id)?.label}</option>)}</select></label>}
                         {usuarioSelecionado.role === 'master' && <p className="mt-2 text-xs text-violet-700">Master tem acesso a todos os dashboards.</p>}
                       </div>
                       {HOME_MODULOS.map(modulo => (
