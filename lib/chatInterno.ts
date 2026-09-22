@@ -51,7 +51,8 @@ export async function criarConversa(nome:string,tipo:'direta'|'grupo',participan
   if(tipo==='direta'&&participantesValidos.length!==1) return null
   if(tipo==='grupo'&&participantesValidos.length<2) return null
   const nomeSeguro=nome.trim().slice(0,100)
-  if(tipo==='direta'&&participantesValidos.length===1){
+
+  if(tipo==='direta'){
     const outro=participantesValidos[0]
     const {data:minhas}=await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id',usuario.id)
     const ids=(minhas||[]).map((p:any)=>p.conversa_id)
@@ -65,17 +66,16 @@ export async function criarConversa(nome:string,tipo:'direta'|'grupo',participan
       }
     }
   }
-  // Gere o id no cliente: com RLS, o INSERT pode ser permitido mas o .select()
-  // imediato ainda não enxerga a conversa porque o criador só vira participante no passo seguinte.
-  const conversaId=uuidv4()
-  const agora=new Date().toISOString()
-  const novaConversa:ChatConversa={id:conversaId,nome:nomeSeguro||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome,created_at:agora,updated_at:agora}
-  const {error}=await supabase.from('chat_conversas').insert({id:conversaId,nome:nomeSeguro||null,tipo,criado_por_id:usuario.id,criado_por_nome:usuario.nome})
-  if(error) return null
-  const unicos=new Map([[usuario.id,{id:usuario.id,nome:usuario.nome}],...participantesValidos.map(p=>[p.id,p] as const)])
-  const {error:participantesError}=await supabase.from('chat_participantes').insert([...unicos.values()].map(p=>({conversa_id:conversaId,usuario_id:p.id,usuario_nome:p.nome})))
-  if(participantesError){await supabase.from('chat_conversas').delete().eq('id',conversaId);return null}
-  return novaConversa
+
+  // A criação é atômica no banco para não depender da RLS entre a conversa
+  // e o cadastro inicial dos participantes.
+  const {data,error}=await supabase.rpc('atlas_chat_criar_conversa',{
+    p_nome:nomeSeguro||null,
+    p_tipo:tipo,
+    p_participantes:participantesValidos.map(p=>p.id),
+  })
+  if(error||!data) return null
+  return data as ChatConversa
 }
 
 export async function enviarMensagem(conversaId:string,texto:string,extras?:{clienteId?:string|null;orcamentoId?:string|null;mensagemPaiId?:string|null;anexoUrl?:string|null;anexoNome?:string|null}):Promise<boolean> {
