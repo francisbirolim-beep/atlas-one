@@ -14,10 +14,20 @@ export const HOME_MODULOS = [
 
 export type HomeModuloId = typeof HOME_MODULOS[number]['id']
 export type EscopoAssistencias = 'proprias' | 'todas'
+export type DashboardId = 'geral' | 'comercial' | 'pessoal' | 'assistencias'
+
+export const DASHBOARDS = [
+  { id: 'geral', label: 'Geral' },
+  { id: 'comercial', label: 'Comercial' },
+  { id: 'pessoal', label: 'Pessoal' },
+  { id: 'assistencias', label: 'Assistências' },
+] as const
 
 export interface HomeUsuarioConfig {
   modulos: HomeModuloId[]
   assistenciasEscopo: EscopoAssistencias
+  dashboards?: DashboardId[]
+  dashboardPrincipal?: DashboardId
 }
 
 const MODULOS_VALIDOS = new Set<HomeModuloId>(HOME_MODULOS.map(m => m.id))
@@ -39,6 +49,8 @@ export function homeConfigPadrao(role: Usuario['role'] = 'funcionario'): HomeUsu
   return {
     modulos: role === 'master' ? [...MODULOS_MASTER] : [...MODULOS_FUNCIONARIO],
     assistenciasEscopo: role === 'master' ? 'todas' : 'proprias',
+    dashboards: role === 'master' ? DASHBOARDS.map(d => d.id) : ['comercial', 'pessoal'],
+    dashboardPrincipal: role === 'master' ? 'geral' : 'comercial',
   }
 }
 
@@ -52,10 +64,15 @@ function normalizarConfig(valor: unknown, role: Usuario['role']): HomeUsuarioCon
     : padrao.modulos
 
   const assistenciasEscopo: EscopoAssistencias = bruto.assistenciasEscopo === 'todas' ? 'todas' : 'proprias'
+  const validos = new Set<DashboardId>(DASHBOARDS.map(d => d.id))
+  const dashboards = Array.isArray(bruto.dashboards) ? bruto.dashboards.filter((id): id is DashboardId => typeof id === 'string' && validos.has(id as DashboardId)) : padrao.dashboards
+  const dashboardPrincipal = bruto.dashboardPrincipal && validos.has(bruto.dashboardPrincipal) && dashboards?.includes(bruto.dashboardPrincipal) ? bruto.dashboardPrincipal : dashboards?.[0] || padrao.dashboardPrincipal
 
   return {
     modulos: Array.from(new Set(modulos)),
     assistenciasEscopo: role === 'master' ? 'todas' : assistenciasEscopo,
+    dashboards: role === 'master' ? DASHBOARDS.map(d => d.id) : dashboards,
+    dashboardPrincipal: role === 'master' && !dashboardPrincipal ? 'geral' : dashboardPrincipal,
   }
 }
 
@@ -95,6 +112,8 @@ export async function salvarHomeUsuarioConfig(usuarioId: string, config: HomeUsu
   const normalizada: HomeUsuarioConfig = {
     modulos: Array.from(new Set(config.modulos.filter(id => MODULOS_VALIDOS.has(id)))),
     assistenciasEscopo: config.assistenciasEscopo === 'todas' ? 'todas' : 'proprias',
+    dashboards: config.dashboards || ['comercial', 'pessoal'],
+    dashboardPrincipal: config.dashboardPrincipal || config.dashboards?.[0] || 'comercial',
   }
 
   const { error } = await supabase
