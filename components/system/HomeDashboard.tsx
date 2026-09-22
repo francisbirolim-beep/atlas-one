@@ -42,8 +42,9 @@ export default function HomeDashboard() {
 
   const atual = dashboard || config.dashboardPrincipal || 'geral'
   const permitidos = config.dashboards?.length ? config.dashboards : ['geral'] as DashboardId[]
-  const mostrarComercial = atual === 'geral' || atual === 'comercial'
+  const mostrarComercial = atual === 'geral' || atual === 'comercial' || atual === 'orcamentos'
   const mostrarAssistencias = atual === 'geral' || atual === 'assistencias'
+  const mostrarOperacional = ['engenharia', 'producao', 'instalacao', 'financeiro'].includes(atual)
   const mostrarPessoal = atual === 'geral' || atual === 'pessoal'
   const mostrarNegocio = (mostrarComercial && temModulo(config, 'kanban')) || (mostrarAssistencias && temModulo(config, 'assistencias'))
 
@@ -62,9 +63,19 @@ export default function HomeDashboard() {
         </section>
       )}
 
-      {(atual === 'geral' || atual === 'comercial') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
+      {(atual === 'geral' || atual === 'comercial' || atual === 'orcamentos' || mostrarOperacional) && temModulo(config, 'indicadores') && <HomeManagementOverview />}
 
       {mostrarComercial && temModulo(config, 'orcamentos') && <HomeRecentQuotes />}
+
+      {mostrarOperacional && (
+        <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dashboard do setor</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-900">{DASHBOARDS.find(item => item.id === atual)?.label}</h2>
+            <p className="mt-1 text-sm text-slate-500">Indicadores específicos deste setor serão consolidados aqui sem misturar as informações dos demais departamentos.</p>
+          </div>
+        </section>
+      )}
 
       {mostrarNegocio && (
         <section className="atlas-home-mobile-full mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
