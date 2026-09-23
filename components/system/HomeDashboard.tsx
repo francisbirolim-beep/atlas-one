@@ -25,7 +25,7 @@ export default function HomeDashboard() {
       const carregada = await lerHomeUsuarioConfig(usuario)
       if (ativo) {
         setConfig(carregada)
-        setDashboard(carregada.dashboardPrincipal || carregada.dashboards?.[0] || 'geral')
+        setDashboard(carregada.dashboards?.includes('pessoal') ? 'pessoal' : (carregada.dashboardPrincipal || carregada.dashboards?.[0] || 'geral'))
       }
     })
     return () => { ativo = false }
@@ -42,7 +42,7 @@ export default function HomeDashboard() {
     )
   }
 
-  const atual = dashboard || config.dashboardPrincipal || 'geral'
+  const atual = dashboard || (config.dashboards?.includes('pessoal') ? 'pessoal' : config.dashboardPrincipal) || 'geral'
   const permitidos = config.dashboards?.length ? config.dashboards : ['geral'] as DashboardId[]
   const mostrarComercial = atual === 'geral' || atual === 'comercial' || atual === 'orcamentos'
   const mostrarAssistencias = atual === 'geral' || atual === 'assistencias'
