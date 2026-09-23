@@ -58,6 +58,12 @@ export interface DadosOrcamentoForm {
   itens: ItemOrcamentoForm[]
   clienteNome: string
   clienteWhatsapp: string
+  clienteApelido?: string
+  obraNome?: string
+  obraEndereco?: string
+  obraBairro?: string
+  obraCidade?: string
+  obraLocalizacao?: string
   cidade: string
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
@@ -144,15 +150,37 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   const {
     clienteId: clienteIdInformado,
     itens, clienteNome, clienteWhatsapp, cidade, origem,
+    clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
   const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
 
   const [clienteId, colunaId, usuario, referenciasWvetro] = await Promise.all([
-    clienteIdInformado ? Promise.resolve(clienteIdInformado) : obterOuCriarCliente({ nome: clienteNome, whatsapp: clienteWhatsapp, cidade, origem }),
+    clienteIdInformado ? Promise.resolve(clienteIdInformado) : obterOuCriarCliente({ nome: clienteNome, apelido: clienteApelido, whatsapp: clienteWhatsapp, cidade: obraCidade || cidade, origem }),
     primeiraColunaId(), usuarioAtual(), carregarReferenciasWvetroSnapshot(),
   ])
+
+  if (clienteIdInformado && clienteApelido?.trim()) {
+    await supabase.from('clientes').update({ apelido: clienteApelido.trim() }).eq('id', clienteIdInformado)
+  }
+
+  let obraIdEfetiva = obraId
+  if (!obraIdEfetiva && obraNome?.trim()) {
+    const { data: obraCriada, error: erroObra } = await supabase.from('obras').insert({
+      cliente_id: clienteId,
+      nome: obraNome.trim(),
+      status: 'planejamento',
+      endereco: obraEndereco?.trim() || null,
+      bairro: obraBairro?.trim() || null,
+      cidade: (obraCidade || cidade).trim() || null,
+      observacoes: obraLocalizacao?.trim() ? `Localização: ${obraLocalizacao.trim()}` : null,
+      criado_por_id: usuario?.id || null,
+      criado_por_nome: usuario?.nome || null,
+    }).select('id').single()
+    if (erroObra) return { ok: false, error: erroObra.message }
+    obraIdEfetiva = obraCriada?.id || null
+  }
 
   const itensSalvos: ItemEsquadria[] = []
   const fotosUrls: string[] = []
@@ -295,7 +323,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     idResultado = orcamentoIdDestino
   } else {
     const inserido = await supabase.from('orcamentos').insert({
-    id: novoId, cliente_id: clienteId, obra_id: obraId || null, cliente_nome: clienteNome,
+    id: novoId, cliente_id: clienteId, obra_id: obraIdEfetiva || null, cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp, cidade, origem,
     tipo_esquadria: primeiro?.tipo_esquadria || 'outro', largura_mm: primeiro?.largura_mm || null,
     altura_mm: primeiro?.altura_mm || null, quantidade: primeiro?.quantidade || 1,
