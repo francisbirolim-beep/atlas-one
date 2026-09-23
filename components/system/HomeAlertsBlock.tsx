@@ -35,19 +35,19 @@ export default function HomeAlertsBlock() {
   }, [])
 
   return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white shadow-sm md:p-5">
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm md:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2"><Bell size={17} className="text-violet-300" /><h2 className="font-semibold">Notificações e alertas</h2></div>
-        <span className="rounded-full bg-white/5 px-2 py-1 text-[11px] text-slate-400">{notificacoes.length} recentes</span>
+        <div className="flex items-center gap-2"><Bell size={17} className="text-red-500" /><h2 className="font-semibold">Notificações e alertas</h2></div>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-500">{notificacoes.length} recentes</span>
       </div>
-      <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
+      <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {carregando ? <p className="p-4 text-sm text-slate-500">Carregando notificações...</p> : notificacoes.length === 0 ? (
           <div className="p-5 text-sm text-slate-400"><Check size={16} className="mb-2 text-emerald-400" />Nenhuma notificação pendente.</div>
         ) : notificacoes.map(notificacao => (
-          <Link key={notificacao.id} href={notificacao.href || '/'} className="flex items-start gap-3 px-3 py-3 transition hover:bg-white/5">
+          <Link key={notificacao.id} href={notificacao.href || '/'} className="flex items-start gap-3 px-3 py-3 transition hover:bg-slate-50">
             <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300"><Bell size={14}/></span>
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-100">{notificacao.titulo}</p><p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{notificacao.mensagem || notificacao.criado_por_nome || 'Nova notificação'}</p></div>
-            <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600"><Clock3 size={10}/>{quando(notificacao.created_at)}</span>
+            <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-800">{notificacao.titulo}</p><p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{notificacao.mensagem || notificacao.criado_por_nome || 'Nova notificação'}</p></div>
+            <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-400"><Clock3 size={10}/>{quando(notificacao.created_at)}</span>
           </Link>
         ))}
       </div>
