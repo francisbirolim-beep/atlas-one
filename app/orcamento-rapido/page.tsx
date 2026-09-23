@@ -10,7 +10,7 @@ import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '
 import { supabase } from '@/lib/supabase'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
-const RASCUNHO_ID = 'orcamento-rapido-v3'
+const RASCUNHO_ID = 'orcamento-rapido-layout-restaurado-v1'
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
@@ -125,12 +125,6 @@ interface RascunhoOrcamentoRapido {
   clienteIdOrigem: string | null
   clienteNome: string
   clienteWhatsapp: string
-  clienteApelido?: string
-  obraNome?: string
-  obraEndereco?: string
-  obraBairro?: string
-  obraCidade?: string
-  obraLocalizacao?: string
   cidade: string
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
@@ -147,12 +141,6 @@ export default function OrcamentoRapido() {
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
-  const [clienteApelido, setClienteApelido] = useState('')
-  const [obraNome, setObraNome] = useState('')
-  const [obraEndereco, setObraEndereco] = useState('')
-  const [obraBairro, setObraBairro] = useState('')
-  const [obraCidade, setObraCidade] = useState('')
-  const [obraLocalizacao, setObraLocalizacao] = useState('')
   const [cidade, setCidade] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [temperatura, setTemperatura] = useState<TemperaturaLead | ''>('')
@@ -196,12 +184,6 @@ export default function OrcamentoRapido() {
         setClienteIdOrigem(d.clienteIdOrigem || null)
         setClienteNome(d.clienteNome || '')
         setClienteWhatsapp(d.clienteWhatsapp || '')
-        setClienteApelido(d.clienteApelido || '')
-        setObraNome(d.obraNome || '')
-        setObraEndereco(d.obraEndereco || '')
-        setObraBairro(d.obraBairro || '')
-        setObraCidade(d.obraCidade || d.cidade || '')
-        setObraLocalizacao(d.obraLocalizacao || '')
         setCidade(d.cidade || '')
         if (d.origem) setOrigem(d.origem)
         setTemperatura(d.temperatura || '')
@@ -223,14 +205,14 @@ export default function OrcamentoRapido() {
     const timer = window.setTimeout(() => {
       const dados: RascunhoOrcamentoRapido = {
         itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-        clienteIdOrigem, clienteNome, clienteWhatsapp, clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao, cidade, origem, temperatura,
+        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura,
         acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
         arquivos: arquivos.map(arquivoParaRascunho),
       }
       salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
@@ -244,9 +226,7 @@ export default function OrcamentoRapido() {
         setClienteIdOrigem(cliente.id)
         setClienteNome(cliente.nome || '')
         setClienteWhatsapp(cliente.whatsapp || cliente.telefone || '')
-        setClienteApelido((cliente as any).apelido || '')
         setCidade(cliente.cidade || '')
-        setObraCidade(cliente.cidade || '')
         if (cliente.origem) setOrigem(cliente.origem)
       } catch {
         // A consulta é apenas conveniência; falha de rede não bloqueia o formulário.
@@ -305,7 +285,7 @@ export default function OrcamentoRapido() {
     setSalvando(true)
     const tipoMedida = itens.every(item => item.tipoMedida === 'final') ? 'final' : 'comum'
     const dadosForm: DadosOrcamentoForm = {
-      clienteId: clienteIdOrigem, orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), itens: itens.map(item => ({ ...item, itemTipo: item.itemTipo || 'sob_medida' })), clienteNome, clienteWhatsapp, clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao, cidade: obraCidade || cidade, origem,
+      clienteId: clienteIdOrigem, orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), itens: itens.map(item => ({ ...item, itemTipo: item.itemTipo || 'sob_medida' })), clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
@@ -322,7 +302,7 @@ export default function OrcamentoRapido() {
 
   async function salvar() {
     if (!clienteNome.trim()) return setErro('Informe o nome do cliente')
-    if (!(obraCidade || cidade).trim()) return setErro('Informe a cidade da obra')
+    if (!cidade.trim()) return setErro('Informe a cidade da obra')
     if (!temperatura) return setErro('Selecione a temperatura do orçamento (quente, morno ou frio)')
     if (!acabamento) return setErro('Selecione a cor/acabamento')
     if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) return setErro('Escreva qual é a cor')
@@ -365,7 +345,7 @@ export default function OrcamentoRapido() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setPedidoEnviadoId(null); setSalvoOffline(false); setErro(''); setConferenciaAberta(false)
-    setItens([novoItem()]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setClienteApelido(''); setObraNome(''); setObraEndereco(''); setObraBairro(''); setObraCidade(''); setObraLocalizacao(''); setCidade(''); setTemperatura('')
+    setItens([novoItem()]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -384,26 +364,7 @@ export default function OrcamentoRapido() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200"><div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div></div></header>
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
-        <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-          <div><h3 className="text-base font-bold text-slate-800">Cliente</h3>{clienteIdOrigem && <p className="mt-1 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro e vinculado ao histórico.</p>}</div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input autoComplete="off" data-preserve-case="true" value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-            <input autoComplete="off" data-preserve-case="true" value={clienteApelido} onChange={e => setClienteApelido(e.target.value)} placeholder="Apelido (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-            <input autoComplete="off" data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-            <select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select>
-          </div>
-        </section>
-        <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
-          <div><h3 className="text-base font-bold text-slate-800">Obra</h3><p className="text-xs text-slate-500">Identifique esta obra para separar os orçamentos do mesmo cliente.</p></div>
-          <input autoComplete="off" data-preserve-case="true" value={obraNome} onChange={e => setObraNome(e.target.value)} placeholder="Nome da obra (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-          {obraNome.trim() && <div className="grid gap-3 sm:grid-cols-2">
-            <input autoComplete="off" data-preserve-case="true" value={obraEndereco} onChange={e => setObraEndereco(e.target.value)} placeholder="Endereço da obra" className="w-full border border-slate-300 rounded-xl p-3 text-sm sm:col-span-2" />
-            <input autoComplete="off" data-preserve-case="true" value={obraCidade} onChange={e => setObraCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-            <input autoComplete="off" data-preserve-case="true" value={obraBairro} onChange={e => setObraBairro(e.target.value)} placeholder="Bairro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />
-            <input autoComplete="off" data-preserve-case="true" value={obraLocalizacao} onChange={e => setObraLocalizacao(e.target.value)} placeholder="Localização / link do mapa" className="w-full border border-slate-300 rounded-xl p-3 text-sm sm:col-span-2" />
-          </div>}
-          {!obraNome.trim() && <input autoComplete="off" data-preserve-case="true" value={obraCidade || cidade} onChange={e => { setObraCidade(e.target.value); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" />}
-        </section>
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => setTemperatura(t)} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => setAcabamento(a.value)} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input data-preserve-case="true" value={acabamentoOutroTexto} onChange={e => setAcabamentoOutroTexto(e.target.value)} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>
@@ -413,7 +374,7 @@ export default function OrcamentoRapido() {
 
         <div className="space-y-4"><h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>{itens.map((item,idx) => <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
           <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>{itens.length > 1 && <button onClick={() => removerItem(item.id)} className="text-red-400"><Trash2 size={16} /></button>}</div>
-          {!item.itemTipo ? <div className="space-y-3"><div><p className="text-base font-bold text-slate-800">Tipo de item</p><p className="text-xs text-slate-500">Escolha como será este item no orçamento.</p></div><div className="grid grid-cols-2 gap-2">{([['sob_medida','Sob medida'],['medida_padrao','Medida padrão'],['kit_porta_pronta','Kit porta pronta'],['material_avulso','Material avulso']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>atualizarItemCampos(item.id,{itemTipo:v,materialCategoria:v==='material_avulso'?'perfil':null,tipo:v==='sob_medida'?'':'outro',tipoOutroTexto:''})} className="min-h-28 rounded-xl border-2 border-slate-200 bg-white p-4 text-center text-sm font-semibold text-slate-800 hover:border-brand-navy hover:bg-brand-navyLight"><span className="block">{l}</span><span className="mt-1 block text-[11px] font-normal text-slate-500">{v==='sob_medida'?'Tipologia e variáveis técnicas':v==='medida_padrao'?'Produto com medidas cadastradas':v==='kit_porta_pronta'?'Kit previamente cadastrado':'Perfil, acessório, vidro ou outros'}</span></button>)}</div></div> : <><button type="button" onClick={()=>atualizarItemCampos(item.id,{itemTipo:'',produtoId:null,produtoNome:null,materialCategoria:null,contramarcoOverride:null})} className="text-xs font-semibold text-brand-navy">← Trocar tipo de item</button>
+          {!item.itemTipo ? <div className="space-y-3"><div><p className="text-sm font-semibold text-slate-800">O que você vai adicionar?</p><p className="text-xs text-slate-500">Escolha primeiro o tipo do item.</p></div><div className="grid grid-cols-2 gap-2">{([['sob_medida','Sob medida'],['medida_padrao','Medida padrão'],['kit_porta_pronta','Kit porta pronta'],['material_avulso','Material avulso']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>atualizarItemCampos(item.id,{itemTipo:v,materialCategoria:v==='material_avulso'?'perfil':null,tipo:v==='sob_medida'?'':'outro',tipoOutroTexto:''})} className="min-h-20 rounded-xl border-2 border-slate-200 bg-white p-3 text-left text-sm font-semibold text-slate-800 hover:border-brand-navy"><span className="block">{l}</span><span className="mt-1 block text-[11px] font-normal text-slate-500">{v==='sob_medida'?'Tipologia e variáveis técnicas':v==='medida_padrao'?'Produto com medidas cadastradas':v==='kit_porta_pronta'?'Kit previamente cadastrado':'Perfil, acessório, vidro ou outros'}</span></button>)}</div></div> : <><button type="button" onClick={()=>atualizarItemCampos(item.id,{itemTipo:'',produtoId:null,produtoNome:null,materialCategoria:null,contramarcoOverride:null})} className="text-xs font-semibold text-brand-navy">← Trocar tipo de item</button>
           <div><label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label><input data-preserve-case="true" value={item.ambiente} onChange={e => atualizarItem(item.id,'ambiente',e.target.value)} placeholder="Ex: Sala, Quarto 1, Cozinha..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
           {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
           {item.itemTipo==='sob_medida' && item.tipo && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
@@ -438,7 +399,7 @@ export default function OrcamentoRapido() {
 
           </> : <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div>
-            {item.itemTipo!=='material_avulso' && item.itemTipo!=='medida_padrao' && <div><p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p><p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se este item não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se este item tiver contramarco, selecione abaixo.'}</p><div className="grid grid-cols-2 gap-2"><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button></div></div>}
+            {item.itemTipo!=='material_avulso' && <div><p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p><p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se este item não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se este item tiver contramarco, selecione abaixo.'}</p><div className="grid grid-cols-2 gap-2"><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button></div></div>}
           </div>}
 
           <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotosPreviews.map((src,i) => <div key={i} className="relative w-24 h-24"><img src={src} alt="Foto" onClick={() => setFotoAmpliada(src)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
