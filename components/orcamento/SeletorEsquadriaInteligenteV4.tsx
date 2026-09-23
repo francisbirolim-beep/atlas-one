@@ -112,11 +112,26 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   }, [buscaLinha, linhasDisponiveis])
 
   const pesquisaTipologia = useMemo(() => {
-    const q = normalizar(buscaTipologia)
-    if (!q) return []
+    const termos = normalizar(buscaTipologia).split(/\s+/).filter(Boolean)
+    if (!termos.length) return []
     return tipologiasDaLinha
-      .filter(t => normalizar(`${t.label} ${t.chave} ${(t as any).categoria || ''}`).includes(q))
-      .slice(0, 20)
+      .map(t => {
+        const texto = normalizar([
+          t.label,
+          t.chave,
+          (t as any).categoria || '',
+          (t as any).descricao || '',
+          (t as any).modelo || '',
+          (t as any).apelidos || '',
+        ].join(' '))
+        const corresponde = termos.every(termo => texto.includes(termo))
+        const pontuacao = termos.reduce((total, termo) => total + (texto.startsWith(termo) ? 3 : texto.includes(termo) ? 1 : 0), 0)
+        return { t, corresponde, pontuacao }
+      })
+      .filter(item => item.corresponde)
+      .sort((a, b) => b.pontuacao - a.pontuacao || a.t.label.localeCompare(b.t.label, 'pt-BR'))
+      .slice(0, 30)
+      .map(item => item.t)
   }, [buscaTipologia, tipologiasDaLinha])
 
   const tipologiaAtual = tipologias.find(t => t.id === value.tipologiaId) || null
