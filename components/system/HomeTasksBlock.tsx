@@ -66,6 +66,13 @@ export default function HomeTasksBlock() {
       return (b.created_at || '').localeCompare(a.created_at || '')
     }), [tarefas])
 
+  const agora = new Date()
+  const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime()
+  const fimHoje = inicioHoje + 86400000
+  const atrasadas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < inicioHoje)
+  const hoje = abertas.filter(t => { if (!t.data_hora) return false; const ts = new Date(t.data_hora).getTime(); return ts >= inicioHoje && ts < fimHoje })
+  const proximas = abertas.filter(t => !t.data_hora || new Date(t.data_hora).getTime() >= fimHoje)
+
   async function abrirModal() {
     if (!usuario) return
     setResponsavelId(usuario.id)
@@ -111,31 +118,37 @@ export default function HomeTasksBlock() {
 
   return (
     <>
-      <article className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white shadow-sm md:p-5">
+      <article className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm md:p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2"><CheckSquare size={17} className="text-emerald-400" /><h2 className="font-semibold">Minhas tarefas</h2></div>
-          <button type="button" onClick={() => void abrirModal()} className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"><Plus size={13}/> Nova</button>
+          <div className="flex items-center gap-2"><CheckSquare size={17} className="text-blue-600" /><h2 className="font-semibold">Minhas tarefas</h2></div>
+          <button type="button" onClick={() => void abrirModal()} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"><Plus size={13}/> Nova</button>
         </div>
 
-        <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
+        <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">Minhas tarefas ({abertas.length})</span>
+          <span className="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-600">Atrasadas ({atrasadas.length})</span>
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">Hoje ({hoje.length})</span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">Próximas ({proximas.length})</span>
+        </div>
+        <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
           {carregando ? (
-            <p className="p-4 text-sm text-slate-500">Carregando tarefas...</p>
+            <p className="p-4 text-sm text-slate-400">Carregando tarefas...</p>
           ) : abertas.length === 0 ? (
-            <div className="p-5 text-sm text-slate-400"><Check size={16} className="mb-2 text-emerald-400" />Nenhuma tarefa aberta.</div>
+            <div className="p-5 text-sm text-slate-500"><Check size={16} className="mb-2 text-emerald-600" />Nenhuma tarefa aberta.</div>
           ) : abertas.slice(0, 5).map(tarefa => {
             const atrasada = !!tarefa.data_hora && new Date(tarefa.data_hora).getTime() < Date.now()
             return (
-              <div key={tarefa.id} className="flex items-center gap-3 px-3 py-3">
-                <button type="button" onClick={() => void concluir(tarefa)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition hover:border-emerald-500/50 hover:text-emerald-300" title="Concluir tarefa"><Check size={14}/></button>
+              <div key={tarefa.id} className="flex items-center gap-3 px-3 py-3 hover:bg-slate-50">
+                <button type="button" onClick={() => void concluir(tarefa)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 text-transparent transition hover:border-emerald-500 hover:text-emerald-600" title="Concluir tarefa"><Check size={14}/></button>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-100">{tarefa.titulo}</p>
-                  <p className={`mt-0.5 flex items-center gap-1 text-[11px] ${atrasada ? 'text-red-300' : 'text-slate-500'}`}><Clock3 size={11}/>{dataHoraLabel(tarefa.data_hora)}</p>
+                  <p className="truncate text-sm font-medium text-slate-800">{tarefa.titulo}</p>
+                  <p className={`mt-0.5 flex items-center gap-1 text-[11px] ${atrasada ? 'font-medium text-red-600' : 'text-slate-500'}`}><Clock3 size={11}/>{dataHoraLabel(tarefa.data_hora)}</p>
                 </div>
               </div>
             )
           })}
         </div>
-        <Link href="/tarefas" className="mt-3 inline-block text-xs font-medium text-emerald-300 hover:text-emerald-200">Ver todas as tarefas →</Link>
+        <Link href="/tarefas" className="mt-3 inline-block text-xs font-medium text-blue-700 hover:text-blue-800">Ver todas as tarefas →</Link>
       </article>
 
       {modal && (
