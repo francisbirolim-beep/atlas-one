@@ -70,7 +70,7 @@ export default function HomeTasksBlock() {
   const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime()
   const fimHoje = inicioHoje + 86400000
   const atrasadas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < inicioHoje)
-  const hoje = abertas.filter(t => t.data_hora && { const ts = new Date(t.data_hora).getTime(); return ts >= inicioHoje && ts < fimHoje })
+  const hoje = abertas.filter(t => { if (!t.data_hora) return false; const ts = new Date(t.data_hora).getTime(); return ts >= inicioHoje && ts < fimHoje })
   const proximas = abertas.filter(t => !t.data_hora || new Date(t.data_hora).getTime() >= fimHoje)
 
   async function abrirModal() {
