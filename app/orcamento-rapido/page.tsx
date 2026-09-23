@@ -10,7 +10,7 @@ import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '
 import { supabase } from '@/lib/supabase'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
-const RASCUNHO_ID = 'orcamento-rapido-v2'
+const RASCUNHO_ID = 'orcamento-rapido-v3'
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
