@@ -503,6 +503,33 @@ await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orçamento')
 listarHistorico(cardSelecionado.id).then(setHistorico)
 }
 
+async function iniciarRevisaoOrcamento(adicionarTipologia = false) {
+if (!cardSelecionado || !editando) return
+
+const versoesExistentes = normalizarVersoesLegadas(editando.anexos).filter(ehPdfOrcamentoAtlas).length
+const proximaVersao = String(versoesExistentes + 1).padStart(2, '0')
+
+setSessaoAtiva(true)
+setEditando(prev => {
+if (!prev) return prev
+return {
+...prev,
+orcamento_finalizado_em: null,
+enviado_vendedor_em: null,
+itens: adicionarTipologia ? [...(prev.itens || []), novoItemEdit()] : prev.itens,
+}
+})
+
+await registrarHistorico(
+cardSelecionado.id,
+usuario,
+adicionarTipologia ? 'Iniciou revisão para adicionar tipologia' : 'Iniciou nova revisão do orçamento',
+`Preparando Versão ${proximaVersao}; versões anteriores preservadas.`
+)
+listarHistorico(cardSelecionado.id).then(setHistorico)
+}
+
+
 async function adicionarAnexo(file: File | undefined) {
 if (!file || !novoAnexoTitulo.trim() || !editando) return
 const titulo = novoAnexoTitulo.trim()
@@ -1520,6 +1547,25 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-1
 <p className="flex items-center gap-1.5">
 <CheckCircle2 size={14} /> Finalizado — levou{' '}
 {formatarDuracao(editando.orcamento_iniciado_em || '', editando.orcamento_finalizado_em)}
+</p>
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+<button
+type="button"
+onClick={() => void iniciarRevisaoOrcamento(true)}
+className="w-full py-2.5 px-3 flex items-center justify-center gap-1.5 rounded-lg bg-brand-navy text-white text-xs font-semibold hover:bg-brand-navyDark transition"
+>
+<Plus size={14} /> Adicionar tipologia
+</button>
+<button
+type="button"
+onClick={() => void iniciarRevisaoOrcamento(false)}
+className="w-full py-2.5 px-3 flex items-center justify-center gap-1.5 rounded-lg border border-brand-navy text-brand-navy bg-white text-xs font-semibold hover:bg-brand-navyLight transition"
+>
+<Pencil size={13} /> Criar nova revisão
+</button>
+</div>
+<p className="text-[11px] text-slate-400">
+A versão enviada continua preservada. Ao finalizar novamente, o Atlas gera a próxima versão do orçamento e mantém o card em Orçamento feito.
 </p>
 {editando.enviado_vendedor_em && (
 <p className="flex items-center gap-1.5 text-brand-navy">
