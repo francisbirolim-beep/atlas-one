@@ -16,7 +16,7 @@ import HomeQuotesOverview from '@/components/system/HomeQuotesOverview'
 
 export default function HomeDashboard() {
   const [config, setConfig] = useState<HomeUsuarioConfig | null>(null)
-  const [dashboard, setDashboard] = useState<DashboardId | null>(null)
+  const [dashboard, setDashboard] = useState<DashboardId | 'executivo' | null>(null)
 
   useEffect(() => {
     let ativo = true
@@ -57,13 +57,15 @@ export default function HomeDashboard() {
       {permitidos.length > 1 && (
         <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
           <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <span className="shrink-0 px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Dashboard</span>
+            <button type="button" onClick={() => setDashboard('executivo')} className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold transition ${atual === 'executivo' ? 'bg-blue-600 text-white' : 'text-blue-700 hover:bg-blue-50'}`}>DASHBOARD</button>
             {DASHBOARDS.filter(item => permitidos.includes(item.id)).map(item => (
               <button key={item.id} type="button" onClick={() => setDashboard(item.id)} className={`shrink-0 rounded-xl px-3 py-2 text-sm font-semibold transition ${atual === item.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{item.label}</button>
             ))}
           </div>
         </section>
       )}
+
+      {atual === 'executivo' && temModulo(config, 'indicadores') && <HomeManagementOverview />}
 
       {(atual === 'geral' || atual === 'comercial') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
 
