@@ -68,7 +68,7 @@ export default function AtlasIAPage() {
         <div className="space-y-2 text-sm">
           <div className="rounded-xl bg-white/10 p-3"><Bot size={17} className="mb-2"/><b>Assistente geral</b><p className="mt-1 text-xs text-white/60">Consulta o Atlas conforme suas permissões.</p></div>
           <div className="rounded-xl p-3 text-white/70"><Brain size={17} className="mb-2"/>Projetos e agentes <span className="text-xs">(próxima etapa)</span></div>
-          <div className="rounded-xl p-3 text-white/70"><FileText size={17} className="mb-2"/>Base de conhecimento <span className="text-xs">(próxima etapa)</span></div>
+          <Link href="/atlas-ia/conhecimento" className="block rounded-xl p-3 text-white/80 hover:bg-white/10"><FileText size={17} className="mb-2"/><b>Base de conhecimento</b><p className="mt-1 text-xs text-white/50">Revisar e validar conhecimento.</p></Link>
         </div>
         <div className="mt-auto rounded-xl bg-emerald-400/10 p-3 text-xs text-emerald-100"><ShieldCheck size={16} className="mb-1"/>Acesso aos dados respeita as permissões do usuário.</div>
       </aside>
@@ -81,7 +81,7 @@ export default function AtlasIAPage() {
 
         <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
           <div className="mx-auto max-w-3xl space-y-4">
-            {bolhas.length === 0 && <div className="py-12 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#182444] text-white"><Sparkles size={26}/></div><h2 className="text-xl font-semibold">Como posso ajudar?</h2><p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Pergunte sobre clientes, obras, orçamentos, tarefas e informações do Atlas. Você também pode anexar imagens, PDFs e arquivos de texto.</p></div>}
+            {bolhas.length === 0 && <div className="py-12 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#182444] text-white"><Sparkles size={26}/></div><h2 className="text-xl font-semibold">Como posso ajudar?</h2><p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Pergunte sobre clientes, obras, orçamentos, tarefas e informações do Atlas. Você também pode anexar imagens, PDFs e arquivos de texto.</p><Link href="/atlas-ia/conhecimento" className="mt-4 inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-medium shadow-sm"><ShieldCheck size={16}/> Conhecimento e validações</Link></div>}
             {bolhas.map((b,i) => <div key={i} className={b.papel === 'user' ? 'flex justify-end' : 'flex justify-start'}><div className={'max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm shadow-sm ' + (b.papel === 'user' ? 'bg-[#182444] text-white' : 'border bg-white')}>{b.texto}</div></div>)}
             {carregando && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16}/> Atlas IA está pensando...</div>}
             {erro && <p className="text-sm text-red-600">{erro}</p>}
