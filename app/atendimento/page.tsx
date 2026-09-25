@@ -14,7 +14,7 @@ const conversas=[
 ]
 export default function AtendimentoPage(){
  const [ativa,setAtiva]=useState(0); const [conversasBanco,setConversasBanco]=useState<AtendimentoConversa[]>([])
- useEffect(()=>{ let vivo=true; const carregar=async()=>{try{const dados=await listarConversasAtendimento(); if(vivo)setConversasBanco(dados)}catch{}}; void carregar(); const parar=observarAtendimento(()=>void carregar()); return()=>{vivo=false;parar()} },[]) const [texto,setTexto]=useState(''); const [nota,setNota]=useState(false); const [status,setStatus]=useState('Em atendimento'); const [salvando,setSalvando]=useState(false)
+ useEffect(()=>{ let vivo=true; const carregar=async()=>{try{const dados=await listarConversasAtendimento(); if(vivo)setConversasBanco(dados)}catch{}}; void carregar(); const parar=observarAtendimento(()=>void carregar()); return()=>{vivo=false;parar()} },[])\n const [texto,setTexto]=useState(''); const [nota,setNota]=useState(false); const [status,setStatus]=useState('Em atendimento'); const [salvando,setSalvando]=useState(false)
  const conversaReal=conversasBanco[ativa]||null
  const enviar=async()=>{if(!conversaReal||!texto.trim())return;setSalvando(true);try{await enviarMensagemAtendimento(conversaReal.id,texto,nota);setTexto('')}finally{setSalvando(false)}}
  const mudarStatus=async(valor:string)=>{setStatus(valor);if(!conversaReal)return;const mapa:Record<string,any>={'Em atendimento':'em_atendimento','Aguardando cliente':'aguardando_cliente','Transferido':'transferido','Finalizado':'finalizado'};await alterarStatusAtendimento(conversaReal.id,mapa[valor])}
