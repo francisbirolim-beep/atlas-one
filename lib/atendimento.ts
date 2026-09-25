@@ -4,6 +4,8 @@ import { usuarioAtual } from './auth'
 export type AtendimentoStatus='aguardando'|'em_atendimento'|'aguardando_cliente'|'transferido'|'finalizado'
 export type AtendimentoConversa={id:string;telefone:string;cliente_id:string|null;status:AtendimentoStatus;responsavel_id:string|null;responsavel_nome:string|null;setor:string|null;ultima_mensagem_em:string|null;created_at:string;updated_at:string}
 export type AtendimentoMensagem={id:string;conversa_id:string;sessao_id:string|null;direcao:'entrada'|'saida'|'interna';tipo:string;texto:string|null;media_url:string|null;usuario_id:string|null;usuario_nome:string|null;created_at:string}
+export type AtendimentoCliente={id:string;nome:string;whatsapp:string|null;telefone:string|null;email:string|null;cidade:string|null;endereco:string|null}
+export type AtendimentoUsuario={id:string;nome:string}
 
 export async function listarConversasAtendimento(){
  const {data,error}=await supabase.from('atendimento_conversas').select('*').order('ultima_mensagem_em',{ascending:false,nullsFirst:false}).order('created_at',{ascending:false})
@@ -42,4 +44,25 @@ export async function enviarMensagemAtendimento(conversaId:string,texto:string,i
 export function observarAtendimento(onChange:()=>void){
  const channel=supabase.channel('atlas-atendimento').on('postgres_changes',{event:'*',schema:'public',table:'atendimento_conversas'},onChange).on('postgres_changes',{event:'*',schema:'public',table:'atendimento_mensagens'},onChange).subscribe()
  return ()=>{void supabase.removeChannel(channel)}
+}
+
+export async function buscarClienteAtendimento(clienteId:string|null){
+ if(!clienteId) return null
+ const {data,error}=await supabase.from('clientes').select('id,nome,whatsapp,telefone,email,cidade,endereco').eq('id',clienteId).maybeSingle()
+ if(error) throw error
+ return data as AtendimentoCliente|null
+}
+export async function listarUsuariosAtendimento(){
+ const {data,error}=await supabase.from('usuarios').select('id,nome').order('nome')
+ if(error) throw error
+ return (data||[]) as AtendimentoUsuario[]
+}
+export async function transferirAtendimento(conversaId:string,responsavel:AtendimentoUsuario,setor?:string|null){
+ const u=await usuarioAtual(); if(!u) throw new Error('Usuário não autenticado')
+ const agora=new Date().toISOString()
+ const {error}=await supabase.from('atendimento_conversas').update({status:'transferido',responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null,updated_at:agora}).eq('id',conversaId)
+ if(error) throw error
+ const {data:s}=await supabase.from('atendimento_sessoes').select('id').eq('conversa_id',conversaId).order('created_at',{ascending:false}).limit(1).maybeSingle()
+ if(s?.id) await supabase.from('atendimento_sessoes').update({status:'transferido',responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null}).eq('id',s.id)
+ await supabase.from('atendimento_eventos').insert({conversa_id:conversaId,sessao_id:s?.id||null,tipo:'transferido',usuario_id:u.id,usuario_nome:u.nome,dados:{responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null}})
 }
