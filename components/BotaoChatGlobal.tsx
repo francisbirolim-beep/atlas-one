@@ -42,13 +42,13 @@ export default function BotaoChatGlobal() {
     return()=>{ativo=false;if(canal)void supabase.removeChannel(canal)}
   },[])
 
-  if (pathname.startsWith('/chat')) return null
+  if (pathname.startsWith('/atendimento')) return null
   return (
-    <Link href="/chat" aria-label="Abrir Chat interno" title="Chat interno"
-      className="fixed bottom-[calc(env(safe-area-inset-bottom)+7rem)] right-4 z-[80] flex h-14 w-14 items-center justify-center rounded-full bg-brand-navy text-white shadow-lg ring-1 ring-black/5 transition hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-brand-navy focus:ring-offset-2 sm:bottom-6 sm:right-6">
-      <MessageCircle size={25} aria-hidden="true" />
+    <Link href="/atendimento" aria-label="Abrir Atendimento WhatsApp" title="Atendimento WhatsApp"
+      className="fixed bottom-[calc(env(safe-area-inset-bottom)+7rem)] right-4 z-[80] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg ring-1 ring-black/5 transition hover:scale-105 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-brand-navy focus:ring-offset-2 sm:bottom-6 sm:right-6">
+      <MessageCircle size={28} aria-hidden="true" />
       {naoLidas>0&&<span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{naoLidas>99?'99+':naoLidas}</span>}
-      <span className="sr-only">Chat interno</span>
+      <span className="sr-only">Atendimento WhatsApp</span>
     </Link>
   )
 }
