@@ -66,4 +66,3 @@ export async function transferirAtendimento(conversaId:string,responsavel:Atendi
  if(s?.id) await supabase.from('atendimento_sessoes').update({status:'transferido',responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null}).eq('id',s.id)
  await supabase.from('atendimento_eventos').insert({conversa_id:conversaId,sessao_id:s?.id||null,tipo:'transferido',usuario_id:u.id,usuario_nome:u.nome,dados:{responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null}})
 }
-
