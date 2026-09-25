@@ -1,15 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, FileText, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, FileText, ImageIcon, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
 
-type Bolha = { papel: 'user' | 'assistant'; texto: string }
+type Bolha = { papel: 'user' | 'assistant'; texto: string; imagem?: string }
 type Anexo = { nome: string; mediaType: string; tipo: 'imagem' | 'pdf' | 'texto'; dados: string }
+type ImagemPendente = { prompt: string; usd: number; model: string; quality: string; size: string }
 
 const MAX = 8 * 1024 * 1024
+const PEDIDO_IMAGEM = /\b(gere|gerar|crie|criar|faça|faca|produza|desenhe|imagem|foto)\b.*\b(imagem|foto|porta|janela|esquadria|desenho|render)\b/i
 
 export default function AtlasIAPage() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -19,11 +21,12 @@ export default function AtlasIAPage() {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
   const [anexo, setAnexo] = useState<Anexo | null>(null)
+  const [imagemPendente, setImagemPendente] = useState<ImagemPendente | null>(null)
   const arquivoRef = useRef<HTMLInputElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { usuarioAtual().then(setUsuario) }, [])
-  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [bolhas, carregando])
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [bolhas, carregando, imagemPendente])
 
   async function selecionarArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -43,12 +46,45 @@ export default function AtlasIAPage() {
     else setAnexo({ nome: file.name, mediaType: file.type || 'text/plain', tipo: 'texto', dados: dataUrl })
   }
 
+  async function prepararImagem(prompt: string) {
+    setCarregando(true); setErro('')
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/agente/imagem', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` }, body: JSON.stringify({ prompt, confirmar: false }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Erro ao preparar geração de imagem')
+      setImagemPendente({ prompt, usd: j.estimate?.usd || 0, model: j.estimate?.model || '', quality: j.estimate?.quality || '', size: j.estimate?.size || '' })
+    } catch (e: any) { setErro(e.message || 'Erro ao preparar geração de imagem') }
+    finally { setCarregando(false) }
+  }
+
+  async function gerarImagem() {
+    if (!imagemPendente || carregando) return
+    const pedido = imagemPendente
+    setImagemPendente(null); setCarregando(true); setErro('')
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/agente/imagem', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` }, body: JSON.stringify({ prompt: pedido.prompt, confirmar: true }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Erro ao gerar imagem')
+      setBolhas(p => [...p, { papel: 'assistant', texto: `Imagem gerada para: ${pedido.prompt}`, imagem: j.image }])
+    } catch (e: any) { setErro(e.message || 'Erro ao gerar imagem') }
+    finally { setCarregando(false) }
+  }
+
   async function enviar() {
     const texto = entrada.trim()
     if ((!texto && !anexo) || carregando) return
     const atual = anexo
-    setEntrada(''); setAnexo(null); setErro(''); setCarregando(true)
+    setEntrada(''); setAnexo(null); setErro('')
     setBolhas(p => [...p, { papel: 'user', texto: (texto || 'Analisar arquivo') + (atual ? `\n📎 ${atual.nome}` : '') }])
+
+    if (!atual && PEDIDO_IMAGEM.test(texto)) {
+      await prepararImagem(texto)
+      return
+    }
+
+    setCarregando(true)
     try {
       const token = await tokenAtual()
       const r = await fetch('/api/agente/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` }, body: JSON.stringify({ mensagem: texto, anexo: atual, messages: historico }) })
@@ -64,7 +100,7 @@ export default function AtlasIAPage() {
     <div className="mx-auto flex min-h-screen max-w-7xl">
       <aside className="hidden w-72 flex-col border-r bg-[#111a31] p-4 text-white md:flex">
         <div className="mb-6 flex items-center gap-3 px-2"><div className="rounded-xl bg-white/10 p-2"><Sparkles size={22}/></div><div><b>Atlas IA</b><p className="text-xs text-white/60">Inteligência da Esquadrifácio</p></div></div>
-        <button onClick={() => { setBolhas([]); setHistorico([]) }} className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444]"><MessageSquarePlus size={17}/> Nova conversa</button>
+        <button onClick={() => { setBolhas([]); setHistorico([]); setImagemPendente(null) }} className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444]"><MessageSquarePlus size={17}/> Nova conversa</button>
         <div className="space-y-2 text-sm">
           <div className="rounded-xl bg-white/10 p-3"><Bot size={17} className="mb-2"/><b>Assistente geral</b><p className="mt-1 text-xs text-white/60">Consulta o Atlas conforme suas permissões.</p></div>
           <div className="rounded-xl p-3 text-white/70"><Brain size={17} className="mb-2"/>Projetos e agentes <span className="text-xs">(próxima etapa)</span></div>
@@ -81,15 +117,16 @@ export default function AtlasIAPage() {
 
         <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
           <div className="mx-auto max-w-3xl space-y-4">
-            {bolhas.length === 0 && <div className="py-12 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#182444] text-white"><Sparkles size={26}/></div><h2 className="text-xl font-semibold">Como posso ajudar?</h2><p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Pergunte sobre clientes, obras, orçamentos, tarefas e informações do Atlas. Você também pode anexar imagens, PDFs e arquivos de texto.</p><Link href="/atlas-ia/conhecimento" className="mt-4 inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-medium shadow-sm"><ShieldCheck size={16}/> Conhecimento e validações</Link></div>}
-            {bolhas.map((b,i) => <div key={i} className={b.papel === 'user' ? 'flex justify-end' : 'flex justify-start'}><div className={'max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm shadow-sm ' + (b.papel === 'user' ? 'bg-[#182444] text-white' : 'border bg-white')}>{b.texto}</div></div>)}
-            {carregando && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16}/> Atlas IA está pensando...</div>}
-            {erro && <p className="text-sm text-red-600">{erro}</p>}
+            {bolhas.length === 0 && <div className="py-12 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#182444] text-white"><Sparkles size={26}/></div><h2 className="text-xl font-semibold">Como posso ajudar?</h2><p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Pergunte sobre clientes, obras, orçamentos e informações do Atlas. Você também pode pedir uma imagem e anexar imagens, PDFs e textos.</p><Link href="/atlas-ia/conhecimento" className="mt-4 inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-medium shadow-sm"><ShieldCheck size={16}/> Conhecimento e validações</Link></div>}
+            {bolhas.map((b,i) => <div key={i} className={b.papel === 'user' ? 'flex justify-end' : 'flex justify-start'}><div className={'max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm shadow-sm ' + (b.papel === 'user' ? 'bg-[#182444] text-white' : 'border bg-white')}>{b.imagem && <img src={b.imagem} alt={b.texto} className="mb-3 max-h-[560px] w-full rounded-xl object-contain"/>}{b.texto}</div></div>)}
+            {imagemPendente && <div className="flex justify-start"><div className="max-w-[92%] rounded-2xl border bg-white p-4 text-sm shadow-sm"><div className="mb-2 flex items-center gap-2 font-semibold"><ImageIcon size={18}/> Gerar imagem</div><p className="text-slate-600">Esta ação usa geração de imagem paga. Estimativa: <b>US$ {imagemPendente.usd.toFixed(3)}</b> para {imagemPendente.size}, qualidade {imagemPendente.quality}. O custo real pode variar.</p><div className="mt-3 flex gap-2"><button onClick={gerarImagem} className="rounded-xl bg-[#182444] px-4 py-2 font-semibold text-white">Pode gerar</button><button onClick={() => setImagemPendente(null)} className="rounded-xl border px-4 py-2">Cancelar</button></div></div></div>}
+            {carregando && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16}/> Atlas IA está processando...</div>}
+            {erro && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
             <div ref={fimRef}/>
           </div>
         </div>
 
-        <div className="border-t bg-white p-3 md:p-5"><div className="mx-auto max-w-3xl"><input ref={arquivoRef} className="hidden" type="file" accept="image/*,application/pdf,text/plain,text/csv,application/json" onChange={selecionarArquivo}/>{anexo && <div className="mb-2 inline-flex rounded-lg bg-slate-100 px-3 py-1.5 text-xs">📎 {anexo.nome}</div>}<div className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-sm focus-within:ring-2 focus-within:ring-slate-200"><button onClick={() => arquivoRef.current?.click()} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Anexar arquivo"><Paperclip size={20}/></button><textarea value={entrada} onChange={e => setEntrada(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() } }} rows={1} placeholder="Pergunte ao Atlas IA..." className="max-h-36 min-h-10 flex-1 resize-none border-0 px-2 py-2 text-sm outline-none"/><button onClick={enviar} disabled={carregando || (!entrada.trim() && !anexo)} className="rounded-xl bg-[#182444] p-2.5 text-white disabled:opacity-40"><Send size={19}/></button></div><p className="mt-2 text-center text-[11px] text-slate-400">O Atlas IA pode cometer erros. Informações críticas devem ser confirmadas antes de executar ações.</p></div></div>
+        <div className="border-t bg-white p-3 md:p-5"><div className="mx-auto max-w-3xl"><input ref={arquivoRef} className="hidden" type="file" accept="image/*,application/pdf,text/plain,text/csv,application/json" onChange={selecionarArquivo}/>{anexo && <div className="mb-2 inline-flex rounded-lg bg-slate-100 px-3 py-1.5 text-xs">📎 {anexo.nome}</div>}<div className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-sm focus-within:ring-2 focus-within:ring-slate-200"><button onClick={() => arquivoRef.current?.click()} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Anexar arquivo"><Paperclip size={20}/></button><textarea value={entrada} onChange={e => setEntrada(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() } }} rows={1} placeholder="Pergunte ao Atlas IA..." className="max-h-36 min-h-10 flex-1 resize-none border-0 px-2 py-2 text-sm outline-none"/><button onClick={enviar} disabled={carregando || (!entrada.trim() && !anexo)} className="rounded-xl bg-[#182444] p-2.5 text-white disabled:opacity-40"><Send size={19}/></button></div><p className="mt-2 text-center text-[11px] text-slate-400">O Atlas IA pode cometer erros. Ações com custo ou impacto crítico pedem confirmação antes de executar.</p></div></div>
       </section>
     </div>
   </main>
