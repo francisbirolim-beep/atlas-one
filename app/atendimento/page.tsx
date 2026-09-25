@@ -1,7 +1,7 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Search, Phone, Mail, MapPin, MoreVertical, Paperclip, Image, Mic, Send, UserRound, Clock3, CheckSquare, MessageCircle, ChevronDown } from 'lucide-react'
+import { listarConversasAtendimento, observarAtendimento } from '@/lib/atendimento'\nimport { ArrowLeft, Search, Phone, Mail, MapPin, MoreVertical, Paperclip, Image, Mic, Send, UserRound, Clock3, CheckSquare, MessageCircle, ChevronDown } from 'lucide-react'
 
 const conversas=[
  {nome:'Thiago Almeida',hora:'09:24',texto:'Bom dia! Gostaria de saber sobre...',n:2,cor:'bg-blue-100'},
@@ -12,11 +12,12 @@ const conversas=[
  {nome:'Carlos Eduardo',hora:'08:32',texto:'Qual o prazo de entrega?',n:0,cor:'bg-orange-100'},
 ]
 export default function AtendimentoPage(){
- const [ativa,setAtiva]=useState(0); const [texto,setTexto]=useState(''); const [nota,setNota]=useState(false); const [status,setStatus]=useState('Em atendimento')
+ const [ativa,setAtiva]=useState(0); const [conversasReais,setConversasReais]=useState(0)
+ useEffect(()=>{ let vivo=true; const carregar=async()=>{try{const dados=await listarConversasAtendimento(); if(vivo)setConversasReais(dados.length)}catch{}}; void carregar(); const parar=observarAtendimento(()=>void carregar()); return()=>{vivo=false;parar()} },[]) const [texto,setTexto]=useState(''); const [nota,setNota]=useState(false); const [status,setStatus]=useState('Em atendimento')
  return <main className="min-h-screen bg-slate-100 p-2 md:p-4">
   <div className="mx-auto max-w-[1600px] overflow-hidden rounded-2xl border bg-white shadow-sm">
    <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-    <div className="flex items-center gap-3"><Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link><div><div className="flex items-center gap-2"><h1 className="text-xl font-bold">Atendimento</h1><span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">● WhatsApp</span></div><p className="text-xs text-slate-500">Central de atendimento Atlas</p></div></div>
+    <div className="flex items-center gap-3"><Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link><div><div className="flex items-center gap-2"><h1 className="text-xl font-bold">Atendimento</h1><span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">● WhatsApp</span></div><p className="text-xs text-slate-500">Central de atendimento Atlas {conversasReais>0?`· ${conversasReais} conversa(s) sincronizada(s)`:``}</p></div></div>
     <div className="flex items-center gap-2 text-sm"><span className="hidden text-emerald-600 sm:inline">● Online</span><button className="rounded-xl border px-3 py-2">Todos os números <ChevronDown className="ml-1 inline" size={14}/></button></div>
    </header>
    <div className="flex gap-2 overflow-x-auto border-b p-3 text-xs font-bold">
