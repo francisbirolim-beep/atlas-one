@@ -62,3 +62,4 @@ export default function AtendimentoPage(){
  </div></main>
 }
 function Bubble({children,me=false,interna=false,hora}:{children:React.ReactNode,me?:boolean,interna?:boolean,hora:string}){return <div className={'flex '+(me?'justify-end':'justify-start')}><div className={'max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-sm '+(interna?'border border-amber-300 bg-amber-50':me?'bg-[#d9fdd3]':'bg-white')}>{interna&&<div className="mb-1 text-[10px] font-bold uppercase text-amber-700">Nota interna</div>}{children}<small className="ml-3 text-[10px] text-slate-400">{hora}</small></div></div>}
+
