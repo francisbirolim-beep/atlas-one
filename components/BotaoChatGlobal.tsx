@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { usuarioAtual } from '@/lib/auth'
 
 const POS_KEY = 'atlas-atendimento-fab-position'
 
@@ -23,37 +22,64 @@ export default function BotaoChatGlobal() {
 
   useEffect(() => {
     let ativo = true
-    let canal: any
-    void usuarioAtual().then(async eu => {
-      if (!eu || !ativo) return
-      const atualizar = async () => {
-        const { data: ps } = await supabase.from('chat_participantes').select('conversa_id,ultima_leitura_em').eq('usuario_id', eu.id)
-        let total = 0
-        for (const p of ps || []) {
-          let q = supabase.from('chat_mensagens').select('id', { count: 'exact', head: true }).eq('conversa_id', p.conversa_id).neq('usuario_id', eu.id)
-          if (p.ultima_leitura_em) q = q.gt('created_at', p.ultima_leitura_em)
-          const { count } = await q
-          total += count || 0
+    let canal: ReturnType<typeof supabase.channel> | undefined
+
+    const atualizar = async () => {
+      const { count } = await supabase
+        .from('atendimento_conversas')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['aguardando', 'em_atendimento'])
+      if (ativo) setNaoLidas(count || 0)
+    }
+
+    const alertar = (texto: string, conversaId: string) => {
+      try {
+        const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+        if (AudioCtx) {
+          const ctx = new AudioCtx()
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          gain.gain.value = 0.06
+          osc.frequency.value = 880
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start()
+          osc.stop(ctx.currentTime + 0.16)
         }
-        if (ativo) setNaoLidas(total)
+      } catch {}
+      if ('vibrate' in navigator) navigator.vibrate?.([120, 70, 120])
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const aviso = new Notification('Nova mensagem no WhatsApp', {
+          body: texto || 'Nova mensagem recebida',
+          tag: 'atlas-atendimento-' + conversaId,
+        })
+        aviso.onclick = () => {
+          window.focus()
+          router.push('/atendimento?conversa=' + conversaId)
+          aviso.close()
+        }
       }
-      await atualizar()
-      canal = supabase.channel('chat-global-' + eu.id).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' }, async payload => {
-        const m = payload.new as any
-        if (m.usuario_id === eu.id) return
-        const { data: p } = await supabase.from('chat_participantes').select('id').eq('conversa_id', m.conversa_id).eq('usuario_id', eu.id).maybeSingle()
-        if (!p) return
+    }
+
+    void atualizar()
+    canal = supabase
+      .channel('atendimento-global')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'atendimento_mensagens' }, payload => {
+        const m = payload.new as { direcao?: string; texto?: string; conversa_id?: string }
+        if (m.direcao !== 'entrada' || !m.conversa_id) return
         setNaoLidas(n => n + 1)
-        if (typeof document !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification(m.usuario_nome || 'Atlas Atendimento', {
-            body: m.texto || m.anexo_nome || 'Nova mensagem',
-            tag: 'atlas-atendimento-' + m.conversa_id,
-          })
-        }
-      }).subscribe()
-    })
-    return () => { ativo = false; if (canal) void supabase.removeChannel(canal) }
-  }, [])
+        alertar(m.texto || '', m.conversa_id)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_conversas' }, () => {
+        void atualizar()
+      })
+      .subscribe()
+
+    return () => {
+      ativo = false
+      if (canal) void supabase.removeChannel(canal)
+    }
+  }, [router])
 
   useEffect(() => {
     const move = (e: PointerEvent) => {
