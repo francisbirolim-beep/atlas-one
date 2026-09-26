@@ -41,8 +41,10 @@ export async function enviarMensagemAtendimento(conversaId:string,texto:string,i
  await supabase.from('atendimento_conversas').update({ultima_mensagem_em:agora,updated_at:agora}).eq('id',conversaId)
  if(!interna&&s?.id&&!s.first_response_at) await supabase.from('atendimento_sessoes').update({first_response_at:agora}).eq('id',s.id)
 }
+let sequenciaCanalAtendimento=0
 export function observarAtendimento(onChange:()=>void){
- const channel=supabase.channel('atlas-atendimento').on('postgres_changes',{event:'*',schema:'public',table:'atendimento_conversas'},onChange).on('postgres_changes',{event:'*',schema:'public',table:'atendimento_mensagens'},onChange).subscribe()
+ sequenciaCanalAtendimento+=1
+ const channel=supabase.channel('atlas-atendimento-'+sequenciaCanalAtendimento).on('postgres_changes',{event:'*',schema:'public',table:'atendimento_conversas'},onChange).on('postgres_changes',{event:'*',schema:'public',table:'atendimento_mensagens'},onChange).subscribe()
  return ()=>{void supabase.removeChannel(channel)}
 }
 
