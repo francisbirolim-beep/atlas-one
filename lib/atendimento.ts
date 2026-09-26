@@ -68,3 +68,15 @@ export async function transferirAtendimento(conversaId:string,responsavel:Atendi
  if(s?.id) await supabase.from('atendimento_sessoes').update({status:'transferido',responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null}).eq('id',s.id)
  await supabase.from('atendimento_eventos').insert({conversa_id:conversaId,sessao_id:s?.id||null,tipo:'transferido',usuario_id:u.id,usuario_nome:u.nome,dados:{responsavel_id:responsavel.id,responsavel_nome:responsavel.nome,setor:setor||null}})
 }
+
+export async function iniciarConversaAtendimento(telefone:string){
+ const limpo=telefone.replace(/\D/g,'')
+ if(limpo.length<10) throw new Error('Informe um telefone válido')
+ const {data:existente,error:e0}=await supabase.from('atendimento_conversas').select('*').eq('telefone',limpo).neq('status','finalizado').order('created_at',{ascending:false}).limit(1).maybeSingle()
+ if(e0) throw e0
+ if(existente) return existente as AtendimentoConversa
+ const agora=new Date().toISOString()
+ const {data,error}=await supabase.from('atendimento_conversas').insert({telefone:limpo,status:'aguardando',ultima_mensagem_em:agora,updated_at:agora}).select('*').single()
+ if(error) throw error
+ return data as AtendimentoConversa
+}
