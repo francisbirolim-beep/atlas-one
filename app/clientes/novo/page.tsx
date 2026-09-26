@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, CheckCircle, Settings2 } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { textoMaiusculo, textoMaiusculoOuNull } from '@/lib/texto'
 import { OrigemCliente } from '@/lib/tipos'
@@ -31,11 +31,14 @@ const origens: { value: OrigemCliente; label: string }[] = [
 
 export default function NovoCliente() {
   const router = useRouter()
+  const params = useSearchParams()
+  const atendimentoId = params.get('atendimento')
+  const whatsappInicial = params.get('whatsapp') || ''
   const [campos, setCampos] = useState<CampoConfiguravel[]>([])
   const [configCarregada, setConfigCarregada] = useState(false)
   const [nome, setNome] = useState('')
   const [apelido, setApelido] = useState('')
-  const [whatsapp, setWhatsapp] = useState('')
+  const [whatsapp, setWhatsapp] = useState(whatsappInicial)
   const [telefone, setTelefone] = useState('')
   const [email, setEmail] = useState('')
   const [cidade, setCidade] = useState('')
@@ -144,6 +147,15 @@ export default function NovoCliente() {
       return
     }
 
+    if (atendimentoId) {
+      const { error: vinculoError } = await supabase.from('atendimento_conversas').update({ cliente_id: data.id, updated_at: new Date().toISOString() }).eq('id', atendimentoId)
+      if (vinculoError) {
+        setErro('Cliente salvo, mas não foi possível vincular ao atendimento: ' + vinculoError.message)
+        return
+      }
+      router.push('/atendimento')
+      return
+    }
     router.push(`/clientes/${data.id}`)
   }
 
