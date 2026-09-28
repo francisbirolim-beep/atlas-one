@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Circle, Clock3, History, Loader2, PauseCircle, PlayCircle } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { listarItensMedicao } from '@/lib/medicaoFinal'
 import type { Usuario } from '@/lib/tipos'
 import {
   carregarEstadoParcialMedicao,
@@ -38,7 +38,7 @@ function rotuloEvento(evento: EventoHistoricoMedicao) {
   return 'Medição retomada'
 }
 
-export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }) {
+export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { medicaoId: string; onSelecionarPeca: (itemId: string) => void }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [pecas, setPecas] = useState<PecaResumo[]>([])
   const [eventos, setEventos] = useState<EventoHistoricoMedicao[]>([])
@@ -53,13 +53,9 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
   const [mostrarHistorico, setMostrarHistorico] = useState(false)
 
   const carregar = useCallback(async () => {
-    const [estado, itensResp] = await Promise.all([
+    const [estado, itens] = await Promise.all([
       carregarEstadoParcialMedicao(medicaoId),
-      supabase
-        .from('medicao_itens')
-        .select('id, descricao, tipo_esquadria, medido, quantidade, ordem')
-        .eq('medicao_id', medicaoId)
-        .order('ordem', { ascending: true }),
+      listarItensMedicao(medicaoId),
     ])
 
     const instante = Date.now()
@@ -68,7 +64,7 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
     setTempoBase(estado.tempoAtivoMs)
     setCarregadoEm(instante)
     setAgora(instante)
-    setPecas((itensResp.data || []).map((item: any) => ({
+    setPecas(itens.map(item => ({
       id: item.id,
       descricao: item.descricao || item.tipo_esquadria || 'Peça',
       medido: Boolean(item.medido),
@@ -167,14 +163,15 @@ export default function MedicaoParcialPanel({ medicaoId }: { medicaoId: string }
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {pecas.map((peca, indice) => (
-              <div key={peca.id} className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${peca.medido ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-white'}`}>
+              <button type="button" key={peca.id} onClick={() => onSelecionarPeca(peca.id)} className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-left transition hover:border-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${peca.medido ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-white'}`}>
                 {peca.medido ? <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-emerald-600" /> : <Circle size={17} className="mt-0.5 shrink-0 text-slate-300" />}
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-slate-800">Peça {indice + 1}</p>
-                  <p className="truncate text-[11px] text-slate-500">{peca.descricao}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm font-semibold text-slate-800">{peca.descricao}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Peça {indice + 1} · Quantidade: {peca.quantidade}</p>
                   <p className={`mt-0.5 text-[10px] font-semibold ${peca.medido ? 'text-emerald-700' : 'text-amber-700'}`}>{peca.medido ? 'FEITA ✓' : 'EM ABERTO'}</p>
+                  <p className="mt-1 text-xs font-medium text-blue-700">Abrir checklist e medidas</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 

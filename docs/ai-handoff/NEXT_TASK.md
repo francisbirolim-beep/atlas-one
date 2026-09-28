@@ -1,3 +1,10 @@
+## 2026-09-28 — Medição Final: descrição e acesso ao checklist
+
+- Cartões do controle mostram a descrição completa e abrem o checklist da peça pelo ID, com rolagem e foco; numeração e quantidade são secundárias.
+- Descrição do PDF preservada. Orçamentos estruturados sem descrição usam nome, folhas e ambiente, sem o fallback Item N.
+- Linhas legadas genéricas recuperam a identificação na leitura apenas quando ordem, tipo, quantidade e total de linhas conferem com o orçamento. Nenhuma medida, foto, resposta ou status é regravado.
+- Checklist existente mantido: larguras/alturas, fotos, padrões fixos e campos configurados por tipologia. Não foi criado um checklist técnico novo.
+- Regressão: node scripts/test-medicao-descricao.cjs. Validação de interface autenticada e publicação em produção ainda pendentes.
 # NEXT_TASK.md — Atlas One
 
 ## TAREFA ATUAL — validar Prospecção em Campo V1

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { ItemEsquadria, MedicaoItem, Usuario } from './tipos'
+import { listarItensMedicao } from './medicaoFinal'
 
 export type CampoChecklistV2 = {
   id: string
@@ -205,20 +206,19 @@ export async function salvarMedidasFixasItemV2(
 }
 
 export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<DadosChecklistMedicaoV2> {
-  const [itensResp, camposResp, respostasResp, fotosResp] = await Promise.all([
-    supabase.from('medicao_itens').select('*').eq('medicao_id', medicaoId).order('ordem', { ascending: true }),
+  const [itens, camposResp, respostasResp, fotosResp] = await Promise.all([
+    listarItensMedicao(medicaoId),
     supabase.from('tipologia_campos_extras').select('*').eq('ativo', true).order('ordem', { ascending: true }),
     supabase.from('medicao_respostas').select('*').eq('medicao_id', medicaoId).order('respondido_em', { ascending: true }),
     supabase.from('medicao_fotos').select('*').eq('medicao_id', medicaoId).order('created_at', { ascending: true }),
   ])
 
-  if (itensResp.error) console.error('Erro ao carregar itens do checklist:', itensResp.error)
   if (camposResp.error) console.error('Erro ao carregar campos do checklist:', camposResp.error)
   if (respostasResp.error) console.error('Erro ao carregar respostas do checklist:', respostasResp.error)
   if (fotosResp.error) console.error('Erro ao carregar fotos da medicao:', fotosResp.error)
 
   return {
-    itens: (itensResp.data || []) as MedicaoItem[],
+    itens,
     campos: (camposResp.data || []).map((campo: any) => ({
       ...campo,
       opcoes: Array.isArray(campo.opcoes) ? campo.opcoes : [],

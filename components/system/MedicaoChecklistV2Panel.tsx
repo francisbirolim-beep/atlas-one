@@ -73,7 +73,9 @@ function itemTemMedidasFinais(item: MedicaoItem) {
   })
 }
 
-export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: string }) {
+export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medicaoId: string; selecao?: { itemId: string } | null }) {
+  const painelRef = useRef<HTMLElement>(null)
+  const selecaoAplicada = useRef<typeof selecao>(null)
   const [dados, setDados] = useState<DadosChecklistMedicaoV2>(VAZIO)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [itemId, setItemId] = useState('')
@@ -106,6 +108,15 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
   }, [carregar])
 
   const item = useMemo(() => dados.itens.find(i => i.id === itemId) || null, [dados.itens, itemId])
+  useEffect(() => {
+    if (!selecao || selecaoAplicada.current === selecao || carregando || !dados.itens.some(i => i.id === selecao.itemId)) return
+    selecaoAplicada.current = selecao
+    setItemId(selecao.itemId)
+    setAberto(true)
+    setMensagem('')
+    painelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    painelRef.current?.focus({ preventScroll: true })
+  }, [selecao, carregando, dados.itens])
   const campos = useMemo(() => item ? camposDoItemV2(dados.campos, item) : [], [dados.campos, item])
   const fotosItem = useMemo(() => dados.fotos.filter(f => f.item_id === itemId), [dados.fotos, itemId])
 
@@ -253,7 +264,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
   if (dados.itens.length === 0) return null
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
+    <section ref={painelRef} tabIndex={-1} aria-label="Checklist da peça selecionada" className="mx-auto w-full max-w-4xl scroll-mt-20 px-3 pt-3 md:px-4">
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <button
           type="button"
@@ -280,10 +291,11 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                     key={peca.id}
                     type="button"
                     onClick={() => setItemId(peca.id)}
-                    className={`min-w-[150px] rounded-lg border px-3 py-2 text-left text-xs transition ${peca.id === itemId ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                    aria-pressed={peca.id === itemId}
+                    className={`w-64 shrink-0 rounded-lg border px-3 py-2 text-left text-xs transition ${peca.id === itemId ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
                   >
-                    <span className="block font-semibold">Peça {indice + 1}</span>
-                    <span className={`mt-0.5 block truncate ${peca.id === itemId ? 'text-slate-300' : 'text-slate-400'}`}>{peca.descricao || peca.tipo_esquadria}</span>
+                    <span className="block whitespace-pre-wrap break-words font-semibold">{peca.descricao || peca.tipo_outro_texto || 'Descrição não informada'}</span>
+                    <span className={`mt-0.5 block ${peca.id === itemId ? 'text-slate-300' : 'text-slate-400'}`}>Peça {indice + 1} · Quantidade: {peca.quantidade}</span>
                     <span className={`mt-1 block ${medidasOk ? 'text-emerald-400' : peca.id === itemId ? 'text-amber-300' : 'text-amber-600'}`}>
                       {medidasOk ? 'Medidas completas' : 'Medidas pendentes'}
                     </span>
@@ -406,7 +418,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId }: { medicaoId: stri
                   </div>
                 </div>
 
-                <MedicaoPadroesFixosPanel itemId={item.id} />
+                <MedicaoPadroesFixosPanel key={item.id} itemId={item.id} />
 
                 {campos.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-400">Nenhum campo de checklist configurado para esta tipologia.</p>

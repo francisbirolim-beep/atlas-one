@@ -10,10 +10,9 @@ import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
-import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
+import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
-import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -50,9 +49,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
               <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
-              <MedicaoParcialPanel medicaoId={medicaoFinalId} />
+              <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
               <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
-              <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { tokenAtual } from './auth'
+import { descricaoGenericaMedicao, descricaoItemMedicao, identificarItensMedicao } from './medicaoDescricao'
 import {
     MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra,
     Usuario, ItemEsquadria,
@@ -215,7 +216,7 @@ export async function criarMedicaoDoOrcamento(
                     medicao_id: medicao.id,
                     tipo_esquadria: it.tipo_esquadria,
                     tipo_outro_texto: it.tipo_outro_texto || null,
-                    descricao: it.descricao || `Item ${idx + 1}`,
+                    descricao: descricaoItemMedicao(it),
                     quantidade: it.quantidade || 1,
                     ordem: idx,
             }))
@@ -324,7 +325,13 @@ export async function listarItensMedicao(medicaoId: string): Promise<MedicaoItem
         console.error('Erro ao listar itens de medicao:', error)
         return []
   }
-    return data as MedicaoItem[]
+    const itens = data as MedicaoItem[]
+    if (!itens.some(item => descricaoGenericaMedicao(item.descricao))) return itens
+    const { data: medicao } = await supabase.from('medicoes_finais').select('orcamento_id').eq('id', medicaoId).maybeSingle()
+    const { data: orcamento } = medicao?.orcamento_id
+      ? await supabase.from('orcamentos').select('itens').eq('id', medicao.orcamento_id).maybeSingle()
+      : { data: null }
+    return identificarItensMedicao(itens, Array.isArray(orcamento?.itens) ? orcamento.itens : [])
 }
 
 export async function adicionarItemMedicao(
