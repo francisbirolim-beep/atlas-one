@@ -41,7 +41,7 @@ export default function MedicaoIdentificationBar({ medicaoId }: { medicaoId: str
   }, [medicaoId])
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
+    <section className="mx-auto w-full max-w-6xl px-3 pt-3 md:px-4">
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Identificação da Medição Final</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-[1.4fr_1fr_0.7fr]">
