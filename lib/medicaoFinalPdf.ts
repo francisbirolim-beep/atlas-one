@@ -32,6 +32,28 @@ function desenharCroquiMedidas(doc: jsPDF, item: MedicaoItem, y: number) {
   return y + altura + 10
 }
 
+async function carregarImagem(url: string): Promise<string | null> {
+  try {
+    const resposta = await fetch(url)
+    if (!resposta.ok) return null
+    const blob = await resposta.blob()
+    return await new Promise(resolve => {
+      const leitor = new FileReader()
+      leitor.onload = () => resolve(typeof leitor.result === 'string' ? leitor.result : null)
+      leitor.onerror = () => resolve(null)
+      leitor.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+function formatoImagem(dataUrl: string) {
+  if (dataUrl.startsWith('data:image/png')) return 'PNG'
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
+  return 'JPEG'
+}
+
 function novaPaginaSeNecessario(doc: jsPDF, y: number, altura = 12) {
   if (y + altura > 282) {
     doc.addPage()
@@ -40,7 +62,7 @@ function novaPaginaSeNecessario(doc: jsPDF, y: number, altura = 12) {
   return y
 }
 
-export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]) {
+export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]) {
   // O relatório técnico deve refletir somente o que foi efetivamente concluído
   // em campo. Itens pendentes/em andamento permanecem fora do PDF.
   const itensConcluidos = itens.filter(item => item.medido || item.status_medicao === 'concluida')
@@ -119,10 +141,26 @@ export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]
     }
 
     if (item.foto_larguras_url || item.foto_alturas_url) {
-      y = novaPaginaSeNecessario(doc, y, 10)
-      doc.text('Evidências de trena:', 18, y); y += 4.5
-      if (item.foto_larguras_url) { doc.text(`Foto larguras: ${item.foto_larguras_url}`, 20, y); y += 4.5 }
-      if (item.foto_alturas_url) { doc.text(`Foto alturas: ${item.foto_alturas_url}`, 20, y); y += 4.5 }
+      y = novaPaginaSeNecessario(doc, y, 62)
+      doc.text('Evidências reais da trena:', 18, y); y += 5
+      const [fotoLargura, fotoAltura] = await Promise.all([
+        item.foto_larguras_url ? carregarImagem(item.foto_larguras_url) : Promise.resolve(null),
+        item.foto_alturas_url ? carregarImagem(item.foto_alturas_url) : Promise.resolve(null),
+      ])
+      if (fotoLargura) {
+        doc.text('Largura (3 medidas)', 20, y)
+        doc.addImage(fotoLargura, formatoImagem(fotoLargura), 20, y + 3, 78, 48, undefined, 'FAST')
+      }
+      if (fotoAltura) {
+        doc.text('Altura (3 medidas)', 112, y)
+        doc.addImage(fotoAltura, formatoImagem(fotoAltura), 112, y + 3, 78, 48, undefined, 'FAST')
+      }
+      if (!fotoLargura && !fotoAltura) {
+        doc.text('As fotos registradas não puderam ser incorporadas ao PDF neste dispositivo.', 20, y)
+        y += 5
+      } else {
+        y += 55
+      }
     }
 
     y += 5
