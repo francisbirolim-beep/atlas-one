@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { tokenAtual } from './auth'
-import { descricaoGenericaMedicao, descricaoItemMedicao, identificarItensMedicao } from './medicaoDescricao'
+import { descricaoItemMedicao, identificarItensMedicao } from './medicaoDescricao'
 import {
     MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra,
     Usuario, ItemEsquadria,
