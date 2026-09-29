@@ -86,7 +86,7 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
   doc.text(`Progresso: ${itensConcluidos.length}/${itens.length} tipologias concluídas`, 15, y)
   y += 7
 
-  itensConcluidos.forEach((item, index) => {
+  for (const [index, item] of itensConcluidos.entries()) {
     y = novaPaginaSeNecessario(doc, y, 55)
     doc.setFontSize(11)
     doc.text(`${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}`, 15, y)
@@ -167,7 +167,7 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
     doc.setDrawColor(200, 200, 200)
     doc.line(15, y, 195, y)
     y += 7
-  })
+  }
 
   doc.addPage()
   y = 18
