@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Circle, Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight } from 'lucide-react'
+import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarItensMedicao } from '@/lib/medicaoFinal'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
@@ -23,6 +23,7 @@ type PecaResumo = {
   ordem: number
   medidoPor: string
   atualizadoEm: string
+  status: 'pendente' | 'em_andamento' | 'concluida'
 }
 
 function formatarDuracao(ms: number) {
@@ -107,6 +108,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
         ordem: Number(item.ordem || 0),
         medidoPor: item.medido_por_nome || '',
         atualizadoEm: item.medido_em || item.updated_at || '',
+        status: item.medido ? 'concluida' : itemIniciado(item) ? 'em_andamento' : 'pendente',
       }
     }))
     setCarregando(false)
@@ -128,9 +130,9 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
   }, [carregar])
 
   const tempoExibido = parcial ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
-  const feitas = pecas.filter(peca => peca.medido).length
-  const emAndamento = pecas.filter(peca => !peca.medido && peca.iniciado).length
-  const pendentes = pecas.filter(peca => !peca.medido && !peca.iniciado).length
+  const feitas = pecas.filter(peca => peca.status === 'concluida').length
+  const emAndamento = pecas.filter(peca => peca.status === 'em_andamento').length
+  const pendentes = pecas.filter(peca => peca.status === 'pendente').length
   const iniciada = eventos.some(evento => evento.tipo === 'inicio')
   const ambientes = useMemo(() => [...new Set(pecas.map(p => p.ambiente))].sort(), [pecas])
   const tipologias = useMemo(() => [...new Set(pecas.map(p => p.tipologia))].sort(), [pecas])
@@ -217,7 +219,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
           <div className="p-3 md:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Lista de tipologias da obra</p>
-              <span className="text-xs font-medium text-slate-500">{pecas.length} item(ns)</span>
+              <span className="text-xs font-medium text-slate-500">{pecas.length} tipologia(s) · {feitas} concluída(s) · {emAndamento} em andamento · {pendentes} pendente(s)</span>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_180px]">
               <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2"><Search size={15} className="text-slate-400" /><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar tipologia, ambiente..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label>
