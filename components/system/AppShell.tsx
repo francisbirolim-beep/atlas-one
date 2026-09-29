@@ -49,8 +49,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
               <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
-              <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
               <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
+              <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
             </div>
           )}
 
@@ -74,7 +74,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                             : undefined
               }
             >
-              {children}
+              {medicaoFinalId ? null : children}
             </div>
           )}
         </main>
