@@ -9,14 +9,19 @@ export default function AbrirMedidaFinalCliente() {
   const router = useRouter()
   const clienteId = params?.clienteId as string
   const [mensagem, setMensagem] = useState('Abrindo Medida Final...')
+  const [tentativa, setTentativa] = useState(0)
+  const [erro, setErro] = useState(false)
 
   useEffect(() => {
     if (!clienteId) return
     const chave = `atlas-medicao-cliente-${clienteId}`
+    let cancelado = false
+    setErro(false)
+    setMensagem('Abrindo Medida Final...')
 
     async function abrir() {
       if (navigator.onLine) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('medicoes_finais')
           .select('id')
           .eq('cliente_id', clienteId)
@@ -24,16 +29,21 @@ export default function AbrirMedidaFinalCliente() {
           .limit(1)
           .maybeSingle()
 
+        if (cancelado) return
+        if (error) throw error
+
         if (data?.id) {
-          localStorage.setItem(chave, data.id)
+          // Cache is optional: unavailable storage must not prevent navigation.
+          try { localStorage.setItem(chave, data.id) } catch {}
           router.replace(`/producao/medicao-final/${data.id}`)
           return
         }
-        router.replace(`/clientes/${clienteId}?aba=medicoes&novaMedida=1`)
+        setMensagem('Nenhuma Medição Final disponível para este cliente. Confira as medições no cadastro do cliente e seu acesso.')
         return
       }
 
       const medicaoId = localStorage.getItem(chave)
+      if (cancelado) return
       if (medicaoId) {
         router.replace(`/producao/medicao-final/${medicaoId}`)
         return
@@ -41,8 +51,16 @@ export default function AbrirMedidaFinalCliente() {
       setMensagem('Abra a Medida Final deste cliente uma vez com internet para disponibilizá-la offline neste aparelho.')
     }
 
-    abrir()
-  }, [clienteId, router])
+    void abrir().catch(() => {
+      if (cancelado) return
+      setErro(true)
+      setMensagem('Não foi possível carregar a Medição Final. Confira sua conexão e seu acesso e tente novamente. Os dados salvos foram preservados.')
+    })
+    return () => { cancelado = true }
+  }, [clienteId, router, tentativa])
 
-  return <div className="min-h-[100dvh] bg-slate-50 p-6 text-center text-slate-600"><p className="mt-24 font-semibold">{mensagem}</p></div>
+  return <div className="min-h-[100dvh] bg-slate-50 p-6 text-center text-slate-600">
+    <p className="mt-24 font-semibold" role={erro ? 'alert' : 'status'}>{mensagem}</p>
+    {erro && <button className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-white" onClick={() => setTentativa(v => v + 1)}>Tentar novamente</button>}
+  </div>
 }
