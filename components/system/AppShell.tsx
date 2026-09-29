@@ -47,8 +47,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <div key={medicaoFinalId} className="atlas-medicao-tools">
               <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
-              <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
-              <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
+              <div className="mx-auto grid w-full max-w-6xl gap-3 px-3 pt-3 md:grid-cols-[1.05fr_0.95fr] md:px-4">
+                <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} embedded />
+                <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} embedded />
+              </div>
               <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
             </div>
           )}
