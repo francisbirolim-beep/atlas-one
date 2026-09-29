@@ -100,7 +100,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
         id: item.id,
         descricao,
         tipologia: partes.tipologia,
-        ambiente: partes.ambiente,
+        ambiente: item.ambiente?.trim() || partes.ambiente,
         medido: Boolean(item.medido),
         iniciado: itemIniciado(item),
         quantidade: Math.max(1, Number(item.quantidade || 1)),
