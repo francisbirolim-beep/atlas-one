@@ -32,12 +32,40 @@ export default function AbrirMedidaFinalCliente() {
         if (cancelado) return
         if (error) throw error
 
-        if (data?.id) {
+        let medicaoId = data?.id || null
+
+        // Importações antigas do WVetro podem ter criado a medição com cliente_id nulo,
+        // mantendo o vínculo correto pelo orçamento. Recupera esse vínculo sem regravar dados.
+        if (!medicaoId) {
+          const { data: orcamentos, error: erroOrcamentos } = await supabase
+            .from('orcamentos')
+            .select('id')
+            .eq('cliente_id', clienteId)
+
+          if (erroOrcamentos) throw erroOrcamentos
+
+          const orcamentoIds = (orcamentos || []).map(item => item.id).filter(Boolean)
+          if (orcamentoIds.length > 0) {
+            const { data: medicaoPorOrcamento, error: erroMedicaoPorOrcamento } = await supabase
+              .from('medicoes_finais')
+              .select('id')
+              .in('orcamento_id', orcamentoIds)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+
+            if (erroMedicaoPorOrcamento) throw erroMedicaoPorOrcamento
+            medicaoId = medicaoPorOrcamento?.id || null
+          }
+        }
+
+        if (medicaoId) {
           // Cache is optional: unavailable storage must not prevent navigation.
-          try { localStorage.setItem(chave, data.id) } catch {}
-          router.replace(`/producao/medicao-final/${data.id}`)
+          try { localStorage.setItem(chave, medicaoId) } catch {}
+          router.replace(`/producao/medicao-final/${medicaoId}`)
           return
         }
+
         setMensagem('Nenhuma Medição Final disponível para este cliente. Confira as medições no cadastro do cliente e seu acesso.')
         return
       }
