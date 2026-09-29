@@ -229,11 +229,11 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
               <select value={filtroTipologia} onChange={e => setFiltroTipologia(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"><option value="todas">Todas as tipologias</option>{tipologias.map(t => <option key={t} value={t}>{t}</option>)}</select>
             </div>
 
-            <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200"><div className="hidden min-w-[860px] grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:grid"><span>#</span><span>Tipologia</span><span>Ambiente</span><span className="text-center">Quantidade</span><span>Status</span><span>Medido por / atualização</span><span /></div>
-              {pecasFiltradas.map(peca => {
+            <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+              {pecasFiltradas.map((peca, indice) => {
                 const status = peca.medido ? 'Concluída' : peca.iniciado ? 'Em andamento' : 'Pendente'
                 return (
-                  <button key={peca.id} type="button" onClick={() => onSelecionarPeca(peca.id)} className="grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
+                  <button key={peca.id} type="button" onClick={() => onSelecionarPeca(peca.id)} className="grid w-full grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
                     <span className="text-xs font-bold text-slate-500">{String(peca.ordem + 1).padStart(2, '0')}</span>
                     <span className="min-w-0"><span className="block text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
                     <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
@@ -246,7 +246,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
                 )
               })}
               {pecasFiltradas.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">Nenhuma tipologia encontrada com estes filtros.</p>}
-            </div></div>
+            </div>
           </div>
         </div>
       </section>
