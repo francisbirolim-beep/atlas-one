@@ -507,6 +507,8 @@ export interface MedicaoItem {
       tipo_esquadria: string
       tipo_outro_texto?: string | null
       descricao?: string | null
+      ambiente?: string | null
+      folhas?: string | null
       quantidade: number
       ordem: number
       largura_baixo_mm?: number | null
