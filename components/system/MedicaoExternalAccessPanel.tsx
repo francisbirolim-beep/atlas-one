@@ -33,7 +33,7 @@ function normalizarNome(valor: string) {
     .toLowerCase()
 }
 
-export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: string }) {
+export default function MedicaoExternalAccessPanel({ medicaoId, embedded = false }: { medicaoId: string; embedded?: boolean }) {
   const [acessos, setAcessos] = useState<Acesso[]>([])
   const [podeEditar, setPodeEditar] = useState(false)
   const [visivel, setVisivel] = useState(true)
@@ -151,7 +151,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
   if (!visivel) return null
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
+    <section className={embedded ? "w-full" : "mx-auto w-full max-w-4xl px-3 pt-3 md:px-4"}>
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
