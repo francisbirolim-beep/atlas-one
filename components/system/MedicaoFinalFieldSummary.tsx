@@ -63,6 +63,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId }: { medicaoId: str
   const [erro, setErro] = useState('')
   const [novaPendencia, setNovaPendencia] = useState('')
   const [mostrandoPendencias, setMostrandoPendencias] = useState(false)
+  const [revisando, setRevisando] = useState(false)
 
   const master = usuario?.role === 'master'
 
@@ -280,7 +281,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId }: { medicaoId: str
                 type="button"
                 disabled={processando || !podeConcluir}
                 title={!podeConcluir ? 'Meça todas as peças, separe agrupamentos e resolva as pendências antes de concluir.' : undefined}
-                onClick={() => void executar(() => concluirMedicaoFinal(medicaoId), 'Medição concluída e enviada para aprovação.')}
+                onClick={() => { limparRetorno(); setRevisando(true) }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <CheckCircle2 size={14} /> Concluir medição
@@ -307,6 +308,30 @@ export default function MedicaoFinalFieldSummary({ medicaoId }: { medicaoId: str
             </button>
           </div>
         </div>
+
+        {revisando && (
+          <div className="border-b border-blue-200 bg-blue-50/70 p-3 md:p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700">Revisão antes do envio</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">Confira a Medição Final antes de enviar definitivamente.</p>
+                <p className="mt-1 text-xs text-slate-600">{resumo.pecasMedidas}/{resumo.totalPecas} peças concluídas · {resumo.percentual}% da obra · {resumo.medidores.length || 1} medidor(es).</p>
+                <p className="mt-1 text-[11px] text-slate-500">Você ainda pode voltar para a lista e revisar medidas, checklist e fotos de cada tipologia.</p>
+              </div>
+              <button type="button" onClick={() => setRevisando(false)} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Voltar e revisar</button>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                disabled={processando || !podeConcluir}
+                onClick={() => void executar(() => concluirMedicaoFinal(medicaoId), 'Medição Final enviada para aprovação.').then(() => setRevisando(false))}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
+              >
+                <CheckCircle2 size={14} /> Enviar medição final
+              </button>
+            </div>
+          </div>
+        )}
 
         {resumo.itensAgrupados.length > 0 && (
           <div className="border-b border-amber-200 bg-amber-50 p-3 md:px-4">
