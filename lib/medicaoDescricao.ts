@@ -24,7 +24,12 @@ export function identificarItensMedicao(itens: MedicaoItem[], origem: ItemEsquad
     && Number(item.quantidade) === Number(origem[indice]?.quantidade || 1)
   )
   return itens.map((item, indice) => {
-    if (!descricaoGenericaMedicao(item.descricao)) return item
-    return { ...item, descricao: descricaoItemMedicao(sequenciaIntegra ? origem[indice] : item) }
+    const origemItem = sequenciaIntegra ? origem[indice] : null
+    return {
+      ...item,
+      descricao: descricaoGenericaMedicao(item.descricao) ? descricaoItemMedicao(origemItem || item) : item.descricao,
+      ambiente: origemItem?.ambiente || item.ambiente || null,
+      folhas: origemItem?.folhas || item.folhas || null,
+    }
   })
 }
