@@ -15,6 +15,7 @@ import {
   removerFotoMedicaoV2,
   salvarMedidasFixasItemV2,
   salvarRespostaChecklistV2,
+  statusItemChecklistV2,
   valorRespostaItemV2,
   type CampoChecklistV2,
   type DadosChecklistMedicaoV2,
@@ -148,6 +149,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const obrigatorios = campos.filter(c => c.obrigatorio)
   const obrigatoriosRespondidos = obrigatorios.filter(c => campoRespondido(valorRespostaItemV2(item as MedicaoItem, c, dados.respostas))).length
   const medidasCompletas = item ? itemTemMedidasFinais(item) : false
+  const statusItem = item ? statusItemChecklistV2(item, dados.campos, dados.respostas) : 'pendente'
 
   async function salvarMedidasFixas() {
     if (!item || salvandoMedidas) return
@@ -315,9 +317,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                       {obrigatorios.length ? ` · ${obrigatoriosRespondidos}/${obrigatorios.length} campos de checklist obrigatórios` : ''}
                     </p>
                   </div>
-                  {medidasCompletas && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check size={14} /> Medidas completas</span>
-                  )}
+                  <span className={`inline-flex items-center gap-1 text-xs font-semibold ${statusItem === 'concluida' ? 'text-emerald-700' : statusItem === 'em_andamento' ? 'text-amber-700' : 'text-slate-500'}`}><Check size={14} /> {statusItem === 'concluida' ? 'Tipologia concluída' : statusItem === 'em_andamento' ? 'Em andamento' : 'Pendente'}</span>
                 </div>
 
                 <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
