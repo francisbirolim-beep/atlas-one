@@ -65,7 +65,7 @@ function itemIniciado(item: MedicaoItem) {
   )
 }
 
-export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { medicaoId: string; onSelecionarPeca: (itemId: string) => void }) {
+export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo = 'completo', embedded = false }: { medicaoId: string; onSelecionarPeca?: (itemId: string) => void; modo?: 'completo' | 'controle' | 'lista'; embedded?: boolean }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [pecas, setPecas] = useState<PecaResumo[]>([])
   const [eventos, setEventos] = useState<EventoHistoricoMedicao[]>([])
@@ -165,13 +165,13 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
   }
 
   if (carregando) {
-    return <section className="mx-auto w-full max-w-6xl px-3 pt-3 md:px-4"><div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white" /></section>
+    return <section className={embedded ? "w-full" : "mx-auto w-full max-w-6xl px-3 pt-3 md:px-4"}><div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white" /></section>
   }
   if (!iniciada) return null
 
   return (
     <>
-      <section className="mx-auto w-full max-w-6xl px-3 pt-3 md:px-4">
+      {modo !== 'lista' && <section className={embedded ? "w-full" : "mx-auto w-full max-w-6xl px-3 pt-3 md:px-4"}>
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="p-3 md:p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -214,9 +214,9 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
             {erro && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</p>}
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="mx-auto w-full max-w-6xl px-3 pt-3 md:px-4">
+      {modo !== 'controle' && <section className="mx-auto w-full max-w-6xl px-3 pt-3 md:px-4">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="p-3 md:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -233,7 +233,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
               {pecasFiltradas.map((peca, indice) => {
                 const status = peca.medido ? 'Concluída' : peca.iniciado ? 'Em andamento' : 'Pendente'
                 return (
-                  <button key={peca.id} type="button" onClick={() => onSelecionarPeca(peca.id)} className="grid w-full grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
+                  <button key={peca.id} type="button" onClick={() => onSelecionarPeca?.(peca.id)} className="grid w-full grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
                     <span className="text-xs font-bold text-slate-500">{String(peca.ordem + 1).padStart(2, '0')}</span>
                     <span className="min-w-0"><span className="block text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
                     <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
@@ -249,7 +249,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
             </div>
           </div>
         </div>
-      </section>
+      </section>}
     </>
   )
 }
