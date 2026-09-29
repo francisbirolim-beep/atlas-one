@@ -12,6 +12,7 @@ import MobileNavigationControls from '@/components/system/MobileNavigationContro
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
+import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
 import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
@@ -47,8 +48,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <div key={medicaoFinalId} className="atlas-medicao-tools">
               <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
-              <div className="mx-auto grid w-full max-w-6xl gap-3 px-3 pt-3 md:grid-cols-[1.05fr_0.95fr] md:px-4">
+              <div className="mx-auto grid w-full max-w-6xl gap-3 px-3 pt-3 lg:grid-cols-3 md:px-4">
                 <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} embedded />
+                <MedicaoParcialPanel medicaoId={medicaoFinalId} modo="controle" embedded />
                 <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} embedded />
               </div>
               <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
