@@ -18,6 +18,9 @@ function novaPaginaSeNecessario(doc: jsPDF, y: number, altura = 12) {
 }
 
 export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]) {
+  // O relatório técnico deve refletir somente o que foi efetivamente concluído
+  // em campo. Itens pendentes/em andamento permanecem fora do PDF.
+  const itensConcluidos = itens.filter(item => item.medido || item.status_medicao === 'concluida')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   let y = 18
 
@@ -33,9 +36,12 @@ export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]
 
   doc.setFontSize(12)
   doc.text('Posições medidas', 15, y)
+  y += 5
+  doc.setFontSize(9)
+  doc.text(`Progresso: ${itensConcluidos.length}/${itens.length} tipologias concluídas`, 15, y)
   y += 7
 
-  itens.forEach((item, index) => {
+  itensConcluidos.forEach((item, index) => {
     y = novaPaginaSeNecessario(doc, y, 55)
     doc.setFontSize(11)
     doc.text(`${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}`, 15, y)
@@ -94,6 +100,30 @@ export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]
     doc.line(15, y, 195, y)
     y += 7
   })
+
+  doc.addPage()
+  y = 18
+  doc.setFontSize(13)
+  doc.text('RESUMO DA MEDIÇÃO FINAL', 15, y)
+  y += 8
+  doc.setFontSize(9)
+  doc.text(`Cliente: ${texto(medicao.cliente_nome)}`, 15, y); y += 5
+  doc.text(`Total de tipologias: ${itens.length}`, 15, y); y += 5
+  doc.text(`Tipologias medidas/concluídas: ${itensConcluidos.length}`, 15, y); y += 5
+  doc.text(`Progresso: ${itens.length ? Math.round((itensConcluidos.length / itens.length) * 100) : 0}%`, 15, y); y += 7
+
+  const contagemPorUsuario = itensConcluidos.reduce<Record<string, number>>((acc, item) => {
+    const nome = item.medido_por_nome || 'Não identificado'
+    acc[nome] = (acc[nome] || 0) + 1
+    return acc
+  }, {})
+  doc.setFontSize(10)
+  doc.text('Medições por usuário', 15, y); y += 5
+  doc.setFontSize(9)
+  for (const [nome, quantidade] of Object.entries(contagemPorUsuario)) {
+    doc.text(`${nome}: ${quantidade} tipologia(s)`, 18, y)
+    y += 5
+  }
 
   y = novaPaginaSeNecessario(doc, y, 15)
   doc.setFontSize(8)
