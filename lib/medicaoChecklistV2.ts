@@ -145,17 +145,10 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
       atualizacao.foto_alturas_url = origem.foto_alturas_url
     }
 
-    const medidasMescladas = CAMPOS_MEDIDA_FIXA.map(campo =>
-      atualizacao[campo] ?? destino[campo]
-    )
-    const medidasCompletas = medidasMescladas.every(medidaPositiva)
-
-    if (medidasCompletas && !destino.medido) {
-      atualizacao.medido = true
-      atualizacao.medido_em = destino.medido_em || new Date().toISOString()
-    }
-
     if (Object.keys(atualizacao).length === 0) continue
+
+    // Herdar as seis medidas não conclui a tipologia por si só. A conclusão
+    // depende também dos campos obrigatórios específicos do checklist.
 
     const { error } = await supabase
       .from('medicao_itens')
@@ -168,6 +161,7 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
     }
 
     alterou = true
+    await sincronizarStatusItemChecklistV2(medicaoId, destino.id, null)
   }
 
   return alterou
