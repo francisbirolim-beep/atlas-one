@@ -5,6 +5,7 @@ import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save,
 import { usuarioAtual } from '@/lib/auth'
 import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
+import { excluirFotoComHistorico, listarCorrecoesFoto, type CorrecaoFoto } from '@/lib/medicaoFotoCorrecoes'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import MedicaoPadroesFixosPanel from '@/components/system/MedicaoPadroesFixosPanel'
 import {
@@ -12,7 +13,6 @@ import {
   camposDoItemV2,
   carregarChecklistMedicaoV2,
   herdarMedidasFinaisDoOrcamento,
-  removerFotoMedicaoV2,
   salvarMedidasFixasItemV2,
   salvarRespostaChecklistV2,
   statusItemChecklistV2,
@@ -88,6 +88,11 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const [enviandoFoto, setEnviandoFoto] = useState<string | null>(null)
   const [categoriaFoto, setCategoriaFoto] = useState('visao_geral')
   const [mensagem, setMensagem] = useState('')
+  const [excluindoFoto, setExcluindoFoto] = useState(false)
+  const [alvoExclusao, setAlvoExclusao] = useState<{ itemId: string; descricao: string; tipo: 'larguras' | 'alturas' | 'galeria'; url: string; fotoId?: string } | null>(null)
+  const [motivoExclusao, setMotivoExclusao] = useState('')
+  const [historicoFotos, setHistoricoFotos] = useState<CorrecaoFoto[] | null>(null)
+  const [erroHistorico, setErroHistorico] = useState('')
   const [carregando, setCarregando] = useState(true)
   const herancaVerificada = useRef<string | null>(null)
 
@@ -254,9 +259,32 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     await carregar()
   }
 
-  async function removerFoto(id: string) {
-    if (!window.confirm('Remover esta foto do checklist da peça?')) return
-    if (await removerFotoMedicaoV2(id)) await carregar()
+  function prepararExclusao(tipo: 'larguras' | 'alturas' | 'galeria', url: string, fotoId?: string) {
+    if (!item || excluindoFoto) return
+    setAlvoExclusao({ itemId: item.id, descricao: item.descricao || item.tipo_outro_texto || item.tipo_esquadria, tipo, url, fotoId })
+    setMotivoExclusao('')
+    setMensagem('')
+  }
+
+  async function abrirHistoricoFotos() {
+    setErroHistorico('')
+    try { setHistoricoFotos(await listarCorrecoesFoto(medicaoId)) }
+    catch (erro) { setErroHistorico(erro instanceof Error ? erro.message : 'Não foi possível carregar o histórico.') }
+  }
+
+  async function confirmarExclusaoFoto() {
+    if (!alvoExclusao || excluindoFoto || motivoExclusao.trim().length < 3) return
+    setExcluindoFoto(true)
+    try {
+      const mensagem = await excluirFotoComHistorico(medicaoId, { ...alvoExclusao, motivo: motivoExclusao })
+      setAlvoExclusao(null)
+      setMensagem(mensagem)
+      await carregar()
+      window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
+      if (historicoFotos !== null) await abrirHistoricoFotos()
+    } catch (erro) {
+      setMensagem(erro instanceof Error ? erro.message : 'Não foi possível excluir a foto.')
+    } finally { setExcluindoFoto(false) }
   }
 
   if (carregando) {
@@ -366,6 +394,34 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                       <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFotoTrena('altura', e.target.files[0])} />
                     </label>
                   </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    {item.foto_larguras_url && <button type="button" disabled={excluindoFoto || Boolean(enviandoFoto)} onClick={() => prepararExclusao('larguras', item.foto_larguras_url!)} className="text-xs font-semibold text-red-700 disabled:opacity-50">Excluir foto da largura</button>}
+                    {item.foto_alturas_url && <button type="button" disabled={excluindoFoto || Boolean(enviandoFoto)} onClick={() => prepararExclusao('alturas', item.foto_alturas_url!)} className="text-xs font-semibold text-red-700 disabled:opacity-50">Excluir foto da altura</button>}
+                    <button type="button" onClick={() => historicoFotos === null ? void abrirHistoricoFotos() : setHistoricoFotos(null)} className="text-xs font-semibold text-blue-700">{historicoFotos === null ? 'Histórico de exclusões de fotos' : 'Fechar histórico de fotos'}</button>
+                  </div>
+                  {erroHistorico && <p role="alert" className="text-sm text-red-700">{erroHistorico}</p>}
+                  {historicoFotos !== null && <div className="space-y-3 rounded-xl border p-3">
+                    <h3 className="text-sm font-semibold">Histórico de exclusões de fotos desta peça</h3>
+                    {historicoFotos.filter(h => h.snapshot.item_id === item.id).length === 0 && <p className="text-xs text-slate-500">Nenhuma exclusão registrada.</p>}
+                    {historicoFotos.filter(h => h.snapshot.item_id === item.id).map(h => <div key={h.id} className="border-t pt-2 text-xs">
+                      <p className="font-semibold">{h.snapshot.resultado === 'excluida' ? 'Foto excluída' : h.snapshot.resultado === 'nao_realizada' ? 'Exclusão não realizada' : 'Exclusão solicitada — resultado não confirmado'} · {h.snapshot.tipo === 'larguras' ? 'Largura' : h.snapshot.tipo === 'alturas' ? 'Altura' : 'Galeria'}</p>
+                      <p>{h.criado_por_nome} · {new Date(h.created_at).toLocaleString('pt-BR')}</p>
+                      <p>{h.snapshot.descricao}</p><p>Motivo: {h.snapshot.motivo}</p>
+                      <a href={h.snapshot.foto_anterior} target="_blank" rel="noreferrer" className="text-blue-700 underline">Ver foto preservada</a>
+                    </div>)}
+                  </div>}
+                  {alvoExclusao && <div role="dialog" aria-modal="true" aria-label="Confirmar exclusão da foto" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5">
+                      <h3 className="font-semibold">Excluir foto desta peça?</h3>
+                      <p className="text-sm">{alvoExclusao.descricao} · {alvoExclusao.tipo === 'larguras' ? 'Largura' : alvoExclusao.tipo === 'alturas' ? 'Altura' : 'Galeria'}</p>
+                      <img src={alvoExclusao.url} alt="Foto selecionada para exclusão" className="h-32 w-full object-contain" />
+                      <p className="text-xs text-slate-600">A foto sairá da peça. O histórico manterá a imagem anterior, quem excluiu, a data e o motivo. As medidas numéricas serão mantidas.</p>
+                      <label className="block text-sm">Motivo da exclusão<textarea autoFocus disabled={excluindoFoto} maxLength={500} value={motivoExclusao} onChange={e => setMotivoExclusao(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+                      {mensagem && <p role="alert" className="text-sm text-red-700">{mensagem}</p>}
+                      <div className="flex justify-end gap-3"><button type="button" disabled={excluindoFoto} onClick={() => setAlvoExclusao(null)}>Cancelar</button><button type="button" disabled={excluindoFoto || motivoExclusao.trim().length < 3} onClick={() => void confirmarExclusaoFoto()} className="rounded bg-red-700 px-3 py-2 text-white disabled:opacity-50">{excluindoFoto ? 'Excluindo...' : 'Confirmar exclusão'}</button></div>
+                    </div>
+                  </div>}
 
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-slate-500">Larguras (mm) — baixo, meio, cima</p>
@@ -500,7 +556,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                           <img src={foto.url} alt={foto.legenda || foto.categoria} className="h-28 w-full object-cover" />
                           <div className="flex items-center justify-between gap-1 px-2 py-1.5">
                             <span className="truncate text-[10px] text-slate-500">{foto.categoria.replace('checklist:', 'Checklist: ')}</span>
-                            <button type="button" onClick={() => void removerFoto(foto.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                            {!foto.categoria.startsWith('checklist:') && <button type="button" disabled={excluindoFoto} aria-label="Excluir foto da peça" onClick={() => prepararExclusao('galeria', foto.url, foto.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>}
                           </div>
                         </div>
                       ))}

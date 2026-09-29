@@ -123,6 +123,15 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
 
   if (erroItens || !itensDestino || itensDestino.length !== itensOrigem.length) return false
 
+  // A deliberately removed photo must not return on the next page load.
+  // Read failure is fail-closed: do not import anything without this history.
+  const { data: correcoes, error: erroCorrecoes } = await supabase.from('medicao_revisoes')
+    .select('snapshot').eq('medicao_id', medicaoId).eq('motivo', 'Correção de foto')
+  if (erroCorrecoes) return false
+  const fotoFoiRemovida = (itemId: string, campo: string, url: string) => (correcoes || []).some(({ snapshot }) =>
+    snapshot?.item_id === itemId && snapshot?.campo === campo && snapshot?.foto_anterior === url && snapshot?.resultado !== 'nao_realizada',
+  )
+
   let alterou = false
 
   for (let indice = 0; indice < itensDestino.length; indice++) {
@@ -138,10 +147,10 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
       }
     }
 
-    if (!destino.foto_larguras_url && origem.foto_larguras_url) {
+    if (!destino.foto_larguras_url && origem.foto_larguras_url && !fotoFoiRemovida(destino.id, 'foto_larguras_url', origem.foto_larguras_url)) {
       atualizacao.foto_larguras_url = origem.foto_larguras_url
     }
-    if (!destino.foto_alturas_url && origem.foto_alturas_url) {
+    if (!destino.foto_alturas_url && origem.foto_alturas_url && !fotoFoiRemovida(destino.id, 'foto_alturas_url', origem.foto_alturas_url)) {
       atualizacao.foto_alturas_url = origem.foto_alturas_url
     }
 
@@ -364,11 +373,7 @@ export async function adicionarFotoMedicaoV2(
   return data as FotoMedicaoV2
 }
 
-export async function removerFotoMedicaoV2(fotoId: string): Promise<boolean> {
-  const { error } = await supabase.from('medicao_fotos').delete().eq('id', fotoId)
-  if (error) console.error('Erro ao remover foto da Medicao Final:', error)
-  return !error
-}
+
 
 export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<{
   ok: boolean

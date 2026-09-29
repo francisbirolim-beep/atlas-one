@@ -125,8 +125,10 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => void carregar(), 10000)
-    return () => window.clearInterval(timer)
+    const atualizar = () => void carregar()
+    window.addEventListener('atlas-medicao-atualizada', atualizar)
+    const timer = window.setInterval(atualizar, 10000)
+    return () => { window.clearInterval(timer); window.removeEventListener('atlas-medicao-atualizada', atualizar) }
   }, [carregar])
 
   const tempoExibido = parcial ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
