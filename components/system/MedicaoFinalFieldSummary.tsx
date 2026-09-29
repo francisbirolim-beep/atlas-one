@@ -50,7 +50,7 @@ function formatarData(valor: string | null | undefined) {
   return new Date(valor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export default function MedicaoFinalFieldSummary({ medicaoId }: { medicaoId: string }) {
+export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }: { medicaoId: string; embedded?: boolean }) {
   const [resumo, setResumo] = useState<ResumoMedicaoV2>(RESUMO_VAZIO)
   const [operacao, setOperacao] = useState<OperacaoMedicaoV2 | null>(null)
   const [pendencias, setPendencias] = useState<PendenciaMedicao[]>([])
@@ -201,7 +201,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId }: { medicaoId: str
   }
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
+    <section className={embedded ? "w-full" : "mx-auto w-full max-w-4xl px-3 pt-3 md:px-4"}>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-3 md:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
