@@ -69,6 +69,10 @@ const CAMPOS_MEDIDA_FIXA = [
   'altura_esquerda_mm',
 ] as const
 
+export function valorChecklistPreenchido(valor: unknown) {
+  return !(valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0))
+}
+
 function medidaPositiva(valor: unknown): valor is number {
   const numero = Number(valor)
   return Number.isFinite(numero) && numero > 0
@@ -169,7 +173,50 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
   return alterou
 }
 
+export function statusItemChecklistV2(
+  item: MedicaoItem,
+  campos: CampoChecklistV2[],
+  respostas: RespostaChecklistV2[],
+): 'pendente' | 'em_andamento' | 'concluida' {
+  const camposAtivos = camposDoItemV2(campos, item)
+  const obrigatorios = camposAtivos.filter(c => c.obrigatorio)
+  const medidasCompletas = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(item[campo]))
+  const checklistCompleto = obrigatorios.every(campo => valorChecklistPreenchido(valorRespostaItemV2(item, campo, respostas)))
+  if (medidasCompletas && checklistCompleto) return 'concluida'
+
+  const iniciouMedidas = CAMPOS_MEDIDA_FIXA.some(campo => medidaPositiva(item[campo]))
+  const iniciouChecklist = camposAtivos.some(campo => valorChecklistPreenchido(valorRespostaItemV2(item, campo, respostas)))
+  const iniciou = iniciouMedidas || iniciouChecklist || Boolean(
+    item.foto_larguras_url || item.foto_alturas_url || item.observacoes_medicao
+  )
+  return iniciou ? 'em_andamento' : 'pendente'
+}
+
+async function sincronizarStatusItemChecklistV2(
+  medicaoId: string,
+  itemId: string,
+  usuario: Usuario | null,
+): Promise<boolean> {
+  const dados = await carregarChecklistMedicaoV2(medicaoId)
+  const item = dados.itens.find(i => i.id === itemId)
+  if (!item) return false
+  const status = statusItemChecklistV2(item, dados.campos, dados.respostas)
+  const concluida = status === 'concluida'
+  const agora = new Date().toISOString()
+  const { error } = await supabase.from('medicao_itens').update({
+    medido: concluida,
+    status_medicao: concluida ? 'concluida' : 'rascunho',
+    updated_at: agora,
+    medido_em: concluida ? (item.medido_em || agora) : null,
+    medido_por_id: concluida ? (usuario?.id || item.medido_por_id || null) : null,
+    medido_por_nome: concluida ? (usuario?.nome || item.medido_por_nome || null) : null,
+  }).eq('id', itemId)
+  if (error) console.error('Erro ao sincronizar status da peça:', error)
+  return !error
+}
+
 export async function salvarMedidasFixasItemV2(
+  medicaoId: string,
   itemId: string,
   medidas: MedidasFixasItemV2,
   usuario: Usuario | null,
@@ -183,17 +230,13 @@ export async function salvarMedidasFixasItemV2(
     altura_esquerda_mm: normalizarMedida(medidas.altura_esquerda_mm),
   }
 
-  const completo = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(normalizadas[campo]))
   const agora = new Date().toISOString()
 
   const { error } = await supabase
     .from('medicao_itens')
     .update({
       ...normalizadas,
-      medido: completo,
-      medido_em: completo ? agora : null,
-      medido_por_id: completo ? usuario?.id || null : null,
-      medido_por_nome: completo ? usuario?.nome || null : null,
+      updated_at: agora,
     })
     .eq('id', itemId)
 
@@ -202,7 +245,7 @@ export async function salvarMedidasFixasItemV2(
     return false
   }
 
-  return true
+  return sincronizarStatusItemChecklistV2(medicaoId, itemId, usuario)
 }
 
 export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<DadosChecklistMedicaoV2> {
@@ -293,6 +336,7 @@ export async function salvarRespostaChecklistV2(
     console.error('Resposta V2 salva, mas falhou ao sincronizar campos_extras:', erroLegado)
   }
 
+  await sincronizarStatusItemChecklistV2(medicaoId, item.id, usuario)
   return true
 }
 
