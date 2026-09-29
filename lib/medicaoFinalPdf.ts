@@ -87,6 +87,7 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
   y += 7
 
   for (const [index, item] of itensConcluidos.entries()) {
+    if (index > 0) { doc.addPage(); y = 18 }
     y = novaPaginaSeNecessario(doc, y, 55)
     doc.setFontSize(11)
     doc.text(`${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}`, 15, y)
@@ -101,7 +102,9 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
     doc.setFontSize(9)
     const linhas = [
       `Tipo: ${texto(item.tipo_esquadria)}`,
+      `Ambiente: ${texto(item.ambiente)}`,
       `Quantidade: ${texto(item.quantidade)}`,
+      `Folhas: ${texto(item.folhas)}`,
       `Referência: ${item.referencia_vista === 'interna' ? 'Vista interna' : item.referencia_vista === 'externa' ? 'Vista externa' : '-'}`,
       `Larguras (baixo / meio / cima): ${texto(item.largura_baixo_mm)} / ${texto(item.largura_meio_mm)} / ${texto(item.largura_cima_mm)} mm`,
       `Alturas (direita / meio / esquerda): ${texto(item.altura_direita_mm)} / ${texto(item.altura_meio_mm)} / ${texto(item.altura_esquerda_mm)} mm`,
