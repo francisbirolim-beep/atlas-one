@@ -155,7 +155,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     setSalvandoMedidas(true)
     setMensagem('')
 
-    const ok = await salvarMedidasFixasItemV2(item.id, {
+    const ok = await salvarMedidasFixasItemV2(medicaoId, item.id, {
       largura_baixo_mm: numeroMedida(medidas.largura_baixo_mm),
       largura_meio_mm: numeroMedida(medidas.largura_meio_mm),
       largura_cima_mm: numeroMedida(medidas.largura_cima_mm),
