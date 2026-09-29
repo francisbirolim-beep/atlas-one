@@ -9,6 +9,29 @@ function texto(valor: unknown): string {
   return String(valor)
 }
 
+function medidaProducao(valores: unknown[]) {
+  const validas = valores.map(Number).filter(v => Number.isFinite(v) && v > 0)
+  return validas.length ? Math.min(...validas) : null
+}
+
+function desenharCroquiMedidas(doc: jsPDF, item: MedicaoItem, y: number) {
+  const x = 55
+  const largura = 100
+  const altura = 52
+  doc.setDrawColor(80, 80, 80)
+  doc.rect(x, y, largura, altura)
+  doc.line(x + largura / 2, y, x + largura / 2, y + altura)
+
+  doc.setFontSize(7)
+  doc.text(`Cima: ${texto(item.largura_cima_mm)} mm`, x + largura / 2, y - 3, { align: 'center' })
+  doc.text(`Meio: ${texto(item.largura_meio_mm)} mm`, x + largura / 2, y + altura / 2, { align: 'center' })
+  doc.text(`Baixo: ${texto(item.largura_baixo_mm)} mm`, x + largura / 2, y + altura + 5, { align: 'center' })
+  doc.text(`Esq.: ${texto(item.altura_esquerda_mm)} mm`, x - 3, y + altura / 2, { angle: 90, align: 'center' })
+  doc.text(`Dir.: ${texto(item.altura_direita_mm)} mm`, x + largura + 6, y + altura / 2, { angle: 90, align: 'center' })
+  doc.text(`Centro: ${texto(item.altura_meio_mm)} mm`, x + largura / 2 + 3, y + altura / 2 + 4, { angle: 90, align: 'center' })
+  return y + altura + 10
+}
+
 function novaPaginaSeNecessario(doc: jsPDF, y: number, altura = 12) {
   if (y + altura > 282) {
     doc.addPage()
@@ -47,6 +70,12 @@ export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]
     doc.text(`${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}`, 15, y)
     y += 5
 
+    y = novaPaginaSeNecessario(doc, y, 70)
+    y = desenharCroquiMedidas(doc, item, y + 4)
+
+    const larguraProducao = medidaProducao([item.largura_baixo_mm, item.largura_meio_mm, item.largura_cima_mm])
+    const alturaProducao = medidaProducao([item.altura_direita_mm, item.altura_meio_mm, item.altura_esquerda_mm])
+
     doc.setFontSize(9)
     const linhas = [
       `Tipo: ${texto(item.tipo_esquadria)}`,
@@ -54,6 +83,7 @@ export function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[]
       `Referência: ${item.referencia_vista === 'interna' ? 'Vista interna' : item.referencia_vista === 'externa' ? 'Vista externa' : '-'}`,
       `Larguras (baixo / meio / cima): ${texto(item.largura_baixo_mm)} / ${texto(item.largura_meio_mm)} / ${texto(item.largura_cima_mm)} mm`,
       `Alturas (direita / meio / esquerda): ${texto(item.altura_direita_mm)} / ${texto(item.altura_meio_mm)} / ${texto(item.altura_esquerda_mm)} mm`,
+      `Medida para produção (menor): ${texto(larguraProducao)} x ${texto(alturaProducao)} mm`,
       `Contramarco: ${texto(item.contramarco)}`,
       `Cadeirinha: ${texto(item.cadeirinha)}`,
       `Status: ${texto(item.status_medicao || (item.medido ? 'concluida' : 'rascunho')).replaceAll('_', ' ')}`,
