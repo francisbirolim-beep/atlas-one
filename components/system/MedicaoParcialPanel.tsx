@@ -230,7 +230,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca }: { m
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200"><div className="hidden min-w-[860px] grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:grid"><span>#</span><span>Tipologia</span><span>Ambiente</span><span className="text-center">Quantidade</span><span>Status</span><span>Medido por / atualização</span><span /></div>
-              {pecasFiltradas.map((peca, indice) => {
+              {pecasFiltradas.map(peca => {
                 const status = peca.medido ? 'Concluída' : peca.iniciado ? 'Em andamento' : 'Pendente'
                 return (
                   <button key={peca.id} type="button" onClick={() => onSelecionarPeca(peca.id)} className="grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
