@@ -326,7 +326,6 @@ export async function listarItensMedicao(medicaoId: string): Promise<MedicaoItem
         return []
   }
     const itens = data as MedicaoItem[]
-    if (!itens.some(item => descricaoGenericaMedicao(item.descricao))) return itens
     const { data: medicao } = await supabase.from('medicoes_finais').select('orcamento_id').eq('id', medicaoId).maybeSingle()
     const { data: orcamento } = medicao?.orcamento_id
       ? await supabase.from('orcamentos').select('itens').eq('id', medicao.orcamento_id).maybeSingle()
