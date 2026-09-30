@@ -168,6 +168,9 @@ async function consultarRecurso(req: NextRequest, recurso: WVetroOperacionalRecu
     return listarItensNotaEntradaWVetro(nfId)
   }
 
+  if (recurso === 'contas') return listarContasWVetro(param(req, 'contaNro'))
+  if (recurso === 'plano_contas') return listarPlanoContasWVetro()
+
   const periodo = validarPeriodo(req, 7)
 
   if (recurso === 'orcamentos') return listarOrcamentosWVetro(periodo.inicio, periodo.fim)
@@ -225,9 +228,6 @@ async function consultarRecurso(req: NextRequest, recurso: WVetroOperacionalRecu
       fim: periodo.fim,
     })
   }
-
-  if (recurso === 'contas') return listarContasWVetro(param(req, 'contaNro'))
-  if (recurso === 'plano_contas') return listarPlanoContasWVetro()
 
   throw new Error('Recurso operacional não reconhecido.')
 }
