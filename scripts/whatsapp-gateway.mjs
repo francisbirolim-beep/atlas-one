@@ -53,7 +53,7 @@ const qrStates = new Map()
 let shuttingDown = false
 let refreshTimer = null
 let queueTimer = null
-let localPanelOpened = false
+let panelBrowserOpened = false
 
 const LOCAL_PANEL_PORT = 3337
 const localPanel = http.createServer((req, res) => {
@@ -120,10 +120,6 @@ setInterval(refresh,700);refresh();
 })
 
 localPanel.listen(LOCAL_PANEL_PORT, '127.0.0.1', () => {
-  if (!localPanelOpened) {
-    localPanelOpened = true
-    execFile('open', [`http://127.0.0.1:${LOCAL_PANEL_PORT}`], () => {})
-  }
   console.log(`[gateway] painel QR ao vivo: http://127.0.0.1:${LOCAL_PANEL_PORT}`)
 })
 
@@ -337,6 +333,10 @@ async function connectChannel(channel) {
           updatedAt: new Date().toISOString(),
         })
         await reportState(channel.id, 'qr', { qrDataUrl })
+        if (!panelBrowserOpened) {
+          panelBrowserOpened = true
+          execFile('open', [`http://127.0.0.1:${LOCAL_PANEL_PORT}`], () => {})
+        }
         console.log(`[gateway] QR atualizado: ${channel.nome} (${channel.numero_declarado || 'a identificar'})`)
       }
 
