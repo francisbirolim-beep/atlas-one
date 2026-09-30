@@ -200,6 +200,52 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     )
   }
 
+  if (embedded) {
+    return (
+      <section className="h-full">
+        <div className="flex h-full min-h-[210px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Execução em campo</p>
+              <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusAtual.classe}`}>
+                <CircleDot size={11} /> {statusAtual.label}
+              </span>
+            </div>
+            {master ? (
+              <select
+                aria-label="Responsável pela medição"
+                value={operacao?.responsavel_id || ''}
+                onChange={e => void trocarResponsavel(e.target.value)}
+                disabled={processando || operacao?.status_operacional === 'aprovado'}
+                className="max-w-[150px] rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none"
+              >
+                <option value="">Responsável</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            ) : (
+              <span className="text-xs font-semibold text-slate-700">{responsavelExibicao}</span>
+            )}
+          </div>
+
+          <div className="mt-5 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Progresso da medição</p>
+              <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} tipologias concluídas</p>
+            </div>
+            <span className="text-2xl font-bold text-emerald-700">{resumo.percentual}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, Math.max(0, resumo.percentual))}%` }} />
+          </div>
+
+          <div className="mt-auto pt-4">
+            <p className="inline-flex items-center gap-1.5 text-xs text-slate-500"><UserRound size={13} /> Responsável: <span className="font-semibold text-slate-700">{responsavelExibicao}</span></p>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className={embedded ? "w-full" : "mx-auto w-full max-w-4xl px-3 pt-3 md:px-4"}>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
