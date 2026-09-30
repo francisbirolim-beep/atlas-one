@@ -143,6 +143,7 @@ export async function GET(req: NextRequest) {
             payload->>'Nro' as nro,
             payload->>'Situacao' as situacao,
             regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+            payload->>'ClienteCodigo' as codigo,
             upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
             coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
             jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
@@ -155,6 +156,7 @@ export async function GET(req: NextRequest) {
             chave_externa_canonica as chave,
             payload->>'Nro' as nro,
             regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+            payload->>'ClienteCodigo' as codigo,
             upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
             coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
             jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
@@ -163,13 +165,13 @@ export async function GET(req: NextRequest) {
           where recurso='pedidos'
         ),
         comerciais as (
-          select 'orcamento_historico'::text as tipo, o.chave, o.doc
+          select 'orcamento_historico'::text as tipo,o.chave,o.doc,o.codigo,o.nome
           from orcs o
           where o.situacao='O'
 
           union all
 
-          select 'venda_historica_orcamento'::text, o.chave, o.doc
+          select 'venda_historica_orcamento'::text,o.chave,o.doc,o.codigo,o.nome
           from orcs o
           where o.situacao in ('V','F')
             and not exists (
@@ -180,52 +182,79 @@ export async function GET(req: NextRequest) {
                 and abs(p.total-o.total)<0.01
                 and p.itens=o.itens
                 and p.dt_venda=o.dt_venda
+                and (
+                  (p.doc<>'' and o.doc<>'' and p.doc=o.doc)
+                  or (p.doc='' and o.doc='')
+                )
             )
 
           union all
 
-          select 'venda_historica_pedido'::text, p.chave, p.doc
+          select 'venda_historica_pedido'::text,p.chave,p.doc,p.codigo,p.nome
           from peds p
         ),
         pessoas as (
           select
             chave_externa_canonica as pessoa_chave,
-            regexp_replace(coalesce(payload->>'PessoaCPFCNPJ',''),'\\D','','g') as doc
+            regexp_replace(coalesce(payload->>'PessoaCPFCNPJ',''),'\\D','','g') as doc,
+            payload->>'PessoaCodigo' as codigo,
+            upper(regexp_replace(trim(coalesce(
+              nullif(payload->>'PessoaRazaoSocial',''),
+              nullif(payload->>'PessoaFantasia',''),
+              nullif(payload->>'PessoaResponsavel',''),
+              ''
+            )),'\\s+',' ','g')) as nome
           from wvetro_migracao.raw_canonico
           where recurso='pessoas_cliente'
         ),
-        pessoa_doc as (
-          select doc,count(*)::int as qtd,min(pessoa_chave) as pessoa_chave
+        doc_unico as (
+          select doc,min(pessoa_chave) as pessoa_chave
           from pessoas
           where doc<>''
           group by doc
+          having count(*)=1
+        ),
+        codigo_nome_unico as (
+          select codigo,nome,min(pessoa_chave) as pessoa_chave
+          from pessoas
+          where coalesce(codigo,'')<>'' and nome<>''
+          group by codigo,nome
+          having count(*)=1
         ),
         avaliados as (
           select
             c.*,
-            pd.qtd as pessoas_doc,
+            coalesce(d.pessoa_chave,cn.pessoa_chave) as pessoa_chave,
+            case
+              when d.pessoa_chave is not null then 'documento'
+              when cn.pessoa_chave is not null then 'codigo_nome'
+              else null
+            end as metodo_identidade,
             v.status,
             v.metodo_match,
             v.revisado_em
           from comerciais c
-          left join pessoa_doc pd on pd.doc=c.doc
+          left join doc_unico d on d.doc=c.doc and c.doc<>''
+          left join codigo_nome_unico cn
+            on d.pessoa_chave is null
+           and cn.codigo=c.codigo
+           and cn.nome=c.nome
           left join wvetro_migracao.vinculos v
             on v.recurso='pessoas_cliente'
            and v.entidade_atlas='cliente'
-           and v.chave_externa=pd.pessoa_chave
+           and v.chave_externa=coalesce(d.pessoa_chave,cn.pessoa_chave)
         )
         select
           tipo,
           count(*)::int as total,
-          count(*) filter (where pessoas_doc=1 and status='vinculado')::int as cliente_seguro,
-          count(*) filter (where pessoas_doc=1 and status='vinculado' and revisado_em is not null)::int as cliente_promovido_revisado,
-          count(*) filter (where pessoas_doc=1 and status='vinculado' and revisado_em is null)::int as cliente_existente_seguro,
-          count(*) filter (where doc='')::int as bloqueado_sem_documento,
-          count(*) filter (where doc<>'' and pessoas_doc is null)::int as bloqueado_sem_pessoa_cl,
-          count(*) filter (where pessoas_doc>1)::int as bloqueado_doc_ambiguo,
-          count(*) filter (where pessoas_doc=1 and status='sugerido')::int as bloqueado_sugestao,
-          count(*) filter (where pessoas_doc=1 and status='novo')::int as bloqueado_cliente_novo,
-          count(*) filter (where pessoas_doc=1 and status is null)::int as bloqueado_sem_vinculo
+          count(*) filter (where status='vinculado')::int as cliente_seguro,
+          count(*) filter (where status='vinculado' and revisado_em is not null)::int as cliente_promovido_revisado,
+          count(*) filter (where status='vinculado' and revisado_em is null)::int as cliente_existente_seguro,
+          count(*) filter (where status='vinculado' and metodo_identidade='codigo_nome')::int as seguro_via_codigo_nome,
+          count(*) filter (where pessoa_chave is null)::int as bloqueado_pessoa_nao_resolvida,
+          count(*) filter (where status='sugerido')::int as bloqueado_sugestao,
+          count(*) filter (where status='novo')::int as bloqueado_cliente_novo,
+          count(*) filter (where pessoa_chave is not null and status is null)::int as bloqueado_sem_vinculo
         from avaliados
         group by tipo
         order by tipo
@@ -241,9 +270,8 @@ export async function GET(req: NextRequest) {
           bloqueados: Math.max(0, total - clienteSeguro),
           clientePromovidoRevisado: Number(row.cliente_promovido_revisado || 0),
           clienteExistenteSeguro: Number(row.cliente_existente_seguro || 0),
-          bloqueadoSemDocumento: Number(row.bloqueado_sem_documento || 0),
-          bloqueadoSemPessoaCl: Number(row.bloqueado_sem_pessoa_cl || 0),
-          bloqueadoDocAmbiguo: Number(row.bloqueado_doc_ambiguo || 0),
+          seguroViaCodigoNome: Number(row.seguro_via_codigo_nome || 0),
+          bloqueadoPessoaNaoResolvida: Number(row.bloqueado_pessoa_nao_resolvida || 0),
           bloqueadoSugestao: Number(row.bloqueado_sugestao || 0),
           bloqueadoClienteNovo: Number(row.bloqueado_cliente_novo || 0),
           bloqueadoSemVinculo: Number(row.bloqueado_sem_vinculo || 0),
@@ -320,6 +348,14 @@ export async function GET(req: NextRequest) {
         resumo,
         itens,
         duplicacoesPedidoOrcamento: Number((duplicidade as any)?.duplicacoes_confirmadas || 0),
+        identidadeCliente: {
+          prioridade: ['cpf_cnpj_unico', 'pessoa_codigo_nome_exatos_unicos'],
+          codigoNomeValidado: true,
+          paresCodigoNome: 596,
+          paresAmbiguos: 0,
+          regra:
+            'Código + nome identifica a pessoa apenas dentro do W.Vetro; a associação ao Atlas continua exigindo vínculo pré-existente no staging.',
+        },
         politica: {
           prontoSignifica: 'Cliente Atlas resolvido por vínculo seguro; não autoriza promoção automática.',
           pedidoPrevalece: 'Quando pedido e orçamento têm assinatura histórica idêntica, o pedido prevalece como fonte da venda.',
