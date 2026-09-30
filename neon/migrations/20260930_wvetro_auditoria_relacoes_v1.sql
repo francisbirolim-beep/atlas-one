@@ -82,7 +82,7 @@ select
   pr.lote_id::text as referencia,
   (l.chave is not null) as encontrado,
   'forte'::text as confianca,
-  'loteId declarado no projeto de produção'::text as regra
+  'lote_id_declarado_producao'::text as regra
 from producao pr
 left join lotes l on l.lote_id = pr.lote_id
 
@@ -97,7 +97,7 @@ select
   lp.orcamento,
   (o.chave is not null),
   'declarada_payload',
-  'orcamento declarado dentro do projeto do lote'
+  'orcamento_declarado_projeto_lote'
 from lote_projetos lp
 left join orcamentos o on o.nro = lp.orcamento
 
@@ -112,7 +112,7 @@ select
   pr.orcamento,
   (o.chave is not null),
   'declarada_payload',
-  'orcamento declarado no projeto de produção'
+  'orcamento_declarado_producao'
 from producao pr
 left join orcamentos o on o.nro = pr.orcamento
 
@@ -127,7 +127,7 @@ select
   ip.lote_id,
   (l.chave is not null),
   'forte',
-  'loteId declarado no projeto da instalação'
+  'lote_id_declarado_instalacao'
 from instalacao_projetos ip
 left join lotes l on l.lote_id = ip.lote_id
 
@@ -142,7 +142,7 @@ select
   concat_ws(':', ip.lote_id, ip.projeto_id),
   (pr.chave is not null),
   'forte',
-  'loteId + loteProjetoId declarados na instalação'
+  'lote_id_projeto_id_instalacao'
 from instalacao_projetos ip
 left join producao pr
   on pr.lote_id = ip.lote_id
@@ -159,7 +159,7 @@ select
   ip.orcamento,
   (o.chave is not null),
   'declarada_payload',
-  'orcamento declarado dentro do projeto da instalação'
+  'orcamento_declarado_instalacao'
 from instalacao_projetos ip
 left join orcamentos o on o.nro = ip.orcamento
 
@@ -174,7 +174,7 @@ select
   t.orcamento,
   (o.chave is not null),
   'documental',
-  'número extraído de TituloOrigem (ORÇAMENTO/ORC)'
+  'numero_extraido_titulo_origem'
 from titulos_orcamento t
 left join orcamentos o on o.nro = t.orcamento
 where t.orcamento is not null
@@ -190,7 +190,7 @@ select
   b.titulo_id,
   (t.titulo_chave is not null),
   'forte',
-  'TituloId idêntico entre baixa e título'
+  'titulo_id_identico_baixa'
 from baixas b
 left join titulos t on t.titulo_id = b.titulo_id
 
@@ -205,7 +205,7 @@ select
   p.nro,
   (o.chave is not null),
   'observacional',
-  'pedido e orçamento possuem o mesmo Nro; não usar para promoção automática'
+  'numero_compartilhado_observacional'
 from pedidos p
 left join orcamentos o on o.nro = p.nro;
 
