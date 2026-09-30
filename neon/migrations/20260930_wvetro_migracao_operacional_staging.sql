@@ -53,7 +53,9 @@ create table if not exists wvetro_migracao.raw (
   capturado_em timestamptz not null default now(),
   created_at timestamptz not null default now(),
   constraint uq_wvetro_migracao_raw_hash
-    unique (recurso, chave_externa, payload_hash)
+    unique (recurso, chave_externa, payload_hash),
+  constraint uq_wvetro_migracao_raw_versao
+    unique (recurso, chave_externa, versao)
 );
 
 create index if not exists idx_wvetro_migracao_raw_recurso_chave
