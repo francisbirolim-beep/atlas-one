@@ -129,6 +129,213 @@ export async function GET(req: NextRequest) {
   const neon = statusNeonStaging()
   const recurso = String(req.nextUrl.searchParams.get('recurso') || 'mapa').trim()
 
+  if (recurso === 'plano-promocao') {
+    if (!neon.configurado) {
+      return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
+    }
+
+    try {
+      const sql = neonStaging()
+      const rows = await sql`
+        with orcs as (
+          select
+            chave_externa_canonica as chave,
+            payload->>'Nro' as nro,
+            payload->>'Situacao' as situacao,
+            regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+            upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+            coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+            jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+            coalesce(payload->>'DtVenda','') as dt_venda
+          from wvetro_migracao.raw_canonico
+          where recurso='orcamentos'
+        ),
+        peds as (
+          select
+            chave_externa_canonica as chave,
+            payload->>'Nro' as nro,
+            regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+            upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+            coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+            jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+            coalesce(payload->>'DtVenda','') as dt_venda
+          from wvetro_migracao.raw_canonico
+          where recurso='pedidos'
+        ),
+        comerciais as (
+          select 'orcamento_historico'::text as tipo, o.chave, o.doc
+          from orcs o
+          where o.situacao='O'
+
+          union all
+
+          select 'venda_historica_orcamento'::text, o.chave, o.doc
+          from orcs o
+          where o.situacao in ('V','F')
+            and not exists (
+              select 1
+              from peds p
+              where p.nro=o.nro
+                and p.nome=o.nome
+                and abs(p.total-o.total)<0.01
+                and p.itens=o.itens
+                and p.dt_venda=o.dt_venda
+            )
+
+          union all
+
+          select 'venda_historica_pedido'::text, p.chave, p.doc
+          from peds p
+        ),
+        pessoas as (
+          select
+            chave_externa_canonica as pessoa_chave,
+            regexp_replace(coalesce(payload->>'PessoaCPFCNPJ',''),'\\D','','g') as doc
+          from wvetro_migracao.raw_canonico
+          where recurso='pessoas_cliente'
+        ),
+        pessoa_doc as (
+          select doc,count(*)::int as qtd,min(pessoa_chave) as pessoa_chave
+          from pessoas
+          where doc<>''
+          group by doc
+        ),
+        avaliados as (
+          select
+            c.*,
+            pd.qtd as pessoas_doc,
+            v.status,
+            v.metodo_match,
+            v.revisado_em
+          from comerciais c
+          left join pessoa_doc pd on pd.doc=c.doc
+          left join wvetro_migracao.vinculos v
+            on v.recurso='pessoas_cliente'
+           and v.entidade_atlas='cliente'
+           and v.chave_externa=pd.pessoa_chave
+        )
+        select
+          tipo,
+          count(*)::int as total,
+          count(*) filter (where pessoas_doc=1 and status='vinculado')::int as cliente_seguro,
+          count(*) filter (where pessoas_doc=1 and status='vinculado' and revisado_em is not null)::int as cliente_promovido_revisado,
+          count(*) filter (where pessoas_doc=1 and status='vinculado' and revisado_em is null)::int as cliente_existente_seguro,
+          count(*) filter (where doc='')::int as bloqueado_sem_documento,
+          count(*) filter (where doc<>'' and pessoas_doc is null)::int as bloqueado_sem_pessoa_cl,
+          count(*) filter (where pessoas_doc>1)::int as bloqueado_doc_ambiguo,
+          count(*) filter (where pessoas_doc=1 and status='sugerido')::int as bloqueado_sugestao,
+          count(*) filter (where pessoas_doc=1 and status='novo')::int as bloqueado_cliente_novo,
+          count(*) filter (where pessoas_doc=1 and status is null)::int as bloqueado_sem_vinculo
+        from avaliados
+        group by tipo
+        order by tipo
+      `
+
+      const itens = rows.map((row: any) => {
+        const total = Number(row.total || 0)
+        const clienteSeguro = Number(row.cliente_seguro || 0)
+        return {
+          tipo: String(row.tipo || ''),
+          total,
+          clienteSeguro,
+          bloqueados: Math.max(0, total - clienteSeguro),
+          clientePromovidoRevisado: Number(row.cliente_promovido_revisado || 0),
+          clienteExistenteSeguro: Number(row.cliente_existente_seguro || 0),
+          bloqueadoSemDocumento: Number(row.bloqueado_sem_documento || 0),
+          bloqueadoSemPessoaCl: Number(row.bloqueado_sem_pessoa_cl || 0),
+          bloqueadoDocAmbiguo: Number(row.bloqueado_doc_ambiguo || 0),
+          bloqueadoSugestao: Number(row.bloqueado_sugestao || 0),
+          bloqueadoClienteNovo: Number(row.bloqueado_cliente_novo || 0),
+          bloqueadoSemVinculo: Number(row.bloqueado_sem_vinculo || 0),
+        }
+      })
+
+      const vendaTipos = new Set(['venda_historica_orcamento', 'venda_historica_pedido'])
+      const resumo = itens.reduce(
+        (acc, item) => {
+          acc.total += item.total
+          acc.clienteSeguro += item.clienteSeguro
+          acc.bloqueados += item.bloqueados
+          if (vendaTipos.has(item.tipo)) {
+            acc.vendas.total += item.total
+            acc.vendas.clienteSeguro += item.clienteSeguro
+            acc.vendas.bloqueados += item.bloqueados
+          } else {
+            acc.orcamentos.total += item.total
+            acc.orcamentos.clienteSeguro += item.clienteSeguro
+            acc.orcamentos.bloqueados += item.bloqueados
+          }
+          return acc
+        },
+        {
+          total: 0,
+          clienteSeguro: 0,
+          bloqueados: 0,
+          vendas: { total: 0, clienteSeguro: 0, bloqueados: 0 },
+          orcamentos: { total: 0, clienteSeguro: 0, bloqueados: 0 },
+        },
+      )
+
+      const [duplicidade] = await sql`
+        with o as (
+          select
+            payload->>'Nro' as nro,
+            regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+            upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+            coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+            jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+            coalesce(payload->>'DtVenda','') as dt_venda
+          from wvetro_migracao.raw_canonico
+          where recurso='orcamentos'
+        ),
+        p as (
+          select
+            payload->>'Nro' as nro,
+            regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+            upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+            coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+            jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+            coalesce(payload->>'DtVenda','') as dt_venda
+          from wvetro_migracao.raw_canonico
+          where recurso='pedidos'
+        )
+        select count(*)::int as duplicacoes_confirmadas
+        from o join p using(nro)
+        where o.nome=p.nome
+          and abs(o.total-p.total)<0.01
+          and o.itens=p.itens
+          and o.dt_venda=p.dt_venda
+          and (
+            (o.doc<>'' and p.doc<>'' and o.doc=p.doc)
+            or (o.doc='' and p.doc='')
+          )
+      `
+
+      return NextResponse.json({
+        ok: true,
+        recurso,
+        modo: 'dry-run',
+        gravacaoWvetro: false,
+        gravacaoAtlas: false,
+        resumo,
+        itens,
+        duplicacoesPedidoOrcamento: Number((duplicidade as any)?.duplicacoes_confirmadas || 0),
+        politica: {
+          prontoSignifica: 'Cliente Atlas resolvido por vínculo seguro; não autoriza promoção automática.',
+          pedidoPrevalece: 'Quando pedido e orçamento têm assinatura histórica idêntica, o pedido prevalece como fonte da venda.',
+          historicoSemWorkflow: true,
+          fluxoVendaNormalPermitido: false,
+          motivoFluxoVendaNormalBloqueado:
+            'O fluxo normal dispara Financeiro, workflow, Kanban e Engenharia; histórico W.Vetro exige importação isolada.',
+        },
+      })
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Falha ao montar plano de promoção.'
+      console.error('Erro no plano dry-run W.Vetro:', error)
+      return NextResponse.json({ error: mensagem, recurso }, { status: 502 })
+    }
+  }
+
   if (recurso === 'auditoria-relacoes') {
     if (!neon.configurado) {
       return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
