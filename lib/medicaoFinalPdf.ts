@@ -208,6 +208,7 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
   if (!itensConcluidos.length) {
     doc.setFontSize(10); doc.setFont('helvetica', 'normal')
     doc.text('Nenhuma tipologia concluída para emissão.', 15, y)
+    y += 9
   }
 
   if (y > 264) { doc.addPage(); y = 18 }
