@@ -7,6 +7,7 @@ import {
   transformarPayloadWVetroEmStaging,
 } from '@/lib/wvetroMigracaoOperacionalServer'
 import { reconciliarPessoasWVetroComClientesAtlas } from '@/lib/wvetroReconciliacaoPessoasServer'
+import { statusNeonStaging, testarNeonStaging } from '@/lib/neonStaging'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -87,15 +88,45 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    const neon = statusNeonStaging()
+    if (!neon.configurado) {
+      return NextResponse.json(
+        {
+          error: 'Staging Neon não configurado. Defina NEON_STAGING_DATABASE_URL no ambiente servidor.',
+          gravacaoWvetro: false,
+          gravacaoAtlasOficial: false,
+          gravacaoStaging: false,
+        },
+        { status: 503 },
+      )
+    }
+
     if (process.env.WVETRO_MIGRACAO_OPERACIONAL_WRITE_ENABLED !== 'true') {
       return NextResponse.json(
         {
           error:
-            'Gravação de staging bloqueada. Use dryRun=true ou habilite WVETRO_MIGRACAO_OPERACIONAL_WRITE_ENABLED somente em ambiente de teste com as tabelas de staging aplicadas.',
+            'Gravação no Neon bloqueada. Use dryRun=true ou habilite WVETRO_MIGRACAO_OPERACIONAL_WRITE_ENABLED somente após aplicar o schema wvetro_migracao no Neon.',
           gravacaoWvetro: false,
           gravacaoAtlasOficial: false,
+          gravacaoStaging: false,
+          staging: { provedor: 'neon', ...neon },
         },
         { status: 423 },
+      )
+    }
+
+    const testeNeon = await testarNeonStaging()
+    if (!testeNeon.schemaPronto) {
+      return NextResponse.json(
+        {
+          error:
+            'Conexão Neon válida, porém o schema wvetro_migracao ainda não foi aplicado. Execute neon/migrations/20260930_wvetro_migracao_operacional_staging.sql.',
+          gravacaoWvetro: false,
+          gravacaoAtlasOficial: false,
+          gravacaoStaging: false,
+          staging: testeNeon,
+        },
+        { status: 503 },
       )
     }
 
@@ -118,6 +149,7 @@ export async function POST(req: NextRequest) {
       gravacaoWvetro: false,
       gravacaoAtlasOficial: false,
       gravacaoStaging: true,
+      staging: { provedor: 'neon', database: testeNeon.database },
       execucao: resultado,
       reconciliacao: {
         totais: reconciliacao.totais,
