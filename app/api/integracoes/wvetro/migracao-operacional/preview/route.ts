@@ -129,6 +129,159 @@ export async function GET(req: NextRequest) {
   const neon = statusNeonStaging()
   const recurso = String(req.nextUrl.searchParams.get('recurso') || 'mapa').trim()
 
+  if (recurso === 'staging-clientes') {
+    if (!neon.configurado) {
+      return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
+    }
+
+    try {
+      const sql = neonStaging()
+      const rows = await sql`
+        select
+          r.chave_externa,
+          r.payload->>'PessoaId' as pessoa_id,
+          r.payload->>'PessoaCodigo' as pessoa_codigo,
+          coalesce(
+            nullif(r.payload->>'PessoaRazaoSocial', ''),
+            nullif(r.payload->>'PessoaFantasia', ''),
+            nullif(r.payload->>'PessoaResponsavel', ''),
+            ''
+          ) as nome,
+          nullif(r.payload->>'PessoaCPFCNPJ', '') as cpf_cnpj,
+          nullif(r.payload->>'PessoaFone', '') as telefone,
+          nullif(r.payload->>'PessoaCelular', '') as celular,
+          nullif(r.payload->>'PessoaEmail', '') as email,
+          nullif(r.payload->>'CidadeNome', '') as cidade,
+          v.status,
+          v.metodo_match,
+          v.atlas_id::text as atlas_id,
+          v.confianca::text as confianca,
+          v.dados_reconciliacao
+        from wvetro_migracao.raw r
+        join wvetro_migracao.vinculos v
+          on v.recurso = r.recurso
+         and v.chave_externa = r.chave_externa
+         and v.entidade_atlas = 'cliente'
+        where r.recurso = 'pessoas_cliente'
+        order by
+          case
+            when v.status = 'sugerido' and v.metodo_match = 'contato_composto' then 1
+            when v.status = 'sugerido' and v.metodo_match = 'contato_parcial' then 2
+            when v.status = 'vinculado' then 3
+            when v.status = 'divergente' then 4
+            else 5
+          end,
+          nome,
+          r.chave_externa
+      `
+
+      const atlasIds = Array.from(
+        new Set(
+          rows
+            .map((row: any) => String(row.atlas_id || '').trim())
+            .filter(Boolean),
+        ),
+      )
+
+      const nomesAtlas = new Map<string, string>()
+      if (atlasIds.length > 0) {
+        const { data: clientesAtlas, error: clientesErro } = await supabaseAdmin
+          .from('clientes')
+          .select('id,nome')
+          .eq('empresa_id', usuario.empresa_id)
+          .in('id', atlasIds)
+
+        if (clientesErro) throw new Error(`Falha ao resolver clientes Atlas: ${clientesErro.message}`)
+        for (const cliente of clientesAtlas || []) {
+          nomesAtlas.set(String(cliente.id), String(cliente.nome || ''))
+        }
+      }
+
+      const classificar = (row: any) => {
+        if (row.status === 'vinculado') return 'vinculado_seguro'
+        if (row.status === 'divergente') return 'divergente'
+        if (row.status === 'novo') return 'novo'
+        if (row.status === 'sugerido' && row.metodo_match === 'contato_composto') return 'sugestao_forte'
+        if (row.status === 'sugerido') return 'revisao'
+        return 'revisao'
+      }
+
+      const filtro = String(req.nextUrl.searchParams.get('status') || 'todos').trim()
+      const busca = String(req.nextUrl.searchParams.get('busca') || '').trim().toLocaleUpperCase('pt-BR')
+      const pagina = Math.max(1, Number(req.nextUrl.searchParams.get('pagina') || 1) || 1)
+      const limite = Math.min(100, Math.max(10, Number(req.nextUrl.searchParams.get('limite') || 50) || 50))
+
+      const itens = rows.map((row: any) => {
+        const atlasId = String(row.atlas_id || '').trim() || null
+        const dados = row.dados_reconciliacao && typeof row.dados_reconciliacao === 'object'
+          ? row.dados_reconciliacao
+          : {}
+
+        return {
+          chaveExterna: String(row.chave_externa || ''),
+          pessoaId: String(row.pessoa_id || '').trim() || null,
+          pessoaCodigo: String(row.pessoa_codigo || '').trim() || null,
+          nome: String(row.nome || ''),
+          cpfCnpj: String(row.cpf_cnpj || '').trim() || null,
+          telefone: String(row.telefone || '').trim() || null,
+          celular: String(row.celular || '').trim() || null,
+          email: String(row.email || '').trim() || null,
+          cidade: String(row.cidade || '').trim() || null,
+          status: classificar(row),
+          clienteAtlasId: atlasId,
+          clienteAtlasNome: atlasId ? nomesAtlas.get(atlasId) || null : null,
+          metodo: String(row.metodo_match || '').trim() || null,
+          confianca: row.confianca == null ? null : Number(row.confianca),
+          motivos: Array.isArray((dados as any).motivos)
+            ? (dados as any).motivos.map((motivo: unknown) => String(motivo))
+            : [],
+        }
+      }).filter((item: any) => {
+        if (filtro !== 'todos' && item.status !== filtro) return false
+        if (!busca) return true
+
+        const textoBusca = [
+          item.nome,
+          item.cpfCnpj,
+          item.telefone,
+          item.celular,
+          item.email,
+          item.cidade,
+          item.clienteAtlasNome,
+          item.pessoaId,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleUpperCase('pt-BR')
+
+        return textoBusca.includes(busca)
+      })
+
+      const total = itens.length
+      const inicio = (pagina - 1) * limite
+      const paginaItens = itens.slice(inicio, inicio + limite)
+
+      return NextResponse.json({
+        ok: true,
+        recurso,
+        modo: 'somente-leitura',
+        gravacaoWvetro: false,
+        gravacaoAtlas: false,
+        filtro,
+        busca: busca || null,
+        pagina,
+        limite,
+        total,
+        paginas: Math.max(1, Math.ceil(total / limite)),
+        itens: paginaItens,
+      })
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Falha ao carregar fila do staging.'
+      console.error('Erro ao carregar fila de clientes W.Vetro no Neon:', error)
+      return NextResponse.json({ error: mensagem, recurso }, { status: 502 })
+    }
+  }
+
   if (recurso === 'mapa') {
     let testeNeon: unknown = null
     let resumoNeon: unknown = null
