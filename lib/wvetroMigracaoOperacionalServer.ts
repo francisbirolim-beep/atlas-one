@@ -2,8 +2,15 @@ import { createHash } from 'crypto'
 import { neonStaging } from '@/lib/neonStaging'
 import { WVetroOperacionalRecurso } from '@/lib/wvetroOperacionalMap'
 
+export type WVetroStagingRecurso =
+  | WVetroOperacionalRecurso
+  | 'pessoas_cliente'
+  | 'pessoas_fornecedor'
+  | 'pessoas_construtora'
+  | 'pessoas_funcionario'
+
 export type WVetroRegistroStaging = {
-  recurso: WVetroOperacionalRecurso
+  recurso: WVetroStagingRecurso
   chaveExterna: string
   dataReferencia: string | null
   payload: Record<string, unknown>
@@ -257,7 +264,7 @@ export function transformarPayloadWVetroEmStaging(
 }
 
 export async function criarExecucaoWVetroOperacional(params: {
-  recurso: WVetroOperacionalRecurso
+  recurso: WVetroStagingRecurso
   periodoInicio?: string | null
   periodoFim?: string | null
   criadoPorId?: string | null
@@ -289,10 +296,12 @@ export async function criarExecucaoWVetroOperacional(params: {
 export async function salvarStagingWVetroOperacional(params: {
   execucaoId: string
   recurso: WVetroOperacionalRecurso
+  recursoStaging?: WVetroStagingRecurso
   payload: unknown
 }): Promise<ExecucaoResumo> {
   const sql = neonStaging()
   const { registros, semChave } = transformarPayloadWVetroEmStaging(params.recurso, params.payload)
+  const recursoStaging = params.recursoStaging || params.recurso
   let novos = 0
   let repetidos = 0
   let erros = semChave.length
@@ -304,13 +313,13 @@ export async function salvarStagingWVetroOperacional(params: {
           execucao_id, recurso, chave_externa, data_referencia, versao, payload, payload_hash
         ) values (
           ${params.execucaoId}::uuid,
-          ${registro.recurso},
+          ${recursoStaging},
           ${registro.chaveExterna},
           ${registro.dataReferencia}::date,
           (
             select coalesce(max(versao), 0)::int + 1
             from wvetro_migracao.raw
-            where recurso = ${registro.recurso}
+            where recurso = ${recursoStaging}
               and chave_externa = ${registro.chaveExterna}
           ),
           ${JSON.stringify(registro.payload)}::jsonb,
@@ -335,7 +344,7 @@ export async function salvarStagingWVetroOperacional(params: {
           execucao_id, recurso, tipo, motivo, contexto, status
         ) values (
           ${params.execucaoId}::uuid,
-          ${params.recurso},
+          ${recursoStaging},
           'captura',
           'Registro sem chave externa segura.',
           ${JSON.stringify({ payload: item })}::jsonb,
