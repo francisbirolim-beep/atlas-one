@@ -106,9 +106,8 @@ type PlanoPromocaoItem = {
   bloqueados: number
   clientePromovidoRevisado: number
   clienteExistenteSeguro: number
-  bloqueadoSemDocumento: number
-  bloqueadoSemPessoaCl: number
-  bloqueadoDocAmbiguo: number
+  seguroViaCodigoNome: number
+  bloqueadoPessoaNaoResolvida: number
   bloqueadoSugestao: number
   bloqueadoClienteNovo: number
   bloqueadoSemVinculo: number
@@ -126,6 +125,13 @@ type PlanoPromocao = {
   }
   itens: PlanoPromocaoItem[]
   duplicacoesPedidoOrcamento: number
+  identidadeCliente: {
+    prioridade: string[]
+    codigoNomeValidado: boolean
+    paresCodigoNome: number
+    paresAmbiguos: number
+    regra: string
+  }
   politica: {
     prontoSignifica: string
     pedidoPrevalece: string
@@ -681,15 +687,14 @@ export default function MigracaoOperacionalWVetroPage() {
                         <th className="px-3 py-2">Cliente seguro</th>
                         <th className="px-3 py-2">Já promovido/revisado</th>
                         <th className="px-3 py-2">Cliente Atlas existente</th>
-                        <th className="px-3 py-2">Sem documento</th>
+                        <th className="px-3 py-2">Seguro via código + nome</th>
+                        <th className="px-3 py-2">Pessoa não resolvida</th>
                         <th className="px-3 py-2">Outros bloqueios</th>
                       </tr>
                     </thead>
                     <tbody>
                       {planoPromocao.itens.map(item => {
                         const outrosBloqueios =
-                          item.bloqueadoSemPessoaCl +
-                          item.bloqueadoDocAmbiguo +
                           item.bloqueadoSugestao +
                           item.bloqueadoClienteNovo +
                           item.bloqueadoSemVinculo
@@ -700,13 +705,22 @@ export default function MigracaoOperacionalWVetroPage() {
                             <td className="px-3 py-2 font-semibold text-emerald-700">{item.clienteSeguro}</td>
                             <td className="px-3 py-2">{item.clientePromovidoRevisado}</td>
                             <td className="px-3 py-2">{item.clienteExistenteSeguro}</td>
-                            <td className="px-3 py-2 text-amber-700">{item.bloqueadoSemDocumento}</td>
+                            <td className="px-3 py-2 text-blue-700">{item.seguroViaCodigoNome}</td>
+                            <td className="px-3 py-2 text-amber-700">{item.bloqueadoPessoaNaoResolvida}</td>
                             <td className="px-3 py-2 text-amber-700">{outrosBloqueios}</td>
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs leading-5 text-blue-800">
+                  <b>Identidade do cliente no W.Vetro:</b> primeiro usamos CPF/CNPJ único. Quando o
+                  documento não existe, o par <b>PessoaCodigo + nome exato</b> pode localizar a pessoa
+                  somente dentro do W.Vetro. Foram validados {planoPromocao.identidadeCliente.paresCodigoNome}
+                  pares e {planoPromocao.identidadeCliente.paresAmbiguos} ambiguidades. A associação ao
+                  Cliente 360 continua dependendo de um vínculo já existente no staging.
                 </div>
 
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-xs leading-5 text-red-800">
