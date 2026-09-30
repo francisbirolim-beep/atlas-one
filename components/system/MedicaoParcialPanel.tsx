@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight } from 'lucide-react'
+import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight, FileDown } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarItensMedicao } from '@/lib/medicaoFinal'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
@@ -247,9 +247,17 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
       {modo !== 'controle' && <section className="mx-auto w-full max-w-6xl px-3 pt-3 md:px-4">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="p-3 md:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><p className="text-sm font-bold uppercase tracking-[0.04em] text-slate-800">Lista de tipologias da obra</p><p className="mt-0.5 text-xs text-slate-500">Visualize e acesse o checklist técnico de cada tipologia</p></div>
-              <span className="text-xs font-medium text-slate-500">{pecas.length} tipologia(s) · {feitas} concluída(s) · {emAndamento} em andamento · {pendentes} pendente(s)</span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-[0.04em] text-slate-800">Lista de tipologias da obra</p>
+                <p className="mt-0.5 text-xs text-slate-500">Visualize e acesse o checklist técnico de cada tipologia</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-medium text-slate-500">{pecas.length} tipologia(s) · {feitas} concluída(s) · {emAndamento} em andamento · {pendentes} pendente(s)</span>
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas-medicao-exportar-pdf', { detail: { medicaoId } }))} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <FileDown size={14} /> Exportar PDF da Medição
+                </button>
+              </div>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_180px]">
               <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2"><Search size={15} className="text-slate-400" /><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar tipologia, ambiente..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label>
@@ -264,7 +272,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                 return (
                   <button key={peca.id} type="button" onClick={() => onSelecionarPeca?.(peca.id)} className="grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
                     <span className="text-xs font-bold text-slate-500">{String(peca.ordem + 1).padStart(2, '0')}</span>
-                    <span className="min-w-0"><span className="block text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : 'Linha / configuração conforme orçamento'}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
                     <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
                     <span className="hidden text-center text-xs text-slate-600 md:block">{peca.quantidade}</span>
                     <span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold md:inline-flex ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
