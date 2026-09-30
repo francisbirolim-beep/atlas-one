@@ -148,7 +148,10 @@ async function autenticarWVetro(force = false): Promise<string> {
   return token
 }
 
-async function requisicaoWVetro<T>(caminho: string, query?: Record<string, string | number | undefined>): Promise<T> {
+async function requisicaoWVetro<T>(
+  caminho: string,
+  query?: Record<string, string | number | undefined>,
+): Promise<T> {
   const cfg = credenciaisWVetro()
   const url = new URL(`${cfg.baseUrl}${caminho.startsWith('/') ? caminho : `/${caminho}`}`)
 
@@ -157,11 +160,15 @@ async function requisicaoWVetro<T>(caminho: string, query?: Record<string, strin
   })
 
   async function executar(token: string) {
-    return fetchWVetro(url, {
-      method: 'GET',
-      cache: 'no-store',
-      headers: { token, Accept: 'application/json' },
-    }, caminho)
+    return fetchWVetro(
+      url,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { token, Accept: 'application/json' },
+      },
+      caminho,
+    )
   }
 
   let resposta = await executar(await autenticarWVetro())
@@ -189,6 +196,10 @@ export async function listarLinhasWVetro<T = unknown>(): Promise<T> {
 
 export async function listarCoresWVetro<T = unknown>(): Promise<T> {
   return requisicaoWVetro<T>('/Produtos/cores')
+}
+
+export async function listarVidrosWVetro<T = unknown>(): Promise<T> {
+  return requisicaoWVetro<T>('/Produtos/vidros')
 }
 
 export async function buscarProdutoWVetro<T = unknown>(tipo: WVetroProdutoTipo, codigo: string): Promise<T> {
@@ -220,6 +231,44 @@ export async function listarPedidosWVetro<T = unknown>(inicio: string, fim: stri
   })
 }
 
+export async function buscarPedidoWVetro<T = unknown>(orcamentoId: string | number): Promise<T> {
+  return requisicaoWVetro<T>('/vendas/pedidoByKey', { Orcamentoid: orcamentoId })
+}
+
+export async function listarPessoasWVetro<T = unknown>(params: {
+  pessoaId?: string | number
+  tipoPessoa?: string
+} = {}): Promise<T> {
+  return requisicaoWVetro<T>('/pessoa/listPessoa', {
+    Pessoaid: params.pessoaId,
+    Tipopessoa: params.tipoPessoa,
+  })
+}
+
+export async function listarTiposPessoaWVetro<T = unknown>(): Promise<T> {
+  return requisicaoWVetro<T>('/pessoa/listTipo')
+}
+
+export async function listarVendedoresWVetro<T = unknown>(vendedorId?: string | number): Promise<T> {
+  return requisicaoWVetro<T>('/pessoa/listVendedor', {
+    Vendedorid: vendedorId,
+  })
+}
+
+export async function listarMetasWVetro<T = unknown>(params: {
+  vendedorId?: string | number
+  linhaId?: string | number
+  ano: number
+  mes: number
+}): Promise<T> {
+  return requisicaoWVetro<T>('/vendas/listMetas', {
+    Vendedorid: params.vendedorId,
+    Linhaid: params.linhaId,
+    Ano: params.ano,
+    Mes: String(params.mes).padStart(2, '0'),
+  })
+}
+
 export async function listarNotasEntradaWVetro<T = unknown>(inicio: string, fim: string): Promise<T> {
   return requisicaoWVetro<T>('/compras/nf', {
     Dtentradainicio: inicio,
@@ -229,4 +278,108 @@ export async function listarNotasEntradaWVetro<T = unknown>(inicio: string, fim:
 
 export async function listarItensNotaEntradaWVetro<T = unknown>(nfId: string | number): Promise<T> {
   return requisicaoWVetro<T>('/compras/itemNf', { Nfid: nfId })
+}
+
+export async function listarMovimentosEstoqueWVetro<T = unknown>(
+  inicio: string,
+  fim: string,
+  filtros: {
+    tipo?: string
+    produtoCodigo?: string
+    corNome?: string
+  } = {},
+): Promise<T> {
+  return requisicaoWVetro<T>('/estoque/movimentoEstoque', {
+    Dtmovimentoinicio: inicio,
+    Dtmovimentofinal: fim,
+    Tipo: filtros.tipo,
+    Produtocodigo: filtros.produtoCodigo,
+    Cornome: filtros.corNome,
+  })
+}
+
+export async function listarTitulosWVetro<T = unknown>(
+  inicio: string,
+  fim: string,
+  tituloTipo?: string,
+): Promise<T> {
+  return requisicaoWVetro<T>('/Financeiro/listTitulos', {
+    Dtvencimentoinicial: inicio,
+    Dtvencimentofinal: fim,
+    Titulotipo: tituloTipo,
+  })
+}
+
+export async function listarTitulosBaixadosWVetro<T = unknown>(
+  inicio: string,
+  fim: string,
+  tituloTipo?: string,
+): Promise<T> {
+  return requisicaoWVetro<T>('/Financeiro/listTitulosBaixados', {
+    Dtbaixainicial: inicio,
+    Dtbaixafinal: fim,
+    Titulotipo: tituloTipo,
+  })
+}
+
+export async function listarContasWVetro<T = unknown>(contaNro?: string): Promise<T> {
+  return requisicaoWVetro<T>('/Financeiro/listContas', { Contanro: contaNro })
+}
+
+export async function listarPlanoContasWVetro<T = unknown>(): Promise<T> {
+  return requisicaoWVetro<T>('/Financeiro/listPlanoContas')
+}
+
+export async function listarExtratoWVetro<T = unknown>(
+  inicio: string,
+  fim: string,
+  filtros: {
+    contaNro?: string
+    tipo?: string
+  } = {},
+): Promise<T> {
+  return requisicaoWVetro<T>('/Financeiro/listExtrato', {
+    Dtcontabilinicial: inicio,
+    Dtcontabilfinal: fim,
+    Contanro: filtros.contaNro,
+    Lancamentobancotipo: filtros.tipo,
+  })
+}
+
+export async function listarLotesProducaoWVetro<T = unknown>(params: {
+  loteNro?: string | number
+  inicio: string
+  fim: string
+  produzido?: boolean
+}): Promise<T> {
+  return requisicaoWVetro<T>('/producao/lotes', {
+    Loteproducaonro: params.loteNro,
+    Dtprogramadoinicio: params.inicio,
+    Dtprogramadofinal: params.fim,
+    Produzido: params.produzido === undefined ? undefined : String(params.produzido),
+  })
+}
+
+export async function listarProducaoProjetoWVetro<T = unknown>(params: {
+  loteNro?: string | number
+  inicio: string
+  fim: string
+}): Promise<T> {
+  return requisicaoWVetro<T>('/producao/producaoProjeto', {
+    Loteproducaonro: params.loteNro,
+    Dtproduzidoinicial: params.inicio,
+    Dtproduzidofinal: params.fim,
+  })
+}
+
+export async function listarInstalacoesWVetro<T = unknown>(params: {
+  programacaoNro?: string | number
+  inicio: string
+  fim: string
+}): Promise<T> {
+  return requisicaoWVetro<T>('/producao/instalacoes', {
+    Proginstalacaonro: params.programacaoNro,
+    Dtinicio: params.inicio,
+    Dtfinal: params.fim,
+  })
 }
