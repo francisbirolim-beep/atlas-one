@@ -10,6 +10,7 @@
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
     "@supabase/supabase-js": "^2.43.0",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "jspdf": "^2.5.1",
