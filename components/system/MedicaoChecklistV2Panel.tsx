@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2 } from 'lucide-react'
+import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2, ZoomIn } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
@@ -88,6 +88,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const [enviandoFoto, setEnviandoFoto] = useState<string | null>(null)
   const [categoriaFoto, setCategoriaFoto] = useState('visao_geral')
   const [mensagem, setMensagem] = useState('')
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [excluindoFoto, setExcluindoFoto] = useState(false)
   const [alvoExclusao, setAlvoExclusao] = useState<{ itemId: string; descricao: string; tipo: 'larguras' | 'alturas' | 'galeria'; url: string; fotoId?: string } | null>(null)
   const [motivoExclusao, setMotivoExclusao] = useState('')
@@ -366,7 +367,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                         <span className="text-[10px] font-medium text-blue-700">Foto da trena</span>
                       </div>
                       {item.foto_larguras_url ? (
-                        <img src={item.foto_larguras_url} alt="Foto da trena da largura" className="h-36 w-full rounded-lg object-cover" />
+                        <button type="button" onClick={e => { e.preventDefault(); setFotoAmpliada(item.foto_larguras_url || null) }} className="group relative block w-full"><img src={item.foto_larguras_url} alt="Foto da trena da largura" className="h-36 w-full rounded-lg object-cover" /><span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-white/95 px-2 py-1 text-[10px] font-semibold text-slate-700 shadow"><ZoomIn size={12} /> Ampliar</span></button>
                       ) : (
                         <div className="flex h-36 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-blue-200 bg-white text-xs text-blue-700">
                           {enviandoFoto === 'medida:largura' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
@@ -383,7 +384,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                         <span className="text-[10px] font-medium text-emerald-700">Foto da trena</span>
                       </div>
                       {item.foto_alturas_url ? (
-                        <img src={item.foto_alturas_url} alt="Foto da trena da altura" className="h-36 w-full rounded-lg object-cover" />
+                        <button type="button" onClick={e => { e.preventDefault(); setFotoAmpliada(item.foto_alturas_url || null) }} className="group relative block w-full"><img src={item.foto_alturas_url} alt="Foto da trena da altura" className="h-36 w-full rounded-lg object-cover" /><span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-white/95 px-2 py-1 text-[10px] font-semibold text-slate-700 shadow"><ZoomIn size={12} /> Ampliar</span></button>
                       ) : (
                         <div className="flex h-36 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-emerald-200 bg-white text-xs text-emerald-700">
                           {enviandoFoto === 'medida:altura' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
@@ -565,6 +566,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                 </div>
 
                 {mensagem && <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{mensagem}</p>}
+                {fotoAmpliada && <div role="dialog" aria-modal="true" className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4" onClick={() => setFotoAmpliada(null)}><div className="relative max-h-[92vh] max-w-5xl" onClick={e => e.stopPropagation()}><img src={fotoAmpliada} alt="Foto da trena ampliada" className="max-h-[88vh] max-w-full rounded-xl object-contain shadow-2xl" /><button type="button" onClick={() => setFotoAmpliada(null)} className="absolute right-2 top-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow">Fechar</button></div></div>}
               </div>
             )}
           </div>
