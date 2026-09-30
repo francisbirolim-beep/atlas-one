@@ -12,6 +12,7 @@ import { obterOuCriarCliente } from '@/lib/clientes'
 import type { Cliente } from '@/lib/tipos'
 
 type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
+const CACHE_CLIENTES_IDENTIFICAR = 'atlas_clientes_identificar_cache_v1'
 
 function temNomeCompleto(nome: string) {
   return nome.trim().split(/\s+/).filter(Boolean).length >= 2
@@ -24,27 +25,84 @@ function iniciais(nome: string) {
 export default function IdentificarCliente() {
   const [busca, setBusca] = useState('')
   const [clientes, setClientes] = useState<ClienteBusca[]>([])
-  const [carregando, setCarregando] = useState(true)
+  const [carregando, setCarregando] = useState(false)
   const [erroBusca, setErroBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteBusca | null>(null)
 
   useEffect(() => {
-    supabase.from('clientes').select('*').order('nome').limit(1000).then(({ data, error }) => {
-      if (error) {
-        setErroBusca('Não foi possível consultar os clientes agora. Atualize a página e tente novamente.')
-        setClientes([])
-      } else {
-        setErroBusca('')
-        setClientes((data || []) as ClienteBusca[])
-      }
+    const termo = busca.trim()
+    if (!termo) {
+      setClientes([])
       setCarregando(false)
-    })
-  }, [])
+      setErroBusca('')
+      return
+    }
+
+    let cancelado = false
+    const timer = window.setTimeout(async () => {
+      setCarregando(true)
+      setErroBusca('')
+
+      try {
+        const termoBusca = termo.replace(/[%,]/g, ' ').replace(/\s+/g, ' ').trim()
+        const primeiroTermo = termoBusca.split(' ')[0] || termoBusca
+        const padraoInicio = `${primeiroTermo}%`
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('id,nome,apelido,whatsapp,telefone,cidade,bairro,cpf_cnpj')
+          .or([
+            `nome.ilike.${padraoInicio}`,
+            `apelido.ilike.${padraoInicio}`,
+            `whatsapp.ilike.${padraoInicio}`,
+            `telefone.ilike.${padraoInicio}`,
+            `cidade.ilike.${padraoInicio}`,
+            `bairro.ilike.${padraoInicio}`,
+            `cpf_cnpj.ilike.${padraoInicio}`,
+          ].join(','))
+          .order('nome')
+          .limit(20)
+
+        if (cancelado) return
+
+        if (error) {
+          throw error
+        }
+
+        const encontradosBanco = ((data || []) as ClienteBusca[])
+          .filter((cliente) => correspondeBuscaAtlas(
+            termo, cliente.nome, cliente.apelido, cliente.whatsapp, cliente.telefone,
+            cliente.cidade, cliente.bairro, cliente.cpf_cnpj,
+          ))
+          .slice(0, 8)
+
+        setClientes(encontradosBanco)
+        try { localStorage.setItem(CACHE_CLIENTES_IDENTIFICAR, JSON.stringify(encontradosBanco)) } catch {}
+      } catch {
+        if (cancelado) return
+        setErroBusca('Não foi possível consultar os clientes agora. Atualize a página e tente novamente.')
+        try {
+          const cache = JSON.parse(localStorage.getItem(CACHE_CLIENTES_IDENTIFICAR) || '[]')
+          setClientes(Array.isArray(cache) ? (cache as ClienteBusca[]).filter((cliente) => correspondeBuscaAtlas(
+            termo, cliente.nome, cliente.apelido, cliente.whatsapp, cliente.telefone,
+            cliente.cidade, cliente.bairro, cliente.cpf_cnpj,
+          )).slice(0, 8) : [])
+        } catch {
+          setClientes([])
+        }
+      } finally {
+        if (!cancelado) setCarregando(false)
+      }
+    }, 180)
+
+    return () => {
+      cancelado = true
+      window.clearTimeout(timer)
+    }
+  }, [busca])
 
   const encontrados = useMemo(() => {
-    if (busca.trim().length < 2) return []
     return clientes.filter((cliente) => correspondeBuscaAtlas(
       busca, cliente.nome, cliente.apelido, cliente.whatsapp, cliente.telefone,
       cliente.cidade, cliente.bairro, cliente.cpf_cnpj,
@@ -134,10 +192,10 @@ export default function IdentificarCliente() {
           <h2 className="mt-2 text-xl font-bold text-slate-900">Qual é o nome do cliente?</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">Comece a digitar o nome: os clientes já cadastrados aparecem abaixo. Clique em um deles para escolher o que fazer. Se o cliente ainda não existir, cadastre pelo menos nome e sobrenome.</p>
           <div className="relative mt-5"><Search size={18} className="absolute left-3 top-3.5 text-slate-400" /><input autoFocus value={busca} onChange={(e) => { setBusca(e.currentTarget.value); setErro('') }} placeholder="Digite nome e sobrenome..." className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-3 text-base outline-none transition focus:border-brand-navy focus:ring-2 focus:ring-brand-navy/10" /></div>
-          {carregando ? <div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> Carregando clientes...</div> : null}
+          {carregando ? <div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> Buscando clientes...</div> : null}
           {erroBusca ? <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erroBusca}</p> : null}
           {encontrados.length > 0 ? <div className="mt-3 overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm">{encontrados.map((cliente) => <button key={cliente.id} type="button" onClick={() => setClienteSelecionado(cliente)} className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50"><span className="rounded-lg bg-emerald-50 p-2 text-emerald-700"><UserCheck size={16} /></span><span className="min-w-0 flex-1"><strong className="block text-sm text-slate-800">{cliente.nome}</strong><span className="block truncate text-xs text-slate-500">{[cliente.cidade, cliente.bairro, cliente.whatsapp || cliente.telefone].filter(Boolean).join(' • ') || 'Escolher ação'}</span></span><span className="text-xs font-semibold text-brand-navy">Abrir</span></button>)}</div> : null}
-          {busca.trim().length >= 2 && encontrados.length === 0 && !carregando && !erroBusca ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-900">Nenhum cliente cadastrado com esse nome</p><button type="button" disabled={salvando} onClick={() => void cadastrarEAbrir()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{salvando ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />} Cadastrar e abrir Cliente 360</button></div> : null}
+          {busca.trim().length >= 1 && encontrados.length === 0 && !carregando && !erroBusca ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-900">Nenhum cliente cadastrado com esse nome</p><button type="button" disabled={salvando} onClick={() => void cadastrarEAbrir()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{salvando ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />} Cadastrar e abrir Cliente 360</button></div> : null}
           {erro ? <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p> : null}
         </section>
       </main>
