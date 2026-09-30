@@ -30,6 +30,7 @@ import {
   WVetroOperacionalRecurso,
 } from '@/lib/wvetroOperacionalMap'
 import { reconciliarPessoasWVetroComClientesAtlas } from '@/lib/wvetroReconciliacaoPessoasServer'
+import { statusNeonStaging, testarNeonStaging } from '@/lib/neonStaging'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -240,15 +241,33 @@ export async function GET(req: NextRequest) {
   }
 
   const configuracao = statusConfiguracaoWVetro()
+  const neon = statusNeonStaging()
   const recurso = String(req.nextUrl.searchParams.get('recurso') || 'mapa').trim()
 
   if (recurso === 'mapa') {
+    let testeNeon: unknown = null
+    if (req.nextUrl.searchParams.get('testarNeon') === '1' && neon.configurado) {
+      try {
+        testeNeon = await testarNeonStaging()
+      } catch (error) {
+        testeNeon = {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Falha ao testar Neon.',
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       modo: 'somente-leitura',
       gravacaoWvetro: false,
       gravacaoAtlas: false,
       configuracao,
+      staging: {
+        provedor: 'neon',
+        ...neon,
+        teste: testeNeon,
+      },
       recursos: WVETRO_MIGRACAO_OPERACIONAL_MAPA,
     })
   }
