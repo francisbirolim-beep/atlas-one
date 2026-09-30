@@ -66,21 +66,22 @@ export async function POST(req: NextRequest) {
   try {
     const usuario = await autenticar(req)
     if (!usuario) return NextResponse.json({ error: 'Sem acesso à IA Comercial' }, { status: 403 })
+    const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
 
     const body = await req.json()
     const pergunta = String(body?.pergunta || '').trim()
     if (!pergunta) return NextResponse.json({ error: 'Digite uma pergunta' }, { status: 400 })
     if (pergunta.length > 4000) return NextResponse.json({ error: 'Pergunta muito longa' }, { status: 400 })
 
-    const openCodeStatus = statusOpenCode()
+    const openCodeStatus = await statusOpenCode()
     if (!openCodeStatus.configurado) {
       return NextResponse.json(
         {
-          error: 'IA ainda não ativada: falta configurar a conexão segura com o OpenCode no ambiente da Vercel.',
+          error: 'IA ainda não ativada: o gateway seguro do OpenCode não está disponível.',
           codigo: 'OPENCODE_CONFIG_MISSING',
           detalhe: {
             baseUrl: openCodeStatus.baseUrlConfigurada,
-            senha: openCodeStatus.senhaConfigurada,
+            autenticacao: openCodeStatus.modoAutenticacao,
           },
         },
         { status: 503 }
@@ -149,6 +150,7 @@ export async function POST(req: NextRequest) {
     let resultadoIA: Awaited<ReturnType<typeof consultarOpenCode>>
     try {
       resultadoIA = await consultarOpenCode({
+        accessToken,
         sessionId: sessionIdInformada,
         tituloSessao: `Atlas Comercial - ${usuario.nome || usuario.id}`,
         system: instructions,
