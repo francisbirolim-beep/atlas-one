@@ -33,6 +33,6 @@ export default function MedicaoPecasPanel({ medicaoId }: { medicaoId: string }) 
       </div>
     )}
 
-    <MedicaoChecklistV2Panel medicaoId={medicaoId} selecao={selecao} />
+    {selecao && <MedicaoChecklistV2Panel key={selecao.itemId} medicaoId={medicaoId} selecao={selecao} />}
   </>
 }

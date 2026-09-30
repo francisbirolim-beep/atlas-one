@@ -7,12 +7,13 @@ import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
 import { excluirFotoComHistorico, listarCorrecoesFoto, type CorrecaoFoto } from '@/lib/medicaoFotoCorrecoes'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
-import MedicaoPadroesFixosPanel from '@/components/system/MedicaoPadroesFixosPanel'
+import { referenciaDaTipologia } from '@/lib/medicaoChecklistRegras'
+import MedicaoCroqui from './MedicaoCroqui'
+import MedicaoAdicionarCampo from './MedicaoAdicionarCampo'
 import {
   adicionarFotoMedicaoV2,
   camposDoItemV2,
   carregarChecklistMedicaoV2,
-  herdarMedidasFinaisDoOrcamento,
   salvarMedidasFixasItemV2,
   salvarRespostaChecklistV2,
   statusItemChecklistV2,
@@ -95,14 +96,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const [historicoFotos, setHistoricoFotos] = useState<CorrecaoFoto[] | null>(null)
   const [erroHistorico, setErroHistorico] = useState('')
   const [carregando, setCarregando] = useState(true)
-  const herancaVerificada = useRef<string | null>(null)
 
   const carregar = useCallback(async () => {
-    if (herancaVerificada.current !== medicaoId) {
-      await herdarMedidasFinaisDoOrcamento(medicaoId)
-      herancaVerificada.current = medicaoId
-    }
-
     const novo = await carregarChecklistMedicaoV2(medicaoId)
     setDados(novo)
     setItemId(atual => atual && novo.itens.some(i => i.id === atual) ? atual : (novo.itens[0]?.id || ''))
@@ -124,7 +119,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     painelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     painelRef.current?.focus({ preventScroll: true })
   }, [selecao, carregando, dados.itens])
-  const campos = useMemo(() => item ? camposDoItemV2(dados.campos, item) : [], [dados.campos, item])
+  const campos = useMemo(() => item ? camposDoItemV2(dados.campos, item, dados.respostas) : [], [dados.campos, dados.respostas, item])
   const fotosItem = useMemo(() => dados.fotos.filter(f => f.item_id === itemId), [dados.fotos, itemId])
 
   useEffect(() => {
@@ -141,7 +136,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       altura_meio_mm: textoValor(item.altura_meio_mm),
       altura_esquerda_mm: textoValor(item.altura_esquerda_mm),
     })
-  }, [item])
+  }, [item?.id])
 
   useEffect(() => {
     if (!item) return
@@ -181,6 +176,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
 
     setMensagem('Medidas finais salvas.')
     await carregar()
+    window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
   async function enviarFotoTrena(eixo: 'largura' | 'altura', file: File) {
@@ -207,6 +203,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
 
     setMensagem(eixo === 'largura' ? 'Foto da largura registrada.' : 'Foto da altura registrada.')
     await carregar()
+    window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
   async function salvarCampo(campo: CampoChecklistV2, valorForcado?: string, fotoUrls: string[] = []) {
@@ -223,12 +220,13 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     }
     setMensagem(`“${campo.nome}” salvo.`)
     await carregar()
+    window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
   async function enviarFotoCampo(campo: CampoChecklistV2, file: File) {
     if (!item) return
     setEnviandoFoto(`campo:${campo.chave}`)
-    const url = await uploadFoto(file)
+    const url = await uploadFotoMedicao(file)
     if (!url) {
       setEnviandoFoto(null)
       setMensagem('Não foi possível enviar a foto.')
@@ -244,7 +242,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     if (!item) return
     setEnviandoFoto('categoria')
     setMensagem('')
-    const url = await uploadFoto(file)
+    const url = await uploadFotoMedicao(file)
     if (!url) {
       setEnviandoFoto(null)
       setMensagem('Não foi possível enviar a foto.')
@@ -258,6 +256,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     }
     setMensagem('Foto registrada na peça.')
     await carregar()
+    window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
   function prepararExclusao(tipo: 'larguras' | 'alturas' | 'galeria', url: string, fotoId?: string) {
@@ -340,7 +339,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
               <div className="mt-4 space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{item.descricao || item.tipo_esquadria}</p>
+                    <p className="text-sm font-semibold text-slate-800">{String(dados.itens.findIndex(i => i.id === item.id) + 1).padStart(2, '0')} · {item.descricao || item.tipo_esquadria}</p>
+                    <p className="mt-1 text-xs text-slate-500">Ambiente: {item.ambiente || '—'} · Quantidade: {item.quantidade} · Medido por: {item.medido_por_nome || usuario?.nome || '—'}</p>
                     <p className="text-xs text-slate-500">
                       {medidasCompletas ? 'Medidas finais completas' : 'Medidas finais pendentes'}
                       {obrigatorios.length ? ` · ${obrigatoriosRespondidos}/${obrigatorios.length} campos de checklist obrigatórios` : ''}
@@ -430,6 +430,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                       {(['largura_baixo_mm', 'largura_meio_mm', 'largura_cima_mm'] as const).map((chave, indice) => (
                         <input
                           key={chave}
+                          aria-label={chave}
                           type="number"
                           inputMode="numeric"
                           min="1"
@@ -449,6 +450,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                       {(['altura_direita_mm', 'altura_meio_mm', 'altura_esquerda_mm'] as const).map((chave, indice) => (
                         <input
                           key={chave}
+                          aria-label={chave}
                           type="number"
                           inputMode="numeric"
                           min="1"
@@ -462,6 +464,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                     </div>
                   </div>
 
+                  <MedicaoCroqui item={item} medidas={medidas} />
+                  <p className="text-xs font-semibold text-slate-500">Referência: vista {referenciaDaTipologia(item)} do ambiente</p>
                   <div className="flex justify-end">
                     <button
                       type="button"
@@ -475,7 +479,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                   </div>
                 </div>
 
-                <MedicaoPadroesFixosPanel key={item.id} itemId={item.id} />
+                <MedicaoAdicionarCampo item={item} onAdicionado={carregar} />
 
                 {campos.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-400">Nenhum campo de checklist configurado para esta tipologia.</p>
@@ -491,12 +495,13 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                         const opcoes = Array.isArray(campo.opcoes) ? campo.opcoes.filter(v => typeof v === 'string') as string[] : []
                         const valor = valores[campo.chave] ?? ''
                         return (
-                          <div key={campo.id} className="rounded-lg border border-slate-200 p-3">
+                          <div key={campo.id || campo.chave} className="rounded-lg border border-slate-200 p-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <label className="text-sm font-medium text-slate-700">{campo.nome}{campo.obrigatorio && <span className="ml-1 text-red-500">*</span>}</label>
                               {salvando === campo.chave && <Loader2 size={14} className="animate-spin text-slate-400" />}
                             </div>
 
+                            {campo.tipo_valor === 'foto' && valor && <button type="button" onClick={() => setFotoAmpliada(valor)} className="mb-2 text-xs text-blue-700">Abrir foto</button>}
                             {campo.tipo_valor === 'foto' ? (
                               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-200 px-3 py-3 text-xs font-medium text-slate-500 hover:border-slate-300">
                                 {enviandoFoto === `campo:${campo.chave}` ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
@@ -554,7 +559,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                       {fotosItem.map(foto => (
                         <div key={foto.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                          <img src={foto.url} alt={foto.legenda || foto.categoria} className="h-28 w-full object-cover" />
+                          <button type="button" aria-label="Ampliar foto da peça" onClick={() => setFotoAmpliada(foto.url)} className="block w-full"><img src={foto.url} alt={foto.legenda || foto.categoria} className="h-28 w-full object-cover" /></button>
                           <div className="flex items-center justify-between gap-1 px-2 py-1.5">
                             <span className="truncate text-[10px] text-slate-500">{foto.categoria.replace('checklist:', 'Checklist: ')}</span>
                             {!foto.categoria.startsWith('checklist:') && <button type="button" disabled={excluindoFoto} aria-label="Excluir foto da peça" onClick={() => prepararExclusao('galeria', foto.url, foto.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight, FileDown } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
+import { carregarChecklistMedicaoV2, statusItemChecklistV2 } from '@/lib/medicaoChecklistV2'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import {
@@ -84,10 +85,11 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   const [filtroTipologia, setFiltroTipologia] = useState('todas')
 
   const carregar = useCallback(async () => {
-    const [estado, itens] = await Promise.all([
+    const [estado, checklist] = await Promise.all([
       carregarEstadoParcialMedicao(medicaoId),
-      listarItensMedicao(medicaoId),
+      carregarChecklistMedicaoV2(medicaoId),
     ])
+    const itens = checklist.itens
 
     const instante = Date.now()
     setEventos(estado.eventos)
@@ -98,18 +100,19 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
     setPecas(itens.map(item => {
       const descricao = item.descricao || item.tipo_outro_texto || item.tipo_esquadria || 'Peça'
       const partes = separarDescricao(descricao)
+      const status = statusItemChecklistV2(item, checklist.campos, checklist.respostas)
       return {
         id: item.id,
         descricao,
         tipologia: partes.tipologia,
         ambiente: item.ambiente?.trim() || partes.ambiente,
-        medido: Boolean(item.medido),
-        iniciado: itemIniciado(item),
+        medido: status === 'concluida',
+        iniciado: status !== 'pendente',
         quantidade: Math.max(1, Number(item.quantidade || 1)),
         ordem: Number(item.ordem || 0),
         medidoPor: item.medido_por_nome || '',
         atualizadoEm: item.medido_em || item.updated_at || '',
-        status: item.medido ? 'concluida' : itemIniciado(item) ? 'em_andamento' : 'pendente',
+        status,
       }
     }))
     setCarregando(false)
@@ -132,7 +135,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
     return () => { window.clearInterval(timer); window.removeEventListener('atlas-medicao-atualizada', atualizar) }
   }, [carregar])
 
-  const tempoExibido = parcial ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
+  const tempoExibido = parcial || !eventos.some(evento => evento.tipo === 'inicio') ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
   const feitas = pecas.filter(peca => peca.status === 'concluida').length
   const emAndamento = pecas.filter(peca => peca.status === 'em_andamento').length
   const pendentes = pecas.filter(peca => peca.status === 'pendente').length
@@ -168,7 +171,6 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   if (carregando) {
     return <section className={embedded ? "w-full" : "mx-auto w-full max-w-6xl px-3 pt-3 md:px-4"}><div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white" /></section>
   }
-  if (!iniciada) return null
 
   if (modo === 'controle' && embedded) {
     return (
@@ -184,15 +186,19 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
             <div className="rounded-lg bg-blue-50 px-2 py-2 text-center"><p className="text-lg font-bold text-blue-700">{emAndamento}</p><p className="text-[10px] font-medium text-blue-700">Em andamento</p></div>
             <div className="rounded-lg bg-slate-100 px-2 py-2 text-center"><p className="text-lg font-bold text-slate-700">{pendentes}</p><p className="text-[10px] font-medium text-slate-600">Pendentes</p></div>
           </div>
-          <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+          <details className="mt-auto pt-4"><summary className="cursor-pointer text-xs font-semibold text-slate-500">Ações e histórico</summary><div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
               <History size={14} /> Histórico
             </button>
-            <button type="button" onClick={() => void alternarParcial()} disabled={processando} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
               {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
               {parcial ? 'Retomar medição' : 'Salvar parcial'}
             </button>
           </div>
+          {mostrarHistorico && <div className="mt-2 space-y-2">{[...eventos].reverse().map(evento => <p key={evento.id} className="text-xs text-slate-600">{rotuloEvento(evento)} · {formatarData(evento.data)} · {evento.usuario || "—"}</p>)}</div>}
+          {mensagem && <p role="status" className="mt-2 text-xs text-emerald-700">{mensagem}</p>}
+          {erro && <p role="alert" className="mt-2 text-xs text-red-700">{erro}</p>}
+          </details>
         </div>
       </section>
     )
@@ -218,7 +224,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                 <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
                   <History size={14} /> Histórico
                 </button>
-                <button type="button" onClick={() => void alternarParcial()} disabled={processando} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
                   {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
                   {parcial ? 'Retomar medição' : 'Salvar medição parcial'}
                 </button>
@@ -279,8 +285,8 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                 const status = peca.medido ? 'Concluída' : peca.iniciado ? 'Em andamento' : 'Pendente'
                 return (
                   <button key={peca.id} type="button" onClick={() => onSelecionarPeca?.(peca.id)} className="grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
-                    <span className="text-xs font-bold text-slate-500">{String(peca.ordem + 1).padStart(2, '0')}</span>
-                    <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : 'Linha / configuração conforme orçamento'}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                    <span className="text-xs font-bold text-slate-500">{String(pecas.findIndex(p => p.id === peca.id) + 1).padStart(2, '0')}</span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : ''}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
                     <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
                     <span className="hidden text-center text-xs text-slate-600 md:block">{peca.quantidade}</span>
                     <span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold md:inline-flex ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>

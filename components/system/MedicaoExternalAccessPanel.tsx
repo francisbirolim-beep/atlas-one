@@ -149,7 +149,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId, embedded = false
     await carregar()
   }
 
-  if (!visivel) return null
+  if (!visivel) return embedded ? <section className="h-full min-w-0"><div className="flex h-full min-h-[240px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Compartilhar Medição Final</p><p className="mt-4 text-xs text-slate-500">Seu usuário não possui acesso ao compartilhamento desta medição.</p></div></section> : null
 
   if (embedded) {
     return (
@@ -162,8 +162,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId, embedded = false
             </div>
             <ShieldCheck size={19} className="shrink-0 text-emerald-600" />
           </div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">Selecione quem vai medir e compartilhe o acesso desta Medição Final.</p>
-
+          <div className="mt-3 flex gap-2"><input aria-label="Link de acesso da medição" readOnly value={urlNova} placeholder="Gere um link para compartilhar" className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-600" /><button type="button" aria-label="Copiar link" disabled={!urlNova} onClick={() => void copiar()} className="rounded-lg border border-slate-200 px-2.5 text-slate-600 disabled:opacity-40"><Copy size={14} /></button></div>
           {podeEditar ? (
             <div className="mt-4 space-y-2">
               <input
@@ -184,13 +183,8 @@ export default function MedicaoExternalAccessPanel({ medicaoId, embedded = false
             <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Acesso somente para consulta.</p>
           )}
 
-          <div className="mt-auto pt-3">
-            {urlNova ? (
-              <div className="flex gap-2"><input readOnly value={urlNova} className="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-[10px] text-slate-600" /><button onClick={() => void copiar()} className="rounded-lg bg-emerald-700 px-2.5 text-white"><Copy size={13} /></button></div>
-            ) : (
-              <p className="text-[11px] text-slate-400">Links gerados: {acessos.length}</p>
-            )}
-          </div>
+          {mensagem && <p role="status" className="mt-2 text-xs text-slate-600">{mensagem}</p>}
+          <details className="mt-auto pt-3"><summary className="cursor-pointer text-xs font-semibold text-slate-500">Links gerados ({acessos.length})</summary><div className="mt-2 space-y-2">{acessos.map(acesso => <div key={acesso.id} className="flex flex-wrap items-center justify-between gap-2 text-xs"><span>{acesso.nome_convidado || 'Medidor externo'} · {acesso.revogado_em ? 'Revogado' : acesso.expira_em && new Date(acesso.expira_em).getTime() < Date.now() ? 'Expirado' : 'Ativo'}</span>{podeEditar && !acesso.revogado_em && <button type="button" onClick={() => void revogar(acesso.id)} className="text-red-700">Revogar</button>}</div>)}</div></details>
         </div>
       </section>
     )

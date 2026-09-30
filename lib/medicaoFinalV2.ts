@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { MedicaoItem, Usuario } from './tipos'
+import { carregarChecklistMedicaoV2, statusItemChecklistV2, validarChecklistObrigatorioV2 } from './medicaoChecklistV2'
 
 export type ResumoMedicaoV2 = {
   totalLinhas: number
@@ -57,26 +58,8 @@ export type ResultadoTransicaoMedicao = {
 }
 
 export async function carregarResumoMedicaoV2(medicaoId: string): Promise<ResumoMedicaoV2> {
-  const { data, error } = await supabase
-    .from('medicao_itens')
-    .select('*')
-    .eq('medicao_id', medicaoId)
-    .order('ordem', { ascending: true })
-
-  if (error || !data) {
-    console.error('Erro ao carregar resumo da Medicao Final V2:', error)
-    return {
-      totalLinhas: 0,
-      totalPecas: 0,
-      pecasMedidas: 0,
-      percentual: 0,
-      medidores: [],
-      itensAgrupados: [],
-      itensAgrupadosMedidos: [],
-    }
-  }
-
-  const itens = data as MedicaoItem[]
+  const dados = await carregarChecklistMedicaoV2(medicaoId)
+  const itens = dados.itens.map(item => ({ ...item, medido: statusItemChecklistV2(item, dados.campos, dados.respostas) === 'concluida' }))
   const totalPecas = itens.reduce((total, item) => total + Math.max(1, item.quantidade || 1), 0)
 
   // Regra conservadora: uma linha antiga com quantidade 3 e apenas um conjunto
@@ -231,6 +214,8 @@ export async function iniciarMedicaoFinal(
 export async function concluirMedicaoFinal(
   medicaoId: string,
 ): Promise<ResultadoTransicaoMedicao> {
+  const checklist = await validarChecklistObrigatorioV2(medicaoId)
+  if (!checklist.ok) return { ok: false, mensagem: `Complete as medidas e ${checklist.faltantes.length} campo(s) obrigatório(s).` }
   const [{ data: itens, error: erroItens }, { count: pendenciasAbertas, error: erroPendencias }] = await Promise.all([
     supabase
       .from('medicao_itens')

@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { ItemEsquadria, MedicaoItem, Usuario } from './tipos'
 import { listarItensMedicao } from './medicaoFinal'
+import { camposAplicaveis, respostaDoCampo, valorValidoChecklist } from './medicaoChecklistRegras'
 
 export type CampoChecklistV2 = {
   id: string
@@ -181,14 +182,14 @@ export function statusItemChecklistV2(
   campos: CampoChecklistV2[],
   respostas: RespostaChecklistV2[],
 ): 'pendente' | 'em_andamento' | 'concluida' {
-  const camposAtivos = camposDoItemV2(campos, item)
+  const camposAtivos = camposDoItemV2(campos, item, respostas)
   const obrigatorios = camposAtivos.filter(c => c.obrigatorio)
   const medidasCompletas = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(item[campo]))
-  const checklistCompleto = obrigatorios.every(campo => valorChecklistPreenchido(valorRespostaItemV2(item, campo, respostas)))
+  const checklistCompleto = obrigatorios.every(campo => valorValidoChecklist(campo, valorRespostaItemV2(item, campo, respostas)))
   if (medidasCompletas && checklistCompleto) return 'concluida'
 
   const iniciouMedidas = CAMPOS_MEDIDA_FIXA.some(campo => medidaPositiva(item[campo]))
-  const iniciouChecklist = camposAtivos.some(campo => valorChecklistPreenchido(valorRespostaItemV2(item, campo, respostas)))
+  const iniciouChecklist = camposAtivos.some(campo => valorValidoChecklist(campo, valorRespostaItemV2(item, campo, respostas)))
   const iniciou = iniciouMedidas || iniciouChecklist || Boolean(
     item.foto_larguras_url || item.foto_alturas_url || item.observacoes_medicao
   )
@@ -208,8 +209,6 @@ async function sincronizarStatusItemChecklistV2(
   const agora = new Date().toISOString()
   const { error } = await supabase.from('medicao_itens').update({
     medido: concluida,
-    status_medicao: concluida ? 'concluida' : 'rascunho',
-    updated_at: agora,
     medido_em: concluida ? (item.medido_em || agora) : null,
     medido_por_id: concluida ? (usuario?.id || item.medido_por_id || null) : null,
     medido_por_nome: concluida ? (usuario?.nome || item.medido_por_nome || null) : null,
@@ -239,7 +238,6 @@ export async function salvarMedidasFixasItemV2(
     .from('medicao_itens')
     .update({
       ...normalizadas,
-      updated_at: agora,
     })
     .eq('id', itemId)
 
@@ -280,20 +278,12 @@ export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<Dad
   }
 }
 
-export function camposDoItemV2(campos: CampoChecklistV2[], item: MedicaoItem): CampoChecklistV2[] {
-  return campos
-    .filter(campo => campo.ativo && (campo.tipo_esquadria == null || campo.tipo_esquadria === item.tipo_esquadria))
-    .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+export function camposDoItemV2(campos: CampoChecklistV2[], item: MedicaoItem, respostas: RespostaChecklistV2[] = []): CampoChecklistV2[] {
+  return camposAplicaveis(campos, item, respostas)
 }
 
-export function valorRespostaItemV2(
-  item: MedicaoItem,
-  campo: CampoChecklistV2,
-  respostas: RespostaChecklistV2[],
-): unknown {
-  const resposta = respostas.find(r => r.item_id === item.id && r.campo_chave === campo.chave)
-  if (resposta && resposta.valor !== undefined && resposta.valor !== null) return resposta.valor
-  return item.campos_extras?.[campo.chave]
+export function valorRespostaItemV2(item: MedicaoItem, campo: CampoChecklistV2, respostas: RespostaChecklistV2[]): unknown {
+  return respostaDoCampo(item, campo, respostas)
 }
 
 export async function salvarRespostaChecklistV2(
@@ -311,7 +301,7 @@ export async function salvarRespostaChecklistV2(
     .upsert({
       medicao_id: medicaoId,
       item_id: item.id,
-      campo_id: campo.id,
+      campo_id: campo.id || null,
       campo_chave: campo.chave,
       valor,
       observacao: observacao || null,
@@ -329,7 +319,9 @@ export async function salvarRespostaChecklistV2(
 
   // Compatibilidade: o formulario legado ainda le `medicao_itens.campos_extras`.
   // Mantemos um espelho para que checklist V2 e tela de medicao nao divirjam.
-  const extras = { ...(item.campos_extras || {}), [campo.chave]: valor as any }
+  const { data: atual, error: erroAtual } = await supabase.from('medicao_itens').select('campos_extras').eq('id', item.id).single()
+  if (erroAtual) return false
+  const extras = { ...(atual?.campos_extras || {}), [campo.chave]: valor as any }
   const { error: erroLegado } = await supabase
     .from('medicao_itens')
     .update({ campos_extras: extras })
@@ -383,10 +375,11 @@ export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<
   const faltantes: { itemId: string; itemDescricao: string; campo: string }[] = []
 
   for (const item of dados.itens) {
-    const campos = camposDoItemV2(dados.campos, item).filter(c => c.obrigatorio)
+    for (const chave of CAMPOS_MEDIDA_FIXA) if (!medidaPositiva(item[chave])) faltantes.push({ itemId: item.id, itemDescricao: item.descricao || item.tipo_esquadria, campo: chave })
+    const campos = camposDoItemV2(dados.campos, item, dados.respostas).filter(c => c.obrigatorio)
     for (const campo of campos) {
       const valor = valorRespostaItemV2(item, campo, dados.respostas)
-      const vazio = valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0)
+      const vazio = !valorValidoChecklist(campo, valor)
       if (vazio) {
         faltantes.push({
           itemId: item.id,
@@ -398,4 +391,19 @@ export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<
   }
 
   return { ok: faltantes.length === 0, faltantes }
+}
+
+export async function adicionarCampoChecklistV2(item: MedicaoItem, nome: string, tipo: 'sim_nao' | 'medida' | 'texto' | 'numero' | 'selecao', obrigatorio: boolean, escopo: 'peca' | 'tipologia' | 'geral', opcoes: string[] = []) {
+  if (!nome.trim() || (tipo === 'selecao' && opcoes.length === 0)) return false
+  const { error } = await supabase.from('tipologia_campos_extras').insert({
+    tipo_esquadria: escopo === 'geral' ? null : item.tipo_esquadria,
+    chave: `campo_${crypto.randomUUID().replace(/-/g, '')}`,
+    nome: nome.trim() + (tipo === 'medida' ? ' (mm)' : ''),
+    tipo_valor: tipo === 'medida' || tipo === 'numero' ? 'numero' : 'texto',
+    obrigatorio, ativo: true, ordem: 100,
+    secao: 'Itens adicionados em campo',
+    opcoes: tipo === 'sim_nao' ? ['sim', 'nao'] : tipo === 'selecao' ? opcoes : [],
+    regra_condicional: escopo === 'peca' ? { item_id: item.id } : {},
+  })
+  return !error
 }

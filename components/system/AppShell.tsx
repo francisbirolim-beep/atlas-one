@@ -50,7 +50,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Medição Final</h1>
               </section>
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
-              <div className="mx-auto grid w-full max-w-6xl gap-3 px-3 pt-3 lg:grid-cols-3 md:px-4">
+              <div className="mx-auto grid w-full max-w-6xl atlas-medicao-overview gap-3 px-3 pt-3 lg:grid-cols-3 md:px-4">
                 <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} embedded />
                 <MedicaoParcialPanel medicaoId={medicaoFinalId} modo="controle" embedded />
                 <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} embedded />

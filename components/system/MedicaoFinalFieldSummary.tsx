@@ -64,6 +64,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
   const [novaPendencia, setNovaPendencia] = useState('')
   const [mostrandoPendencias, setMostrandoPendencias] = useState(false)
   const [revisando, setRevisando] = useState(false)
+  const [operacoesAbertas, setOperacoesAbertas] = useState(false)
 
   const master = usuario?.role === 'master'
 
@@ -99,7 +100,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     return 'Não definido'
   }, [operacao?.responsavel_nome, resumo.medidores])
 
-  const statusAtual = STATUS[operacao?.status_operacional || 'aguardando_liberacao']
+  const statusAtual = STATUS[operacao?.status_operacional || 'aguardando_liberacao'] || STATUS.aguardando_liberacao
   const pendenciasAbertas = pendencias.filter(p => p.status === 'aberta')
   const podeConcluir = resumo.totalPecas > 0 && resumo.percentual === 100 && resumo.itensAgrupados.length === 0 && pendenciasAbertas.length === 0
 
@@ -202,7 +203,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
 
   if (embedded) {
     return (
-      <section className="h-full">
+      <><section className="h-full min-w-0">
         <div className="flex h-full min-h-[210px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -211,26 +212,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
                 <CircleDot size={11} /> {statusAtual.label}
               </span>
             </div>
-            {master ? (
-              <select
-                aria-label="Responsável pela medição"
-                value={operacao?.responsavel_id || ''}
-                onChange={e => void trocarResponsavel(e.target.value)}
-                disabled={processando || operacao?.status_operacional === 'aprovado'}
-                className="max-w-[150px] rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none"
-              >
-                <option value="">Responsável</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-              </select>
-            ) : (
-              <span className="text-xs font-semibold text-slate-700">{responsavelExibicao}</span>
-            )}
+
           </div>
 
           <div className="mt-5 flex items-end justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">Progresso da medição</p>
-              <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} tipologias concluídas</p>
+              <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} peças concluídas</p>
             </div>
             <span className="text-2xl font-bold text-emerald-700">{resumo.percentual}%</span>
           </div>
@@ -241,8 +229,11 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           <div className="mt-auto pt-4">
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500"><UserRound size={13} /> Responsável: <span className="font-semibold text-slate-700">{responsavelExibicao}</span></p>
           </div>
+          <button type="button" onClick={() => setOperacoesAbertas(true)} className="mt-2 self-start text-xs font-semibold text-slate-500">Gerenciar execução</button>
         </div>
       </section>
+      {operacoesAbertas && <div role="dialog" aria-modal="true" aria-label="Gerenciar execução" className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3"><div className="mx-auto max-w-4xl rounded-xl bg-white pb-4"><div className="flex justify-end p-3"><button type="button" onClick={() => { setOperacoesAbertas(false); void carregar() }} className="rounded-lg border px-3 py-2 text-sm">Fechar</button></div><MedicaoFinalFieldSummary medicaoId={medicaoId} /></div></div>}
+      </>
     )
   }
 
