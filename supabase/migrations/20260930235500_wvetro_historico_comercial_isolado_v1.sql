@@ -44,13 +44,50 @@ create table if not exists public.wvetro_historico_comercial (
   updated_at timestamptz not null default now(),
 
   constraint wvetro_historico_comercial_empresa_tipo_chave_uk
-    unique (empresa_id, tipo_registro, chave_externa),
-
-  constraint wvetro_historico_cliente_mesma_empresa_fk
-    foreign key (cliente_id, empresa_id)
-    references public.clientes(id, empresa_id)
-    deferrable initially deferred
+    unique (empresa_id, tipo_registro, chave_externa)
 );
+
+
+
+create or replace function private.wvetro_historico_validar_tenant()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.cliente_id is not null and not exists (
+    select 1
+    from public.clientes c
+    where c.id = new.cliente_id
+      and c.empresa_id = new.empresa_id
+  ) then
+    raise exception 'Cliente não pertence à empresa do histórico W.Vetro.';
+  end if;
+
+  if new.importado_por_id is not null and not exists (
+    select 1
+    from public.usuarios u
+    where u.id = new.importado_por_id
+      and u.empresa_id = new.empresa_id
+  ) then
+    raise exception 'Usuário importador não pertence à empresa do histórico W.Vetro.';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function private.wvetro_historico_validar_tenant() from public;
+
+drop trigger if exists trg_wvetro_historico_validar_tenant
+  on public.wvetro_historico_comercial;
+
+create trigger trg_wvetro_historico_validar_tenant
+before insert or update of empresa_id, cliente_id, importado_por_id
+on public.wvetro_historico_comercial
+for each row
+execute function private.wvetro_historico_validar_tenant();
 
 create index if not exists wvetro_historico_comercial_cliente_idx
   on public.wvetro_historico_comercial (empresa_id, cliente_id, data_venda desc nulls last, data_emissao desc nulls last);
