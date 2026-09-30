@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { parseItensDoTextoPdf } from '@/lib/pdfOrcamentoImport'
 import { parseOrcamentoWVetroTexto } from '@/lib/wvetroPdf'
 import { ItemEsquadria } from '@/lib/tipos'
+import { descricaoItemMedicao } from '@/lib/medicaoDescricao'
 import { anexoEhPdf, baixarAnexoPrivadoOuLegado, type AnexoStorage } from '@/lib/anexoPrivadoServer'
 
 export const runtime = 'nodejs'
@@ -279,7 +280,7 @@ export async function POST(req: NextRequest) {
           medicao_id: medicao.id,
           tipo_esquadria: it.tipo_esquadria,
           tipo_outro_texto: it.tipo_outro_texto || null,
-          descricao: it.descricao || 'Item ' + (idx + 1),
+          descricao: descricaoItemMedicao(it),
           quantidade: it.quantidade || 1,
           ordem: idx,
         }))

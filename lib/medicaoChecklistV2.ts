@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import type { ItemEsquadria, MedicaoItem, Usuario } from './tipos'
+import { listarItensMedicao } from './medicaoFinal'
+import { camposAplicaveis, respostaDoCampo, valorValidoChecklist } from './medicaoChecklistRegras'
 
 export type CampoChecklistV2 = {
   id: string
@@ -68,6 +70,10 @@ const CAMPOS_MEDIDA_FIXA = [
   'altura_esquerda_mm',
 ] as const
 
+export function valorChecklistPreenchido(valor: unknown) {
+  return !(valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0))
+}
+
 function medidaPositiva(valor: unknown): valor is number {
   const numero = Number(valor)
   return Number.isFinite(numero) && numero > 0
@@ -118,6 +124,15 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
 
   if (erroItens || !itensDestino || itensDestino.length !== itensOrigem.length) return false
 
+  // A deliberately removed photo must not return on the next page load.
+  // Read failure is fail-closed: do not import anything without this history.
+  const { data: correcoes, error: erroCorrecoes } = await supabase.from('medicao_revisoes')
+    .select('snapshot').eq('medicao_id', medicaoId).eq('motivo', 'Correção de foto')
+  if (erroCorrecoes) return false
+  const fotoFoiRemovida = (itemId: string, campo: string, url: string) => (correcoes || []).some(({ snapshot }) =>
+    snapshot?.item_id === itemId && snapshot?.campo === campo && snapshot?.foto_anterior === url && snapshot?.resultado !== 'nao_realizada',
+  )
+
   let alterou = false
 
   for (let indice = 0; indice < itensDestino.length; indice++) {
@@ -133,24 +148,17 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
       }
     }
 
-    if (!destino.foto_larguras_url && origem.foto_larguras_url) {
+    if (!destino.foto_larguras_url && origem.foto_larguras_url && !fotoFoiRemovida(destino.id, 'foto_larguras_url', origem.foto_larguras_url)) {
       atualizacao.foto_larguras_url = origem.foto_larguras_url
     }
-    if (!destino.foto_alturas_url && origem.foto_alturas_url) {
+    if (!destino.foto_alturas_url && origem.foto_alturas_url && !fotoFoiRemovida(destino.id, 'foto_alturas_url', origem.foto_alturas_url)) {
       atualizacao.foto_alturas_url = origem.foto_alturas_url
     }
 
-    const medidasMescladas = CAMPOS_MEDIDA_FIXA.map(campo =>
-      atualizacao[campo] ?? destino[campo]
-    )
-    const medidasCompletas = medidasMescladas.every(medidaPositiva)
-
-    if (medidasCompletas && !destino.medido) {
-      atualizacao.medido = true
-      atualizacao.medido_em = destino.medido_em || new Date().toISOString()
-    }
-
     if (Object.keys(atualizacao).length === 0) continue
+
+    // Herdar as seis medidas não conclui a tipologia por si só. A conclusão
+    // depende também dos campos obrigatórios específicos do checklist.
 
     const { error } = await supabase
       .from('medicao_itens')
@@ -163,12 +171,54 @@ export async function herdarMedidasFinaisDoOrcamento(medicaoId: string): Promise
     }
 
     alterou = true
+    await sincronizarStatusItemChecklistV2(medicaoId, destino.id, null)
   }
 
   return alterou
 }
 
+export function statusItemChecklistV2(
+  item: MedicaoItem,
+  campos: CampoChecklistV2[],
+  respostas: RespostaChecklistV2[],
+): 'pendente' | 'em_andamento' | 'concluida' {
+  const camposAtivos = camposDoItemV2(campos, item, respostas)
+  const obrigatorios = camposAtivos.filter(c => c.obrigatorio)
+  const medidasCompletas = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(item[campo]))
+  const checklistCompleto = obrigatorios.every(campo => valorValidoChecklist(campo, valorRespostaItemV2(item, campo, respostas)))
+  if (medidasCompletas && checklistCompleto) return 'concluida'
+
+  const iniciouMedidas = CAMPOS_MEDIDA_FIXA.some(campo => medidaPositiva(item[campo]))
+  const iniciouChecklist = camposAtivos.some(campo => valorValidoChecklist(campo, valorRespostaItemV2(item, campo, respostas)))
+  const iniciou = iniciouMedidas || iniciouChecklist || Boolean(
+    item.foto_larguras_url || item.foto_alturas_url || item.observacoes_medicao
+  )
+  return iniciou ? 'em_andamento' : 'pendente'
+}
+
+async function sincronizarStatusItemChecklistV2(
+  medicaoId: string,
+  itemId: string,
+  usuario: Usuario | null,
+): Promise<boolean> {
+  const dados = await carregarChecklistMedicaoV2(medicaoId)
+  const item = dados.itens.find(i => i.id === itemId)
+  if (!item) return false
+  const status = statusItemChecklistV2(item, dados.campos, dados.respostas)
+  const concluida = status === 'concluida'
+  const agora = new Date().toISOString()
+  const { error } = await supabase.from('medicao_itens').update({
+    medido: concluida,
+    medido_em: concluida ? (item.medido_em || agora) : null,
+    medido_por_id: concluida ? (usuario?.id || item.medido_por_id || null) : null,
+    medido_por_nome: concluida ? (usuario?.nome || item.medido_por_nome || null) : null,
+  }).eq('id', itemId)
+  if (error) console.error('Erro ao sincronizar status da peça:', error)
+  return !error
+}
+
 export async function salvarMedidasFixasItemV2(
+  medicaoId: string,
   itemId: string,
   medidas: MedidasFixasItemV2,
   usuario: Usuario | null,
@@ -182,17 +232,12 @@ export async function salvarMedidasFixasItemV2(
     altura_esquerda_mm: normalizarMedida(medidas.altura_esquerda_mm),
   }
 
-  const completo = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(normalizadas[campo]))
   const agora = new Date().toISOString()
 
   const { error } = await supabase
     .from('medicao_itens')
     .update({
       ...normalizadas,
-      medido: completo,
-      medido_em: completo ? agora : null,
-      medido_por_id: completo ? usuario?.id || null : null,
-      medido_por_nome: completo ? usuario?.nome || null : null,
     })
     .eq('id', itemId)
 
@@ -201,24 +246,23 @@ export async function salvarMedidasFixasItemV2(
     return false
   }
 
-  return true
+  return sincronizarStatusItemChecklistV2(medicaoId, itemId, usuario)
 }
 
 export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<DadosChecklistMedicaoV2> {
-  const [itensResp, camposResp, respostasResp, fotosResp] = await Promise.all([
-    supabase.from('medicao_itens').select('*').eq('medicao_id', medicaoId).order('ordem', { ascending: true }),
+  const [itens, camposResp, respostasResp, fotosResp] = await Promise.all([
+    listarItensMedicao(medicaoId),
     supabase.from('tipologia_campos_extras').select('*').eq('ativo', true).order('ordem', { ascending: true }),
     supabase.from('medicao_respostas').select('*').eq('medicao_id', medicaoId).order('respondido_em', { ascending: true }),
     supabase.from('medicao_fotos').select('*').eq('medicao_id', medicaoId).order('created_at', { ascending: true }),
   ])
 
-  if (itensResp.error) console.error('Erro ao carregar itens do checklist:', itensResp.error)
   if (camposResp.error) console.error('Erro ao carregar campos do checklist:', camposResp.error)
   if (respostasResp.error) console.error('Erro ao carregar respostas do checklist:', respostasResp.error)
   if (fotosResp.error) console.error('Erro ao carregar fotos da medicao:', fotosResp.error)
 
   return {
-    itens: (itensResp.data || []) as MedicaoItem[],
+    itens,
     campos: (camposResp.data || []).map((campo: any) => ({
       ...campo,
       opcoes: Array.isArray(campo.opcoes) ? campo.opcoes : [],
@@ -234,20 +278,12 @@ export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<Dad
   }
 }
 
-export function camposDoItemV2(campos: CampoChecklistV2[], item: MedicaoItem): CampoChecklistV2[] {
-  return campos
-    .filter(campo => campo.ativo && (campo.tipo_esquadria == null || campo.tipo_esquadria === item.tipo_esquadria))
-    .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+export function camposDoItemV2(campos: CampoChecklistV2[], item: MedicaoItem, respostas: RespostaChecklistV2[] = []): CampoChecklistV2[] {
+  return camposAplicaveis(campos, item, respostas)
 }
 
-export function valorRespostaItemV2(
-  item: MedicaoItem,
-  campo: CampoChecklistV2,
-  respostas: RespostaChecklistV2[],
-): unknown {
-  const resposta = respostas.find(r => r.item_id === item.id && r.campo_chave === campo.chave)
-  if (resposta && resposta.valor !== undefined && resposta.valor !== null) return resposta.valor
-  return item.campos_extras?.[campo.chave]
+export function valorRespostaItemV2(item: MedicaoItem, campo: CampoChecklistV2, respostas: RespostaChecklistV2[]): unknown {
+  return respostaDoCampo(item, campo, respostas)
 }
 
 export async function salvarRespostaChecklistV2(
@@ -265,7 +301,7 @@ export async function salvarRespostaChecklistV2(
     .upsert({
       medicao_id: medicaoId,
       item_id: item.id,
-      campo_id: campo.id,
+      campo_id: campo.id || null,
       campo_chave: campo.chave,
       valor,
       observacao: observacao || null,
@@ -283,7 +319,9 @@ export async function salvarRespostaChecklistV2(
 
   // Compatibilidade: o formulario legado ainda le `medicao_itens.campos_extras`.
   // Mantemos um espelho para que checklist V2 e tela de medicao nao divirjam.
-  const extras = { ...(item.campos_extras || {}), [campo.chave]: valor as any }
+  const { data: atual, error: erroAtual } = await supabase.from('medicao_itens').select('campos_extras').eq('id', item.id).single()
+  if (erroAtual) return false
+  const extras = { ...(atual?.campos_extras || {}), [campo.chave]: valor as any }
   const { error: erroLegado } = await supabase
     .from('medicao_itens')
     .update({ campos_extras: extras })
@@ -293,6 +331,7 @@ export async function salvarRespostaChecklistV2(
     console.error('Resposta V2 salva, mas falhou ao sincronizar campos_extras:', erroLegado)
   }
 
+  await sincronizarStatusItemChecklistV2(medicaoId, item.id, usuario)
   return true
 }
 
@@ -326,11 +365,7 @@ export async function adicionarFotoMedicaoV2(
   return data as FotoMedicaoV2
 }
 
-export async function removerFotoMedicaoV2(fotoId: string): Promise<boolean> {
-  const { error } = await supabase.from('medicao_fotos').delete().eq('id', fotoId)
-  if (error) console.error('Erro ao remover foto da Medicao Final:', error)
-  return !error
-}
+
 
 export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<{
   ok: boolean
@@ -340,10 +375,11 @@ export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<
   const faltantes: { itemId: string; itemDescricao: string; campo: string }[] = []
 
   for (const item of dados.itens) {
-    const campos = camposDoItemV2(dados.campos, item).filter(c => c.obrigatorio)
+    for (const chave of CAMPOS_MEDIDA_FIXA) if (!medidaPositiva(item[chave])) faltantes.push({ itemId: item.id, itemDescricao: item.descricao || item.tipo_esquadria, campo: chave })
+    const campos = camposDoItemV2(dados.campos, item, dados.respostas).filter(c => c.obrigatorio)
     for (const campo of campos) {
       const valor = valorRespostaItemV2(item, campo, dados.respostas)
-      const vazio = valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0)
+      const vazio = !valorValidoChecklist(campo, valor)
       if (vazio) {
         faltantes.push({
           itemId: item.id,
@@ -355,4 +391,19 @@ export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<
   }
 
   return { ok: faltantes.length === 0, faltantes }
+}
+
+export async function adicionarCampoChecklistV2(item: MedicaoItem, nome: string, tipo: 'sim_nao' | 'medida' | 'texto' | 'numero' | 'selecao', obrigatorio: boolean, escopo: 'peca' | 'tipologia' | 'geral', opcoes: string[] = []) {
+  if (!nome.trim() || (tipo === 'selecao' && opcoes.length === 0)) return false
+  const { error } = await supabase.from('tipologia_campos_extras').insert({
+    tipo_esquadria: escopo === 'geral' ? null : item.tipo_esquadria,
+    chave: `campo_${crypto.randomUUID().replace(/-/g, '')}`,
+    nome: nome.trim() + (tipo === 'medida' ? ' (mm)' : ''),
+    tipo_valor: tipo === 'medida' || tipo === 'numero' ? 'numero' : 'texto',
+    obrigatorio, ativo: true, ordem: 100,
+    secao: 'Itens adicionados em campo',
+    opcoes: tipo === 'sim_nao' ? ['sim', 'nao'] : tipo === 'selecao' ? opcoes : [],
+    regra_condicional: escopo === 'peca' ? { item_id: item.id } : {},
+  })
+  return !error
 }

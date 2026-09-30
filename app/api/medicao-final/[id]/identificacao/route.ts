@@ -111,7 +111,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: medicao, error: erroMedicao } = await supabaseAdmin
     .from('medicoes_finais')
-    .select('id, cliente_nome, orcamento_id')
+    .select('id, cliente_nome, orcamento_id, obra_id')
     .eq('id', params.id)
     .eq('empresa_id', usuario.empresa_id)
     .maybeSingle()
@@ -120,23 +120,31 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Medicao Final nao encontrada.' }, { status: 404 })
   }
 
+  const { data: obra } = medicao.obra_id
+    ? await supabaseAdmin.from('obras').select('nome').eq('id', medicao.obra_id).eq('empresa_id', usuario.empresa_id).maybeSingle()
+    : { data: null }
+
   if (!medicao.orcamento_id) {
     return NextResponse.json({
       cliente_nome: medicao.cliente_nome || null,
-      nome_obra: null,
+      nome_obra: obra?.nome || null,
       numero_orcamento: null,
     })
   }
 
   const { data: orcamento } = await supabaseAdmin
     .from('orcamentos')
-    .select('numero, descricao_livre, anexos')
+    .select('numero, descricao_livre, anexos, obra_id')
     .eq('id', medicao.orcamento_id)
     .eq('empresa_id', usuario.empresa_id)
     .maybeSingle()
 
   const numeroWVetro = numeroExterno(orcamento?.descricao_livre)
-  let nomeObra = obraDoMarcador(orcamento?.descricao_livre)
+  let nomeObra = obra?.nome || obraDoMarcador(orcamento?.descricao_livre)
+  if (!nomeObra && orcamento?.obra_id) {
+    const { data: obraOrcamento } = await supabaseAdmin.from('obras').select('nome').eq('id', orcamento.obra_id).eq('empresa_id', usuario.empresa_id).maybeSingle()
+    nomeObra = obraOrcamento?.nome || null
+  }
 
   if (!nomeObra && numeroWVetro) {
     nomeObra = await lerNomeObraDoPdf(orcamento?.anexos)

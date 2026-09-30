@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, ExternalLink, Link2, Loader2, ShieldCheck, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Link2, Loader2, ShieldCheck, Trash2, UserRound } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { carregarOperacaoMedicaoV2, listarUsuariosDisponiveisMedicao } from '@/lib/medicaoFinalV2'
 import type { Usuario } from '@/lib/tipos'
@@ -33,7 +33,7 @@ function normalizarNome(valor: string) {
     .toLowerCase()
 }
 
-export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: string }) {
+export default function MedicaoExternalAccessPanel({ medicaoId, embedded = false }: { medicaoId: string; embedded?: boolean }) {
   const [acessos, setAcessos] = useState<Acesso[]>([])
   const [podeEditar, setPodeEditar] = useState(false)
   const [visivel, setVisivel] = useState(true)
@@ -46,6 +46,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
   const [carregando, setCarregando] = useState(true)
   const [urlNova, setUrlNova] = useState('')
   const [mensagem, setMensagem] = useState('')
+  const [mostrarHistorico, setMostrarHistorico] = useState(false)
 
   const carregar = useCallback(async () => {
     const token = await tokenAtual()
@@ -118,7 +119,7 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
     setGerando(false)
     if (!resp.ok) return setMensagem(json.error || 'Nao foi possivel gerar o link.')
     setUrlNova(json.url || '')
-    setMensagem('Link gerado. Copie e envie para o responsavel pela medicao.')
+    setMensagem('Link gerado. Copie e envie para quem vai realizar ou continuar a medição.')
     setNome(''); setTelefone('')
     await carregar()
   }
@@ -148,46 +149,75 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
     await carregar()
   }
 
-  if (!visivel) return null
+  if (!visivel) return embedded ? <section className="h-full min-w-0"><div className="flex h-full min-h-[240px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Compartilhar Medição Final</p><p className="mt-4 text-xs text-slate-500">Seu usuário não possui acesso ao compartilhamento desta medição.</p></div></section> : null
+
+  if (embedded) {
+    return (
+      <section className="h-full">
+        <div className="flex h-full min-h-[210px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Compartilhar Medição Final</p>
+              <h2 className="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900"><Link2 size={16} /> Link de acesso da medição</h2>
+            </div>
+            <ShieldCheck size={19} className="shrink-0 text-emerald-600" />
+          </div>
+          <div className="mt-3 flex gap-2"><input aria-label="Link de acesso da medição" readOnly value={urlNova} placeholder="Gere um link para compartilhar" className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-600" /><button type="button" aria-label="Copiar link" disabled={!urlNova} onClick={() => void copiar()} className="rounded-lg border border-slate-200 px-2.5 text-slate-600 disabled:opacity-40"><Copy size={14} /></button></div>
+          {podeEditar ? (
+            <div className="mt-4 space-y-2">
+              <input
+                list={`responsaveis-medicao-${medicaoId}`}
+                value={nome}
+                onChange={e => alterarNome(e.target.value)}
+                placeholder="Selecionar usuário"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <datalist id={`responsaveis-medicao-${medicaoId}`}>
+                {usuarios.map(u => <option key={u.id} value={u.nome} />)}
+              </datalist>
+              <button onClick={() => void gerar()} disabled={gerando} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {gerando ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />} Enviar link
+              </button>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Acesso somente para consulta.</p>
+          )}
+
+          {mensagem && <p role="status" className="mt-2 text-xs text-slate-600">{mensagem}</p>}
+          <details className="mt-auto pt-3"><summary className="cursor-pointer text-xs font-semibold text-slate-500">Links gerados ({acessos.length})</summary><div className="mt-2 space-y-2">{acessos.map(acesso => <div key={acesso.id} className="flex flex-wrap items-center justify-between gap-2 text-xs"><span>{acesso.nome_convidado || 'Medidor externo'} · {acesso.revogado_em ? 'Revogado' : acesso.expira_em && new Date(acesso.expira_em).getTime() < Date.now() ? 'Expirado' : 'Ativo'}</span>{podeEditar && !acesso.revogado_em && <button type="button" onClick={() => void revogar(acesso.id)} className="text-red-700">Revogar</button>}</div>)}</div></details>
+        </div>
+      </section>
+    )
+  }
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-3 pt-3 md:px-4">
+    <section className={embedded ? "w-full" : "mx-auto w-full max-w-4xl px-3 pt-3 md:px-4"}>
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Acesso de campo</p>
-            <h2 className="mt-0.5 flex items-center gap-2 text-sm font-semibold text-slate-900"><Link2 size={16} /> Link externo da Medicao Final</h2>
-            <p className="mt-1 text-xs text-slate-500">O link abre somente esta medicao. O token fica armazenado no banco apenas como hash e pode ser revogado.</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Compartilhar Medição Final</p>
+            <h2 className="mt-0.5 flex items-center gap-2 text-sm font-semibold text-slate-900"><Link2 size={16} /> Link de acesso da medição</h2>
+            <p className="mt-1 text-xs text-slate-500">Selecione quem vai medir e compartilhe o acesso desta Medição Final.</p>
           </div>
           <ShieldCheck size={20} className="shrink-0 text-emerald-600" />
         </div>
 
         {podeEditar ? (
-          <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_180px_100px_auto]">
+          <div className="mt-4 grid gap-2">
             <div>
               <input
                 list={`responsaveis-medicao-${medicaoId}`}
                 value={nome}
                 onChange={e => alterarNome(e.target.value)}
-                placeholder="Nome de quem vai medir"
+                placeholder="Selecione um usuário ou informe o nome"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <datalist id={`responsaveis-medicao-${medicaoId}`}>
                 {usuarios.map(u => <option key={u.id} value={u.nome} />)}
               </datalist>
             </div>
-            <input
-              value={telefone}
-              onChange={e => setTelefone(e.target.value)}
-              placeholder="Telefone (opcional)"
-              inputMode="tel"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-            <select value={dias} onChange={e => setDias(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-2 text-sm">
-              <option value={1}>1 dia</option><option value={3}>3 dias</option><option value={7}>7 dias</option><option value={15}>15 dias</option><option value={30}>30 dias</option>
-            </select>
             <button onClick={() => void gerar()} disabled={gerando} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {gerando ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />} Gerar link
+              {gerando ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />} Enviar link
             </button>
           </div>
         ) : (
@@ -195,14 +225,15 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
         )}
 
         {responsavelPadrao && podeEditar && (
-          <p className="mt-2 text-[11px] text-slate-400">
-            Responsável cadastrado: {responsavelPadrao.nome}{responsavelPadrao.whatsapp ? ' · telefone preenchido automaticamente' : ' · sem telefone cadastrado; informe manualmente se necessário'}.
+          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-500">
+            <UserRound size={12} /> Responsável atual: {responsavelPadrao.nome}{responsavelPadrao.whatsapp ? ' · telefone preenchido automaticamente' : ''}.
           </p>
         )}
 
         {urlNova && (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-            <p className="text-xs font-semibold text-emerald-800">Este endereco completo aparece somente agora.</p>
+            <p className="text-xs font-semibold text-emerald-800">Link pronto para compartilhar</p>
+            <p className="mt-0.5 text-[11px] text-emerald-700">Quem receber este link poderá abrir esta Medição Final e continuar o preenchimento.</p>
             <div className="mt-2 flex gap-2"><input readOnly value={urlNova} className="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs text-slate-600" /><button onClick={() => void copiar()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white"><Copy size={13} /> Copiar</button></div>
           </div>
         )}
@@ -210,12 +241,14 @@ export default function MedicaoExternalAccessPanel({ medicaoId }: { medicaoId: s
         {mensagem && <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{mensagem}</p>}
 
         <div className="mt-4 border-t border-slate-100 pt-3">
-          <p className="mb-2 text-xs font-semibold text-slate-600">Links gerados</p>
+          <button type="button" onClick={() => setMostrarHistorico(v => !v)} className="text-xs font-semibold text-slate-600">{mostrarHistorico ? "Ocultar links gerados" : `Links gerados (${acessos.length})`}</button>
+          {mostrarHistorico && <div className="mt-2">
           {carregando ? <p className="text-xs text-slate-400">Carregando...</p> : acessos.length === 0 ? <p className="text-xs text-slate-400">Nenhum link externo gerado para esta medicao.</p> : <div className="space-y-2">{acessos.map(acesso => {
             const expirado = acesso.expira_em ? new Date(acesso.expira_em).getTime() < Date.now() : false
             const ativo = !acesso.revogado_em && !expirado
             return <div key={acesso.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"><div><p className="text-sm font-medium text-slate-700">{acesso.nome_convidado || 'Medidor externo'}</p><p className="text-[11px] text-slate-400">{ativo ? `Valido ate ${acesso.expira_em ? new Date(acesso.expira_em).toLocaleString('pt-BR') : 'sem prazo'}` : acesso.revogado_em ? 'Revogado' : 'Expirado'}{acesso.ultimo_acesso_em ? ` · ultimo acesso ${new Date(acesso.ultimo_acesso_em).toLocaleString('pt-BR')}` : ' · ainda nao acessado'}</p></div>{ativo && podeEditar && <button onClick={() => void revogar(acesso.id)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"><Trash2 size={13} /> Revogar</button>}</div>
           })}</div>}
+          </div>}
         </div>
       </div>
     </section>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
+import { medicaoIdDaRota } from '@/lib/medicaoRota'
 import Sidebar from '@/components/Sidebar'
 import SidebarQuickSearch from '@/components/system/SidebarQuickSearch'
 import AppTopbar from '@/components/system/AppTopbar'
@@ -10,10 +11,9 @@ import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
-import MedicaoChecklistV2Panel from '@/components/system/MedicaoChecklistV2Panel'
-import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
-import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
+import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
 import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
+import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -27,9 +27,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const ehSetorGenerico = pathname.startsWith('/setor/')
   const ehMedicaoFinal = pathname.startsWith('/producao/medicao-final')
   const ehQuadroMedicaoFinal = pathname === '/producao/medicao-final'
-  const medicaoFinalId = ehMedicaoFinal && !ehQuadroMedicaoFinal
-    ? pathname.replace('/producao/medicao-final/', '').split('/')[0]
-    : ''
+  const medicaoFinalId = medicaoIdDaRota(pathname)
 
   return (
     <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
@@ -46,13 +44,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {ehProducao && <ProducaoEtapasBar />}
 
           {medicaoFinalId && (
-            <div className="atlas-medicao-tools">
-              <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
+            <div key={medicaoFinalId} className="atlas-medicao-tools">
+              <section className="mx-auto w-full max-w-6xl px-3 pt-4 md:px-4">
+                <p className="text-xs font-medium text-slate-400">Produção <span className="px-1">›</span> Medição Final <span className="px-1">›</span> Obra</p>
+                <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Medição Final</h1>
+              </section>
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
-              <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} />
-              <MedicaoParcialPanel medicaoId={medicaoFinalId} />
-              <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} />
-              <MedicaoChecklistV2Panel medicaoId={medicaoFinalId} />
+              <div className="mx-auto grid w-full max-w-6xl atlas-medicao-overview gap-3 px-3 pt-3 lg:grid-cols-3 md:px-4">
+                <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} embedded />
+                <MedicaoParcialPanel medicaoId={medicaoFinalId} modo="controle" embedded />
+                <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} embedded />
+              </div>
+              <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
             </div>
           )}
 
@@ -76,7 +79,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                             : undefined
               }
             >
-              {children}
+              {medicaoFinalId ? null : children}
             </div>
           )}
         </main>
