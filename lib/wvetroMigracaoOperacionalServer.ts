@@ -91,7 +91,12 @@ function primeiraColecao(payload: unknown): unknown[] {
   return [payload]
 }
 
-function chaveComFallback(prefixo: string, valores: unknown[]) {
+function chavePrimeiroDisponivel(prefixo: string, valores: unknown[]) {
+  const primeiro = valores.map(texto).find(Boolean)
+  return primeiro ? `${prefixo}:${primeiro}` : ''
+}
+
+function chaveComposta(prefixo: string, valores: unknown[]) {
   const partes = valores.map(texto).filter(Boolean)
   return partes.length ? `${prefixo}:${partes.join(':')}` : ''
 }
@@ -102,39 +107,26 @@ export function chaveExternaWVetro(
 ): string {
   switch (recurso) {
     case 'pessoas':
-      return chaveComFallback('pessoa', [payload.PessoaId, payload.PessoaCodigo, payload.PessoaCPFCNPJ])
+      return chavePrimeiroDisponivel('pessoa', [payload.PessoaId, payload.PessoaCodigo, payload.PessoaCPFCNPJ])
     case 'vendedores':
-      return chaveComFallback('vendedor', [payload.VendedorId, payload.VendedorCPFCNPJ, payload.VendedorEmail])
+      return chavePrimeiroDisponivel('vendedor', [payload.VendedorId, payload.VendedorCPFCNPJ, payload.VendedorEmail])
     case 'orcamentos':
-      return chaveComFallback('orcamento', [payload.Nro, payload.ClienteCodigo])
+      return chavePrimeiroDisponivel('orcamento', [payload.Nro])
     case 'pedidos':
-      return chaveComFallback('pedido', [payload.Nro, payload.ClienteCodigo])
+      return chavePrimeiroDisponivel('pedido', [payload.Nro])
     case 'pedido':
-      return chaveComFallback('pedido', [payload.Nro, payload.OrcamentoId, payload.Orcamentoid])
+      return chavePrimeiroDisponivel('pedido', [payload.OrcamentoId, payload.Orcamentoid, payload.Nro])
     case 'metas':
-      return chaveComFallback('meta', [
-        payload.id,
-        payload.VendedorId,
-        payload.LinhaId,
-        payload.Ano,
-        payload.Mes,
-      ])
+      return chavePrimeiroDisponivel('meta', [payload.id]) ||
+        chaveComposta('meta', [payload.VendedorId, payload.LinhaId, payload.Ano, payload.Mes])
     case 'notas_entrada':
-      return chaveComFallback('nf', [
-        payload.NFCompraId,
-        payload.NFCompraChaveNFe,
-        payload.NFCompraFornecedorId,
-        payload.NFCompraNro,
-        payload.NFCompraSerie,
-      ])
+      return chavePrimeiroDisponivel('nf', [payload.NFCompraId, payload.NFCompraChaveNFe]) ||
+        chaveComposta('nf', [payload.NFCompraFornecedorId, payload.NFCompraNro, payload.NFCompraSerie])
     case 'itens_nf':
-      return chaveComFallback('nfitem', [
-        payload.ItemNFCompraId,
-        payload.ProdutoId,
-        payload.ProdutoCodigo,
-      ])
+      return chavePrimeiroDisponivel('nfitem', [payload.ItemNFCompraId]) ||
+        chaveComposta('nfitem', [payload.NFCompraId, payload.ProdutoId, payload.ProdutoCodigo])
     case 'estoque_movimentos':
-      return chaveComFallback('estoque', [
+      return chaveComposta('estoque', [
         payload.MovimentoEstoqueDtLancamento,
         payload.MovimentoEstoqueDocumento,
         payload.MovimentoEstoqueTipo,
@@ -144,15 +136,17 @@ export function chaveExternaWVetro(
         payload.MovimentoEstoqueQtde,
       ])
     case 'titulos':
-      return chaveComFallback('titulo', [payload.TituloId])
+      return chavePrimeiroDisponivel('titulo', [payload.TituloId])
     case 'titulos_baixados':
-      return chaveComFallback('titulo-baixa', [payload.TituloId, payload.TituloDtBaixa, payload.TituloVlrRecebido])
+      return chavePrimeiroDisponivel('titulo-baixa', [payload.TituloId]) ||
+        chaveComposta('titulo-baixa', [payload.TituloDtBaixa, payload.PessoaId, payload.TituloVlrRecebido])
     case 'contas':
-      return chaveComFallback('conta', [payload.id, payload.contaNro])
+      return chavePrimeiroDisponivel('conta', [payload.id, payload.contaNro])
     case 'plano_contas':
-      return chaveComFallback('plano', [payload.id, payload.codigo])
+      return chavePrimeiroDisponivel('plano', [payload.id, payload.codigo])
     case 'extrato':
-      return chaveComFallback('extrato', [
+      return chavePrimeiroDisponivel('extrato', [payload.id]) ||
+        chaveComposta('extrato', [
         payload.id,
         payload.contaId,
         payload.data,
@@ -161,19 +155,21 @@ export function chaveExternaWVetro(
         payload.tipo,
       ])
     case 'lotes_producao':
-      return chaveComFallback('lote', [payload.id, payload.nro])
+      return chavePrimeiroDisponivel('lote', [payload.id, payload.nro])
     case 'producao_projeto':
-      return chaveComFallback('producao-projeto', [payload.id, payload.loteId, payload.orcamento])
+      return chavePrimeiroDisponivel('producao-projeto', [payload.id]) ||
+        chaveComposta('producao-projeto', [payload.loteId, payload.orcamento])
     case 'instalacoes':
-      return chaveComFallback('instalacao', [payload.ProgInstalacaoId, payload.ProgInstalacaoNro])
+      return chavePrimeiroDisponivel('instalacao', [payload.ProgInstalacaoId, payload.ProgInstalacaoNro])
     case 'linhas':
-      return chaveComFallback('linha', [payload.LinhaId, payload.LinhaNome])
+      return chavePrimeiroDisponivel('linha', [payload.LinhaId, payload.LinhaNome])
     case 'cores':
-      return chaveComFallback('cor', [payload.CorId, payload.CorNome])
+      return chavePrimeiroDisponivel('cor', [payload.CorId, payload.CorNome])
     case 'vidros':
-      return chaveComFallback('vidro', [payload.VidroId, payload.CorId, payload.CorNome, payload.Descricao])
+      return chavePrimeiroDisponivel('vidro', [payload.VidroId]) ||
+        chaveComposta('vidro', [payload.CorId, payload.CorNome, payload.Descricao])
     case 'tipos_pessoa':
-      return chaveComFallback('tipo-pessoa', [payload.TipoClienteId, payload.id, payload.codigo, payload.descricao])
+      return chavePrimeiroDisponivel('tipo-pessoa', [payload.TipoClienteId, payload.id, payload.codigo, payload.descricao])
     default:
       return ''
   }
