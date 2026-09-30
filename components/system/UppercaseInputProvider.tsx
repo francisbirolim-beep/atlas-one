@@ -90,7 +90,15 @@ export default function UppercaseInputProvider({ children }: { children: ReactNo
 
     const inicio = alvo.selectionStart
     const fim = alvo.selectionEnd
-    alvo.value = maiusculo
+    // Não usar `alvo.value = maiusculo`: essa atribuição atualiza o rastreador
+    // interno do React e ele deixa de disparar o onChange. O campo mostrava o
+    // texto, mas o estado da tela ficava vazio (busca de cliente sem resultado,
+    // cadastro salvando campo em branco). O setter nativo do protótipo troca o
+    // valor sem enganar o React, e o onChange recebe o texto já em maiúsculas.
+    const prototipo = alvo instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    const setterNativo = Object.getOwnPropertyDescriptor(prototipo, 'value')?.set
+    if (setterNativo) setterNativo.call(alvo, maiusculo)
+    else alvo.value = maiusculo
 
     if (inicio != null && fim != null) {
       try {
