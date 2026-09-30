@@ -74,7 +74,7 @@ function telefoneEquivalente(a: string | null, b: string | null) {
   return false
 }
 
-async function buscarClientesAtlas(): Promise<ClienteAtlas[]> {
+async function buscarClientesAtlas(empresaId: string): Promise<ClienteAtlas[]> {
   const todos: ClienteAtlas[] = []
   const pagina = 1000
   let inicio = 0
@@ -83,6 +83,7 @@ async function buscarClientesAtlas(): Promise<ClienteAtlas[]> {
     const { data, error } = await supabaseAdmin
       .from('clientes')
       .select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade')
+      .eq('empresa_id', empresaId)
       .order('id', { ascending: true })
       .range(inicio, inicio + pagina - 1)
 
@@ -103,12 +104,13 @@ function deduplicarClientes(itens: ClienteAtlas[]) {
 
 export async function reconciliarPessoasWVetroComClientesAtlas(
   payloadWVetro: unknown,
+  empresaId: string,
 ): Promise<{
   totais: Record<ReconciliacaoPessoaStatus, number>
   itens: ReconciliacaoPessoaWVetro[]
 }> {
   const { registros } = transformarPayloadWVetroEmStaging('pessoas', payloadWVetro)
-  const clientes = await buscarClientesAtlas()
+  const clientes = await buscarClientesAtlas(empresaId)
   const itens: ReconciliacaoPessoaWVetro[] = []
 
   for (const registro of registros) {
