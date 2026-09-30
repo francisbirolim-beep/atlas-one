@@ -29,6 +29,7 @@ import {
   WVETRO_MIGRACAO_OPERACIONAL_MAPA,
   WVetroOperacionalRecurso,
 } from '@/lib/wvetroOperacionalMap'
+import { reconciliarPessoasWVetroComClientesAtlas } from '@/lib/wvetroReconciliacaoPessoasServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -277,6 +278,11 @@ export async function GET(req: NextRequest) {
     const dados = await consultarRecurso(req, recurso as WVetroOperacionalRecurso)
     const preview = montarPreview(dados)
 
+    const reconciliacao =
+      recurso === 'pessoas' && req.nextUrl.searchParams.get('reconciliar') === '1'
+        ? await reconciliarPessoasWVetroComClientesAtlas(dados)
+        : null
+
     return NextResponse.json({
       ok: true,
       recurso,
@@ -285,6 +291,16 @@ export async function GET(req: NextRequest) {
       gravacaoAtlas: false,
       mapa,
       ...preview,
+      ...(reconciliacao
+        ? {
+            reconciliacao: {
+              regra: 'CPF/CNPJ exato e único é o único vínculo seguro automático nesta fase.',
+              totais: reconciliacao.totais,
+              itens: reconciliacao.itens.slice(0, 100),
+              truncado: reconciliacao.itens.length > 100,
+            },
+          }
+        : {}),
     })
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : 'Erro desconhecido ao consultar W.Vetro.'
