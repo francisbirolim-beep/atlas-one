@@ -19,6 +19,11 @@ export type ReconciliacaoPessoaStatus =
   | 'novo'
   | 'ignorado_nao_cliente'
 
+export type ReconciliacaoPessoasWVetroOpcoes = {
+  categoriaClienteConfirmada?: boolean
+  origemCategoria?: string | null
+}
+
 export type ReconciliacaoPessoaWVetro = {
   chaveExterna: string
   pessoaId: string | null
@@ -105,6 +110,7 @@ function deduplicarClientes(itens: ClienteAtlas[]) {
 export async function reconciliarPessoasWVetroComClientesAtlas(
   payloadWVetro: unknown,
   empresaId: string,
+  opcoes: ReconciliacaoPessoasWVetroOpcoes = {},
 ): Promise<{
   totais: Record<ReconciliacaoPessoaStatus, number>
   itens: ReconciliacaoPessoaWVetro[]
@@ -115,7 +121,14 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
 
   for (const registro of registros) {
     const p = registro.payload
-    const eCliente = p.PessoaCliente === true || p.PessoaCliente === 1 || String(p.PessoaCliente).toLowerCase() === 'true'
+    const marcadoCliente =
+      p.PessoaCliente === true ||
+      p.PessoaCliente === 1 ||
+      String(p.PessoaCliente).toLowerCase() === 'true'
+    const eCliente = marcadoCliente || opcoes.categoriaClienteConfirmada === true
+    const motivoOrigemCliente = opcoes.categoriaClienteConfirmada
+      ? `Pessoa retornada pelo filtro W.Vetro ${opcoes.origemCategoria || 'de clientes'}.`
+      : 'Pessoa marcada como cliente pelo W.Vetro.'
     const nome = texto(p.PessoaRazaoSocial) || texto(p.PessoaFantasia) || texto(p.PessoaResponsavel) || ''
     const cpfCnpj = somenteDigitos(p.PessoaCPFCNPJ)
     const telefone = texto(p.PessoaFone)
@@ -143,7 +156,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
         clienteAtlasNome: null,
         metodo: null,
         candidatos: [],
-        motivos: ['Pessoa W.Vetro não está marcada como cliente.'],
+        motivos: ['Pessoa W.Vetro sem marcação ou filtro confirmado de cliente.'],
       })
       continue
     }
@@ -159,7 +172,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
           clienteAtlasNome: porDocumento[0].nome,
           metodo: 'cpf_cnpj_exato',
           candidatos: [{ id: porDocumento[0].id, nome: porDocumento[0].nome, motivos: ['CPF/CNPJ exato e único.'] }],
-          motivos: ['CPF/CNPJ exato e único no Atlas.'],
+          motivos: [motivoOrigemCliente, 'CPF/CNPJ exato e único no Atlas.'],
         })
         continue
       }
@@ -176,7 +189,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
             nome: c.nome,
             motivos: ['Mesmo CPF/CNPJ encontrado em mais de um cliente Atlas.'],
           })),
-          motivos: ['CPF/CNPJ não pode gerar vínculo enquanto houver duplicidade no Atlas.'],
+          motivos: [motivoOrigemCliente, 'CPF/CNPJ não pode gerar vínculo enquanto houver duplicidade no Atlas.'],
         })
         continue
       }
@@ -224,6 +237,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
           metodo: 'contato_composto',
           candidatos,
           motivos: [
+            motivoOrigemCliente,
             'Há sinais fortes de que é o mesmo cliente, mas exige aprovação porque não houve CPF/CNPJ exato.',
           ],
         })
@@ -235,7 +249,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
           clienteAtlasNome: null,
           metodo: 'contato_parcial',
           candidatos,
-          motivos: ['Existe contato coincidente, mas não há evidência suficiente para vínculo automático.'],
+          motivos: [motivoOrigemCliente, 'Existe contato coincidente, mas não há evidência suficiente para vínculo automático.'],
         })
       }
       continue
@@ -249,7 +263,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
         clienteAtlasNome: null,
         metodo: 'contato_multiplos_candidatos',
         candidatos,
-        motivos: ['Telefone/e-mail encontrou mais de um cliente Atlas.'],
+        motivos: [motivoOrigemCliente, 'Telefone/e-mail encontrou mais de um cliente Atlas.'],
       })
       continue
     }
@@ -261,7 +275,7 @@ export async function reconciliarPessoasWVetroComClientesAtlas(
       clienteAtlasNome: null,
       metodo: null,
       candidatos: [],
-      motivos: ['Nenhum cliente Atlas compatível foi encontrado pelos identificadores disponíveis.'],
+      motivos: [motivoOrigemCliente, 'Nenhum cliente Atlas compatível foi encontrado pelos identificadores disponíveis.'],
     })
   }
 
