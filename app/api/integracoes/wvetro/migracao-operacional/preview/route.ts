@@ -156,16 +156,6 @@ export async function GET(req: NextRequest) {
           origem_chave
       `
 
-      const origem = String(req.nextUrl.searchParams.get('origem') || 'todos').trim()
-      const relacao = String(req.nextUrl.searchParams.get('relacao') || 'todos').trim()
-      const situacao = String(req.nextUrl.searchParams.get('situacao') || 'todos').trim()
-      const confianca = String(req.nextUrl.searchParams.get('confianca') || 'todos').trim()
-      const busca = String(req.nextUrl.searchParams.get('busca') || '')
-        .trim()
-        .toLocaleUpperCase('pt-BR')
-      const pagina = Math.max(1, Number(req.nextUrl.searchParams.get('pagina') || 1) || 1)
-      const limite = Math.min(100, Math.max(10, Number(req.nextUrl.searchParams.get('limite') || 50) || 50))
-
       const normalizados = rows.map((row: any) => ({
         origemRecurso: String(row.origem_recurso || ''),
         origemChave: String(row.origem_chave || ''),
@@ -178,28 +168,117 @@ export async function GET(req: NextRequest) {
         regra: String(row.regra || ''),
       }))
 
-      const resumo = normalizados.reduce(
+      const numerosPedidos = new Set(
+        normalizados
+          .filter(item => item.origemRecurso === 'pedidos' && item.tipoRelacao === 'numero_compartilhado')
+          .map(item => item.referencia)
+          .filter((item): item is string => !!item),
+      )
+
+      const instalacoesComLote = new Set(
+        normalizados
+          .filter(
+            item =>
+              item.origemRecurso === 'instalacoes' &&
+              item.tipoRelacao === 'lote_producao' &&
+              item.encontrado,
+          )
+          .map(item => item.origemChave),
+      )
+
+      const classificados = normalizados.map(item => {
+        let classificacao = 'pendente_revisao'
+        let explicacao = 'Referência não encontrada no staging atual.'
+        let requerAtencao = true
+
+        if (item.encontrado) {
+          classificacao = 'confirmada'
+          explicacao = 'Relação encontrada diretamente no staging.'
+          requerAtencao = false
+        } else if (
+          item.origemRecurso === 'pedidos' &&
+          item.tipoRelacao === 'numero_compartilhado'
+        ) {
+          classificacao = 'informativa'
+          explicacao = 'Número compartilhado é apenas observacional e não é chave de vínculo automático.'
+          requerAtencao = false
+        } else if (
+          item.origemRecurso === 'titulos_baixados' &&
+          item.tipoRelacao === 'titulo_mesmo_id'
+        ) {
+          classificacao = 'reconstruivel_baixa'
+          explicacao = 'A baixa contém os campos necessários para reconstrução histórica sem título aberto correspondente.'
+          requerAtencao = false
+        } else if (item.referencia === '0') {
+          classificacao = 'sem_referencia'
+          explicacao = 'A origem declarou referência zero; não há vínculo externo válido a perseguir.'
+          requerAtencao = false
+        } else if (
+          item.destinoRecurso === 'orcamentos' &&
+          item.referencia &&
+          numerosPedidos.has(item.referencia)
+        ) {
+          classificacao = 'resolvida_por_pedido'
+          explicacao = 'O orçamento histórico não está no staging, mas existe pedido vendido com o mesmo número.'
+          requerAtencao = false
+        } else if (
+          item.origemRecurso === 'instalacoes' &&
+          item.tipoRelacao === 'projeto_producao' &&
+          instalacoesComLote.has(item.origemChave)
+        ) {
+          classificacao = 'resolvida_por_lote'
+          explicacao = 'O projeto de produção não foi localizado, mas a instalação está vinculada a um lote confirmado.'
+          requerAtencao = false
+        }
+
+        return { ...item, classificacao, explicacao, requerAtencao }
+      })
+
+      const resumo = classificados.reduce(
         (acc, item) => {
           acc.total += 1
           if (item.encontrado) acc.encontradas += 1
           else acc.ausentes += 1
+          if (item.requerAtencao) acc.pendenciasReais += 1
+          acc.classificacoes[item.classificacao] =
+            (acc.classificacoes[item.classificacao] || 0) + 1
           return acc
         },
-        { total: 0, encontradas: 0, ausentes: 0 },
+        {
+          total: 0,
+          encontradas: 0,
+          ausentes: 0,
+          pendenciasReais: 0,
+          classificacoes: {} as Record<string, number>,
+        },
       )
 
       const opcoes = {
-        origens: Array.from(new Set(normalizados.map(item => item.origemRecurso))).sort(),
-        relacoes: Array.from(new Set(normalizados.map(item => item.tipoRelacao))).sort(),
-        confiancas: Array.from(new Set(normalizados.map(item => item.confianca))).sort(),
+        origens: Array.from(new Set(classificados.map(item => item.origemRecurso))).sort(),
+        relacoes: Array.from(new Set(classificados.map(item => item.tipoRelacao))).sort(),
+        confiancas: Array.from(new Set(classificados.map(item => item.confianca))).sort(),
+        classificacoes: Array.from(new Set(classificados.map(item => item.classificacao))).sort(),
       }
 
-      const filtrados = normalizados.filter(item => {
+      const origem = String(req.nextUrl.searchParams.get('origem') || 'todos').trim()
+      const relacao = String(req.nextUrl.searchParams.get('relacao') || 'todos').trim()
+      const situacao = String(req.nextUrl.searchParams.get('situacao') || 'todos').trim()
+      const confianca = String(req.nextUrl.searchParams.get('confianca') || 'todos').trim()
+      const classificacao = String(req.nextUrl.searchParams.get('classificacao') || 'todos').trim()
+      const busca = String(req.nextUrl.searchParams.get('busca') || '')
+        .trim()
+        .toLocaleUpperCase('pt-BR')
+      const pagina = Math.max(1, Number(req.nextUrl.searchParams.get('pagina') || 1) || 1)
+      const limite = Math.min(100, Math.max(10, Number(req.nextUrl.searchParams.get('limite') || 50) || 50))
+
+      const filtrados = classificados.filter(item => {
         if (origem !== 'todos' && item.origemRecurso !== origem) return false
         if (relacao !== 'todos' && item.tipoRelacao !== relacao) return false
         if (confianca !== 'todos' && item.confianca !== confianca) return false
+        if (classificacao !== 'todos' && item.classificacao !== classificacao) return false
         if (situacao === 'encontradas' && !item.encontrado) return false
         if (situacao === 'ausentes' && item.encontrado) return false
+        if (situacao === 'atencao' && !item.requerAtencao) return false
         if (!busca) return true
 
         const textoBusca = [
@@ -211,6 +290,8 @@ export async function GET(req: NextRequest) {
           item.referencia,
           item.confianca,
           item.regra,
+          item.classificacao,
+          item.explicacao,
         ]
           .filter(Boolean)
           .join(' ')
@@ -231,7 +312,7 @@ export async function GET(req: NextRequest) {
         gravacaoAtlas: false,
         resumo,
         opcoes,
-        filtros: { origem, relacao, situacao, confianca, busca: busca || null },
+        filtros: { origem, relacao, situacao, confianca, classificacao, busca: busca || null },
         pagina,
         limite,
         total,
@@ -426,6 +507,35 @@ export async function GET(req: NextRequest) {
             (select count(*)::int from wvetro_migracao.auditoria_relacoes) as auditoria_relacoes,
             (select count(*)::int from wvetro_migracao.auditoria_relacoes where encontrado) as auditoria_encontradas,
             (select count(*)::int from wvetro_migracao.auditoria_relacoes where not encontrado) as auditoria_ausentes,
+            (
+              select count(*)::int
+              from wvetro_migracao.auditoria_relacoes a
+              where not a.encontrado
+                and not (a.origem_recurso = 'pedidos' and a.tipo_relacao = 'numero_compartilhado')
+                and not (a.origem_recurso = 'titulos_baixados' and a.tipo_relacao = 'titulo_mesmo_id')
+                and coalesce(a.referencia, '') <> '0'
+                and not (
+                  a.destino_recurso = 'orcamentos'
+                  and exists (
+                    select 1
+                    from wvetro_migracao.raw_canonico p
+                    where p.recurso = 'pedidos'
+                      and p.payload->>'Nro' = a.referencia
+                  )
+                )
+                and not (
+                  a.origem_recurso = 'instalacoes'
+                  and a.tipo_relacao = 'projeto_producao'
+                  and exists (
+                    select 1
+                    from wvetro_migracao.auditoria_relacoes lote
+                    where lote.origem_recurso = 'instalacoes'
+                      and lote.origem_chave = a.origem_chave
+                      and lote.tipo_relacao = 'lote_producao'
+                      and lote.encontrado
+                  )
+                )
+            ) as auditoria_pendencias_reais,
             (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
         `
         resumoNeon = rows[0] || null

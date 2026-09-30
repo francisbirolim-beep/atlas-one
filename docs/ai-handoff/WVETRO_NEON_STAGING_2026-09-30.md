@@ -322,3 +322,80 @@ Quando for implementada, deverá:
 - não promover automaticamente novos clientes;
 - não calcular saldo oficial de estoque a partir de histórico parcial;
 - não transformar composição histórica W.Vetro em receita técnica oficial sem validação.
+
+
+## Estado validado em 30/09/2026
+
+O staging operacional já contém e foi auditado sem promoção automática para tabelas oficiais do Atlas.
+
+### Cargas principais
+
+- Orçamentos: **736** snapshots únicos.
+- Clientes W.Vetro classificados por `Tipopessoa=CL`: **596**.
+- Pedidos: **127**.
+- Lotes de produção: **79**.
+- Projetos de produção: **144**.
+- Instalações: **17**.
+- Títulos: **938**.
+- Títulos baixados: **509**.
+
+### Reconciliação de clientes CL
+
+Fila persistida no Neon:
+
+- vínculo seguro por CPF/CNPJ exato e único: **6**;
+- sugestões fortes: **4**;
+- revisão: **2**;
+- novos sem correspondência suficiente: **584**;
+- divergentes: **0**.
+
+Nenhum desses registros foi criado ou alterado automaticamente no Cliente 360.
+
+### Auditoria de relações
+
+View:
+
+```
+wvetro_migracao.auditoria_relacoes
+```
+
+Totais validados:
+
+- relações auditadas: **1.486**;
+- relações encontradas diretamente: **1.065**;
+- ausências brutas: **421**;
+- duplicatas exatas: **0**.
+
+As 421 ausências brutas não equivalem a 421 erros.
+
+Classificação operacional:
+
+- **297** baixas sem título correspondente na carga de `titulos`: reconstruíveis pelo próprio payload de `titulos_baixados`;
+- **43** pedidos sem orçamento de mesmo número: relação meramente observacional, não bloqueante;
+- **9** projetos de instalação sem projeto de produção correspondente: todos possuem lote pai confirmado;
+- **37** referências de orçamento ausentes: possuem pedido vendido com o mesmo número;
+- **4** relações com referência `0`: sem vínculo externo válido a perseguir;
+- **31** ocorrências permanecem como pendência real de revisão.
+
+As 31 pendências reais estão concentradas em **13 números de orçamento** que não estão presentes nem em `orcamentos` nem em `pedidos` no staging atual.
+
+Regra de segurança: somente as ocorrências classificadas como `pendente_revisao` devem entrar em fila de investigação. As demais ausências continuam auditáveis, mas não devem bloquear a migração por si só.
+
+### Painel Master
+
+O painel:
+
+```
+/configuracoes/integracoes/wvetro/migracao-operacional
+```
+
+mostra:
+
+- carga persistida do Neon;
+- fila de clientes CL;
+- auditoria de relações;
+- filtros por módulo, relação, situação, confiança e tratamento;
+- diferença entre ausência bruta e pendência real;
+- busca e paginação.
+
+Todo esse fluxo permanece em modo de conferência. Não há promoção automática Neon -> Supabase.

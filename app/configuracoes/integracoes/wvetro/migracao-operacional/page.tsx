@@ -62,6 +62,7 @@ type NeonStagingResumo = {
   auditoria_relacoes?: number
   auditoria_encontradas?: number
   auditoria_ausentes?: number
+  auditoria_pendencias_reais?: number
   ultima_captura?: string | null
   erro?: string
 }
@@ -86,12 +87,16 @@ type AuditoriaRelacao = {
   encontrado: boolean
   confianca: string
   regra: string
+  classificacao: string
+  explicacao: string
+  requerAtencao: boolean
 }
 
 type AuditoriaOpcoes = {
   origens: string[]
   relacoes: string[]
   confiancas: string[]
+  classificacoes: string[]
 }
 
 type Reconciliacao = {
@@ -133,6 +138,19 @@ function badgePrioridade(prioridade: RecursoMapa['prioridade']) {
   )
 }
 
+function rotuloAuditoria(classificacao: string) {
+  const mapa: Record<string, string> = {
+    confirmada: 'Confirmada',
+    informativa: 'Informativa',
+    reconstruivel_baixa: 'Reconstruível pela baixa',
+    sem_referencia: 'Sem referência válida',
+    resolvida_por_pedido: 'Resolvida por pedido',
+    resolvida_por_lote: 'Resolvida pelo lote',
+    pendente_revisao: 'Pendente de revisão',
+  }
+  return mapa[classificacao] || classificacao
+}
+
 function badgePessoa(status: PessoaReconciliada['status']) {
   const mapa: Record<PessoaReconciliada['status'], [string, string]> = {
     vinculado_seguro: ['Vínculo seguro', 'bg-emerald-50 text-emerald-700'],
@@ -170,11 +188,13 @@ export default function MigracaoOperacionalWVetroPage() {
     origens: [],
     relacoes: [],
     confiancas: [],
+    classificacoes: [],
   })
   const [auditoriaOrigem, setAuditoriaOrigem] = useState('todos')
   const [auditoriaRelacao, setAuditoriaRelacao] = useState('todos')
   const [auditoriaSituacao, setAuditoriaSituacao] = useState('todos')
   const [auditoriaConfianca, setAuditoriaConfianca] = useState('todos')
+  const [auditoriaClassificacao, setAuditoriaClassificacao] = useState('todos')
   const [auditoriaBusca, setAuditoriaBusca] = useState('')
   const [auditoriaPagina, setAuditoriaPagina] = useState(1)
   const [auditoriaPaginas, setAuditoriaPaginas] = useState(1)
@@ -231,6 +251,7 @@ export default function MigracaoOperacionalWVetroPage() {
       relacao: string
       situacao: string
       confianca: string
+      classificacao: string
       busca: string
     }>,
   ) {
@@ -241,6 +262,7 @@ export default function MigracaoOperacionalWVetroPage() {
     const relacao = overrides?.relacao ?? auditoriaRelacao
     const situacao = overrides?.situacao ?? auditoriaSituacao
     const confianca = overrides?.confianca ?? auditoriaConfianca
+    const classificacao = overrides?.classificacao ?? auditoriaClassificacao
     const busca = overrides?.busca ?? auditoriaBusca
 
     try {
@@ -250,6 +272,7 @@ export default function MigracaoOperacionalWVetroPage() {
         relacao,
         situacao,
         confianca,
+        classificacao,
         pagina: String(pagina),
         limite: '50',
       })
@@ -261,6 +284,7 @@ export default function MigracaoOperacionalWVetroPage() {
       setAuditoriaRelacao(relacao)
       setAuditoriaSituacao(situacao)
       setAuditoriaConfianca(confianca)
+      setAuditoriaClassificacao(classificacao)
       setAuditoriaBusca(busca)
       setAuditoriaPagina(Number(json.pagina || pagina))
       setAuditoriaPaginas(Number(json.paginas || 1))
@@ -270,6 +294,7 @@ export default function MigracaoOperacionalWVetroPage() {
         origens: Array.isArray(json?.opcoes?.origens) ? json.opcoes.origens : [],
         relacoes: Array.isArray(json?.opcoes?.relacoes) ? json.opcoes.relacoes : [],
         confiancas: Array.isArray(json?.opcoes?.confiancas) ? json.opcoes.confiancas : [],
+        classificacoes: Array.isArray(json?.opcoes?.classificacoes) ? json.opcoes.classificacoes : [],
       })
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar auditoria de relações.')
@@ -433,7 +458,7 @@ export default function MigracaoOperacionalWVetroPage() {
                   )}
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                   {[
                     ['Orçamentos', neon.resumo.orcamentos ?? 0],
                     ['Clientes CL', neon.resumo.clientes_cl ?? 0],
@@ -467,7 +492,7 @@ export default function MigracaoOperacionalWVetroPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-3">
+                <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-[11px] text-slate-500">Relações auditadas</div>
                     <div className="mt-1 text-xl font-bold text-slate-900">
@@ -481,9 +506,15 @@ export default function MigracaoOperacionalWVetroPage() {
                     </div>
                   </div>
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                    <div className="text-[11px] text-amber-700">Relações ausentes</div>
+                    <div className="text-[11px] text-amber-700">Ausências brutas</div>
                     <div className="mt-1 text-xl font-bold text-amber-800">
                       {neon.resumo.auditoria_ausentes ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                    <div className="text-[11px] text-red-700">Pendências reais</div>
+                    <div className="mt-1 text-xl font-bold text-red-800">
+                      {neon.resumo.auditoria_pendencias_reais ?? 0}
                     </div>
                   </div>
                 </div>
@@ -502,7 +533,7 @@ export default function MigracaoOperacionalWVetroPage() {
                     Abrir fila de clientes
                   </button>
                   <button
-                    onClick={() => carregarAuditoria(1, { origem: 'todos', relacao: 'todos', situacao: 'todos', confianca: 'todos', busca: '' })}
+                    onClick={() => carregarAuditoria(1, { origem: 'todos', relacao: 'todos', situacao: 'todos', confianca: 'todos', classificacao: 'todos', busca: '' })}
                     disabled={auditoriaCarregando}
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
                   >
@@ -536,14 +567,14 @@ export default function MigracaoOperacionalWVetroPage() {
                     </div>
                     <p className="mt-1 max-w-3xl text-sm text-slate-600">
                       Confere vínculos entre produção, lotes, instalações, títulos, baixas, pedidos e
-                      orçamentos. Relação ausente significa que a referência não está no staging atual;
-                      não cria erro nem promove dado automaticamente.
+                      orçamentos. As ausências são classificadas para separar casos informativos ou
+                      reconstruíveis das pendências que realmente exigem revisão. Nada é promovido automaticamente.
                     </p>
                   </div>
                   <div className="text-sm font-semibold text-slate-700">{auditoriaTotal} relação(ões)</div>
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                   <select
                     value={auditoriaOrigem}
                     onChange={e => carregarAuditoria(1, { origem: e.target.value })}
@@ -569,9 +600,10 @@ export default function MigracaoOperacionalWVetroPage() {
                     onChange={e => carregarAuditoria(1, { situacao: e.target.value })}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
                   >
-                    <option value="todos">Encontradas e ausentes</option>
+                    <option value="todos">Todas as situações</option>
                     <option value="encontradas">Somente encontradas</option>
-                    <option value="ausentes">Somente ausentes</option>
+                    <option value="ausentes">Somente ausências brutas</option>
+                    <option value="atencao">Somente pendências reais</option>
                   </select>
                   <select
                     value={auditoriaConfianca}
@@ -581,6 +613,16 @@ export default function MigracaoOperacionalWVetroPage() {
                     <option value="todos">Todos os níveis</option>
                     {auditoriaOpcoes.confiancas.map(item => (
                       <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={auditoriaClassificacao}
+                    onChange={e => carregarAuditoria(1, { classificacao: e.target.value })}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                  >
+                    <option value="todos">Todos os tratamentos</option>
+                    {auditoriaOpcoes.classificacoes.map(item => (
+                      <option key={item} value={item}>{rotuloAuditoria(item)}</option>
                     ))}
                   </select>
                 </div>
@@ -614,6 +656,7 @@ export default function MigracaoOperacionalWVetroPage() {
                         <th className="px-3 py-2">Referência</th>
                         <th className="px-3 py-2">Destino</th>
                         <th className="px-3 py-2">Situação</th>
+                        <th className="px-3 py-2">Tratamento</th>
                         <th className="px-3 py-2">Confiança</th>
                         <th className="px-3 py-2">Regra</th>
                       </tr>
@@ -643,13 +686,27 @@ export default function MigracaoOperacionalWVetroPage() {
                               {item.encontrado ? 'Encontrada' : 'Ausente'}
                             </span>
                           </td>
+                          <td className="px-3 py-2">
+                            <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                              item.requerAtencao
+                                ? 'bg-red-50 text-red-700'
+                                : item.classificacao === 'confirmada'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {rotuloAuditoria(item.classificacao)}
+                            </span>
+                            <div className="mt-1 max-w-[280px] text-[11px] leading-4 text-slate-500">
+                              {item.explicacao}
+                            </div>
+                          </td>
                           <td className="px-3 py-2 text-xs text-slate-600">{item.confianca}</td>
                           <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.regra}</td>
                         </tr>
                       ))}
                       {!auditoriaCarregando && auditoriaItens.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
+                          <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
                             Nenhuma relação encontrada para os filtros selecionados.
                           </td>
                         </tr>
