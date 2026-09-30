@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { listarPessoasWVetro, statusConfiguracaoWVetro } from '@/lib/wvetroApi'
+import { statusConfiguracaoWVetro } from '@/lib/wvetroApi'
 import {
   criarExecucaoWVetroOperacional,
   salvarStagingWVetroOperacional,
@@ -8,6 +8,14 @@ import {
 } from '@/lib/wvetroMigracaoOperacionalServer'
 import { reconciliarPessoasWVetroComClientesAtlas } from '@/lib/wvetroReconciliacaoPessoasServer'
 import { statusNeonStaging, testarNeonStaging } from '@/lib/neonStaging'
+import {
+  consultarRecursoOperacionalWVetro,
+  WVetroOperacionalConsultaParams,
+} from '@/lib/wvetroOperacionalConsultaServer'
+import {
+  mapaWVetroPorRecurso,
+  WVetroOperacionalRecurso,
+} from '@/lib/wvetroOperacionalMap'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -35,6 +43,44 @@ function texto(valor: unknown) {
   return v || undefined
 }
 
+function numeroInteiro(valor: unknown) {
+  if (valor === null || valor === undefined || valor === '') return undefined
+  const n = Number(valor)
+  return Number.isInteger(n) ? n : undefined
+}
+
+function booleano(valor: unknown) {
+  if (typeof valor === 'boolean') return valor
+  if (typeof valor === 'string') {
+    if (valor.toLowerCase() === 'true') return true
+    if (valor.toLowerCase() === 'false') return false
+  }
+  return undefined
+}
+
+function paramsDoBody(body: Record<string, unknown>): WVetroOperacionalConsultaParams {
+  return {
+    inicio: texto(body.inicio),
+    fim: texto(body.fim),
+    pessoaId: texto(body.pessoaId),
+    tipoPessoa: texto(body.tipoPessoa),
+    vendedorId: texto(body.vendedorId),
+    linhaId: texto(body.linhaId),
+    ano: numeroInteiro(body.ano),
+    mes: numeroInteiro(body.mes),
+    id: texto(body.id),
+    nfId: texto(body.nfId),
+    tipo: texto(body.tipo),
+    produtoCodigo: texto(body.produtoCodigo),
+    corNome: texto(body.corNome),
+    tituloTipo: texto(body.tituloTipo),
+    contaNro: texto(body.contaNro),
+    loteNro: texto(body.loteNro),
+    programacaoNro: texto(body.programacaoNro),
+    produzido: booleano(body.produzido),
+  }
+}
+
 export async function POST(req: NextRequest) {
   const usuario = await autenticarMaster(req)
   if (!usuario) {
@@ -53,38 +99,57 @@ export async function POST(req: NextRequest) {
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
-    // Corpo é opcional. Sem body a rota executa em dry-run.
+    // Corpo opcional: mantém Pessoas em dry-run para compatibilidade.
+  }
+
+  const recurso = String(body.recurso || 'pessoas').trim() as WVetroOperacionalRecurso
+  const mapa = mapaWVetroPorRecurso(recurso)
+  if (!mapa) {
+    return NextResponse.json({ error: 'Recurso operacional W.Vetro inválido.' }, { status: 400 })
   }
 
   const dryRun = body.dryRun !== false
-  const pessoaId = texto(body.pessoaId)
-  const tipoPessoa = texto(body.tipoPessoa)
+  const params = paramsDoBody(body)
 
   try {
-    const dados = await listarPessoasWVetro({ pessoaId, tipoPessoa })
-    const staging = transformarPayloadWVetroEmStaging('pessoas', dados)
-    const reconciliacao = await reconciliarPessoasWVetroComClientesAtlas(dados)
+    const dados = await consultarRecursoOperacionalWVetro(recurso, params)
+    const staging = transformarPayloadWVetroEmStaging(recurso, dados)
+
+    const reconciliacao =
+      recurso === 'pessoas'
+        ? await reconciliarPessoasWVetroComClientesAtlas(dados)
+        : null
+
+    const resumoBase = {
+      ok: true,
+      recurso,
+      mapa,
+      gravacaoWvetro: false,
+      gravacaoAtlasOficial: false,
+      capturaveis: staging.registros.length,
+      semChave: staging.semChave.length,
+      chavesAmostra: staging.registros.slice(0, 30).map(item => ({
+        chaveExterna: item.chaveExterna,
+        dataReferencia: item.dataReferencia,
+        hash: item.payloadHash,
+      })),
+      ...(reconciliacao
+        ? {
+            reconciliacao: {
+              regra: 'CPF/CNPJ exato e único é o único vínculo seguro automático nesta fase.',
+              totais: reconciliacao.totais,
+              amostra: reconciliacao.itens.slice(0, 100),
+              truncado: reconciliacao.itens.length > 100,
+            },
+          }
+        : {}),
+    }
 
     if (dryRun) {
       return NextResponse.json({
-        ok: true,
-        recurso: 'pessoas',
+        ...resumoBase,
         modo: 'dry-run',
-        gravacaoWvetro: false,
-        gravacaoAtlasOficial: false,
         gravacaoStaging: false,
-        capturaveis: staging.registros.length,
-        semChave: staging.semChave.length,
-        chavesAmostra: staging.registros.slice(0, 30).map(item => ({
-          chaveExterna: item.chaveExterna,
-          hash: item.payloadHash,
-        })),
-        reconciliacao: {
-          regra: 'CPF/CNPJ exato e único é o único vínculo seguro automático nesta fase.',
-          totais: reconciliacao.totais,
-          amostra: reconciliacao.itens.slice(0, 100),
-          truncado: reconciliacao.itens.length > 100,
-        },
       })
     }
 
@@ -92,7 +157,8 @@ export async function POST(req: NextRequest) {
     if (!neon.configurado) {
       return NextResponse.json(
         {
-          error: 'Staging Neon não configurado. Defina NEON_STAGING_DATABASE_URL no ambiente servidor.',
+          error:
+            'Staging Neon não configurado. Defina NEON_STAGING_DATABASE_URL ou provisione Neon pelo Vercel Marketplace.',
           gravacaoWvetro: false,
           gravacaoAtlasOficial: false,
           gravacaoStaging: false,
@@ -131,35 +197,30 @@ export async function POST(req: NextRequest) {
     }
 
     const execucaoId = await criarExecucaoWVetroOperacional({
-      recurso: 'pessoas',
+      recurso,
+      periodoInicio: params.inicio || null,
+      periodoFim: params.fim || null,
       criadoPorId: usuario.id,
       criadoPorNome: usuario.nome,
     })
 
     const resultado = await salvarStagingWVetroOperacional({
       execucaoId,
-      recurso: 'pessoas',
+      recurso,
       payload: dados,
     })
 
     return NextResponse.json({
-      ok: true,
-      recurso: 'pessoas',
+      ...resumoBase,
       modo: 'staging',
-      gravacaoWvetro: false,
-      gravacaoAtlasOficial: false,
       gravacaoStaging: true,
       staging: { provedor: 'neon', database: testeNeon.database },
       execucao: resultado,
-      reconciliacao: {
-        totais: reconciliacao.totais,
-        amostra: reconciliacao.itens.slice(0, 100),
-        truncado: reconciliacao.itens.length > 100,
-      },
     })
   } catch (error) {
-    console.error('Erro na captura operacional W.Vetro/Pessoas:', error)
+    console.error(`Erro na captura operacional W.Vetro/${recurso}:`, error)
     const mensagem = error instanceof Error ? error.message : 'Erro desconhecido na captura W.Vetro.'
-    return NextResponse.json({ error: mensagem }, { status: 502 })
+    const status = /Informe|não pode|no máximo|inválido|reconhecido/i.test(mensagem) ? 400 : 502
+    return NextResponse.json({ error: mensagem, recurso }, { status })
   }
 }
