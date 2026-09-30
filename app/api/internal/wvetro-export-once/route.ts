@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const TOKEN_HASH = '7db851d992d7ccbdf08f02c0949543124040a41ba02a6810d1930e204164aafe'
-const EXPIRES_AT = Date.parse('2026-09-30T21:00:00Z')
+const EXPIRES_AT = Date.parse('2026-10-01T06:00:00Z')
 
 function autorizado(req: NextRequest) {
   if (Date.now() > EXPIRES_AT) return false
