@@ -153,7 +153,11 @@ export default function IntegracaoWVetroPage() {
             <h1 className="text-2xl font-bold text-slate-900">Integração W.Vetro</h1>
             <p className="mt-1 text-sm text-slate-600">Conferência somente leitura. Nenhum cadastro oficial do Atlas é alterado.</p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><ShieldCheck className="text-emerald-600" size={26} /></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/configuracoes/integracoes/wvetro/migracao-operacional" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100">Migração operacional</Link>
+            <Link href="/configuracoes/integracoes/wvetro/base-tecnica" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Base técnica</Link>
+            <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><ShieldCheck className="text-emerald-600" size={26} /></div>
+          </div>
         </div>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
