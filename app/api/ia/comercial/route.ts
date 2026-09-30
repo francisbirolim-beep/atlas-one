@@ -1,21 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { consultarOpenCode, statusOpenCode } from '@/lib/ai/opencode'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 type UsuarioMin = { id: string; nome?: string | null; role?: string | null; empresa_id: string }
-
-function extrairTextoResposta(data: any): string {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim()
-  const partes: string[] = []
-  for (const item of data?.output || []) {
-    if (item?.type !== 'message') continue
-    for (const c of item?.content || []) {
-      if (c?.type === 'output_text' && typeof c.text === 'string') partes.push(c.text)
-    }
-  }
-  return partes.join('\n').trim()
-}
 
 function resumirOrcamento(o: any) {
   return {
@@ -82,13 +72,22 @@ export async function POST(req: NextRequest) {
     if (!pergunta) return NextResponse.json({ error: 'Digite uma pergunta' }, { status: 400 })
     if (pergunta.length > 4000) return NextResponse.json({ error: 'Pergunta muito longa' }, { status: 400 })
 
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
+    const openCodeStatus = statusOpenCode()
+    if (!openCodeStatus.configurado) {
       return NextResponse.json(
-        { error: 'IA ainda não ativada: falta configurar OPENAI_API_KEY no ambiente de produção.', codigo: 'OPENAI_KEY_MISSING' },
+        {
+          error: 'IA ainda não ativada: falta configurar a conexão segura com o OpenCode no ambiente da Vercel.',
+          codigo: 'OPENCODE_CONFIG_MISSING',
+          detalhe: {
+            baseUrl: openCodeStatus.baseUrlConfigurada,
+            senha: openCodeStatus.senhaConfigurada,
+          },
+        },
         { status: 503 }
       )
     }
+
+    const sessionIdInformada = String(body?.sessionId || '').trim() || null
 
     const [orcResp, prodResp, tipoResp, memResp, interResp, feedbackResp] = await Promise.all([
       supabaseAdmin
@@ -135,7 +134,6 @@ export async function POST(req: NextRequest) {
       exemplos_aprovados: exemplosHumanos,
     }
 
-    const modelo = process.env.OPENAI_MODEL || 'gpt-4.1-mini'
     const instructions = [
       'Você é o Assistente Comercial do Atlas One, sistema interno da Esquadrifácio.',
       'Responda em português do Brasil, de forma objetiva e prática.',
@@ -145,26 +143,20 @@ export async function POST(req: NextRequest) {
       'Você NÃO tem permissão para criar, editar, excluir, aprovar ou mover registros. Suas respostas são sugestões.',
       'Quando houver correção humana ou memória aprovada, priorize-a em relação a padrões inferidos.',
       'Não trate uma sugestão histórica como regra absoluta; diferencie fato registrado de inferência.',
+      'O OpenCode é apenas o orquestrador desta conversa. Não tente usar shell, editar arquivos ou executar ações no computador.',
     ].join('\n')
 
-    const openaiResp = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelo,
-        instructions,
-        input: `CONTEXTO ATLAS:\n${JSON.stringify(contexto)}\n\nPERGUNTA DO USUÁRIO:\n${pergunta}`,
-        max_output_tokens: 900,
-        store: false,
-      }),
-    })
-
-    const openaiData = await openaiResp.json().catch(() => ({}))
-    if (!openaiResp.ok) {
-      const detalhe = openaiData?.error?.message || `OpenAI respondeu ${openaiResp.status}`
+    let resultadoIA: Awaited<ReturnType<typeof consultarOpenCode>>
+    try {
+      resultadoIA = await consultarOpenCode({
+        sessionId: sessionIdInformada,
+        tituloSessao: `Atlas Comercial - ${usuario.nome || usuario.id}`,
+        system: instructions,
+        prompt: `CONTEXTO ATLAS:\n${JSON.stringify(contexto)}\n\nPERGUNTA DO USUÁRIO:\n${pergunta}`,
+      })
+    } catch (e: any) {
+      const detalhe = String(e?.message || 'Falha ao consultar o OpenCode').slice(0, 800)
+      const modeloConfigurado = `${openCodeStatus.providerId}/${openCodeStatus.modelId}`
       await supabaseAdmin.from('ai_interacoes').insert({
         empresa_id: usuario.empresa_id,
         contexto: 'comercial',
@@ -172,15 +164,20 @@ export async function POST(req: NextRequest) {
         usuario_nome: usuario.nome || null,
         pergunta,
         resposta: detalhe,
-        modelo,
-        contexto_json: { erro_openai: true },
+        modelo: modeloConfigurado,
+        contexto_json: {
+          erro_opencode: true,
+          orquestrador: 'opencode',
+          motor: 'freellmapi',
+        },
         status: 'erro',
       })
-      return NextResponse.json({ error: detalhe }, { status: 502 })
+      return NextResponse.json({ error: detalhe, codigo: 'OPENCODE_REQUEST_FAILED' }, { status: 502 })
     }
 
-    const resposta = extrairTextoResposta(openaiData)
-    if (!resposta) return NextResponse.json({ error: 'A IA não retornou texto.' }, { status: 502 })
+    const resposta = resultadoIA.resposta
+    const modelo = `${resultadoIA.providerId}/${resultadoIA.modelId}`
+    const sessionId = resultadoIA.sessionId
 
     const { data: interacao, error: erroInsert } = await supabaseAdmin
       .from('ai_interacoes')
@@ -198,6 +195,11 @@ export async function POST(req: NextRequest) {
           qtd_tipologias: contexto.tipologias.length,
           qtd_memorias: contexto.memorias_aprovadas.length,
           qtd_exemplos_aprovados: contexto.exemplos_aprovados.length,
+          orquestrador: 'opencode',
+          motor: 'freellmapi',
+          opencode_session_id: sessionId,
+          provider_id: resultadoIA.providerId,
+          model_id: resultadoIA.modelId,
         },
         status: 'ok',
       })
@@ -210,6 +212,9 @@ export async function POST(req: NextRequest) {
       resposta,
       interacaoId: interacao?.id || null,
       modelo,
+      sessionId,
+      orquestrador: 'opencode',
+      motor: 'freellmapi',
       somenteSugestao: true,
     })
   } catch (e: any) {
