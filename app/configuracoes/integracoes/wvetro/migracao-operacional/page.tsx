@@ -99,6 +99,42 @@ type AuditoriaOpcoes = {
   classificacoes: string[]
 }
 
+type PlanoPromocaoItem = {
+  tipo: string
+  total: number
+  clienteSeguro: number
+  bloqueados: number
+  clientePromovidoRevisado: number
+  clienteExistenteSeguro: number
+  bloqueadoSemDocumento: number
+  bloqueadoSemPessoaCl: number
+  bloqueadoDocAmbiguo: number
+  bloqueadoSugestao: number
+  bloqueadoClienteNovo: number
+  bloqueadoSemVinculo: number
+}
+
+type PlanoPromocao = {
+  ok: boolean
+  modo: 'dry-run'
+  resumo: {
+    total: number
+    clienteSeguro: number
+    bloqueados: number
+    vendas: { total: number; clienteSeguro: number; bloqueados: number }
+    orcamentos: { total: number; clienteSeguro: number; bloqueados: number }
+  }
+  itens: PlanoPromocaoItem[]
+  duplicacoesPedidoOrcamento: number
+  politica: {
+    prontoSignifica: string
+    pedidoPrevalece: string
+    historicoSemWorkflow: boolean
+    fluxoVendaNormalPermitido: boolean
+    motivoFluxoVendaNormalBloqueado: string
+  }
+}
+
 type Reconciliacao = {
   regra: string
   totais: Record<PessoaReconciliada['status'], number>
@@ -173,6 +209,7 @@ export default function MigracaoOperacionalWVetroPage() {
   const [erro, setErro] = useState('')
   const [analisandoPessoas, setAnalisandoPessoas] = useState(false)
   const [reconciliacao, setReconciliacao] = useState<Reconciliacao | null>(null)
+  const [planoPromocao, setPlanoPromocao] = useState<PlanoPromocao | null>(null)
   const [filaAberta, setFilaAberta] = useState(false)
   const [filaCarregando, setFilaCarregando] = useState(false)
   const [filaItens, setFilaItens] = useState<PessoaReconciliada[]>([])
@@ -216,11 +253,15 @@ export default function MigracaoOperacionalWVetroPage() {
       }
 
       try {
-        const json = await apiPreview(new URLSearchParams({ recurso: 'mapa' }))
+        const [json, plano] = await Promise.all([
+          apiPreview(new URLSearchParams({ recurso: 'mapa' })),
+          apiPreview(new URLSearchParams({ recurso: 'plano-promocao' })),
+        ])
         if (!ativo) return
         setRecursos(Array.isArray(json.recursos) ? json.recursos : [])
         setPronto(!!json?.configuracao?.pronto)
         setNeon(json?.staging || null)
+        setPlanoPromocao(plano?.ok ? plano as PlanoPromocao : null)
       } catch (e) {
         if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar o mapa.')
       } finally {
@@ -547,6 +588,131 @@ export default function MigracaoOperacionalWVetroPage() {
                   <span className="text-xs text-slate-500">
                     Somente leitura. Nenhuma promoção automática é executada.
                   </span>
+                </div>
+              </section>
+            )}
+
+            {planoPromocao && (
+              <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={19} className="text-indigo-700" />
+                      <h2 className="font-semibold text-slate-900">Prontidão para migração — dry-run</h2>
+                    </div>
+                    <p className="mt-1 max-w-4xl text-sm text-slate-600">
+                      Consolida o histórico comercial do W.Vetro sem gravar no Atlas oficial. “Cliente seguro”
+                      significa apenas que o registro já consegue apontar para um Cliente 360 sem ambiguidade.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                    Sem gravação no Atlas
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[11px] text-slate-500">Históricos únicos</div>
+                    <div className="mt-1 text-xl font-bold text-slate-900">{planoPromocao.resumo.total}</div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <div className="text-[11px] text-emerald-700">Com cliente seguro</div>
+                    <div className="mt-1 text-xl font-bold text-emerald-800">
+                      {planoPromocao.resumo.clienteSeguro}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-[11px] text-amber-700">Bloqueados por cliente</div>
+                    <div className="mt-1 text-xl font-bold text-amber-800">
+                      {planoPromocao.resumo.bloqueados}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <div className="text-[11px] text-blue-700">Pedido/orçamento consolidados</div>
+                    <div className="mt-1 text-xl font-bold text-blue-800">
+                      {planoPromocao.duplicacoesPedidoOrcamento}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vendas históricas</div>
+                    <div className="mt-2 flex items-end gap-4">
+                      <div>
+                        <div className="text-2xl font-bold text-slate-900">{planoPromocao.resumo.vendas.total}</div>
+                        <div className="text-[11px] text-slate-500">total único</div>
+                      </div>
+                      <div>
+                        <div className="text-xl font-bold text-emerald-700">{planoPromocao.resumo.vendas.clienteSeguro}</div>
+                        <div className="text-[11px] text-slate-500">cliente seguro</div>
+                      </div>
+                      <div>
+                        <div className="text-xl font-bold text-amber-700">{planoPromocao.resumo.vendas.bloqueados}</div>
+                        <div className="text-[11px] text-slate-500">bloqueadas</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Orçamentos históricos</div>
+                    <div className="mt-2 flex items-end gap-4">
+                      <div>
+                        <div className="text-2xl font-bold text-slate-900">{planoPromocao.resumo.orcamentos.total}</div>
+                        <div className="text-[11px] text-slate-500">total único</div>
+                      </div>
+                      <div>
+                        <div className="text-xl font-bold text-emerald-700">{planoPromocao.resumo.orcamentos.clienteSeguro}</div>
+                        <div className="text-[11px] text-slate-500">cliente seguro</div>
+                      </div>
+                      <div>
+                        <div className="text-xl font-bold text-amber-700">{planoPromocao.resumo.orcamentos.bloqueados}</div>
+                        <div className="text-[11px] text-slate-500">bloqueados</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 overflow-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[980px] text-sm">
+                    <thead className="bg-slate-100 text-left text-xs text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2">Fonte histórica</th>
+                        <th className="px-3 py-2">Total</th>
+                        <th className="px-3 py-2">Cliente seguro</th>
+                        <th className="px-3 py-2">Já promovido/revisado</th>
+                        <th className="px-3 py-2">Cliente Atlas existente</th>
+                        <th className="px-3 py-2">Sem documento</th>
+                        <th className="px-3 py-2">Outros bloqueios</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {planoPromocao.itens.map(item => {
+                        const outrosBloqueios =
+                          item.bloqueadoSemPessoaCl +
+                          item.bloqueadoDocAmbiguo +
+                          item.bloqueadoSugestao +
+                          item.bloqueadoClienteNovo +
+                          item.bloqueadoSemVinculo
+                        return (
+                          <tr key={item.tipo} className="border-t border-slate-100">
+                            <td className="px-3 py-2 font-medium text-slate-800">{item.tipo}</td>
+                            <td className="px-3 py-2">{item.total}</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-700">{item.clienteSeguro}</td>
+                            <td className="px-3 py-2">{item.clientePromovidoRevisado}</td>
+                            <td className="px-3 py-2">{item.clienteExistenteSeguro}</td>
+                            <td className="px-3 py-2 text-amber-700">{item.bloqueadoSemDocumento}</td>
+                            <td className="px-3 py-2 text-amber-700">{outrosBloqueios}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-xs leading-5 text-red-800">
+                  <b>Gate de segurança:</b> histórico W.Vetro não pode usar o fluxo normal “Confirmar venda”.
+                  Esse fluxo dispara Financeiro, Kanban, workflow e Engenharia. A promoção futura deverá usar
+                  um modo histórico isolado, idempotente e sem reabrir operação antiga.
                 </div>
               </section>
             )}
