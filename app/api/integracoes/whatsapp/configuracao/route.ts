@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const [configResp, regrasResp, usuariosResp] = await Promise.all([
     supabaseAdmin
       .from('atendimento_configuracoes')
-      .select('*')
+      .select('empresa_id,numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_qr_data_url,gateway_qr_updated_at,gateway_connected_jid,gateway_last_seen_at,gateway_device_name')
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle(),
     supabaseAdmin
@@ -66,6 +66,7 @@ export async function PUT(req: NextRequest) {
         numero_principal: numeroPrincipal,
         setor_padrao: body?.setorPadrao ? String(body.setorPadrao) : null,
         usuario_padrao_id: body?.usuarioPadraoId || null,
+        modo_integracao: 'qr',
         ativo: body?.ativo !== false,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'empresa_id' })

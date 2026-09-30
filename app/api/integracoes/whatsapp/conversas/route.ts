@@ -3,7 +3,6 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant } from '@/lib/tenantServer'
 import {
   assumirConversa,
-  configuracaoMeta,
   finalizarConversa,
   listarConversasAtendimento,
   transferirConversa,
@@ -31,23 +30,20 @@ export async function GET(req: NextRequest) {
 
     const { data: config } = await supabaseAdmin
       .from('atendimento_configuracoes')
-      .select('numero_principal,phone_number_id,setor_padrao,usuario_padrao_id,ativo')
+      .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_last_seen_at,gateway_device_name')
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
-    const meta = configuracaoMeta()
     return NextResponse.json({
       ok: true,
       usuario: { id: usuario.id, nome: usuario.nome, role: usuario.role },
       conversas,
       usuarios,
       configuracao: config || null,
-      metaPronta: Boolean(
-        meta.accessToken &&
-        meta.graphVersion &&
-        (config?.phone_number_id || meta.phoneNumberId) &&
-        meta.verifyToken
-      ),
+      canalPronto: config?.modo_integracao === 'qr'
+        ? config?.gateway_status === 'connected'
+        : false,
+      gatewayStatus: config?.gateway_status || 'offline',
     })
   } catch (error) {
     console.error('Erro ao listar conversas WhatsApp:', error)

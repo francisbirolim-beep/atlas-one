@@ -67,7 +67,8 @@ export default function WhatsAppAtendimentoPage() {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
-  const [metaPronta, setMetaPronta] = useState(false)
+  const [canalPronto, setCanalPronto] = useState(false)
+  const [gatewayStatus, setGatewayStatus] = useState('offline')
   const [destinoId, setDestinoId] = useState('')
   const [setorTransferencia, setSetorTransferencia] = useState('')
   const fimRef = useRef<HTMLDivElement | null>(null)
@@ -81,7 +82,8 @@ export default function WhatsAppAtendimentoPage() {
       setEu(json.usuario)
       setConversas(json.conversas || [])
       setUsuarios(json.usuarios || [])
-      setMetaPronta(Boolean(json.metaPronta))
+      setCanalPronto(Boolean(json.canalPronto))
+      setGatewayStatus(String(json.gatewayStatus || 'offline'))
       if (selecionar && !ativa && json.conversas?.[0]) setAtiva(json.conversas[0])
       if (ativa) {
         const atualizada = (json.conversas || []).find((c: Conversa) => c.id === ativa.id)
@@ -205,8 +207,8 @@ export default function WhatsAppAtendimentoPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`hidden rounded-full px-3 py-1 text-xs font-semibold sm:inline-flex ${metaPronta ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-              {metaPronta ? 'Meta conectada' : 'Aguardando credenciais Meta'}
+            <span className={`hidden rounded-full px-3 py-1 text-xs font-semibold sm:inline-flex ${canalPronto ? 'bg-emerald-100 text-emerald-700' : gatewayStatus === 'qr' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+              {canalPronto ? 'WhatsApp conectado' : gatewayStatus === 'qr' ? 'QR Code disponível' : 'WhatsApp desconectado'}
             </span>
             {eu?.role === 'master' && (
               <Link href="/whatsapp/configuracao" className="rounded-xl border p-2 hover:bg-slate-50" title="Configurar roteamento">
@@ -347,9 +349,9 @@ export default function WhatsAppAtendimentoPage() {
                       onKeyDown={e=>{
                         if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviar()}
                       }}
-                      rows={1} placeholder={metaPronta?'Digite uma mensagem':'Conecte a Meta para enviar'}
+                      rows={1} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
                       className="min-h-11 flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
-                    <button disabled={!texto.trim()||enviando||!metaPronta}
+                    <button disabled={!texto.trim()||enviando||!canalPronto}
                       onClick={()=>void enviar()}
                       className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white disabled:opacity-40">
                       <Send size={18}/>

@@ -41,6 +41,11 @@ type ConfigAtendimento = {
   phone_number_id?: string | null
   setor_padrao?: string | null
   usuario_padrao_id?: string | null
+  modo_integracao?: 'qr' | 'cloud_api' | null
+  gateway_token_hash?: string | null
+  gateway_status?: string | null
+  gateway_qr_data_url?: string | null
+  gateway_connected_jid?: string | null
   ativo: boolean
 }
 
@@ -328,6 +333,198 @@ export async function processarWebhookMeta(payload: any) {
   return { recebidas, statusRecebidos }
 }
 
+export async function autenticarGatewayWhatsApp(token: string | null | undefined) {
+  const valor = String(token || '').trim()
+  if (!valor) return null
+  const hash = crypto.createHash('sha256').update(valor).digest('hex')
+  const { data } = await supabaseAdmin
+    .from('atendimento_configuracoes')
+    .select('*')
+    .eq('gateway_token_hash', hash)
+    .eq('ativo', true)
+    .eq('modo_integracao', 'qr')
+    .maybeSingle()
+  return data ? data as ConfigAtendimento : null
+}
+
+export async function atualizarEstadoGateway(
+  config: ConfigAtendimento,
+  dados: {
+    status: 'offline' | 'connecting' | 'qr' | 'connected' | 'disconnected'
+    qrDataUrl?: string | null
+    connectedJid?: string | null
+    deviceName?: string | null
+  },
+) {
+  const agora = new Date().toISOString()
+  const payload: Record<string, unknown> = {
+    gateway_status: dados.status,
+    gateway_last_seen_at: agora,
+    updated_at: agora,
+  }
+
+  if (dados.status === 'qr') {
+    payload.gateway_qr_data_url = dados.qrDataUrl || null
+    payload.gateway_qr_updated_at = agora
+  }
+  if (dados.status === 'connected') {
+    payload.gateway_qr_data_url = null
+    payload.gateway_connected_jid = dados.connectedJid || null
+  }
+  if (dados.deviceName) payload.gateway_device_name = dados.deviceName
+
+  const { error } = await supabaseAdmin
+    .from('atendimento_configuracoes')
+    .update(payload)
+    .eq('empresa_id', config.empresa_id)
+  if (error) throw error
+}
+
+export async function registrarEntradaGateway(
+  config: ConfigAtendimento,
+  dados: {
+    telefone: string
+    contatoNome?: string | null
+    whatsappMessageId?: string | null
+    tipo?: string | null
+    texto?: string | null
+    timestamp?: string | null
+    payload?: Record<string, unknown> | null
+  },
+) {
+  const telefone = normalizarTelefone(dados.telefone)
+  if (!telefone) throw new Error('Telefone de origem invalido.')
+
+  if (dados.whatsappMessageId) {
+    const { data: duplicada } = await supabaseAdmin
+      .from('atendimento_mensagens')
+      .select('id')
+      .eq('empresa_id', config.empresa_id)
+      .eq('whatsapp_message_id', dados.whatsappMessageId)
+      .maybeSingle()
+    if (duplicada) return { duplicate: true }
+  }
+
+  const conversa = await criarOuAtualizarConversa({
+    config,
+    telefone,
+    contatoNome: dados.contatoNome || null,
+    texto: dados.texto || null,
+  })
+  const sessao = await garantirSessao(conversa)
+  const agora = dados.timestamp || new Date().toISOString()
+  const texto = dados.texto || (
+    dados.tipo === 'image' ? '📷 Imagem' :
+    dados.tipo === 'video' ? '🎥 Vídeo' :
+    dados.tipo === 'audio' ? '🎤 Áudio' :
+    dados.tipo === 'document' ? '📎 Documento' :
+    dados.tipo === 'sticker' ? '🖼️ Figurinha' :
+    '[Mensagem]'
+  )
+
+  const { error } = await supabaseAdmin.from('atendimento_mensagens').insert({
+    empresa_id: config.empresa_id,
+    conversa_id: conversa.id,
+    sessao_id: sessao?.id || null,
+    direcao: 'entrada',
+    tipo: dados.tipo || 'text',
+    texto,
+    whatsapp_message_id: dados.whatsappMessageId || null,
+    provider_timestamp: agora,
+    payload: { transporte: 'qr_gateway', ...(dados.payload || {}) },
+  })
+  if (error) throw error
+
+  await supabaseAdmin.from('atendimento_conversas').update({
+    ultimo_preview: texto,
+    nao_lidas: (conversa.nao_lidas || 0) + 1,
+    ultima_mensagem_em: agora,
+    ultima_entrada_em: agora,
+    status: conversa.responsavel_id ? 'em_atendimento' : 'aguardando',
+    updated_at: new Date().toISOString(),
+  }).eq('id', conversa.id)
+
+  await registrarEvento({
+    empresaId: config.empresa_id,
+    conversaId: conversa.id,
+    sessaoId: sessao?.id || null,
+    tipo: 'mensagem_recebida_qr',
+    dados: { whatsapp_message_id: dados.whatsappMessageId || null, tipo: dados.tipo || 'text' },
+  })
+
+  return { duplicate: false, conversaId: conversa.id }
+}
+
+export async function proximaSaidaGateway(config: ConfigAtendimento) {
+  const { data: item, error } = await supabaseAdmin
+    .from('atendimento_fila_saida')
+    .select('id,conversa_id,mensagem_id,telefone,tipo,texto,payload,tentativas,created_at')
+    .eq('empresa_id', config.empresa_id)
+    .eq('status', 'pendente')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  if (!item) return null
+
+  const { error: updateError } = await supabaseAdmin
+    .from('atendimento_fila_saida')
+    .update({
+      status: 'processando',
+      tentativas: Number(item.tentativas || 0) + 1,
+      processando_em: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', item.id)
+    .eq('status', 'pendente')
+  if (updateError) throw updateError
+  return item
+}
+
+export async function confirmarSaidaGateway(
+  config: ConfigAtendimento,
+  dados: {
+    filaId: string
+    sucesso: boolean
+    whatsappMessageId?: string | null
+    erro?: string | null
+  },
+) {
+  const { data: fila } = await supabaseAdmin
+    .from('atendimento_fila_saida')
+    .select('id,conversa_id,mensagem_id')
+    .eq('id', dados.filaId)
+    .eq('empresa_id', config.empresa_id)
+    .maybeSingle()
+  if (!fila) throw new Error('Item da fila nao encontrado.')
+
+  const agora = new Date().toISOString()
+  const { error } = await supabaseAdmin
+    .from('atendimento_fila_saida')
+    .update({
+      status: dados.sucesso ? 'enviado' : 'erro',
+      erro: dados.sucesso ? null : (dados.erro || 'Falha no envio pelo gateway.'),
+      enviado_em: dados.sucesso ? agora : null,
+      updated_at: agora,
+    })
+    .eq('id', fila.id)
+  if (error) throw error
+
+  await registrarEvento({
+    empresaId: config.empresa_id,
+    conversaId: fila.conversa_id,
+    tipo: dados.sucesso ? 'mensagem_enviada_qr' : 'mensagem_erro_qr',
+    dados: {
+      fila_id: fila.id,
+      mensagem_id: fila.mensagem_id,
+      whatsapp_message_id: dados.whatsappMessageId || null,
+      erro: dados.erro || null,
+    },
+  })
+
+  return { ok: true }
+}
+
 export async function conversaAcessivel(conversaId: string, usuario: UsuarioTenant, incluirFila = true) {
   const { data } = await supabaseAdmin.from('atendimento_conversas').select('*').eq('id', conversaId).maybeSingle()
   if (!data || data.empresa_id !== usuario.empresa_id) return null
@@ -369,6 +566,67 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     .select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
   if (!config) throw new Error('WhatsApp ainda não foi configurado para esta empresa.')
 
+  const sessao = await garantirSessao(conversa)
+  const agora = new Date().toISOString()
+  const modo = config.modo_integracao || 'qr'
+
+  if (modo === 'qr') {
+    if (config.gateway_status !== 'connected') {
+      throw new Error('WhatsApp por QR ainda não está conectado. O Master precisa escanear o QR Code.')
+    }
+
+    const { data: mensagem, error: mensagemError } = await supabaseAdmin
+      .from('atendimento_mensagens')
+      .insert({
+        empresa_id: usuario.empresa_id,
+        conversa_id: conversa.id,
+        sessao_id: sessao?.id || null,
+        direcao: 'saida',
+        tipo: 'text',
+        texto: corpo,
+        usuario_id: usuario.id,
+        usuario_nome: usuario.nome,
+        provider_timestamp: agora,
+        payload: { transporte: 'qr_gateway', status: 'pendente' },
+      })
+      .select('id')
+      .single()
+    if (mensagemError) throw mensagemError
+
+    const { error: filaError } = await supabaseAdmin.from('atendimento_fila_saida').insert({
+      empresa_id: usuario.empresa_id,
+      conversa_id: conversa.id,
+      mensagem_id: mensagem.id,
+      telefone: conversa.telefone,
+      tipo: 'text',
+      texto: corpo,
+      payload: {},
+      status: 'pendente',
+    })
+    if (filaError) throw filaError
+
+    await supabaseAdmin.from('atendimento_conversas').update({
+      ultimo_preview: corpo,
+      ultima_mensagem_em: agora,
+      ultima_saida_em: agora,
+      nao_lidas: 0,
+      status: 'em_atendimento',
+      updated_at: agora,
+    }).eq('id', conversa.id)
+
+    await registrarEvento({
+      empresaId: usuario.empresa_id,
+      conversaId: conversa.id,
+      sessaoId: sessao?.id || null,
+      tipo: 'mensagem_enfileirada_qr',
+      usuarioId: usuario.id,
+      usuarioNome: usuario.nome,
+      dados: { mensagem_id: mensagem.id },
+    })
+
+    return { messageId: null, queued: true }
+  }
+
   const meta = configuracaoMeta()
   const phoneNumberId = config.phone_number_id || meta.phoneNumberId
   if (!meta.accessToken || !meta.graphVersion || !phoneNumberId) {
@@ -386,13 +644,9 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     }),
   })
   const json = await resposta.json().catch(() => ({}))
-  if (!resposta.ok) {
-    throw new Error(json?.error?.message || 'A Meta recusou o envio da mensagem.')
-  }
+  if (!resposta.ok) throw new Error(json?.error?.message || 'A Meta recusou o envio da mensagem.')
 
-  const sessao = await garantirSessao(conversa)
   const messageId = json?.messages?.[0]?.id || null
-  const agora = new Date().toISOString()
   const { error } = await supabaseAdmin.from('atendimento_mensagens').insert({
     empresa_id: usuario.empresa_id,
     conversa_id: conversa.id,
@@ -427,7 +681,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     dados: { whatsapp_message_id: messageId },
   })
 
-  return { messageId }
+  return { messageId, queued: false }
 }
 
 export async function assumirConversa(conversaId: string, usuario: UsuarioTenant) {
