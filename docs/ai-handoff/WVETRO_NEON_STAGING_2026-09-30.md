@@ -399,3 +399,7 @@ mostra:
 - busca e paginação.
 
 Todo esse fluxo permanece em modo de conferência. Não há promoção automática Neon -> Supabase.
+
+
+## Sincronização de deploy
+- 2026-09-30: disparo de novo deployment da `main` para publicar o estado consolidado após os PRs #503, #504, #505 e #506. Sem alteração de regra de negócio.
