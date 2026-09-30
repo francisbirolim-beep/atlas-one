@@ -4,17 +4,29 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, CheckCircle2, Clock3, MessageCircle,
-  Search, Send, Settings, ShieldCheck, UserRoundCheck,
+  Search, Send, Settings, ShieldCheck, Smartphone, UserRoundCheck,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
 
 type Usuario = { id: string; nome: string; role?: string }
+type Canal = {
+  id: string
+  nome: string
+  numero_declarado?: string | null
+  numero_conectado?: string | null
+  principal: boolean
+  usuario_id?: string | null
+  usuario_nome?: string | null
+  gateway_status: string
+}
 type Conversa = {
   id: string
   telefone: string
   contato_nome?: string | null
   cliente_id?: string | null
+  whatsapp_canal_id?: string | null
+  whatsapp_numero?: string | null
   status: string
   responsavel_id?: string | null
   responsavel_nome?: string | null
@@ -59,6 +71,7 @@ export default function WhatsAppAtendimentoPage() {
   const [eu, setEu] = useState<Usuario | null>(null)
   const [conversas, setConversas] = useState<Conversa[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [canais, setCanais] = useState<Canal[]>([])
   const [ativa, setAtiva] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
@@ -67,8 +80,8 @@ export default function WhatsAppAtendimentoPage() {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
-  const [canalPronto, setCanalPronto] = useState(false)
-  const [gatewayStatus, setGatewayStatus] = useState('offline')
+  const [canaisConectados, setCanaisConectados] = useState(0)
+  const [canaisTotal, setCanaisTotal] = useState(0)
   const [destinoId, setDestinoId] = useState('')
   const [setorTransferencia, setSetorTransferencia] = useState('')
   const fimRef = useRef<HTMLDivElement | null>(null)
@@ -82,8 +95,9 @@ export default function WhatsAppAtendimentoPage() {
       setEu(json.usuario)
       setConversas(json.conversas || [])
       setUsuarios(json.usuarios || [])
-      setCanalPronto(Boolean(json.canalPronto))
-      setGatewayStatus(String(json.gatewayStatus || 'offline'))
+      setCanais(json.canais || [])
+      setCanaisConectados(Number(json.canaisConectados || 0))
+      setCanaisTotal(Number(json.canaisTotal || 0))
       if (selecionar && !ativa && json.conversas?.[0]) setAtiva(json.conversas[0])
       if (ativa) {
         const atualizada = (json.conversas || []).find((c: Conversa) => c.id === ativa.id)
@@ -191,6 +205,10 @@ export default function WhatsAppAtendimentoPage() {
   const podeResponder = Boolean(
     ativa && (eu?.role === 'master' || ativa.responsavel_id === eu?.id),
   )
+  const canalAtivo = ativa?.whatsapp_canal_id
+    ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
+    : null
+  const canalPronto = canalAtivo?.gateway_status === 'connected'
 
   return (
     <main className="min-h-screen bg-slate-100 p-3 md:p-6">
@@ -203,13 +221,16 @@ export default function WhatsAppAtendimentoPage() {
                 <MessageCircle className="text-emerald-600" size={20}/>
                 <h1 className="font-bold text-slate-900">WhatsApp Atlas</h1>
               </div>
-              <p className="text-xs text-slate-500">+55 (17) 99635-5667 · atendimento por usuario</p>
+              <p className="text-xs text-slate-500">Multicanal · principal +55 (17) 99635-5667</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`hidden rounded-full px-3 py-1 text-xs font-semibold sm:inline-flex ${canalPronto ? 'bg-emerald-100 text-emerald-700' : gatewayStatus === 'qr' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-              {canalPronto ? 'WhatsApp conectado' : gatewayStatus === 'qr' ? 'QR Code disponível' : 'WhatsApp desconectado'}
+            <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 sm:inline-flex">
+              {canaisConectados}/{canaisTotal} canais conectados
             </span>
+            <Link href="/whatsapp/numeros" className="rounded-xl border p-2 hover:bg-slate-50" title="Gerenciar canais WhatsApp">
+              <Smartphone size={18}/>
+            </Link>
             {eu?.role === 'master' && (
               <Link href="/whatsapp/configuracao" className="rounded-xl border p-2 hover:bg-slate-50" title="Configurar roteamento">
                 <Settings size={18}/>
@@ -257,6 +278,11 @@ export default function WhatsAppAtendimentoPage() {
                         {c.responsavel_nome || 'Aguardando atendente'}
                       </span>
                       {c.setor && <span className="truncate text-slate-400">{c.setor}</span>}
+                      {c.whatsapp_canal_id && (
+                        <span className="truncate text-emerald-700">
+                          {canais.find(x=>x.id===c.whatsapp_canal_id)?.nome || c.whatsapp_numero || 'WhatsApp'}
+                        </span>
+                      )}
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
                   </div>
@@ -278,6 +304,11 @@ export default function WhatsAppAtendimentoPage() {
                     {telefoneFormatado(ativa.telefone)} · {ativa.responsavel_nome || 'Em espera'}
                     {ativa.setor ? ` · ${ativa.setor}` : ''}
                   </p>
+                  {canalAtivo&&(
+                    <p className="mt-0.5 text-[10px] font-semibold text-emerald-700">
+                      Via {canalAtivo.nome}{canalAtivo.numero_declarado ? ` · ${telefoneFormatado(canalAtivo.numero_declarado)}` : ''}
+                    </p>
+                  )}
                 </div>
                 {ativa.cliente_id && (
                   <Link href={`/clientes/${ativa.cliente_id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold">

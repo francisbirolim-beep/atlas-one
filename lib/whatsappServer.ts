@@ -9,6 +9,8 @@ export type AtendimentoConversa = {
   telefone: string
   contato_nome?: string | null
   cliente_id?: string | null
+  whatsapp_canal_id?: string | null
+  whatsapp_numero?: string | null
   status: string
   responsavel_id?: string | null
   responsavel_nome?: string | null
@@ -54,6 +56,29 @@ export function normalizarTelefone(valor: string | null | undefined) {
   if (!digitos) return ''
   if (digitos.startsWith('55')) return digitos
   return `55${digitos}`
+}
+
+function atlasTipoMensagem(valor: string | null | undefined) {
+  const tipo = String(valor || 'text').toLowerCase()
+  const mapa: Record<string, string> = {
+    text: 'texto',
+    texto: 'texto',
+    image: 'imagem',
+    imagem: 'imagem',
+    sticker: 'imagem',
+    audio: 'audio',
+    video: 'video',
+    document: 'documento',
+    documento: 'documento',
+    location: 'localizacao',
+    localizacao: 'localizacao',
+    contact: 'contato',
+    contacts: 'contato',
+    contato: 'contato',
+    system: 'sistema',
+    sistema: 'sistema',
+  }
+  return mapa[tipo] || 'sistema'
 }
 
 export function configuracaoMeta() {
@@ -277,7 +302,7 @@ export async function processarWebhookMeta(payload: any) {
           conversa_id: conversa.id,
           sessao_id: sessao?.id || null,
           direcao: 'entrada',
-          tipo: msg.type || 'texto',
+          tipo: atlasTipoMensagem(msg.type),
           texto,
           media_id: media.mediaId,
           mime_type: media.mimeType,
@@ -427,7 +452,7 @@ export async function registrarEntradaGateway(
     conversa_id: conversa.id,
     sessao_id: sessao?.id || null,
     direcao: 'entrada',
-    tipo: dados.tipo || 'text',
+    tipo: atlasTipoMensagem(dados.tipo),
     texto,
     whatsapp_message_id: dados.whatsappMessageId || null,
     provider_timestamp: agora,
@@ -571,8 +596,24 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
   const modo = config.modo_integracao || 'qr'
 
   if (modo === 'qr') {
-    if (config.gateway_status !== 'connected') {
-      throw new Error('WhatsApp por QR ainda não está conectado. O Master precisa escanear o QR Code.')
+    const canalId = conversa.whatsapp_canal_id
+    if (!canalId) throw new Error('Esta conversa ainda não possui um número de WhatsApp associado.')
+
+    const { data: canal } = await supabaseAdmin
+      .from('atendimento_whatsapp_canais')
+      .select('id,nome,numero_declarado,principal,usuario_id,gateway_status,ativo')
+      .eq('id', canalId)
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true)
+      .maybeSingle()
+
+    if (!canal) throw new Error('O número usado nesta conversa não está mais disponível.')
+    if (canal.gateway_status !== 'connected') {
+      throw new Error(`O número ${canal.numero_declarado} não está conectado. O Master precisa escanear o QR Code desse canal.`)
+    }
+
+    if (usuario.role !== 'master' && canal.usuario_id && canal.usuario_id !== usuario.id) {
+      throw new Error('Este número está vinculado a outro usuário.')
     }
 
     const { data: mensagem, error: mensagemError } = await supabaseAdmin
@@ -582,7 +623,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
         conversa_id: conversa.id,
         sessao_id: sessao?.id || null,
         direcao: 'saida',
-        tipo: 'text',
+        tipo: 'texto',
         texto: corpo,
         usuario_id: usuario.id,
         usuario_nome: usuario.nome,
@@ -602,6 +643,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       texto: corpo,
       payload: {},
       status: 'pendente',
+      whatsapp_canal_id: canalId,
     })
     if (filaError) throw filaError
 
@@ -652,7 +694,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     conversa_id: conversa.id,
     sessao_id: sessao?.id || null,
     direcao: 'saida',
-    tipo: 'text',
+    tipo: 'texto',
     texto: corpo,
     whatsapp_message_id: messageId,
     usuario_id: usuario.id,

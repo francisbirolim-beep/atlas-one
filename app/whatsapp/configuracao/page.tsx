@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Plus, QrCode, Save, Trash2, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, MessageCircleMore, Plus, Save, Trash2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 
 type Usuario = { id: string; nome: string }
@@ -32,18 +32,11 @@ export default function ConfiguracaoWhatsAppPage() {
   const [erro,setErro]=useState('')
   const [salvando,setSalvando]=useState(false)
   const [salvo,setSalvo]=useState(false)
-  const [gatewayStatus,setGatewayStatus]=useState('offline')
-  const [qrDataUrl,setQrDataUrl]=useState('')
-  const [gatewayLastSeen,setGatewayLastSeen]=useState('')
 
-  useEffect(()=>{
-    void carregar()
-    const timer=setInterval(()=>void carregar(true),2500)
-    return()=>clearInterval(timer)
-  },[])
+  useEffect(()=>{void carregar()},[])
 
-  async function carregar(silencioso=false){
-    if(!silencioso)setErro('')
+  async function carregar(){
+    setErro('')
     const headers=await authHeaders()
     const resp=await fetch('/api/integracoes/whatsapp/configuracao',{headers})
     const json=await resp.json()
@@ -54,9 +47,6 @@ export default function ConfiguracaoWhatsAppPage() {
       setNumero(c.numero_principal||'5517996355667')
       setSetorPadrao(c.setor_padrao||'')
       setUsuarioPadraoId(c.usuario_padrao_id||'')
-      setGatewayStatus(c.gateway_status||'offline')
-      setQrDataUrl(c.gateway_qr_data_url||'')
-      setGatewayLastSeen(c.gateway_last_seen_at||'')
     }
     setRegras((json.regras||[]).map((r:any)=>({
       nome:r.nome||'',
@@ -128,47 +118,27 @@ export default function ConfiguracaoWhatsAppPage() {
       {salvo&&<div className="border-b bg-emerald-50 px-5 py-2 text-sm text-emerald-700">Configuracao salva.</div>}
 
       <div className="space-y-6 p-5">
-        <section className="rounded-2xl border p-5">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center">
-            <div className="flex-1">
-              <div className="mb-2 flex items-center gap-2">
-                {gatewayStatus==='connected'
-                  ? <Wifi size={20} className="text-emerald-600"/>
-                  : gatewayStatus==='qr'
-                    ? <QrCode size={20} className="text-blue-600"/>
-                    : <WifiOff size={20} className="text-amber-600"/>}
-                <h2 className="font-bold text-slate-900">Conexao por QR Code</h2>
-              </div>
-              <p className="text-sm text-slate-600">
-                {gatewayStatus==='connected'
-                  ? 'WhatsApp conectado ao Atlas. O gateway do Mac esta ativo.'
-                  : gatewayStatus==='qr'
-                    ? 'QR Code pronto. Escaneie no WhatsApp Business para vincular o Atlas.'
-                    : 'Gateway desconectado. Inicie o gateway no Mac para gerar o QR Code.'}
-              </p>
-              <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-                No celular: <b>WhatsApp Business → Configuracoes → Aparelhos conectados → Conectar aparelho</b>.
-              </div>
-              {gatewayLastSeen&&(
-                <p className="mt-2 text-xs text-slate-400">
-                  Ultimo sinal do gateway: {new Date(gatewayLastSeen).toLocaleString('pt-BR')}
-                </p>
-              )}
+        <section className="flex flex-col gap-4 rounded-2xl border p-5 md:flex-row md:items-center">
+          <div className="flex-1">
+            <div className="mb-2 flex items-center gap-2">
+              <MessageCircleMore size={20} className="text-emerald-600"/>
+              <h2 className="font-bold text-slate-900">Números conectados</h2>
             </div>
-            {gatewayStatus==='qr'&&qrDataUrl&&(
-              <div className="shrink-0 rounded-2xl border bg-white p-3 text-center shadow-sm">
-                <img src={qrDataUrl} alt="QR Code para conectar WhatsApp ao Atlas" className="h-64 w-64"/>
-                <p className="mt-2 text-xs font-semibold text-slate-600">Escaneie com o numero principal</p>
-              </div>
-            )}
+            <p className="text-sm text-slate-600">
+              O QR Code, o vínculo de cada número com seu usuário e o status de conexão ficam no painel de números.
+            </p>
           </div>
+          <Link href="/whatsapp/numeros"
+            className="rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-bold text-white">
+            Gerenciar números
+          </Link>
         </section>
 
         <section className="grid gap-4 rounded-2xl border p-4 md:grid-cols-3">
           <label className="text-sm font-semibold text-slate-700">
             Numero principal
-            <input value={numero} onChange={e=>setNumero(e.target.value)}
-              className="mt-1 w-full rounded-xl border px-3 py-2 font-normal" placeholder="5517996355667"/>
+            <input value={numero} readOnly
+              className="mt-1 w-full rounded-xl border bg-slate-50 px-3 py-2 font-normal text-slate-600" placeholder="5517996355667"/>
           </label>
           <label className="text-sm font-semibold text-slate-700">
             Setor padrao

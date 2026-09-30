@@ -30,20 +30,34 @@ export async function GET(req: NextRequest) {
 
     const { data: config } = await supabaseAdmin
       .from('atendimento_configuracoes')
-      .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_last_seen_at,gateway_device_name')
+      .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao')
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
+
+    const { data: canaisRaw } = await supabaseAdmin
+      .from('atendimento_whatsapp_canais')
+      .select('id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,gateway_status,gateway_last_seen_at')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true)
+      .order('principal', { ascending: false })
+      .order('created_at', { ascending: true })
+
+    const canais = (canaisRaw || []).filter((canal: any) =>
+      usuario.role === 'master' ||
+      canal.principal === true ||
+      canal.usuario_id === usuario.id
+    )
+    const conectados = canais.filter((canal: any) => canal.gateway_status === 'connected').length
 
     return NextResponse.json({
       ok: true,
       usuario: { id: usuario.id, nome: usuario.nome, role: usuario.role },
       conversas,
       usuarios,
+      canais,
       configuracao: config || null,
-      canalPronto: config?.modo_integracao === 'qr'
-        ? config?.gateway_status === 'connected'
-        : false,
-      gatewayStatus: config?.gateway_status || 'offline',
+      canaisConectados: conectados,
+      canaisTotal: canais.length,
     })
   } catch (error) {
     console.error('Erro ao listar conversas WhatsApp:', error)
