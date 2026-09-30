@@ -129,6 +129,122 @@ export async function GET(req: NextRequest) {
   const neon = statusNeonStaging()
   const recurso = String(req.nextUrl.searchParams.get('recurso') || 'mapa').trim()
 
+  if (recurso === 'auditoria-relacoes') {
+    if (!neon.configurado) {
+      return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
+    }
+
+    try {
+      const sql = neonStaging()
+      const rows = await sql`
+        select
+          origem_recurso,
+          origem_chave,
+          tipo_relacao,
+          destino_recurso,
+          destino_chave,
+          referencia,
+          encontrado,
+          confianca,
+          regra
+        from wvetro_migracao.auditoria_relacoes
+        order by
+          encontrado asc,
+          origem_recurso,
+          tipo_relacao,
+          referencia nulls last,
+          origem_chave
+      `
+
+      const origem = String(req.nextUrl.searchParams.get('origem') || 'todos').trim()
+      const relacao = String(req.nextUrl.searchParams.get('relacao') || 'todos').trim()
+      const situacao = String(req.nextUrl.searchParams.get('situacao') || 'todos').trim()
+      const confianca = String(req.nextUrl.searchParams.get('confianca') || 'todos').trim()
+      const busca = String(req.nextUrl.searchParams.get('busca') || '')
+        .trim()
+        .toLocaleUpperCase('pt-BR')
+      const pagina = Math.max(1, Number(req.nextUrl.searchParams.get('pagina') || 1) || 1)
+      const limite = Math.min(100, Math.max(10, Number(req.nextUrl.searchParams.get('limite') || 50) || 50))
+
+      const normalizados = rows.map((row: any) => ({
+        origemRecurso: String(row.origem_recurso || ''),
+        origemChave: String(row.origem_chave || ''),
+        tipoRelacao: String(row.tipo_relacao || ''),
+        destinoRecurso: String(row.destino_recurso || ''),
+        destinoChave: String(row.destino_chave || ''),
+        referencia: String(row.referencia || '').trim() || null,
+        encontrado: row.encontrado === true,
+        confianca: String(row.confianca || ''),
+        regra: String(row.regra || ''),
+      }))
+
+      const resumo = normalizados.reduce(
+        (acc, item) => {
+          acc.total += 1
+          if (item.encontrado) acc.encontradas += 1
+          else acc.ausentes += 1
+          return acc
+        },
+        { total: 0, encontradas: 0, ausentes: 0 },
+      )
+
+      const opcoes = {
+        origens: Array.from(new Set(normalizados.map(item => item.origemRecurso))).sort(),
+        relacoes: Array.from(new Set(normalizados.map(item => item.tipoRelacao))).sort(),
+        confiancas: Array.from(new Set(normalizados.map(item => item.confianca))).sort(),
+      }
+
+      const filtrados = normalizados.filter(item => {
+        if (origem !== 'todos' && item.origemRecurso !== origem) return false
+        if (relacao !== 'todos' && item.tipoRelacao !== relacao) return false
+        if (confianca !== 'todos' && item.confianca !== confianca) return false
+        if (situacao === 'encontradas' && !item.encontrado) return false
+        if (situacao === 'ausentes' && item.encontrado) return false
+        if (!busca) return true
+
+        const textoBusca = [
+          item.origemRecurso,
+          item.origemChave,
+          item.tipoRelacao,
+          item.destinoRecurso,
+          item.destinoChave,
+          item.referencia,
+          item.confianca,
+          item.regra,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleUpperCase('pt-BR')
+
+        return textoBusca.includes(busca)
+      })
+
+      const total = filtrados.length
+      const inicio = (pagina - 1) * limite
+      const itens = filtrados.slice(inicio, inicio + limite)
+
+      return NextResponse.json({
+        ok: true,
+        recurso,
+        modo: 'somente-leitura',
+        gravacaoWvetro: false,
+        gravacaoAtlas: false,
+        resumo,
+        opcoes,
+        filtros: { origem, relacao, situacao, confianca, busca: busca || null },
+        pagina,
+        limite,
+        total,
+        paginas: Math.max(1, Math.ceil(total / limite)),
+        itens,
+      })
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Falha ao carregar auditoria de relações.'
+      console.error('Erro ao carregar auditoria de relações W.Vetro:', error)
+      return NextResponse.json({ error: mensagem, recurso }, { status: 502 })
+    }
+  }
+
   if (recurso === 'staging-clientes') {
     if (!neon.configurado) {
       return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
@@ -307,6 +423,9 @@ export async function GET(req: NextRequest) {
               where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'novo') as clientes_novos,
             (select count(*)::int from wvetro_migracao.vinculos
               where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'divergente') as clientes_divergentes,
+            (select count(*)::int from wvetro_migracao.auditoria_relacoes) as auditoria_relacoes,
+            (select count(*)::int from wvetro_migracao.auditoria_relacoes where encontrado) as auditoria_encontradas,
+            (select count(*)::int from wvetro_migracao.auditoria_relacoes where not encontrado) as auditoria_ausentes,
             (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
         `
         resumoNeon = rows[0] || null
