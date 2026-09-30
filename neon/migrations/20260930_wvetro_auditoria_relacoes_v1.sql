@@ -1,0 +1,212 @@
+create or replace view wvetro_migracao.auditoria_relacoes as
+with orcamentos as (
+  select
+    payload->>'Nro' as nro,
+    chave_externa_canonica as chave
+  from wvetro_migracao.raw_canonico
+  where recurso = 'orcamentos'
+),
+lotes as (
+  select
+    payload->>'id' as lote_id,
+    chave_externa_canonica as chave
+  from wvetro_migracao.raw_canonico
+  where recurso = 'lotes_producao'
+),
+producao as (
+  select
+    payload->>'loteId' as lote_id,
+    payload->>'id' as projeto_id,
+    payload->>'orcamento' as orcamento,
+    chave_externa_canonica as chave
+  from wvetro_migracao.raw_canonico
+  where recurso = 'producao_projeto'
+),
+lote_projetos as (
+  select
+    l.chave_externa_canonica as lote_chave,
+    l.payload->>'id' as lote_id,
+    p->>'id' as projeto_id,
+    p->>'orcamento' as orcamento
+  from wvetro_migracao.raw_canonico l
+  cross join lateral jsonb_array_elements(coalesce(l.payload->'projetos','[]'::jsonb)) p
+  where l.recurso = 'lotes_producao'
+),
+instalacao_projetos as (
+  select
+    i.chave_externa_canonica as instalacao_chave,
+    p->>'loteId' as lote_id,
+    p->>'loteProjetoId' as projeto_id,
+    p->>'orcamento' as orcamento
+  from wvetro_migracao.raw_canonico i
+  cross join lateral jsonb_array_elements(coalesce(i.payload->'Projetos','[]'::jsonb)) p
+  where i.recurso = 'instalacoes'
+),
+titulos_orcamento as (
+  select
+    t.chave_externa_canonica as titulo_chave,
+    coalesce(
+      (regexp_match(coalesce(t.payload->>'TituloOrigem',''), '(?i)OR[ÇC]AMENTO\s*([0-9]+)'))[1],
+      (regexp_match(coalesce(t.payload->>'TituloOrigem',''), '(?i)ORC:\s*([0-9]+)'))[1]
+    ) as orcamento
+  from wvetro_migracao.raw_canonico t
+  where t.recurso = 'titulos'
+),
+pedidos as (
+  select
+    chave_externa_canonica as pedido_chave,
+    payload->>'Nro' as nro
+  from wvetro_migracao.raw_canonico
+  where recurso = 'pedidos'
+),
+baixas as (
+  select
+    chave_externa_canonica as baixa_chave,
+    payload->>'TituloId' as titulo_id
+  from wvetro_migracao.raw_canonico
+  where recurso = 'titulos_baixados'
+),
+titulos as (
+  select
+    chave_externa_canonica as titulo_chave,
+    payload->>'TituloId' as titulo_id
+  from wvetro_migracao.raw_canonico
+  where recurso = 'titulos'
+)
+select
+  'producao_projeto'::text as origem_recurso,
+  pr.chave::text as origem_chave,
+  'lote_producao'::text as tipo_relacao,
+  'lotes_producao'::text as destino_recurso,
+  coalesce(l.chave, 'lote:' || coalesce(pr.lote_id,''))::text as destino_chave,
+  pr.lote_id::text as referencia,
+  (l.chave is not null) as encontrado,
+  'forte'::text as confianca,
+  'loteId declarado no projeto de produção'::text as regra
+from producao pr
+left join lotes l on l.lote_id = pr.lote_id
+
+union all
+
+select
+  'lotes_producao',
+  lp.lote_chave || ':projeto:' || coalesce(lp.projeto_id,''),
+  'orcamento_declarado',
+  'orcamentos',
+  coalesce(o.chave, 'orcamento:' || coalesce(lp.orcamento,'')),
+  lp.orcamento,
+  (o.chave is not null),
+  'declarada_payload',
+  'orcamento declarado dentro do projeto do lote'
+from lote_projetos lp
+left join orcamentos o on o.nro = lp.orcamento
+
+union all
+
+select
+  'producao_projeto',
+  pr.chave,
+  'orcamento_declarado',
+  'orcamentos',
+  coalesce(o.chave, 'orcamento:' || coalesce(pr.orcamento,'')),
+  pr.orcamento,
+  (o.chave is not null),
+  'declarada_payload',
+  'orcamento declarado no projeto de produção'
+from producao pr
+left join orcamentos o on o.nro = pr.orcamento
+
+union all
+
+select
+  'instalacoes',
+  ip.instalacao_chave || ':lote:' || coalesce(ip.lote_id,'') || ':projeto:' || coalesce(ip.projeto_id,''),
+  'lote_producao',
+  'lotes_producao',
+  coalesce(l.chave, 'lote:' || coalesce(ip.lote_id,'')),
+  ip.lote_id,
+  (l.chave is not null),
+  'forte',
+  'loteId declarado no projeto da instalação'
+from instalacao_projetos ip
+left join lotes l on l.lote_id = ip.lote_id
+
+union all
+
+select
+  'instalacoes',
+  ip.instalacao_chave || ':lote:' || coalesce(ip.lote_id,'') || ':projeto:' || coalesce(ip.projeto_id,''),
+  'projeto_producao',
+  'producao_projeto',
+  coalesce(pr.chave, 'producao-projeto:' || coalesce(ip.lote_id,'') || ':' || coalesce(ip.projeto_id,'')),
+  concat_ws(':', ip.lote_id, ip.projeto_id),
+  (pr.chave is not null),
+  'forte',
+  'loteId + loteProjetoId declarados na instalação'
+from instalacao_projetos ip
+left join producao pr
+  on pr.lote_id = ip.lote_id
+ and pr.projeto_id = ip.projeto_id
+
+union all
+
+select
+  'instalacoes',
+  ip.instalacao_chave || ':lote:' || coalesce(ip.lote_id,'') || ':projeto:' || coalesce(ip.projeto_id,''),
+  'orcamento_declarado',
+  'orcamentos',
+  coalesce(o.chave, 'orcamento:' || coalesce(ip.orcamento,'')),
+  ip.orcamento,
+  (o.chave is not null),
+  'declarada_payload',
+  'orcamento declarado dentro do projeto da instalação'
+from instalacao_projetos ip
+left join orcamentos o on o.nro = ip.orcamento
+
+union all
+
+select
+  'titulos',
+  t.titulo_chave,
+  'orcamento_origem',
+  'orcamentos',
+  coalesce(o.chave, 'orcamento:' || coalesce(t.orcamento,'')),
+  t.orcamento,
+  (o.chave is not null),
+  'documental',
+  'número extraído de TituloOrigem (ORÇAMENTO/ORC)'
+from titulos_orcamento t
+left join orcamentos o on o.nro = t.orcamento
+where t.orcamento is not null
+
+union all
+
+select
+  'titulos_baixados',
+  b.baixa_chave,
+  'titulo_mesmo_id',
+  'titulos',
+  coalesce(t.titulo_chave, 'titulo:' || coalesce(b.titulo_id,'')),
+  b.titulo_id,
+  (t.titulo_chave is not null),
+  'forte',
+  'TituloId idêntico entre baixa e título'
+from baixas b
+left join titulos t on t.titulo_id = b.titulo_id
+
+union all
+
+select
+  'pedidos',
+  p.pedido_chave,
+  'numero_compartilhado',
+  'orcamentos',
+  coalesce(o.chave, 'orcamento:' || coalesce(p.nro,'')),
+  p.nro,
+  (o.chave is not null),
+  'observacional',
+  'pedido e orçamento possuem o mesmo Nro; não usar para promoção automática'
+from pedidos p
+left join orcamentos o on o.nro = p.nro;
+
+revoke all on wvetro_migracao.auditoria_relacoes from public;
