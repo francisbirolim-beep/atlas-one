@@ -1,3 +1,7 @@
+## 2026-09-30 — Maiúsculas globais: concluído
+
+PR #490 em produção. Nada pendente. Ao mexer em conversões de texto em campos controlados, seguir a regra de `DECISIONS.md` (“Campos controlados pelo React”).
+
 ## 2026-09-28 — Medição Final: descrição e acesso ao checklist
 
 - Cartões do controle mostram a descrição completa e abrem o checklist da peça pelo ID, com rolagem e foco; numeração e quantidade são secundárias.

@@ -1,3 +1,11 @@
+## 2026-09-30 — Maiúsculas globais sem perder o onChange (PR #490)
+
+- `components/system/UppercaseInputProvider.tsx` passou a gravar o texto em maiúsculas pelo setter nativo do protótipo (`HTMLInputElement.prototype` / `HTMLTextAreaElement.prototype`), em vez de `alvo.value = ...`.
+- Causa: a atribuição direta atualizava o `_valueTracker` do React; o React concluía que o campo não mudou e não disparava o `onChange`. O campo mostrava o texto, mas o estado da tela ficava vazio sempre que a última tecla era uma letra minúscula.
+- Sintomas corrigidos: busca em `/clientes/identificar` sem resultado até dar espaço ou apagar; campos de cadastro (ex.: nome em `/clientes/novo`) com estado vazio apesar do texto visível.
+- Validado com teste isolado (React 18.3 + jsdom + user-event), preview Vercel aprovado pelo usuário e merge em `main` (`3ccf6ec`).
+- Dados conferidos: nenhum cliente salvo sem nome. Os 26 clientes criados desde 12/08 sem cidade também não têm bairro, WhatsApp nem telefone, padrão de cadastro rápido só com nome, e não de perda por este defeito.
+
 ## 2026-09-28 — Medição Final: descrição e acesso ao checklist
 
 - Cartões do controle mostram a descrição completa e abrem o checklist da peça pelo ID, com rolagem e foco; numeração e quantidade são secundárias.

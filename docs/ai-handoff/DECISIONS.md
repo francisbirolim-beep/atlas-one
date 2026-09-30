@@ -114,3 +114,7 @@ Fluxo obrigatório:
 `branch → PR → Build Validation + Supabase Database Control → Vercel Preview → validação manual → merge manual`.
 
 PR #280 permanece draft até aprovação do usuário.
+
+## Campos controlados pelo React
+
+Nunca alterar o valor de um input/textarea controlado com `elemento.value = ...` fora do React (providers globais, máscaras, conversões). Isso atualiza o rastreador interno do React e o `onChange` deixa de disparar. Usar o setter nativo do protótipo (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, novo)`), como em `UppercaseInputProvider` (PR #490).
