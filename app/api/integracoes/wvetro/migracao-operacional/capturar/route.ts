@@ -118,7 +118,10 @@ export async function POST(req: NextRequest) {
 
     const reconciliacao =
       recurso === 'pessoas'
-        ? await reconciliarPessoasWVetroComClientesAtlas(dados, usuario.empresa_id)
+        ? await reconciliarPessoasWVetroComClientesAtlas(dados, usuario.empresa_id, {
+            categoriaClienteConfirmada: params.tipoPessoa?.toUpperCase() === 'CL',
+            origemCategoria: params.tipoPessoa ? `Tipopessoa=${params.tipoPessoa}` : null,
+          })
         : null
 
     const resumoBase = {
