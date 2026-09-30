@@ -31,8 +31,28 @@ function texto(valor: unknown) {
 function dataIso(valor: unknown): string | null {
   const bruto = texto(valor)
   if (!bruto) return null
-  const match = bruto.match(/^(\d{4}-\d{2}-\d{2})/)
-  return match ? match[1] : null
+
+  const match = bruto.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return null
+
+  const ano = Number(match[1])
+  const mes = Number(match[2])
+  const dia = Number(match[3])
+
+  // O W.Vetro usa "0000-00-00" como sentinela em campos sem data.
+  // PostgreSQL rejeita esse valor, então ele deve virar NULL no staging.
+  if (ano < 1 || mes < 1 || mes > 12 || dia < 1 || dia > 31) return null
+
+  const data = new Date(Date.UTC(ano, mes - 1, dia))
+  if (
+    data.getUTCFullYear() !== ano ||
+    data.getUTCMonth() !== mes - 1 ||
+    data.getUTCDate() !== dia
+  ) {
+    return null
+  }
+
+  return `${match[1]}-${match[2]}-${match[3]}`
 }
 
 function normalizarParaHash(valor: unknown): unknown {
@@ -157,8 +177,10 @@ export function chaveExternaWVetro(
     case 'lotes_producao':
       return chavePrimeiroDisponivel('lote', [payload.id, payload.nro])
     case 'producao_projeto':
-      return chavePrimeiroDisponivel('producao-projeto', [payload.id]) ||
-        chaveComposta('producao-projeto', [payload.loteId, payload.orcamento])
+      // "id" reinicia dentro de cada lote no W.Vetro; sozinho não é chave global.
+      // A dupla loteId + id foi validada como única na carga de staging atual.
+      return chaveComposta('producao-projeto', [payload.loteId, payload.id]) ||
+        chaveComposta('producao-projeto', [payload.loteNro, payload.id, payload.orcamento, payload.codigo])
     case 'instalacoes':
       return chavePrimeiroDisponivel('instalacao', [payload.ProgInstalacaoId, payload.ProgInstalacaoNro])
     case 'linhas':
