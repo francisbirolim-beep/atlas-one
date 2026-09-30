@@ -30,7 +30,7 @@ async function autenticarMaster(req: NextRequest) {
 
   const { data: usuario } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
 
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
 
   const dryRun = body.dryRun !== false
   const params = paramsDoBody(body)
+  if (recurso === 'pessoas' && !params.tipoPessoa) params.tipoPessoa = 'CL'
 
   try {
     const dados = await consultarRecursoOperacionalWVetro(recurso, params)
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     const reconciliacao =
       recurso === 'pessoas'
-        ? await reconciliarPessoasWVetroComClientesAtlas(dados)
+        ? await reconciliarPessoasWVetroComClientesAtlas(dados, usuario.empresa_id)
         : null
 
     const resumoBase = {
