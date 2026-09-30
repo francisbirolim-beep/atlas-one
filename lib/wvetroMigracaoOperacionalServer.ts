@@ -277,14 +277,6 @@ export async function salvarStagingWVetroOperacional(params: {
 
   for (const registro of registros) {
     try {
-      const versoes = await sql`
-        select coalesce(max(versao), 0)::int as versao
-        from wvetro_migracao.raw
-        where recurso = ${registro.recurso}
-          and chave_externa = ${registro.chaveExterna}
-      `
-      const proximaVersao = Number((versoes[0] as { versao?: number } | undefined)?.versao || 0) + 1
-
       const inseridos = await sql`
         insert into wvetro_migracao.raw (
           execucao_id, recurso, chave_externa, data_referencia, versao, payload, payload_hash
@@ -293,7 +285,12 @@ export async function salvarStagingWVetroOperacional(params: {
           ${registro.recurso},
           ${registro.chaveExterna},
           ${registro.dataReferencia}::date,
-          ${proximaVersao},
+          (
+            select coalesce(max(versao), 0)::int + 1
+            from wvetro_migracao.raw
+            where recurso = ${registro.recurso}
+              and chave_externa = ${registro.chaveExterna}
+          ),
           ${JSON.stringify(registro.payload)}::jsonb,
           ${registro.payloadHash}
         )
