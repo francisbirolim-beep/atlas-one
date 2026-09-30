@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { neonStaging } from '@/lib/neonStaging'
 import { WVetroOperacionalRecurso } from '@/lib/wvetroOperacionalMap'
 
 export type WVetroRegistroStaging = {
@@ -245,26 +245,27 @@ export async function criarExecucaoWVetroOperacional(params: {
   criadoPorId?: string | null
   criadoPorNome?: string | null
 }) {
-  const { data, error } = await supabaseAdmin
-    .from('wvetro_operacional_execucoes')
-    .insert({
-      recurso: params.recurso,
-      periodo_inicio: params.periodoInicio || null,
-      periodo_fim: params.periodoFim || null,
-      cursor_data: params.periodoInicio || null,
-      status: 'em_andamento',
-      criado_por_id: params.criadoPorId || null,
-      criado_por_nome: params.criadoPorNome || null,
-      iniciado_em: new Date().toISOString(),
-    })
-    .select('id')
-    .single()
+  const sql = neonStaging()
+  const rows = await sql`
+    insert into wvetro_migracao.execucoes (
+      recurso, periodo_inicio, periodo_fim, cursor_data, status,
+      criado_por_id, criado_por_nome, iniciado_em
+    ) values (
+      ${params.recurso},
+      ${params.periodoInicio || null}::date,
+      ${params.periodoFim || null}::date,
+      ${params.periodoInicio || null}::date,
+      'em_andamento',
+      ${params.criadoPorId || null},
+      ${params.criadoPorNome || null},
+      now()
+    )
+    returning id
+  `
 
-  if (error || !data?.id) {
-    throw new Error(`Não foi possível iniciar a execução operacional W.Vetro: ${error?.message || 'sem id'}`)
-  }
-
-  return String(data.id)
+  const id = String((rows[0] as { id?: string } | undefined)?.id || '')
+  if (!id) throw new Error('Não foi possível iniciar a execução operacional W.Vetro no Neon.')
+  return id
 }
 
 export async function salvarStagingWVetroOperacional(params: {
@@ -272,89 +273,84 @@ export async function salvarStagingWVetroOperacional(params: {
   recurso: WVetroOperacionalRecurso
   payload: unknown
 }): Promise<ExecucaoResumo> {
+  const sql = neonStaging()
   const { registros, semChave } = transformarPayloadWVetroEmStaging(params.recurso, params.payload)
   let novos = 0
   let repetidos = 0
   let erros = semChave.length
 
   for (const registro of registros) {
-    const { data: existente, error: erroBusca } = await supabaseAdmin
-      .from('wvetro_operacional_raw')
-      .select('id')
-      .eq('recurso', registro.recurso)
-      .eq('chave_externa', registro.chaveExterna)
-      .eq('payload_hash', registro.payloadHash)
-      .maybeSingle()
+    try {
+      const versoes = await sql`
+        select coalesce(max(versao), 0)::int as versao
+        from wvetro_migracao.raw
+        where recurso = ${registro.recurso}
+          and chave_externa = ${registro.chaveExterna}
+      `
+      const proximaVersao = Number((versoes[0] as { versao?: number } | undefined)?.versao || 0) + 1
 
-    if (erroBusca) {
+      const inseridos = await sql`
+        insert into wvetro_migracao.raw (
+          execucao_id, recurso, chave_externa, data_referencia, versao, payload, payload_hash
+        ) values (
+          ${params.execucaoId}::uuid,
+          ${registro.recurso},
+          ${registro.chaveExterna},
+          ${registro.dataReferencia}::date,
+          ${proximaVersao},
+          ${JSON.stringify(registro.payload)}::jsonb,
+          ${registro.payloadHash}
+        )
+        on conflict (recurso, chave_externa, payload_hash) do nothing
+        returning id
+      `
+
+      if (inseridos.length > 0) novos += 1
+      else repetidos += 1
+    } catch (error) {
+      console.error('Erro ao persistir snapshot W.Vetro no Neon:', error)
       erros += 1
-      continue
     }
-
-    if (existente?.id) {
-      repetidos += 1
-      continue
-    }
-
-    const { count, error: erroVersao } = await supabaseAdmin
-      .from('wvetro_operacional_raw')
-      .select('id', { count: 'exact', head: true })
-      .eq('recurso', registro.recurso)
-      .eq('chave_externa', registro.chaveExterna)
-
-    if (erroVersao) {
-      erros += 1
-      continue
-    }
-
-    const { error: erroInsert } = await supabaseAdmin
-      .from('wvetro_operacional_raw')
-      .insert({
-        execucao_id: params.execucaoId,
-        recurso: registro.recurso,
-        chave_externa: registro.chaveExterna,
-        data_referencia: registro.dataReferencia,
-        versao: (count || 0) + 1,
-        payload: registro.payload,
-        payload_hash: registro.payloadHash,
-      })
-
-    if (erroInsert) erros += 1
-    else novos += 1
   }
 
   for (const item of semChave) {
-    await supabaseAdmin.from('wvetro_operacional_pendencias').insert({
-      execucao_id: params.execucaoId,
-      recurso: params.recurso,
-      tipo: 'captura',
-      motivo: 'Registro sem chave externa segura.',
-      contexto: { payload: item },
-      status: 'pendente',
-    })
+    try {
+      await sql`
+        insert into wvetro_migracao.pendencias (
+          execucao_id, recurso, tipo, motivo, contexto, status
+        ) values (
+          ${params.execucaoId}::uuid,
+          ${params.recurso},
+          'captura',
+          'Registro sem chave externa segura.',
+          ${JSON.stringify({ payload: item })}::jsonb,
+          'pendente'
+        )
+      `
+    } catch (error) {
+      console.error('Erro ao registrar pendência W.Vetro no Neon:', error)
+    }
   }
 
   const lidos = registros.length + semChave.length
   const status = erros > 0 ? 'erro' : 'concluida'
-  const agora = new Date().toISOString()
+  const ultimaMensagem = `${novos} novos, ${repetidos} repetidos, ${erros} erro(s)/pendência(s).`
+  const mensagemErro = erros > 0
+    ? 'A execução terminou com pendências; revisar wvetro_migracao.pendencias.'
+    : null
 
-  const { error: erroExecucao } = await supabaseAdmin
-    .from('wvetro_operacional_execucoes')
-    .update({
-      status,
-      total_lidos: lidos,
-      total_novos: novos,
-      total_erros: erros,
-      ultima_mensagem: `${novos} novos, ${repetidos} repetidos, ${erros} erro(s)/pendência(s).`,
-      erro: erros > 0 ? 'A execução terminou com pendências; revisar wvetro_operacional_pendencias.' : null,
-      updated_at: agora,
-      finalizado_em: agora,
-    })
-    .eq('id', params.execucaoId)
-
-  if (erroExecucao) {
-    throw new Error(`Staging salvo, mas falhou ao finalizar a execução: ${erroExecucao.message}`)
-  }
+  await sql`
+    update wvetro_migracao.execucoes
+    set status = ${status},
+        total_lidos = ${lidos},
+        total_novos = ${novos},
+        total_erros = ${erros},
+        ultima_mensagem = ${ultimaMensagem},
+        erro = ${mensagemErro},
+        updated_at = now(),
+        finalizado_em = now()
+    where id = ${params.execucaoId}::uuid
+  `
 
   return { id: params.execucaoId, lidos, novos, repetidos, erros }
 }
