@@ -14,7 +14,6 @@ import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSumma
 import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
 import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
-import MedicaoVistaInternaAviso from '@/components/system/MedicaoVistaInternaAviso'
 import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -46,7 +45,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
           {medicaoFinalId && (
             <div key={medicaoFinalId} className="atlas-medicao-tools">
-              <MedicaoVistaInternaAviso medicaoId={medicaoFinalId} />
+              <section className="mx-auto w-full max-w-6xl px-3 pt-4 md:px-4">
+                <p className="text-xs font-medium text-slate-400">Produção <span className="px-1">›</span> Medição Final <span className="px-1">›</span> Obra</p>
+                <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Medição Final</h1>
+              </section>
               <MedicaoIdentificationBar medicaoId={medicaoFinalId} />
               <div className="mx-auto grid w-full max-w-6xl gap-3 px-3 pt-3 lg:grid-cols-3 md:px-4">
                 <MedicaoFinalFieldSummary medicaoId={medicaoFinalId} embedded />
