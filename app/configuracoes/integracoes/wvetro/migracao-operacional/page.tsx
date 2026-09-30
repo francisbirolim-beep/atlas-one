@@ -49,6 +49,15 @@ type PessoaReconciliada = {
   motivos: string[]
 }
 
+type NeonStagingInfo = {
+  provedor: 'neon'
+  configurado: boolean
+  env: string
+  host: string | null
+  database: string | null
+  teste?: { ok?: boolean; schemaPronto?: boolean; database?: string | null; error?: string } | null
+}
+
 type Reconciliacao = {
   regra: string
   totais: Record<PessoaReconciliada['status'], number>
@@ -106,6 +115,7 @@ export default function MigracaoOperacionalWVetroPage() {
   const [carregando, setCarregando] = useState(true)
   const [recursos, setRecursos] = useState<RecursoMapa[]>([])
   const [pronto, setPronto] = useState(false)
+  const [neon, setNeon] = useState<NeonStagingInfo | null>(null)
   const [erro, setErro] = useState('')
   const [analisandoPessoas, setAnalisandoPessoas] = useState(false)
   const [reconciliacao, setReconciliacao] = useState<Reconciliacao | null>(null)
@@ -130,6 +140,7 @@ export default function MigracaoOperacionalWVetroPage() {
         if (!ativo) return
         setRecursos(Array.isArray(json.recursos) ? json.recursos : [])
         setPronto(!!json?.configuracao?.pronto)
+        setNeon(json?.staging || null)
       } catch (e) {
         if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar o mapa.')
       } finally {
@@ -218,7 +229,7 @@ export default function MigracaoOperacionalWVetroPage() {
           </div>
         ) : (
           <>
-            <section className="grid gap-3 sm:grid-cols-3">
+            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <Database size={18} className="text-blue-700" />
                 <div className="mt-3 text-xs text-slate-500">Recursos mapeados</div>
@@ -234,6 +245,18 @@ export default function MigracaoOperacionalWVetroPage() {
                 <div className="mt-1 text-lg font-bold text-slate-900">
                   {pronto ? 'Credenciais configuradas' : 'Configuração incompleta'}
                 </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                {neon?.configurado ? (
+                  <CheckCircle2 size={18} className="text-emerald-600" />
+                ) : (
+                  <AlertTriangle size={18} className="text-amber-600" />
+                )}
+                <div className="mt-3 text-xs text-slate-500">Staging Neon</div>
+                <div className="mt-1 text-lg font-bold text-slate-900">
+                  {neon?.configurado ? 'Conexão configurada' : 'Aguardando DATABASE_URL'}
+                </div>
+                {neon?.host && <div className="mt-1 truncate text-[10px] text-slate-400">{neon.host}</div>}
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <ShieldCheck size={18} className="text-emerald-600" />
@@ -373,7 +396,7 @@ export default function MigracaoOperacionalWVetroPage() {
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
               <b>Gate atual:</b> nenhum dado é promovido para tabelas oficiais. A próxima mudança de
-              estado será somente a criação do staging em ambiente Supabase isolado; depois disso a
+              estado será somente a conexão do staging Neon e aplicação do schema isolado; depois disso a
               captura continuará separada do Cliente 360 até conferência.
             </section>
           </>
