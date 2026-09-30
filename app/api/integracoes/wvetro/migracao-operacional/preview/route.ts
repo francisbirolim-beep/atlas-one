@@ -7,7 +7,7 @@ import {
   WVetroOperacionalRecurso,
 } from '@/lib/wvetroOperacionalMap'
 import { reconciliarPessoasWVetroComClientesAtlas } from '@/lib/wvetroReconciliacaoPessoasServer'
-import { statusNeonStaging, testarNeonStaging } from '@/lib/neonStaging'
+import { neonStaging, statusNeonStaging, testarNeonStaging } from '@/lib/neonStaging'
 import {
   consultarRecursoOperacionalWVetro,
   WVetroOperacionalConsultaParams,
@@ -131,6 +131,39 @@ export async function GET(req: NextRequest) {
 
   if (recurso === 'mapa') {
     let testeNeon: unknown = null
+    let resumoNeon: unknown = null
+
+    if (neon.configurado) {
+      try {
+        const sql = neonStaging()
+        const rows = await sql`
+          select
+            (select count(*)::int from wvetro_migracao.raw where recurso = 'orcamentos') as orcamentos,
+            (select count(*)::int from wvetro_migracao.raw where recurso = 'pessoas_cliente') as clientes_cl,
+            (select count(*)::int from wvetro_migracao.raw where recurso = 'producao_projeto') as producao_projeto,
+            (select count(*)::int from wvetro_migracao.execucoes where status = 'concluida') as execucoes_concluidas,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'vinculado') as clientes_vinculados,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente'
+                and status = 'sugerido' and metodo_match = 'contato_composto') as sugestoes_fortes,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente'
+                and status = 'sugerido' and metodo_match = 'contato_parcial') as sugestoes_revisao,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'novo') as clientes_novos,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'divergente') as clientes_divergentes,
+            (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
+        `
+        resumoNeon = rows[0] || null
+      } catch (error) {
+        resumoNeon = {
+          erro: error instanceof Error ? error.message : 'Falha ao carregar resumo do staging Neon.',
+        }
+      }
+    }
+
     if (req.nextUrl.searchParams.get('testarNeon') === '1' && neon.configurado) {
       try {
         testeNeon = await testarNeonStaging()
@@ -152,6 +185,7 @@ export async function GET(req: NextRequest) {
         provedor: 'neon',
         ...neon,
         teste: testeNeon,
+        resumo: resumoNeon,
       },
       recursos: WVETRO_MIGRACAO_OPERACIONAL_MAPA,
     })

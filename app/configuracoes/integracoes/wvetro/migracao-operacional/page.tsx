@@ -49,6 +49,20 @@ type PessoaReconciliada = {
   motivos: string[]
 }
 
+type NeonStagingResumo = {
+  orcamentos?: number
+  clientes_cl?: number
+  producao_projeto?: number
+  execucoes_concluidas?: number
+  clientes_vinculados?: number
+  sugestoes_fortes?: number
+  sugestoes_revisao?: number
+  clientes_novos?: number
+  clientes_divergentes?: number
+  ultima_captura?: string | null
+  erro?: string
+}
+
 type NeonStagingInfo = {
   provedor: 'neon'
   configurado: boolean
@@ -56,6 +70,7 @@ type NeonStagingInfo = {
   host: string | null
   database: string | null
   teste?: { ok?: boolean; schemaPronto?: boolean; database?: string | null; error?: string } | null
+  resumo?: NeonStagingResumo | null
 }
 
 type Reconciliacao = {
@@ -264,6 +279,71 @@ export default function MigracaoOperacionalWVetroPage() {
                 <div className="mt-1 text-lg font-bold text-slate-900">Somente leitura / dry-run</div>
               </div>
             </section>
+
+            {neon?.resumo && !neon.resumo.erro && (
+              <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Database size={19} className="text-emerald-700" />
+                      <h2 className="font-semibold text-slate-900">Staging Neon — carga persistida</h2>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Dados já capturados do W.Vetro e mantidos isolados. Nenhum item abaixo foi
+                      promovido automaticamente para as tabelas oficiais do Atlas.
+                    </p>
+                  </div>
+                  {neon.resumo.ultima_captura && (
+                    <div className="text-right text-[11px] text-slate-500">
+                      Última captura
+                      <div className="mt-0.5 font-medium text-slate-700">
+                        {new Date(neon.resumo.ultima_captura).toLocaleString('pt-BR')}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ['Orçamentos', neon.resumo.orcamentos ?? 0],
+                    ['Clientes CL', neon.resumo.clientes_cl ?? 0],
+                    ['Produção', neon.resumo.producao_projeto ?? 0],
+                    ['Execuções concluídas', neon.resumo.execucoes_concluidas ?? 0],
+                  ].map(([label, total]) => (
+                    <div key={String(label)} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-[11px] text-slate-500">{label}</div>
+                      <div className="mt-1 text-xl font-bold text-slate-900">{total}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Reconciliação dos clientes CL
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    {[
+                      ['Vinculados', neon.resumo.clientes_vinculados ?? 0, 'text-emerald-700'],
+                      ['Sugestões fortes', neon.resumo.sugestoes_fortes ?? 0, 'text-blue-700'],
+                      ['Revisar', neon.resumo.sugestoes_revisao ?? 0, 'text-amber-700'],
+                      ['Novos', neon.resumo.clientes_novos ?? 0, 'text-violet-700'],
+                      ['Divergentes', neon.resumo.clientes_divergentes ?? 0, 'text-red-700'],
+                    ].map(([label, total, cls]) => (
+                      <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-[11px] text-slate-500">{label}</div>
+                        <div className={`mt-1 text-xl font-bold ${cls}`}>{total}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {neon?.resumo?.erro && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                O staging está conectado, mas o resumo persistido não pôde ser carregado: {neon.resumo.erro}
+              </div>
+            )}
 
             <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
