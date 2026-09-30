@@ -1,29 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import {
-  buscarPedidoWVetro,
-  listarContasWVetro,
-  listarCoresWVetro,
-  listarExtratoWVetro,
-  listarInstalacoesWVetro,
-  listarItensNotaEntradaWVetro,
-  listarLinhasWVetro,
-  listarLotesProducaoWVetro,
-  listarMetasWVetro,
-  listarMovimentosEstoqueWVetro,
-  listarNotasEntradaWVetro,
-  listarOrcamentosWVetro,
-  listarPedidosWVetro,
-  listarPessoasWVetro,
-  listarPlanoContasWVetro,
-  listarProducaoProjetoWVetro,
-  listarTiposPessoaWVetro,
-  listarTitulosBaixadosWVetro,
-  listarTitulosWVetro,
-  listarVendedoresWVetro,
-  listarVidrosWVetro,
-  statusConfiguracaoWVetro,
-} from '@/lib/wvetroApi'
+import { statusConfiguracaoWVetro } from '@/lib/wvetroApi'
 import {
   mapaWVetroPorRecurso,
   WVETRO_MIGRACAO_OPERACIONAL_MAPA,
@@ -31,6 +8,10 @@ import {
 } from '@/lib/wvetroOperacionalMap'
 import { reconciliarPessoasWVetroComClientesAtlas } from '@/lib/wvetroReconciliacaoPessoasServer'
 import { statusNeonStaging, testarNeonStaging } from '@/lib/neonStaging'
+import {
+  consultarRecursoOperacionalWVetro,
+  WVetroOperacionalConsultaParams,
+} from '@/lib/wvetroOperacionalConsultaServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -53,31 +34,6 @@ async function autenticarMaster(req: NextRequest) {
 
   if (!usuario || usuario.role !== 'master') return null
   return usuario
-}
-
-function dataIsoValida(valor: string | null): valor is string {
-  if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false
-  return !Number.isNaN(new Date(`${valor}T00:00:00Z`).getTime())
-}
-
-function validarPeriodo(req: NextRequest, limiteDias = 7) {
-  const inicio = req.nextUrl.searchParams.get('inicio')
-  const fim = req.nextUrl.searchParams.get('fim')
-
-  if (!dataIsoValida(inicio) || !dataIsoValida(fim)) {
-    throw new Error('Informe inicio e fim no formato YYYY-MM-DD.')
-  }
-
-  const inicioMs = new Date(`${inicio}T00:00:00Z`).getTime()
-  const fimMs = new Date(`${fim}T00:00:00Z`).getTime()
-  const dias = Math.floor((fimMs - inicioMs) / 86_400_000)
-
-  if (dias < 0) throw new Error('A data final não pode ser anterior à data inicial.')
-  if (dias > limiteDias) {
-    throw new Error(`A API W.Vetro deve ser consultada em lotes de no máximo ${limiteDias} dias.`)
-  }
-
-  return { inicio, fim, dias }
 }
 
 function colecaoPrincipal(payload: unknown): unknown[] | null {
@@ -132,106 +88,35 @@ function inteiro(req: NextRequest, nome: string) {
   return Number.isInteger(numero) ? numero : undefined
 }
 
-async function consultarRecurso(req: NextRequest, recurso: WVetroOperacionalRecurso) {
-  if (recurso === 'pessoas') {
-    return listarPessoasWVetro({
-      pessoaId: param(req, 'pessoaId'),
-      tipoPessoa: param(req, 'tipoPessoa'),
-    })
+function booleano(req: NextRequest, nome: string) {
+  const valor = param(req, nome)
+  if (valor === undefined) return undefined
+  if (valor.toLowerCase() === 'true') return true
+  if (valor.toLowerCase() === 'false') return false
+  return undefined
+}
+
+function paramsDaUrl(req: NextRequest): WVetroOperacionalConsultaParams {
+  return {
+    inicio: param(req, 'inicio'),
+    fim: param(req, 'fim'),
+    pessoaId: param(req, 'pessoaId'),
+    tipoPessoa: param(req, 'tipoPessoa'),
+    vendedorId: param(req, 'vendedorId'),
+    linhaId: param(req, 'linhaId'),
+    ano: inteiro(req, 'ano'),
+    mes: inteiro(req, 'mes'),
+    id: param(req, 'id'),
+    nfId: param(req, 'nfId'),
+    tipo: param(req, 'tipo'),
+    produtoCodigo: param(req, 'produtoCodigo'),
+    corNome: param(req, 'corNome'),
+    tituloTipo: param(req, 'tituloTipo'),
+    contaNro: param(req, 'contaNro'),
+    loteNro: param(req, 'loteNro'),
+    programacaoNro: param(req, 'programacaoNro'),
+    produzido: booleano(req, 'produzido'),
   }
-
-  if (recurso === 'tipos_pessoa') return listarTiposPessoaWVetro()
-  if (recurso === 'vendedores') return listarVendedoresWVetro(param(req, 'vendedorId'))
-  if (recurso === 'linhas') return listarLinhasWVetro()
-  if (recurso === 'cores') return listarCoresWVetro()
-  if (recurso === 'vidros') return listarVidrosWVetro()
-
-  if (recurso === 'pedido') {
-    const id = param(req, 'id')
-    if (!id) throw new Error('Informe id do orçamento/pedido W.Vetro.')
-    return buscarPedidoWVetro(id)
-  }
-
-  if (recurso === 'metas') {
-    const ano = inteiro(req, 'ano')
-    const mes = inteiro(req, 'mes')
-    if (!ano || !mes || mes < 1 || mes > 12) throw new Error('Informe ano e mes válidos.')
-    return listarMetasWVetro({
-      vendedorId: param(req, 'vendedorId'),
-      linhaId: param(req, 'linhaId'),
-      ano,
-      mes,
-    })
-  }
-
-  if (recurso === 'itens_nf') {
-    const nfId = param(req, 'nfId')
-    if (!nfId) throw new Error('Informe nfId.')
-    return listarItensNotaEntradaWVetro(nfId)
-  }
-
-  if (recurso === 'contas') return listarContasWVetro(param(req, 'contaNro'))
-  if (recurso === 'plano_contas') return listarPlanoContasWVetro()
-
-  const periodo = validarPeriodo(req, 7)
-
-  if (recurso === 'orcamentos') return listarOrcamentosWVetro(periodo.inicio, periodo.fim)
-  if (recurso === 'pedidos') return listarPedidosWVetro(periodo.inicio, periodo.fim)
-  if (recurso === 'notas_entrada') return listarNotasEntradaWVetro(periodo.inicio, periodo.fim)
-
-  if (recurso === 'estoque_movimentos') {
-    return listarMovimentosEstoqueWVetro(periodo.inicio, periodo.fim, {
-      tipo: param(req, 'tipo'),
-      produtoCodigo: param(req, 'produtoCodigo'),
-      corNome: param(req, 'corNome'),
-    })
-  }
-
-  if (recurso === 'titulos') {
-    return listarTitulosWVetro(periodo.inicio, periodo.fim, param(req, 'tituloTipo'))
-  }
-
-  if (recurso === 'titulos_baixados') {
-    return listarTitulosBaixadosWVetro(periodo.inicio, periodo.fim, param(req, 'tituloTipo'))
-  }
-
-  if (recurso === 'extrato') {
-    return listarExtratoWVetro(periodo.inicio, periodo.fim, {
-      contaNro: param(req, 'contaNro'),
-      tipo: param(req, 'tipo'),
-    })
-  }
-
-  if (recurso === 'lotes_producao') {
-    const produzidoRaw = param(req, 'produzido')
-    const produzido =
-      produzidoRaw === undefined ? undefined : produzidoRaw.toLowerCase() === 'true'
-
-    return listarLotesProducaoWVetro({
-      loteNro: param(req, 'loteNro'),
-      inicio: periodo.inicio,
-      fim: periodo.fim,
-      produzido,
-    })
-  }
-
-  if (recurso === 'producao_projeto') {
-    return listarProducaoProjetoWVetro({
-      loteNro: param(req, 'loteNro'),
-      inicio: periodo.inicio,
-      fim: periodo.fim,
-    })
-  }
-
-  if (recurso === 'instalacoes') {
-    return listarInstalacoesWVetro({
-      programacaoNro: param(req, 'programacaoNro'),
-      inicio: periodo.inicio,
-      fim: periodo.fim,
-    })
-  }
-
-  throw new Error('Recurso operacional não reconhecido.')
 }
 
 export async function GET(req: NextRequest) {
@@ -294,7 +179,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const dados = await consultarRecurso(req, recurso as WVetroOperacionalRecurso)
+    const dados = await consultarRecursoOperacionalWVetro(
+      recurso as WVetroOperacionalRecurso,
+      paramsDaUrl(req),
+    )
     const preview = montarPreview(dados)
 
     const reconciliacao =
