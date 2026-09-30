@@ -134,6 +134,14 @@ export default function MigracaoOperacionalWVetroPage() {
   const [erro, setErro] = useState('')
   const [analisandoPessoas, setAnalisandoPessoas] = useState(false)
   const [reconciliacao, setReconciliacao] = useState<Reconciliacao | null>(null)
+  const [filaAberta, setFilaAberta] = useState(false)
+  const [filaCarregando, setFilaCarregando] = useState(false)
+  const [filaItens, setFilaItens] = useState<PessoaReconciliada[]>([])
+  const [filaFiltro, setFilaFiltro] = useState('todos')
+  const [filaBusca, setFilaBusca] = useState('')
+  const [filaPagina, setFilaPagina] = useState(1)
+  const [filaPaginas, setFilaPaginas] = useState(1)
+  const [filaTotal, setFilaTotal] = useState(0)
 
   useEffect(() => {
     let ativo = true
@@ -178,6 +186,37 @@ export default function MigracaoOperacionalWVetroPage() {
     }
     return Array.from(mapa.entries())
   }, [recursos])
+
+  async function carregarFilaStaging(
+    status = filaFiltro,
+    pagina = 1,
+    busca = filaBusca,
+  ) {
+    setFilaCarregando(true)
+    setErro('')
+
+    try {
+      const params = new URLSearchParams({
+        recurso: 'staging-clientes',
+        status,
+        pagina: String(pagina),
+        limite: '50',
+      })
+      if (busca.trim()) params.set('busca', busca.trim())
+
+      const json = await apiPreview(params)
+      setFilaAberta(true)
+      setFilaFiltro(status)
+      setFilaPagina(Number(json.pagina || pagina))
+      setFilaPaginas(Number(json.paginas || 1))
+      setFilaTotal(Number(json.total || 0))
+      setFilaItens(Array.isArray(json.itens) ? json.itens : [])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao carregar fila persistida do staging.')
+    } finally {
+      setFilaCarregando(false)
+    }
+  }
 
   async function analisarPessoas() {
     setAnalisandoPessoas(true)
@@ -336,6 +375,24 @@ export default function MigracaoOperacionalWVetroPage() {
                     ))}
                   </div>
                 </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                  <button
+                    onClick={() => carregarFilaStaging('todos', 1, '')}
+                    disabled={filaCarregando}
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {filaCarregando ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Users size={16} />
+                    )}
+                    Abrir fila de revisão
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    Somente leitura. Nenhum cliente será criado ou alterado nesta etapa.
+                  </span>
+                </div>
               </section>
             )}
 
@@ -343,6 +400,131 @@ export default function MigracaoOperacionalWVetroPage() {
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                 O staging está conectado, mas o resumo persistido não pôde ser carregado: {neon.resumo.erro}
               </div>
+            )}
+
+            {filaAberta && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold text-slate-900">Fila persistida de clientes W.Vetro</h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Leitura do Neon staging. Use os filtros para conferir os vínculos e candidatos antes
+                      de qualquer promoção para o Cliente 360.
+                    </p>
+                  </div>
+                  <div className="text-sm font-semibold text-slate-700">{filaTotal} registro(s)</div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {[
+                    ['todos', 'Todos'],
+                    ['vinculado_seguro', 'Vinculados'],
+                    ['sugestao_forte', 'Sugestões fortes'],
+                    ['revisao', 'Revisar'],
+                    ['novo', 'Novos'],
+                    ['divergente', 'Divergentes'],
+                  ].map(([valor, label]) => (
+                    <button
+                      key={valor}
+                      onClick={() => carregarFilaStaging(valor, 1)}
+                      disabled={filaCarregando}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                        filaFiltro === valor
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={filaBusca}
+                    onChange={e => setFilaBusca(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') carregarFilaStaging(filaFiltro, 1, filaBusca)
+                    }}
+                    placeholder="Buscar por nome, CPF/CNPJ, telefone, e-mail ou cidade"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+                  />
+                  <button
+                    onClick={() => carregarFilaStaging(filaFiltro, 1, filaBusca)}
+                    disabled={filaCarregando}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                  >
+                    {filaCarregando ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                    Buscar
+                  </button>
+                </div>
+
+                <div className="mt-4 overflow-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[1050px] text-sm">
+                    <thead className="bg-slate-100 text-left text-xs text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2">Cliente W.Vetro</th>
+                        <th className="px-3 py-2">CPF/CNPJ</th>
+                        <th className="px-3 py-2">Contato</th>
+                        <th className="px-3 py-2">Cidade</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Cliente Atlas</th>
+                        <th className="px-3 py-2">Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filaItens.map(item => (
+                        <tr key={item.chaveExterna} className="border-t border-slate-100 align-top">
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-slate-900">{item.nome || 'Sem nome'}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                              {item.chaveExterna}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">{item.cpfCnpj || '—'}</td>
+                          <td className="px-3 py-2 text-xs">
+                            <div>{item.celular || item.telefone || '—'}</div>
+                            <div className="text-slate-500">{item.email || ''}</div>
+                          </td>
+                          <td className="px-3 py-2">{item.cidade || '—'}</td>
+                          <td className="px-3 py-2">{badgePessoa(item.status)}</td>
+                          <td className="px-3 py-2 font-medium">{item.clienteAtlasNome || '—'}</td>
+                          <td className="px-3 py-2 text-xs text-slate-600">
+                            {item.motivos.length ? item.motivos.join(' ') : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      {!filaCarregando && filaItens.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
+                            Nenhum registro encontrado para este filtro.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>Página {filaPagina} de {filaPaginas}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => carregarFilaStaging(filaFiltro, Math.max(1, filaPagina - 1))}
+                      disabled={filaCarregando || filaPagina <= 1}
+                      className="rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-600 disabled:opacity-40"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => carregarFilaStaging(filaFiltro, Math.min(filaPaginas, filaPagina + 1))}
+                      disabled={filaCarregando || filaPagina >= filaPaginas}
+                      className="rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-600 disabled:opacity-40"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              </section>
             )}
 
             <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
