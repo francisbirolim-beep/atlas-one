@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight, FileDown } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { listarItensMedicao } from '@/lib/medicaoFinal'
+import { listarItensMedicao, obterMedicaoFinal } from '@/lib/medicaoFinal'
+import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import {
   carregarEstadoParcialMedicao,
@@ -254,7 +255,14 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-xs font-medium text-slate-500">{pecas.length} tipologia(s) · {feitas} concluída(s) · {emAndamento} em andamento · {pendentes} pendente(s)</span>
-                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas-medicao-exportar-pdf', { detail: { medicaoId } }))} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={async () => {
+                  const medicao = await obterMedicaoFinal(medicaoId)
+                  if (!medicao) {
+                    setErro('Não foi possível carregar a Medição Final para gerar o PDF.')
+                    return
+                  }
+                  await gerarPdfMedicaoFinal(medicao, await listarItensMedicao(medicaoId))
+                }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                   <FileDown size={14} /> Exportar PDF da Medição
                 </button>
               </div>
