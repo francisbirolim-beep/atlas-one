@@ -1,6 +1,8 @@
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
 // Atlas One - cliente server-side do OpenCode para a IA Comercial.
-// O OpenCode atua como orquestrador; o provider configurado nele e o FreeLLMAPI.
-// Nenhuma credencial deste arquivo e exposta ao navegador.
+// Em producao, o Atlas chama um gateway local autenticado pelo JWT Supabase.
+// O gateway e o unico componente que conhece a senha do OpenCode.
 
 export type OpenCodeResultado = {
   sessionId: string
@@ -24,24 +26,64 @@ type OpenCodeMensagem = {
   [key: string]: unknown
 }
 
-function config() {
-  const baseUrl = String(process.env.OPENCODE_BASE_URL || '').trim().replace(/\/$/, '')
-  const username = String(process.env.OPENCODE_SERVER_USERNAME || 'opencode').trim()
-  const password = String(process.env.OPENCODE_SERVER_PASSWORD || '').trim()
-  const agent = String(process.env.OPENCODE_AGENT || 'atlas-comercial').trim()
-  const providerId = String(process.env.OPENCODE_PROVIDER_ID || 'freellmapi').trim()
-  const modelId = String(process.env.OPENCODE_MODEL_ID || 'auto').trim()
-  const timeoutMs = Math.max(5_000, Number(process.env.OPENCODE_TIMEOUT_MS || 55_000))
-
-  return { baseUrl, username, password, agent, providerId, modelId, timeoutMs }
+type OpenCodeConfig = {
+  baseUrl: string
+  authMode: 'basic' | 'atlas-jwt'
+  username: string
+  password: string
+  agent: string
+  providerId: string
+  modelId: string
+  timeoutMs: number
 }
 
-export function statusOpenCode() {
-  const c = config()
+function configBase() {
   return {
-    configurado: Boolean(c.baseUrl && c.password),
+    username: String(process.env.OPENCODE_SERVER_USERNAME || 'opencode').trim(),
+    password: String(process.env.OPENCODE_SERVER_PASSWORD || '').trim(),
+    agent: String(process.env.OPENCODE_AGENT || 'atlas-comercial').trim(),
+    providerId: String(process.env.OPENCODE_PROVIDER_ID || 'freellmapi').trim(),
+    modelId: String(process.env.OPENCODE_MODEL_ID || 'auto').trim(),
+    timeoutMs: Math.max(5_000, Number(process.env.OPENCODE_TIMEOUT_MS || 55_000)),
+  }
+}
+
+async function carregarConfig(): Promise<OpenCodeConfig> {
+  const base = configBase()
+  const envBaseUrl = String(process.env.OPENCODE_BASE_URL || '').trim().replace(/\/$/, '')
+
+  if (envBaseUrl) {
+    return {
+      ...base,
+      baseUrl: envBaseUrl,
+      authMode: base.password ? 'basic' : 'atlas-jwt',
+    }
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('ai_runtime_endpoints')
+    .select('base_url')
+    .eq('chave', 'opencode_gateway')
+    .eq('ativo', true)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Falha ao carregar endpoint OpenCode:', error.message)
+  }
+
+  return {
+    ...base,
+    baseUrl: String(data?.base_url || '').trim().replace(/\/$/, ''),
+    authMode: 'atlas-jwt',
+  }
+}
+
+export async function statusOpenCode() {
+  const c = await carregarConfig()
+  return {
+    configurado: Boolean(c.baseUrl && (c.authMode === 'atlas-jwt' || c.password)),
     baseUrlConfigurada: Boolean(c.baseUrl),
-    senhaConfigurada: Boolean(c.password),
+    modoAutenticacao: c.authMode,
     agent: c.agent,
     providerId: c.providerId,
     modelId: c.modelId,
@@ -71,21 +113,33 @@ function extrairModelo(data: any, padraoProvider: string, padraoModelo: string) 
   }
 }
 
-async function requisitar(path: string, init: RequestInit = {}) {
-  const c = config()
-  if (!c.baseUrl) throw new Error('OPENCODE_BASE_URL nao configurada no servidor.')
-  if (!c.password) throw new Error('OPENCODE_SERVER_PASSWORD nao configurada no servidor.')
+function cabecalhoAutorizacao(c: OpenCodeConfig, accessToken: string) {
+  if (c.authMode === 'basic') {
+    if (!c.password) throw new Error('OPENCODE_SERVER_PASSWORD nao configurada no servidor.')
+    const basic = Buffer.from(`${c.username}:${c.password}`).toString('base64')
+    return `Basic ${basic}`
+  }
+
+  if (!accessToken) throw new Error('Sessao Atlas ausente para autenticar o gateway da IA.')
+  return `Bearer ${accessToken}`
+}
+
+async function requisitar(
+  c: OpenCodeConfig,
+  accessToken: string,
+  path: string,
+  init: RequestInit = {},
+) {
+  if (!c.baseUrl) throw new Error('Endpoint do OpenCode nao configurado.')
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), c.timeoutMs)
-
-  const auth = Buffer.from(`${c.username}:${c.password}`).toString('base64')
 
   try {
     const resp = await fetch(c.baseUrl + path, {
       ...init,
       headers: {
-        Authorization: `Basic ${auth}`,
+        Authorization: cabecalhoAutorizacao(c, accessToken),
         'Content-Type': 'application/json',
         ...(init.headers || {}),
       },
@@ -126,8 +180,8 @@ async function requisitar(path: string, init: RequestInit = {}) {
   }
 }
 
-async function criarSessao(titulo: string): Promise<string> {
-  const data = await requisitar('/session', {
+async function criarSessao(c: OpenCodeConfig, accessToken: string, titulo: string): Promise<string> {
+  const data = await requisitar(c, accessToken, '/session', {
     method: 'POST',
     body: JSON.stringify({ title: titulo.slice(0, 120) }),
   })
@@ -137,12 +191,13 @@ async function criarSessao(titulo: string): Promise<string> {
 }
 
 async function enviar(
+  c: OpenCodeConfig,
+  accessToken: string,
   sessionId: string,
   system: string,
   prompt: string,
 ): Promise<{ data: any; resposta: string }> {
-  const c = config()
-  const data = await requisitar(`/session/${encodeURIComponent(sessionId)}/message`, {
+  const data = await requisitar(c, accessToken, `/session/${encodeURIComponent(sessionId)}/message`, {
     method: 'POST',
     body: JSON.stringify({
       agent: c.agent,
@@ -161,28 +216,29 @@ async function enviar(
 }
 
 export async function consultarOpenCode(params: {
+  accessToken: string
   sessionId?: string | null
   tituloSessao: string
   system: string
   prompt: string
 }): Promise<OpenCodeResultado> {
-  const c = config()
+  const c = await carregarConfig()
   let sessionId = String(params.sessionId || '').trim()
 
   if (!sessionId) {
-    sessionId = await criarSessao(params.tituloSessao)
+    sessionId = await criarSessao(c, params.accessToken, params.tituloSessao)
   }
 
   try {
-    const { data, resposta } = await enviar(sessionId, params.system, params.prompt)
+    const { data, resposta } = await enviar(c, params.accessToken, sessionId, params.system, params.prompt)
     const modelo = extrairModelo(data, c.providerId, c.modelId)
     return { sessionId, resposta, ...modelo }
   } catch (e: any) {
     // Sessao antiga pode ter sido limpa/reiniciada no servidor OpenCode.
     // Recriamos somente em 404, sem mascarar outros erros de provider/modelo.
     if (e?.status !== 404) throw e
-    sessionId = await criarSessao(params.tituloSessao)
-    const { data, resposta } = await enviar(sessionId, params.system, params.prompt)
+    sessionId = await criarSessao(c, params.accessToken, params.tituloSessao)
+    const { data, resposta } = await enviar(c, params.accessToken, sessionId, params.system, params.prompt)
     const modelo = extrairModelo(data, c.providerId, c.modelId)
     return { sessionId, resposta, ...modelo }
   }
