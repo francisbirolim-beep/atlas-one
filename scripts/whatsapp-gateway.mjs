@@ -57,7 +57,7 @@ let panelBrowserOpened = false
 
 const LOCAL_PANEL_PORT = 3337
 const localPanel = http.createServer((req, res) => {
-  if (req.url === '/state') {
+  if (req.url?.startsWith('/state')) {
     res.writeHead(200, {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
