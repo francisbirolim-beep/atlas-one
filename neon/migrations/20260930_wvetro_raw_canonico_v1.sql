@@ -48,7 +48,4 @@ select
   created_at
 from versionado;
 
-comment on view wvetro_migracao.raw_canonico is
-  'Leitura canônica e não destrutiva do staging W.Vetro; corrige chaves compostas e elimina cópias logicamente idênticas.';
-
 revoke all on wvetro_migracao.raw_canonico from public;
