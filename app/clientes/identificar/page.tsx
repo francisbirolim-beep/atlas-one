@@ -48,18 +48,18 @@ export default function IdentificarCliente() {
       try {
         const termoBusca = termo.replace(/[%,]/g, ' ').replace(/\s+/g, ' ').trim()
         const primeiroTermo = termoBusca.split(' ')[0] || termoBusca
-        const padraoInicio = `${primeiroTermo}%`
+        const padraoContem = `%${primeiroTermo}%`
         const { data, error } = await supabase
           .from('clientes')
           .select('id,nome,apelido,whatsapp,telefone,cidade,bairro,cpf_cnpj')
           .or([
-            `nome.ilike.${padraoInicio}`,
-            `apelido.ilike.${padraoInicio}`,
-            `whatsapp.ilike.${padraoInicio}`,
-            `telefone.ilike.${padraoInicio}`,
-            `cidade.ilike.${padraoInicio}`,
-            `bairro.ilike.${padraoInicio}`,
-            `cpf_cnpj.ilike.${padraoInicio}`,
+            `nome.ilike.${padraoContem}`,
+            `apelido.ilike.${padraoContem}`,
+            `whatsapp.ilike.${padraoContem}`,
+            `telefone.ilike.${padraoContem}`,
+            `cidade.ilike.${padraoContem}`,
+            `bairro.ilike.${padraoContem}`,
+            `cpf_cnpj.ilike.${padraoContem}`,
           ].join(','))
           .order('nome')
           .limit(20)
