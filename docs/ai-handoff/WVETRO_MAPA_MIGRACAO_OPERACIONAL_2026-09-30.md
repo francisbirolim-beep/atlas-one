@@ -271,11 +271,15 @@ Mais de um candidato = divergência; nunca escolher arbitrariamente.
 
 Baixa deve atualizar/vincular o título correspondente, não criar novo título.
 
-## 7. Staging operacional proposto
+## 7. Staging operacional no Neon
 
-Não aplicar em produção nesta etapa. Próxima migration deverá criar uma camada operacional separada.
+O staging foi movido para Neon Postgres e deve permanecer separado do Supabase operacional do Atlas.
 
-### `wvetro_operacional_execucoes`
+Schema: `wvetro_migracao`.
+
+Migration preparada: `neon/migrations/20260930_wvetro_migracao_operacional_staging.sql`.
+
+### `wvetro_migracao.execucoes`
 
 Controle de execução:
 
@@ -293,7 +297,7 @@ Controle de execução:
 - finalizado_em;
 - usuário solicitante.
 
-### `wvetro_operacional_raw`
+### `wvetro_migracao.raw`
 
 Snapshot imutável de origem:
 
@@ -312,7 +316,7 @@ Snapshot imutável de origem:
 
 Assim o mesmo registro pode mudar no W.Vetro e ainda manter versões históricas sem duplicar cópias idênticas.
 
-### `wvetro_operacional_vinculos`
+### `wvetro_migracao.vinculos`
 
 Reconciliação:
 
@@ -328,7 +332,7 @@ Reconciliação:
 
 A confiança nunca autoriza sozinha uma promoção.
 
-### `wvetro_operacional_pendencias`
+### `wvetro_migracao.pendencias`
 
 Fila auditável:
 
@@ -465,11 +469,13 @@ Exemplos:
 
 - credenciais W.Vetro permanecem em variáveis de ambiente servidor;
 - token W.Vetro não é enviado ao navegador;
-- endpoint de preview exige Master;
-- staging futuro deve ter RLS habilitado;
-- tabelas de staging não devem ser liberadas diretamente para `anon`;
-- a partir das mudanças atuais do Supabase, novas tabelas devem declarar explicitamente grants mínimos quando precisarem ser acessíveis pela Data API;
-- execução de migração deve passar por service role/server-side e por trilha de auditoria.
+- endpoint de preview exige Master via autenticação atual do Atlas/Supabase;
+- a connection string Neon usa `NEON_STAGING_DATABASE_URL` somente no servidor;
+- nunca usar variável `NEXT_PUBLIC_*` para a conexão Neon;
+- o schema `wvetro_migracao` revoga acesso do papel genérico `public`;
+- o navegador nunca consulta Neon diretamente;
+- a flag `WVETRO_MIGRACAO_OPERACIONAL_WRITE_ENABLED` permanece desligada por padrão;
+- execução de migração passa por rotas server-side e trilha de auditoria.
 
 ## 12. Critérios para liberar a primeira importação
 
@@ -490,18 +496,23 @@ Antes de promover qualquer dado para tabelas oficiais:
 
 ## 13. Próxima implementação
 
-Próxima etapa técnica, ainda sem produção:
+Já preparado na branch:
 
-1. criar migration das quatro tabelas de staging operacional;
-2. habilitar RLS e grants mínimos;
-3. criar serviço `wvetroMigracaoOperacionalServer.ts`;
-4. implementar captura idempotente por janela;
-5. criar tela Master de Migração W.Vetro com:
-   - execução;
-   - progresso;
-   - pendências;
-   - vínculos;
-   - divergências;
-   - botão de promover somente itens revisados;
-6. testar em branch/preview;
-7. somente após validação, autorizar aplicação no Supabase de produção.
+1. migration Neon das quatro tabelas de staging;
+2. driver serverless Neon;
+3. serviço `wvetroMigracaoOperacionalServer.ts` usando Neon para persistência;
+4. captura idempotente por hash/versão;
+5. reconciliação de Pessoas x Cliente 360;
+6. painel Master de Migração W.Vetro.
+
+Próximos gates:
+
+1. conectar/criar o projeto Neon;
+2. definir `NEON_STAGING_DATABASE_URL` apenas no Preview Vercel;
+3. aplicar o schema `wvetro_migracao`;
+4. testar conexão;
+5. executar dry-run de Pessoas;
+6. habilitar a flag de escrita somente para capturar staging;
+7. repetir a mesma captura para validar idempotência;
+8. depois expandir captura para Orçamentos/Pedidos;
+9. somente após validação implementar promoção Neon -> Supabase oficial.
