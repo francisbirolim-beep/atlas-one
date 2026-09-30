@@ -169,6 +169,34 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   }
   if (!iniciada) return null
 
+  if (modo === 'controle' && embedded) {
+    return (
+      <section className="h-full">
+        <div className="flex h-full min-h-[210px] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Controle da medição</p>
+          <div className="mt-3 flex items-center gap-2">
+            <Clock3 size={17} className="text-slate-500" />
+            <span className="text-xl font-bold tabular-nums text-slate-900">{formatarDuracao(tempoExibido)}</span>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-emerald-50 px-2 py-2 text-center"><p className="text-lg font-bold text-emerald-700">{feitas}</p><p className="text-[10px] font-medium text-emerald-700">Concluídas</p></div>
+            <div className="rounded-lg bg-blue-50 px-2 py-2 text-center"><p className="text-lg font-bold text-blue-700">{emAndamento}</p><p className="text-[10px] font-medium text-blue-700">Em andamento</p></div>
+            <div className="rounded-lg bg-slate-100 px-2 py-2 text-center"><p className="text-lg font-bold text-slate-700">{pendentes}</p><p className="text-[10px] font-medium text-slate-600">Pendentes</p></div>
+          </div>
+          <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+            <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+              <History size={14} /> Histórico
+            </button>
+            <button type="button" onClick={() => void alternarParcial()} disabled={processando} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+              {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
+              {parcial ? 'Retomar medição' : 'Salvar parcial'}
+            </button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <>
       {modo !== 'lista' && <section className={embedded ? "w-full" : "mx-auto w-full max-w-6xl px-3 pt-3 md:px-4"}>
