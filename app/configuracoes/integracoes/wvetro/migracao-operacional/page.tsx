@@ -574,7 +574,7 @@ export default function MigracaoOperacionalWVetroPage() {
                   <div className="text-sm font-semibold text-slate-700">{auditoriaTotal} relação(ões)</div>
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                   <select
                     value={auditoriaOrigem}
                     onChange={e => carregarAuditoria(1, { origem: e.target.value })}
