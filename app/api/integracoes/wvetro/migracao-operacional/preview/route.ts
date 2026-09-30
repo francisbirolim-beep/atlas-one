@@ -190,7 +190,10 @@ export async function GET(req: NextRequest) {
 
     const reconciliacao =
       recurso === 'pessoas' && req.nextUrl.searchParams.get('reconciliar') === '1'
-        ? await reconciliarPessoasWVetroComClientesAtlas(dados, usuario.empresa_id)
+        ? await reconciliarPessoasWVetroComClientesAtlas(dados, usuario.empresa_id, {
+            categoriaClienteConfirmada: params.tipoPessoa?.toUpperCase() === 'CL',
+            origemCategoria: params.tipoPessoa ? `Tipopessoa=${params.tipoPessoa}` : null,
+          })
         : null
 
     return NextResponse.json({
