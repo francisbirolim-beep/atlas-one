@@ -3,7 +3,7 @@ import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -265,6 +265,31 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
         const formula = FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA
         refs.push({
           id: 'referencia-local-pta3-suprema-familia-a',
+          tipologia_id: formula.tipologia_id,
+          configuracao_label: formula.configuracao_label,
+          status: 'referencia_historica',
+          ativo: false,
+          variaveis: formula.variaveis,
+          pecas: formula.pecas,
+          vidro: formula.vidro,
+          acessorios: formula.acessorios || [],
+        })
+      }
+
+      const familiaBGeometria =
+        Number.isFinite(largura) &&
+        Number.isFinite(altura) &&
+        su108H != null &&
+        su111H != null &&
+        Math.abs(su108H - (altura - 207)) <= 1 &&
+        Math.abs(su111H - (altura - 45)) <= 1 &&
+        Math.abs(quantidadePerfil('MP347','L') - 1) < 0.0001 &&
+        Math.abs(quantidadePerfil('MP347','H') - 2) < 0.0001
+
+      if (familiaBGeometria) {
+        const formula = FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA
+        refs.push({
+          id: 'referencia-local-pta3-suprema-familia-b',
           tipologia_id: formula.tipologia_id,
           configuracao_label: formula.configuracao_label,
           status: 'referencia_historica',
