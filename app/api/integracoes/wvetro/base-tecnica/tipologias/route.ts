@@ -18,6 +18,23 @@ function chaveTipologia(linha: unknown, modelo: unknown) {
   return `${normalizar(linha)}::${normalizar(modelo)}`
 }
 
+async function carregarHistoricoComercial() {
+  const pagina = 1000
+  const registros: Array<{ itens: unknown }> = []
+  for (let inicio = 0; ; inicio += pagina) {
+    const { data, error } = await supabaseAdmin
+      .from('wvetro_historico_comercial')
+      .select('itens')
+      .not('itens', 'is', null)
+      .range(inicio, inicio + pagina - 1)
+    if (error) throw error
+    const lote = (data || []) as Array<{ itens: unknown }>
+    registros.push(...lote)
+    if (lote.length < pagina) break
+  }
+  return registros
+}
+
 // Endpoint só de leitura. Não interfere na carga histórica (execuções/pendências/cursor) —
 // lê exclusivamente as tabelas de referência já preenchidas por ela.
 
@@ -25,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
 
   try {
-    const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }, { data: catalogoComponentes, error: erroCatalogo }, { data: historicoComercial, error: erroHistorico }] = await Promise.all([
+    const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }, { data: catalogoComponentes, error: erroCatalogo }, historicoComercial] = await Promise.all([
       supabaseAdmin
         .from('wvetro_referencias_tipologias')
         .select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,primeiro_visto,ultimo_visto')
@@ -46,18 +63,13 @@ export async function GET(req: NextRequest) {
       supabaseAdmin
         .from('wvetro_referencias_componentes')
         .select('tipo,produto_atlas_id'),
-      supabaseAdmin
-        .from('wvetro_historico_comercial')
-        .select('itens')
-        .not('itens', 'is', null)
-        .limit(1000),
+      carregarHistoricoComercial(),
     ])
     if (erroRefs) throw erroRefs
     if (erroComp) throw erroComp
     if (erroVar) throw erroVar
     if (erroFormulas) throw erroFormulas
     if (erroCatalogo) throw erroCatalogo
-    if (erroHistorico) throw erroHistorico
 
     const compPorRef = new Map<string, { total: number; vinculados: number; perfil: number; acessorio: number; vidro: number }>()
     for (const c of componentes || []) {
