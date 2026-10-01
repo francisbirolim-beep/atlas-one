@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { classificarFamiliaPc2Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
@@ -324,6 +324,11 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
     throw new Error(
       `Variante PC2 Suprema ainda não validada tecnicamente: familia=${variante.familia}; montagem=${variante.montagem}; contramarco=${variante.contramarco}; arremate=${variante.arremate}; trilho=${variante.trilho}; persiana=${variante.persianaAcionamento}; reforco_aba=${variante.reforcoAba ? 'sim' : 'nao'}; reforco_externo=${variante.reforcoExterno ? 'sim' : 'nao'}.`
     )
+  }
+
+  const familiaPc4 = classificarFamiliaPc4Suprema(item)
+  if (familiaPc4 !== 'outra') {
+    throw new Error(`Variante PC4 Suprema ainda não validada tecnicamente: familia=${familiaPc4}.`)
   }
 
   const { data: referencia, error: refError } = await supabaseAdmin
