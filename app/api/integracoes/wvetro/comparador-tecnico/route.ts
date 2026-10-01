@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -116,6 +116,7 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
           'MAC927','NYL042','NYL190','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
         ],
         validarKit: false,
+        exigirVidro: false,
       },
       {
         id: 'referencia-local-pg1-vidro-suprema',
@@ -126,6 +127,18 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
           'GUA258','GUA259','MAC927','NYL042','NYL190','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
         ],
         validarKit: true,
+        exigirVidro: false,
+      },
+      {
+        id: 'referencia-local-pg1-vidro-suprema-sem-arremate',
+        formula: FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA,
+        perfis: ['25-548 (L-715)','SU102','SU111','SU225','SU279'],
+        acessorios: [
+          'ALMC25','ALMC2960','BUC755','CON295','DOB840','FIT206','FRA822','GUA171','GUA239',
+          'GUA258','GUA259','MAC927','NYL042','PAR1037','PAR435','REBACA4X10','SIL-PU',
+        ],
+        validarKit: true,
+        exigirVidro: true,
       },
     ] as const
 
@@ -138,6 +151,7 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
     for (const referencia of referencias) {
       if (!conjuntoExato(perfis, referencia.perfis as unknown as string[])) continue
       if (!conjuntoExato(acessorios, referencia.acessorios as unknown as string[])) continue
+      if (referencia.exigirVidro && !(item.Vidros || []).length) continue
       if (referencia.validarKit) {
         const kitUnitario =
           Math.abs(qtdAcessorio('ALMC25') - 2) < 0.0001 &&
