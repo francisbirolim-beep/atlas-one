@@ -1,18 +1,11 @@
 import { supabase } from '@/lib/supabase'
 import { listarLinhasTecnicas } from '@/lib/linhasTecnicas'
-import type { PecaFormula, TipologiaFormulasCorte, VariavelTipologia } from '@/lib/formulasCorteEngine'
+import type { PecaFormula, TipologiaFormulasCorte, VariavelTipologia, VidroFormulaDeclarativa } from '@/lib/formulasCorteEngine'
 
 export type StatusFormulaCorte = 'em_desenvolvimento' | 'em_validacao' | 'validada'
 export type StatusFormulaAcessorio = 'referencia' | 'em_validacao' | 'validada'
 
-export type VidroFormulaCorte = {
-  formula_largura?: string
-  formula_altura?: string
-  quantidade?: number
-  arredondamento?: string
-  composicao_largura?: string
-  composicao_altura?: string
-}
+export type VidroFormulaCorte = VidroFormulaDeclarativa
 
 export type AcessorioFormulaCorte = {
   codigo: string
