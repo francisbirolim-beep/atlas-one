@@ -1,5 +1,5 @@
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO } from '../lib/wvetroComparadorFixtures'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
   FIXTURE_PC2_SUPREMA_WVETRO,
@@ -74,3 +74,53 @@ console.log(JSON.stringify({
   fixture: 'JC2 Suprema - matriz histórica',
   amostras: jc2Resultados,
 }, null, 2))
+
+
+const pc3Atual = FIXTURES_PC3_SUPREMA_ATUAL_WVETRO.map(item => {
+  const inferida = inferirOpcoesTecnicasWVetro(item, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA)
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA,
+    opcoes: inferida.opcoes,
+  })
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        fixture:item.Codigo,status,opcoes:inferida.opcoes,resumo:comparado.resumo,
+        divergencias:comparado.linhas.filter(l=>l.status!=='igual'&&l.status!=='regra_pendente_atlas'),
+      },null,2))
+      throw new Error(`Regressão PC3 atual ${item.Codigo}: status ${status} deveria ser zero.`)
+    }
+  }
+  return { fixture:item.Codigo,medida:`${item.Largura}x${item.Altura}`,iguais:comparado.resumo.igual,pendentes:comparado.resumo.regra_pendente_atlas,opcoesInferidas:inferida.opcoes }
+})
+
+const pc3LegadoInferido = inferirOpcoesTecnicasWVetro(FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA)
+const pc3Legado = compararItemWVetroComFormulaAtlas({
+  item:FIXTURE_PC3_SUPREMA_LEGADO_WVETRO,
+  formula:FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA,
+  opcoes:pc3LegadoInferido.opcoes,
+})
+for (const status of hard) {
+  if (Number(pc3Legado.resumo[status] || 0) !== 0) {
+    console.error(JSON.stringify({status,resumo:pc3Legado.resumo,divergencias:pc3Legado.linhas.filter(l=>l.status!=='igual'&&l.status!=='regra_pendente_atlas')},null,2))
+    throw new Error(`Regressão PC3 legada: status ${status} deveria ser zero.`)
+  }
+}
+
+const atualContraLegado = compararItemWVetroComFormulaAtlas({
+  item:FIXTURES_PC3_SUPREMA_ATUAL_WVETRO[0],
+  formula:FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA,
+  opcoes:inferirOpcoesTecnicasWVetro(FIXTURES_PC3_SUPREMA_ATUAL_WVETRO[0],FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA).opcoes,
+})
+if (Number(atualContraLegado.resumo.medida_diferente || 0) < 1) {
+  throw new Error('A regressão PC3 deveria distinguir a versão atual da versão legada pelo SU008.')
+}
+
+console.log(JSON.stringify({
+  ok:true,
+  fixture:'PC3 Suprema - matriz histórica atual + legada',
+  atual:pc3Atual,
+  legado:{fixture:FIXTURE_PC3_SUPREMA_LEGADO_WVETRO.Codigo,iguais:pc3Legado.resumo.igual,pendentes:pc3Legado.resumo.regra_pendente_atlas,opcoesInferidas:pc3LegadoInferido.opcoes},
+  discriminacaoVersao:{medidasDiferentesAoUsarLegadoEmAtual:atualContraLegado.resumo.medida_diferente},
+},null,2))
