@@ -1,5 +1,6 @@
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
   FIXTURE_PC2_SUPREMA_WVETRO,
@@ -73,4 +74,43 @@ console.log(JSON.stringify({
   ok: true,
   fixture: 'JC2 Suprema - matriz histórica',
   amostras: jc2Resultados,
+}, null, 2))
+
+
+const testeQuantidadeVariavel = calcularFormulasCorte({
+  tipologia_id: 'teste-formula-quantidade',
+  variaveis: [],
+  pecas: [
+    {
+      codigo: 'GS-034',
+      eixo: 'L',
+      formula: 'Largura-173',
+      formula_quantidade: 'CEIL((Altura-28)/108.2)',
+    },
+  ],
+}, 800, 2200, {})
+
+if (testeQuantidadeVariavel.length !== 1 || testeQuantidadeVariavel[0].quantidade !== 21) {
+  console.error(JSON.stringify(testeQuantidadeVariavel, null, 2))
+  throw new Error('Regressão motor: formula_quantidade deveria calcular 21 perfis GS-034.')
+}
+
+const testeQuantidadeLegada = calcularFormulasCorte({
+  tipologia_id: 'teste-quantidade-fixa',
+  variaveis: [],
+  pecas: [
+    { codigo: 'SU001', eixo: 'L', formula: 'Largura-30', quantidade: 2 },
+  ],
+}, 1000, 1000, {})
+
+if (testeQuantidadeLegada[0]?.quantidade !== 2) {
+  console.error(JSON.stringify(testeQuantidadeLegada, null, 2))
+  throw new Error('Regressão motor: quantidade fixa legada deveria permanecer 2.')
+}
+
+console.log(JSON.stringify({
+  ok: true,
+  fixture: 'Motor de perfis - quantidade variável',
+  gs034_2200: testeQuantidadeVariavel[0].quantidade,
+  quantidadeFixaLegada: testeQuantidadeLegada[0].quantidade,
 }, null, 2))
