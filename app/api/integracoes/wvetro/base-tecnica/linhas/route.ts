@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -8,17 +9,8 @@ function norm(v: unknown) {
   return String(v ?? '').trim().toUpperCase()
 }
 
-async function master(req: NextRequest) {
-  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
-  return usuario?.role === 'master' ? usuario : null
-}
-
 export async function GET(req: NextRequest) {
-  if (!await master(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
+  if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
 
   try {
     const [linhasResp, refsResp, tipologiasResp, componentesResp] = await Promise.all([
