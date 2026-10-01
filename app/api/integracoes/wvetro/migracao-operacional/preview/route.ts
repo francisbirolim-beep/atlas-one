@@ -118,6 +118,7 @@ type EvidenciasAuditoria = {
   numerosHistoricoComercial: Set<string>
   numerosHistoricoOperacional: Set<string>
   titulosHistoricoFinanceiro: Set<string>
+  tituloOrcamentoHistoricoFinanceiro: Set<string>
   projetosPresentesNosLotes: Set<string>
 }
 
@@ -139,7 +140,7 @@ async function carregarEvidenciasAuditoria(
       .eq('somente_historico', true),
     supabaseAdmin
       .from('wvetro_historico_financeiro')
-      .select('titulo_id_wvetro')
+      .select('titulo_id_wvetro,orcamento_wvetro')
       .eq('empresa_id', empresaId)
       .eq('somente_historico', true)
       .not('titulo_id_wvetro', 'is', null),
@@ -170,6 +171,15 @@ async function carregarEvidenciasAuditoria(
     ),
     titulosHistoricoFinanceiro: new Set(
       (financeiro.data || []).map((item: any) => String(item.titulo_id_wvetro || '').trim()).filter(Boolean),
+    ),
+    tituloOrcamentoHistoricoFinanceiro: new Set(
+      (financeiro.data || [])
+        .map((item: any) => {
+          const tituloId = String(item.titulo_id_wvetro || '').trim()
+          const orcamento = String(item.orcamento_wvetro || '').trim()
+          return tituloId && orcamento ? `${tituloId}:${orcamento}` : ''
+        })
+        .filter(Boolean),
     ),
     projetosPresentesNosLotes: new Set(
       (projetosLote || []).map((item: any) => String(item.referencia || '').trim()).filter(Boolean),
@@ -222,9 +232,19 @@ function classificarAuditoria(normalizados: AuditoriaNormalizada[], evidencias: 
         classificacao = 'preservada_historico_operacional'
         explicacao = 'O snapshot do orçamento não foi localizado, mas o número está preservado de forma consistente em lote/instalação histórica do W.Vetro.'
         requerAtencao = false
+      } else if (
+        item.origemRecurso === 'titulos' &&
+        item.origemChave.startsWith('titulo:') &&
+        evidencias.tituloOrcamentoHistoricoFinanceiro.has(
+          `${item.origemChave.replace(/^titulo:/, '')}:${item.referencia}`,
+        )
+      ) {
+        classificacao = 'referencia_historica_sem_snapshot'
+        explicacao = 'A referência ao orçamento está preservada no título financeiro histórico, mas o snapshot do orçamento não foi disponibilizado nas capturas concluídas do W.Vetro.'
+        requerAtencao = false
       } else {
         classificacao = 'referencia_orcamento_nao_localizada'
-        explicacao = 'O número de orçamento não foi localizado no staging nem nos históricos comercial ou operacional do Atlas.'
+        explicacao = 'O número de orçamento não foi localizado no staging nem nos históricos comercial, operacional ou financeiro do Atlas.'
       }
     }
 
