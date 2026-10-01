@@ -739,56 +739,111 @@ export async function GET(req: NextRequest) {
 
     try {
       const [
-        comercialResp,
-        financeiroResp,
-        operacionalResp,
-        suprimentosResp,
+        comercialTotal,
+        comercialHistorico,
+        comercialClientes,
+        financeiroTotal,
+        financeiroHistorico,
+        financeiroClientes,
+        operacionalTotal,
+        operacionalHistorico,
+        operacionalClientes,
+        suprimentosTotal,
+        suprimentosHistorico,
       ] = await Promise.all([
         supabaseAdmin
           .from('wvetro_historico_comercial')
-          .select('cliente_id,somente_historico')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
           .eq('empresa_id', usuario.empresa_id),
         supabaseAdmin
           .from('wvetro_historico_financeiro')
-          .select('cliente_id,somente_historico')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
           .eq('empresa_id', usuario.empresa_id),
         supabaseAdmin
           .from('wvetro_historico_operacional')
-          .select('cliente_id,somente_historico')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_suprimentos')
+          .select('id', { count: 'exact', head: true })
           .eq('empresa_id', usuario.empresa_id),
         supabaseAdmin
           .from('wvetro_historico_suprimentos')
-          .select('somente_historico')
-          .eq('empresa_id', usuario.empresa_id),
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
       ])
 
       const respostas = [
-        ['comercial', comercialResp],
-        ['financeiro', financeiroResp],
-        ['operacional', operacionalResp],
-        ['suprimentos', suprimentosResp],
-      ] as const
+        comercialTotal,
+        comercialHistorico,
+        comercialClientes,
+        financeiroTotal,
+        financeiroHistorico,
+        financeiroClientes,
+        operacionalTotal,
+        operacionalHistorico,
+        operacionalClientes,
+        suprimentosTotal,
+        suprimentosHistorico,
+      ]
 
-      for (const [camada, resposta] of respostas) {
-        if (resposta.error) {
-          throw new Error(`${camada}: ${resposta.error.message}`)
+      const falha = respostas.find(resposta => resposta.error)
+      if (falha?.error) throw new Error(falha.error.message)
+
+      const camada = (
+        total: number | null,
+        historico: number | null,
+        comCliente: number | null,
+      ) => {
+        const totalSeguro = total ?? 0
+        const historicoSeguro = historico ?? 0
+        return {
+          total: totalSeguro,
+          somenteHistorico: historicoSeguro,
+          foraHistorico: Math.max(0, totalSeguro - historicoSeguro),
+          comCliente: comCliente ?? 0,
         }
       }
 
-      const resumir = (linhas: any[], possuiCliente: boolean) => ({
-        total: linhas.length,
-        somenteHistorico: linhas.filter(item => item.somente_historico === true).length,
-        foraHistorico: linhas.filter(item => item.somente_historico !== true).length,
-        comCliente: possuiCliente
-          ? linhas.filter(item => !!item.cliente_id).length
-          : 0,
-      })
-
       const camadas = {
-        comercial: resumir(comercialResp.data || [], true),
-        financeiro: resumir(financeiroResp.data || [], true),
-        operacional: resumir(operacionalResp.data || [], true),
-        suprimentos: resumir(suprimentosResp.data || [], false),
+        comercial: camada(comercialTotal.count, comercialHistorico.count, comercialClientes.count),
+        financeiro: camada(financeiroTotal.count, financeiroHistorico.count, financeiroClientes.count),
+        operacional: camada(operacionalTotal.count, operacionalHistorico.count, operacionalClientes.count),
+        suprimentos: camada(suprimentosTotal.count, suprimentosHistorico.count, 0),
       }
 
       historicoAtlas = {
