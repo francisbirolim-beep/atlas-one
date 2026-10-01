@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import type { Usuario } from './tipos'
-import { calcularFormulaCorteIsolada, calcularFormulasCorte, type TipologiaFormulasCorte } from './formulasCorteEngine'
+import { calcularFormulaCorteIsolada, calcularFormulasCorte, calcularVidroFormula, type TipologiaFormulasCorte } from './formulasCorteEngine'
 import { agruparCompraDeBarras, otimizarPerfis, type CortePerfil, type SobraPerfilDisponivel } from './aproveitamentoPerfis'
 
 export type PacoteTecnico = {
@@ -353,11 +353,17 @@ export async function gerarPacoteTecnico(
     }
 
     const vidro = formula.vidro && typeof formula.vidro === 'object' ? formula.vidro : null
-    if (vidro?.formula_largura && vidro?.formula_altura) {
+    const vidroCalculado = calcularVidroFormula(
+      vidro,
+      largura,
+      altura,
+      (item?.variaveis || {}) as Record<string, string>,
+    )
+    if (vidroCalculado) {
       try {
-        const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura)
-        const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura)
-        const qtdVidro = Math.max(1, n(vidro.quantidade, 1)) * qtdItem
+        const larguraVidro = vidroCalculado.largura
+        const alturaVidro = vidroCalculado.altura
+        const qtdVidro = Math.max(1, n(vidroCalculado.quantidade, 1)) * qtdItem
         materiais.push({
           pacote_id: pacote.id,
           item_ref: itemRef(item, indice),
