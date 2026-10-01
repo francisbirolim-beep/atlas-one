@@ -577,3 +577,116 @@ export const FIXTURES_JC3_SUPREMA_WVETRO:WVetroItemTecnico[]=[
     acessorios:jc3Acc({l:2600,h:600,par1023:6,fix:14,cm:'cm200'}),
   }),
 ]
+
+export const FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: '37a87c58-2bd6-49d0-bfa2-61e3a4d7d051',
+  configuracao_label: 'PG1-SUPREMA · Lambril · sem contramarco · referência histórica em validação',
+  variaveis: [],
+  pecas: [
+    { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate interno horizontal', quantidade:1 },
+    { eixo:'H', codigo:'MP347', formula:'Altura+22', descricao:'Arremate interno vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU279', formula:'Largura-4', descricao:'Marco horizontal', quantidade:1 },
+    { eixo:'H', codigo:'SU279', formula:'Altura-4', descricao:'Marco vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU111', formula:'Largura-72', descricao:'Montante folha de giro horizontal', quantidade:1 },
+    { eixo:'H', codigo:'SU111', formula:'Altura-49', descricao:'Montante folha de giro vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU225', formula:'Largura-172', descricao:'Travessa inferior da folha', quantidade:1 },
+    { eixo:'L', codigo:'SU102', formula:'Largura-172', descricao:'Baguete horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU102', formula:'Altura-211', descricao:'Baguete vertical', quantidade:2 },
+    {
+      eixo:'L',
+      codigo:'GS-034',
+      formula:'Largura-173',
+      descricao:'Lambril duplo horizontal',
+      formula_quantidade:'CEIL((Altura-28)/108.2)',
+    },
+    { eixo:'L', codigo:'25-548 (L-715)', formula:'Largura-53', descricao:'Complemento folha horizontal', quantidade:1 },
+    { eixo:'H', codigo:'25-548 (L-715)', formula:'Altura-30', descricao:'Complemento folha vertical', quantidade:1 },
+  ],
+  acessorios: [
+    { codigo:'GUA239', formula_quantidade:'(Largura + Altura * 2) / 1000', status:'em_validacao' },
+    { codigo:'PAR435', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'NYL042', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'REBACA4X10', quantidade_referencia:8, status:'referencia' },
+    { codigo:'FIT206', formula_quantidade:'(Largura + Altura) / 1000', status:'em_validacao' },
+    { codigo:'DOB840', formula_quantidade:'3', status:'em_validacao' },
+    { codigo:'FRA822', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'CON295', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'MAC927', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'GUA258', formula_quantidade:'Altura * 2 / 1000', status:'em_validacao' },
+    { codigo:'NYL190', formula_quantidade:'12', status:'em_validacao' },
+    { codigo:'PAR1025', formula_quantidade:'12', status:'em_validacao' },
+    { codigo:'PAR1037', formula_quantidade:'12', status:'em_validacao' },
+    { codigo:'BUC755', formula_quantidade:'12', status:'em_validacao' },
+    { codigo:'SIL-PU', formula_quantidade:'(Largura + Altura * 2) / 12000', status:'em_validacao' },
+    { codigo:'ALMC25', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'ALMC2960', formula_quantidade:'2', status:'em_validacao' },
+  ],
+}
+
+function pg1LambrilBase(params: {
+  codigo: string
+  nome: string
+  largura: number
+  altura: number
+  perfis: Array<[string,string,number,number]>
+  acessorios: Array<[string,number]>
+}): WVetroItemTecnico {
+  return {
+    Codigo: params.codigo,
+    Nome: params.nome,
+    Linha: 'L. SUPREMA',
+    Modelo: 'PORTA DE GIRO 01 FOLHA',
+    Qtde: 1,
+    Largura: params.largura,
+    Altura: params.altura,
+    Perfil: params.perfis.map(([Codigo,Posicao,Qtde,Medida]) => ({ Codigo, Posicao, Qtde, Medida })),
+    Acessorios: params.acessorios.map(([Codigo,Qtde]) => ({ Codigo, Qtde })),
+  }
+}
+
+export const FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO: WVetroItemTecnico[] = [
+  pg1LambrilBase({
+    codigo:'WV-PG1-LAMBRIL-860X2033',
+    nome:'PORTA DE GIRO 01 FOLHA COM LAMBRI | SUPREMA SEM CONTRAMARCO',
+    largura:860, altura:2033,
+    perfis:[
+      ['25-548 (L-715)','H',1,2.003],['MP347','H',2,2.055],['SU111','H',2,1.984],['SU279','H',2,2.029],
+      ['25-548 (L-715)','L',1,0.807],['MP347','L',1,0.904],['SU111','L',1,0.788],['SU225','L',1,0.688],
+      ['SU279','L',1,0.856],['SU102','H',2,1.822],['SU102','L',2,0.688],['GS-034','L',19,0.687],
+    ],
+    acessorios:[['ALMC25',2],['ALMC2960',2],['BUC755',12],['CON295',1],['DOB840',3],['FIT206',2.893],['FRA822',1],['GUA239',4.926],['GUA258',4.066],['MAC927',1],['NYL042',2],['NYL190',12],['PAR1025',12],['PAR1037',12],['PAR435',4],['REBACA4X10',8],['SIL-PU',0.4105]],
+  }),
+  pg1LambrilBase({
+    codigo:'WV-PG1-LAMBRIL-600X2100',
+    nome:'PORTA DE GIRO 01 FOLHA COM LAMBRI DUPLO HORIZONTAL | SUPREMA SEM CONTRAMARCO',
+    largura:600, altura:2100,
+    perfis:[
+      ['25-548 (L-715)','H',1,2.070],['MP347','H',2,2.122],['SU111','H',2,2.051],['SU279','H',2,2.096],
+      ['25-548 (L-715)','L',1,0.547],['MP347','L',1,0.644],['SU111','L',1,0.528],['SU225','L',1,0.428],
+      ['SU279','L',1,0.596],['SU102','H',2,1.889],['SU102','L',2,0.428],['GS-034','L',20,0.427],
+    ],
+    acessorios:[['ALMC25',2],['ALMC2960',2],['BUC755',12],['CON295',1],['DOB840',3],['FIT206',2.7],['FRA822',1],['GUA239',4.8],['GUA258',4.2],['MAC927',1],['NYL042',2],['NYL190',12],['PAR1025',12],['PAR1037',12],['PAR435',4],['REBACA4X10',7],['SIL-PU',0.4]],
+  }),
+  pg1LambrilBase({
+    codigo:'WV-PG1-LAMBRIL-800X2091',
+    nome:'PORTA DE GIRO 01 FOLHA COM LAMBRI DUPLO | SUPREMA SEM CONTRAMARCO',
+    largura:800, altura:2091,
+    perfis:[
+      ['25-548 (L-715)','H',1,2.061],['MP347','H',2,2.113],['SU111','H',2,2.042],['SU279','H',2,2.087],
+      ['25-548 (L-715)','L',1,0.747],['MP347','L',1,0.844],['SU111','L',1,0.728],['SU225','L',1,0.628],
+      ['SU279','L',1,0.796],['SU102','H',2,1.880],['SU102','L',2,0.628],['GS-034','L',20,0.627],
+    ],
+    acessorios:[['ALMC25',2],['ALMC2960',2],['BUC755',12],['CON295',1],['DOB840',3],['FIT206',2.891],['FRA822',1],['GUA239',4.982],['GUA258',4.182],['MAC927',1],['NYL042',2],['NYL190',12],['PAR1025',12],['PAR1037',12],['PAR435',4],['REBACA4X10',8],['SIL-PU',0.41517]],
+  }),
+  pg1LambrilBase({
+    codigo:'WV-PG1-LAMBRIL-900X2200',
+    nome:'PORTA DE GIRO 01 FOLHA COM LAMBRI DUPLO HORIZONTAL | SUPREMA SEM CONTRAMARCO',
+    largura:900, altura:2200,
+    perfis:[
+      ['25-548 (L-715)','H',1,2.170],['MP347','H',2,2.222],['SU111','H',2,2.151],['SU279','H',2,2.196],
+      ['25-548 (L-715)','L',1,0.847],['MP347','L',1,0.944],['SU111','L',1,0.828],['SU225','L',1,0.728],
+      ['SU279','L',1,0.896],['SU102','H',2,1.989],['SU102','L',2,0.728],['GS-034','L',21,0.727],
+    ],
+    acessorios:[['ALMC25',2],['ALMC2960',2],['BUC755',12],['CON295',1],['DOB840',3],['FIT206',3.1],['FRA822',1],['GUA239',5.3],['GUA258',4.4],['MAC927',1],['NYL042',2],['NYL190',12],['PAR1025',12],['PAR1037',12],['PAR435',4],['REBACA4X10',8],['SIL-PU',0.44167]],
+  }),
+]

@@ -1,5 +1,5 @@
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
@@ -201,3 +201,51 @@ console.log(JSON.stringify({
   fixture:'JC3 Suprema - matriz histórica moderna',
   amostras:jc3Resultados,
 },null,2))
+
+const pg1Resultados = FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO.map(item => {
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA,
+    opcoes: {},
+  })
+
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        fixture: item.Codigo,
+        status,
+        resumo: comparado.resumo,
+        divergencias: comparado.linhas.filter(l => l.status !== 'igual'),
+      }, null, 2))
+      throw new Error(`Regressão PG1 Lambril ${item.Codigo}: status ${status} deveria ser zero.`)
+    }
+  }
+
+  if (Number(comparado.resumo.regra_pendente_atlas || 0) !== 1) {
+    console.error(JSON.stringify({
+      fixture: item.Codigo,
+      resumo: comparado.resumo,
+      pendencias: comparado.linhas.filter(l => l.status === 'regra_pendente_atlas'),
+    }, null, 2))
+    throw new Error(`Regressão PG1 Lambril ${item.Codigo}: deveria existir apenas a regra pendente do rebite.`)
+  }
+
+  const pendente = comparado.linhas.find(l => l.status === 'regra_pendente_atlas')
+  if (String(pendente?.codigo || '').toUpperCase() !== 'REBACA4X10') {
+    throw new Error(`Regressão PG1 Lambril ${item.Codigo}: a única pendência esperada é REBACA4X10.`)
+  }
+
+  return {
+    fixture: item.Codigo,
+    medida: `${item.Largura}x${item.Altura}`,
+    iguais: comparado.resumo.igual,
+    regrasPendentes: comparado.resumo.regra_pendente_atlas,
+    lambris: comparado.linhas.find(l => l.tipo === 'perfil' && l.codigo === 'GS-034')?.atlas?.quantidade,
+  }
+})
+
+console.log(JSON.stringify({
+  ok: true,
+  fixture: 'PG1 Lambril Suprema - matriz histórica',
+  amostras: pg1Resultados,
+}, null, 2))

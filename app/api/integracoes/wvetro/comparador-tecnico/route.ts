@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,6 +41,12 @@ function formulaDoBanco(row: any): FormulaAtlasComparacao {
 function itensDoPayload(payload: any): WVetroItemTecnico[] {
   const itens = Array.isArray(payload?.Itens) ? payload.Itens : []
   return itens.filter((x: unknown) => x && typeof x === 'object') as WVetroItemTecnico[]
+}
+
+function conjuntoExato(codigos: string[], esperados: string[]) {
+  const atual = [...new Set(codigos.map(c => c.trim().toUpperCase()).filter(Boolean))].sort()
+  const alvo = [...new Set(esperados.map(c => c.trim().toUpperCase()).filter(Boolean))].sort()
+  return atual.length === alvo.length && atual.every((codigo, index) => codigo === alvo[index])
 }
 
 function formulasReferenciaLocal(item: WVetroItemTecnico) {
@@ -94,6 +100,32 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
       vidro: formula.vidro,
       acessorios: formula.acessorios || [],
     })
+  }
+
+  if (linha.includes('SUPREMA') && modelo.includes('PORTA DE GIRO 01 FOLHA')) {
+    const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+    const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+    const perfilDominante = [
+      '25-548 (L-715)','GS-034','MP347','SU102','SU111','SU225','SU279',
+    ]
+    const acessorioDominante = [
+      'ALMC25','ALMC2960','BUC755','CON295','DOB840','FIT206','FRA822','GUA239','GUA258',
+      'MAC927','NYL042','NYL190','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
+    ]
+
+    if (conjuntoExato(perfis, perfilDominante) && conjuntoExato(acessorios, acessorioDominante)) {
+      refs.push({
+        id: 'referencia-local-pg1-lambril-suprema',
+        tipologia_id: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.tipologia_id,
+        configuracao_label: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.configuracao_label,
+        status: 'referencia_historica',
+        ativo: false,
+        variaveis: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.variaveis,
+        pecas: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.pecas,
+        vidro: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.vidro,
+        acessorios: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.acessorios || [],
+      })
+    }
   }
 
   return refs
