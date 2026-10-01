@@ -29,6 +29,9 @@ type Resposta = {
     aprovado: boolean
   }
   formula?: { id:string; configuracao_label?:string|null; status?:string|null; ativo?:boolean|null }
+  variaveis?: Array<{ chave:string; label:string; opcoes:string[] }>
+  opcoes?: Record<string,string>
+  inferencias?: Array<{ chave:string; valor:string; origem:string; evidencia:string }>
   formulasDisponiveis?: Array<{ id:string; configuracao_label?:string|null; status?:string|null; ativo?:boolean|null }>
   itensDisponiveis?: Array<{ id:string; nome:string; modelo:string; linha:string; largura:number; altura:number }>
 }
@@ -74,6 +77,7 @@ export default function ComparadorTecnicoWVetroPage() {
   const [numero,setNumero]=useState('')
   const [itemId,setItemId]=useState('')
   const [formulaId,setFormulaId]=useState('')
+  const [opcoes,setOpcoes]=useState<Record<string,string>>({})
   const [dados,setDados]=useState<Resposta|null>(null)
   const [carregando,setCarregando]=useState(false)
   const [erro,setErro]=useState('')
@@ -82,7 +86,7 @@ export default function ComparadorTecnicoWVetroPage() {
     usuarioAtual().then(u => setMaster(u?.role === 'master')).catch(() => setMaster(false))
   }, [])
 
-  async function executar(modo: 'fixture'|'historico', override?: { itemId?:string; formulaId?:string }) {
+  async function executar(modo: 'fixture'|'historico', override?: { itemId?:string; formulaId?:string; opcoes?:Record<string,string>; resetOpcoes?:boolean }) {
     setCarregando(true); setErro('')
     try {
       const p = new URLSearchParams({ modo })
@@ -93,6 +97,8 @@ export default function ComparadorTecnicoWVetroPage() {
         const formula = override?.formulaId ?? formulaId
         if (item) p.set('itemId', item)
         if (formula) p.set('formulaId', formula)
+        const opcoesEnvio = override?.resetOpcoes ? {} : (override?.opcoes ?? opcoes)
+        if (Object.keys(opcoesEnvio).length > 0) p.set('opcoes', JSON.stringify(opcoesEnvio))
       }
       const json = await chamar(p)
       setDados(json)
@@ -101,6 +107,7 @@ export default function ComparadorTecnicoWVetroPage() {
         const escolhidoFormula = override?.formulaId ?? formulaId
         if (!escolhidoItem && json.itensDisponiveis?.[0]?.id) setItemId(json.itensDisponiveis[0].id)
         if (!escolhidoFormula && json.formula?.id) setFormulaId(json.formula.id)
+        setOpcoes(json.opcoes || {})
       }
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha no comparador.')
@@ -145,15 +152,27 @@ export default function ComparadorTecnicoWVetroPage() {
           </div>
           {dados?.modo === 'historico' && (dados.itensDisponiveis?.length || 0) > 1 && <div className="mt-3 grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-600">Item
-              <select value={itemId} onChange={e=>{setItemId(e.target.value); executar('historico',{itemId:e.target.value})}} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm">
+              <select value={itemId} onChange={e=>{setItemId(e.target.value); executar('historico',{itemId:e.target.value,resetOpcoes:true})}} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm">
                 {dados.itensDisponiveis?.map(i=><option key={i.id} value={i.id}>{i.id} · {i.nome} · {i.largura}×{i.altura}</option>)}
               </select>
             </label>
             <label className="text-xs font-semibold text-slate-600">Configuração Atlas
-              <select value={formulaId} onChange={e=>{setFormulaId(e.target.value); executar('historico',{formulaId:e.target.value})}} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm">
+              <select value={formulaId} onChange={e=>{setFormulaId(e.target.value); executar('historico',{formulaId:e.target.value,resetOpcoes:true})}} className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm">
                 {dados.formulasDisponiveis?.map(f=><option key={f.id} value={f.id}>{f.configuracao_label || f.id} · {f.status || '—'}{f.ativo?' · ativa':''}</option>)}
               </select>
             </label>
+          </div>}
+          {dados?.modo === 'historico' && (dados.variaveis?.length || 0) > 0 && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Opções técnicas usadas na comparação</p><p className="mt-0.5 text-xs text-slate-400">Sugestões inferidas da composição W.Vetro. Você pode alterar sem gravar nada.</p></div>
+              <button type="button" onClick={()=>executar('historico',{opcoes})} disabled={carregando} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Recalcular opções</button>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {dados.variaveis?.map(v=><label key={v.chave} className="text-xs font-semibold text-slate-600">{v.label}
+                {v.opcoes.length>0?<select value={opcoes[v.chave]||''} onChange={e=>setOpcoes(prev=>({...prev,[v.chave]:e.target.value}))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">{v.opcoes.map(o=><option key={o} value={o}>{o}</option>)}</select>:<input value={opcoes[v.chave]||''} onChange={e=>setOpcoes(prev=>({...prev,[v.chave]:e.target.value}))} placeholder={`Informe ${v.label.toLowerCase()}`} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm"/>}
+                {dados.inferencias?.find(i=>i.chave===v.chave)?.evidencia&&<span className="mt-1 block text-[10px] font-normal text-slate-400">{dados.inferencias.find(i=>i.chave===v.chave)?.evidencia}</span>}
+              </label>)}
+            </div>
           </div>}
         </section>
 
