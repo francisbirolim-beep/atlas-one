@@ -46,6 +46,390 @@ export type FormulaAtlasComparacao = TipologiaFormulasCorte & {
 }
 
 
+export const PC2_SUPREMA_REFORCO_EXTERNO_PERFIS = [
+  'MP347','SU001','TMC','SU007','SU008','SU053','SU225','SU280','SU040','SU049','SU102',
+] as const
+
+export const PC2_SUPREMA_REFORCO_EXTERNO_ACESSORIOS = [
+  'NYL335','NYL332','FRA820','CON409','RPCS100','NYL357','FIT206','FIT246','FIT212',
+  'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
+  'BUC755','SIL-PU',
+] as const
+
+// Aliases legados: o staging por ocorrência mostrou que esta assinatura é a variante
+// com reforço externo, não a composição dominante geral da PC2.
+export const PC2_SUPREMA_DOMINANTE_PERFIS = PC2_SUPREMA_REFORCO_EXTERNO_PERFIS
+export const PC2_SUPREMA_DOMINANTE_ACESSORIOS = PC2_SUPREMA_REFORCO_EXTERNO_ACESSORIOS
+
+export const PC2_SUPREMA_PADRAO_SEM_REFORCO_PERFIS = [
+  'MP347','SU001','TMC','SU007','SU008','SU053','SU225','SU280','SU040','SU041','SU102',
+] as const
+
+export const PC2_SUPREMA_PADRAO_SEM_REFORCO_ACESSORIOS = [
+  'NYL335','NYL332','FRA820','CON409','RPCS100','FIT206','FIT246','FIT212',
+  'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
+  'BUC755','SIL-PU',
+] as const
+
+export const PC4_SUPREMA_QUATRO_PLANOS_PERFIS = [
+  'MP347','SU121','TMC','SU123','SU008','SU053','SU225','SU280','SU040','SU041','SU102',
+] as const
+
+export const PC4_SUPREMA_QUATRO_PLANOS_ACESSORIOS = [
+  'NYL335','NYL332','NYL414','FRA820','CON409','RPCS100','FIT206','FIT246','FIT212',
+  'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
+  'BUC755','SIL-PU',
+] as const
+
+export const PORTINHOLA_SUPREMA_VENEZIANA_1F_PERFIS = [
+  'CL006','CL011','SU108','SU111','SU279','US285',
+] as const
+
+export const PORTINHOLA_SUPREMA_VENEZIANA_1F_ACESSORIOS = [
+  'BUC755','DOB840','FEC514','GUA239','GUA282','PAR1037','SIL-PU',
+] as const
+
+function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
+  const a = [...new Set(atual.map(normalizarCodigo).filter(Boolean))].sort()
+  const e = [...new Set(esperado.map(normalizarCodigo).filter(Boolean))].sort()
+  return a.length === e.length && a.every((codigo, index) => codigo === e[index])
+}
+
+export type AssinaturaComposicaoWVetro = {
+  chave: string
+  perfis: Array<{ codigo: string; posicoes: string[]; quantidade: number }>
+  acessorios: string[]
+  vidros: Array<{ especificacao: string; quantidade: number }>
+}
+
+export function assinaturaComposicaoWVetro(item: WVetroItemTecnico): AssinaturaComposicaoWVetro {
+  const perfisMap = new Map<string, { codigo: string; posicoes: Set<string>; quantidade: number }>()
+  for (const perfil of item.Perfil || []) {
+    const codigo = normalizarCodigo(perfil.Codigo)
+    if (!codigo) continue
+    const atual = perfisMap.get(codigo) || { codigo, posicoes: new Set<string>(), quantidade: 0 }
+    const posicao = normalizarCodigo(perfil.Posicao)
+    if (posicao) atual.posicoes.add(posicao)
+    const quantidade = Number(perfil.Qtde || 0)
+    atual.quantidade += Number.isFinite(quantidade) ? quantidade : 0
+    perfisMap.set(codigo, atual)
+  }
+
+  const perfis = [...perfisMap.values()]
+    .map(p => ({
+      codigo: p.codigo,
+      posicoes: [...p.posicoes].sort(),
+      quantidade: Number(p.quantidade.toFixed(6)),
+    }))
+    .sort((a, b) => a.codigo.localeCompare(b.codigo))
+
+  const acessorios = [...new Set(
+    (item.Acessorios || []).map(a => normalizarCodigo(a.Codigo)).filter(Boolean)
+  )].sort()
+
+  const vidrosMap = new Map<string, number>()
+  for (const vidro of item.Vidros || []) {
+    const especificacao = String(vidro.Especificacao || 'VIDRO').trim().toUpperCase()
+    const quantidade = Number(vidro.Qtde || 0)
+    vidrosMap.set(
+      especificacao,
+      (vidrosMap.get(especificacao) || 0) + (Number.isFinite(quantidade) ? quantidade : 0)
+    )
+  }
+  const vidros = [...vidrosMap.entries()]
+    .map(([especificacao, quantidade]) => ({ especificacao, quantidade: Number(quantidade.toFixed(6)) }))
+    .sort((a, b) => a.especificacao.localeCompare(b.especificacao))
+
+  const chave = JSON.stringify({
+    p: perfis.map(p => [p.codigo, p.posicoes, p.quantidade]),
+    a: acessorios,
+    v: vidros.map(v => [v.especificacao, v.quantidade]),
+  })
+
+  return { chave, perfis, acessorios, vidros }
+}
+
+export type FamiliaPc4Suprema =
+  | 'quatro_planos'
+  | 'sequencial'
+  | 'abertura_central'
+  | 'fixas_moveis'
+  | 'veneziana_mista'
+  | 'outra'
+
+export function classificarFamiliaPc4Suprema(item: WVetroItemTecnico): FamiliaPc4Suprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 04 FOLHAS')) return 'outra'
+  if (nome.includes('VENEZIANA') || nome.includes('LAMBRI') || nome.includes('TELA') || codigo.includes('PC4-03') || codigo.includes('PC4-09')) return 'veneziana_mista'
+  if (nome.includes('ABERTURA CENTRAL')) return 'abertura_central'
+  if (nome.includes('FIXA') || codigo.includes('PC4-01')) return 'fixas_moveis'
+  if (nome.includes('SEQUENC')) return 'sequencial'
+  if (nome.includes('04 PLANOS') || nome.includes('4 PLANOS') || codigo.includes('PC4-02')) return 'quatro_planos'
+  return 'outra'
+}
+
+export type FamiliaPc1Suprema =
+  | 'vidro'
+  | 'vidro_suspensa'
+  | 'lambri'
+  | 'lambri_suspensa'
+  | 'veneziana'
+  | 'mista_vidro_veneziana'
+  | 'estrutura_ripado'
+  | 'kit_porta_pronta'
+  | 'outra'
+
+export function classificarFamiliaPc1Suprema(item: WVetroItemTecnico): FamiliaPc1Suprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 01 FOLHA')) return 'outra'
+  if (nome.includes('KIT PORTA PRONTA') || nome.includes('SINCOL') || nome.includes('SINIKIT')) return 'kit_porta_pronta'
+  if (nome.includes('ESTRUTURA') && nome.includes('RIPAD')) return 'estrutura_ripado'
+  if (nome.includes('VIDRO SUPERIOR') || codigo.includes('PC1-02')) return 'mista_vidro_veneziana'
+  if (nome.includes('VENEZIANA') || codigo.includes('PC1-03')) return 'veneziana'
+  if (nome.includes('LAMBRI') || codigo.includes('PC1-04')) return nome.includes('SUSPENSA') ? 'lambri_suspensa' : 'lambri'
+  if (nome.includes('VIDRO') || codigo.includes('PC1-01')) return nome.includes('SUSPENSA') ? 'vidro_suspensa' : 'vidro'
+  return 'outra'
+}
+
+export type FamiliaPortinholaSuprema =
+  | 'veneziana_1f'
+  | 'veneziana_2f'
+  | 'lisa_1f'
+  | 'outra'
+
+export type VariantesPortinholaSuprema = {
+  familia: FamiliaPortinholaSuprema
+  folhas: 1 | 2 | null
+  veneziana: 'cega' | 'ventilada' | 'nao_informada'
+  contramarco: 'com' | 'sem' | 'na_obra' | 'nao_informado'
+  arremate: 'com' | 'sem' | 'nao_informado'
+  fechamento: 'tranqueta' | 'trinco' | 'fechadura' | 'nao_informado'
+}
+
+export function classificarFamiliaPortinholaSuprema(item: WVetroItemTecnico): FamiliaPortinholaSuprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || modelo !== 'PORTINHOLA') return 'outra'
+  if (nome.includes('02 FOLH') || codigo.includes('PTA-04')) return 'veneziana_2f'
+  if (nome.includes('VENEZIANA') || codigo.includes('PTA-03')) return 'veneziana_1f'
+  if (codigo.includes('PTA-01') || nome.includes('01 FOLHA')) return 'lisa_1f'
+  return 'outra'
+}
+
+export function extrairVariantesPortinholaSuprema(item: WVetroItemTecnico): VariantesPortinholaSuprema {
+  const texto = `${String(item.Nome || '')} ${String(item.Modelo || '')}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const familia = classificarFamiliaPortinholaSuprema(item)
+  const folhas: 1 | 2 | null = familia === 'veneziana_2f' ? 2 : familia === 'outra' ? null : 1
+  const veneziana: VariantesPortinholaSuprema['veneziana'] =
+    texto.includes('CEGA') ? 'cega' :
+    texto.includes('VENTILAD') || texto.includes('VENTIULAD') ? 'ventilada' :
+    'nao_informada'
+  const contramarco: VariantesPortinholaSuprema['contramarco'] =
+    texto.includes('CONTRAMARCO NA OBRA') ? 'na_obra' :
+    texto.includes('SEM CONTRAMARCO') ? 'sem' :
+    texto.includes('COM CONTRAMARCO') ? 'com' :
+    'nao_informado'
+  const arremate: VariantesPortinholaSuprema['arremate'] =
+    texto.includes('SEM ARREMATE') ||
+    texto.includes('SEM CONTRAMARCO E ARREMATE') ||
+    texto.includes('SEM CONTRAMARCO E NEM ARREMATE') ? 'sem' :
+    texto.includes('COM ARREMATE') ? 'com' :
+    'nao_informado'
+  const fechamento: VariantesPortinholaSuprema['fechamento'] =
+    texto.includes('TRANQUETA') ? 'tranqueta' :
+    texto.includes('TRINCO') ? 'trinco' :
+    texto.includes('FECHADURA') ? 'fechadura' :
+    'nao_informado'
+  return { familia, folhas, veneziana, contramarco, arremate, fechamento }
+}
+
+export type FamiliaPc2Suprema =
+  | 'vidro_padrao'
+  | 'integrada_persiana'
+  | 'veneziana'
+  | 'lambri'
+  | 'bandeira'
+  | 'abertura_central'
+  | 'mista_vidro_veneziana'
+  | 'outra'
+
+export function classificarFamiliaPc2Suprema(item: WVetroItemTecnico): FamiliaPc2Suprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '').trim().toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return 'outra'
+  if (nome.includes('INTEGRADA') || codigo.includes('PC2-08')) return 'integrada_persiana'
+  if (nome.includes('VIDRO SUPERIOR') || codigo.includes('PC2-02')) return 'mista_vidro_veneziana'
+  if (nome.includes('VENEZIANA') || codigo.includes('PC2-03')) return 'veneziana'
+  if (nome.includes('LAMBRI') || codigo.includes('PC2-04')) return 'lambri'
+  if (nome.includes('BANDEIRA') || codigo.includes('PC2-05')) return 'bandeira'
+  if (nome.includes('ABERTURA CENTRAL') || codigo.includes('PC2-11')) return 'abertura_central'
+  return 'vidro_padrao'
+}
+
+export type VariantesPc2Suprema = {
+  familia: FamiliaPc2Suprema
+  montagem: 'sequencial' | 'abertura_central' | 'fixa_movel' | 'duas_moveis' | 'nao_informada'
+  contramarco: 'com' | 'sem' | 'na_obra' | 'nao_informado'
+  arremate: 'com' | 'sem' | 'nao_informado'
+  reforcoAba: boolean
+  reforcoExterno: boolean
+  trilho: 'embutido' | 'macarrao_colado' | 'nao_informado'
+  persianaAcionamento: 'motor_220v' | 'fita' | 'sem_motor' | 'nao_informado'
+}
+
+export function extrairVariantesPc2Suprema(item: WVetroItemTecnico): VariantesPc2Suprema {
+  const texto = `${String(item.Nome || '')} ${String(item.Modelo || '')}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+
+  const familia = classificarFamiliaPc2Suprema(item)
+
+  const montagem: VariantesPc2Suprema['montagem'] =
+    texto.includes('ABERTURA CENTRAL') ? 'abertura_central' :
+    texto.includes('SEQUENC') ? 'sequencial' :
+    texto.includes('1 FIXA') || texto.includes('01 FIXA') ? 'fixa_movel' :
+    texto.includes('FOLHAS MOVEIS') || texto.includes('FOLHAS MÓVEIS') ? 'duas_moveis' :
+    'nao_informada'
+
+  const contramarco: VariantesPc2Suprema['contramarco'] =
+    texto.includes('CONTRAMARCO NA OBRA') ? 'na_obra' :
+    texto.includes('SEM CONTRAMARCO') || texto.includes('SEM CONTRAMARCCO') ? 'sem' :
+    texto.includes('COM CONTRAMARCO') || texto.includes('CONTRAMARCO CM') || texto.includes('CONTRAMARCO CMO') ? 'com' :
+    'nao_informado'
+
+  const arremate: VariantesPc2Suprema['arremate'] =
+    texto.includes('SEM ARREMATE') ? 'sem' :
+    texto.includes('COM ARREMATE') || texto.includes('E ARREMATE') || texto.includes('ARREMATE MP347') ? 'com' :
+    'nao_informado'
+
+  const trilho: VariantesPc2Suprema['trilho'] =
+    texto.includes('MACARRAO COLADO') ? 'macarrao_colado' :
+    texto.includes('TRILHO EMBUTID') || texto.includes('TRILHOS EMBUTID') ? 'embutido' :
+    'nao_informado'
+
+  const persianaAcionamento: VariantesPc2Suprema['persianaAcionamento'] =
+    texto.includes('SEM MOTOR') ? 'sem_motor' :
+    texto.includes('RECOLHEDOR') || texto.includes('EM FITA') || texto.includes('NA FITA') ? 'fita' :
+    texto.includes('MOTOR') || texto.includes('220V') || texto.includes('220 V') ? 'motor_220v' :
+    'nao_informado'
+
+  return {
+    familia,
+    montagem,
+    contramarco,
+    arremate,
+    reforcoAba: texto.includes('REF DE ABA') || texto.includes('REFORCO DE ABA') || texto.includes('REF DE  ABA'),
+    reforcoExterno: texto.includes('REF EXTERNO') || texto.includes('REFO EXTERNO') || texto.includes('REF EXTR'),
+    trilho,
+    persianaAcionamento,
+  }
+}
+
+function qtdAcessorioUnitario(item: WVetroItemTecnico, codigo: string) {
+  const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
+  return (item.Acessorios || [])
+    .filter(a => normalizarCodigo(a.Codigo) === codigo)
+    .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
+}
+
+function assinaturaExataItem(
+  item: WVetroItemTecnico,
+  perfisEsperados: readonly string[],
+  acessoriosEsperados: readonly string[],
+) {
+  const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+  const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+  return conjuntoCodigosExato(perfis, perfisEsperados) && conjuntoCodigosExato(acessorios, acessoriosEsperados)
+}
+
+export function ehPc2SupremaReforcoExterno(item: WVetroItemTecnico) {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
+  if (classificarFamiliaPc2Suprema(item) !== 'vidro_padrao' || !(item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PC2_SUPREMA_REFORCO_EXTERNO_PERFIS, PC2_SUPREMA_REFORCO_EXTERNO_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 4) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL332') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL335') - 1) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL357') - 2) < 0.0001
+  )
+}
+
+// Compatibilidade com chamadas anteriores ao diagnóstico por ocorrência.
+export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
+  return ehPc2SupremaReforcoExterno(item)
+}
+
+export function ehPc2SupremaPadraoSemReforco(item: WVetroItemTecnico) {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
+  if (classificarFamiliaPc2Suprema(item) !== 'vidro_padrao' || !(item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PC2_SUPREMA_PADRAO_SEM_REFORCO_PERFIS, PC2_SUPREMA_PADRAO_SEM_REFORCO_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 4) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL332') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL335') - 1) < 0.0001
+  )
+}
+
+export function ehPc4SupremaQuatroPlanosValidada(item: WVetroItemTecnico) {
+  if (classificarFamiliaPc4Suprema(item) !== 'quatro_planos' || !(item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PC4_SUPREMA_QUATRO_PLANOS_PERFIS, PC4_SUPREMA_QUATRO_PLANOS_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'NYL335') - 3) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL332') - 16) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL414') - 12) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001
+  )
+}
+
+export function ehPortinholaSupremaVeneziana1fValidada(item: WVetroItemTecnico) {
+  if (classificarFamiliaPortinholaSuprema(item) !== 'veneziana_1f') return false
+  if ((item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PORTINHOLA_SUPREMA_VENEZIANA_1F_PERFIS, PORTINHOLA_SUPREMA_VENEZIANA_1F_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'DOB840') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FEC514') - 1) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'PAR1037') - 12) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'BUC755') - 12) < 0.0001
+  )
+}
+
 export type OpcaoTecnicaInferida = {
   chave: string
   valor: string
