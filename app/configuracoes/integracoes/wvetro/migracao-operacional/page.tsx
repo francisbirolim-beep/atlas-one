@@ -167,6 +167,7 @@ type AuditoriaCatalogos = {
       pendentes: number
       aguardandoHomologacao: number
       homologadosCatalogo: number
+      naoAplicaveis: number
       vinculadosProdutoAtlas: number
       comCustoReferencia: number
     }
@@ -195,6 +196,9 @@ type AuditoriaCatalogos = {
     vidros: Array<{
       nome: string
       status: string
+      referenciaId: string | null
+      referenciaChave: string | null
+      codigo: string | null
       statusValidacao: string | null
       produtoAtlasId: string | null
       catalogoCustoId: string | null
@@ -368,6 +372,8 @@ export default function MigracaoOperacionalWVetroPage() {
   const [auditoriaResumo, setAuditoriaResumo] = useState<AuditoriaResumo | null>(null)
   const [catalogosCarregando, setCatalogosCarregando] = useState(false)
   const [catalogosAuditoria, setCatalogosAuditoria] = useState<AuditoriaCatalogos | null>(null)
+  const [homologandoVidro, setHomologandoVidro] = useState<string | null>(null)
+  const [catalogosMensagem, setCatalogosMensagem] = useState('')
 
   useEffect(() => {
     let ativo = true
@@ -431,6 +437,82 @@ export default function MigracaoOperacionalWVetroPage() {
       setErro(e instanceof Error ? e.message : 'Falha ao auditar catálogos W.Vetro.')
     } finally {
       setCatalogosCarregando(false)
+    }
+  }
+
+  async function homologarVidro(
+    item: AuditoriaCatalogos['pendencias']['vidros'][number],
+  ) {
+    if (!item.referenciaChave) {
+      setErro('Referência W.Vetro sem chave estável. Homologação bloqueada.')
+      return
+    }
+
+    const sugestao = item.historicoCustoM2Mediana ?? item.custoReferenciaM2
+    const valorInicial = sugestao != null ? sugestao.toFixed(2).replace('.', ',') : ''
+    const informado = window.prompt(
+      `Custo OFICIAL por m² de ${item.nome}:\n\nA mediana histórica W.Vetro é somente referência e NÃO será aplicada automaticamente.`,
+      valorInicial,
+    )
+    if (informado == null) return
+
+    const limpo = informado.replace(/R\$/gi, '').replace(/\s/g, '')
+    const normalizado = limpo.includes(',')
+      ? limpo.replace(/\./g, '').replace(',', '.')
+      : limpo
+    const custo = Number(normalizado)
+
+    if (!Number.isFinite(custo) || custo <= 0) {
+      setErro('Informe um custo oficial por m² maior que zero.')
+      return
+    }
+
+    const confirmado = window.confirm(
+      `Confirmar ${custo.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      })}/m² como custo OFICIAL de ${item.nome} no Atlas?\n\nEssa confirmação afeta futuros orçamentos. O histórico W.Vetro permanece apenas como evidência.`,
+    )
+    if (!confirmado) return
+
+    setHomologandoVidro(item.referenciaChave)
+    setCatalogosMensagem('')
+    setErro('')
+
+    try {
+      const token = await tokenAtual()
+      if (!token) throw new Error('Sessão do Atlas não encontrada. Entre novamente.')
+
+      const resp = await fetch(
+        '/api/integracoes/wvetro/migracao-operacional/homologar-vidro',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            referenciaChave: item.referenciaChave,
+            custoOficial: custo,
+            confirmar: true,
+          }),
+        },
+      )
+
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(json?.error || `Falha na homologação (${resp.status}).`)
+
+      setCatalogosMensagem(
+        `${item.nome} homologado com custo oficial de ${custo.toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        })}/m².`,
+      )
+      await carregarAuditoriaCatalogos()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao homologar vidro.')
+    } finally {
+      setHomologandoVidro(null)
     }
   }
 
@@ -898,6 +980,11 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="mt-1 text-[11px] text-slate-500">
                       Ordenada pelo uso histórico. Custo/m² abaixo é somente referência da amostra W.Vetro e não vira custo oficial.
                     </div>
+                    {catalogosMensagem && (
+                      <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                        {catalogosMensagem}
+                      </div>
+                    )}
                     <div className="mt-2 max-h-[34rem] space-y-2 overflow-auto pr-1">
                       {catalogosAuditoria.pendencias.vidros.map(item => (
                         <div key={item.nome} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -948,9 +1035,24 @@ export default function MigracaoOperacionalWVetroPage() {
                                 Homologado no catálogo Atlas
                               </span>
                             ) : (
-                              <span className="rounded-md bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                                Aguardando homologação
-                              </span>
+                              <>
+                                <span className="rounded-md bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                                  Aguardando homologação
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => homologarVidro(item)}
+                                  disabled={!item.referenciaChave || homologandoVidro === item.referenciaChave}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {homologandoVidro === item.referenciaChave ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 size={12} />
+                                  )}
+                                  Homologar custo oficial
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
