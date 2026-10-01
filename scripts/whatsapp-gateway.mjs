@@ -320,10 +320,11 @@ async function registerInbound(channel, msg, sock) {
         }),
       })
 
+      const mimeUpload = preparado.mimeType || String(extracted.mimeType || 'application/octet-stream').split(';')[0]
       const upload = await fetch(preparado.signedUrl, {
         method: 'PUT',
         headers: {
-          'content-type': extracted.mimeType || 'application/octet-stream',
+          'content-type': mimeUpload,
           'cache-control': 'max-age=3600',
           'x-upsert': 'false',
         },
@@ -354,7 +355,7 @@ async function registerInbound(channel, msg, sock) {
       texto: extracted.texto,
       timestamp,
       mediaPath,
-      mimeType: extracted.mimeType || null,
+      mimeType: preparado?.mimeType || extracted.mimeType || null,
       fileName: extracted.fileName || null,
       mediaSize,
       payload: {
