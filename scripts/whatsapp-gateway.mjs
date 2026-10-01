@@ -634,6 +634,7 @@ async function processPushQueue() {
       tag: `atlas-${notificacao.id}`,
       categoria: String(notificacao.categoria || 'operacao'),
       silent: notificacao.silent === true,
+      forceShow: notificacao.tipo === 'push_teste',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
     })
