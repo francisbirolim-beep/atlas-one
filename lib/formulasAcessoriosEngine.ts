@@ -10,7 +10,7 @@ export type ResultadoAcessorioFormula = {
 type Token =
   | { tipo: 'numero'; valor: string }
   | { tipo: 'identificador'; valor: string }
-  | { tipo: 'funcao'; valor: 'ROUND' | 'CEIL' }
+  | { tipo: 'funcao'; valor: 'ROUND' | 'CEIL' | 'FLOOR' }
   | { tipo: 'operador'; valor: '+' | '-' | '*' | '/' | '(' | ')' }
 
 export class FormulaAcessorioError extends Error {
@@ -32,7 +32,7 @@ function tokenizar(formula: string): Token[] {
     const identificador = restante.match(/^[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*/)
     if (identificador) {
       const valor = identificador[0]
-      if (valor === 'ROUND' || valor === 'CEIL') tokens.push({ tipo: 'funcao', valor })
+      if (valor === 'ROUND' || valor === 'CEIL' || valor === 'FLOOR') tokens.push({ tipo: 'funcao', valor })
       else tokens.push({ tipo: 'identificador', valor })
       i += valor.length
       continue
@@ -91,7 +91,7 @@ function avaliar(formula: string, contexto: Record<string, number>): number {
       if (abre?.tipo !== 'operador' || abre.valor !== '(') throw new FormulaAcessorioError(`${token.valor} sem parênteses`)
       const valor = expr(); const fecha = next()
       if (fecha?.tipo !== 'operador' || fecha.valor !== ')') throw new FormulaAcessorioError(`${token.valor} sem fechamento`)
-      return token.valor === 'CEIL' ? Math.ceil(valor) : Math.round(valor)
+      return token.valor === 'CEIL' ? Math.ceil(valor) : token.valor === 'FLOOR' ? Math.floor(valor) : Math.round(valor)
     }
     if (token.tipo === 'numero') { next(); return Number(token.valor) }
     if (token.tipo === 'identificador') {
@@ -113,7 +113,7 @@ function numero(valor: number) {
 
 function mostrarCalculo(formula: string, contexto: Record<string, number>) {
   return formula.replace(/\b[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*\b/g, token => {
-    if (token === 'ROUND' || token === 'CEIL') return token
+    if (token === 'ROUND' || token === 'CEIL' || token === 'FLOOR') return token
     return token in contexto ? numero(contexto[token]) : token
   })
 }
