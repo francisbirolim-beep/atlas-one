@@ -283,6 +283,7 @@ function rotuloAuditoria(classificacao: string) {
     sem_referencia: 'Sem referência válida',
     resolvida_por_pedido: 'Resolvida por pedido',
     resolvida_por_lote: 'Resolvida pelo lote',
+    preservada_historico_operacional: 'Preservada no histórico operacional',
     referencia_historica_sem_snapshot: 'Referência histórica sem snapshot',
     pendente_revisao: 'Pendente de revisão',
   }
