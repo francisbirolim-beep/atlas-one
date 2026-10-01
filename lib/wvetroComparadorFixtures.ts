@@ -163,7 +163,7 @@ export const FIXTURE_PC3_SUPREMA_WVETRO: WVetroItemTecnico = {
   Largura: 2930,
   Altura: 2219,
   Perfil: [
-    { Codigo:'SU010',Nome:'MARCO SUPERIOR / CORRER 3',Qtde:1,Medida:2.900,Posicao:'L' },
+    { Codigo:'SU010',Cor:'PINTURA PRETO',Nome:'MARCO SUPERIOR / CORRER 3',Qtde:1,Medida:2.900,Posicao:'L' },
     { Codigo:'TMC',Nome:'TRILHO MACARRÃO DE EMBUTIR MEIA-CANA',Qtde:3,Medida:2.900,Posicao:'L' },
     { Codigo:'SU012',Nome:'MARCO LATERAL / CORRER 3',Qtde:2,Medida:2.215,Posicao:'H' },
     { Codigo:'SU008',Nome:'MATA JUNTA / COMPLEMENTO DO MARCO',Qtde:2,Medida:2.202,Posicao:'H' },
