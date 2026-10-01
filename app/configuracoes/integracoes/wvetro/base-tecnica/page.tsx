@@ -11,6 +11,7 @@ type Resumo = {
   produtosComCustoWvetro: number
   produtosWvetroComFoto: number
   tipologiasReferencia: number
+  casosIndividuais: number
 }
 
 type Execucao = {
@@ -177,6 +178,7 @@ export default function BaseTecnicaWVetroPage() {
 
   const cards = [
     ['Tipologias referência', resumo?.tipologiasReferencia || 0, PackageSearch],
+    ['Casos individuais', resumo?.casosIndividuais || 0, CheckCircle2],
     ['BOM por tipologia', resumo?.componentesPorTipologia || 0, Wrench],
     ['Componentes mapeados', resumo?.componentesMapeados || 0, CheckCircle2],
     ['Produtos com custo W.Vetro', resumo?.produtosComCustoWvetro || 0, Database],
@@ -200,7 +202,7 @@ export default function BaseTecnicaWVetroPage() {
         {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
         {mensagem && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{mensagem}</div>}
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {cards.map(([label, total, Icon]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><Icon size={18} className="text-blue-700" /><p className="mt-3 text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold text-slate-900">{total}</p></div>)}
         </section>
 
