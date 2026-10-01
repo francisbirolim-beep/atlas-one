@@ -62,22 +62,37 @@ function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
   return a.length === e.length && a.every((codigo, index) => codigo === e[index])
 }
 
-export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
+export type FamiliaPc2Suprema =
+  | 'vidro_padrao'
+  | 'integrada_persiana'
+  | 'veneziana'
+  | 'lambri'
+  | 'bandeira'
+  | 'abertura_central'
+  | 'mista_vidro_veneziana'
+  | 'outra'
+
+export function classificarFamiliaPc2Suprema(item: WVetroItemTecnico): FamiliaPc2Suprema {
   const linha = String(item.Linha || '').trim().toUpperCase()
   const modelo = String(item.Modelo || '').trim().toUpperCase()
   const nome = String(item.Nome || '').trim().toUpperCase()
   const codigo = normalizarCodigo(item.Codigo)
-  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
 
-  const varianteEspecial =
-    nome.includes('INTEGRADA') ||
-    nome.includes('VENEZIANA') ||
-    nome.includes('LAMBRI') ||
-    nome.includes('BANDEIRA') ||
-    nome.includes('ABERTURA CENTRAL') ||
-    nome.includes('VIDRO SUPERIOR') ||
-    ['PC2-02','PC2-03','PC2-04','PC2-05','PC2-08','PC2-11'].some(sufixo => codigo.includes(sufixo))
-  if (varianteEspecial) return false
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return 'outra'
+  if (nome.includes('INTEGRADA') || codigo.includes('PC2-08')) return 'integrada_persiana'
+  if (nome.includes('VIDRO SUPERIOR') || codigo.includes('PC2-02')) return 'mista_vidro_veneziana'
+  if (nome.includes('VENEZIANA') || codigo.includes('PC2-03')) return 'veneziana'
+  if (nome.includes('LAMBRI') || codigo.includes('PC2-04')) return 'lambri'
+  if (nome.includes('BANDEIRA') || codigo.includes('PC2-05')) return 'bandeira'
+  if (nome.includes('ABERTURA CENTRAL') || codigo.includes('PC2-11')) return 'abertura_central'
+  return 'vidro_padrao'
+}
+
+export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
+  if (classificarFamiliaPc2Suprema(item) !== 'vidro_padrao') return false
 
   if (!(item.Vidros || []).length) return false
 
