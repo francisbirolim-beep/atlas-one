@@ -121,6 +121,19 @@ type AuditoriaOpcoes = {
   classificacoes: string[]
 }
 
+type AuditoriaCatalogos = {
+  resumo: {
+    linhas: { total: number; mapeadas: number; pendentes: number }
+    cores: { total: number; jaNoAtlas: number; itensVidro: number; pendentes: number }
+    vidros: { total: number; referenciados: number; pendentes: number; vinculadosProdutoAtlas: number }
+  }
+  pendencias: {
+    linhas: Array<{ nome: string; status: string; statusMapeamento: string | null; linhaTecnicaId: string | null }>
+    cores: Array<{ nome: string; status: string }>
+    vidros: Array<{ nome: string; status: string; statusValidacao: string | null; produtoAtlasId: string | null }>
+  }
+}
+
 type PlanoPromocaoItem = {
   tipo: string
   total: number
@@ -266,6 +279,8 @@ export default function MigracaoOperacionalWVetroPage() {
   const [auditoriaPagina, setAuditoriaPagina] = useState(1)
   const [auditoriaPaginas, setAuditoriaPaginas] = useState(1)
   const [auditoriaTotal, setAuditoriaTotal] = useState(0)
+  const [catalogosCarregando, setCatalogosCarregando] = useState(false)
+  const [catalogosAuditoria, setCatalogosAuditoria] = useState<AuditoriaCatalogos | null>(null)
 
   useEffect(() => {
     let ativo = true
@@ -315,6 +330,22 @@ export default function MigracaoOperacionalWVetroPage() {
     }
     return Array.from(mapa.entries())
   }, [recursos])
+
+  async function carregarAuditoriaCatalogos() {
+    setCatalogosCarregando(true)
+    setErro('')
+    try {
+      const json = await apiPreview(new URLSearchParams({ recurso: 'auditoria-catalogos' }))
+      setCatalogosAuditoria({
+        resumo: json.resumo,
+        pendencias: json.pendencias,
+      })
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao auditar catálogos W.Vetro.')
+    } finally {
+      setCatalogosCarregando(false)
+    }
+  }
 
   async function carregarAuditoria(
     pagina = 1,
@@ -622,9 +653,108 @@ export default function MigracaoOperacionalWVetroPage() {
                     )}
                     Abrir auditoria de relações
                   </button>
+                  <button
+                    onClick={carregarAuditoriaCatalogos}
+                    disabled={catalogosCarregando}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 disabled:opacity-50"
+                  >
+                    {catalogosCarregando ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Database size={16} />
+                    )}
+                    Auditar catálogos
+                  </button>
                   <span className="text-xs text-slate-500">
                     Somente leitura. Nenhuma promoção automática é executada.
                   </span>
+                </div>
+              </section>
+            )}
+
+            {catalogosAuditoria && (
+              <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Database size={19} className="text-blue-700" />
+                      <h2 className="font-semibold text-slate-900">Auditoria técnica — linhas, cores e vidros</h2>
+                    </div>
+                    <p className="mt-1 max-w-4xl text-sm text-slate-600">
+                      Comparação somente leitura entre o staging W.Vetro e os cadastros/referências já existentes no Atlas.
+                      Nenhum item é promovido automaticamente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linhas</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900">{catalogosAuditoria.resumo.linhas.total}</div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      {catalogosAuditoria.resumo.linhas.mapeadas} mapeadas · {catalogosAuditoria.resumo.linhas.pendentes} pendente(s)
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cores / acabamentos</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900">{catalogosAuditoria.resumo.cores.total}</div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      {catalogosAuditoria.resumo.cores.jaNoAtlas} no Atlas · {catalogosAuditoria.resumo.cores.itensVidro} são vidro · {catalogosAuditoria.resumo.cores.pendentes} revisar
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vidros</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900">{catalogosAuditoria.resumo.vidros.total}</div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      {catalogosAuditoria.resumo.vidros.referenciados} referenciados · {catalogosAuditoria.resumo.vidros.pendentes} pendente(s)
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="text-sm font-semibold text-slate-900">Linhas para revisar</div>
+                    <div className="mt-2 space-y-2">
+                      {catalogosAuditoria.pendencias.linhas.map(item => (
+                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          <div className="font-semibold">{item.nome}</div>
+                          <div className="mt-0.5">{item.statusMapeamento || item.status}</div>
+                        </div>
+                      ))}
+                      {!catalogosAuditoria.pendencias.linhas.length && (
+                        <div className="text-xs text-emerald-700">Nenhuma pendência de linha.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="text-sm font-semibold text-slate-900">Cores para revisar</div>
+                    <div className="mt-2 max-h-72 space-y-2 overflow-auto pr-1">
+                      {catalogosAuditoria.pendencias.cores.map(item => (
+                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                          {item.nome}
+                        </div>
+                      ))}
+                      {!catalogosAuditoria.pendencias.cores.length && (
+                        <div className="text-xs text-emerald-700">Nenhuma pendência de cor.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="text-sm font-semibold text-slate-900">Vidros para revisar</div>
+                    <div className="mt-2 space-y-2">
+                      {catalogosAuditoria.pendencias.vidros.map(item => (
+                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          <div className="font-semibold">{item.nome}</div>
+                          <div className="mt-0.5">{item.statusValidacao || item.status}</div>
+                        </div>
+                      ))}
+                      {!catalogosAuditoria.pendencias.vidros.length && (
+                        <div className="text-xs text-emerald-700">Nenhuma pendência de vidro.</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </section>
             )}

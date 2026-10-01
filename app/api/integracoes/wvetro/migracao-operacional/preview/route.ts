@@ -493,6 +493,145 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  if (recurso === 'auditoria-catalogos') {
+    if (!neon.configurado) {
+      return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
+    }
+
+    try {
+      const sql = neonStaging()
+      const [linhasNeon, coresNeon, vidrosNeon, linhasAtlas, coresAtlas, vidrosAtlas] =
+        await Promise.all([
+          sql`
+            select distinct payload->>'LinhaNome' as nome
+            from wvetro_migracao.raw_canonico
+            where recurso='linhas'
+              and nullif(trim(payload->>'LinhaNome'),'') is not null
+            order by 1
+          `,
+          sql`
+            select distinct payload->>'CorNome' as nome
+            from wvetro_migracao.raw_canonico
+            where recurso='cores'
+              and nullif(trim(payload->>'CorNome'),'') is not null
+            order by 1
+          `,
+          sql`
+            select distinct payload->>'CorNome' as nome
+            from wvetro_migracao.raw_canonico
+            where recurso='vidros'
+              and nullif(trim(payload->>'CorNome'),'') is not null
+            order by 1
+          `,
+          supabaseAdmin
+            .from('wvetro_referencias_linhas')
+            .select('linha_raw,status_mapeamento,linha_tecnica_id')
+            .eq('origem_api_linhas', true),
+          supabaseAdmin
+            .from('cores')
+            .select('nome,ativo'),
+          supabaseAdmin
+            .from('wvetro_referencias_vidros')
+            .select('especificacao,status_validacao,produto_atlas_id'),
+        ])
+
+      if (linhasAtlas.error) throw new Error(`Falha ao carregar linhas W.Vetro: ${linhasAtlas.error.message}`)
+      if (coresAtlas.error) throw new Error(`Falha ao carregar cores Atlas: ${coresAtlas.error.message}`)
+      if (vidrosAtlas.error) throw new Error(`Falha ao carregar vidros W.Vetro: ${vidrosAtlas.error.message}`)
+
+      const normalizar = (valor: unknown) =>
+        String(valor || '')
+          .normalize('NFC')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLocaleUpperCase('pt-BR')
+
+      const refsLinhas = new Map(
+        (linhasAtlas.data || [])
+          .map((item: any) => [normalizar(item.linha_raw), item] as const)
+          .filter(([nome]) => !!nome),
+      )
+      const coresOficiais = new Set(
+        (coresAtlas.data || []).map((item: any) => normalizar(item.nome)).filter(Boolean),
+      )
+      const referenciasVidros = new Map(
+        (vidrosAtlas.data || [])
+          .map((item: any) => [normalizar(item.especificacao), item] as const)
+          .filter(([nome]) => !!nome),
+      )
+      const nomesVidrosNeon = new Set(
+        (vidrosNeon || []).map((item: any) => normalizar(item.nome)).filter(Boolean),
+      )
+
+      const linhas = (linhasNeon || []).map((item: any) => {
+        const nome = normalizar(item.nome)
+        const referencia = refsLinhas.get(nome)
+        const mapeada = !!referencia?.linha_tecnica_id
+        return {
+          nome,
+          status: !referencia ? 'sem_referencia' : mapeada ? 'mapeada' : 'pendente_revisao',
+          statusMapeamento: referencia?.status_mapeamento || null,
+          linhaTecnicaId: referencia?.linha_tecnica_id || null,
+        }
+      })
+
+      const cores = (coresNeon || []).map((item: any) => {
+        const nome = normalizar(item.nome)
+        let status = 'pendente_revisao'
+        if (coresOficiais.has(nome)) status = 'cor_atlas'
+        else if (nomesVidrosNeon.has(nome)) status = 'item_vidro'
+        return { nome, status }
+      })
+
+      const vidros = (vidrosNeon || []).map((item: any) => {
+        const nome = normalizar(item.nome)
+        const referencia = referenciasVidros.get(nome)
+        return {
+          nome,
+          status: referencia ? 'referencia_wvetro' : 'pendente_revisao',
+          statusValidacao: referencia?.status_validacao || null,
+          produtoAtlasId: referencia?.produto_atlas_id || null,
+        }
+      })
+
+      return NextResponse.json({
+        ok: true,
+        recurso,
+        modo: 'somente-leitura',
+        gravacaoWvetro: false,
+        gravacaoAtlas: false,
+        resumo: {
+          linhas: {
+            total: linhas.length,
+            mapeadas: linhas.filter(item => item.status === 'mapeada').length,
+            pendentes: linhas.filter(item => item.status !== 'mapeada').length,
+          },
+          cores: {
+            total: cores.length,
+            jaNoAtlas: cores.filter(item => item.status === 'cor_atlas').length,
+            itensVidro: cores.filter(item => item.status === 'item_vidro').length,
+            pendentes: cores.filter(item => item.status === 'pendente_revisao').length,
+          },
+          vidros: {
+            total: vidros.length,
+            referenciados: vidros.filter(item => item.status === 'referencia_wvetro').length,
+            pendentes: vidros.filter(item => item.status === 'pendente_revisao').length,
+            vinculadosProdutoAtlas: vidros.filter(item => !!item.produtoAtlasId).length,
+          },
+        },
+        pendencias: {
+          linhas: linhas.filter(item => item.status !== 'mapeada'),
+          cores: cores.filter(item => item.status === 'pendente_revisao'),
+          vidros: vidros.filter(item => item.status === 'pendente_revisao'),
+        },
+      })
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Falha ao auditar catálogos W.Vetro.'
+      console.error('Erro na auditoria de catálogos W.Vetro:', error)
+      return NextResponse.json({ error: mensagem, recurso }, { status: 502 })
+    }
+  }
+
   if (recurso === 'auditoria-relacoes') {
     if (!neon.configurado) {
       return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
