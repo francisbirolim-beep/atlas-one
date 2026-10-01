@@ -487,6 +487,8 @@ async function matrizHistorica(req: NextRequest) {
     perfis: ReturnType<typeof assinaturaComposicaoWVetro>['perfis']
     acessorios: string[]
     vidros: ReturnType<typeof assinaturaComposicaoWVetro>['vidros']
+    cobertura: 'referencia_local' | 'nao_validada'
+    referenciasLocais: Array<{ id:string; configuracao_label:string }>
     amostras: Array<{
       numero: string
       itemId: string
@@ -519,6 +521,7 @@ async function matrizHistorica(req: NextRequest) {
     const largura = numeroSeguro(item.Largura, NaN)
     const altura = numeroSeguro(item.Altura, NaN)
     const quantidade = Math.max(1, numeroSeguro(item.Qtde, 1))
+    const referenciasLocais = formulasReferenciaLocal(item)
     const grupo = grupos.get(chaveGrupo) || {
       assinatura: assinatura.chave,
       linha: linhaItem,
@@ -533,6 +536,11 @@ async function matrizHistorica(req: NextRequest) {
       perfis: assinatura.perfis,
       acessorios: assinatura.acessorios,
       vidros: assinatura.vidros,
+      cobertura: referenciasLocais.length ? 'referencia_local' : 'nao_validada',
+      referenciasLocais: referenciasLocais.map((r:any) => ({
+        id: String(r.id || ''),
+        configuracao_label: String(r.configuracao_label || r.id || ''),
+      })),
       amostras: [],
     }
 
@@ -564,6 +572,7 @@ async function matrizHistorica(req: NextRequest) {
   }
 
   const assinaturas = [...grupos.values()].sort((a, b) =>
+    Number(a.cobertura === 'referencia_local') - Number(b.cobertura === 'referencia_local') ||
     b.ocorrencias - a.ocorrencias ||
     b.pecas - a.pecas ||
     a.modelo.localeCompare(b.modelo, 'pt-BR') ||
