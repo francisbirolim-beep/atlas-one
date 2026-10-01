@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,6 +41,25 @@ function formulaDoBanco(row: any): FormulaAtlasComparacao {
 function itensDoPayload(payload: any): WVetroItemTecnico[] {
   const itens = Array.isArray(payload?.Itens) ? payload.Itens : []
   return itens.filter((x: unknown) => x && typeof x === 'object') as WVetroItemTecnico[]
+}
+
+function formulaReferenciaLocal(item: WVetroItemTecnico) {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  if (linha.includes('SUPREMA') && modelo.includes('JANELA DE CORRER 02 FOLHAS')) {
+    return {
+      id: 'referencia-local-jc2-suprema',
+      tipologia_id: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.tipologia_id,
+      configuracao_label: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.configuracao_label,
+      status: 'referencia_historica',
+      ativo: false,
+      variaveis: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.variaveis,
+      pecas: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.pecas,
+      vidro: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.vidro,
+      acessorios: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.acessorios || [],
+    }
+  }
+  return null
 }
 
 async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
@@ -92,7 +111,22 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
     const ativo = Number(Boolean(b.ativo)) - Number(Boolean(a.ativo))
     return ativo !== 0 ? ativo : rankStatus(a.status) - rankStatus(b.status)
   })
-  if (!ordenadas.length) throw new Error('A tipologia Atlas vinculada ainda não possui fórmula técnica.')
+  if (!ordenadas.length) {
+    const local = formulaReferenciaLocal(item)
+    if (!local) throw new Error('A tipologia Atlas vinculada ainda não possui fórmula técnica nem referência histórica local.')
+    return {
+      formula: formulaDoBanco(local),
+      formulaBanco: local,
+      formulasBanco: [local],
+      referencia,
+      disponiveis: [{
+        id: local.id,
+        configuracao_label: local.configuracao_label,
+        status: local.status,
+        ativo: local.ativo,
+      }],
+    }
+  }
 
   return {
     formula: formulaDoBanco(ordenadas[0]),

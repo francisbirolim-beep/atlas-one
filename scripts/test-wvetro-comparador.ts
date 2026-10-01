@@ -1,5 +1,5 @@
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
   FIXTURE_PC2_SUPREMA_WVETRO,
@@ -37,4 +37,40 @@ console.log(JSON.stringify({
   iguais: resultado.resumo.igual,
   regrasPendentes: resultado.resumo.regra_pendente_atlas,
   opcoesInferidas: inferencia.opcoes,
+}, null, 2))
+
+
+const jc2Resultados = FIXTURES_JC2_SUPREMA_WVETRO.map(item => {
+  const inferida = inferirOpcoesTecnicasWVetro(item, FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA)
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA,
+    opcoes: inferida.opcoes,
+  })
+
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        fixture: item.Codigo,
+        status,
+        opcoes: inferida.opcoes,
+        resumo: comparado.resumo,
+        divergencias: comparado.linhas.filter(l => l.status !== 'igual'),
+      }, null, 2))
+      throw new Error(`Regressão JC2 ${item.Codigo}: status ${status} deveria ser zero.`)
+    }
+  }
+
+  return {
+    fixture: item.Codigo,
+    medida: `${item.Largura}x${item.Altura}`,
+    iguais: comparado.resumo.igual,
+    opcoesInferidas: inferida.opcoes,
+  }
+})
+
+console.log(JSON.stringify({
+  ok: true,
+  fixture: 'JC2 Suprema - matriz histórica',
+  amostras: jc2Resultados,
 }, null, 2))
