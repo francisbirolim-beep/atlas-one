@@ -34,7 +34,7 @@ select
     {"eixo":"L","codigo":"25-548 (L-715)","formula":"Largura-53","descricao":"Complemento folha horizontal","quantidade":1},
     {"eixo":"H","codigo":"25-548 (L-715)","formula":"Altura-30","descricao":"Complemento folha vertical","quantidade":1}
   ]'::jsonb,
-  null,
+  '{}'::jsonb,
   '[
     {"codigo":"GUA239","formula_quantidade":"(Largura + Altura * 2) / 1000","status":"em_validacao"},
     {"codigo":"PAR435","formula_quantidade":"4","status":"em_validacao"},
