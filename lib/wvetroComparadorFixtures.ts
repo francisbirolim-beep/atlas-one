@@ -931,3 +931,115 @@ export const FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO: WVetroItemTecnico[] = [
   max1VarianteItem({largura:800,altura:600,arremate:false,fixadores:8}),
 ]
 
+export const FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: '37a87c58-2bd6-49d0-bfa2-61e3a4d7d051',
+  configuracao_label: 'PG1-SUPREMA · Vidro · arremate interno · kit unitário · referência histórica dominante',
+  variaveis: [],
+  pecas: [
+    { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate interno horizontal', quantidade:1 },
+    { eixo:'H', codigo:'MP347', formula:'Altura+22', descricao:'Arremate interno vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU279', formula:'Largura-4', descricao:'Marco horizontal', quantidade:1 },
+    { eixo:'H', codigo:'SU279', formula:'Altura-4', descricao:'Marco vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU111', formula:'Largura-72', descricao:'Montante folha de giro horizontal', quantidade:1 },
+    { eixo:'H', codigo:'SU111', formula:'Altura-49', descricao:'Montante folha de giro vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU225', formula:'Largura-172', descricao:'Travessa inferior da folha', quantidade:1 },
+    { eixo:'L', codigo:'SU102', formula:'Largura-172', descricao:'Baguete horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU102', formula:'Altura-211', descricao:'Baguete vertical', quantidade:2 },
+    { eixo:'L', codigo:'25-548 (L-715)', formula:'Largura-53', descricao:'Complemento folha horizontal', quantidade:1 },
+    { eixo:'H', codigo:'25-548 (L-715)', formula:'Altura-30', descricao:'Complemento folha vertical', quantidade:1 },
+  ],
+  vidro: {
+    quantidade: 1,
+    formula_largura: 'Largura-178',
+    formula_altura: 'Altura-193',
+  },
+  acessorios: [
+    { codigo:'ALMC25', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'ALMC2960', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'CON295', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'FRA822', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'MAC927', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'NYL042', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'PAR435', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'FIT206', formula_quantidade:'(Largura+Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA171', formula_quantidade:'Largura/1000', status:'em_validacao' },
+    { codigo:'GUA239', formula_quantidade:'(Largura+2*Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA258', formula_quantidade:'(Largura+2*Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA259', formula_quantidade:'(2*Largura+2*Altura)/1000', status:'em_validacao' },
+    { codigo:'SIL-PU', formula_quantidade:'(Largura+2*Altura)/12000', status:'em_validacao' },
+    { codigo:'DOB840', quantidade_referencia:3, status:'referencia' },
+    { codigo:'BUC755', quantidade_referencia:12, status:'referencia' },
+    { codigo:'NYL190', quantidade_referencia:12, status:'referencia' },
+    { codigo:'PAR1025', quantidade_referencia:12, status:'referencia' },
+    { codigo:'PAR1037', quantidade_referencia:12, status:'referencia' },
+    { codigo:'REBACA4X10', quantidade_referencia:8, status:'referencia' },
+  ],
+}
+
+function pg1VidroSupremaItem(params:{
+  largura:number
+  altura:number
+  quantidade?:number
+  dobradicas:number
+  fixadores:number
+  rebites:number
+}): WVetroItemTecnico {
+  const l=params.largura,h=params.altura,q=params.quantidade||1
+  const mult=(v:number)=>v*q
+  return {
+    Codigo:'*SUCB-PG-02-EF',
+    Nome:'PORTA DE GIRO 01 FOLHA | SUPREMA',
+    Linha:'L. SUPREMA',
+    Modelo:'PORTA DE GIRO 01 FOLHA',
+    Qtde:q,
+    Largura:l,
+    Altura:h,
+    Perfil:[
+      {Codigo:'MP347',Posicao:'L',Qtde:mult(1),Medida:(l+44)/1000},
+      {Codigo:'MP347',Posicao:'H',Qtde:mult(2),Medida:(h+22)/1000},
+      {Codigo:'SU279',Posicao:'L',Qtde:mult(1),Medida:(l-4)/1000},
+      {Codigo:'SU279',Posicao:'H',Qtde:mult(2),Medida:(h-4)/1000},
+      {Codigo:'SU111',Posicao:'L',Qtde:mult(1),Medida:(l-72)/1000},
+      {Codigo:'SU111',Posicao:'H',Qtde:mult(2),Medida:(h-49)/1000},
+      {Codigo:'SU225',Posicao:'L',Qtde:mult(1),Medida:(l-172)/1000},
+      {Codigo:'SU102',Posicao:'L',Qtde:mult(2),Medida:(l-172)/1000},
+      {Codigo:'SU102',Posicao:'H',Qtde:mult(2),Medida:(h-211)/1000},
+      {Codigo:'25-548 (L-715)',Posicao:'L',Qtde:mult(1),Medida:(l-53)/1000},
+      {Codigo:'25-548 (L-715)',Posicao:'H',Qtde:mult(1),Medida:(h-30)/1000},
+    ],
+    Vidros:[{
+      Codigo:'VIDRO',Qtde:mult(1),Largura:l-178,Altura:h-193,
+      Especificacao:'INCOLOR 06MM - TEMPERADO',
+    }],
+    Acessorios:[
+      {Codigo:'ALMC25',Qtde:mult(2)},
+      {Codigo:'ALMC2960',Qtde:mult(2)},
+      {Codigo:'CON295',Qtde:mult(1)},
+      {Codigo:'FRA822',Qtde:mult(1)},
+      {Codigo:'MAC927',Qtde:mult(1)},
+      {Codigo:'NYL042',Qtde:mult(2)},
+      {Codigo:'PAR435',Qtde:mult(4)},
+      {Codigo:'FIT206',Qtde:mult((l+h)/1000)},
+      {Codigo:'GUA171',Qtde:mult(l/1000)},
+      {Codigo:'GUA239',Qtde:mult((l+2*h)/1000)},
+      {Codigo:'GUA258',Qtde:mult((l+2*h)/1000)},
+      {Codigo:'GUA259',Qtde:mult((2*l+2*h)/1000)},
+      {Codigo:'SIL-PU',Qtde:mult((l+2*h)/12000)},
+      {Codigo:'DOB840',Qtde:mult(params.dobradicas)},
+      {Codigo:'BUC755',Qtde:mult(params.fixadores)},
+      {Codigo:'NYL190',Qtde:mult(params.fixadores)},
+      {Codigo:'PAR1025',Qtde:mult(params.fixadores)},
+      {Codigo:'PAR1037',Qtde:mult(params.fixadores)},
+      {Codigo:'REBACA4X10',Qtde:mult(params.rebites)},
+    ],
+  }
+}
+
+export const FIXTURES_PG1_VIDRO_SUPREMA_WVETRO: WVetroItemTecnico[] = [
+  pg1VidroSupremaItem({largura:800,altura:2100,dobradicas:3,fixadores:12,rebites:8}),
+  pg1VidroSupremaItem({largura:800,altura:2200,quantidade:2,dobradicas:3,fixadores:12,rebites:8}),
+  pg1VidroSupremaItem({largura:850,altura:2329,dobradicas:4,fixadores:12,rebites:8}),
+  pg1VidroSupremaItem({largura:1018,altura:2144,dobradicas:3,fixadores:13,rebites:8}),
+  pg1VidroSupremaItem({largura:1160,altura:2150,dobradicas:3,fixadores:13,rebites:9}),
+]
+
