@@ -220,52 +220,6 @@ export const FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO: WVetroItemTecnico[]
   pc2PadraoSemReforcoItem(1990,2157,'WV-1105-2'),
 ]
 
-export const FIXTURE_PORTINHOLA_SUPREMA_VENEZIANA_1F_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
-  tipologia_id:'c7a9d371-184c-4daa-8db1-d8c60cc3f008',
-  configuracao_label:'Portinhola Suprema · 1 folha veneziana · assinatura histórica H=1630',
-  variaveis:[],
-  pecas:[
-    {eixo:'L',codigo:'SU279',formula:'Largura-4',quantidade:2},{eixo:'H',codigo:'SU279',formula:'Altura-4',quantidade:2},
-    {eixo:'L',codigo:'SU111',formula:'Largura-65',quantidade:2},{eixo:'H',codigo:'SU111',formula:'Altura-65',quantidade:2},
-    {eixo:'L',codigo:'SU108',formula:'Largura-165',quantidade:2},{eixo:'H',codigo:'SU108',formula:'Altura-189',quantidade:2},
-    {eixo:'L',codigo:'US285',formula:'Largura-172',quantidade:25},{eixo:'L',codigo:'CL006',formula:'30',quantidade:8},
-    {eixo:'L',codigo:'CL011',formula:'30',quantidade:16},
-  ],
-  vidro:{},
-  acessorios:[
-    {codigo:'BUC755',formula_quantidade:'12',status:'validada'},{codigo:'DOB840',formula_quantidade:'2',status:'validada'},
-    {codigo:'FEC514',formula_quantidade:'1',status:'validada'},{codigo:'GUA239',formula_quantidade:'(Largura*2+Altura*2)/1000',status:'validada'},
-    {codigo:'GUA282',formula_quantidade:'Altura*2/1000',status:'validada'},{codigo:'PAR1037',formula_quantidade:'12',status:'validada'},
-    {codigo:'SIL-PU',formula_quantidade:'(Largura*2+Altura*2)/12000',status:'validada'},
-  ],
-}
-
-function portinholaVeneziana1f1630(largura:number,codigo:string): WVetroItemTecnico {
-  const altura=1630
-  return {
-    Codigo:codigo,Nome:'PORTINHOLA DE GIRO 01 FOLHA COM VENEZIANA | SUPREMA',Linha:'L. SUPREMA',Modelo:'PORTINHOLA',
-    Qtde:1,Largura:largura,Altura:altura,
-    Perfil:[
-      {Codigo:'SU279',Posicao:'L',Qtde:2,Medida:(largura-4)/1000},{Codigo:'SU279',Posicao:'H',Qtde:2,Medida:(altura-4)/1000},
-      {Codigo:'SU111',Posicao:'L',Qtde:2,Medida:(largura-65)/1000},{Codigo:'SU111',Posicao:'H',Qtde:2,Medida:(altura-65)/1000},
-      {Codigo:'SU108',Posicao:'L',Qtde:2,Medida:(largura-165)/1000},{Codigo:'SU108',Posicao:'H',Qtde:2,Medida:(altura-189)/1000},
-      {Codigo:'US285',Posicao:'L',Qtde:25,Medida:(largura-172)/1000},{Codigo:'CL006',Posicao:'L',Qtde:8,Medida:0.03},{Codigo:'CL011',Posicao:'L',Qtde:16,Medida:0.03},
-    ],
-    Vidros:[],
-    Acessorios:[
-      {Codigo:'BUC755',Qtde:12},{Codigo:'DOB840',Qtde:2},{Codigo:'FEC514',Qtde:1},{Codigo:'GUA239',Qtde:(largura*2+altura*2)/1000},
-      {Codigo:'GUA282',Qtde:altura*2/1000},{Codigo:'PAR1037',Qtde:12},{Codigo:'SIL-PU',Qtde:(largura*2+altura*2)/12000},
-    ],
-  }
-}
-
-export const FIXTURES_PORTINHOLA_SUPREMA_VENEZIANA_1F_WVETRO: WVetroItemTecnico[] = [
-  portinholaVeneziana1f1630(602,'WV-531-3'),
-  portinholaVeneziana1f1630(707,'WV-531-4'),
-  portinholaVeneziana1f1630(728,'WV-531-9'),
-]
-
-
 export const FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
   tipologia_id: 'ecf93bb8-bc6f-4e1b-84eb-40f8c887485a',
   configuracao_label: 'JC2-SUPREMA · referência histórica em validação',
