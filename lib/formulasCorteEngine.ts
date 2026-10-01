@@ -42,6 +42,7 @@ export type OpcoesEscolhidas = Record<string, string>
 
 export type ResultadoPeca = {
   codigo: string
+  grupo?: string
   descricao?: string
   tamanho: number
   eixo?: 'L' | 'H'
@@ -291,6 +292,7 @@ function enriquecerResultado(
 ): ResultadoPeca {
   return {
     ...resultado,
+    grupo: peca.grupo,
     quantidade: peca.quantidade,
     composicao_desconto: peca.composicao_desconto,
   }
