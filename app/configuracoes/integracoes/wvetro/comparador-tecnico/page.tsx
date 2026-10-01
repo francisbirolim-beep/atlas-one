@@ -187,6 +187,7 @@ export default function ComparadorTecnicoWVetroPage() {
                 <div className="flex items-center gap-2">{dados.resultado.aprovado?<CheckCircle2 className="text-emerald-600" size={20}/>:<XCircle className="text-amber-600" size={20}/>}<h2 className="font-bold text-slate-900">{dados.resultado.item.nome}</h2></div>
                 <p className="mt-1 text-sm text-slate-600">{dados.resultado.item.linha} · {dados.resultado.item.modelo} · {dados.resultado.item.largura_mm} × {dados.resultado.item.altura_mm} mm</p>
                 <p className="mt-1 text-xs text-slate-500">Atlas: {dados.resultado.formula.configuracao_label || 'Configuração sem nome'}</p>
+                {dados.formula?.status === 'referencia_historica' && <p className="mt-1 text-[11px] font-semibold text-amber-700">Referência histórica em validação. Não é receita oficial de produção e não grava nenhuma fórmula no Atlas.</p>}
                 {dados.formula?.selecionada_por === 'melhor_compatibilidade_historica' && <p className="mt-1 text-[11px] text-blue-700">Configuração escolhida automaticamente pela menor divergência contra esta composição histórica. Score {fmt(dados.formula.score,0)}.</p>}
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${dados.resultado.aprovado?'bg-emerald-600 text-white':'bg-amber-500 text-white'}`}>{dados.resultado.aprovado?'100% compatível':'Divergências encontradas'}</span>
