@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -49,11 +49,13 @@ function conjuntoExato(codigos: string[], esperados: string[]) {
   return atual.length === alvo.length && atual.every((codigo, index) => codigo === alvo[index])
 }
 
-function formulaReferenciaLocal(item: WVetroItemTecnico) {
+function formulasReferenciaLocal(item: WVetroItemTecnico) {
   const linha = String(item.Linha || '').trim().toUpperCase()
   const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const refs: any[] = []
+
   if (linha.includes('SUPREMA') && modelo.includes('JANELA DE CORRER 02 FOLHAS')) {
-    return {
+    refs.push({
       id: 'referencia-local-jc2-suprema',
       tipologia_id: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.tipologia_id,
       configuracao_label: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.configuracao_label,
@@ -63,8 +65,28 @@ function formulaReferenciaLocal(item: WVetroItemTecnico) {
       pecas: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.pecas,
       vidro: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.vidro,
       acessorios: FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA.acessorios || [],
+    })
+  }
+
+  if (linha.includes('SUPREMA') && modelo.includes('PORTA DE CORRER 03 FOLHAS')) {
+    for (const [id, formula] of [
+      ['referencia-local-pc3-suprema-atual', FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA],
+      ['referencia-local-pc3-suprema-legado', FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA],
+    ] as const) {
+      refs.push({
+        id,
+        tipologia_id: formula.tipologia_id,
+        configuracao_label: formula.configuracao_label,
+        status: 'referencia_historica',
+        ativo: false,
+        variaveis: formula.variaveis,
+        pecas: formula.pecas,
+        vidro: formula.vidro,
+        acessorios: formula.acessorios || [],
+      })
     }
   }
+
 
   if (linha.includes('SUPREMA') && modelo.includes('PORTA DE GIRO 01 FOLHA')) {
     const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
@@ -78,7 +100,7 @@ function formulaReferenciaLocal(item: WVetroItemTecnico) {
     ]
 
     if (conjuntoExato(perfis, perfilDominante) && conjuntoExato(acessorios, acessorioDominante)) {
-      return {
+      refs.push({
         id: 'referencia-local-pg1-lambril-suprema',
         tipologia_id: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.tipologia_id,
         configuracao_label: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.configuracao_label,
@@ -88,15 +110,32 @@ function formulaReferenciaLocal(item: WVetroItemTecnico) {
         pecas: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.pecas,
         vidro: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.vidro,
         acessorios: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.acessorios || [],
-      }
+      })
     }
   }
 
-  return null
+  return refs
 }
 
 async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
   if (formulaId) {
+    const localSelecionada = formulasReferenciaLocal(item).find((f: any) => f.id === formulaId)
+    if (localSelecionada) {
+      const locais = formulasReferenciaLocal(item)
+      return {
+        formula: formulaDoBanco(localSelecionada),
+        formulaBanco: localSelecionada,
+        formulasBanco: locais,
+        referencia: null,
+        disponiveis: locais.map((f: any) => ({
+          id: f.id,
+          configuracao_label: f.configuracao_label,
+          status: f.status,
+          ativo: f.ativo,
+        })),
+      }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('engenharia_tipologia_formulas_corte')
       .select('id,tipologia_id,configuracao_label,status,ativo,variaveis,pecas,vidro,acessorios')
@@ -140,26 +179,12 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
     .eq('tipologia_id', referencia.tipologia_atlas_id)
   if (error) throw error
 
-  const ordenadas = [...(formulas || [])].sort((a: any, b: any) => {
+  const locais = formulasReferenciaLocal(item)
+  const ordenadas = [...(formulas || []), ...locais].sort((a: any, b: any) => {
     const ativo = Number(Boolean(b.ativo)) - Number(Boolean(a.ativo))
     return ativo !== 0 ? ativo : rankStatus(a.status) - rankStatus(b.status)
   })
-  if (!ordenadas.length) {
-    const local = formulaReferenciaLocal(item)
-    if (!local) throw new Error('A tipologia Atlas vinculada ainda não possui fórmula técnica nem referência histórica local.')
-    return {
-      formula: formulaDoBanco(local),
-      formulaBanco: local,
-      formulasBanco: [local],
-      referencia,
-      disponiveis: [{
-        id: local.id,
-        configuracao_label: local.configuracao_label,
-        status: local.status,
-        ativo: local.ativo,
-      }],
-    }
-  }
+  if (!ordenadas.length) throw new Error('A tipologia Atlas vinculada ainda não possui fórmula técnica nem referência histórica local.')
 
   return {
     formula: formulaDoBanco(ordenadas[0]),
