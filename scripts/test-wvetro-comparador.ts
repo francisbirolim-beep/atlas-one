@@ -497,7 +497,7 @@ console.log(JSON.stringify({
 
 
 function exigirSemDivergencia(nome:string, item:any, formula:any) {
-  const inferida = inferirOpcoesTecnicasWVetro(item, formula)
+  const inferida = inferirOpcoesTecnicasWVetro(item, formula, { cor:'PRETO', vidro:'INCOLOR 06MM - TEMPERADO' })
   const comparado = compararItemWVetroComFormulaAtlas({ item, formula, opcoes: inferida.opcoes })
   for (const status of [...hard, 'regra_pendente_atlas'] as const) {
     if (Number(comparado.resumo[status] || 0) !== 0) {
