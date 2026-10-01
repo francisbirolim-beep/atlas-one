@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "dev:lan": "next dev -H 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run typecheck && npm run build",
+    "vercel:preview": "npx -y vercel@latest deploy",
+    "vercel:prod": "npx -y vercel@latest deploy --prod"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
