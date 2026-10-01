@@ -164,6 +164,21 @@ export function inferirOpcoesTecnicasWVetro(
         valor = nomesAcessorio.some(n => n.includes('PUXADOR')) ? 'sim' : 'sem'
         evidencia = valor === 'sim' ? 'Acessório de puxador presente.' : 'Nenhum puxador identificado.'
         break
+      case 'versao_mata_junta': {
+        const su008 = perfis.find(p => normalizarCodigo(p.Codigo) === 'SU008')
+        const medida = Number(su008?.Medida || 0) * 1000
+        const altura = Number(item.Altura || 0)
+        const ajusteCm = codigosPerfil.has('CM200') || codigosPerfil.has('CM060') ? 12 : 0
+        const descontoBase = altura > 0 && medida > 0 ? altura - medida - ajusteCm : NaN
+        if (Math.abs(descontoBase - 17) <= 1) {
+          valor = 'atual_17'
+          evidencia = `SU008 identifica versão atual: folga-base ~${descontoBase.toFixed(1)} mm.`
+        } else if (Math.abs(descontoBase - 21) <= 1) {
+          valor = 'legado_21'
+          evidencia = `SU008 identifica versão histórica: folga-base ~${descontoBase.toFixed(1)} mm.`
+        }
+        break
+      }
       case 'cor': {
         const cor = perfis.find(p => String(p.Cor || '').trim())?.Cor || acessorios.find(a => String(a.Cor || '').trim())?.Cor
         if (cor) { valor = String(cor); evidencia = 'Cor lida da composição W.Vetro.' }
