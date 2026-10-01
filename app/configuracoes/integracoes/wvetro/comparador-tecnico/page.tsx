@@ -39,6 +39,8 @@ type RespostaMatriz = {
   modo: 'matriz'
   filtros: { linha:string; modelo:string; limite:number }
   totalItens: number
+  totalLinhasLidas: number
+  truncado: boolean
   totalAssinaturas: number
   assinaturas: AssinaturaMatriz[]
 }
@@ -259,6 +261,7 @@ export default function ComparadorTecnicoWVetroPage() {
             </button>
           </div>
           {erroMatriz && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erroMatriz}</div>}
+          {matriz?.truncado && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">A leitura atingiu o limite de {matriz.filtros.limite} linhas. Refine por modelo antes de usar a frequência para homologação.</div>}
           {matriz && <div className="mt-4 overflow-x-auto rounded-xl border">
             <table className="min-w-full text-sm">
               <thead><tr className="border-b bg-slate-50 text-left text-xs uppercase text-slate-400"><th className="px-3 py-2">Família / modelo</th><th className="px-3 py-2">Frequência</th><th className="px-3 py-2">Faixa</th><th className="px-3 py-2">Composição</th><th className="px-3 py-2">Amostra</th></tr></thead>
