@@ -3,7 +3,7 @@ import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -211,6 +211,47 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
         vidro: formula.vidro,
         acessorios: formula.acessorios || [],
       })
+    }
+  }
+
+
+  if (linha.includes('SUPREMA') && modelo.includes('BASCULANTE')) {
+    const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+    const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+    const perfisDominantes = [
+      'AF-018','BC-009','CL006','CL011','MP347','SU093','SU096','SU097','SU098','SU100','SU102',
+    ]
+    const acessoriosDominantes = [
+      'ALA-059','ARR-10001','BUC753','CON456','GUA171','GUA259','NYL190',
+      'PARFIAPF04850N','PARFIAPP04216N','PIV753','REBACA4X10','REBCCC-5/32X1/2','SIL-PU',
+    ]
+
+    if (conjuntoExato(perfis, perfisDominantes) && conjuntoExato(acessorios, acessoriosDominantes)) {
+      const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
+      const qtdAcessorio = (codigo: string) =>
+        (item.Acessorios || [])
+          .filter(a => String(a.Codigo || '').trim().toUpperCase() === codigo)
+          .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
+      const kitUnitario =
+        Math.abs(qtdAcessorio('ALA-059') - 1) < 0.0001 &&
+        Math.abs(qtdAcessorio('ARR-10001') - 6) < 0.0001 &&
+        Math.abs(qtdAcessorio('CON456') - 1) < 0.0001 &&
+        Math.abs(qtdAcessorio('PIV753') - 2) < 0.0001
+
+      if (kitUnitario && (item.Vidros || []).length > 0) {
+        const formula = FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA
+        refs.push({
+          id: 'referencia-local-bas3-suprema-dominante',
+          tipologia_id: formula.tipologia_id,
+          configuracao_label: formula.configuracao_label,
+          status: 'referencia_historica',
+          ativo: false,
+          variaveis: formula.variaveis,
+          pecas: formula.pecas,
+          vidro: formula.vidro,
+          acessorios: formula.acessorios || [],
+        })
+      }
     }
   }
 
