@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { compararItemWVetroComFormulaAtlas, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import { FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
@@ -52,7 +52,21 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
       .maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Fórmula Atlas não encontrada.')
-    return { formula: formulaDoBanco(data), formulaBanco: data, referencia: null, disponiveis: [data] }
+    const { data: irmas, error: erroIrmas } = await supabaseAdmin
+      .from('engenharia_tipologia_formulas_corte')
+      .select('id,tipologia_id,configuracao_label,status,ativo,variaveis,pecas,vidro,acessorios')
+      .eq('tipologia_id', data.tipologia_id)
+    if (erroIrmas) throw erroIrmas
+    const disponiveis = [...(irmas || [])].sort((a: any, b: any) => {
+      const ativo = Number(Boolean(b.ativo)) - Number(Boolean(a.ativo))
+      return ativo !== 0 ? ativo : rankStatus(a.status) - rankStatus(b.status)
+    }).map((f: any) => ({
+      id: f.id,
+      configuracao_label: f.configuracao_label,
+      status: f.status,
+      ativo: f.ativo,
+    }))
+    return { formula: formulaDoBanco(data), formulaBanco: data, referencia: null, disponiveis }
   }
 
   const { data: referencia, error: refError } = await supabaseAdmin
@@ -90,6 +104,22 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
   }
 }
 
+function opcoesDaUrl(req: NextRequest): Record<string, string> {
+  const raw = String(req.nextUrl.searchParams.get('opcoes') || '').trim()
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([, valor]) => typeof valor === 'string')
+        .map(([chave, valor]) => [chave, String(valor)])
+    )
+  } catch {
+    throw new Error('Opções técnicas inválidas.')
+  }
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await autenticarMaster(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito a usuário master.' }, { status: 401 })
@@ -122,6 +152,7 @@ export async function GET(req: NextRequest) {
     const numero = String(req.nextUrl.searchParams.get('numero') || '').trim()
     const itemId = String(req.nextUrl.searchParams.get('itemId') || '').trim()
     const formulaId = String(req.nextUrl.searchParams.get('formulaId') || '').trim() || undefined
+    const opcoesInformadas = opcoesDaUrl(req)
     if (!numero) return NextResponse.json({ error: 'Informe o número do orçamento/pedido W.Vetro.' }, { status: 400 })
 
     const sql = neonStaging()
@@ -141,7 +172,12 @@ export async function GET(req: NextRequest) {
     if (!item) return NextResponse.json({ error: 'Item técnico não encontrado neste registro.' }, { status: 404 })
 
     const carregada = await carregarFormula(item, formulaId)
-    const resultado = compararItemWVetroComFormulaAtlas({ item, formula: carregada.formula })
+    const inferencia = inferirOpcoesTecnicasWVetro(item, carregada.formula, opcoesInformadas)
+    const resultado = compararItemWVetroComFormulaAtlas({
+      item,
+      formula: carregada.formula,
+      opcoes: inferencia.opcoes,
+    })
 
     return NextResponse.json({
       ok: true,
@@ -155,6 +191,9 @@ export async function GET(req: NextRequest) {
         status: carregada.formulaBanco.status,
         ativo: carregada.formulaBanco.ativo,
       },
+      variaveis: carregada.formula.variaveis,
+      opcoes: inferencia.opcoes,
+      inferencias: inferencia.inferencias,
       formulasDisponiveis: carregada.disponiveis,
       itensDisponiveis: itens.map((x: any) => ({
         id: String(x.Id || ''),
