@@ -7,6 +7,7 @@ import QRCode from 'qrcode'
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
   extractMessageContent,
   fetchLatestWaWebVersion,
   getContentType,
@@ -170,9 +171,30 @@ function phoneFromKey(key) {
   return jid.split('@')[0].split(':')[0].replace(/\D/g, '')
 }
 
-function extractMessage(message) {
+function extensaoPorMime(mimeType, fallback = 'bin') {
+  const mime = String(mimeType || '').split(';')[0].toLowerCase()
+  const mapa = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'audio/webm': 'webm',
+    'application/pdf': 'pdf',
+  }
+  return mapa[mime] || fallback
+}
+
+function extractMessage(message, messageId = '') {
   const content = extractMessageContent(message)
   const type = getContentType(content || {}) || 'unknown'
+  const base = messageId || Date.now()
 
   if (type === 'conversation') {
     return { messageType: 'text', texto: content?.conversation || '' }
@@ -181,33 +203,144 @@ function extractMessage(message) {
     return { messageType: 'text', texto: content?.extendedTextMessage?.text || '' }
   }
   if (type === 'imageMessage') {
-    return { messageType: 'image', texto: content?.imageMessage?.caption || '📷 Imagem' }
+    const media = content?.imageMessage || {}
+    const mimeType = media.mimetype || 'image/jpeg'
+    return {
+      messageType: 'image',
+      texto: media.caption || '📷 Imagem',
+      isMedia: true,
+      mimeType,
+      fileName: media.fileName || `imagem-${base}.${extensaoPorMime(mimeType, 'jpg')}`,
+    }
   }
   if (type === 'videoMessage') {
-    return { messageType: 'video', texto: content?.videoMessage?.caption || '🎥 Vídeo' }
+    const media = content?.videoMessage || {}
+    const mimeType = media.mimetype || 'video/mp4'
+    return {
+      messageType: 'video',
+      texto: media.caption || '🎥 Vídeo',
+      isMedia: true,
+      mimeType,
+      fileName: media.fileName || `video-${base}.${extensaoPorMime(mimeType, 'mp4')}`,
+    }
   }
-  if (type === 'audioMessage') return { messageType: 'audio', texto: '🎤 Áudio' }
+  if (type === 'audioMessage') {
+    const media = content?.audioMessage || {}
+    const mimeType = media.mimetype || 'audio/ogg'
+    return {
+      messageType: 'audio',
+      texto: '🎤 Áudio',
+      isMedia: true,
+      mimeType,
+      fileName: `audio-${base}.${extensaoPorMime(mimeType, 'ogg')}`,
+      ptt: media.ptt === true,
+    }
+  }
   if (type === 'documentMessage') {
-    return { messageType: 'document', texto: content?.documentMessage?.fileName || '📎 Documento' }
+    const media = content?.documentMessage || {}
+    const mimeType = media.mimetype || 'application/pdf'
+    return {
+      messageType: 'document',
+      texto: media.fileName || '📎 Documento',
+      isMedia: true,
+      mimeType,
+      fileName: media.fileName || `documento-${base}.${extensaoPorMime(mimeType, 'bin')}`,
+    }
   }
-  if (type === 'stickerMessage') return { messageType: 'sticker', texto: '🖼️ Figurinha' }
+  if (type === 'stickerMessage') {
+    const media = content?.stickerMessage || {}
+    const mimeType = media.mimetype || 'image/webp'
+    return {
+      messageType: 'sticker',
+      texto: '🖼️ Figurinha',
+      isMedia: true,
+      mimeType,
+      fileName: `figurinha-${base}.${extensaoPorMime(mimeType, 'webp')}`,
+    }
+  }
+  if (type === 'reactionMessage') {
+    const reaction = content?.reactionMessage || {}
+    return {
+      messageType: 'reaction',
+      texto: reaction.text ? `Reagiu ${reaction.text}` : 'Reação removida',
+      reactionKey: reaction.key || null,
+    }
+  }
   if (type === 'locationMessage') return { messageType: 'location', texto: '📍 Localização' }
   if (type === 'contactMessage' || type === 'contactsArrayMessage') {
     return { messageType: 'contact', texto: '👤 Contato' }
   }
-  return { messageType: type, texto: `[${type}]` }
+  return { messageType: 'system', texto: `Mensagem do WhatsApp (${type})` }
 }
 
-async function registerInbound(channel, msg) {
+async function baixarMidia(sock, msg) {
+  try {
+    return await downloadMediaMessage(msg, 'buffer', {})
+  } catch (primeiroErro) {
+    try {
+      const atualizada = await sock.updateMediaMessage(msg)
+      return await downloadMediaMessage(atualizada || msg, 'buffer', {})
+    } catch {
+      throw primeiroErro
+    }
+  }
+}
+
+async function registerInbound(channel, msg, sock) {
   if (!msg?.message || msg?.key?.fromMe) return
   const telefone = phoneFromKey(msg.key)
   if (!telefone) return
 
-  const extracted = extractMessage(msg.message)
+  const whatsappMessageId = msg.key?.id || null
+  const extracted = extractMessage(msg.message, whatsappMessageId || '')
   const rawTs = Number(msg.messageTimestamp || 0)
   const timestamp = rawTs > 0
     ? new Date(rawTs * 1000).toISOString()
     : new Date().toISOString()
+
+  let mediaPath = null
+  let mediaSize = null
+  let mediaError = null
+
+  if (extracted.isMedia) {
+    try {
+      const buffer = await baixarMidia(sock, msg)
+      if (!buffer?.length) throw new Error('Mídia recebida sem conteúdo.')
+      if (buffer.length > 50 * 1024 * 1024) throw new Error('Mídia recebida excede 50 MB.')
+
+      const preparado = await atlas('', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'media_prepare',
+          channelId: channel.id,
+          whatsappMessageId,
+          fileName: extracted.fileName,
+          mimeType: extracted.mimeType,
+          size: buffer.length,
+        }),
+      })
+
+      const upload = await fetch(preparado.signedUrl, {
+        method: 'PUT',
+        headers: {
+          'content-type': extracted.mimeType || 'application/octet-stream',
+          'cache-control': 'max-age=3600',
+          'x-upsert': 'false',
+        },
+        body: buffer,
+      })
+      if (!upload.ok) {
+        const detalhe = await upload.text().catch(() => '')
+        throw new Error(`Storage respondeu HTTP ${upload.status}${detalhe ? `: ${detalhe.slice(0, 160)}` : ''}`)
+      }
+
+      mediaPath = preparado.path
+      mediaSize = buffer.length
+    } catch (error) {
+      mediaError = error instanceof Error ? error.message : String(error)
+      console.error(`[gateway:${channel.id}] mídia ${whatsappMessageId || ''}:`, mediaError)
+    }
+  }
 
   await atlas('', {
     method: 'POST',
@@ -216,13 +349,20 @@ async function registerInbound(channel, msg) {
       channelId: channel.id,
       telefone,
       contatoNome: msg.pushName || null,
-      whatsappMessageId: msg.key?.id || null,
+      whatsappMessageId,
       messageType: extracted.messageType,
       texto: extracted.texto,
       timestamp,
+      mediaPath,
+      mimeType: extracted.mimeType || null,
+      fileName: extracted.fileName || null,
+      mediaSize,
       payload: {
         remoteJid: msg.key?.remoteJid || null,
         remoteJidAlt: msg.key?.remoteJidAlt || null,
+        ptt: extracted.ptt === true,
+        reactionKey: extracted.reactionKey || null,
+        mediaError,
       },
     }),
   })
@@ -238,11 +378,46 @@ async function processQueue(channelId) {
     if (!item) return
 
     try {
-      if (item.tipo !== 'text') {
+      const jid = `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
+      const payload = item.payload && typeof item.payload === 'object' ? item.payload : {}
+      let conteudo
+
+      if (item.tipo === 'text') {
+        conteudo = { text: String(item.texto || '') }
+      } else if (item.tipo === 'image') {
+        if (!payload.mediaUrl) throw new Error('URL da imagem não disponível.')
+        conteudo = {
+          image: { url: String(payload.mediaUrl) },
+          caption: item.texto ? String(item.texto) : undefined,
+          mimetype: payload.mimeType ? String(payload.mimeType) : undefined,
+        }
+      } else if (item.tipo === 'video') {
+        if (!payload.mediaUrl) throw new Error('URL do vídeo não disponível.')
+        conteudo = {
+          video: { url: String(payload.mediaUrl) },
+          caption: item.texto ? String(item.texto) : undefined,
+          mimetype: payload.mimeType ? String(payload.mimeType) : undefined,
+        }
+      } else if (item.tipo === 'audio') {
+        if (!payload.mediaUrl) throw new Error('URL do áudio não disponível.')
+        conteudo = {
+          audio: { url: String(payload.mediaUrl) },
+          mimetype: payload.mimeType ? String(payload.mimeType) : 'audio/ogg',
+          ptt: payload.ptt !== false,
+        }
+      } else if (item.tipo === 'document') {
+        if (!payload.mediaUrl) throw new Error('URL do documento não disponível.')
+        conteudo = {
+          document: { url: String(payload.mediaUrl) },
+          mimetype: payload.mimeType ? String(payload.mimeType) : 'application/octet-stream',
+          fileName: payload.fileName ? String(payload.fileName) : 'documento',
+          caption: item.texto ? String(item.texto) : undefined,
+        }
+      } else {
         throw new Error(`Tipo de saida ainda nao suportado: ${item.tipo}`)
       }
-      const jid = `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
-      const sent = await state.sock.sendMessage(jid, { text: String(item.texto || '') })
+
+      const sent = await state.sock.sendMessage(jid, conteudo)
       await atlas('', {
         method: 'POST',
         body: JSON.stringify({
@@ -390,7 +565,7 @@ async function connectChannel(channel) {
       if (type !== 'notify') return
       for (const msg of messages || []) {
         try {
-          await registerInbound(channel, msg)
+          await registerInbound(channel, msg, sock)
         } catch (error) {
           console.error(`[gateway:${channel.id}] entrada:`, error.message)
         }
