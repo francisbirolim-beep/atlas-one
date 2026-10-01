@@ -1,5 +1,5 @@
 import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PC4_SUPREMA_WVETRO, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_A_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PC4_SUPREMA_WVETRO, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_A_WVETRO, FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_B_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
@@ -680,3 +680,49 @@ console.log(JSON.stringify({
   fixture:'PTA3 Suprema - portinhola família A - veneziana/arremate 4 lados',
   amostras:pta3Resultados,
 },null,2))
+
+const pta3FamiliaBResultados = FIXTURES_PTA3_SUPREMA_FAMILIA_B_WVETRO.map(item => {
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA,
+    opcoes: {},
+  })
+
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        medida:`${item.Largura}x${item.Altura}`,
+        status,
+        resumo:comparado.resumo,
+        divergencias:comparado.linhas.filter(l=>l.status!=='igual'),
+      },null,2))
+      throw new Error(`Regressão PTA3 família B ${item.Largura}x${item.Altura}: status ${status} deveria ser zero.`)
+    }
+  }
+
+  if (Number(comparado.resumo.regra_pendente_atlas || 0) !== 0) {
+    throw new Error(`Regressão PTA3 família B ${item.Largura}x${item.Altura}: não deveria existir regra pendente.`)
+  }
+
+  if (!comparado.aprovado) {
+    throw new Error(`Regressão PTA3 família B ${item.Largura}x${item.Altura}: comparação deveria estar aprovada.`)
+  }
+
+  const vz = comparado.linhas.find(l => l.tipo==='perfil' && l.codigo==='VZ006')
+  const fix = comparado.linhas.find(l => l.tipo==='acessorio' && l.codigo==='BUC755')
+  return {
+    medida:`${item.Largura}x${item.Altura}`,
+    laminas:vz?.atlas?.quantidade,
+    fixadores:fix?.atlas?.quantidade,
+    iguais:comparado.resumo.igual,
+    aprovado:comparado.aprovado,
+  }
+})
+
+console.log(JSON.stringify({
+  ok:true,
+  fixture:'PTA3 Suprema - portinhola família B - arremate 3 lados',
+  amostras:pta3FamiliaBResultados,
+},null,2))
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
