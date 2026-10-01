@@ -7,6 +7,13 @@ import {
 } from '@/lib/wvetroApi'
 
 function txt(v: unknown) { return String(v ?? '').trim() }
+function primeiroTexto(...valores: unknown[]) {
+  for (const valor of valores) {
+    const s = txt(valor)
+    if (s) return s
+  }
+  return ''
+}
 function norm(v: unknown) {
   return txt(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
 }
@@ -41,36 +48,116 @@ function objetosProduto(payload: unknown, out: Record<string, unknown>[] = []) {
   return out
 }
 
+type FonteHistorico = 'orcamento' | 'pedido'
 type ItemHistorico = {
+  fonte: FonteHistorico
+  documentoChave: string
+  itemIndice: number
   linha: string
   modelo: string
   largura: number | null
   altura: number | null
   ambiente: string | null
   nome: string | null
+  codigo: string | null
+  quantidade: number | null
+  valorTotal: number | null
   raw: Record<string, unknown>
 }
-function itensHistoricos(payload: unknown, out: ItemHistorico[] = []) {
-  if (Array.isArray(payload)) { payload.forEach(v => itensHistoricos(v, out)); return out }
-  if (!payload || typeof payload !== 'object') return out
-  const o = payload as Record<string, unknown>
-  const linha = txt(o.Linha ?? o.linha)
-  const modelo = txt(o.Modelo ?? o.modelo)
-  if (linha && modelo) {
-    out.push({
-      linha,
-      modelo,
-      // Achado da auditoria 2026-09-01/02: a API já entrega Largura/Altura/Ambiente/Nome
-      // por item (100%/100%/96%/100% numa amostra real), mas a extração nunca os lia.
-      // Só leitura/agregação aditiva aqui — não altera checkpoint/cursor/retry/pendências.
-      largura: num(o.Largura ?? o.largura),
-      altura: num(o.Altura ?? o.altura),
-      ambiente: txt(o.Ambiente ?? o.ambiente) || null,
-      nome: txt(o.Nome ?? o.nome) || null,
-      raw: o,
-    })
+
+function chaveDocumento(o: Record<string, unknown>, fonte: FonteHistorico, ordinal: number) {
+  for (const candidato of [
+    o.OrcamentoId, o.orcamentoId, o.PedidoId, o.pedidoId, o.VendaId, o.vendaId,
+    o.Nro, o.nro, o.Id, o.id, o.Numero, o.numero, o.NumeroOrcamento, o.numeroOrcamento,
+    o.NumeroPedido, o.numeroPedido, o.Codigo, o.codigo,
+  ]) {
+    const valor = txt(candidato)
+    if (valor) return valor
   }
-  Object.values(o).forEach(v => itensHistoricos(v, out))
+  return `SEM-ID-${key(fonte, ordinal, o.Data ?? o.data ?? '', o.Vendedor ?? o.vendedor ?? '')}`
+}
+
+function itemHistorico(raw: Record<string, unknown>, fonte: FonteHistorico, documentoChave: string, itemIndice: number): ItemHistorico | null {
+  const linha = txt(raw.Linha ?? raw.linha)
+  const modelo = txt(raw.Modelo ?? raw.modelo)
+  if (!linha || !modelo) return null
+  return {
+    fonte,
+    documentoChave,
+    itemIndice,
+    linha,
+    modelo,
+    largura: num(raw.Largura ?? raw.largura),
+    altura: num(raw.Altura ?? raw.altura),
+    ambiente: txt(raw.Ambiente ?? raw.ambiente) || null,
+    nome: txt(raw.Nome ?? raw.nome) || null,
+    codigo: txt(raw.Codigo ?? raw.codigo ?? raw.SeuCodigo ?? raw.seuCodigo) || null,
+    quantidade: num(raw.Qtde ?? raw.qtde ?? raw.Quantidade ?? raw.quantidade),
+    valorTotal: num(raw.ValorTotal ?? raw.valorTotal ?? raw.Total ?? raw.total),
+    raw,
+  }
+}
+
+function itensHistoricos(payload: unknown, fonte: FonteHistorico) {
+  const out: ItemHistorico[] = []
+  let ordinalDocumento = 0
+
+  function visitar(valor: unknown) {
+    if (Array.isArray(valor)) {
+      valor.forEach(visitar)
+      return
+    }
+    if (!valor || typeof valor !== 'object') return
+    const o = valor as Record<string, unknown>
+
+    const entradaItens = Object.entries(o).find(([k, v]) => norm(k) === 'ITENS' && Array.isArray(v))
+    if (entradaItens) {
+      const documento = chaveDocumento(o, fonte, ordinalDocumento++)
+      const lista = entradaItens[1] as unknown[]
+      lista.forEach((raw, itemIndice) => {
+        if (!raw || typeof raw !== 'object') return
+        const item = itemHistorico(raw as Record<string, unknown>, fonte, documento, itemIndice)
+        if (item) out.push(item)
+      })
+      for (const [k, v] of Object.entries(o)) if (k !== entradaItens[0]) visitar(v)
+      return
+    }
+
+    Object.values(o).forEach(visitar)
+  }
+
+  visitar(payload)
+
+  // Compatibilidade com respostas antigas/alternativas que não venham envolvidas
+  // por um objeto pai com Itens[]. O coletor anterior encontrava qualquer objeto
+  // com Linha + Modelo; mantemos esse comportamento apenas como fallback para
+  // evitar duplicidade quando o formato normal já foi reconhecido.
+  if (!out.length) {
+    let indiceFallback = 0
+    const visitarFallback = (valor: unknown): void => {
+      if (Array.isArray(valor)) {
+        valor.forEach(visitarFallback)
+        return
+      }
+      if (!valor || typeof valor !== 'object') return
+      const o = valor as Record<string, unknown>
+      const linha = txt(o.Linha ?? o.linha)
+      const modelo = txt(o.Modelo ?? o.modelo)
+      if (linha && modelo) {
+        const item = itemHistorico(
+          o,
+          fonte,
+          `SEM-ID-${key(fonte, linha, modelo, indiceFallback)}`,
+          indiceFallback++,
+        )
+        if (item) out.push(item)
+        return
+      }
+      Object.values(o).forEach(visitarFallback)
+    }
+    visitarFallback(payload)
+  }
+
   return out
 }
 
@@ -141,7 +228,7 @@ async function garantirReferencia(linha: string, modelo: string, imagem: string 
 function componenteDoRaw(tipo: 'perfil' | 'acessorio' | 'vidro', raw: unknown) {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
-  const codigo = txt(o.SeuCodigo ?? o.seuCodigo ?? o.Codigo ?? o.codigo)
+  const codigo = primeiroTexto(o.SeuCodigo, o.seuCodigo, o.Codigo, o.codigo)
   const codigoWvetro = txt(o.Codigo ?? o.codigo)
   const nome = txt(o.Nome ?? o.nome ?? o.Descricao ?? o.descricao ?? o.Especificacao ?? o.especificacao)
   if (!codigo && !codigoWvetro && !nome) return null
@@ -166,6 +253,139 @@ function componenteDoRaw(tipo: 'perfil' | 'acessorio' | 'vidro', raw: unknown) {
   }
 }
 
+function codigoComponente(raw: unknown) {
+  if (!raw || typeof raw !== 'object') return ''
+  const o = raw as Record<string, unknown>
+  return primeiroTexto(o.SeuCodigo, o.seuCodigo, o.Codigo, o.codigo).toUpperCase()
+}
+
+function familiaTecnica(item: ItemHistorico, vidrosRaw: unknown[]) {
+  const descricao = norm(`${item.nome || ''} ${item.modelo || ''}`)
+  if (descricao.includes('VENEZIANA')) return 'veneziana'
+  if (descricao.includes('BANDEIRA')) return 'bandeira'
+  if (descricao.includes('ATRAS DA PAREDE')) return 'atras_parede'
+  if (descricao.includes('JANELA')) return 'janela'
+  if (descricao.includes('TRAVESSA LARGA')) return 'travessa_larga'
+  const vidroQtd = vidrosRaw.reduce<number>((s, raw) => {
+    if (!raw || typeof raw !== 'object') return s
+    const o = raw as Record<string, unknown>
+    return s + (num(o.Qtde ?? o.qtde ?? o.Quantidade ?? o.quantidade) || 0)
+  }, 0)
+  if (norm(item.linha).includes('SUPREMA') && descricao.includes('PORTA DE CORRER 03 FOLHAS') && vidrosRaw.length === 1 && Math.abs(vidroQtd - 3) < 0.001) {
+    return 'pc3_vidro_inteiro'
+  }
+  return 'nao_classificada'
+}
+
+function inferirVariaveisObservadas(item: ItemHistorico, perfisRaw: unknown[], vidrosRaw: unknown[]) {
+  const codigos = new Set(perfisRaw.map(codigoComponente).filter(Boolean))
+  const tem = (...lista: string[]) => lista.some(c => codigos.has(c))
+
+  const contramarco = codigos.has('CM200') ? 'cm200' : codigos.has('CM060') ? 'cm060' : 'nao'
+  const perfilMaoAmigo = tem('SU242', 'SU243', 'SU289', 'SU290')
+    ? 'largo'
+    : tem('SU040', 'SU041', 'SU047', 'SU049') ? 'comum' : 'nao_identificado'
+  const reforcoInterno = tem('SU047', 'SU289')
+  const reforcoExterno = tem('SU049', 'SU290')
+  const reforcoMaoAmigo = reforcoInterno && reforcoExterno
+    ? 'interno_e_externo'
+    : reforcoInterno ? 'interno' : reforcoExterno ? 'externo' : 'sem'
+
+  const su008 = perfisRaw.find(raw => codigoComponente(raw) === 'SU008')
+  let mataJuntaDescontoMm: number | null = null
+  if (su008 && item.altura !== null && typeof su008 === 'object') {
+    const o = su008 as Record<string, unknown>
+    const medidaM = num(o.Medida ?? o.medida)
+    if (medidaM !== null) mataJuntaDescontoMm = Number((item.altura - medidaM * 1000).toFixed(3))
+  }
+
+  const vidroQuantidadeTotal = vidrosRaw.reduce<number>((s, raw) => {
+    if (!raw || typeof raw !== 'object') return s
+    const o = raw as Record<string, unknown>
+    return s + (num(o.Qtde ?? o.qtde ?? o.Quantidade ?? o.quantidade) || 0)
+  }, 0)
+
+  return {
+    familia_tecnica: familiaTecnica(item, vidrosRaw),
+    item_codigo: item.codigo || null,
+    contramarco,
+    arremate_face_interna: codigos.has('MP347') ? 'sim' : 'nao',
+    perfil_mao_amigo: perfilMaoAmigo,
+    reforco_mao_amigo: reforcoMaoAmigo,
+    reforco_aba: tem('SU280', 'SU280D') ? 'sim' : 'nao',
+    mata_junta: tem('SU008', 'SU291') ? 'sim' : 'nao',
+    mata_junta_desconto_mm: mataJuntaDescontoMm,
+    grupos_vidro: vidrosRaw.length,
+    vidro_quantidade_total: Number(vidroQuantidadeTotal.toFixed(3)),
+    assinatura_perfis: Array.from(codigos).sort(),
+  }
+}
+
+function montarCasoIndividual(item: ItemHistorico, ref: any, tip: any, data: string) {
+  const perfisRaw = arr(item.raw, ['Perfil', 'Perfis'])
+  const acessoriosRaw = arr(item.raw, ['Acessorios', 'Acessórios'])
+  const vidrosRaw = arr(item.raw, ['Vidro', 'Vidros'])
+  const payloadHash = createHash('sha256').update(JSON.stringify(item.raw)).digest('hex')
+  const variaveisObservadas = inferirVariaveisObservadas(item, perfisRaw, vidrosRaw)
+  return {
+    perfisRaw,
+    acessoriosRaw,
+    vidrosRaw,
+    caso: {
+      referencia_tipologia_id: ref.id,
+      tipologia_atlas_id: ref.tipologia_atlas_id || tip?.id || null,
+      fonte: item.fonte,
+      documento_chave: item.documentoChave,
+      item_indice: item.itemIndice,
+      caso_chave: key(item.fonte, item.documentoChave, item.itemIndice, item.codigo, item.linha, item.modelo),
+      data_referencia: data,
+      item_codigo: item.codigo,
+      item_nome: item.nome,
+      ambiente: item.ambiente,
+      largura_mm: item.largura,
+      altura_mm: item.altura,
+      quantidade: item.quantidade,
+      valor_total: item.valorTotal,
+      perfis: perfisRaw,
+      acessorios: acessoriosRaw,
+      vidros: vidrosRaw,
+      variaveis_observadas: variaveisObservadas,
+      item_raw: item.raw,
+      payload_hash: payloadHash,
+      updated_at: new Date().toISOString(),
+    },
+  }
+}
+
+async function salvarCasosIndividuais(casos: any[]) {
+  for (let i = 0; i < casos.length; i += 100) {
+    const { error } = await supabaseAdmin
+      .from('wvetro_tipologia_casos')
+      .upsert(casos.slice(i, i + 100), { onConflict: 'caso_chave' })
+    if (error) throw error
+  }
+}
+
+export async function capturarCasosParidadeWVetroDia(data: string) {
+  const [pedidos, orcamentos] = await Promise.all([
+    listarPedidosWVetro<unknown>(data, data),
+    listarOrcamentosWVetro<unknown>(data, data),
+  ])
+  const itens = [...itensHistoricos(pedidos, 'pedido'), ...itensHistoricos(orcamentos, 'orcamento')]
+  const { refsMap, tipMap } = await indiceTipologias()
+  const casos: any[] = []
+  const refsUsadas = new Set<string>()
+
+  for (const item of itens) {
+    const { ref, tip } = await garantirReferencia(item.linha, item.modelo, urlImagem(item.raw), data, refsMap, tipMap)
+    refsUsadas.add(ref.id)
+    casos.push(montarCasoIndividual(item, ref, tip, data).caso)
+  }
+
+  await salvarCasosIndividuais(casos)
+  return { data, itens: itens.length, casos: casos.length, tipologias: refsUsadas.size }
+}
+
 function min(a: number | null, b: number | null) { return a == null ? b : b == null ? a : Math.min(a, b) }
 function max(a: number | null, b: number | null) { return a == null ? b : b == null ? a : Math.max(a, b) }
 function unico(lista: unknown[], valor: unknown) {
@@ -179,11 +399,12 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
     listarPedidosWVetro<unknown>(data, data),
     listarOrcamentosWVetro<unknown>(data, data),
   ])
-  const itens = [...itensHistoricos(pedidos), ...itensHistoricos(orcamentos)]
+  const itens = [...itensHistoricos(pedidos, 'pedido'), ...itensHistoricos(orcamentos, 'orcamento')]
   const { mapa: produtos } = await indiceProdutos()
   const { refsMap, tipMap } = await indiceTipologias()
   const refsUsadas = new Set<string>()
   const agregados = new Map<string, any>()
+  const casosIndividuais: any[] = []
   // Agregação em memória de Largura/Altura/Ambiente/Nome por referência (achado
   // 2026-09-01/02: a API já entrega esses campos por item, não eram capturados).
   const dimensoes = new Map<string, { largura: number[]; altura: number[]; ambientes: Set<string>; nomes: Set<string> }>()
@@ -197,10 +418,14 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
     if (item.ambiente) dim.ambientes.add(item.ambiente)
     if (item.nome) dim.nomes.add(item.nome)
     dimensoes.set(ref.id, dim)
+
+    const { perfisRaw, acessoriosRaw, vidrosRaw, caso } = montarCasoIndividual(item, ref, tip, data)
+    casosIndividuais.push(caso)
+
     const grupos: Array<['perfil' | 'acessorio' | 'vidro', unknown[]]> = [
-      ['perfil', arr(item.raw, ['Perfil', 'Perfis'])],
-      ['acessorio', arr(item.raw, ['Acessorios', 'Acessórios'])],
-      ['vidro', arr(item.raw, ['Vidro', 'Vidros'])],
+      ['perfil', perfisRaw],
+      ['acessorio', acessoriosRaw],
+      ['vidro', vidrosRaw],
     ]
     for (const [tipo, lista] of grupos) {
       for (const raw of lista) {
@@ -310,6 +535,8 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
     if (error) throw error
   }
 
+  await salvarCasosIndividuais(casosIndividuais)
+
   // Grava Largura/Altura/Ambiente/Nome agregados por referência (achado 2026-09-01/02).
   // Mescla com o que já estava salvo em refsMap (lido no início desta execução), não
   // sobrescreve — mesmo cuidado de min/max/união já usado para componentes acima.
@@ -336,7 +563,7 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
   }
 
   await sincronizarCustosProdutosWVetro()
-  return { data, itens: itens.length, tipologias: refsUsadas.size, componentes: linhas.length }
+  return { data, itens: itens.length, tipologias: refsUsadas.size, componentes: linhas.length, casos: casosIndividuais.length }
 }
 
 export async function sincronizarCustosProdutosWVetro() {
@@ -453,13 +680,33 @@ export async function sincronizarCatalogoEsquadriasWVetro() {
   return { suportado: true, encontrados: unicos.size, mapeados, imagens }
 }
 
+function tabelaCasosParidadeAusente(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: string; message?: string; details?: string }
+  const texto = `${e.message || ''} ${e.details || ''}`.toLowerCase()
+  return e.code === '42P01'
+    || e.code === 'PGRST205'
+    || (texto.includes('wvetro_tipologia_casos') && (texto.includes('schema cache') || texto.includes('does not exist') || texto.includes('could not find')))
+}
+
 export async function resumoBaseTecnicaWVetro() {
-  const [bom, mapeados, custos, imgs, tips] = await Promise.all([
+  const [bom, mapeados, custos, imgs, tips, casos] = await Promise.all([
     supabaseAdmin.from('wvetro_tipologia_componentes').select('id', { count: 'exact', head: true }),
     supabaseAdmin.from('wvetro_tipologia_componentes').select('id', { count: 'exact', head: true }).not('produto_atlas_id', 'is', null),
     supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).not('custo_wvetro_ultimo', 'is', null),
     supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).not('foto_url', 'is', null).eq('origem', 'wvetro'),
     supabaseAdmin.from('wvetro_referencias_tipologias').select('id', { count: 'exact', head: true }),
+    supabaseAdmin.from('wvetro_tipologia_casos').select('id', { count: 'exact', head: true }),
   ])
-  return { componentesPorTipologia: bom.count || 0, componentesMapeados: mapeados.count || 0, produtosComCustoWvetro: custos.count || 0, produtosWvetroComFoto: imgs.count || 0, tipologiasReferencia: tips.count || 0 }
+  for (const resposta of [bom, mapeados, custos, imgs, tips]) if (resposta.error) throw resposta.error
+  if (casos.error && !tabelaCasosParidadeAusente(casos.error)) throw casos.error
+  return {
+    componentesPorTipologia: bom.count || 0,
+    componentesMapeados: mapeados.count || 0,
+    produtosComCustoWvetro: custos.count || 0,
+    produtosWvetroComFoto: imgs.count || 0,
+    tipologiasReferencia: tips.count || 0,
+    casosIndividuais: casos.error ? 0 : (casos.count || 0),
+    paridadeSchemaPronto: !casos.error,
+  }
 }
