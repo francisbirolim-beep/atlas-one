@@ -1,7 +1,8 @@
-import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '../lib/wvetroComparadorTecnico'
+import { compararItemWVetroComFormulaAtlas, detectarAlertasTecnicosWVetro, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '../lib/wvetroComparadorTecnico'
 import {
   FIXTURE_PC2_SUPREMA_GENERICA_ATLAS,
   FIXTURE_PC2_SUPREMA_WVETRO,
+  FIXTURE_PC3_SUPREMA_CM060_WVETRO,
   FIXTURE_PC3_SUPREMA_GENERICA_ATLAS,
   FIXTURE_PC3_SUPREMA_WVETRO,
 } from '../lib/wvetroComparadorFixtures'
@@ -37,4 +38,28 @@ const resultados = [
   validar('PC3 Suprema', FIXTURE_PC3_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_GENERICA_ATLAS, 5),
 ]
 
-console.log(JSON.stringify({ ok: true, resultados }, null, 2))
+const infCm = inferirOpcoesTecnicasWVetro(FIXTURE_PC3_SUPREMA_CM060_WVETRO, FIXTURE_PC3_SUPREMA_GENERICA_ATLAS)
+const cm = compararItemWVetroComFormulaAtlas({
+  item: FIXTURE_PC3_SUPREMA_CM060_WVETRO,
+  formula: FIXTURE_PC3_SUPREMA_GENERICA_ATLAS,
+  opcoes: infCm.opcoes,
+})
+if (cm.resumo.medida_diferente !== 0 || cm.resumo.quantidade_diferente !== 0 || cm.resumo.ausente_wvetro !== 0) {
+  throw new Error(`Regressão PC3 CM060: o núcleo técnico voltou a divergir. ${JSON.stringify(cm.resumo)}`)
+}
+if (cm.resumo.ausente_atlas !== 6 || cm.resumo.regra_pendente_atlas !== 4) {
+  throw new Error(`Regressão PC3 CM060: esperado subsistema isolado 6/4. ${JSON.stringify(cm.resumo)}`)
+}
+const alertasCm = detectarAlertasTecnicosWVetro(FIXTURE_PC3_SUPREMA_CM060_WVETRO)
+if (!alertasCm.some(a => String(a.dados.familia).includes('envolvente') && a.dados.familia_quadro === 'quadro padrão')) {
+  throw new Error('Regressão PC3 CM060: família histórica envolvente/quadro padrão não detectada.')
+}
+
+resultados.push({
+  fixture: 'PC3 Suprema CM060 envolvente',
+  iguais: cm.resumo.igual,
+  regrasPendentes: cm.resumo.regra_pendente_atlas,
+  opcoesInferidas: infCm.opcoes,
+})
+
+console.log(JSON.stringify({ ok: true, resultados, alertasCm }, null, 2))
