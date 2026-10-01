@@ -379,3 +379,12 @@ Nenhum merge para `main`.
 - Master possui visão geral; vendedor fica limitado às próprias oportunidades por RLS;
 - navegação, busca global e Home receberam acesso à Prospecção;
 - migration `20260916151751_prospeccao_campo_v1.sql` aplicada no Supabase.
+
+
+# 2026-10-01 — Gate empresarial W.Vetro + IAM da Medição Final
+
+- Reaplicadas sobre a `main` atual as intenções de segurança dos antigos PRs #375/#401/#422, sem mesclar branches com mais de 330 commits de atraso.
+- Criado `lib/wvetroAcessoServer.ts` para centralizar autenticação Master + empresa ativa + slug autorizado.
+- Adicionado `WVETRO_EMPRESA_SLUG=esquadrifacio` ao `.env.example`.
+- A importação `/api/medicao-final/importar-wvetro` agora usa o mesmo modelo de permissão do setor de Medição Final: oculto bloqueia, consulta permite preview, edição permite confirmar.
+- Validação local aprovada com `npm run validate` e `npm run release:check`.
