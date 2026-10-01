@@ -125,7 +125,7 @@ export function calcularAcessoriosTecnicos(
   largura: number,
   altura: number,
   folhas: number,
-  perfis: Array<{ codigo: string; tamanho: number }>,
+  perfis: Array<{ codigo: string; tamanho: number; grupo?: string }>,
   opcoes: OpcoesEscolhidas = {}
 ): ResultadoAcessorioFormula[] {
   const contexto: Record<string, number> = {
@@ -136,7 +136,10 @@ export function calcularAcessoriosTecnicos(
     Folhas: Math.max(1, folhas || 1),
     Encontros: Math.max(0, (folhas || 1) - 1),
   }
-  for (const perfil of perfis) if (perfil.codigo && Number.isFinite(perfil.tamanho)) contexto[perfil.codigo] = perfil.tamanho
+  for (const perfil of perfis) {
+    if (perfil.codigo && Number.isFinite(perfil.tamanho)) contexto[perfil.codigo] = perfil.tamanho
+    if (perfil.grupo && Number.isFinite(perfil.tamanho)) contexto[perfil.grupo] = perfil.tamanho
+  }
 
   return acessorios.map((item, index) => {
     if (item.condicao_ativa && !condicaoBate(item.condicao_ativa, opcoes)) {
