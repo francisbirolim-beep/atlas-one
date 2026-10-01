@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -131,16 +131,43 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
   if (linha.includes('SUPREMA') && modelo.includes('MAXIM-AR')) {
     const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
     const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
-    const perfisDominantes = ['MP347','SU079','SU081','SU082','SU084','SU102','SU276']
-    const acessoriosDominantes = [
-      'ALMC25','BRA702','BUC755','FEC009D','GUA007','GUA157','GUA239','GUA256',
-      'GUA258','NYL190','NYL355','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
-    ]
 
-    if (conjuntoExato(perfis, perfisDominantes) && conjuntoExato(acessorios, acessoriosDominantes)) {
-      const formula = FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA
-      refs.push({
+    const candidatas = [
+      {
         id: 'referencia-local-max1-suprema-dominante',
+        formula: FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA,
+        perfis: ['MP347','SU079','SU081','SU082','SU084','SU102','SU276'],
+        acessorios: [
+          'ALMC25','BRA702','BUC755','FEC009D','GUA007','GUA157','GUA239','GUA256',
+          'GUA258','NYL190','NYL355','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
+        ],
+      },
+      {
+        id: 'referencia-local-max1-suprema-cm200',
+        formula: FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA,
+        perfis: ['CM200','MP347','SU079','SU081','SU082','SU084','SU102','SU276'],
+        acessorios: [
+          'ALMC25','BRA702','CHU838','FEC009D','GUA007','GUA157','GUA239','GUA256',
+          'GUA258','NYL-10002','NYL190','NYL355','PAR1025','PAR435','REBACA4X10','SIL-PU',
+        ],
+      },
+      {
+        id: 'referencia-local-max1-suprema-sem-arremate',
+        formula: FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA,
+        perfis: ['SU079','SU081','SU082','SU084','SU102','SU276'],
+        acessorios: [
+          'ALMC25','BRA702','BUC755','FEC009D','GUA007','GUA157','GUA239','GUA256',
+          'GUA258','NYL355','PAR1037','PAR435','REBACA4X10','SIL-PU',
+        ],
+      },
+    ] as const
+
+    for (const candidata of candidatas) {
+      if (!conjuntoExato(perfis, candidata.perfis as unknown as string[])) continue
+      if (!conjuntoExato(acessorios, candidata.acessorios as unknown as string[])) continue
+      const formula = candidata.formula
+      refs.push({
+        id: candidata.id,
         tipologia_id: formula.tipologia_id,
         configuracao_label: formula.configuracao_label,
         status: 'referencia_historica',
