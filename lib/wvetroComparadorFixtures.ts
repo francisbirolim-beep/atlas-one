@@ -155,6 +155,31 @@ export const FIXTURE_PC2_SUPREMA_GENERICA_ATLAS: FormulaAtlasComparacao = {
 }
 
 
+const PC2_SUPREMA_DOMINANTE_QUANTIDADES_FIXAS: Record<string, string> = {
+  CON409: '2',
+  FRA820: '2',
+  NYL357: '2',
+  PAR1023: '12',
+  PAR1025: '16',
+  NYL190: '16',
+  PAR1037: '16',
+  BUC755: '16',
+}
+
+// Referência histórica estrita para a composição dominante já observada no W.Vetro.
+// Mantém a fórmula genérica separada: estas quantidades fixas não são promovidas para outras variantes PC2.
+export const FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  ...FIXTURE_PC2_SUPREMA_GENERICA_ATLAS,
+  configuracao_label: 'PC2 Suprema · vidro padrão dominante · referência histórica',
+  acessorios: (FIXTURE_PC2_SUPREMA_GENERICA_ATLAS.acessorios || []).map(acessorio => {
+    const formula = PC2_SUPREMA_DOMINANTE_QUANTIDADES_FIXAS[String(acessorio.codigo || '').toUpperCase()]
+    return formula
+      ? { ...acessorio, formula_quantidade: formula, status: 'validada' }
+      : acessorio
+  }),
+}
+
+
 export const FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
   tipologia_id: 'ecf93bb8-bc6f-4e1b-84eb-40f8c887485a',
   configuracao_label: 'JC2-SUPREMA · referência histórica em validação',
