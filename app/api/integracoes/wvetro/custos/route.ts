@@ -19,7 +19,7 @@ async function autenticarMaster(req: NextRequest) {
 
   const { data: usuario } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,role')
+    .select('id,nome,role,empresa_id')
     .eq('id', data.user.id)
     .maybeSingle()
 
@@ -275,15 +275,9 @@ export async function GET(req: NextRequest) {
   const usuario = await autenticarMaster(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito a usuário master.' }, { status: 401 })
 
-  const status = statusConfiguracaoWVetro()
-  if (!status.pronto) {
-    return NextResponse.json({ error: 'Credenciais W.Vetro não configuradas no servidor.' }, { status: 503 })
-  }
-
+  const fonte = String(req.nextUrl.searchParams.get('fonte') || 'api-wvetro').trim()
   const inicio = req.nextUrl.searchParams.get('inicio')
   const fim = req.nextUrl.searchParams.get('fim')
-  const limiteSolicitado = Number(req.nextUrl.searchParams.get('maxNotas') || 25)
-  const maxNotas = Math.max(1, Math.min(Number.isFinite(limiteSolicitado) ? limiteSolicitado : 25, 50))
 
   if (!dataIsoValida(inicio) || !dataIsoValida(fim)) {
     return NextResponse.json({ error: 'Informe inicio e fim no formato YYYY-MM-DD.' }, { status: 400 })
@@ -293,6 +287,144 @@ export async function GET(req: NextRequest) {
   if (dias < 0 || dias > 90) {
     return NextResponse.json({ error: 'O período deve ter entre 0 e 90 dias.' }, { status: 400 })
   }
+
+  if (fonte === 'historico-suprimentos') {
+    try {
+      const { data: linhas, error } = await supabaseAdmin
+        .from('wvetro_historico_suprimentos')
+        .select('produto_atlas_id,nota_chave_externa,fornecedor_nome,data_emissao,valor_unitario,quantidade,valor_total')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('tipo_registro', 'item_nota_entrada')
+        .eq('produto_vinculo_status', 'seguro')
+        .not('produto_atlas_id', 'is', null)
+        .gte('data_emissao', inicio)
+        .lte('data_emissao', fim)
+        .order('data_emissao', { ascending: true })
+
+      if (error) throw error
+
+      const produtoIds = Array.from(new Set((linhas || []).map(item => item.produto_atlas_id).filter(Boolean)))
+      const { data: produtos, error: produtosError } = produtoIds.length
+        ? await supabaseAdmin
+            .from('produtos')
+            .select('id,codigo,nome,categoria,custo')
+            .eq('empresa_id', usuario.empresa_id)
+            .in('id', produtoIds)
+        : { data: [], error: null }
+
+      if (produtosError) throw produtosError
+
+      const produtoPorId = new Map((produtos || []).map(produto => [produto.id, produto]))
+      const mapa = new Map<string, {
+        produtoAtlasId: string
+        codigo: string
+        nome: string
+        categoria: string
+        ocorrencias: number
+        notas: Set<string>
+        primeiraCompra: string | null
+        ultimaCompra: string | null
+        custoMin: number | null
+        custoMax: number | null
+        ultimoCustoObservado: number | null
+        ultimoFornecedor: string | null
+        custoOficialAtual: number | null
+      }>()
+
+      for (const item of linhas || []) {
+        const produtoId = String(item.produto_atlas_id || '')
+        if (!produtoId) continue
+        const produto = produtoPorId.get(produtoId)
+        if (!produto) continue
+
+        const atual = mapa.get(produtoId) || {
+          produtoAtlasId: produtoId,
+          codigo: String(produto.codigo || ''),
+          nome: String(produto.nome || ''),
+          categoria: String(produto.categoria || ''),
+          ocorrencias: 0,
+          notas: new Set<string>(),
+          primeiraCompra: null,
+          ultimaCompra: null,
+          custoMin: null,
+          custoMax: null,
+          ultimoCustoObservado: null,
+          ultimoFornecedor: null,
+          custoOficialAtual: numero(produto.custo),
+        }
+
+        atual.ocorrencias += 1
+        if (item.nota_chave_externa) atual.notas.add(String(item.nota_chave_externa))
+
+        const data = item.data_emissao ? String(item.data_emissao) : null
+        if (data) {
+          if (!atual.primeiraCompra || data < atual.primeiraCompra) atual.primeiraCompra = data
+          if (!atual.ultimaCompra || data >= atual.ultimaCompra) {
+            atual.ultimaCompra = data
+            atual.ultimoFornecedor = item.fornecedor_nome ? String(item.fornecedor_nome) : null
+            atual.ultimoCustoObservado = numero(item.valor_unitario)
+          }
+        }
+
+        const custo = numero(item.valor_unitario)
+        if (custo !== null) {
+          atual.custoMin = atual.custoMin === null ? custo : Math.min(atual.custoMin, custo)
+          atual.custoMax = atual.custoMax === null ? custo : Math.max(atual.custoMax, custo)
+          if (!data) atual.ultimoCustoObservado = custo
+        }
+
+        mapa.set(produtoId, atual)
+      }
+
+      const custos = Array.from(mapa.values())
+        .map(item => {
+          const diferencaUltimoVsOficial =
+            item.ultimoCustoObservado !== null && item.custoOficialAtual !== null
+              ? item.ultimoCustoObservado - item.custoOficialAtual
+              : null
+          const diferencaPercentual =
+            diferencaUltimoVsOficial !== null && item.custoOficialAtual && item.custoOficialAtual !== 0
+              ? (diferencaUltimoVsOficial / item.custoOficialAtual) * 100
+              : null
+          return {
+            ...item,
+            notas: item.notas.size,
+            diferencaUltimoVsOficial,
+            diferencaPercentual,
+          }
+        })
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+      return NextResponse.json({
+        ok: true,
+        fonte: 'historico-suprimentos',
+        modo: 'somente-leitura',
+        periodo: { inicio, fim },
+        seguranca: {
+          nenhumaGravacao: true,
+          observacao: 'Custos comprados históricos não alteram custo oficial, estoque, compras ou financeiro do Atlas.',
+        },
+        resumo: {
+          itens: (linhas || []).length,
+          produtos: custos.length,
+          notas: new Set((linhas || []).map(item => item.nota_chave_externa).filter(Boolean)).size,
+          produtosComCustoOficial: custos.filter(item => item.custoOficialAtual !== null).length,
+        },
+        custos,
+      })
+    } catch (error) {
+      console.error('Erro ao ler custos históricos materializados do W.Vetro:', error)
+      return NextResponse.json({ error: 'Não foi possível ler os custos históricos materializados.' }, { status: 502 })
+    }
+  }
+
+  const status = statusConfiguracaoWVetro()
+  if (!status.pronto) {
+    return NextResponse.json({ error: 'Credenciais W.Vetro não configuradas no servidor.' }, { status: 503 })
+  }
+
+  const limiteSolicitado = Number(req.nextUrl.searchParams.get('maxNotas') || 25)
+  const maxNotas = Math.max(1, Math.min(Number.isFinite(limiteSolicitado) ? limiteSolicitado : 25, 50))
 
   try {
     const notasPayload = await listarNotasEntradaWVetro(inicio, fim)
