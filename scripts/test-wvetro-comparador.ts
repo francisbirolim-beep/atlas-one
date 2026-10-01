@@ -1,4 +1,4 @@
-import { classificarFamiliaPc2Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
@@ -92,6 +92,23 @@ const pc2VenezianaFalsa = {
 }
 if (ehPc2SupremaDominante(pc2VenezianaFalsa)) {
   throw new Error('Regressão PC2 dominante: variante veneziana não pode cair na assinatura de vidro padrão.')
+}
+
+const pc4Base = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Modelo:'PORTA DE CORRER 04 FOLHAS',
+}
+const familiasPc4 = [
+  [{...pc4Base,Codigo:'*SUCB-PC4-02-EF',Nome:'PORTA DE CORRER 04 FOLHAS MÓVEIS EM 04 PLANOS | SUPREMA'},'quatro_planos'],
+  [{...pc4Base,Codigo:'*SUCB-PC4-02-EF',Nome:'PORTA DE CORRER 04 FOLHAS SEQUENCIAIS COM REF DE ABA | SUPREMA'},'sequencial'],
+  [{...pc4Base,Codigo:'*SUCB-PC4-01-EF',Nome:'PORTA DE CORRER 04 FOLHAS ABERTURA CENTRAL | SUPREMA'},'abertura_central'],
+  [{...pc4Base,Codigo:'*SUCB-PC4-01-EF',Nome:'PORTA DE CORRER 04 FOLHAS - 02 FIXAS E 02 MÓVEIS | SUPREMA'},'fixas_moveis'],
+  [{...pc4Base,Codigo:'*SUCB-PC4-09-EF',Nome:'PORTA DE CORRER 04 FOLHAS MÓVEIS | VENEZIANA 01 VENTILADA / 01 CEGA - 01 VIDRO - 01 TELA | SUPREMA'},'veneziana_mista'],
+] as const
+
+for (const [item, esperado] of familiasPc4) {
+  const familia = classificarFamiliaPc4Suprema(item)
+  if (familia !== esperado) throw new Error(`Regressão classificação PC4: esperado ${esperado}, obtido ${familia}.`)
 }
 
 const inferencia = inferirOpcoesTecnicasWVetro(
