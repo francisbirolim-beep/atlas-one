@@ -90,6 +90,13 @@ type HistoricoAtlasResumo = {
   somenteHistorico?: number
   foraHistorico?: number
   comCliente?: number
+  reconciliacaoMaterializacao?: {
+    completo: boolean
+    comercial: { fonteEsperada: number; materializados: number; deduplicados: number; diferenca: number; completo: boolean }
+    financeiro: { fonteEsperada: number; materializados: number; deduplicados: number; diferenca: number; completo: boolean }
+    operacional: { fonteEsperada: number; materializados: number; deduplicados: number; diferenca: number; completo: boolean }
+    suprimentos: { fonteEsperada: number; materializados: number; deduplicados: number; diferenca: number; completo: boolean }
+  }
   coberturaProducaoProjetos?: {
     total: number
     representadosViaLote: number
@@ -957,6 +964,73 @@ export default function MigracaoOperacionalWVetroPage() {
                     )
                   })}
                 </div>
+
+                {historicoAtlas.reconciliacaoMaterializacao && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                          Integridade da materialização
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {historicoAtlas.reconciliacaoMaterializacao.completo
+                            ? 'Cobertura histórica reconciliada'
+                            : 'Diferença encontrada na materialização'}
+                        </div>
+                        <p className="mt-1 max-w-3xl text-xs text-slate-600">
+                          Compara as entidades do staging Neon com as tabelas históricas isoladas do Atlas,
+                          descontando apenas duplicidades comprovadas.
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                          historicoAtlas.reconciliacaoMaterializacao.completo
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {historicoAtlas.reconciliacaoMaterializacao.completo ? '100% reconciliado' : 'Revisar diferenças'}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {[
+                        ['Comercial', historicoAtlas.reconciliacaoMaterializacao.comercial],
+                        ['Financeiro', historicoAtlas.reconciliacaoMaterializacao.financeiro],
+                        ['Operacional', historicoAtlas.reconciliacaoMaterializacao.operacional],
+                        ['Suprimentos', historicoAtlas.reconciliacaoMaterializacao.suprimentos],
+                      ].map(([label, item]) => {
+                        const dados = item as {
+                          fonteEsperada: number
+                          materializados: number
+                          deduplicados: number
+                          diferenca: number
+                          completo: boolean
+                        }
+                        return (
+                          <div key={String(label)} className="rounded-lg border border-emerald-100 bg-white p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                {String(label)}
+                              </span>
+                              <span className={dados.completo ? 'text-emerald-600' : 'text-red-600'}>
+                                {dados.completo ? 'OK' : 'DIF'}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-lg font-bold text-slate-900">
+                              {dados.materializados}/{dados.fonteEsperada}
+                            </div>
+                            <div className="mt-1 text-[11px] text-slate-500">
+                              {dados.deduplicados > 0
+                                ? `${dados.deduplicados} duplicidade(s) comprovada(s) descontada(s)`
+                                : 'Sem deduplicação necessária'}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {historicoAtlas.coberturaProducaoProjetos && (
                   <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
