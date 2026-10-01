@@ -108,6 +108,7 @@ type ProdutoTecnico = {
   nome: string
   categoria: string
   unidade?: string | null
+  unidade_origem?: string | null
   tamanho_barra_mm?: number | null
   custo?: number | null
   preco?: number | null
@@ -153,7 +154,7 @@ function folhasDoItem(item: any) {
 async function carregarProdutosTecnicos() {
   const { data } = await supabase
     .from('produtos')
-    .select('id,codigo,nome,categoria,unidade,tamanho_barra_mm,custo,preco')
+    .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
     .eq('ativo', true)
     .not('codigo', 'is', null)
   const produtos = (data || []) as ProdutoTecnico[]
@@ -388,7 +389,7 @@ export async function gerarPacoteTecnico(
           produto_id: produto?.id || null,
           codigo: acessorio?.codigo || null,
           descricao: acessorio?.descricao || produto?.nome || acessorio?.codigo || 'Acessório pendente',
-          unidade: acessorio?.unidade || produto?.unidade || 'UN',
+          unidade: acessorio?.unidade || produto?.unidade_origem || produto?.unidade || 'UN',
           cor_ref: acessorio?.cor || corRef,
           quantidade_tecnica: Math.max(0, quantidade),
           quantidade_ajustada: Math.max(0, quantidade),

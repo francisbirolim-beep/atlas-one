@@ -57,6 +57,7 @@ export type ProdutoPrecificacao = {
   nome: string
   categoria: string
   unidade?: string | null
+  unidade_origem?: string | null
   custo?: number | null
   peso_kg_m?: number | null
   tamanho_barra_mm?: number | null
@@ -91,6 +92,19 @@ function margemVenda(custo: number, margem: number) {
   return custo <= 0 ? 0 : custo / (1 - m / 100)
 }
 function codigoKey(v?: string | null) { return (v || '').trim().toUpperCase() }
+function unidadeKey(v?: string | null) {
+  const u = (v || '').trim().toUpperCase()
+  if (!u) return ''
+  if (['M', 'METRO', 'METROS'].includes(u)) return 'MT'
+  if (['UNIDADE', 'UNIDADES', 'UND'].includes(u)) return 'UN'
+  if (['TUBO', 'TUBOS'].includes(u)) return 'TB'
+  return u
+}
+function unidadeCompativel(material?: string | null, custo?: string | null) {
+  const m = unidadeKey(material)
+  const c = unidadeKey(custo)
+  return !m || !c || m === c
+}
 function tamanhoBarra(p: any) {
   return num(p?.tamanho_barra_mm) || num(p?.tamanho_barra_mm_origem) || num(p?.dados_origem?.tamanho_raw) || 0
 }
@@ -109,7 +123,7 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
   const [{ data: overrides }, { data: materiais }, { data: produtos }] = await Promise.all([
     supabase.from('orcamento_item_componentes_overrides').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).order('ordem'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem').eq('ativo', true),
+    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem').eq('ativo', true),
   ])
   const produtoMap = new Map<string, any>()
   ;(produtos || []).forEach((p: any) => { if (p.codigo) produtoMap.set(codigoKey(p.codigo), p) })
@@ -156,7 +170,7 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
         produto_id: destino?.id || ov.produto_destino_id || null,
         codigo: ov.codigo_destino || destino?.codigo || null,
         descricao: ov.descricao_destino || destino?.nome || ov.codigo_destino || 'Componente adicional',
-        unidade: destino?.unidade || 'UN',
+        unidade: destino?.unidade_origem || destino?.unidade || 'UN',
         quantidade_tecnica: 0,
         quantidade_ajustada: Math.max(0, num(ov.quantidade_override, 1)),
         comprimento_corte_mm: ov.comprimento_override_mm == null ? null : Math.max(0, num(ov.comprimento_override_mm)),
@@ -178,18 +192,42 @@ async function custoMaterial(material: MaterialPacote, produto: any, catalogo: a
     const pesoM = num(produto?.peso_kg_m)
     if (pesoM > 0 && pesoM < 50 && cfg.precoKg > 0) {
       const kg = pesoM * (num(material.comprimento_corte_mm) / 1000)
-      return { custo: kg * (cfg.precoKg + cfg.pinturaKg), origem: 'calculado' as const, pendente: false }
+      return { custo: kg * (cfg.precoKg + cfg.pinturaKg), origem: 'calculado' as const, pendente: false, motivo: null }
     }
   }
-  if (num(produto?.custo) > 0) return { custo: num(produto.custo), origem: 'produto' as const, pendente: false }
-  if (num(catalogo?.custo_unitario) > 0) return { custo: num(catalogo.custo_unitario), origem: 'catalogo' as const, pendente: false }
-  return { custo: 0, origem: 'pendente' as const, pendente: true }
+
+  if (num(produto?.custo) > 0) {
+    const unidadeCusto = produto?.unidade_origem || produto?.unidade
+    if (!unidadeCompativel(material.unidade, unidadeCusto)) {
+      return {
+        custo: 0,
+        origem: 'pendente' as const,
+        pendente: true,
+        motivo: `Unidade técnica ${unidadeKey(material.unidade) || 'não informada'} incompatível com a unidade do custo do produto ${unidadeKey(unidadeCusto) || 'não informada'}.`,
+      }
+    }
+    return { custo: num(produto.custo), origem: 'produto' as const, pendente: false, motivo: null }
+  }
+
+  if (num(catalogo?.custo_unitario) > 0) {
+    if (!unidadeCompativel(material.unidade, catalogo?.unidade)) {
+      return {
+        custo: 0,
+        origem: 'pendente' as const,
+        pendente: true,
+        motivo: `Unidade técnica ${unidadeKey(material.unidade) || 'não informada'} incompatível com a unidade do catálogo de custo ${unidadeKey(catalogo?.unidade) || 'não informada'}.`,
+      }
+    }
+    return { custo: num(catalogo.custo_unitario), origem: 'catalogo' as const, pendente: false, motivo: null }
+  }
+
+  return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: 'Custo oficial ainda não cadastrado.' }
 }
 
 async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
   const [{ data: materiais }, { data: produtos }, { data: catalogo }, { data: orc }] = await Promise.all([
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).eq('excluido', false).order('ordem'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true),
+    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true),
     supabase.from('catalogo_custos_tecnicos').select('*').eq('ativo', true),
     supabase.from('orcamentos').select('margem_padrao_pct').eq('id', orcamentoId).single(),
   ])
@@ -227,7 +265,7 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
       custo_pendente: m.status_calculo === 'pendente_formula' || custo.pendente,
       incluido_manual: false,
       excluido: false,
-      observacoes: m.justificativa_ajuste || null,
+      observacoes: [m.justificativa_ajuste, custo.motivo].filter(Boolean).join(' ') || null,
     })
   }
   if (linhas.length) await supabase.from('orcamento_precificacao_componentes').insert(linhas)
@@ -274,7 +312,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   const [{ data: componentes }, { data: politicas }, { data: produtos }] = await Promise.all([
     supabase.from('orcamento_precificacao_componentes').select('*').eq('orcamento_id', orcamentoId).eq('excluido', false).order('categoria').order('descricao'),
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true).order('categoria').order('nome'),
+    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true).order('categoria').order('nome'),
   ])
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
