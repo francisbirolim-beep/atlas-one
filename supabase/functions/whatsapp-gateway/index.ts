@@ -254,11 +254,12 @@ async function notificarMensagemWhatsApp(config: any, channel: any, conversation
     push_status: "pendente",
   }));
 
-  const { error } = await db.from("notificacoes").upsert(rows, {
-    onConflict: "usuario_id,origem_tipo,origem_id",
-    ignoreDuplicates: true,
-  });
-  if (error) console.error("Falha ao criar notificacao WhatsApp:", error.message);
+  for (const row of rows) {
+    const { error } = await db.from("notificacoes").insert(row);
+    if (error && error.code !== "23505") {
+      console.error("Falha ao criar notificacao WhatsApp:", error.message);
+    }
+  }
 }
 
 async function proximaNotificacaoPush(config: any) {
