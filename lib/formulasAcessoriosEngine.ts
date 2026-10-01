@@ -1,9 +1,11 @@
 import type { AcessorioFormulaCorte } from '@/lib/engenhariaFormulasCorte'
+import { condicaoBate, type OpcoesEscolhidas } from '@/lib/formulasCorteEngine'
 
 export type ResultadoAcessorioFormula = {
   index: number
   valor: number | null
   calculo: string
+  ativo?: boolean
   erro?: string
 }
 
@@ -123,7 +125,8 @@ export function calcularAcessoriosTecnicos(
   largura: number,
   altura: number,
   folhas: number,
-  perfis: Array<{ codigo: string; tamanho: number }>
+  perfis: Array<{ codigo: string; tamanho: number }>,
+  opcoes: OpcoesEscolhidas = {}
 ): ResultadoAcessorioFormula[] {
   const contexto: Record<string, number> = {
     Largura: largura,
@@ -136,18 +139,22 @@ export function calcularAcessoriosTecnicos(
   for (const perfil of perfis) if (perfil.codigo && Number.isFinite(perfil.tamanho)) contexto[perfil.codigo] = perfil.tamanho
 
   return acessorios.map((item, index) => {
+    if (item.condicao_ativa && !condicaoBate(item.condicao_ativa, opcoes)) {
+      return { index, valor: null, calculo: 'Inativo pela configuração selecionada.', ativo: false }
+    }
+
     const formula = item.formula_quantidade?.trim() || ''
     if (!formula) {
       if (typeof item.quantidade_referencia === 'number') contexto[item.codigo] = item.quantidade_referencia
-      return { index, valor: null, calculo: 'Referência do PDF; fórmula ainda não validada.' }
+      return { index, valor: null, calculo: 'Referência do PDF; fórmula ainda não validada.', ativo: true }
     }
     try {
       const antes = { ...contexto }
       const valor = avaliar(formula, contexto)
       contexto[item.codigo] = valor
-      return { index, valor, calculo: mostrarCalculo(formula, antes) }
+      return { index, valor, calculo: mostrarCalculo(formula, antes), ativo: true }
     } catch (e) {
-      return { index, valor: null, calculo: formula, erro: e instanceof Error ? e.message : 'Fórmula inválida' }
+      return { index, valor: null, calculo: formula, ativo: true, erro: e instanceof Error ? e.message : 'Fórmula inválida' }
     }
   })
 }
