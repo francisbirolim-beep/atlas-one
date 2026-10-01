@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -87,6 +87,20 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
     }
   }
 
+  if (linha === 'L. SUPREMA' && modelo.includes('JANELA DE CORRER 03 FOLHAS')) {
+    const formula = FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA
+    refs.push({
+      id: 'referencia-local-jc3-suprema-moderna',
+      tipologia_id: formula.tipologia_id,
+      configuracao_label: formula.configuracao_label,
+      status: 'referencia_historica',
+      ativo: false,
+      variaveis: formula.variaveis,
+      pecas: formula.pecas,
+      vidro: formula.vidro,
+      acessorios: formula.acessorios || [],
+    })
+  }
 
   if (linha.includes('SUPREMA') && modelo.includes('PORTA DE GIRO 01 FOLHA')) {
     const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
