@@ -1,0 +1,73 @@
+name: TEMP Audit Proxima Tipologia Suprema
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: ${{ github.head_ref == 'audit/wvetro-proxima-tipologia-suprema' }}
+    name: Auditoria read-only próxima tipologia
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build DB URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_PASSWORD:-}"
+          test -n "${SUPABASE_PROJECT_ID:-}"
+          DB_URL=$(python - <<'PY'
+          import os, urllib.parse
+          p=os.environ['SUPABASE_PROJECT_ID']
+          pw=urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{p}:{pw}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+      - name: Rank Suprema references
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== TOP REFERENCIAS SUPREMA POR OCORRENCIA ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "
+            select
+              modelo_raw,
+              linha_raw,
+              ocorrencias,
+              tipologia_atlas_id,
+              status_mapeamento
+            from public.wvetro_referencias_tipologias
+            where upper(coalesce(linha_raw,'')) like '%SUPREMA%'
+            order by ocorrencias desc nulls last, modelo_raw
+            limit 60;
+          "
+          echo '=== NAO COBERTAS PELO COMPARADOR LOCAL ATUAL ==='
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -P pager=off -c "
+            select
+              modelo_raw,
+              ocorrencias,
+              tipologia_atlas_id,
+              status_mapeamento,
+              largura_min_mm,
+              largura_max_mm,
+              altura_min_mm,
+              altura_max_mm
+            from public.wvetro_referencias_tipologias
+            where upper(coalesce(linha_raw,'')) like '%SUPREMA%'
+              and upper(coalesce(modelo_raw,'')) not like '%JANELA DE CORRER 02 FOLHAS%'
+              and upper(coalesce(modelo_raw,'')) not like '%PORTA DE CORRER 03 FOLHAS%'
+              and upper(coalesce(modelo_raw,'')) not like '%JANELA DE CORRER 03 FOLHAS%'
+              and upper(coalesce(modelo_raw,'')) not like '%PORTA DE GIRO 01 FOLHA%'
+              and upper(coalesce(modelo_raw,'')) not like '%MAXIM-AR%'
+            order by ocorrencias desc nulls last, modelo_raw
+            limit 40;
+          "
