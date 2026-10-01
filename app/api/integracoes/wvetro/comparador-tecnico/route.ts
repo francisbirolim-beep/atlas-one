@@ -498,10 +498,18 @@ async function matrizHistorica(req: NextRequest) {
   }
 
   const grupos = new Map<string, Grupo>()
+  const itensVistos = new Set<string>()
   for (const row of rows as any[]) {
     const item = row?.item as WVetroItemTecnico | undefined
     if (!item || typeof item !== 'object') continue
     const assinatura = assinaturaComposicaoWVetro(item)
+    const numeroRegistro = String(row?.numero || '').trim()
+    const itemIdRegistro = String((item as any).Id || '').trim()
+    const chaveOcorrencia = numeroRegistro
+      ? JSON.stringify([numeroRegistro, itemIdRegistro, assinatura.chave])
+      : JSON.stringify([String(row?.chave || ''), itemIdRegistro, assinatura.chave])
+    if (itensVistos.has(chaveOcorrencia)) continue
+    itensVistos.add(chaveOcorrencia)
     const linhaItem = String(item.Linha || '').trim()
     const modeloItem = String(item.Modelo || '').trim()
     const familia = familiaHistorica(item)
