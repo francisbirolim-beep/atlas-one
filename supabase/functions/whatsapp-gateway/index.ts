@@ -174,6 +174,209 @@ async function appendEvent(
   });
   if (error) throw error;
 }
+function categoriaPreferida(preferencias: any, categoria: string) {
+  if (categoria === "tarefas") return preferencias?.tarefas !== false;
+  if (categoria === "agenda") return preferencias?.agenda !== false;
+  if (categoria === "chat") return preferencias?.chat !== false;
+  return preferencias?.operacao !== false;
+}
+
+function horarioLocal(timeZone: string) {
+  const partes = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hora = Number(partes.find((p) => p.type === "hour")?.value || 0);
+  const minuto = Number(partes.find((p) => p.type === "minute")?.value || 0);
+  return hora * 60 + minuto;
+}
+
+function minutosHorario(valor: unknown) {
+  const [h, m] = String(valor || "00:00").split(":");
+  return Number(h || 0) * 60 + Number(m || 0);
+}
+
+function estaEmNaoPerturbe(preferencias: any) {
+  if (!preferencias?.nao_perturbe_ativo) return false;
+  const agora = horarioLocal(preferencias.timezone || "America/Sao_Paulo");
+  const inicio = minutosHorario(preferencias.nao_perturbe_inicio || "22:00");
+  const fim = minutosHorario(preferencias.nao_perturbe_fim || "07:00");
+  if (inicio === fim) return true;
+  return inicio < fim ? agora >= inicio && agora < fim : agora >= inicio || agora < fim;
+}
+
+async function destinatariosWhatsApp(config: any, channel: any, conversation: any) {
+  const ids = new Set<string>();
+  if (conversation.responsavel_id) {
+    ids.add(conversation.responsavel_id);
+    return [...ids];
+  }
+  if (channel.usuario_id) ids.add(channel.usuario_id);
+
+  const [{ data: masters }, { data: permissoes }] = await Promise.all([
+    db.from("usuarios")
+      .select("id")
+      .eq("empresa_id", config.empresa_id)
+      .eq("role", "master"),
+    db.from("atendimento_whatsapp_permissoes")
+      .select("usuario_id,pode_atender,pode_supervisionar")
+      .eq("empresa_id", config.empresa_id)
+      .eq("canal_id", channel.id),
+  ]);
+
+  for (const u of masters || []) if (u.id) ids.add(u.id);
+  for (const p of permissoes || []) {
+    if (p.usuario_id && (p.pode_atender || p.pode_supervisionar)) ids.add(p.usuario_id);
+  }
+  return [...ids];
+}
+
+async function notificarMensagemWhatsApp(config: any, channel: any, conversation: any, body: any, text: string) {
+  const recipients = await destinatariosWhatsApp(config, channel, conversation);
+  if (!recipients.length) return;
+
+  const originId = `${channel.id}:${body.whatsappMessageId || crypto.randomUUID()}`;
+  const titulo = `WhatsApp · ${conversation.contato_nome || conversation.telefone}`;
+  const mensagem = String(text || "Nova mensagem").slice(0, 500);
+
+  const rows = recipients.map((usuarioId) => ({
+    empresa_id: config.empresa_id,
+    usuario_id: usuarioId,
+    categoria: "chat",
+    tipo: "whatsapp_mensagem",
+    titulo,
+    mensagem,
+    href: `/whatsapp?conversaId=${conversation.id}`,
+    origem_tipo: "whatsapp_mensagem",
+    origem_id: originId,
+    push_status: "pendente",
+  }));
+
+  const { error } = await db.from("notificacoes").upsert(rows, {
+    onConflict: "usuario_id,origem_tipo,origem_id",
+    ignoreDuplicates: true,
+  });
+  if (error) console.error("Falha ao criar notificacao WhatsApp:", error.message);
+}
+
+async function proximaNotificacaoPush(config: any) {
+  const limiteTravado = new Date(Date.now() - 5 * 60_000).toISOString();
+  await db.from("notificacoes").update({
+    push_status: "pendente",
+    push_erro: "Reprocessada apos timeout do worker.",
+  })
+    .eq("empresa_id", config.empresa_id)
+    .eq("push_status", "processando")
+    .lt("push_ultimo_em", limiteTravado);
+
+  const { data: notificacao, error } = await db.from("notificacoes")
+    .select("id,usuario_id,categoria,tipo,titulo,mensagem,href,created_at,push_tentativas")
+    .eq("empresa_id", config.empresa_id)
+    .eq("push_status", "pendente")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!notificacao) return null;
+
+  const agora = new Date().toISOString();
+  const { error: lockError } = await db.from("notificacoes").update({
+    push_status: "processando",
+    push_tentativas: Number(notificacao.push_tentativas || 0) + 1,
+    push_ultimo_em: agora,
+    push_erro: null,
+  }).eq("id", notificacao.id).eq("push_status", "pendente");
+  if (lockError) throw lockError;
+
+  const [{ data: preferencias }, { data: assinaturas }] = await Promise.all([
+    db.from("notificacao_preferencias").select("*").eq("usuario_id", notificacao.usuario_id).maybeSingle(),
+    db.from("notificacao_push_assinaturas")
+      .select("id,endpoint,p256dh,auth,dispositivo_nome")
+      .eq("usuario_id", notificacao.usuario_id)
+      .eq("empresa_id", config.empresa_id)
+      .eq("ativo", true),
+  ]);
+
+  if (preferencias?.push_ativo === false || !categoriaPreferida(preferencias, notificacao.categoria)) {
+    await db.from("notificacoes").update({
+      push_status: "ignorado",
+      push_erro: preferencias?.push_ativo === false ? "Push desativado pelo usuario." : "Categoria silenciada pelo usuario.",
+      push_ultimo_em: agora,
+    }).eq("id", notificacao.id);
+    return { skipped: true };
+  }
+
+  if (!assinaturas?.length) {
+    await db.from("notificacoes").update({
+      push_status: "ignorado",
+      push_erro: "Nenhum dispositivo inscrito para Web Push.",
+      push_ultimo_em: agora,
+    }).eq("id", notificacao.id);
+    return { skipped: true };
+  }
+
+  const silent = preferencias?.som_ativo !== true || estaEmNaoPerturbe(preferencias);
+  return {
+    notificacao: { ...notificacao, silent },
+    assinaturas,
+  };
+}
+
+async function confirmarNotificacaoPush(config: any, body: any) {
+  const notificationId = String(body.notificationId || "");
+  if (!notificationId) throw new Error("Notificacao de push nao informada.");
+
+  const { data: notificacao } = await db.from("notificacoes")
+    .select("id,push_tentativas")
+    .eq("id", notificationId)
+    .eq("empresa_id", config.empresa_id)
+    .maybeSingle();
+  if (!notificacao) throw new Error("Notificacao de push nao encontrada.");
+
+  const resultados = Array.isArray(body.resultados) ? body.resultados : [];
+  let sucessos = 0;
+  for (const resultado of resultados) {
+    const assinaturaId = String(resultado?.assinaturaId || "");
+    if (!assinaturaId) continue;
+    if (resultado?.sucesso === true) {
+      sucessos += 1;
+      await db.from("notificacao_push_assinaturas").update({
+        erro_count: 0,
+        ultimo_erro: null,
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", assinaturaId).eq("empresa_id", config.empresa_id);
+    } else {
+      const statusCode = Number(resultado?.statusCode || 0);
+      const expirada = statusCode === 404 || statusCode === 410;
+      const { data: atual } = await db.from("notificacao_push_assinaturas")
+        .select("erro_count")
+        .eq("id", assinaturaId)
+        .eq("empresa_id", config.empresa_id)
+        .maybeSingle();
+      await db.from("notificacao_push_assinaturas").update({
+        ativo: expirada ? false : true,
+        erro_count: Number(atual?.erro_count || 0) + 1,
+        ultimo_erro: String(resultado?.erro || `HTTP ${statusCode || "?"}`).slice(0, 500),
+        updated_at: new Date().toISOString(),
+      }).eq("id", assinaturaId).eq("empresa_id", config.empresa_id);
+    }
+  }
+
+  const tentativas = Number(notificacao.push_tentativas || 0);
+  const status = sucessos > 0 ? "enviado" : tentativas < 3 ? "pendente" : "erro";
+  await db.from("notificacoes").update({
+    push_status: status,
+    push_enviado_em: sucessos > 0 ? new Date().toISOString() : null,
+    push_erro: sucessos > 0 ? null : "Nao foi possivel entregar o push em nenhum dispositivo.",
+    push_ultimo_em: new Date().toISOString(),
+  }).eq("id", notificationId).eq("empresa_id", config.empresa_id);
+
+  return { ok: true, status, sucessos };
+}
+
 async function conversationForInbound(config: any, channel: any, telefone: string, nome: string | null, texto: string | null) {
   const { data: existing } = await db
     .from("atendimento_conversas")
@@ -242,6 +445,11 @@ Deno.serve(async (req) => {
     if (!config) return reply({ error: "Gateway nao autorizado." }, 401);
 
     const url = new URL(req.url);
+
+    if (req.method === "GET" && url.searchParams.get("mode") === "push-pending") {
+      const item = await proximaNotificacaoPush(config);
+      return reply({ ok: true, item });
+    }
 
     if (req.method === "GET" && url.searchParams.get("mode") === "channels") {
       const { data, error } = await db
@@ -316,6 +524,12 @@ Deno.serve(async (req) => {
     if (req.method !== "POST") return reply({ error: "Metodo invalido." }, 405);
     const body = await req.json();
     const type = String(body?.type || "");
+
+    if (type === "push_sent") {
+      const resultado = await confirmarNotificacaoPush(config, body);
+      return reply(resultado);
+    }
+
     const bodyChannelId = String(body?.channelId || "");
     const channel = await getChannel(config.empresa_id, bodyChannelId);
     if (!channel) return reply({ error: "Canal nao encontrado." }, 404);
@@ -440,6 +654,8 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq("id", conversation.id);
       if (convError) throw convError;
+
+      await notificarMensagemWhatsApp(config, channel, conversation, body, text);
 
       await appendEvent(
         config.empresa_id,
