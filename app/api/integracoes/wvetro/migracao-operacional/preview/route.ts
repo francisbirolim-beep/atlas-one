@@ -555,6 +555,8 @@ export async function GET(req: NextRequest) {
         },
       )
 
+      ;(resumo as any).referenciasPendentesDistintas = referenciasPendentesDistintas
+
       const opcoes = {
         origens: Array.from(new Set(classificados.map(item => item.origemRecurso))).sort(),
         relacoes: Array.from(new Set(classificados.map(item => item.tipoRelacao))).sort(),
