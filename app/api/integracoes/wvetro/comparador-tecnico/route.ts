@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO } from '@/lib/wvetroComparadorFixtures'
+import {
+  FIXTURE_PC2_SUPREMA_GENERICA_ATLAS,
+  FIXTURE_PC2_SUPREMA_WVETRO,
+  FIXTURE_PC3_SUPREMA_GENERICA_ATLAS,
+  FIXTURE_PC3_SUPREMA_WVETRO,
+} from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -185,21 +190,26 @@ export async function GET(req: NextRequest) {
   const modo = String(req.nextUrl.searchParams.get('modo') || 'fixture')
   try {
     if (modo === 'fixture') {
-      const resultado = compararItemWVetroComFormulaAtlas({
-        item: FIXTURE_PC2_SUPREMA_WVETRO,
-        formula: FIXTURE_PC2_SUPREMA_ATLAS,
-      })
+      const fixture = String(req.nextUrl.searchParams.get('fixture') || 'pc2').toLowerCase()
+      const pc3 = fixture === 'pc3'
+      const item = pc3 ? FIXTURE_PC3_SUPREMA_WVETRO : FIXTURE_PC2_SUPREMA_WVETRO
+      const formula = pc3 ? FIXTURE_PC3_SUPREMA_GENERICA_ATLAS : FIXTURE_PC2_SUPREMA_GENERICA_ATLAS
+      const inferencia = inferirOpcoesTecnicasWVetro(item, formula)
+      const resultado = compararItemWVetroComFormulaAtlas({ item, formula, opcoes: inferencia.opcoes })
       return NextResponse.json({
         ok: true,
         modo: 'fixture',
-        origem: 'Amostra técnica sanitizada do histórico W.Vetro',
+        origem: `Amostra técnica sanitizada do histórico W.Vetro · ${pc3 ? 'PC3 Suprema' : 'PC2 Suprema'}`,
         resultado,
         formula: {
-          id: 'fixture-pc2-suprema',
-          configuracao_label: FIXTURE_PC2_SUPREMA_ATLAS.configuracao_label,
-          status: 'snapshot_validada',
-          ativo: true,
+          id: pc3 ? 'fixture-pc3-suprema-candidata' : 'fixture-pc2-suprema-candidata',
+          configuracao_label: formula.configuracao_label,
+          status: 'candidata_historica',
+          ativo: false,
         },
+        variaveis: formula.variaveis,
+        opcoes: inferencia.opcoes,
+        inferencias: inferencia.inferencias,
         formulasDisponiveis: [],
       })
     }
