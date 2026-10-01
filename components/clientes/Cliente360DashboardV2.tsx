@@ -48,6 +48,23 @@ type HistoricoWVetroComercial = {
   status_vinculo?:string|null
   itens?: Array<{ id?:string; codigo?:string; nome?:string; quantidade?:string; ambiente?:string; valor_total?:string; valor_total_alterado?:string }> | null
 }
+type HistoricoWVetroFinanceiro = {
+  id:string
+  titulo_id_wvetro:string
+  fonte_wvetro:'titulos'|'titulos_baixados'
+  tipo_titulo?:string|null
+  origem_titulo?:string|null
+  documento?:string|null
+  orcamento_wvetro?:string|null
+  data_emissao?:string|null
+  data_vencimento?:string|null
+  data_baixa?:string|null
+  valor_titulo?:number|null
+  valor_recebido?:number|null
+  valor_saldo?:number|null
+  centro_custo_descricao?:string|null
+  status_vinculo?:string|null
+}
 type Assistencia = { id:string; numero?:string|null; created_at:string; descricao_problema?:string|null; status?:string|null; obra_id?:string|null }
 type Medicao = { id:string; created_at:string; status_operacional?:string|null; obra_id?:string|null; orcamento_id?:string|null }
 type Compra = { id:string; created_at:string; descricao?:string|null; categoria?:string|null; quantidade?:number|null; unidade?:string|null; status?:string|null; prioridade?:string|null; obra_id?:string|null; obra_nome?:string|null }
@@ -74,6 +91,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [obras,setObras]=useState<ObraCliente360[]>([])
   const [orcamentos,setOrcamentos]=useState<Orcamento[]>([])
   const [wvetroHistorico,setWvetroHistorico]=useState<HistoricoWVetroComercial[]>([])
+  const [wvetroFinanceiro,setWvetroFinanceiro]=useState<HistoricoWVetroFinanceiro[]>([])
   const [assistencias,setAssistencias]=useState<Assistencia[]>([])
   const [medicoes,setMedicoes]=useState<Medicao[]>([])
   const [compras,setCompras]=useState<Compra[]>([])
@@ -101,11 +119,12 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   useEffect(()=>{void carregar(); void usuarioAtual().then(setUsuario)},[clienteId])
   async function carregar(){
     setCarregando(true);setErro('')
-    const [c,os,orc,wvh,ass,med,comp,int,cr,rec,docs]=await Promise.all([
+    const [c,os,orc,wvh,wvf,ass,med,comp,int,cr,rec,docs]=await Promise.all([
       supabase.from('clientes').select('*').eq('id',clienteId).maybeSingle(),
       listarObrasCliente(clienteId),
       supabase.from('orcamentos').select('id,numero,created_at,valor_estimado,status,obra_id,revisao_versao,revisao_atual,revisao_tipo,revisao_motivo').eq('cliente_id',clienteId).or('modo_entrada.is.null,modo_entrada.neq.balcao').order('created_at',{ascending:false}),
       supabase.from('wvetro_historico_comercial').select('id,tipo_registro,chave_externa,numero_wvetro,situacao_wvetro,data_emissao,data_venda,valor_total,metodo_identidade,status_vinculo,itens').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_venda',{ascending:false,nullsFirst:false}).order('data_emissao',{ascending:false,nullsFirst:false}),
+      supabase.from('wvetro_historico_financeiro').select('id,titulo_id_wvetro,fonte_wvetro,tipo_titulo,origem_titulo,documento,orcamento_wvetro,data_emissao,data_vencimento,data_baixa,valor_titulo,valor_recebido,valor_saldo,centro_custo_descricao,status_vinculo').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_vencimento',{ascending:false,nullsFirst:false}),
       supabase.from('assistencias').select('id,numero,created_at,descricao_problema,status,obra_id').eq('cliente_id',clienteId).order('created_at',{ascending:false}),
       supabase.from('medicoes_finais').select('id,created_at,status_operacional,obra_id,orcamento_id').eq('cliente_id',clienteId).order('created_at',{ascending:false}),
       supabase.from('compras_necessidades').select('id,created_at,descricao,categoria,quantidade,unidade,status,prioridade,obra_id,obra_nome').eq('cliente_id',clienteId).order('created_at',{ascending:false}),
@@ -114,7 +133,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     ])
     if(c.error||!c.data){setErro('Cliente não encontrado.');setCarregando(false);return}
     const r=rec||[]; const alo=await listarAlocacoesCliente(r.map(x=>x.id))
-    setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]) as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
+    setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]) as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
   }
 
   const obraPorId=useMemo(()=>Object.fromEntries(obras.map(o=>[o.id,o])),[obras])
@@ -133,7 +152,15 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     ...assistencias.map(a=>({id:`a-${a.id}`,data:a.created_at,titulo:`Assistência ${a.numero?`#${a.numero}`:''}`,detalhe:a.descricao_problema||status(a.status)})),
     ...recebimentos.map(r=>({id:`r-${r.id}`,data:r.created_at,titulo:`Recebimento ${moeda(r.valor)}`,detalhe:r.forma||''})),
     ...interacoes.map(i=>({id:`i-${i.id}`,data:i.created_at,titulo:status(i.tipo),detalhe:i.descricao||i.usuario_nome||''})),
-  ].sort((a,b)=>new Date(b.data).getTime()-new Date(a.data).getTime()).slice(0,60),[orcamentos,obras,assistencias,recebimentos,interacoes])
+    ...wvetroHistorico
+      .filter(h=>h.data_venda||h.data_emissao)
+      .map(h=>({
+        id:`wv-${h.id}`,
+        data:String(h.data_venda||h.data_emissao),
+        titulo:`${h.tipo_registro==='orcamento_historico'?'Orçamento':'Venda'} W.Vetro #${h.numero_wvetro||'—'}`,
+        detalhe:`Histórico importado · ${moeda(h.valor_total)}`,
+      })),
+  ].sort((a,b)=>new Date(b.data).getTime()-new Date(a.data).getTime()).slice(0,60),[orcamentos,obras,assistencias,recebimentos,interacoes,wvetroHistorico])
 
   async function salvarObs(){ if(!cliente)return;setSalvando(true);const {error}=await supabase.from('clientes').update({observacoes:obs.trim()||null,updated_at:new Date().toISOString()}).eq('id',cliente.id);setSalvando(false);if(error)setErro(error.message);else await carregar() }
   async function salvarRecebimento(){ if(!cliente)return;const valor=Number(recebimentoForm.valor.replace(',','.'));setSalvando(true);const r=await registrarRecebimentoCliente({clienteId:cliente.id,clienteNome:cliente.nome,valor,dataRecebimento:recebimentoForm.data,forma:recebimentoForm.forma,referencia:recebimentoForm.referencia,observacoes:recebimentoForm.observacoes,obraId:recebimentoForm.obraId||null});setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao registrar recebimento.');return}setModalRecebimento(false);setRecebimentoForm({valor:'',forma:'pix',data:new Date().toISOString().slice(0,10),obraId:'',referencia:'',observacoes:''});await carregar() }
@@ -183,7 +210,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
         {aba==='obras'&&<Box titulo="Obras do cliente" acao={<button onClick={()=>setModalObra(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Nova obra</button>}><div className="grid gap-3 md:grid-cols-2">{obras.map(o=><div key={o.id} className="rounded-xl border p-4"><div className="flex justify-between"><b>{o.nome}</b><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{status(o.status)}</span></div><p className="mt-2 text-xs text-slate-500">Obra #{o.numero}{o.cidade?` · ${o.cidade}`:''} · previsão {dataBR(o.previsao_entrega)}</p></div>)}</div></Box>}
 
-        {aba==='financeiro'&&<div className="space-y-5"><Box titulo="Contas a receber / parcelas" acao={<button onClick={()=>setModalRecebimento(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||`Parcela ${c.parcela}/${c.total_parcelas}`}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(saldo(c))}</td><td>{status(c.status)}</td></tr>)}</tbody></table></div></Box><Box titulo="Recebimentos"><div className="space-y-2">{recebimentos.map(r=><div key={r.id} className="rounded-xl border p-3"><b>{moeda(r.valor)} · {r.forma||'—'}</b><p className="text-xs text-slate-500">{dataBR(r.data_recebimento)}{r.referencia?` · ${r.referencia}`:''}</p></div>)}</div></Box></div>}
+        {aba==='financeiro'&&<div className="space-y-5"><Box titulo="Contas a receber / parcelas" acao={<button onClick={()=>setModalRecebimento(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||`Parcela ${c.parcela}/${c.total_parcelas}`}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(saldo(c))}</td><td>{status(c.status)}</td></tr>)}</tbody></table></div></Box><Box titulo="Recebimentos"><div className="space-y-2">{recebimentos.map(r=><div key={r.id} className="rounded-xl border p-3"><b>{moeda(r.valor)} · {r.forma||'—'}</b><p className="text-xs text-slate-500">{dataBR(r.data_recebimento)}{r.referencia?` · ${r.referencia}`:''}</p></div>)}</div></Box><Box titulo="Histórico financeiro W.Vetro"><div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">Consulta histórica isolada. Estes valores não entram em Total vendido, Total recebido, A receber, Vencido, fluxo de caixa ou contas oficiais do Atlas.</div><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Tipo</th><th>Emissão</th><th>Vencimento</th><th>Baixa</th><th>Valor</th><th>Recebido</th><th>Saldo histórico</th></tr></thead><tbody>{wvetroFinanceiro.map(t=><tr key={t.id} className="border-b"><td className="py-3"><div className="font-medium">{t.documento||`W.Vetro #${t.titulo_id_wvetro}`}</div>{t.orcamento_wvetro&&<div className="text-[11px] text-slate-400">Orçamento W.Vetro #{t.orcamento_wvetro}</div>}</td><td>{t.tipo_titulo||'—'}</td><td>{dataBR(t.data_emissao)}</td><td>{dataBR(t.data_vencimento)}</td><td>{dataBR(t.data_baixa)}</td><td>{moeda(t.valor_titulo)}</td><td>{moeda(t.valor_recebido)}</td><td>{moeda(t.valor_saldo)}</td></tr>)}{!wvetroFinanceiro.length&&<tr><td colSpan={8} className="py-6 text-center text-sm text-slate-400">Nenhum título histórico W.Vetro vinculado com segurança a este cliente.</td></tr>}</tbody></table></div></Box></div>}
 
         {aba==='medicoes'&&<Box titulo="Medida Final" acao={<button onClick={()=>setModalMedidaFinal(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white"><Plus size={13}/>Nova Medida Final</button>}><div className="space-y-2">{medicoes.map(m=><Link href={`/producao/medicao-final/${m.id}`} key={m.id} className="flex justify-between rounded-xl border p-3 hover:border-brand-navy"><div><b>Medida Final {dataBR(m.created_at)}</b><p className="text-xs text-slate-500">{m.obra_id&&obraPorId[m.obra_id]?obraPorId[m.obra_id].nome:'Sem obra vinculada'}</p></div><span className="rounded-full bg-cyan-50 px-2 py-1 text-xs text-cyan-700">{status(m.status_operacional)}</span></Link>)}{!medicoes.length&&<p className="text-sm text-slate-400">Nenhuma Medida Final. Clique em Nova Medida Final para começar.</p>}</div></Box>}
 
