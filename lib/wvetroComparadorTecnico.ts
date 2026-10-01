@@ -75,6 +75,9 @@ export function inferirOpcoesTecnicasWVetro(
     inferencias.push({ chave, valor, origem, evidencia })
   }
 
+  const opcaoCompativel = (opcoesPermitidas: string[], candidatos: string[]) =>
+    candidatos.find(candidato => opcoesPermitidas.includes(candidato)) || ''
+
   for (const variavel of formula.variaveis || []) {
     const override = overrides[variavel.chave]
     if (override != null && String(override).trim() !== '') {
@@ -86,8 +89,16 @@ export function inferirOpcoesTecnicasWVetro(
     let evidencia = ''
     switch (variavel.chave) {
       case 'contramarco':
-        valor = codigosPerfil.has('CM200') ? 'cm200' : 'sem'
-        evidencia = codigosPerfil.has('CM200') ? 'Perfil CM200 presente.' : 'Nenhum perfil CM200 presente na composição.'
+        if (codigosPerfil.has('CM200')) {
+          valor = opcaoCompativel(variavel.opcoes, ['cm200'])
+          evidencia = 'Perfil CM200 presente.'
+        } else if (codigosPerfil.has('CM060')) {
+          valor = opcaoCompativel(variavel.opcoes, ['cm060'])
+          evidencia = 'Perfil CM060 presente.'
+        } else {
+          valor = opcaoCompativel(variavel.opcoes, ['sem', 'nao'])
+          evidencia = 'Nenhum perfil de contramarco CM200/CM060 presente na composição.'
+        }
         break
       case 'arremate':
         valor = codigosPerfil.has('MP347') ? 'interno' : 'sem'
@@ -104,14 +115,15 @@ export function inferirOpcoesTecnicasWVetro(
           valor = 'concha'; evidencia = 'Acessório de concha identificado.'
         }
         break
-      case 'mao_amigo_largura': {
+      case 'mao_amigo_largura':
+      case 'perfil_mao_amigo': {
         const largos = ['SU243','SU242','SU289','SU290']
         valor = largos.some(x => codigosPerfil.has(x)) ? 'largo' : 'comum'
         evidencia = valor === 'largo' ? 'Código de mão-de-amigo larga presente.' : 'Composição usa códigos de mão-de-amigo comum.'
         break
       }
       case 'reforco_mao_amigo': {
-        const pares: Array<[string,string,string]> = [
+        const pares: Array<[string,string,'interno_externo'|'interno'|'externo'|'sem_reforco']> = [
           ['SU289','SU290','interno_externo'],
           ['SU289','SU242','interno'],
           ['SU243','SU290','externo'],
@@ -123,7 +135,13 @@ export function inferirOpcoesTecnicasWVetro(
         ]
         const achado = pares.find(([a,b]) => codigosPerfil.has(a) && codigosPerfil.has(b))
         if (achado) {
-          valor = achado[2]
+          const canonico = achado[2]
+          const candidatos = canonico === 'interno_externo'
+            ? ['interno_externo', 'interno_e_externo']
+            : canonico === 'sem_reforco'
+              ? ['sem_reforco', 'sem']
+              : [canonico]
+          valor = opcaoCompativel(variavel.opcoes, candidatos)
           evidencia = `Par ${achado[0]} + ${achado[1]} presente.`
         }
         break
