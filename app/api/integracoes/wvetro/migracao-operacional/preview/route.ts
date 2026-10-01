@@ -524,6 +524,7 @@ export async function GET(req: NextRequest) {
         linhasNeon,
         coresNeon,
         vidrosNeon,
+        vidrosHistoricoStats,
         pendenciasTecnicas,
         linhasAtlas,
         coresAtlas,
@@ -550,6 +551,44 @@ export async function GET(req: NextRequest) {
             where recurso='vidros'
               and nullif(trim(payload->>'CorNome'),'') is not null
             order by 1
+          `,
+          sql`
+            with docs as (
+              select recurso,chave_externa_canonica as documento,payload
+              from wvetro_migracao.raw_canonico
+              where recurso in ('orcamentos','pedidos')
+            ),
+            itens as (
+              select d.documento,i
+              from docs d
+              cross join lateral jsonb_array_elements(coalesce(d.payload->'Itens','[]'::jsonb)) i
+            ),
+            vidros as (
+              select
+                upper(regexp_replace(trim(coalesce(v->>'Especificacao','')),'\\s+',' ','g')) as especificacao,
+                documento,
+                coalesce(nullif(v->>'M2Arred','')::numeric,nullif(v->>'M2','')::numeric,0) as area_m2,
+                coalesce(nullif(v->>'CustoVlr','')::numeric,0) as custo
+              from itens
+              cross join lateral jsonb_array_elements(coalesce(i->'Vidros','[]'::jsonb)) v
+              where nullif(trim(v->>'Especificacao'),'') is not null
+            ),
+            validos as (
+              select *,
+                case when area_m2>0 and custo>0 then custo/area_m2 else null end as custo_m2
+              from vidros
+            )
+            select
+              especificacao,
+              count(*)::int as ocorrencias,
+              count(distinct documento)::int as documentos,
+              round(sum(area_m2),3) as area_m2,
+              count(*) filter (where custo_m2 is not null)::int as amostras_custo,
+              round(min(custo_m2),2) as custo_m2_min,
+              round(percentile_cont(0.5) within group (order by custo_m2)::numeric,2) as custo_m2_mediana,
+              round(max(custo_m2),2) as custo_m2_max
+            from validos
+            group by especificacao
           `,
           sql`
             select chave_externa,motivo,contexto,status
@@ -645,6 +684,11 @@ export async function GET(req: NextRequest) {
       )
       const nomesVidrosNeon = new Set(
         (vidrosNeon || []).map((item: any) => normalizar(item.nome)).filter(Boolean),
+      )
+      const estatisticasVidros = new Map(
+        (vidrosHistoricoStats || [])
+          .map((item: any) => [normalizar(item.especificacao), item] as const)
+          .filter(([nome]) => !!nome),
       )
       const catalogoVidros = new Map<string, any>()
       for (const item of catalogoVidrosAtlas.data || []) {
@@ -745,6 +789,9 @@ export async function GET(req: NextRequest) {
           area && area > 0 && custoAmostra != null && custoAmostra > 0
             ? Number((custoAmostra / area).toFixed(4))
             : null
+        const estatistica: any = estatisticasVidros.get(nome)
+        const historicoCustoMediana =
+          estatistica?.custo_m2_mediana == null ? null : Number(estatistica.custo_m2_mediana)
 
         return {
           nome,
@@ -762,9 +809,19 @@ export async function GET(req: NextRequest) {
           ncm: String(catalogoApi.CorNCM || referencia?.ncm || '').trim() || null,
           espessuraMm: numeroSeguro(catalogoApi.CorEspessura),
           pesoKgM2: numeroSeguro(catalogoApi.CorVidroPeso),
-          custoReferenciaM2,
+          custoReferenciaM2: historicoCustoMediana ?? custoReferenciaM2,
           custoReferenciaFonte:
-            custoReferenciaM2 == null ? null : 'amostra_historica_wvetro',
+            historicoCustoMediana != null
+              ? 'mediana_historica_wvetro'
+              : custoReferenciaM2 == null
+                ? null
+                : 'amostra_historica_wvetro',
+          historicoDocumentos: Number(estatistica?.documentos || 0),
+          historicoAreaM2: estatistica?.area_m2 == null ? null : Number(estatistica.area_m2),
+          historicoAmostrasCusto: Number(estatistica?.amostras_custo || 0),
+          historicoCustoM2Min: estatistica?.custo_m2_min == null ? null : Number(estatistica.custo_m2_min),
+          historicoCustoM2Mediana: historicoCustoMediana,
+          historicoCustoM2Max: estatistica?.custo_m2_max == null ? null : Number(estatistica.custo_m2_max),
         }
       }).sort((a: any, b: any) =>
         Number(b.ocorrencias || 0) - Number(a.ocorrencias || 0) ||
