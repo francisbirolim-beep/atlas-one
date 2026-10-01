@@ -574,7 +574,9 @@ async function matrizHistorica(req: NextRequest) {
     ok: true,
     modo: 'matriz',
     filtros: { linha, modelo, limite },
-    totalItens: rows.length,
+    totalItens: itensVistos.size,
+    totalLinhasLidas: rows.length,
+    truncado: rows.length >= limite,
     totalAssinaturas: assinaturas.length,
     assinaturas,
   })
