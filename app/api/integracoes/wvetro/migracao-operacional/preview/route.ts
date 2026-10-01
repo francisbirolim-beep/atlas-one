@@ -1305,6 +1305,73 @@ export async function GET(req: NextRequest) {
         `
         resumoNeon = rows[0] || null
 
+        const [projetosPorLote, lotesHistoricos] = await Promise.all([
+          sql`
+            select
+              payload->>'loteId' as lote_id,
+              count(*)::int as projetos
+            from wvetro_migracao.raw_canonico
+            where recurso='producao_projeto'
+              and nullif(payload->>'loteId','') is not null
+            group by payload->>'loteId'
+          `,
+          supabaseAdmin
+            .from('wvetro_historico_operacional')
+            .select('chave_externa,cliente_id,status_vinculo')
+            .eq('empresa_id', usuario.empresa_id)
+            .eq('tipo_registro', 'lote_producao')
+            .eq('somente_historico', true),
+        ])
+
+        if (lotesHistoricos.error) {
+          throw new Error(
+            `Falha ao conferir cobertura histórica dos projetos de produção: ${lotesHistoricos.error.message}`,
+          )
+        }
+
+        const lotesHistoricosMap = new Map(
+          (lotesHistoricos.data || []).map((lote: any) => [
+            String(lote.chave_externa || '').replace(/^lote:/, ''),
+            lote,
+          ]),
+        )
+
+        let projetosRepresentados = 0
+        let projetosClienteSeguro = 0
+        let projetosSemClienteSeguro = 0
+        let lotesCobertos = 0
+        const projetosTotal = (projetosPorLote || []).reduce(
+          (soma: number, item: any) => soma + Number(item.projetos || 0),
+          0,
+        )
+
+        for (const item of projetosPorLote || []) {
+          const lote = lotesHistoricosMap.get(String((item as any).lote_id || ''))
+          const qtd = Number((item as any).projetos || 0)
+          if (!lote) continue
+          lotesCobertos += 1
+          projetosRepresentados += qtd
+          if ((lote as any).status_vinculo === 'seguro' && (lote as any).cliente_id) {
+            projetosClienteSeguro += qtd
+          } else {
+            projetosSemClienteSeguro += qtd
+          }
+        }
+
+        if (historicoAtlas && typeof historicoAtlas === 'object' && !('erro' in (historicoAtlas as any))) {
+          ;(historicoAtlas as any).coberturaProducaoProjetos = {
+            total: projetosTotal,
+            representadosViaLote: projetosRepresentados,
+            comClienteSeguro: projetosClienteSeguro,
+            semClienteSeguro: projetosSemClienteSeguro,
+            lotesCobertos,
+            lotesComProjetos: (projetosPorLote || []).length,
+            completo: projetosTotal > 0 && projetosRepresentados === projetosTotal,
+            estrategia:
+              'Projetos de produção são preservados dentro do JSON projetos dos lotes históricos; não são duplicados como ordens de produção ativas.',
+          }
+        }
+
         const ausentes = await sql`
           select
             origem_recurso,
