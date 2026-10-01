@@ -1,4 +1,4 @@
-import { assinaturaComposicaoWVetro, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, extrairVariantesPortinholaSuprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
@@ -116,6 +116,45 @@ for (const [item, esperado] of familiasPc4) {
   const familia = classificarFamiliaPc4Suprema(item)
   if (familia !== esperado) throw new Error(`Regressão classificação PC4: esperado ${esperado}, obtido ${familia}.`)
 }
+
+const pc1Base = { ...FIXTURE_PC2_SUPREMA_WVETRO, Modelo:'PORTA DE CORRER 01 FOLHA' }
+const familiasPc1 = [
+  [{...pc1Base,Codigo:'*SUCB-PC1-01-EF*',Nome:'PORTA DE CORRER 01 FOLHA | VIDRO | SUPREMA'},'vidro'],
+  [{...pc1Base,Codigo:'*SUCB-PC1-01-EF*',Nome:'PORTA DE CORRER 01 FOLHA SUSPENSA | VIDRO | SUPREMA SEM CONTRAMARCO'},'vidro_suspensa'],
+  [{...pc1Base,Codigo:'*SUCB-PC1-04-EF*',Nome:'PORTA DE CORRER 01 FOLHA | LAMBRI | SUPREMA'},'lambri'],
+  [{...pc1Base,Codigo:'*SUCB-PC1-04-EF*',Nome:'PORTA DE CORRER 01 FOLHA SUSPENSA | LAMBRI | SUPREMA SEM CONTRAMARCO'},'lambri_suspensa'],
+  [{...pc1Base,Codigo:'*SUCB-PC1-03-EF',Nome:'PORTA DE CORRER 01 FOLHA | VENEZIANA | SUPREMA'},'veneziana'],
+  [{...pc1Base,Codigo:'*SUCB-PC1-02-EF',Nome:'PORTA DE CORRER 01 FOLHA | VIDRO SUPERIOR E VENEZIANA INFERIOR VENTILADA | SUPREMA'},'mista_vidro_veneziana'],
+  [{...pc1Base,Codigo:'*SUCB-PC1-01-EF*',Nome:'ESTRUTURA PORTA DE CORRER 01 FOLHA PARA RECEBER O RIPADO DE AMBOS OS LADOS | SUPREMA'},'estrutura_ripado'],
+  [{...pc1Base,Codigo:'SUCB-PC1-04',Nome:'KIT PORTA PRONTA SINCOL SINIKIT - PORTA DE CORRER'},'kit_porta_pronta'],
+] as const
+for (const [item, esperado] of familiasPc1) {
+  const familia = classificarFamiliaPc1Suprema(item)
+  if (familia !== esperado) throw new Error(`Regressão classificação PC1: esperado ${esperado}, obtido ${familia}.`)
+}
+
+const portinholaBase = { ...FIXTURE_PC2_SUPREMA_WVETRO, Modelo:'PORTINHOLA' }
+const familiasPortinhola = [
+  [{...portinholaBase,Codigo:'SUCB-PTA-03',Nome:'PORTINHOLA DE GIRO 01 FOLHA COM VENEZIANA | SUPREMA'},'veneziana_1f'],
+  [{...portinholaBase,Codigo:'SUCB-PTA-04',Nome:'PORTINHOLA DE GIRO 02 FOLHAS COM VENEZIANA VENTILADA | SUPREMA'},'veneziana_2f'],
+  [{...portinholaBase,Codigo:'SUCB-PTA-01',Nome:'PORTINHOLA DE GIRO 01 FOLHA | SUPREMA'},'lisa_1f'],
+] as const
+for (const [item, esperado] of familiasPortinhola) {
+  const familia = classificarFamiliaPortinholaSuprema(item)
+  if (familia !== esperado) throw new Error(`Regressão classificação Portinhola: esperado ${esperado}, obtido ${familia}.`)
+}
+const portinholaDetalhada = extrairVariantesPortinholaSuprema({
+  ...portinholaBase,
+  Codigo:'SUCB-PTA-03',
+  Nome:'PORTINHOLA DE GIRO 01 FOLHA COM VENEZIANA CEGA COM TRANQUETA | SUPREMA SEM CONTRAMARCO E ARREMATE',
+})
+if (
+  portinholaDetalhada.familia !== 'veneziana_1f' ||
+  portinholaDetalhada.veneziana !== 'cega' ||
+  portinholaDetalhada.contramarco !== 'sem' ||
+  portinholaDetalhada.arremate !== 'sem' ||
+  portinholaDetalhada.fechamento !== 'tranqueta'
+) throw new Error(`Regressão variantes Portinhola: ${JSON.stringify(portinholaDetalhada)}`)
 
 const assinaturaBasePc2 = assinaturaComposicaoWVetro(FIXTURE_PC2_SUPREMA_WVETRO)
 const assinaturaMesmoEsqueletoOutraMedida = assinaturaComposicaoWVetro({
