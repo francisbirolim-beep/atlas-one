@@ -606,7 +606,7 @@ export async function GET(req: NextRequest) {
             .select('id,nome,ativo'),
           supabaseAdmin
             .from('wvetro_referencias_vidros')
-            .select('especificacao,status_validacao,produto_atlas_id,ncm,ocorrencias,dados_origem'),
+            .select('id,chave,codigo,especificacao,status_validacao,produto_atlas_id,ncm,ocorrencias,dados_origem'),
           supabaseAdmin
             .from('catalogo_custos_tecnicos')
             .select('id,chave,descricao,unidade,custo_unitario,ativo')
@@ -775,6 +775,7 @@ export async function GET(req: NextRequest) {
         const nome = normalizar(item.nome)
         const referencia: any = referenciasVidros.get(nome)
         const catalogo = catalogoVidros.get(nome)
+        const naoAplicavel = nome === 'SEM VIDRO'
         const origem =
           referencia?.dados_origem && typeof referencia.dados_origem === 'object'
             ? referencia.dados_origem
@@ -795,11 +796,16 @@ export async function GET(req: NextRequest) {
 
         return {
           nome,
-          status: catalogo
-            ? 'homologado_catalogo'
-            : referencia
-              ? 'aguardando_homologacao'
-              : 'pendente_revisao',
+          status: naoAplicavel
+            ? 'nao_aplicavel'
+            : catalogo
+              ? 'homologado_catalogo'
+              : referencia
+                ? 'aguardando_homologacao'
+                : 'pendente_revisao',
+          referenciaId: referencia?.id || null,
+          referenciaChave: referencia?.chave || null,
+          codigo: referencia?.codigo || null,
           statusValidacao: referencia?.status_validacao || null,
           produtoAtlasId: referencia?.produto_atlas_id || null,
           catalogoCustoId: catalogo?.id || null,
@@ -864,9 +870,12 @@ export async function GET(req: NextRequest) {
           vidros: {
             total: vidros.length,
             referenciados: vidros.filter(item => item.status !== 'pendente_revisao').length,
-            pendentes: vidros.filter(item => item.status !== 'homologado_catalogo').length,
+            pendentes: vidros.filter(
+              item => item.status !== 'homologado_catalogo' && item.status !== 'nao_aplicavel',
+            ).length,
             aguardandoHomologacao: vidros.filter(item => item.status === 'aguardando_homologacao').length,
             homologadosCatalogo: vidros.filter(item => item.status === 'homologado_catalogo').length,
+            naoAplicaveis: vidros.filter(item => item.status === 'nao_aplicavel').length,
             vinculadosProdutoAtlas: vidros.filter(item => !!item.produtoAtlasId).length,
             comCustoReferencia: vidros.filter(item => item.custoReferenciaM2 != null).length,
           },
@@ -874,7 +883,9 @@ export async function GET(req: NextRequest) {
         pendencias: {
           linhas: linhas.filter(item => item.status !== 'mapeada'),
           cores: cores.filter(item => item.status === 'pendente_revisao'),
-          vidros: vidros.filter(item => item.status !== 'homologado_catalogo'),
+          vidros: vidros.filter(
+            item => item.status !== 'homologado_catalogo' && item.status !== 'nao_aplicavel',
+          ),
         },
       })
     } catch (error) {
@@ -998,3 +1009,739 @@ export async function GET(req: NextRequest) {
       const total = filtrados.length
       const inicio = (pagina - 1) * limite
       const itens = filtrados.slice(inicio, inicio + limite)
+
+      return NextResponse.json({
+        ok: true,
+        recurso,
+        modo: 'somente-leitura',
+        gravacaoWvetro: false,
+        gravacaoAtlas: false,
+        resumo,
+        opcoes,
+        filtros: { origem, relacao, situacao, confianca, classificacao, busca: busca || null },
+        pagina,
+        limite,
+        total,
+        paginas: Math.max(1, Math.ceil(total / limite)),
+        itens,
+      })
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Falha ao carregar auditoria de relações.'
+      console.error('Erro ao carregar auditoria de relações W.Vetro:', error)
+      return NextResponse.json({ error: mensagem, recurso }, { status: 502 })
+    }
+  }
+
+  if (recurso === 'staging-clientes') {
+    if (!neon.configurado) {
+      return NextResponse.json({ error: 'Staging Neon não configurado.' }, { status: 503 })
+    }
+
+    try {
+      const sql = neonStaging()
+      const rows = await sql`
+        select
+          r.chave_externa,
+          r.payload->>'PessoaId' as pessoa_id,
+          r.payload->>'PessoaCodigo' as pessoa_codigo,
+          coalesce(
+            nullif(r.payload->>'PessoaRazaoSocial', ''),
+            nullif(r.payload->>'PessoaFantasia', ''),
+            nullif(r.payload->>'PessoaResponsavel', ''),
+            ''
+          ) as nome,
+          nullif(r.payload->>'PessoaCPFCNPJ', '') as cpf_cnpj,
+          nullif(r.payload->>'PessoaFone', '') as telefone,
+          nullif(r.payload->>'PessoaCelular', '') as celular,
+          nullif(r.payload->>'PessoaEmail', '') as email,
+          nullif(r.payload->>'CidadeNome', '') as cidade,
+          v.status,
+          v.metodo_match,
+          v.atlas_id::text as atlas_id,
+          v.confianca::text as confianca,
+          v.dados_reconciliacao
+        from wvetro_migracao.raw r
+        join wvetro_migracao.vinculos v
+          on v.recurso = r.recurso
+         and v.chave_externa = r.chave_externa
+         and v.entidade_atlas = 'cliente'
+        where r.recurso = 'pessoas_cliente'
+        order by
+          case
+            when v.status = 'sugerido' and v.metodo_match = 'contato_composto' then 1
+            when v.status = 'sugerido' and v.metodo_match = 'contato_parcial' then 2
+            when v.status = 'vinculado' then 3
+            when v.status = 'divergente' then 4
+            else 5
+          end,
+          nome,
+          r.chave_externa
+      `
+
+      const atlasIds = Array.from(
+        new Set(
+          rows
+            .map((row: any) => String(row.atlas_id || '').trim())
+            .filter(Boolean),
+        ),
+      )
+
+      const nomesAtlas = new Map<string, string>()
+      if (atlasIds.length > 0) {
+        const { data: clientesAtlas, error: clientesErro } = await supabaseAdmin
+          .from('clientes')
+          .select('id,nome')
+          .eq('empresa_id', usuario.empresa_id)
+          .in('id', atlasIds)
+
+        if (clientesErro) throw new Error(`Falha ao resolver clientes Atlas: ${clientesErro.message}`)
+        for (const cliente of clientesAtlas || []) {
+          nomesAtlas.set(String(cliente.id), String(cliente.nome || ''))
+        }
+      }
+
+      const classificar = (row: any) => {
+        if (row.status === 'vinculado') return 'vinculado_seguro'
+        if (row.status === 'divergente') return 'divergente'
+        if (row.status === 'novo') return 'novo'
+        if (row.status === 'sugerido' && row.metodo_match === 'contato_composto') return 'sugestao_forte'
+        if (row.status === 'sugerido') return 'revisao'
+        return 'revisao'
+      }
+
+      const filtro = String(req.nextUrl.searchParams.get('status') || 'todos').trim()
+      const busca = String(req.nextUrl.searchParams.get('busca') || '').trim().toLocaleUpperCase('pt-BR')
+      const pagina = Math.max(1, Number(req.nextUrl.searchParams.get('pagina') || 1) || 1)
+      const limite = Math.min(100, Math.max(10, Number(req.nextUrl.searchParams.get('limite') || 50) || 50))
+
+      const itens = rows.map((row: any) => {
+        const atlasId = String(row.atlas_id || '').trim() || null
+        const dados = row.dados_reconciliacao && typeof row.dados_reconciliacao === 'object'
+          ? row.dados_reconciliacao
+          : {}
+
+        return {
+          chaveExterna: String(row.chave_externa || ''),
+          pessoaId: String(row.pessoa_id || '').trim() || null,
+          pessoaCodigo: String(row.pessoa_codigo || '').trim() || null,
+          nome: String(row.nome || ''),
+          cpfCnpj: String(row.cpf_cnpj || '').trim() || null,
+          telefone: String(row.telefone || '').trim() || null,
+          celular: String(row.celular || '').trim() || null,
+          email: String(row.email || '').trim() || null,
+          cidade: String(row.cidade || '').trim() || null,
+          status: classificar(row),
+          clienteAtlasId: atlasId,
+          clienteAtlasNome: atlasId ? nomesAtlas.get(atlasId) || null : null,
+          metodo: String(row.metodo_match || '').trim() || null,
+          confianca: row.confianca == null ? null : Number(row.confianca),
+          motivos: Array.isArray((dados as any).motivos)
+            ? (dados as any).motivos.map((motivo: unknown) => String(motivo))
+            : [],
+        }
+      }).filter((item: any) => {
+        if (filtro !== 'todos' && item.status !== filtro) return false
+        if (!busca) return true
+
+        const textoBusca = [
+          item.nome,
+          item.cpfCnpj,
+          item.telefone,
+          item.celular,
+          item.email,
+          item.cidade,
+          item.clienteAtlasNome,
+          item.pessoaId,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleUpperCase('pt-BR')
+
+        return textoBusca.includes(busca)
+      })
+
+      const total = itens.length
+      const inicio = (pagina - 1) * limite
+      const paginaItens = itens.slice(inicio, inicio + limite)
+
+      return NextResponse.json({
+        ok: true,
+        recurso,
+        modo: 'somente-leitura',
+        gravacaoWvetro: false,
+        gravacaoAtlas: false,
+        filtro,
+        busca: busca || null,
+        pagina,
+        limite,
+        total,
+        paginas: Math.max(1, Math.ceil(total / limite)),
+        itens: paginaItens,
+      })
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Falha ao carregar fila do staging.'
+      console.error('Erro ao carregar fila de clientes W.Vetro no Neon:', error)
+      return NextResponse.json({ error: mensagem, recurso }, { status: 502 })
+    }
+  }
+
+  if (recurso === 'mapa') {
+    let testeNeon: unknown = null
+    let resumoNeon: unknown = null
+    let historicoAtlas: unknown = null
+
+    try {
+      const [
+        comercialTotal,
+        comercialHistorico,
+        comercialClientes,
+        financeiroTotal,
+        financeiroHistorico,
+        financeiroClientes,
+        operacionalTotal,
+        operacionalHistorico,
+        operacionalClientes,
+        suprimentosTotal,
+        suprimentosHistorico,
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_suprimentos')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_suprimentos')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+      ])
+
+      const respostas = [
+        comercialTotal,
+        comercialHistorico,
+        comercialClientes,
+        financeiroTotal,
+        financeiroHistorico,
+        financeiroClientes,
+        operacionalTotal,
+        operacionalHistorico,
+        operacionalClientes,
+        suprimentosTotal,
+        suprimentosHistorico,
+      ]
+
+      const falha = respostas.find(resposta => resposta.error)
+      if (falha?.error) throw new Error(falha.error.message)
+
+      const camada = (
+        total: number | null,
+        historico: number | null,
+        comCliente: number | null,
+      ) => {
+        const totalSeguro = total ?? 0
+        const historicoSeguro = historico ?? 0
+        return {
+          total: totalSeguro,
+          somenteHistorico: historicoSeguro,
+          foraHistorico: Math.max(0, totalSeguro - historicoSeguro),
+          comCliente: comCliente ?? 0,
+        }
+      }
+
+      const camadas = {
+        comercial: camada(comercialTotal.count, comercialHistorico.count, comercialClientes.count),
+        financeiro: camada(financeiroTotal.count, financeiroHistorico.count, financeiroClientes.count),
+        operacional: camada(operacionalTotal.count, operacionalHistorico.count, operacionalClientes.count),
+        suprimentos: camada(suprimentosTotal.count, suprimentosHistorico.count, 0),
+      }
+
+      historicoAtlas = {
+        total:
+          camadas.comercial.total +
+          camadas.financeiro.total +
+          camadas.operacional.total +
+          camadas.suprimentos.total,
+        somenteHistorico:
+          camadas.comercial.somenteHistorico +
+          camadas.financeiro.somenteHistorico +
+          camadas.operacional.somenteHistorico +
+          camadas.suprimentos.somenteHistorico,
+        foraHistorico:
+          camadas.comercial.foraHistorico +
+          camadas.financeiro.foraHistorico +
+          camadas.operacional.foraHistorico +
+          camadas.suprimentos.foraHistorico,
+        comCliente:
+          camadas.comercial.comCliente +
+          camadas.financeiro.comCliente +
+          camadas.operacional.comCliente,
+        camadas,
+      }
+    } catch (error) {
+      historicoAtlas = {
+        erro:
+          error instanceof Error
+            ? error.message
+            : 'Falha ao carregar histórico materializado no Atlas.',
+      }
+    }
+
+    if (neon.configurado) {
+      try {
+        const sql = neonStaging()
+        const rows = await sql`
+          select
+            (select count(*)::int from wvetro_migracao.raw where recurso = 'orcamentos') as orcamentos,
+            (select count(*)::int from wvetro_migracao.raw where recurso = 'pessoas_cliente') as clientes_cl,
+            (select count(*)::int from wvetro_migracao.raw where recurso = 'producao_projeto') as producao_projeto,
+            (select count(*)::int from wvetro_migracao.execucoes where status = 'concluida') as execucoes_concluidas,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'vinculado') as clientes_vinculados,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente'
+                and status = 'sugerido' and metodo_match = 'contato_composto') as sugestoes_fortes,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente'
+                and status = 'sugerido' and metodo_match = 'contato_parcial') as sugestoes_revisao,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'novo') as clientes_novos,
+            (select count(*)::int from wvetro_migracao.vinculos
+              where recurso = 'pessoas_cliente' and entidade_atlas = 'cliente' and status = 'divergente') as clientes_divergentes,
+            (select count(*)::int from wvetro_migracao.auditoria_relacoes) as auditoria_relacoes,
+            (select count(*)::int from wvetro_migracao.auditoria_relacoes where encontrado) as auditoria_encontradas,
+            (select count(*)::int from wvetro_migracao.auditoria_relacoes where not encontrado) as auditoria_ausentes,
+            (
+              select count(*)::int
+              from wvetro_migracao.auditoria_relacoes a
+              where not a.encontrado
+                and not (a.origem_recurso = 'pedidos' and a.tipo_relacao = 'numero_compartilhado')
+                and not (a.origem_recurso = 'titulos_baixados' and a.tipo_relacao = 'titulo_mesmo_id')
+                and coalesce(a.referencia, '') <> '0'
+                and not (
+                  a.destino_recurso = 'orcamentos'
+                  and exists (
+                    select 1
+                    from wvetro_migracao.raw_canonico p
+                    where p.recurso = 'pedidos'
+                      and p.payload->>'Nro' = a.referencia
+                  )
+                )
+                and not (
+                  a.origem_recurso = 'instalacoes'
+                  and a.tipo_relacao = 'projeto_producao'
+                  and exists (
+                    select 1
+                    from wvetro_migracao.auditoria_relacoes lote
+                    where lote.origem_recurso = 'instalacoes'
+                      and lote.origem_chave = a.origem_chave
+                      and lote.tipo_relacao = 'lote_producao'
+                      and lote.encontrado
+                  )
+                )
+                and not (
+                  a.destino_recurso = 'orcamentos'
+                  and nullif(trim(a.referencia), '') is not null
+                  and a.origem_recurso in ('titulos','lotes_producao','producao_projeto','instalacoes')
+                  and a.confianca in ('documental','declarada_payload')
+                )
+            ) as auditoria_pendencias_reais,
+            (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
+        `
+        resumoNeon = rows[0] || null
+
+        const [materializacaoFonte] = await sql`
+          with
+          orc as (
+            select
+              payload->>'Nro' as nro,
+              payload->>'Situacao' as situacao,
+              regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+              upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+              coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+              jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+              coalesce(payload->>'DtVenda','') as dt_venda
+            from wvetro_migracao.raw_canonico
+            where recurso='orcamentos'
+          ),
+          ped as (
+            select
+              payload->>'Nro' as nro,
+              regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+              upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+              coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+              jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+              coalesce(payload->>'DtVenda','') as dt_venda
+            from wvetro_migracao.raw_canonico
+            where recurso='pedidos'
+          ),
+          tit as (
+            select payload->>'TituloId' as id
+            from wvetro_migracao.raw_canonico
+            where recurso='titulos'
+          ),
+          baix as (
+            select payload->>'TituloId' as id
+            from wvetro_migracao.raw_canonico
+            where recurso='titulos_baixados'
+          )
+          select
+            (select count(*)::int from orc where situacao='O') as comercial_orcamentos_abertos,
+            (select count(*)::int from orc where situacao in ('V','F')) as comercial_orcamentos_venda,
+            (select count(*)::int from ped) as comercial_pedidos,
+            (
+              select count(*)::int
+              from orc o
+              join ped p using(nro)
+              where o.nome=p.nome
+                and abs(o.total-p.total)<0.01
+                and o.itens=p.itens
+                and o.dt_venda=p.dt_venda
+                and (
+                  (o.doc<>'' and p.doc<>'' and o.doc=p.doc)
+                  or (o.doc='' and p.doc='')
+                )
+            ) as comercial_duplicacoes_pedido_orcamento,
+            (select count(*)::int from tit) as financeiro_titulos,
+            (
+              select count(*)::int
+              from baix b
+              left join tit t using(id)
+              where t.id is null
+            ) as financeiro_baixas_exclusivas,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='lotes_producao') as operacional_lotes,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='instalacoes') as operacional_instalacoes,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='notas_entrada') as suprimentos_notas,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='itens_nf') as suprimentos_itens,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='estoque_movimentos') as suprimentos_movimentos
+        `
+
+        if (
+          historicoAtlas &&
+          typeof historicoAtlas === 'object' &&
+          !('erro' in (historicoAtlas as any))
+        ) {
+          const fonte = materializacaoFonte as any
+          const esperadoComercial =
+            Number(fonte?.comercial_orcamentos_abertos || 0) +
+            Math.max(
+              0,
+              Number(fonte?.comercial_orcamentos_venda || 0) -
+                Number(fonte?.comercial_duplicacoes_pedido_orcamento || 0),
+            ) +
+            Number(fonte?.comercial_pedidos || 0)
+          const esperadoFinanceiro =
+            Number(fonte?.financeiro_titulos || 0) +
+            Number(fonte?.financeiro_baixas_exclusivas || 0)
+          const esperadoOperacional =
+            Number(fonte?.operacional_lotes || 0) +
+            Number(fonte?.operacional_instalacoes || 0)
+          const esperadoSuprimentos =
+            Number(fonte?.suprimentos_notas || 0) +
+            Number(fonte?.suprimentos_itens || 0) +
+            Number(fonte?.suprimentos_movimentos || 0)
+
+          const materializado = (historicoAtlas as any).camadas || {}
+          const bloco = (
+            esperado: number,
+            atual: number,
+            deduplicados = 0,
+          ) => ({
+            fonteEsperada: esperado,
+            materializados: atual,
+            deduplicados,
+            diferenca: atual - esperado,
+            completo: atual === esperado,
+          })
+
+          const reconciliacaoMaterializacao = {
+            comercial: bloco(
+              esperadoComercial,
+              Number(materializado.comercial?.total || 0),
+              Number(fonte?.comercial_duplicacoes_pedido_orcamento || 0),
+            ),
+            financeiro: bloco(
+              esperadoFinanceiro,
+              Number(materializado.financeiro?.total || 0),
+              Math.max(
+                0,
+                Number(fonte?.financeiro_titulos || 0) +
+                  Number(
+                    (
+                      await sql`
+                        select count(*)::int as qtd
+                        from wvetro_migracao.raw_canonico
+                        where recurso='titulos_baixados'
+                      `
+                    )[0]?.qtd || 0,
+                  ) -
+                  esperadoFinanceiro,
+              ),
+            ),
+            operacional: bloco(
+              esperadoOperacional,
+              Number(materializado.operacional?.total || 0),
+            ),
+            suprimentos: bloco(
+              esperadoSuprimentos,
+              Number(materializado.suprimentos?.total || 0),
+            ),
+          }
+
+          ;(historicoAtlas as any).reconciliacaoMaterializacao = {
+            ...reconciliacaoMaterializacao,
+            completo: Object.values(reconciliacaoMaterializacao).every(
+              (item: any) => item.completo,
+            ),
+          }
+        }
+
+        const [projetosPorLote, lotesHistoricos] = await Promise.all([
+          sql`
+            select
+              payload->>'loteId' as lote_id,
+              count(*)::int as projetos
+            from wvetro_migracao.raw_canonico
+            where recurso='producao_projeto'
+              and nullif(payload->>'loteId','') is not null
+            group by payload->>'loteId'
+          `,
+          supabaseAdmin
+            .from('wvetro_historico_operacional')
+            .select('chave_externa,cliente_id,status_vinculo')
+            .eq('empresa_id', usuario.empresa_id)
+            .eq('tipo_registro', 'lote_producao')
+            .eq('somente_historico', true),
+        ])
+
+        if (lotesHistoricos.error) {
+          throw new Error(
+            `Falha ao conferir cobertura histórica dos projetos de produção: ${lotesHistoricos.error.message}`,
+          )
+        }
+
+        const lotesHistoricosMap = new Map(
+          (lotesHistoricos.data || []).map((lote: any) => [
+            String(lote.chave_externa || '').replace(/^lote:/, ''),
+            lote,
+          ]),
+        )
+
+        let projetosRepresentados = 0
+        let projetosClienteSeguro = 0
+        let projetosSemClienteSeguro = 0
+        let lotesCobertos = 0
+        const projetosTotal = (projetosPorLote || []).reduce(
+          (soma: number, item: any) => soma + Number(item.projetos || 0),
+          0,
+        )
+
+        for (const item of projetosPorLote || []) {
+          const lote = lotesHistoricosMap.get(String((item as any).lote_id || ''))
+          const qtd = Number((item as any).projetos || 0)
+          if (!lote) continue
+          lotesCobertos += 1
+          projetosRepresentados += qtd
+          if ((lote as any).status_vinculo === 'seguro' && (lote as any).cliente_id) {
+            projetosClienteSeguro += qtd
+          } else {
+            projetosSemClienteSeguro += qtd
+          }
+        }
+
+        if (historicoAtlas && typeof historicoAtlas === 'object' && !('erro' in (historicoAtlas as any))) {
+          ;(historicoAtlas as any).coberturaProducaoProjetos = {
+            total: projetosTotal,
+            representadosViaLote: projetosRepresentados,
+            comClienteSeguro: projetosClienteSeguro,
+            semClienteSeguro: projetosSemClienteSeguro,
+            lotesCobertos,
+            lotesComProjetos: (projetosPorLote || []).length,
+            completo: projetosTotal > 0 && projetosRepresentados === projetosTotal,
+            estrategia:
+              'Projetos de produção são preservados dentro do JSON projetos dos lotes históricos; não são duplicados como ordens de produção ativas.',
+          }
+        }
+
+        const ausentes = await sql`
+          select
+            origem_recurso,
+            origem_chave,
+            tipo_relacao,
+            destino_recurso,
+            destino_chave,
+            referencia,
+            encontrado,
+            confianca,
+            regra
+          from wvetro_migracao.auditoria_relacoes
+          where not encontrado
+        `
+
+        const ausentesNormalizados: AuditoriaNormalizada[] = ausentes.map((row: any) => ({
+          origemRecurso: String(row.origem_recurso || ''),
+          origemChave: String(row.origem_chave || ''),
+          tipoRelacao: String(row.tipo_relacao || ''),
+          destinoRecurso: String(row.destino_recurso || ''),
+          destinoChave: String(row.destino_chave || ''),
+          referencia: String(row.referencia || '').trim() || null,
+          encontrado: row.encontrado === true,
+          confianca: String(row.confianca || ''),
+          regra: String(row.regra || ''),
+        }))
+
+        const evidenciasResumo = await carregarEvidenciasAuditoria(usuario.empresa_id, sql)
+        const classificacaoResumo = classificarAuditoria(
+          ausentesNormalizados,
+          evidenciasResumo,
+        )
+
+        if (resumoNeon && typeof resumoNeon === 'object') {
+          ;(resumoNeon as any).auditoria_pendencias_reais =
+            classificacaoResumo.classificados.filter(item => item.requerAtencao).length
+          ;(resumoNeon as any).auditoria_referencias_pendentes_distintas =
+            classificacaoResumo.referenciasPendentesDistintas
+        }
+      } catch (error) {
+        resumoNeon = {
+          erro: error instanceof Error ? error.message : 'Falha ao carregar resumo do staging Neon.',
+        }
+      }
+    }
+
+    if (req.nextUrl.searchParams.get('testarNeon') === '1' && neon.configurado) {
+      try {
+        testeNeon = await testarNeonStaging()
+      } catch (error) {
+        testeNeon = {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Falha ao testar Neon.',
+        }
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      modo: 'somente-leitura',
+      gravacaoWvetro: false,
+      gravacaoAtlas: false,
+      configuracao,
+      staging: {
+        provedor: 'neon',
+        ...neon,
+        teste: testeNeon,
+        resumo: resumoNeon,
+      },
+      historicoAtlas,
+      recursos: WVETRO_MIGRACAO_OPERACIONAL_MAPA,
+    })
+  }
+
+  const mapa = mapaWVetroPorRecurso(recurso)
+  if (!mapa) {
+    return NextResponse.json(
+      {
+        error: 'Recurso inválido.',
+        recursosValidos: WVETRO_MIGRACAO_OPERACIONAL_MAPA.map(item => item.recurso),
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!configuracao.pronto) {
+    return NextResponse.json(
+      {
+        error: 'Credenciais da API W.Vetro não configuradas no ambiente.',
+        configuracao,
+      },
+      { status: 503 },
+    )
+  }
+
+  try {
+    const params = paramsDaUrl(req)
+    if (recurso === 'pessoas' && !params.tipoPessoa) params.tipoPessoa = 'CL'
+
+    const dados = await consultarRecursoOperacionalWVetro(
+      recurso as WVetroOperacionalRecurso,
+      params,
+    )
+    const preview = montarPreview(dados)
+
+    const reconciliacao =
+      recurso === 'pessoas' && req.nextUrl.searchParams.get('reconciliar') === '1'
+        ? await reconciliarPessoasWVetroComClientesAtlas(dados, usuario.empresa_id, {
+            categoriaClienteConfirmada: params.tipoPessoa?.toUpperCase() === 'CL',
+            origemCategoria: params.tipoPessoa ? `Tipopessoa=${params.tipoPessoa}` : null,
+          })
+        : null
+
+    return NextResponse.json({
+      ok: true,
+      recurso,
+      modo: 'somente-leitura',
+      gravacaoWvetro: false,
+      gravacaoAtlas: false,
+      mapa,
+      ...preview,
+      ...(reconciliacao
+        ? {
+            reconciliacao: {
+              regra: 'CPF/CNPJ exato e único é o único vínculo seguro automático nesta fase.',
+              totais: reconciliacao.totais,
+              itens: reconciliacao.itens.slice(0, 100),
+              truncado: reconciliacao.itens.length > 100,
+            },
+          }
+        : {}),
+    })
+  } catch (error) {
+    const mensagem = error instanceof Error ? error.message : 'Erro desconhecido ao consultar W.Vetro.'
+    const status = /Informe|não pode|no máximo|inválido|reconhecido/i.test(mensagem) ? 400 : 502
+    console.error('Erro no preview de migração operacional W.Vetro:', error)
+    return NextResponse.json({ error: mensagem, recurso }, { status })
+  }
+}
