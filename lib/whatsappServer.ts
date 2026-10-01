@@ -31,6 +31,9 @@ export type AtendimentoMensagem = {
   texto?: string | null
   media_url?: string | null
   media_id?: string | null
+  mime_type?: string | null
+  arquivo_nome?: string | null
+  payload?: Record<string, unknown> | null
   whatsapp_message_id?: string | null
   usuario_id?: string | null
   usuario_nome?: string | null
@@ -157,10 +160,69 @@ function atlasTipoMensagem(valor: string | null | undefined) {
     contact: 'contato',
     contacts: 'contato',
     contato: 'contato',
+    reaction: 'reacao',
+    reacao: 'reacao',
     system: 'sistema',
     sistema: 'sistema',
   }
   return mapa[tipo] || 'sistema'
+}
+
+const WHATSAPP_MEDIA_BUCKET = 'whatsapp-midia'
+const WHATSAPP_MEDIA_MAX_BYTES = 50 * 1024 * 1024
+const MIME_MIDIA_ACEITOS = new Set([
+  'image/jpeg','image/png','image/webp','image/heic',
+  'video/mp4','video/quicktime',
+  'audio/webm','audio/mp4','audio/mpeg','audio/ogg','audio/opus','audio/aac',
+  'application/pdf','text/plain','application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+])
+
+function mimeBase(valor: string | null | undefined) {
+  return String(valor || 'application/octet-stream').split(';')[0].trim().toLowerCase()
+}
+
+function nomeArquivoSeguro(valor: string | null | undefined) {
+  const bruto = String(valor || 'arquivo').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  return bruto.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(0, 120) || 'arquivo'
+}
+
+function tipoMidiaPorMime(mime: string, nome?: string | null) {
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.startsWith('audio/')) return 'audio'
+  if (mime.startsWith('video/')) return 'video'
+  if (mime || nome) return 'document'
+  return 'document'
+}
+
+function validarArquivoMidia(mimeType: string | null | undefined, tamanho: number | null | undefined) {
+  const mime = mimeBase(mimeType)
+  const bytes = Number(tamanho || 0)
+  if (bytes <= 0 || !Number.isFinite(bytes)) throw new Error('Arquivo de mídia inválido.')
+  if (bytes > WHATSAPP_MEDIA_MAX_BYTES) throw new Error('O arquivo excede o limite de 50 MB.')
+  if (!MIME_MIDIA_ACEITOS.has(mime)) throw new Error('Tipo de arquivo não permitido no WhatsApp do Atlas.')
+  return { mime, bytes }
+}
+
+async function criarUploadAssinadoMidia(params: {
+  empresaId: string
+  direcao: 'entrada' | 'saida'
+  referencia: string
+  nomeArquivo?: string | null
+  mimeType?: string | null
+  tamanho?: number | null
+}) {
+  const { mime, bytes } = validarArquivoMidia(params.mimeType, params.tamanho)
+  const nome = nomeArquivoSeguro(params.nomeArquivo || `midia-${Date.now()}`)
+  const mes = new Date().toISOString().slice(0, 7)
+  const caminho = `${params.empresaId}/${params.direcao}/${mes}/${params.referencia}/${crypto.randomUUID()}-${nome}`
+  const { data, error } = await supabaseAdmin.storage
+    .from(WHATSAPP_MEDIA_BUCKET)
+    .createSignedUploadUrl(caminho)
+  if (error || !data?.token) throw new Error(error?.message || 'Não foi possível preparar o envio da mídia.')
+  return { path: caminho, token: data.token, signedUrl: data.signedUrl, mimeType: mime, tamanho: bytes }
 }
 
 export function configuracaoMeta() {
@@ -489,6 +551,35 @@ export async function atualizarEstadoGateway(
   if (error) throw error
 }
 
+export async function prepararUploadMidiaGateway(
+  config: ConfigAtendimento,
+  dados: {
+    channelId: string
+    whatsappMessageId?: string | null
+    fileName?: string | null
+    mimeType?: string | null
+    size?: number | null
+  },
+) {
+  const { data: canal } = await supabaseAdmin
+    .from('atendimento_whatsapp_canais')
+    .select('id')
+    .eq('id', dados.channelId)
+    .eq('empresa_id', config.empresa_id)
+    .eq('ativo', true)
+    .maybeSingle()
+  if (!canal) throw new Error('Canal WhatsApp inválido para upload de mídia.')
+
+  return criarUploadAssinadoMidia({
+    empresaId: config.empresa_id,
+    direcao: 'entrada',
+    referencia: dados.whatsappMessageId || dados.channelId,
+    nomeArquivo: dados.fileName,
+    mimeType: dados.mimeType,
+    tamanho: dados.size,
+  })
+}
+
 export async function registrarEntradaGateway(
   config: ConfigAtendimento,
   dados: {
@@ -498,6 +589,10 @@ export async function registrarEntradaGateway(
     tipo?: string | null
     texto?: string | null
     timestamp?: string | null
+    mediaPath?: string | null
+    mimeType?: string | null
+    fileName?: string | null
+    mediaSize?: number | null
     payload?: Record<string, unknown> | null
   },
 ) {
@@ -538,9 +633,16 @@ export async function registrarEntradaGateway(
     direcao: 'entrada',
     tipo: atlasTipoMensagem(dados.tipo),
     texto,
+    media_url: dados.mediaPath || null,
+    mime_type: dados.mimeType ? mimeBase(dados.mimeType) : null,
     whatsapp_message_id: dados.whatsappMessageId || null,
     provider_timestamp: agora,
-    payload: { transporte: 'qr_gateway', ...(dados.payload || {}) },
+    payload: {
+      transporte: 'qr_gateway',
+      fileName: dados.fileName || null,
+      mediaSize: dados.mediaSize || null,
+      ...(dados.payload || {}),
+    },
   })
   if (error) throw error
 
@@ -587,7 +689,25 @@ export async function proximaSaidaGateway(config: ConfigAtendimento) {
     .eq('id', item.id)
     .eq('status', 'pendente')
   if (updateError) throw updateError
-  return item
+
+  const payload = (item.payload && typeof item.payload === 'object') ? { ...item.payload } as Record<string, unknown> : {}
+  const mediaPath = typeof payload.mediaPath === 'string' ? payload.mediaPath : null
+  if (mediaPath) {
+    const { data: signed, error: signedError } = await supabaseAdmin.storage
+      .from(WHATSAPP_MEDIA_BUCKET)
+      .createSignedUrl(mediaPath, 10 * 60)
+    if (signedError || !signed?.signedUrl) {
+      await supabaseAdmin.from('atendimento_fila_saida').update({
+        status: 'erro',
+        erro: signedError?.message || 'Não foi possível gerar URL temporária da mídia.',
+        updated_at: new Date().toISOString(),
+      }).eq('id', item.id)
+      throw new Error(signedError?.message || 'Não foi possível gerar URL temporária da mídia.')
+    }
+    payload.mediaUrl = signed.signedUrl
+  }
+
+  return { ...item, payload }
 }
 
 export async function confirmarSaidaGateway(
@@ -618,6 +738,13 @@ export async function confirmarSaidaGateway(
     })
     .eq('id', fila.id)
   if (error) throw error
+
+  if (dados.sucesso && fila.mensagem_id) {
+    await supabaseAdmin.from('atendimento_mensagens').update({
+      whatsapp_message_id: dados.whatsappMessageId || null,
+      provider_timestamp: agora,
+    }).eq('id', fila.mensagem_id).eq('empresa_id', config.empresa_id)
+  }
 
   await registrarEvento({
     empresaId: config.empresa_id,
@@ -718,11 +845,180 @@ export async function listarMensagensAtendimento(conversaId: string, usuario: Us
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) return null
   const { data, error } = await supabaseAdmin.from('atendimento_mensagens')
-    .select('id,conversa_id,sessao_id,direcao,tipo,texto,media_url,media_id,whatsapp_message_id,usuario_id,usuario_nome,created_at')
+    .select('id,conversa_id,sessao_id,direcao,tipo,texto,media_url,media_id,mime_type,payload,whatsapp_message_id,usuario_id,usuario_nome,created_at')
     .eq('conversa_id', conversaId)
     .order('created_at', { ascending: true })
   if (error) throw error
-  return (data || []) as AtendimentoMensagem[]
+
+  const mensagens = (data || []) as any[]
+  const caminhos = [...new Set(
+    mensagens
+      .map(m => String(m.media_url || ''))
+      .filter(valor => valor && !/^https?:\/\//i.test(valor))
+  )]
+
+  const assinadas = new Map<string, string>()
+  if (caminhos.length) {
+    const { data: urls } = await supabaseAdmin.storage
+      .from(WHATSAPP_MEDIA_BUCKET)
+      .createSignedUrls(caminhos, 60 * 60)
+    for (const item of urls || []) {
+      if (item?.path && item?.signedUrl) assinadas.set(item.path, item.signedUrl)
+    }
+  }
+
+  return mensagens.map(m => ({
+    ...m,
+    media_url: m.media_url
+      ? (/^https?:\/\//i.test(m.media_url) ? m.media_url : assinadas.get(m.media_url) || null)
+      : null,
+    arquivo_nome: m.payload && typeof m.payload === 'object'
+      ? String((m.payload as any).fileName || '') || null
+      : null,
+  })) as AtendimentoMensagem[]
+}
+
+export async function prepararUploadMidiaAtendimento(
+  conversaId: string,
+  arquivo: { nome?: string | null; mimeType?: string | null; tamanho?: number | null },
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, false)
+  if (!conversa) throw new Error('Conversa não disponível para este usuário.')
+  if (!conversa.whatsapp_canal_id) throw new Error('Esta conversa ainda não possui um número de WhatsApp associado.')
+
+  const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  if (!acesso.atender) throw new Error('Você não possui permissão para responder por este canal.')
+  if (usuario.role !== 'master' && conversa.responsavel_id && conversa.responsavel_id !== usuario.id) {
+    throw new Error('Este atendimento está com outro atendente.')
+  }
+
+  return criarUploadAssinadoMidia({
+    empresaId: usuario.empresa_id,
+    direcao: 'saida',
+    referencia: conversa.id,
+    nomeArquivo: arquivo.nome,
+    mimeType: arquivo.mimeType,
+    tamanho: arquivo.tamanho,
+  })
+}
+
+export async function enviarMidiaWhatsApp(
+  conversaId: string,
+  dados: {
+    mediaPath: string
+    mimeType: string
+    fileName?: string | null
+    tamanho?: number | null
+    legenda?: string | null
+    ptt?: boolean
+  },
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, false)
+  if (!conversa) throw new Error('Conversa não disponível para este usuário.')
+  const { mime, bytes } = validarArquivoMidia(dados.mimeType, dados.tamanho)
+  const mediaPath = String(dados.mediaPath || '')
+  if (!mediaPath.startsWith(`${usuario.empresa_id}/saida/`)) {
+    throw new Error('Arquivo de mídia inválido para esta empresa.')
+  }
+
+  const { data: config } = await supabaseAdmin.from('atendimento_configuracoes')
+    .select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
+  if (!config) throw new Error('WhatsApp ainda não foi configurado para esta empresa.')
+  if ((config.modo_integracao || 'qr') !== 'qr') {
+    throw new Error('Envio de mídia nesta etapa está disponível para os canais conectados por QR.')
+  }
+
+  const canalId = conversa.whatsapp_canal_id
+  if (!canalId) throw new Error('Esta conversa ainda não possui um número de WhatsApp associado.')
+  const { data: canal } = await supabaseAdmin.from('atendimento_whatsapp_canais')
+    .select('id,nome,numero_declarado,gateway_status,ativo')
+    .eq('id', canalId).eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
+  if (!canal) throw new Error('O número usado nesta conversa não está mais disponível.')
+  if (canal.gateway_status !== 'connected') throw new Error('O número WhatsApp desta conversa não está conectado.')
+
+  const acesso = await acessoCanalWhatsApp(usuario, canalId)
+  if (!acesso.atender) throw new Error('Você não possui permissão para responder por este canal.')
+  if (usuario.role !== 'master' && conversa.responsavel_id && conversa.responsavel_id !== usuario.id) {
+    throw new Error('Este atendimento está com outro atendente.')
+  }
+
+  const tipoGateway = tipoMidiaPorMime(mime, dados.fileName)
+  const tipoAtlas = atlasTipoMensagem(tipoGateway)
+  const nome = nomeArquivoSeguro(dados.fileName || 'arquivo')
+  const legenda = String(dados.legenda || '').trim()
+  const preview =
+    tipoGateway === 'audio' ? '🎤 Áudio' :
+    tipoGateway === 'image' ? (legenda || '📷 Imagem') :
+    tipoGateway === 'video' ? (legenda || '🎥 Vídeo') :
+    `📎 ${nome}`
+
+  const sessao = await garantirSessao(conversa)
+  const agora = new Date().toISOString()
+  const payload = {
+    transporte: 'qr_gateway',
+    status: 'pendente',
+    fileName: nome,
+    mediaSize: bytes,
+    mediaPath,
+    mimeType: mime,
+    ptt: tipoGateway === 'audio' ? dados.ptt !== false : false,
+  }
+
+  const { data: mensagem, error: mensagemError } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .insert({
+      empresa_id: usuario.empresa_id,
+      conversa_id: conversa.id,
+      sessao_id: sessao?.id || null,
+      direcao: 'saida',
+      tipo: tipoAtlas,
+      texto: preview,
+      media_url: mediaPath,
+      mime_type: mime,
+      usuario_id: usuario.id,
+      usuario_nome: usuario.nome,
+      provider_timestamp: agora,
+      payload,
+    })
+    .select('id')
+    .single()
+  if (mensagemError) throw mensagemError
+
+  const { error: filaError } = await supabaseAdmin.from('atendimento_fila_saida').insert({
+    empresa_id: usuario.empresa_id,
+    conversa_id: conversa.id,
+    mensagem_id: mensagem.id,
+    telefone: conversa.telefone,
+    tipo: tipoGateway,
+    texto: legenda || null,
+    payload,
+    status: 'pendente',
+    whatsapp_canal_id: canalId,
+  })
+  if (filaError) throw filaError
+
+  await supabaseAdmin.from('atendimento_conversas').update({
+    ultimo_preview: preview,
+    ultima_mensagem_em: agora,
+    ultima_saida_em: agora,
+    nao_lidas: 0,
+    status: 'em_atendimento',
+    updated_at: agora,
+  }).eq('id', conversa.id)
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId: conversa.id,
+    sessaoId: sessao?.id || null,
+    tipo: 'midia_enfileirada_qr',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: { mensagem_id: mensagem.id, tipo: tipoGateway, fileName: nome },
+  })
+
+  return { queued: true, mensagemId: mensagem.id }
 }
 
 export async function enviarTextoWhatsApp(conversaId: string, texto: string, usuario: UsuarioTenant) {
