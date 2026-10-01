@@ -1,8 +1,11 @@
 {
-    "crons": [
-          {
-                  "path": "/api/backup",
-                  "schedule": "0 6 * * *"
-          }
-    ]
+  "crons": [
+    {
+      "path": "/api/backup",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": false
+  }
 }
