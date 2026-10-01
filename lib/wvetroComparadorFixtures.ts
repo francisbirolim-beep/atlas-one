@@ -441,3 +441,139 @@ export const FIXTURE_PC3_SUPREMA_LEGADO_WVETRO: WVetroItemTecnico = pc3Item({
   ],
   acessorios:pc3AcessoriosBase({fit206:4.232,fit212:6.32,fit246:8.464,gua171:2.7912,gua258:12.696,gua259:15.4872,sil:1.24333,par1023:12,par1037:14,buc755:14,nyl190:14,par1025:14}),
 })
+
+
+export const FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id:'5a37c6f1-76eb-4e26-884c-9b4fc896a953',
+  configuracao_label:'JC3-SUPREMA · referência histórica moderna com arremate interno',
+  variaveis:[
+    { chave:'contramarco',label:'Contramarco',opcoes:['sem','cm060','cm200'] },
+    { chave:'arremate',label:'Arremate',opcoes:['interno'] },
+  ],
+  pecas:[
+    { eixo:'L',codigo:'CM060',formula:'Largura-24',descricao:'Contramarco horizontal CM060',quantidade:2,condicao_ativa:{contramarco:['cm060']} },
+    { eixo:'H',codigo:'CM060',formula:'Altura-24',descricao:'Contramarco vertical CM060',quantidade:2,condicao_ativa:{contramarco:['cm060']} },
+    { eixo:'L',codigo:'CM200',formula:'Largura-24',descricao:'Contramarco horizontal CM200',quantidade:2,condicao_ativa:{contramarco:['cm200']} },
+    { eixo:'H',codigo:'CM200',formula:'Altura-24',descricao:'Contramarco vertical CM200',quantidade:2,condicao_ativa:{contramarco:['cm200']} },
+    { eixo:'L',codigo:'MP347',formula:'Largura+44',descricao:'Arremate interno horizontal',quantidade:2 },
+    { eixo:'H',codigo:'MP347',formula:'Altura+44',descricao:'Arremate interno vertical',quantidade:2 },
+    { eixo:'L',codigo:'SU010',formula:'Largura-30',descricao:'Marco superior',quantidade:1 },
+    { eixo:'L',codigo:'SU011',formula:'Largura-30',descricao:'Marco inferior',quantidade:1 },
+    { eixo:'H',codigo:'SU012',formula:'Altura-4',descricao:'Marco lateral',quantidade:2 },
+    { eixo:'H',codigo:'SU008',formula:'Altura-38',descricao:'Mata-junta',quantidade:2 },
+    { eixo:'H',codigo:'SU039',formula:'Altura-54',descricao:'Montante lateral',quantidade:2 },
+    { eixo:'H',codigo:'SU040',formula:'Altura-54',descricao:'Mão-de-amigo interna',quantidade:2 },
+    { eixo:'H',codigo:'SU041',formula:'Altura-54',descricao:'Mão-de-amigo externa',quantidade:2 },
+    { eixo:'L',codigo:'SU053',formula:'(Largura-159)/3',descricao:'Travessa da folha',quantidade:6 },
+    { eixo:'L',codigo:'SU102',formula:'(Largura-159)/3',descricao:'Baguete horizontal',quantidade:6 },
+    { eixo:'H',codigo:'SU102',formula:'Altura-156',descricao:'Baguete vertical',quantidade:6 },
+  ],
+  vidro:{
+    quantidade:3,
+    formula_largura:'FLOOR((Largura-178)/3)',
+    formula_altura:'Altura-138',
+  },
+  acessorios:[
+    { codigo:'NYL329',formula_quantidade:'2',quantidade_referencia:2,status:'em_validacao' },
+    { codigo:'NYL335',formula_quantidade:'Folhas-1',quantidade_referencia:2,status:'em_validacao' },
+    { codigo:'NYL332',formula_quantidade:'Folhas*4',quantidade_referencia:12,status:'em_validacao' },
+    { codigo:'NYL414',formula_quantidade:'4*(Folhas-1)',quantidade_referencia:8,status:'em_validacao' },
+    { codigo:'CON370',formula_quantidade:'2',quantidade_referencia:2,status:'em_validacao' },
+    { codigo:'FEC1045',formula_quantidade:'2',quantidade_referencia:2,status:'em_validacao' },
+    { codigo:'ROL440',formula_quantidade:'Folhas*2',quantidade_referencia:6,status:'em_validacao' },
+    { codigo:'TRA009',formula_quantidade:'2',quantidade_referencia:2,status:'em_validacao' },
+    { codigo:'FIT206',formula_quantidade:'Altura*2/1000',status:'em_validacao' },
+    { codigo:'FIT246',formula_quantidade:'Altura*4/1000',status:'em_validacao' },
+    { codigo:'FIT212',formula_quantidade:'Largura*4/1000',status:'em_validacao' },
+    { codigo:'GUA171',formula_quantidade:'Largura*2/1000',status:'em_validacao' },
+    { codigo:'GUA258',formula_quantidade:'Altura*6/1000',status:'em_validacao' },
+    { codigo:'GUA259',formula_quantidade:'GUA171+GUA258',status:'em_validacao' },
+    { codigo:'PAR435',formula_quantidade:'Folhas*8',quantidade_referencia:24,status:'em_validacao' },
+    { codigo:'SIL-PU',formula_quantidade:'(Largura*2+Altura*2)/6000',status:'em_validacao' },
+    { codigo:'PAR1023',quantidade_referencia:6,status:'referencia' },
+    { codigo:'NYL190',quantidade_referencia:14,status:'referencia' },
+    { codigo:'PAR1025',quantidade_referencia:14,status:'referencia' },
+    { codigo:'PAR1037',quantidade_referencia:16,status:'referencia',condicao_ativa:{contramarco:['sem']} },
+    { codigo:'BUC755',quantidade_referencia:16,status:'referencia',condicao_ativa:{contramarco:['sem']} },
+    { codigo:'CHU838',quantidade_referencia:14,status:'referencia',condicao_ativa:{contramarco:['cm060','cm200']} },
+    { codigo:'NYL-10002',quantidade_referencia:4,status:'referencia',condicao_ativa:{contramarco:['cm200']} },
+    { codigo:'NYL-10005',quantidade_referencia:4,status:'referencia',condicao_ativa:{contramarco:['cm060']} },
+  ],
+}
+
+function jc3Item(params:{
+  codigo:string;largura:number;altura:number;cm?:'cm060'|'cm200';
+  perfis:Array<[string,string,number,number]>;vidro:[number,number];acessorios:Array<[string,number]>;
+}):WVetroItemTecnico{
+  return {
+    Codigo:params.codigo,
+    Nome:'JANELA DE CORRER 03 FOLHAS MÓVEIS | SUPREMA',
+    Linha:'L. SUPREMA',
+    Modelo:'JANELA DE CORRER 03 FOLHAS',
+    Qtde:1,Largura:params.largura,Altura:params.altura,
+    Perfil:params.perfis.map(([Codigo,Posicao,Qtde,Medida])=>({Codigo,Posicao,Qtde,Medida:Medida/1000})),
+    Vidros:[{Codigo:'VIDRO',Qtde:3,Largura:params.vidro[0],Altura:params.vidro[1],Especificacao:'INCOLOR 06MM - TEMPERADO'}],
+    Acessorios:params.acessorios.map(([Codigo,Qtde])=>({Codigo,Qtde})),
+  }
+}
+
+const jc3Acc=(p:{l:number;h:number;par1023:number;fix:number;cm?:'cm060'|'cm200'})=>{
+  const arr:Array<[string,number]>=[
+    ['NYL329',2],['NYL335',2],['NYL332',12],['NYL414',8],['CON370',2],['FEC1045',2],['ROL440',6],['TRA009',2],
+    ['FIT206',p.h*2/1000],['FIT246',p.h*4/1000],['FIT212',p.l*4/1000],
+    ['GUA171',p.l*2/1000],['GUA258',p.h*6/1000],['GUA259',(p.l*2+p.h*6)/1000],
+    ['PAR435',24],['SIL-PU',(p.l*2+p.h*2)/6000],
+    ['PAR1023',p.par1023],['NYL190',p.fix],['PAR1025',p.fix],
+  ]
+  if(!p.cm) arr.push(['PAR1037',p.fix],['BUC755',p.fix])
+  else {
+    arr.push(['CHU838',14])
+    arr.push([p.cm==='cm200'?'NYL-10002':'NYL-10005',4])
+  }
+  return arr
+}
+
+export const FIXTURES_JC3_SUPREMA_WVETRO:WVetroItemTecnico[]=[
+  jc3Item({
+    codigo:'WV-528-4',largura:1600,altura:1600,vidro:[474,1462],
+    perfis:[
+      ['MP347','L',2,1644],['MP347','H',2,1644],['SU010','L',1,1570],['SU011','L',1,1570],['SU012','H',2,1596],['SU008','H',2,1562],
+      ['SU039','H',2,1546],['SU040','H',2,1546],['SU041','H',2,1546],['SU053','L',6,480.33],['SU102','L',6,480.33],['SU102','H',6,1444],
+    ],
+    acessorios:jc3Acc({l:1600,h:1600,par1023:10,fix:16}),
+  }),
+  jc3Item({
+    codigo:'WV-878-1',largura:2300,altura:800,vidro:[707,662],
+    perfis:[
+      ['MP347','L',2,2344],['MP347','H',2,844],['SU010','L',1,2270],['SU011','L',1,2270],['SU012','H',2,796],['SU008','H',2,762],
+      ['SU039','H',2,746],['SU040','H',2,746],['SU041','H',2,746],['SU053','L',6,713.67],['SU102','L',6,713.67],['SU102','H',6,644],
+    ],
+    acessorios:jc3Acc({l:2300,h:800,par1023:6,fix:16}),
+  }),
+  jc3Item({
+    codigo:'WV-976-2',largura:2074,altura:481,vidro:[632,343],
+    perfis:[
+      ['MP347','L',2,2118],['MP347','H',2,525],['SU010','L',1,2044],['SU011','L',1,2044],['SU012','H',2,477],['SU008','H',2,443],
+      ['SU039','H',2,427],['SU040','H',2,427],['SU041','H',2,427],['SU053','L',6,638.33],['SU102','L',6,638.33],['SU102','H',6,325],
+    ],
+    acessorios:jc3Acc({l:2074,h:481,par1023:4,fix:12}),
+  }),
+  jc3Item({
+    codigo:'WV-556-6',largura:1970,altura:970,vidro:[597,832],
+    perfis:[
+      ['CM060','L',2,1946],['CM060','H',2,946],['MP347','L',2,2014],['MP347','H',2,1014],
+      ['SU010','L',1,1940],['SU011','L',1,1940],['SU012','H',2,966],['SU008','H',2,932],
+      ['SU039','H',2,916],['SU040','H',2,916],['SU041','H',2,916],['SU053','L',6,603.67],['SU102','L',6,603.67],['SU102','H',6,814],
+    ],
+    acessorios:jc3Acc({l:1970,h:970,par1023:6,fix:14,cm:'cm060'}),
+  }),
+  jc3Item({
+    codigo:'WV-269-14',largura:2600,altura:600,vidro:[807,462],
+    perfis:[
+      ['CM200','L',2,2576],['CM200','H',2,576],['MP347','L',2,2644],['MP347','H',2,644],
+      ['SU010','L',1,2570],['SU011','L',1,2570],['SU012','H',2,596],['SU008','H',2,562],
+      ['SU039','H',2,546],['SU040','H',2,546],['SU041','H',2,546],['SU053','L',6,813.67],['SU102','L',6,813.67],['SU102','H',6,444],
+    ],
+    acessorios:jc3Acc({l:2600,h:600,par1023:6,fix:14,cm:'cm200'}),
+  }),
+]
