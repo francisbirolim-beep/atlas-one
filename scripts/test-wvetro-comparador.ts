@@ -1,5 +1,5 @@
-import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PC4_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, ehPortinholaSupremaVeneziana1fValidada, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PC4_SUPREMA_WVETRO, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO, FIXTURE_PORTINHOLA_SUPREMA_VENEZIANA_1F_ATLAS_REFERENCIA, FIXTURES_PORTINHOLA_SUPREMA_VENEZIANA_1F_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
@@ -494,3 +494,150 @@ console.log(JSON.stringify({
   amostras:pc4Resultados,
 },null,2))
 
+
+
+function exigirSemDivergencia(nome:string, item:any, formula:any) {
+  const inferida = inferirOpcoesTecnicasWVetro(item, formula)
+  const comparado = compararItemWVetroComFormulaAtlas({ item, formula, opcoes: inferida.opcoes })
+  for (const status of [...hard, 'regra_pendente_atlas'] as const) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        nome,
+        status,
+        resumo: comparado.resumo,
+        opcoes: inferida.opcoes,
+        divergencias: comparado.linhas.filter(l => l.status !== 'igual'),
+      }, null, 2))
+      throw new Error(`Regressão ${nome}: status ${status} deveria ser zero.`)
+    }
+  }
+  if (!comparado.aprovado) throw new Error(`Regressão ${nome}: comparação deveria estar aprovada.`)
+  return comparado
+}
+
+for (const item of FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO) {
+  if (!ehPc2SupremaPadraoSemReforco(item)) {
+    throw new Error(`Regressão PC2 sem reforço: assinatura ${item.Codigo} não foi reconhecida.`)
+  }
+  exigirSemDivergencia(
+    `PC2 sem reforço ${item.Codigo}`,
+    item,
+    FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA,
+  )
+}
+
+if (!ehPc2SupremaDominante(FIXTURE_PC2_SUPREMA_WVETRO)) {
+  throw new Error('Regressão PC2 reforço externo: fixture histórica principal não foi reconhecida.')
+}
+exigirSemDivergencia(
+  'PC2 mão-de-amigo comum com reforço externo',
+  FIXTURE_PC2_SUPREMA_WVETRO,
+  FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA,
+)
+
+for (const item of FIXTURES_PORTINHOLA_SUPREMA_VENEZIANA_1F_WVETRO) {
+  if (!ehPortinholaSupremaVeneziana1fValidada(item)) {
+    throw new Error(`Regressão Portinhola: assinatura ${item.Codigo} não foi reconhecida.`)
+  }
+  exigirSemDivergencia(
+    `Portinhola veneziana 1F ${item.Codigo}`,
+    item,
+    FIXTURE_PORTINHOLA_SUPREMA_VENEZIANA_1F_ATLAS_REFERENCIA,
+  )
+}
+
+const assinaturaPc2 = assinaturaComposicaoWVetro(FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO[0])
+const assinaturaPc2OutraMedida = assinaturaComposicaoWVetro({
+  ...FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO[0],
+  Largura: 1900,
+  Altura: 2400,
+  Perfil: (FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO[0].Perfil || []).map(p => ({
+    ...p,
+    Medida: Number(p.Medida || 0) + 0.123,
+  })),
+  Vidros: (FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO[0].Vidros || []).map(v => ({
+    ...v,
+    Largura: Number(v.Largura || 0) + 100,
+    Altura: Number(v.Altura || 0) + 100,
+  })),
+})
+if (assinaturaPc2.chave !== assinaturaPc2OutraMedida.chave) {
+  throw new Error('Regressão matriz histórica: medidas não devem fragmentar a mesma composição estrutural.')
+}
+
+const assinaturaPc2ComExtra = assinaturaComposicaoWVetro({
+  ...FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO[0],
+  Acessorios: [
+    ...(FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO[0].Acessorios || []),
+    { Codigo:'EXTRA-REGRESSAO', Qtde:1 },
+  ],
+})
+if (assinaturaPc2.chave === assinaturaPc2ComExtra.chave) {
+  throw new Error('Regressão matriz histórica: composição com acessório extra precisa gerar outra assinatura.')
+}
+
+const pc2Integrada = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Codigo:'*SUCB-PC2-08-EF*',
+  Nome:'PORTA DE CORRER INTEGRADA 02 FOLHAS MÓVEIS COM MOTOR 220V | SUPREMA',
+}
+if (classificarFamiliaPc2Suprema(pc2Integrada) !== 'integrada_persiana') {
+  throw new Error('Regressão família PC2: integrada/persiana não reconhecida.')
+}
+if (ehPc2SupremaDominante(pc2Integrada) || ehPc2SupremaPadraoSemReforco(pc2Integrada)) {
+  throw new Error('Regressão família PC2: integrada não pode cair em receita de vidro padrão.')
+}
+
+const varianteIntegrada = extrairVariantesPc2Suprema({
+  ...pc2Integrada,
+  Nome:'PORTA DE CORRER INTEGRADA 02 FOLHAS MÓVEIS EM TRILHOS EMBUTIDOS COM MOTOR 220V | SUPREMA COM CONTRAMARCO E ARREMATE',
+})
+if (
+  varianteIntegrada.trilho !== 'embutido' ||
+  varianteIntegrada.persianaAcionamento !== 'motor_220v' ||
+  varianteIntegrada.contramarco !== 'com' ||
+  varianteIntegrada.arremate !== 'com'
+) {
+  throw new Error(`Regressão variantes PC2 integrada: ${JSON.stringify(varianteIntegrada)}`)
+}
+
+const pc4Sintetica = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Modelo:'PORTA DE CORRER 04 FOLHAS',
+  Codigo:'*SUCB-PC4-02-EF',
+  Nome:'PORTA DE CORRER 04 FOLHAS MÓVEIS EM 04 PLANOS | SUPREMA',
+}
+if (classificarFamiliaPc4Suprema(pc4Sintetica) !== 'quatro_planos') {
+  throw new Error('Regressão família PC4: quatro planos não reconhecido.')
+}
+
+const pc1Sintetica = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Modelo:'PORTA DE CORRER 01 FOLHA',
+  Codigo:'*SUCB-PC1-04-EF*',
+  Nome:'PORTA DE CORRER 01 FOLHA SUSPENSA | LAMBRI | SUPREMA SEM CONTRAMARCO',
+}
+if (classificarFamiliaPc1Suprema(pc1Sintetica) !== 'lambri_suspensa') {
+  throw new Error('Regressão família PC1: lambri suspensa não reconhecida.')
+}
+
+const portinhola2fSintetica = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Modelo:'PORTINHOLA',
+  Codigo:'SUCB-PTA-04',
+  Nome:'PORTINHOLA DE GIRO 02 FOLHAS COM VENEZIANA VENTILADA | SUPREMA',
+  Vidros:[],
+}
+if (classificarFamiliaPortinholaSuprema(portinhola2fSintetica) !== 'veneziana_2f') {
+  throw new Error('Regressão família Portinhola: veneziana 2F não reconhecida.')
+}
+
+console.log(JSON.stringify({
+  ok:true,
+  fixture:'Homologação adicional W.Vetro',
+  pc2SemReforco:FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO.length,
+  pc2ReforcoExterno:1,
+  portinholaVeneziana1f:FIXTURES_PORTINHOLA_SUPREMA_VENEZIANA_1F_WVETRO.length,
+  matrizAssinatura:true,
+  familiasSeguras:true,
+}, null, 2))
