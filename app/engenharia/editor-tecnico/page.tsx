@@ -6,6 +6,7 @@ import { ArrowLeft, Beaker, BookOpen, Check, Loader2, Plus, Save, Trash2, Wrench
 import {
   calcularFormulaCorteIsolada,
   calcularFormulasCorte,
+  resolverFormulaCondicional,
   FormulaCorteError,
   type PecaFormula,
   type ResultadoPeca,
@@ -273,7 +274,11 @@ export default function EditorTecnicoPage() {
       const calculados = calcularFormulasCorte(rascunho, L, H, opcoes)
       setResultados(calculados)
       const formulaL = rascunho.vidro.formula_largura
+        ? resolverFormulaCondicional(rascunho.vidro.formula_largura, rascunho.vidro.condicoes_largura, opcoes)
+        : null
       const formulaH = rascunho.vidro.formula_altura
+        ? resolverFormulaCondicional(rascunho.vidro.formula_altura, rascunho.vidro.condicoes_altura, opcoes)
+        : null
       if (formulaL && formulaH) {
         setVidroTeste({
           largura: calcularFormulaCorteIsolada(formulaL, L, H),
@@ -445,7 +450,7 @@ export default function EditorTecnicoPage() {
                 <div className="mt-4 grid gap-3 md:grid-cols-4">
                   <label className="text-xs font-semibold text-slate-500">Largura (mm)<input type="number" value={largura} onChange={e => setLargura(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                   <label className="text-xs font-semibold text-slate-500">Altura (mm)<input type="number" value={altura} onChange={e => setAltura(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-                  {rascunho.variaveis.map(v => <label key={v.chave} className="text-xs font-semibold text-slate-500">{v.label}<select value={opcoes[v.chave] || ''} onChange={e => setOpcoes(prev => ({ ...prev, [v.chave]: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">{v.opcoes.map(o => <option key={o} value={o}>{o}</option>)}</select></label>)}
+                  {rascunho.variaveis.map(v => <label key={v.chave} className="text-xs font-semibold text-slate-500">{v.label}{v.opcoes.length > 0 ? <select value={opcoes[v.chave] || ''} onChange={e => setOpcoes(prev => ({ ...prev, [v.chave]: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">{v.opcoes.map(o => <option key={o} value={o}>{o}</option>)}</select> : <input value={opcoes[v.chave] || ''} onChange={e => setOpcoes(prev => ({ ...prev, [v.chave]: e.target.value }))} placeholder={`Informe ${v.label.toLowerCase()}`} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />}</label>)}
                   <button type="button" onClick={testar} className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white"><Beaker size={15}/> Calcular teste</button>
                 </div>
 
