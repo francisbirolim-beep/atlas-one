@@ -1,6 +1,25 @@
-import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
+
+if (!ehPc2SupremaDominante(FIXTURE_PC2_SUPREMA_WVETRO)) {
+  throw new Error('Regressão PC2 dominante: a fixture histórica principal deveria ser reconhecida.')
+}
+
+const pc2SemVidro = { ...FIXTURE_PC2_SUPREMA_WVETRO, Vidros: [] }
+if (ehPc2SupremaDominante(pc2SemVidro)) {
+  throw new Error('Regressão PC2 dominante: composição sem vidro não pode ser classificada como vidro padrão.')
+}
+
+const pc2IntegradaFalsa = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Codigo: '*SUCB-PC2-08-EF*',
+  Nome: 'PORTA DE CORRER INTEGRADA 02 FOLHAS | SUPREMA',
+  Acessorios: [...(FIXTURE_PC2_SUPREMA_WVETRO.Acessorios || []), { Codigo: 'MOTOR220', Qtde: 1 }],
+}
+if (ehPc2SupremaDominante(pc2IntegradaFalsa)) {
+  throw new Error('Regressão PC2 dominante: variante integrada/persiana não pode cair na assinatura de vidro padrão.')
+}
 
 const inferencia = inferirOpcoesTecnicasWVetro(
   FIXTURE_PC2_SUPREMA_WVETRO,
