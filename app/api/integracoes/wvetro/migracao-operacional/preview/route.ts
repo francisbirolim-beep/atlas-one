@@ -606,7 +606,7 @@ export async function GET(req: NextRequest) {
             .select('id,nome,ativo'),
           supabaseAdmin
             .from('wvetro_referencias_vidros')
-            .select('especificacao,status_validacao,produto_atlas_id,ncm,ocorrencias,dados_origem'),
+            .select('id,chave,codigo,especificacao,status_validacao,produto_atlas_id,ncm,ocorrencias,dados_origem'),
           supabaseAdmin
             .from('catalogo_custos_tecnicos')
             .select('id,chave,descricao,unidade,custo_unitario,ativo')
@@ -775,6 +775,7 @@ export async function GET(req: NextRequest) {
         const nome = normalizar(item.nome)
         const referencia: any = referenciasVidros.get(nome)
         const catalogo = catalogoVidros.get(nome)
+        const naoAplicavel = nome === 'SEM VIDRO'
         const origem =
           referencia?.dados_origem && typeof referencia.dados_origem === 'object'
             ? referencia.dados_origem
@@ -795,11 +796,16 @@ export async function GET(req: NextRequest) {
 
         return {
           nome,
-          status: catalogo
-            ? 'homologado_catalogo'
-            : referencia
-              ? 'aguardando_homologacao'
-              : 'pendente_revisao',
+          status: naoAplicavel
+            ? 'nao_aplicavel'
+            : catalogo
+              ? 'homologado_catalogo'
+              : referencia
+                ? 'aguardando_homologacao'
+                : 'pendente_revisao',
+          referenciaId: referencia?.id || null,
+          referenciaChave: referencia?.chave || null,
+          codigo: referencia?.codigo || null,
           statusValidacao: referencia?.status_validacao || null,
           produtoAtlasId: referencia?.produto_atlas_id || null,
           catalogoCustoId: catalogo?.id || null,
@@ -864,9 +870,12 @@ export async function GET(req: NextRequest) {
           vidros: {
             total: vidros.length,
             referenciados: vidros.filter(item => item.status !== 'pendente_revisao').length,
-            pendentes: vidros.filter(item => item.status !== 'homologado_catalogo').length,
+            pendentes: vidros.filter(
+              item => item.status !== 'homologado_catalogo' && item.status !== 'nao_aplicavel',
+            ).length,
             aguardandoHomologacao: vidros.filter(item => item.status === 'aguardando_homologacao').length,
             homologadosCatalogo: vidros.filter(item => item.status === 'homologado_catalogo').length,
+            naoAplicaveis: vidros.filter(item => item.status === 'nao_aplicavel').length,
             vinculadosProdutoAtlas: vidros.filter(item => !!item.produtoAtlasId).length,
             comCustoReferencia: vidros.filter(item => item.custoReferenciaM2 != null).length,
           },
@@ -874,7 +883,9 @@ export async function GET(req: NextRequest) {
         pendencias: {
           linhas: linhas.filter(item => item.status !== 'mapeada'),
           cores: cores.filter(item => item.status === 'pendente_revisao'),
-          vidros: vidros.filter(item => item.status !== 'homologado_catalogo'),
+          vidros: vidros.filter(
+            item => item.status !== 'homologado_catalogo' && item.status !== 'nao_aplicavel',
+          ),
         },
       })
     } catch (error) {
