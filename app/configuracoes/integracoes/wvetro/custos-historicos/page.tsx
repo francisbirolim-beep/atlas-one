@@ -26,6 +26,37 @@ type Resumo = {
   vidros: Componente[]
 }
 
+type CustoCompraHistorico = {
+  produtoAtlasId: string
+  codigo: string
+  nome: string
+  categoria: string
+  ocorrencias: number
+  notas: number
+  primeiraCompra: string | null
+  ultimaCompra: string | null
+  custoMin: number | null
+  custoMax: number | null
+  ultimoCustoObservado: number | null
+  ultimoFornecedor: string | null
+  custoOficialAtual: number | null
+  diferencaUltimoVsOficial: number | null
+  diferencaPercentual: number | null
+}
+
+type ResumoComprasHistoricas = {
+  ok: boolean
+  fonte: 'historico-suprimentos'
+  periodo: { inicio: string; fim: string }
+  resumo: {
+    itens: number
+    produtos: number
+    notas: number
+    produtosComCustoOficial: number
+  }
+  custos: CustoCompraHistorico[]
+}
+
 function dataLocal(d: Date) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -51,6 +82,8 @@ export default function CustosHistoricosWVetroPage() {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
   const [resultado, setResultado] = useState<Resumo | null>(null)
+  const [comprasHistoricas, setComprasHistoricas] = useState<ResumoComprasHistoricas | null>(null)
+  const [erroCompras, setErroCompras] = useState('')
   const [grupo, setGrupo] = useState<'perfis' | 'acessorios' | 'vidros'>('perfis')
   const [busca, setBusca] = useState('')
 
@@ -66,6 +99,21 @@ export default function CustosHistoricosWVetroPage() {
     try {
       const token = await tokenAtual()
       if (!token) throw new Error('Sessão do Atlas não encontrada. Entre novamente no sistema.')
+      setErroCompras('')
+      const paramsCompras = new URLSearchParams({ fonte: 'historico-suprimentos', inicio, fim })
+      try {
+        const respCompras = await fetch(`/api/integracoes/wvetro/custos?${paramsCompras.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        const jsonCompras = await respCompras.json().catch(() => ({}))
+        if (!respCompras.ok) throw new Error(jsonCompras?.error || `Falha ao ler histórico de compras (${respCompras.status}).`)
+        setComprasHistoricas(jsonCompras as ResumoComprasHistoricas)
+      } catch (e) {
+        setComprasHistoricas(null)
+        setErroCompras(e instanceof Error ? e.message : 'Não foi possível ler o histórico materializado de compras.')
+      }
+
       const params = new URLSearchParams({ recurso: 'resumo', fonte: 'orcamentos', inicio, fim })
       const resp = await fetch(`/api/integracoes/wvetro/preview?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -99,7 +147,7 @@ export default function CustosHistoricosWVetroPage() {
           <div>
             <Link href="/configuracoes/integracoes/wvetro" className="mb-2 inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={16} /> Integração W.Vetro</Link>
             <h1 className="text-2xl font-bold text-slate-900">Custos históricos W.Vetro</h1>
-            <p className="mt-1 text-sm text-slate-600">Consolidação somente leitura dos campos CustoVlr e VendaVlr existentes nos orçamentos reais.</p>
+            <p className="mt-1 text-sm text-slate-600">Consolidação somente leitura de custos observados em orçamentos e custos realmente comprados nas NFs históricas W.Vetro.</p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><ShieldCheck className="text-emerald-600" size={26} /></div>
         </header>
@@ -113,6 +161,70 @@ export default function CustosHistoricosWVetroPage() {
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Segurança:</strong> os valores abaixo são observações históricas. Nenhum custo, preço ou cadastro do Atlas é atualizado nesta tela.</div>
           {erro && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
         </section>
+
+        {erroCompras && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{erroCompras}</div>}
+
+        {comprasHistoricas && (
+          <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Custo realmente comprado — NFs W.Vetro</h2>
+                <p className="mt-1 text-sm text-slate-600">Itens de notas de entrada materializados e vinculados com segurança ao catálogo Atlas.</p>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">somente histórico</span>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <Card titulo="Itens de NF" valor={comprasHistoricas.resumo.itens} />
+              <Card titulo="Produtos Atlas" valor={comprasHistoricas.resumo.produtos} />
+              <Card titulo="Notas" valor={comprasHistoricas.resumo.notas} />
+              <Card titulo="Com custo oficial" valor={comprasHistoricas.resumo.produtosComCustoOficial} />
+            </div>
+
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <strong>Não altera custo oficial:</strong> custo mínimo, máximo e último abaixo são referências das compras históricas. Nenhum valor é gravado em <code>produtos.custo</code>.
+            </div>
+
+            <div className="mt-4 max-h-[38rem] overflow-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[1180px] text-sm">
+                <thead className="sticky top-0 bg-slate-100 text-left text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2">Produto Atlas</th>
+                    <th className="px-3 py-2 text-right">Itens</th>
+                    <th className="px-3 py-2 text-right">NFs</th>
+                    <th className="px-3 py-2">Período</th>
+                    <th className="px-3 py-2 text-right">Faixa comprada</th>
+                    <th className="px-3 py-2 text-right">Último custo</th>
+                    <th className="px-3 py-2">Último fornecedor</th>
+                    <th className="px-3 py-2 text-right">Custo oficial atual</th>
+                    <th className="px-3 py-2 text-right">Diferença</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comprasHistoricas.custos.map(item => (
+                    <tr key={item.produtoAtlasId} className="border-t border-slate-100 align-top">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-900">{item.codigo ? `${item.codigo} · ` : ''}{item.nome || '—'}</div>
+                        <div className="text-[11px] text-slate-400">{item.categoria || 'Sem categoria'}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right">{item.ocorrencias}</td>
+                      <td className="px-3 py-2 text-right">{item.notas}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{item.primeiraCompra ? dataLocal(new Date(`${item.primeiraCompra}T12:00:00`)).split('-').reverse().join('/') : '—'} → {item.ultimaCompra ? dataLocal(new Date(`${item.ultimaCompra}T12:00:00`)).split('-').reverse().join('/') : '—'}</td>
+                      <td className="px-3 py-2 text-right">{faixa(item.custoMin, item.custoMax)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-900">{moeda(item.ultimoCustoObservado)}</td>
+                      <td className="px-3 py-2 text-slate-700">{item.ultimoFornecedor || '—'}</td>
+                      <td className="px-3 py-2 text-right">{moeda(item.custoOficialAtual)}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${item.diferencaUltimoVsOficial === null ? 'text-slate-400' : item.diferencaUltimoVsOficial > 0 ? 'text-red-600' : item.diferencaUltimoVsOficial < 0 ? 'text-emerald-700' : 'text-slate-600'}`}>
+                        {item.diferencaUltimoVsOficial === null ? '—' : `${item.diferencaUltimoVsOficial > 0 ? '+' : ''}${moeda(item.diferencaUltimoVsOficial)}${item.diferencaPercentual === null ? '' : ` (${item.diferencaPercentual > 0 ? '+' : ''}${item.diferencaPercentual.toFixed(1)}%)`}`}
+                      </td>
+                    </tr>
+                  ))}
+                  {comprasHistoricas.custos.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nenhum custo comprado histórico encontrado no período.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {resultado && <>
           <section className="grid gap-3 sm:grid-cols-4">
