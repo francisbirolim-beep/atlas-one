@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, ehPc4SupremaQuatroPlanosValidada, ehPortinholaSupremaVeneziana1fValidada, extrairVariantesPc2Suprema, extrairVariantesPortinholaSuprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURE_PORTINHOLA_SUPREMA_VENEZIANA_1F_ATLAS_REFERENCIA, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, ehPc4SupremaQuatroPlanosValidada, extrairVariantesPc2Suprema, extrairVariantesPortinholaSuprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -77,15 +77,6 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
       pecas: formula.pecas,
       vidro: formula.vidro,
       acessorios: formula.acessorios || [],
-    })
-  }
-
-  if (ehPortinholaSupremaVeneziana1fValidada(item) && Number(item.Altura) === 1630) {
-    const formula = FIXTURE_PORTINHOLA_SUPREMA_VENEZIANA_1F_ATLAS_REFERENCIA
-    refs.push({
-      id:'referencia-local-portinhola-suprema-veneziana-1f-h1630', tipologia_id:formula.tipologia_id,
-      configuracao_label:formula.configuracao_label, status:'referencia_historica', ativo:false,
-      variaveis:formula.variaveis, pecas:formula.pecas, vidro:formula.vidro, acessorios:formula.acessorios || [],
     })
   }
 
