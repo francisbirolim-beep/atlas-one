@@ -532,81 +532,9 @@ export async function GET(req: NextRequest) {
         regra: String(row.regra || ''),
       }))
 
-      const numerosPedidos = new Set(
-        normalizados
-          .filter(item => item.origemRecurso === 'pedidos' && item.tipoRelacao === 'numero_compartilhado')
-          .map(item => item.referencia)
-          .filter((item): item is string => !!item),
-      )
-
-      const instalacoesComLote = new Set(
-        normalizados
-          .filter(
-            item =>
-              item.origemRecurso === 'instalacoes' &&
-              item.tipoRelacao === 'lote_producao' &&
-              item.encontrado,
-          )
-          .map(item => item.origemChave),
-      )
-
-      const classificados = normalizados.map(item => {
-        let classificacao = 'pendente_revisao'
-        let explicacao = 'Referência não encontrada no staging atual.'
-        let requerAtencao = true
-
-        if (item.encontrado) {
-          classificacao = 'confirmada'
-          explicacao = 'Relação encontrada diretamente no staging.'
-          requerAtencao = false
-        } else if (
-          item.origemRecurso === 'pedidos' &&
-          item.tipoRelacao === 'numero_compartilhado'
-        ) {
-          classificacao = 'informativa'
-          explicacao = 'Número compartilhado é apenas observacional e não é chave de vínculo automático.'
-          requerAtencao = false
-        } else if (
-          item.origemRecurso === 'titulos_baixados' &&
-          item.tipoRelacao === 'titulo_mesmo_id'
-        ) {
-          classificacao = 'reconstruivel_baixa'
-          explicacao = 'A baixa contém os campos necessários para reconstrução histórica sem título aberto correspondente.'
-          requerAtencao = false
-        } else if (item.referencia === '0') {
-          classificacao = 'sem_referencia'
-          explicacao = 'A origem declarou referência zero; não há vínculo externo válido a perseguir.'
-          requerAtencao = false
-        } else if (
-          item.destinoRecurso === 'orcamentos' &&
-          item.referencia &&
-          numerosPedidos.has(item.referencia)
-        ) {
-          classificacao = 'resolvida_por_pedido'
-          explicacao = 'O orçamento histórico não está no staging, mas existe pedido vendido com o mesmo número.'
-          requerAtencao = false
-        } else if (
-          item.origemRecurso === 'instalacoes' &&
-          item.tipoRelacao === 'projeto_producao' &&
-          instalacoesComLote.has(item.origemChave)
-        ) {
-          classificacao = 'resolvida_por_lote'
-          explicacao = 'O projeto de produção não foi localizado, mas a instalação está vinculada a um lote confirmado.'
-          requerAtencao = false
-        } else if (
-          item.destinoRecurso === 'orcamentos' &&
-          item.referencia &&
-          ['titulos', 'lotes_producao', 'producao_projeto', 'instalacoes'].includes(item.origemRecurso) &&
-          ['documental', 'declarada_payload'].includes(item.confianca)
-        ) {
-          classificacao = 'referencia_historica_sem_snapshot'
-          explicacao =
-            'A origem histórica declara o número do orçamento, mas o snapshot desse orçamento não está no staging. A referência é preservada somente como histórico e não autoriza vínculo operacional automático.'
-          requerAtencao = false
-        }
-
-        return { ...item, classificacao, explicacao, requerAtencao }
-      })
+      const evidencias = await carregarEvidenciasAuditoria(usuario.empresa_id, sql)
+      const { classificados, referenciasPendentesDistintas } =
+        classificarAuditoria(normalizados, evidencias)
 
       const resumo = classificados.reduce(
         (acc, item) => {
