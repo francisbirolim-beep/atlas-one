@@ -629,3 +629,54 @@ console.log(JSON.stringify({
   matrizAssinatura:true,
   familiasSeguras:true,
 }, null, 2))
+
+const pta3Resultados = FIXTURES_PTA3_SUPREMA_FAMILIA_A_WVETRO.map(item => {
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA,
+    opcoes: {},
+  })
+
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        fixture:item.Codigo,
+        medida:`${item.Largura}x${item.Altura}`,
+        status,
+        resumo:comparado.resumo,
+        divergencias:comparado.linhas.filter(l=>l.status!=='igual'),
+      },null,2))
+      throw new Error(`Regressão PTA3 Suprema ${item.Largura}x${item.Altura}: status ${status} deveria ser zero.`)
+    }
+  }
+
+  if (Number(comparado.resumo.regra_pendente_atlas || 0) !== 0) {
+    console.error(JSON.stringify({
+      medida:`${item.Largura}x${item.Altura}`,
+      resumo:comparado.resumo,
+      pendencias:comparado.linhas.filter(l=>l.status==='regra_pendente_atlas'),
+    },null,2))
+    throw new Error(`Regressão PTA3 Suprema ${item.Largura}x${item.Altura}: não deveria existir regra pendente.`)
+  }
+
+  if (!comparado.aprovado) {
+    throw new Error(`Regressão PTA3 Suprema ${item.Largura}x${item.Altura}: comparação deveria estar aprovada.`)
+  }
+
+  const vz = comparado.linhas.find(l => l.tipo==='perfil' && l.codigo==='VZ006')
+  const fix = comparado.linhas.find(l => l.tipo==='acessorio' && l.codigo==='BUC755')
+
+  return {
+    medida:`${item.Largura}x${item.Altura}`,
+    laminas: vz?.atlas?.quantidade,
+    fixadores: fix?.atlas?.quantidade,
+    iguais:comparado.resumo.igual,
+    aprovado:comparado.aprovado,
+  }
+})
+
+console.log(JSON.stringify({
+  ok:true,
+  fixture:'PTA3 Suprema - portinhola família A - veneziana/arremate 4 lados',
+  amostras:pta3Resultados,
+},null,2))
