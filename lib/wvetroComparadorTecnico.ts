@@ -81,14 +81,6 @@ export const PC4_SUPREMA_QUATRO_PLANOS_ACESSORIOS = [
   'BUC755','SIL-PU',
 ] as const
 
-export const PORTINHOLA_SUPREMA_VENEZIANA_1F_PERFIS = [
-  'CL006','CL011','SU108','SU111','SU279','US285',
-] as const
-
-export const PORTINHOLA_SUPREMA_VENEZIANA_1F_ACESSORIOS = [
-  'BUC755','DOB840','FEC514','GUA239','GUA282','PAR1037','SIL-PU',
-] as const
-
 function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
   const a = [...new Set(atual.map(normalizarCodigo).filter(Boolean))].sort()
   const e = [...new Set(esperado.map(normalizarCodigo).filter(Boolean))].sort()
@@ -415,18 +407,6 @@ export function ehPc4SupremaQuatroPlanosValidada(item: WVetroItemTecnico) {
     Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 8) < 0.0001 &&
     Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
     Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001
-  )
-}
-
-export function ehPortinholaSupremaVeneziana1fValidada(item: WVetroItemTecnico) {
-  if (classificarFamiliaPortinholaSuprema(item) !== 'veneziana_1f') return false
-  if ((item.Vidros || []).length) return false
-  if (!assinaturaExataItem(item, PORTINHOLA_SUPREMA_VENEZIANA_1F_PERFIS, PORTINHOLA_SUPREMA_VENEZIANA_1F_ACESSORIOS)) return false
-  return (
-    Math.abs(qtdAcessorioUnitario(item, 'DOB840') - 2) < 0.0001 &&
-    Math.abs(qtdAcessorioUnitario(item, 'FEC514') - 1) < 0.0001 &&
-    Math.abs(qtdAcessorioUnitario(item, 'PAR1037') - 12) < 0.0001 &&
-    Math.abs(qtdAcessorioUnitario(item, 'BUC755') - 12) < 0.0001
   )
 }
 
