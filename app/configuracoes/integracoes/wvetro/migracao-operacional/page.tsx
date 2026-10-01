@@ -197,6 +197,12 @@ type AuditoriaCatalogos = {
       pesoKgM2: number | null
       custoReferenciaM2: number | null
       custoReferenciaFonte: string | null
+      historicoDocumentos: number
+      historicoAreaM2: number | null
+      historicoAmostrasCusto: number
+      historicoCustoM2Min: number | null
+      historicoCustoM2Mediana: number | null
+      historicoCustoM2Max: number | null
     }>
   }
 }
@@ -883,10 +889,32 @@ export default function MigracaoOperacionalWVetroPage() {
                             {item.ncm && <span>NCM {item.ncm}</span>}
                             <span>{item.statusValidacao || item.status}</span>
                           </div>
+                          {(item.historicoDocumentos > 0 || item.historicoAmostrasCusto > 0) && (
+                            <div className="mt-1.5 rounded-md border border-amber-100 bg-white/80 px-2 py-1.5 text-[11px] text-slate-600">
+                              <span className="font-semibold text-slate-700">Evidência histórica:</span>{' '}
+                              {item.historicoDocumentos} documento(s)
+                              {item.historicoAreaM2 != null
+                                ? ` · ${item.historicoAreaM2.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m²`
+                                : ''}
+                              {item.historicoAmostrasCusto > 0 &&
+                                item.historicoCustoM2Mediana != null && (
+                                  <>
+                                    {' · '}custo/m² min.{' '}
+                                    {item.historicoCustoM2Min?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    {' · '}mediana{' '}
+                                    <b>
+                                      {item.historicoCustoM2Mediana.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </b>
+                                    {' · '}máx.{' '}
+                                    {item.historicoCustoM2Max?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </>
+                                )}
+                            </div>
+                          )}
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
                             {item.custoReferenciaM2 != null ? (
                               <span className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[11px] font-semibold text-amber-800">
-                                Ref. W.Vetro: {item.custoReferenciaM2.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/m²
+                                {item.custoReferenciaFonte === 'mediana_historica_wvetro' ? 'Mediana histórica W.Vetro' : 'Ref. W.Vetro'}: {item.custoReferenciaM2.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/m²
                               </span>
                             ) : (
                               <span className="text-[11px] text-slate-500">Sem amostra de custo válida</span>
