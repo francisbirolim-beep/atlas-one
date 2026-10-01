@@ -42,6 +42,7 @@ export type OpcoesEscolhidas = Record<string, string>
 
 export type ResultadoPeca = {
   codigo: string
+  grupo?: string
   descricao?: string
   tamanho: number
   eixo?: 'L' | 'H'
@@ -291,6 +292,7 @@ function enriquecerResultado(
 ): ResultadoPeca {
   return {
     ...resultado,
+    grupo: peca.grupo,
     quantidade: peca.quantidade,
     composicao_desconto: peca.composicao_desconto,
   }
@@ -348,6 +350,10 @@ function tentarResolverPeca(
       }
       const tamanho = avaliarFormula(formulaComCondicoes(peca, opcoes), contexto)
       contexto[codigoResolvido] = tamanho
+      // Mantém também um alias estável pelo nome do grupo. Assim fórmulas
+      // posteriores (especialmente acessórios) podem depender do comprimento
+      // calculado sem precisar saber qual código físico foi escolhido pelo mapa.
+      contexto[peca.grupo] = tamanho
       return [enriquecerResultado(peca, {
         codigo: codigoResolvido,
         descricao: peca.descricao,
