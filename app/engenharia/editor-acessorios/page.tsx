@@ -156,9 +156,9 @@ export default function EditorAcessoriosPage() {
     if (!Number.isFinite(L) || !Number.isFinite(H) || L <= 0 || H <= 0) { setErro('Informe largura e altura válidas.'); return }
     try {
       const defaults: Record<string, string> = {}
-      for (const variavel of rascunho.variaveis || []) defaults[variavel.chave] = variavel.opcoes[0] || ''
+      for (const variavel of rascunho.variaveis || []) defaults[variavel.chave] = variavel.opcoes[0] || 'VALIDACAO'
       const perfis = calcularFormulasCorte(rascunho, L, H, defaults)
-      setResultados(calcularAcessoriosTecnicos(rascunho.acessorios, L, H, folhas, perfis.map(p => ({ codigo: p.codigo, tamanho: p.tamanho }))))
+      setResultados(calcularAcessoriosTecnicos(rascunho.acessorios, L, H, folhas, perfis.map(p => ({ codigo: p.codigo, tamanho: p.tamanho })), defaults))
     } catch (e) {
       setResultados([])
       setErro(e instanceof FormulaCorteError || e instanceof FormulaAcessorioError || e instanceof Error ? e.message : 'Erro ao testar fórmulas.')
