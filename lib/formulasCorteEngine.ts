@@ -40,6 +40,24 @@ export type TipologiaFormulasCorte = {
 
 export type OpcoesEscolhidas = Record<string, string>
 
+export type VidroFormulaDeclarativa = {
+  formula_largura?: string
+  formula_altura?: string
+  condicoes_largura?: CondicaoFormula[]
+  condicoes_altura?: CondicaoFormula[]
+  condicao_ativa?: Record<string, string[]>
+  quantidade?: number
+  arredondamento?: string
+  composicao_largura?: string
+  composicao_altura?: string
+}
+
+export type ResultadoVidroFormula = {
+  largura: number
+  altura: number
+  quantidade: number
+}
+
 export type ResultadoPeca = {
   codigo: string
   descricao?: string
@@ -252,6 +270,40 @@ function condicaoBate(quando: Record<string, string[]>, opcoes: OpcoesEscolhidas
     const escolhido = opcoes[chave]
     return escolhido !== undefined && valoresAceitos.includes(escolhido)
   })
+}
+
+function formulaCondicional(
+  base: string | undefined,
+  condicoes: CondicaoFormula[] | undefined,
+  opcoes: OpcoesEscolhidas,
+) {
+  let formula = base
+  for (const condicao of condicoes ?? []) {
+    if (condicaoBate(condicao.quando, opcoes)) formula = condicao.formula
+  }
+  return formula
+}
+
+export function calcularVidroFormula(
+  vidro: VidroFormulaDeclarativa | null | undefined,
+  largura: number,
+  altura: number,
+  opcoes: OpcoesEscolhidas = {},
+): ResultadoVidroFormula | null {
+  if (!vidro) return null
+  if (vidro.condicao_ativa && !condicaoBate(vidro.condicao_ativa, opcoes)) return null
+
+  const formulaLargura = formulaCondicional(vidro.formula_largura, vidro.condicoes_largura, opcoes)
+  const formulaAltura = formulaCondicional(vidro.formula_altura, vidro.condicoes_altura, opcoes)
+  const quantidade = Number(vidro.quantidade || 0)
+
+  if (!formulaLargura || !formulaAltura || !Number.isFinite(quantidade) || quantidade <= 0) return null
+
+  return {
+    largura: calcularFormulaCorteIsolada(formulaLargura, largura, altura),
+    altura: calcularFormulaCorteIsolada(formulaAltura, largura, altura),
+    quantidade,
+  }
 }
 
 function validarOpcoes(def: TipologiaFormulasCorte, opcoes: OpcoesEscolhidas) {
