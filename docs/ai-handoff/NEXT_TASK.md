@@ -412,3 +412,17 @@ request→composição calculada, se ela existir como chamada de frontend.
 - restauração de tipologia nunca apaga histórico;
 - sobra cobrada fica sem margem;
 - GitHub continua fonte da verdade.
+
+
+## 2026-10-01 — Próximo passo: validar segurança W.Vetro
+
+Branch: `fix/wvetro-seguranca-main-atual`
+
+1. conferir Build Validation do PR;
+2. não publicar Preview automaticamente;
+3. após merge, validar em ambiente controlado:
+   - Master da Esquadrifácio acessa as telas W.Vetro normalmente;
+   - usuário sem acesso à Medição Final recebe 403 na importação;
+   - usuário com consulta consegue preview, mas não confirmar;
+   - usuário com edição consegue importar;
+   - empresa diferente da configurada em `WVETRO_EMPRESA_SLUG` não acessa rotas administrativas globais.
