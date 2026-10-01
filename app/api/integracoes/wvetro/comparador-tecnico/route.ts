@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
@@ -423,6 +423,153 @@ function escolherMelhorFormula(
   }
 }
 
+function numeroSeguro(v: unknown, fallback = 0) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function familiaHistorica(item: WVetroItemTecnico) {
+  const pc2 = classificarFamiliaPc2Suprema(item)
+  if (pc2 !== 'outra') return `pc2:${pc2}`
+  const pc4 = classificarFamiliaPc4Suprema(item)
+  if (pc4 !== 'outra') return `pc4:${pc4}`
+  return String(item.Modelo || 'sem_modelo').trim().toLowerCase().replace(/\s+/g, '_')
+}
+
+async function matrizHistorica(req: NextRequest) {
+  const linha = String(req.nextUrl.searchParams.get('linha') || 'SUPREMA').trim()
+  const modelo = String(req.nextUrl.searchParams.get('modelo') || '').trim()
+  const limite = Math.max(1, Math.min(5000, Number(req.nextUrl.searchParams.get('limite') || 2500) || 2500))
+  const linhaFiltro = linha ? `%${linha}%` : '%'
+  const modeloFiltro = modelo ? `%${modelo}%` : '%'
+  const sql = neonStaging()
+
+  const rows = await sql`
+    with ultimos as (
+      select distinct on (recurso, chave_externa_canonica)
+        recurso,
+        chave_externa_canonica as chave,
+        payload,
+        capturado_em,
+        versao_canonica
+      from wvetro_migracao.raw_canonico
+      where recurso in ('orcamentos','pedidos')
+      order by recurso, chave_externa_canonica, versao_canonica desc, capturado_em desc
+    )
+    select
+      recurso,
+      chave,
+      payload->>'Nro' as numero,
+      capturado_em,
+      item
+    from ultimos
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(payload->'Itens') = 'array' then payload->'Itens' else '[]'::jsonb end
+    ) item
+    where coalesce(item->>'Linha','') ilike ${linhaFiltro}
+      and coalesce(item->>'Modelo','') ilike ${modeloFiltro}
+    order by capturado_em desc
+    limit ${limite}
+  `
+
+  type Grupo = {
+    assinatura: string
+    linha: string
+    modelo: string
+    familia: string
+    ocorrencias: number
+    pecas: number
+    larguraMin: number | null
+    larguraMax: number | null
+    alturaMin: number | null
+    alturaMax: number | null
+    perfis: ReturnType<typeof assinaturaComposicaoWVetro>['perfis']
+    acessorios: string[]
+    vidros: ReturnType<typeof assinaturaComposicaoWVetro>['vidros']
+    amostras: Array<{
+      numero: string
+      itemId: string
+      codigo: string
+      nome: string
+      largura: number
+      altura: number
+      recurso: string
+    }>
+  }
+
+  const grupos = new Map<string, Grupo>()
+  for (const row of rows as any[]) {
+    const item = row?.item as WVetroItemTecnico | undefined
+    if (!item || typeof item !== 'object') continue
+    const assinatura = assinaturaComposicaoWVetro(item)
+    const linhaItem = String(item.Linha || '').trim()
+    const modeloItem = String(item.Modelo || '').trim()
+    const familia = familiaHistorica(item)
+    const chaveGrupo = JSON.stringify([linhaItem.toUpperCase(), modeloItem.toUpperCase(), familia, assinatura.chave])
+    const largura = numeroSeguro(item.Largura, NaN)
+    const altura = numeroSeguro(item.Altura, NaN)
+    const quantidade = Math.max(1, numeroSeguro(item.Qtde, 1))
+    const grupo = grupos.get(chaveGrupo) || {
+      assinatura: assinatura.chave,
+      linha: linhaItem,
+      modelo: modeloItem,
+      familia,
+      ocorrencias: 0,
+      pecas: 0,
+      larguraMin: null,
+      larguraMax: null,
+      alturaMin: null,
+      alturaMax: null,
+      perfis: assinatura.perfis,
+      acessorios: assinatura.acessorios,
+      vidros: assinatura.vidros,
+      amostras: [],
+    }
+
+    grupo.ocorrencias += 1
+    grupo.pecas += quantidade
+    if (Number.isFinite(largura)) {
+      grupo.larguraMin = grupo.larguraMin == null ? largura : Math.min(grupo.larguraMin, largura)
+      grupo.larguraMax = grupo.larguraMax == null ? largura : Math.max(grupo.larguraMax, largura)
+    }
+    if (Number.isFinite(altura)) {
+      grupo.alturaMin = grupo.alturaMin == null ? altura : Math.min(grupo.alturaMin, altura)
+      grupo.alturaMax = grupo.alturaMax == null ? altura : Math.max(grupo.alturaMax, altura)
+    }
+
+    const numero = String(row?.numero || '').trim()
+    const itemId = String((item as any).Id || '').trim()
+    if (grupo.amostras.length < 5 && numero && !grupo.amostras.some(a => a.numero === numero && a.itemId === itemId)) {
+      grupo.amostras.push({
+        numero,
+        itemId,
+        codigo: String(item.Codigo || ''),
+        nome: String(item.Nome || ''),
+        largura: numeroSeguro(item.Largura),
+        altura: numeroSeguro(item.Altura),
+        recurso: String(row?.recurso || ''),
+      })
+    }
+    grupos.set(chaveGrupo, grupo)
+  }
+
+  const assinaturas = [...grupos.values()].sort((a, b) =>
+    b.ocorrencias - a.ocorrencias ||
+    b.pecas - a.pecas ||
+    a.modelo.localeCompare(b.modelo, 'pt-BR') ||
+    a.familia.localeCompare(b.familia, 'pt-BR')
+  )
+
+  return NextResponse.json({
+    ok: true,
+    modo: 'matriz',
+    filtros: { linha, modelo, limite },
+    totalItens: rows.length,
+    totalAssinaturas: assinaturas.length,
+    assinaturas,
+  })
+}
+
 function opcoesDaUrl(req: NextRequest): Record<string, string> {
   const raw = String(req.nextUrl.searchParams.get('opcoes') || '').trim()
   if (!raw) return {}
@@ -467,6 +614,8 @@ export async function GET(req: NextRequest) {
 
     const neon = statusNeonStaging()
     if (!neon.configurado) return NextResponse.json({ error: 'Staging Neon não configurado para consulta histórica real.' }, { status: 503 })
+
+    if (modo === 'matriz') return matrizHistorica(req)
 
     const numero = String(req.nextUrl.searchParams.get('numero') || '').trim()
     const itemId = String(req.nextUrl.searchParams.get('itemId') || '').trim()
