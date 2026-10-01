@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -105,25 +105,59 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
   if (linha.includes('SUPREMA') && modelo.includes('PORTA DE GIRO 01 FOLHA')) {
     const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
     const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
-    const perfilDominante = [
-      '25-548 (L-715)','GS-034','MP347','SU102','SU111','SU225','SU279',
-    ]
-    const acessorioDominante = [
-      'ALMC25','ALMC2960','BUC755','CON295','DOB840','FIT206','FRA822','GUA239','GUA258',
-      'MAC927','NYL042','NYL190','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
-    ]
 
-    if (conjuntoExato(perfis, perfilDominante) && conjuntoExato(acessorios, acessorioDominante)) {
-      refs.push({
+    const referencias = [
+      {
         id: 'referencia-local-pg1-lambril-suprema',
-        tipologia_id: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.tipologia_id,
-        configuracao_label: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.configuracao_label,
+        formula: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA,
+        perfis: ['25-548 (L-715)','GS-034','MP347','SU102','SU111','SU225','SU279'],
+        acessorios: [
+          'ALMC25','ALMC2960','BUC755','CON295','DOB840','FIT206','FRA822','GUA239','GUA258',
+          'MAC927','NYL042','NYL190','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
+        ],
+        validarKit: false,
+      },
+      {
+        id: 'referencia-local-pg1-vidro-suprema',
+        formula: FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA,
+        perfis: ['25-548 (L-715)','MP347','SU102','SU111','SU225','SU279'],
+        acessorios: [
+          'ALMC25','ALMC2960','BUC755','CON295','DOB840','FIT206','FRA822','GUA171','GUA239',
+          'GUA258','GUA259','MAC927','NYL042','NYL190','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
+        ],
+        validarKit: true,
+      },
+    ] as const
+
+    const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
+    const qtdAcessorio = (codigo: string) =>
+      (item.Acessorios || [])
+        .filter(a => String(a.Codigo || '').trim().toUpperCase() === codigo)
+        .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
+
+    for (const referencia of referencias) {
+      if (!conjuntoExato(perfis, referencia.perfis as unknown as string[])) continue
+      if (!conjuntoExato(acessorios, referencia.acessorios as unknown as string[])) continue
+      if (referencia.validarKit) {
+        const kitUnitario =
+          Math.abs(qtdAcessorio('ALMC25') - 2) < 0.0001 &&
+          Math.abs(qtdAcessorio('CON295') - 1) < 0.0001 &&
+          Math.abs(qtdAcessorio('FRA822') - 1) < 0.0001 &&
+          Math.abs(qtdAcessorio('PAR435') - 4) < 0.0001
+        if (!kitUnitario) continue
+      }
+
+      const formula = referencia.formula
+      refs.push({
+        id: referencia.id,
+        tipologia_id: formula.tipologia_id,
+        configuracao_label: formula.configuracao_label,
         status: 'referencia_historica',
         ativo: false,
-        variaveis: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.variaveis,
-        pecas: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.pecas,
-        vidro: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.vidro,
-        acessorios: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.acessorios || [],
+        variaveis: formula.variaveis,
+        pecas: formula.pecas,
+        vidro: formula.vidro,
+        acessorios: formula.acessorios || [],
       })
     }
   }
