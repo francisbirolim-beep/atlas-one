@@ -348,6 +348,10 @@ function tentarResolverPeca(
       }
       const tamanho = avaliarFormula(formulaComCondicoes(peca, opcoes), contexto)
       contexto[codigoResolvido] = tamanho
+      // Mantém também um alias estável pelo nome do grupo. Assim fórmulas
+      // posteriores (especialmente acessórios) podem depender do comprimento
+      // calculado sem precisar saber qual código físico foi escolhido pelo mapa.
+      contexto[peca.grupo] = tamanho
       return [enriquecerResultado(peca, {
         codigo: codigoResolvido,
         descricao: peca.descricao,
