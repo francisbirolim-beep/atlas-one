@@ -119,6 +119,127 @@ function paramsDaUrl(req: NextRequest): WVetroOperacionalConsultaParams {
   }
 }
 
+type AuditoriaNormalizada = {
+  origemRecurso: string
+  origemChave: string
+  tipoRelacao: string
+  destinoRecurso: string
+  destinoChave: string
+  referencia: string | null
+  encontrado: boolean
+  confianca: string
+  regra: string
+}
+
+type EvidenciasAuditoria = {
+  numerosHistoricoComercial: Set<string>
+  titulosHistoricoFinanceiro: Set<string>
+  projetosPresentesNosLotes: Set<string>
+}
+
+async function carregarEvidenciasAuditoria(
+  empresaId: string,
+  sql: ReturnType<typeof neonStaging>,
+): Promise<EvidenciasAuditoria> {
+  const [comercial, financeiro, projetosLote] = await Promise.all([
+    supabaseAdmin
+      .from('wvetro_historico_comercial')
+      .select('numero_wvetro')
+      .eq('empresa_id', empresaId)
+      .eq('somente_historico', true)
+      .not('numero_wvetro', 'is', null),
+    supabaseAdmin
+      .from('wvetro_historico_financeiro')
+      .select('titulo_id_wvetro')
+      .eq('empresa_id', empresaId)
+      .eq('somente_historico', true)
+      .not('titulo_id_wvetro', 'is', null),
+    sql`
+      select distinct
+        (l.payload->>'id') || ':' || (p->>'id') as referencia
+      from wvetro_migracao.raw_canonico l
+      cross join lateral jsonb_array_elements(coalesce(l.payload->'projetos','[]'::jsonb)) p
+      where l.recurso='lotes_producao'
+        and nullif(l.payload->>'id','') is not null
+        and nullif(p->>'id','') is not null
+    `,
+  ])
+
+  if (comercial.error) throw new Error(`Falha ao consultar histórico comercial W.Vetro: ${comercial.error.message}`)
+  if (financeiro.error) throw new Error(`Falha ao consultar histórico financeiro W.Vetro: ${financeiro.error.message}`)
+
+  return {
+    numerosHistoricoComercial: new Set(
+      (comercial.data || []).map((item: any) => String(item.numero_wvetro || '').trim()).filter(Boolean),
+    ),
+    titulosHistoricoFinanceiro: new Set(
+      (financeiro.data || []).map((item: any) => String(item.titulo_id_wvetro || '').trim()).filter(Boolean),
+    ),
+    projetosPresentesNosLotes: new Set(
+      (projetosLote || []).map((item: any) => String(item.referencia || '').trim()).filter(Boolean),
+    ),
+  }
+}
+
+function classificarAuditoria(normalizados: AuditoriaNormalizada[], evidencias: EvidenciasAuditoria) {
+  const classificados = normalizados.map(item => {
+    let classificacao = 'pendente_revisao'
+    let explicacao = 'Referência não encontrada nas evidências disponíveis.'
+    let requerAtencao = true
+
+    if (item.encontrado) {
+      classificacao = 'confirmada'
+      explicacao = 'Relação encontrada diretamente no staging.'
+      requerAtencao = false
+    } else if (item.origemRecurso === 'pedidos' && item.tipoRelacao === 'numero_compartilhado') {
+      classificacao = 'informativa'
+      explicacao = 'Número compartilhado entre pedido e orçamento é observacional e não é usado como chave automática.'
+      requerAtencao = false
+    } else if (item.referencia === '0') {
+      classificacao = 'sem_referencia'
+      explicacao = 'A origem declarou referência zero; não existe vínculo externo válido.'
+      requerAtencao = false
+    } else if (item.origemRecurso === 'titulos_baixados' && item.tipoRelacao === 'titulo_mesmo_id') {
+      if (item.referencia && evidencias.titulosHistoricoFinanceiro.has(item.referencia)) {
+        classificacao = 'preservada_historico_financeiro'
+        explicacao = 'A baixa não possui título atual correspondente, mas está preservada no histórico financeiro isolado.'
+        requerAtencao = false
+      } else {
+        classificacao = 'baixa_sem_historico_financeiro'
+        explicacao = 'A baixa não possui título atual correspondente nem registro no histórico financeiro isolado.'
+      }
+    } else if (item.origemRecurso === 'instalacoes' && item.tipoRelacao === 'projeto_producao') {
+      if (item.referencia && evidencias.projetosPresentesNosLotes.has(item.referencia)) {
+        classificacao = 'preservada_no_lote'
+        explicacao = 'O projeto não veio no endpoint producao_projeto, mas existe dentro do lote de produção correspondente.'
+        requerAtencao = false
+      } else {
+        classificacao = 'projeto_producao_nao_localizado'
+        explicacao = 'O projeto não foi localizado nem no endpoint producao_projeto nem dentro do lote.'
+      }
+    } else if (item.destinoRecurso === 'orcamentos' && item.referencia) {
+      if (evidencias.numerosHistoricoComercial.has(item.referencia)) {
+        classificacao = 'preservada_historico_comercial'
+        explicacao = 'O snapshot não está no staging atual, mas o número existe no histórico comercial isolado do Atlas.'
+        requerAtencao = false
+      } else {
+        classificacao = 'referencia_orcamento_nao_localizada'
+        explicacao = 'O número de orçamento não foi localizado nem no staging atual nem no histórico comercial isolado.'
+      }
+    }
+
+    return { ...item, classificacao, explicacao, requerAtencao }
+  })
+
+  const referenciasPendentesDistintas = new Set(
+    classificados
+      .filter(item => item.requerAtencao && item.referencia)
+      .map(item => item.referencia as string),
+  ).size
+
+  return { classificados, referenciasPendentesDistintas }
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await autenticarMaster(req)
   if (!usuario) {
