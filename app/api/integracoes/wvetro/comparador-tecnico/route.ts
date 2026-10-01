@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
@@ -54,48 +54,19 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
     })
   }
 
-  if (linha.includes('SUPREMA') && modelo.includes('PORTA DE CORRER 02 FOLHAS')) {
-    const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
-    const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
-
-    const perfisDominantes = [
-      'MP347','SU001','TMC','SU007','SU008','SU053','SU225','SU280','SU040','SU049','SU102',
-    ]
-    const acessoriosDominantes = [
-      'NYL335','NYL332','FRA820','CON409','RPCS100','NYL357','FIT206','FIT246','FIT212',
-      'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
-      'BUC755','SIL-PU',
-    ]
-
-    if (conjuntoExato(perfis, perfisDominantes) && conjuntoExato(acessorios, acessoriosDominantes)) {
-      const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
-      const qtdAcessorio = (codigo: string) =>
-        (item.Acessorios || [])
-          .filter(a => String(a.Codigo || '').trim().toUpperCase() === codigo)
-          .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
-
-      const assinaturaUnitaria =
-        Math.abs(qtdAcessorio('RPCS100') - 4) < 0.0001 &&
-        Math.abs(qtdAcessorio('NYL332') - 8) < 0.0001 &&
-        Math.abs(qtdAcessorio('CON409') - 2) < 0.0001 &&
-        Math.abs(qtdAcessorio('FRA820') - 2) < 0.0001 &&
-        Math.abs(qtdAcessorio('NYL335') - 1) < 0.0001
-
-      if (assinaturaUnitaria && (item.Vidros || []).length > 0) {
-        const formula = FIXTURE_PC2_SUPREMA_GENERICA_ATLAS
-        refs.push({
-          id: 'referencia-local-pc2-suprema-dominante',
-          tipologia_id: formula.tipologia_id,
-          configuracao_label: 'PC2 Suprema · vidro padrão dominante',
-          status: 'referencia_historica',
-          ativo: false,
-          variaveis: formula.variaveis,
-          pecas: formula.pecas,
-          vidro: formula.vidro,
-          acessorios: formula.acessorios || [],
-        })
-      }
-    }
+  if (ehPc2SupremaDominante(item)) {
+    const formula = FIXTURE_PC2_SUPREMA_GENERICA_ATLAS
+    refs.push({
+      id: 'referencia-local-pc2-suprema-dominante',
+      tipologia_id: formula.tipologia_id,
+      configuracao_label: 'PC2 Suprema · vidro padrão dominante',
+      status: 'referencia_historica',
+      ativo: false,
+      variaveis: formula.variaveis,
+      pecas: formula.pecas,
+      vidro: formula.vidro,
+      acessorios: formula.acessorios || [],
+    })
   }
 
   if (linha.includes('SUPREMA') && modelo.includes('PORTA DE CORRER 03 FOLHAS')) {
