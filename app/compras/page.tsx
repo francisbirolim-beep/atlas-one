@@ -129,6 +129,9 @@ type HistoricoWVetroSuprimento = {
   quantidade: number | null;
   valor_unitario: number | null;
   valor_total: number | null;
+  produto_atlas_id: string | null;
+  produto_vinculo_status: "seguro" | "pendente" | "ambiguo" | null;
+  produto_vinculo_metodo: string | null;
   nota_id_wvetro: string | null;
   nota_numero: string | null;
   nota_serie: string | null;
@@ -757,6 +760,9 @@ export default function ComprasPage() {
                         h.valor_contabil ??
                         h.valor_produto ??
                         null;
+                      const produtoAtlas = h.produto_atlas_id
+                        ? dados?.produtos.find((p) => p.id === h.produto_atlas_id)
+                        : undefined;
                       return (
                         <tr key={h.id} className="border-t align-top">
                           <td className="px-3 py-3 whitespace-nowrap">
@@ -799,6 +805,22 @@ export default function ComprasPage() {
                                 .filter(Boolean)
                                 .join(" · ")}
                             </div>
+                            {h.produto_vinculo_status === "seguro" && (
+                              <div className="mt-1.5 text-[11px] font-semibold text-emerald-700">
+                                Atlas: {produtoAtlas?.codigo ? `${produtoAtlas.codigo} · ` : ""}
+                                {produtoAtlas?.nome || h.produto_atlas_id}
+                              </div>
+                            )}
+                            {h.produto_vinculo_status === "pendente" && (
+                              <div className="mt-1.5 text-[11px] font-semibold text-amber-700">
+                                Produto Atlas pendente de vínculo
+                              </div>
+                            )}
+                            {h.produto_vinculo_status === "ambiguo" && (
+                              <div className="mt-1.5 text-[11px] font-semibold text-red-700">
+                                Produto com vínculo ambíguo — revisar
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-right">
                             {h.quantidade ?? "—"}
