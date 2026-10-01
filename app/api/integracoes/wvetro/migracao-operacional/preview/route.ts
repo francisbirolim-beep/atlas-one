@@ -990,6 +990,46 @@ export async function GET(req: NextRequest) {
             (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
         `
         resumoNeon = rows[0] || null
+
+        const ausentes = await sql`
+          select
+            origem_recurso,
+            origem_chave,
+            tipo_relacao,
+            destino_recurso,
+            destino_chave,
+            referencia,
+            encontrado,
+            confianca,
+            regra
+          from wvetro_migracao.auditoria_relacoes
+          where not encontrado
+        `
+
+        const ausentesNormalizados: AuditoriaNormalizada[] = ausentes.map((row: any) => ({
+          origemRecurso: String(row.origem_recurso || ''),
+          origemChave: String(row.origem_chave || ''),
+          tipoRelacao: String(row.tipo_relacao || ''),
+          destinoRecurso: String(row.destino_recurso || ''),
+          destinoChave: String(row.destino_chave || ''),
+          referencia: String(row.referencia || '').trim() || null,
+          encontrado: row.encontrado === true,
+          confianca: String(row.confianca || ''),
+          regra: String(row.regra || ''),
+        }))
+
+        const evidenciasResumo = await carregarEvidenciasAuditoria(usuario.empresa_id, sql)
+        const classificacaoResumo = classificarAuditoria(
+          ausentesNormalizados,
+          evidenciasResumo,
+        )
+
+        if (resumoNeon && typeof resumoNeon === 'object') {
+          ;(resumoNeon as any).auditoria_pendencias_reais =
+            classificacaoResumo.classificados.filter(item => item.requerAtencao).length
+          ;(resumoNeon as any).auditoria_referencias_pendentes_distintas =
+            classificacaoResumo.referenciasPendentesDistintas
+        }
       } catch (error) {
         resumoNeon = {
           erro: error instanceof Error ? error.message : 'Falha ao carregar resumo do staging Neon.',
