@@ -1,3 +1,17 @@
+## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST
+
+Antes de qualquer tarefa abaixo:
+1. desenvolver em branch;
+2. testar no workspace local `~/Atlas-One-Dev`;
+3. rodar `npm run release:check`;
+4. abrir/atualizar PR e revisar diff;
+5. mergear somente apos validacao local;
+6. nao esperar Preview Vercel por PR;
+7. usar `npm run vercel:preview` somente quando houver um pacote candidato real;
+8. usar `npm run vercel:prod` apenas para a versao final aprovada.
+
+A integracao Git da Vercel esta desconectada intencionalmente para economizar deployments.
+
 ## 2026-09-30 — Maiúsculas globais: concluído
 
 PR #490 em produção. Nada pendente. Ao mexer em conversões de texto em campos controlados, seguir a regra de `DECISIONS.md` (“Campos controlados pelo React”).
