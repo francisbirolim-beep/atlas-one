@@ -73,6 +73,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    if (acao === 'teste') {
+      const { data, error } = await supabaseAdmin
+        .from('notificacoes')
+        .insert({
+          empresa_id: usuario.empresa_id,
+          usuario_id: usuario.id,
+          categoria: 'chat',
+          tipo: 'push_teste',
+          titulo: 'Teste de notificação do Atlas',
+          mensagem: 'Se este aviso apareceu, as notificações deste dispositivo estão funcionando.',
+          href: '/configuracoes/notificacoes',
+          origem_tipo: 'push_teste',
+          origem_id: crypto.randomUUID(),
+          push_status: 'pendente',
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      return NextResponse.json({ ok: true, notificationId: data.id })
+    }
+
     if (acao === 'remover') {
       const endpoint = String(body?.endpoint || '').trim()
       if (!endpoint) return NextResponse.json({ error: 'Endpoint nao informado.' }, { status: 400 })
