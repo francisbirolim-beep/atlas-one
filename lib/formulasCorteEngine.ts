@@ -52,7 +52,7 @@ export type ResultadoPeca = {
 type Token =
   | { tipo: 'numero'; valor: string }
   | { tipo: 'identificador'; valor: string }
-  | { tipo: 'funcao'; valor: 'ROUND' | 'CEIL' }
+  | { tipo: 'funcao'; valor: 'ROUND' | 'CEIL' | 'FLOOR' }
   | { tipo: 'operador'; valor: '+' | '-' | '*' | '/' | '(' | ')' }
 
 export class FormulaCorteError extends Error {
@@ -86,7 +86,7 @@ function tokenizar(formula: string): Token[] {
     const identificador = restante.match(/^[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_]*/)
     if (identificador) {
       const valor = identificador[0]
-      if (valor === 'ROUND' || valor === 'CEIL') {
+      if (valor === 'ROUND' || valor === 'CEIL' || valor === 'FLOOR') {
         tokens.push({ tipo: 'funcao', valor })
       } else {
         tokens.push({ tipo: 'identificador', valor })
@@ -193,7 +193,7 @@ function avaliarFormula(formula: string, contexto: Record<string, number>): numb
       if (fechamento?.tipo !== 'operador' || fechamento.valor !== ')') {
         throw new FormulaCorteError(`${token.valor} sem fechamento em "${formula}"`)
       }
-      return token.valor === 'CEIL' ? Math.ceil(valor) : Math.round(valor)
+      return token.valor === 'CEIL' ? Math.ceil(valor) : token.valor === 'FLOOR' ? Math.floor(valor) : Math.round(valor)
     }
 
     if (token.tipo === 'numero') {
