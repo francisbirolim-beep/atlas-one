@@ -90,6 +90,16 @@ type HistoricoAtlasResumo = {
   somenteHistorico?: number
   foraHistorico?: number
   comCliente?: number
+  coberturaProducaoProjetos?: {
+    total: number
+    representadosViaLote: number
+    comClienteSeguro: number
+    semClienteSeguro: number
+    lotesCobertos: number
+    lotesComProjetos: number
+    completo: boolean
+    estrategia: string
+  }
   camadas?: {
     comercial: HistoricoAtlasCamada
     financeiro: HistoricoAtlasCamada
@@ -847,6 +857,37 @@ export default function MigracaoOperacionalWVetroPage() {
                     )
                   })}
                 </div>
+
+                {historicoAtlas.coberturaProducaoProjetos && (
+                  <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                          Projetos de produção
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {historicoAtlas.coberturaProducaoProjetos.representadosViaLote}/
+                          {historicoAtlas.coberturaProducaoProjetos.total} preservados via lote histórico
+                        </div>
+                        <div className="mt-1 max-w-3xl text-xs text-slate-600">
+                          {historicoAtlas.coberturaProducaoProjetos.estrategia}
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-slate-600">
+                        <div>
+                          {historicoAtlas.coberturaProducaoProjetos.comClienteSeguro} com cliente seguro
+                        </div>
+                        <div>
+                          {historicoAtlas.coberturaProducaoProjetos.semClienteSeguro} sem cliente seguro
+                        </div>
+                        <div>
+                          {historicoAtlas.coberturaProducaoProjetos.lotesCobertos}/
+                          {historicoAtlas.coberturaProducaoProjetos.lotesComProjetos} lotes cobertos
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
                   <span
