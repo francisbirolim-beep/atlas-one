@@ -400,7 +400,7 @@ function compararAcessorios(
     if (resultado?.ativo === false) return
     const k = String(def.codigo || '').toUpperCase()
     if (!k) return
-    const regraPendente = resultado?.ativo !== false && resultado?.valor == null && !String(def.formula_quantidade || '').trim()
+    const regraPendente = resultado?.valor == null && !String(def.formula_quantidade || '').trim()
     const quantidade = resultado?.valor ?? def.quantidade_referencia ?? null
     const atual = aMap.get(k)
     if (!atual) {
