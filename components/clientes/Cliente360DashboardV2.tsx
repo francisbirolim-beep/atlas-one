@@ -65,6 +65,21 @@ type HistoricoWVetroFinanceiro = {
   centro_custo_descricao?:string|null
   status_vinculo?:string|null
 }
+type HistoricoWVetroOperacional = {
+  id:string
+  tipo_registro:'lote_producao'|'instalacao'
+  chave_externa:string
+  numero_wvetro?:string|null
+  data_programacao?:string|null
+  data_inicio?:string|null
+  data_termino?:string|null
+  equipe_nome?:string|null
+  observacao?:string|null
+  quantidade_prevista?:number|null
+  quantidade_realizada?:number|null
+  orcamentos_wvetro?:string[]|null
+  status_vinculo?:string|null
+}
 type Assistencia = { id:string; numero?:string|null; created_at:string; descricao_problema?:string|null; status?:string|null; obra_id?:string|null }
 type Medicao = { id:string; created_at:string; status_operacional?:string|null; obra_id?:string|null; orcamento_id?:string|null }
 type Compra = { id:string; created_at:string; descricao?:string|null; categoria?:string|null; quantidade?:number|null; unidade?:string|null; status?:string|null; prioridade?:string|null; obra_id?:string|null; obra_nome?:string|null }
@@ -92,6 +107,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [orcamentos,setOrcamentos]=useState<Orcamento[]>([])
   const [wvetroHistorico,setWvetroHistorico]=useState<HistoricoWVetroComercial[]>([])
   const [wvetroFinanceiro,setWvetroFinanceiro]=useState<HistoricoWVetroFinanceiro[]>([])
+  const [wvetroOperacional,setWvetroOperacional]=useState<HistoricoWVetroOperacional[]>([])
   const [assistencias,setAssistencias]=useState<Assistencia[]>([])
   const [medicoes,setMedicoes]=useState<Medicao[]>([])
   const [compras,setCompras]=useState<Compra[]>([])
@@ -119,12 +135,13 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   useEffect(()=>{void carregar(); void usuarioAtual().then(setUsuario)},[clienteId])
   async function carregar(){
     setCarregando(true);setErro('')
-    const [c,os,orc,wvh,wvf,ass,med,comp,int,cr,rec,docs]=await Promise.all([
+    const [c,os,orc,wvh,wvf,wvo,ass,med,comp,int,cr,rec,docs]=await Promise.all([
       supabase.from('clientes').select('*').eq('id',clienteId).maybeSingle(),
       listarObrasCliente(clienteId),
       supabase.from('orcamentos').select('id,numero,created_at,valor_estimado,status,obra_id,revisao_versao,revisao_atual,revisao_tipo,revisao_motivo').eq('cliente_id',clienteId).or('modo_entrada.is.null,modo_entrada.neq.balcao').order('created_at',{ascending:false}),
       supabase.from('wvetro_historico_comercial').select('id,tipo_registro,chave_externa,numero_wvetro,situacao_wvetro,data_emissao,data_venda,valor_total,metodo_identidade,status_vinculo,itens').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_venda',{ascending:false,nullsFirst:false}).order('data_emissao',{ascending:false,nullsFirst:false}),
       supabase.from('wvetro_historico_financeiro').select('id,titulo_id_wvetro,fonte_wvetro,tipo_titulo,origem_titulo,documento,orcamento_wvetro,data_emissao,data_vencimento,data_baixa,valor_titulo,valor_recebido,valor_saldo,centro_custo_descricao,status_vinculo').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_vencimento',{ascending:false,nullsFirst:false}),
+      supabase.from('wvetro_historico_operacional').select('id,tipo_registro,chave_externa,numero_wvetro,data_programacao,data_inicio,data_termino,equipe_nome,observacao,quantidade_prevista,quantidade_realizada,orcamentos_wvetro,status_vinculo').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_programacao',{ascending:false,nullsFirst:false}),
       supabase.from('assistencias').select('id,numero,created_at,descricao_problema,status,obra_id').eq('cliente_id',clienteId).order('created_at',{ascending:false}),
       supabase.from('medicoes_finais').select('id,created_at,status_operacional,obra_id,orcamento_id').eq('cliente_id',clienteId).order('created_at',{ascending:false}),
       supabase.from('compras_necessidades').select('id,created_at,descricao,categoria,quantidade,unidade,status,prioridade,obra_id,obra_nome').eq('cliente_id',clienteId).order('created_at',{ascending:false}),
@@ -133,7 +150,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     ])
     if(c.error||!c.data){setErro('Cliente não encontrado.');setCarregando(false);return}
     const r=rec||[]; const alo=await listarAlocacoesCliente(r.map(x=>x.id))
-    setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]) as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
+    setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]) as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setWvetroOperacional((wvo.data||[]) as HistoricoWVetroOperacional[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
   }
 
   const obraPorId=useMemo(()=>Object.fromEntries(obras.map(o=>[o.id,o])),[obras])
@@ -220,7 +237,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
         {aba==='documentos'&&<div className="grid gap-5 xl:grid-cols-[340px_1fr]"><Box titulo="Adicionar documento"><div className="space-y-3"><input value={documentoForm.titulo} onChange={e=>setDocumentoForm(f=>({...f,titulo:e.target.value}))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Título"/><select value={documentoForm.obraId} onChange={e=>setDocumentoForm(f=>({...f,obraId:e.target.value}))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">Cliente geral</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select><label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-slate-500"><Upload size={15}/>{arquivo?.name||'Escolher arquivo'}<input type="file" className="hidden" onChange={e=>setArquivo(e.target.files?.[0]||null)}/></label><textarea value={documentoForm.observacoes} onChange={e=>setDocumentoForm(f=>({...f,observacoes:e.target.value}))} className="w-full rounded-lg border p-3 text-sm" rows={3}/><button disabled={!arquivo||!documentoForm.titulo.trim()||salvando} onClick={salvarDocumento} className="w-full rounded-lg bg-brand-navy py-2 text-sm font-bold text-white disabled:opacity-40">Salvar</button></div></Box><Box titulo="Documentos"><div className="space-y-2">{documentos.map(d=><a key={d.id} href={d.url} target="_blank" rel="noreferrer" className="block rounded-xl border p-3"><b>{d.titulo}</b><p className="text-xs text-slate-500">{d.nome_arquivo||'Arquivo'} · {dataBR(d.created_at)}</p></a>)}</div></Box></div>}
 
-        {aba==='historico'&&<Box titulo="Últimas movimentações"><div className="space-y-4">{eventos.map((e,i)=><div key={e.id} className="flex gap-3"><div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-brand-navy"/><div><b className="text-sm">{e.titulo}</b><p className="text-xs text-slate-500">{new Date(e.data).toLocaleString('pt-BR')}{e.detalhe?` · ${e.detalhe}`:''}</p></div></div>)}</div></Box>}
+        {aba==='historico'&&<div className="space-y-5"><Box titulo="Histórico operacional W.Vetro"><div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">Somente consulta. Lotes e instalações históricas não entram no Kanban, Produção ativa, Engenharia ou agenda de instalação do Atlas.</div><div className="space-y-2">{wvetroOperacional.map(o=>{const instalacao=o.tipo_registro==='instalacao';const orcs=Array.isArray(o.orcamentos_wvetro)?o.orcamentos_wvetro:[];return <div key={o.id} className="rounded-xl border bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b>{instalacao?'Instalação':'Lote de produção'} W.Vetro #{o.numero_wvetro||'—'}</b><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${instalacao?'bg-violet-100 text-violet-700':'bg-indigo-100 text-indigo-700'}`}>{instalacao?'INSTALAÇÃO HISTÓRICA':'PRODUÇÃO HISTÓRICA'}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(o.data_programacao||o.data_inicio)}{o.equipe_nome?` · Equipe ${o.equipe_nome}`:''}{orcs.length?` · Orçamento(s) ${orcs.join(', ')}`:''}</p>{o.observacao&&<p className="mt-1 text-xs text-slate-400">{o.observacao}</p>}</div><div className="text-right text-xs text-slate-500">{o.quantidade_prevista!=null&&<div>Previsto: <b className="text-slate-700">{Number(o.quantidade_prevista)}</b></div>}{o.quantidade_realizada!=null&&<div>Realizado: <b className="text-slate-700">{Number(o.quantidade_realizada)}</b></div>}</div></div></div>})}{!wvetroOperacional.length&&<p className="text-sm text-slate-400">Nenhum histórico operacional W.Vetro vinculado com segurança a este cliente.</p>}</div></Box><Box titulo="Últimas movimentações"><div className="space-y-4">{eventos.map((e,i)=><div key={e.id} className="flex gap-3"><div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-brand-navy"/><div><b className="text-sm">{e.titulo}</b><p className="text-xs text-slate-500">{new Date(e.data).toLocaleString('pt-BR')}{e.detalhe?` · ${e.detalhe}`:''}</p></div></div>)}</div></Box></div>}
 
         {aba==='observacoes'&&<Box titulo="Observações do cliente"><textarea value={obs} onChange={e=>setObs(e.target.value)} rows={8} className="w-full rounded-xl border p-3 text-sm" placeholder="Preferências, restrições, informações importantes, observações de relacionamento..."/><div className="mt-3 flex justify-end"><button disabled={salvando} onClick={salvarObs} className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white"><Save size={15}/>Salvar observações</button></div></Box>}
       </div>
