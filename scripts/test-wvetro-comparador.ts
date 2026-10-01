@@ -1,4 +1,4 @@
-import { classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
@@ -109,6 +109,26 @@ const familiasPc4 = [
 for (const [item, esperado] of familiasPc4) {
   const familia = classificarFamiliaPc4Suprema(item)
   if (familia !== esperado) throw new Error(`Regressão classificação PC4: esperado ${esperado}, obtido ${familia}.`)
+}
+
+const assinaturaBasePc2 = assinaturaComposicaoWVetro(FIXTURE_PC2_SUPREMA_WVETRO)
+const assinaturaMesmoEsqueletoOutraMedida = assinaturaComposicaoWVetro({
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Largura: 2500,
+  Altura: 2100,
+  Perfil: (FIXTURE_PC2_SUPREMA_WVETRO.Perfil || []).map(p => ({ ...p, Medida: Number(p.Medida || 0) + 0.123 })),
+  Vidros: (FIXTURE_PC2_SUPREMA_WVETRO.Vidros || []).map(v => ({ ...v, Largura: Number(v.Largura || 0) - 100, Altura: Number(v.Altura || 0) - 100 })),
+})
+if (assinaturaBasePc2.chave !== assinaturaMesmoEsqueletoOutraMedida.chave) {
+  throw new Error('Regressão assinatura W.Vetro: medidas não devem fragmentar o mesmo esqueleto técnico.')
+}
+
+const assinaturaComAcessorioExtra = assinaturaComposicaoWVetro({
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Acessorios: [...(FIXTURE_PC2_SUPREMA_WVETRO.Acessorios || []), { Codigo:'EXTRA-TESTE', Qtde:1 }],
+})
+if (assinaturaBasePc2.chave === assinaturaComAcessorioExtra.chave) {
+  throw new Error('Regressão assinatura W.Vetro: acessório extra deve gerar outra assinatura.')
 }
 
 const inferencia = inferirOpcoesTecnicasWVetro(
