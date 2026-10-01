@@ -724,5 +724,3 @@ console.log(JSON.stringify({
   fixture:'PTA3 Suprema - portinhola família B - arremate 3 lados',
   amostras:pta3FamiliaBResultados,
 },null,2))
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
