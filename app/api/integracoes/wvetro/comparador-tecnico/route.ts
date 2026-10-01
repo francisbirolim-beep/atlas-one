@@ -66,14 +66,17 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
       status: f.status,
       ativo: f.ativo,
     }))
-    return { formula: formulaDoBanco(data), formulaBanco: data, referencia: null, disponiveis }
+    return { formula: formulaDoBanco(data), formulaBanco: data, formulasBanco: [data, ...(irmas || []).filter((f: any) => f.id !== data.id)], referencia: null, disponiveis }
   }
 
+  const linha = String(item.Linha || '').trim()
+  const modelo = String(item.Modelo || '').trim()
   const { data: referencia, error: refError } = await supabaseAdmin
     .from('wvetro_referencias_tipologias')
     .select('id,linha_raw,modelo_raw,tipologia_atlas_id,status_mapeamento')
-    .eq('linha_raw', String(item.Linha || ''))
-    .eq('modelo_raw', String(item.Modelo || ''))
+    .ilike('linha_raw', linha)
+    .ilike('modelo_raw', modelo)
+    .limit(1)
     .maybeSingle()
 
   if (refError) throw refError
@@ -94,12 +97,66 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
   return {
     formula: formulaDoBanco(ordenadas[0]),
     formulaBanco: ordenadas[0],
+    formulasBanco: ordenadas,
     referencia,
     disponiveis: ordenadas.map((f: any) => ({
       id: f.id,
       configuracao_label: f.configuracao_label,
       status: f.status,
       ativo: f.ativo,
+    })),
+  }
+}
+
+function pontuarResultado(resultado: ReturnType<typeof compararItemWVetroComFormulaAtlas>) {
+  const r = resultado.resumo
+  return (
+    Number(r.ausente_atlas || 0) * 20 +
+    Number(r.ausente_wvetro || 0) * 10 +
+    Number(r.quantidade_diferente || 0) * 5 +
+    Number(r.medida_diferente || 0)
+  )
+}
+
+function escolherMelhorFormula(
+  item: WVetroItemTecnico,
+  rows: any[],
+  opcoesInformadas: Record<string, string>,
+) {
+  const avaliadas = rows.flatMap((row: any) => {
+    try {
+      const formula = formulaDoBanco(row)
+      const inferencia = inferirOpcoesTecnicasWVetro(item, formula, opcoesInformadas)
+      const resultado = compararItemWVetroComFormulaAtlas({ item, formula, opcoes: inferencia.opcoes })
+      return [{
+        row,
+        formula,
+        inferencia,
+        resultado,
+        score: pontuarResultado(resultado),
+      }]
+    } catch {
+      return []
+    }
+  })
+
+  avaliadas.sort((a, b) => {
+    if (a.score !== b.score) return a.score - b.score
+    const ativo = Number(Boolean(b.row.ativo)) - Number(Boolean(a.row.ativo))
+    if (ativo !== 0) return ativo
+    return rankStatus(a.row.status) - rankStatus(b.row.status)
+  })
+
+  if (!avaliadas.length) throw new Error('Nenhuma fórmula Atlas pôde ser avaliada para este item.')
+  return {
+    melhor: avaliadas[0],
+    ranking: avaliadas.map(a => ({
+      id: a.row.id,
+      configuracao_label: a.row.configuracao_label,
+      status: a.row.status,
+      ativo: a.row.ativo,
+      score: a.score,
+      resumo: a.resultado.resumo,
     })),
   }
 }
@@ -172,12 +229,32 @@ export async function GET(req: NextRequest) {
     if (!item) return NextResponse.json({ error: 'Item técnico não encontrado neste registro.' }, { status: 404 })
 
     const carregada = await carregarFormula(item, formulaId)
-    const inferencia = inferirOpcoesTecnicasWVetro(item, carregada.formula, opcoesInformadas)
-    const resultado = compararItemWVetroComFormulaAtlas({
-      item,
-      formula: carregada.formula,
-      opcoes: inferencia.opcoes,
-    })
+    const avaliacao = formulaId
+      ? {
+          melhor: {
+            row: carregada.formulaBanco,
+            formula: carregada.formula,
+            inferencia: inferirOpcoesTecnicasWVetro(item, carregada.formula, opcoesInformadas),
+            resultado: null as ReturnType<typeof compararItemWVetroComFormulaAtlas> | null,
+            score: 0,
+          },
+          ranking: [] as Array<Record<string, unknown>>,
+        }
+      : escolherMelhorFormula(item, carregada.formulasBanco || [carregada.formulaBanco], opcoesInformadas)
+
+    if (!avaliacao.melhor.resultado) {
+      avaliacao.melhor.resultado = compararItemWVetroComFormulaAtlas({
+        item,
+        formula: avaliacao.melhor.formula,
+        opcoes: avaliacao.melhor.inferencia.opcoes,
+      })
+      avaliacao.melhor.score = pontuarResultado(avaliacao.melhor.resultado)
+    }
+
+    const formulaEscolhida = avaliacao.melhor.row
+    const formulaAtlas = avaliacao.melhor.formula
+    const inferencia = avaliacao.melhor.inferencia
+    const resultado = avaliacao.melhor.resultado
 
     return NextResponse.json({
       ok: true,
@@ -186,12 +263,15 @@ export async function GET(req: NextRequest) {
       resultado,
       referencia: carregada.referencia,
       formula: {
-        id: carregada.formulaBanco.id,
-        configuracao_label: carregada.formulaBanco.configuracao_label,
-        status: carregada.formulaBanco.status,
-        ativo: carregada.formulaBanco.ativo,
+        id: formulaEscolhida.id,
+        configuracao_label: formulaEscolhida.configuracao_label,
+        status: formulaEscolhida.status,
+        ativo: formulaEscolhida.ativo,
+        selecionada_por: formulaId ? 'manual' : 'melhor_compatibilidade_historica',
+        score: avaliacao.melhor.score,
       },
-      variaveis: carregada.formula.variaveis,
+      rankingFormulas: avaliacao.ranking,
+      variaveis: formulaAtlas.variaveis,
       opcoes: inferencia.opcoes,
       inferencias: inferencia.inferencias,
       formulasDisponiveis: carregada.disponiveis,
