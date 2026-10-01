@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { classificarFamiliaPc2Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
@@ -318,6 +318,11 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
 
   const linha = String(item.Linha || '').trim()
   const modelo = String(item.Modelo || '').trim()
+  const familiaPc2 = classificarFamiliaPc2Suprema(item)
+  if (familiaPc2 !== 'outra' && !formulasReferenciaLocal(item).length) {
+    throw new Error(`Variante PC2 Suprema ainda não validada tecnicamente: ${familiaPc2}.`)
+  }
+
   const { data: referencia, error: refError } = await supabaseAdmin
     .from('wvetro_referencias_tipologias')
     .select('id,linha_raw,modelo_raw,tipologia_atlas_id,status_mapeamento')
