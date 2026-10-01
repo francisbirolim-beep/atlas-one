@@ -544,7 +544,7 @@ export async function GET(req: NextRequest) {
             .eq('origem_api_linhas', true),
           supabaseAdmin
             .from('cores')
-            .select('nome,ativo'),
+            .select('id,nome,ativo'),
           supabaseAdmin
             .from('wvetro_referencias_vidros')
             .select('especificacao,status_validacao,produto_atlas_id,ncm,ocorrencias,dados_origem'),
@@ -582,9 +582,42 @@ export async function GET(req: NextRequest) {
           .map((item: any) => [normalizar(item.linha_raw), item] as const)
           .filter(([nome]) => !!nome),
       )
-      const coresOficiais = new Set(
-        (coresAtlas.data || []).map((item: any) => normalizar(item.nome)).filter(Boolean),
-      )
+      const coresOficiaisLista = (coresAtlas.data || []).map((item: any) => ({
+        id: String(item.id || ''),
+        nome: normalizar(item.nome),
+      })).filter((item: any) => !!item.nome)
+      const coresOficiais = new Set(coresOficiaisLista.map((item: any) => item.nome))
+
+      const normalizarSimilaridade = (valor: unknown) =>
+        normalizar(valor)
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\bMARRON\b/g, 'MARROM')
+          .replace(/[^A-Z0-9]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+
+      const tokensCor = (valor: unknown) =>
+        normalizarSimilaridade(valor)
+          .split(' ')
+          .filter(token => token.length >= 3 && token !== 'COD')
+
+      const sugestoesCor = (nome: string) => {
+        const origem = new Set(tokensCor(nome))
+        if (!origem.size) return []
+
+        return coresOficiaisLista
+          .map((cor: any) => {
+            const destino = new Set(tokensCor(cor.nome))
+            if (!destino.size) return { ...cor, score: 0 }
+            const intersecao = Array.from(origem).filter(token => destino.has(token)).length
+            const score = intersecao / Math.min(origem.size, destino.size)
+            return { ...cor, score: Number(score.toFixed(3)) }
+          })
+          .filter((item: any) => item.score >= 0.45)
+          .sort((a: any, b: any) => b.score - a.score || a.nome.localeCompare(b.nome, 'pt-BR'))
+          .slice(0, 3)
+      }
       const referenciasVidros = new Map(
         (vidrosAtlas.data || [])
           .map((item: any) => [normalizar(item.especificacao), item] as const)
@@ -631,15 +664,42 @@ export async function GET(req: NextRequest) {
           pendencia?.contexto && typeof pendencia.contexto === 'object'
             ? pendencia.contexto
             : {}
+        const ocorrenciasPerfil = Number(contexto.ocorrencias_perfil || 0)
+        const ocorrenciasAcessorio = Number(contexto.ocorrencias_acessorio || 0)
+        const classificacaoUso =
+          ocorrenciasPerfil > 0 && ocorrenciasAcessorio === 0
+            ? 'cor_perfil'
+            : ocorrenciasAcessorio > 0 && ocorrenciasPerfil === 0
+              ? 'acabamento_acessorio'
+              : ocorrenciasPerfil > 0 && ocorrenciasAcessorio > 0
+                ? 'uso_misto'
+                : 'sem_uso'
         return {
           nome,
           status,
           evidenciaUsoHistorico: contexto.evidencia_uso_historico === true,
           ocorrenciasComponentes: Number(contexto.ocorrencias_componentes || 0),
           documentosHistoricos: Number(contexto.documentos || 0),
-          ocorrenciasPerfil: Number(contexto.ocorrencias_perfil || 0),
-          ocorrenciasAcessorio: Number(contexto.ocorrencias_acessorio || 0),
+          ocorrenciasPerfil,
+          ocorrenciasAcessorio,
+          classificacaoUso,
+          sugestoesAtlas:
+            status === 'pendente_revisao' && classificacaoUso === 'cor_perfil'
+              ? sugestoesCor(nome)
+              : [],
         }
+      }).sort((a: any, b: any) => {
+        const prioridade: Record<string, number> = {
+          cor_perfil: 1,
+          uso_misto: 2,
+          acabamento_acessorio: 3,
+          sem_uso: 4,
+        }
+        return (
+          (prioridade[a.classificacaoUso] || 9) - (prioridade[b.classificacaoUso] || 9) ||
+          Number(b.ocorrenciasComponentes || 0) - Number(a.ocorrenciasComponentes || 0) ||
+          a.nome.localeCompare(b.nome, 'pt-BR')
+        )
       })
 
       const numeroSeguro = (valor: unknown) => {
@@ -713,6 +773,15 @@ export async function GET(req: NextRequest) {
             ).length,
             pendentesSemUso: cores.filter(
               item => item.status === 'pendente_revisao' && !item.evidenciaUsoHistorico,
+            ).length,
+            candidatasPerfil: cores.filter(
+              item => item.status === 'pendente_revisao' && item.classificacaoUso === 'cor_perfil',
+            ).length,
+            acabamentosAcessorio: cores.filter(
+              item => item.status === 'pendente_revisao' && item.classificacaoUso === 'acabamento_acessorio',
+            ).length,
+            usoMisto: cores.filter(
+              item => item.status === 'pendente_revisao' && item.classificacaoUso === 'uso_misto',
             ).length,
           },
           vidros: {
