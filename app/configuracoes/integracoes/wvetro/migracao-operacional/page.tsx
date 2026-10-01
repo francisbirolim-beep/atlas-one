@@ -77,6 +77,27 @@ type NeonStagingInfo = {
   resumo?: NeonStagingResumo | null
 }
 
+type HistoricoAtlasCamada = {
+  total: number
+  somenteHistorico: number
+  foraHistorico: number
+  comCliente: number
+}
+
+type HistoricoAtlasResumo = {
+  total?: number
+  somenteHistorico?: number
+  foraHistorico?: number
+  comCliente?: number
+  camadas?: {
+    comercial: HistoricoAtlasCamada
+    financeiro: HistoricoAtlasCamada
+    operacional: HistoricoAtlasCamada
+    suprimentos: HistoricoAtlasCamada
+  }
+  erro?: string
+}
+
 type AuditoriaRelacao = {
   origemRecurso: string
   origemChave: string
@@ -213,6 +234,7 @@ export default function MigracaoOperacionalWVetroPage() {
   const [recursos, setRecursos] = useState<RecursoMapa[]>([])
   const [pronto, setPronto] = useState(false)
   const [neon, setNeon] = useState<NeonStagingInfo | null>(null)
+  const [historicoAtlas, setHistoricoAtlas] = useState<HistoricoAtlasResumo | null>(null)
   const [erro, setErro] = useState('')
   const [analisandoPessoas, setAnalisandoPessoas] = useState(false)
   const [reconciliacao, setReconciliacao] = useState<Reconciliacao | null>(null)
@@ -268,6 +290,7 @@ export default function MigracaoOperacionalWVetroPage() {
         setRecursos(Array.isArray(json.recursos) ? json.recursos : [])
         setPronto(!!json?.configuracao?.pronto)
         setNeon(json?.staging || null)
+        setHistoricoAtlas(json?.historicoAtlas || null)
         setPlanoPromocao(plano?.ok ? plano as PlanoPromocao : null)
       } catch (e) {
         if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar o mapa.')
@@ -597,6 +620,84 @@ export default function MigracaoOperacionalWVetroPage() {
                   </span>
                 </div>
               </section>
+            )}
+
+            {historicoAtlas && !historicoAtlas.erro && (
+              <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Database size={19} className="text-blue-700" />
+                      <h2 className="font-semibold text-slate-900">
+                        Histórico W.Vetro materializado no Atlas
+                      </h2>
+                    </div>
+                    <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                      Registros já copiados para as tabelas históricas isoladas do Supabase.
+                      Eles permanecem fora dos fluxos operacionais, dos saldos financeiros,
+                      do estoque e dos KPIs oficiais do Atlas.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-slate-500">Total histórico</div>
+                    <div className="text-2xl font-bold text-slate-900">
+                      {historicoAtlas.total ?? 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ['Comercial', historicoAtlas.camadas?.comercial],
+                    ['Financeiro', historicoAtlas.camadas?.financeiro],
+                    ['Operacional', historicoAtlas.camadas?.operacional],
+                    ['Suprimentos', historicoAtlas.camadas?.suprimentos],
+                  ].map(([label, camada]) => {
+                    const dados = camada as HistoricoAtlasCamada | undefined
+                    return (
+                      <div
+                        key={String(label)}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          {String(label)}
+                        </div>
+                        <div className="mt-1 text-xl font-bold text-slate-900">
+                          {dados?.total ?? 0}
+                        </div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          {(dados?.comCliente ?? 0) > 0
+                            ? `${dados?.comCliente ?? 0} ligado(s) ao Cliente 360`
+                            : 'Sem vínculo automático a cadastro operacional'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                  <span
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      (historicoAtlas.foraHistorico ?? 0) === 0
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-red-50 text-red-700'
+                    }`}
+                  >
+                    {(historicoAtlas.foraHistorico ?? 0) === 0
+                      ? '100% isolado como histórico'
+                      : `${historicoAtlas.foraHistorico} registro(s) fora do modo histórico`}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {historicoAtlas.somenteHistorico ?? 0} registro(s) com somente_historico=true.
+                  </span>
+                </div>
+              </section>
+            )}
+
+            {historicoAtlas?.erro && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                O histórico materializado no Atlas não pôde ser resumido: {historicoAtlas.erro}
+              </div>
             )}
 
             {planoPromocao && (

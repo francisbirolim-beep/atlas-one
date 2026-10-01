@@ -735,6 +735,147 @@ export async function GET(req: NextRequest) {
   if (recurso === 'mapa') {
     let testeNeon: unknown = null
     let resumoNeon: unknown = null
+    let historicoAtlas: unknown = null
+
+    try {
+      const [
+        comercialTotal,
+        comercialHistorico,
+        comercialClientes,
+        financeiroTotal,
+        financeiroHistorico,
+        financeiroClientes,
+        operacionalTotal,
+        operacionalHistorico,
+        operacionalClientes,
+        suprimentosTotal,
+        suprimentosHistorico,
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('status_vinculo', 'seguro')
+          .not('cliente_id', 'is', null),
+        supabaseAdmin
+          .from('wvetro_historico_suprimentos')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_suprimentos')
+          .select('id', { count: 'exact', head: true })
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('somente_historico', true),
+      ])
+
+      const respostas = [
+        comercialTotal,
+        comercialHistorico,
+        comercialClientes,
+        financeiroTotal,
+        financeiroHistorico,
+        financeiroClientes,
+        operacionalTotal,
+        operacionalHistorico,
+        operacionalClientes,
+        suprimentosTotal,
+        suprimentosHistorico,
+      ]
+
+      const falha = respostas.find(resposta => resposta.error)
+      if (falha?.error) throw new Error(falha.error.message)
+
+      const camada = (
+        total: number | null,
+        historico: number | null,
+        comCliente: number | null,
+      ) => {
+        const totalSeguro = total ?? 0
+        const historicoSeguro = historico ?? 0
+        return {
+          total: totalSeguro,
+          somenteHistorico: historicoSeguro,
+          foraHistorico: Math.max(0, totalSeguro - historicoSeguro),
+          comCliente: comCliente ?? 0,
+        }
+      }
+
+      const camadas = {
+        comercial: camada(comercialTotal.count, comercialHistorico.count, comercialClientes.count),
+        financeiro: camada(financeiroTotal.count, financeiroHistorico.count, financeiroClientes.count),
+        operacional: camada(operacionalTotal.count, operacionalHistorico.count, operacionalClientes.count),
+        suprimentos: camada(suprimentosTotal.count, suprimentosHistorico.count, 0),
+      }
+
+      historicoAtlas = {
+        total:
+          camadas.comercial.total +
+          camadas.financeiro.total +
+          camadas.operacional.total +
+          camadas.suprimentos.total,
+        somenteHistorico:
+          camadas.comercial.somenteHistorico +
+          camadas.financeiro.somenteHistorico +
+          camadas.operacional.somenteHistorico +
+          camadas.suprimentos.somenteHistorico,
+        foraHistorico:
+          camadas.comercial.foraHistorico +
+          camadas.financeiro.foraHistorico +
+          camadas.operacional.foraHistorico +
+          camadas.suprimentos.foraHistorico,
+        comCliente:
+          camadas.comercial.comCliente +
+          camadas.financeiro.comCliente +
+          camadas.operacional.comCliente,
+        camadas,
+      }
+    } catch (error) {
+      historicoAtlas = {
+        erro:
+          error instanceof Error
+            ? error.message
+            : 'Falha ao carregar histórico materializado no Atlas.',
+      }
+    }
 
     if (neon.configurado) {
       try {
@@ -788,6 +929,12 @@ export async function GET(req: NextRequest) {
                       and lote.encontrado
                   )
                 )
+                and not (
+                  a.destino_recurso = 'orcamentos'
+                  and nullif(trim(a.referencia), '') is not null
+                  and a.origem_recurso in ('titulos','lotes_producao','producao_projeto','instalacoes')
+                  and a.confianca in ('documental','declarada_payload')
+                )
             ) as auditoria_pendencias_reais,
             (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
         `
@@ -822,6 +969,7 @@ export async function GET(req: NextRequest) {
         teste: testeNeon,
         resumo: resumoNeon,
       },
+      historicoAtlas,
       recursos: WVETRO_MIGRACAO_OPERACIONAL_MAPA,
     })
   }
