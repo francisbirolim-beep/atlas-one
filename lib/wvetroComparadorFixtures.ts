@@ -690,3 +690,104 @@ export const FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO: WVetroItemTecnico[] = [
     acessorios:[['ALMC25',2],['ALMC2960',2],['BUC755',12],['CON295',1],['DOB840',3],['FIT206',3.1],['FRA822',1],['GUA239',5.3],['GUA258',4.4],['MAC927',1],['NYL042',2],['NYL190',12],['PAR1025',12],['PAR1037',12],['PAR435',4],['REBACA4X10',8],['SIL-PU',0.44167]],
   }),
 ]
+
+export const FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: '4aeb8629-221b-42cd-9379-c0ae1bcaf045',
+  configuracao_label: 'MAX1-SUPREMA · 01 módulo · BRA702 · sem contramarco · referência histórica dominante',
+  variaveis: [],
+  pecas: [
+    { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate interno horizontal', quantidade:2 },
+    { eixo:'H', codigo:'MP347', formula:'Altura+44', descricao:'Arremate interno vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU079', formula:'Largura-4', descricao:'Marco horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU079', formula:'Altura-4', descricao:'Marco vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU276', formula:'Largura-4', descricao:'Pingadeira do marco', quantidade:1 },
+    { eixo:'L', codigo:'SU082', formula:'Largura-96', descricao:'Travessa da folha', quantidade:2 },
+    { eixo:'L', codigo:'SU084', formula:'Largura-34', descricao:'Pingadeira da folha', quantidade:1 },
+    { eixo:'H', codigo:'SU081', formula:'Altura-60', descricao:'Montante da folha', quantidade:2 },
+    { eixo:'L', codigo:'SU102', formula:'Largura-96', descricao:'Baguete horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU102', formula:'Altura-120', descricao:'Baguete vertical', quantidade:2 },
+  ],
+  vidro: {
+    quantidade: 1,
+    formula_largura: 'Largura-102',
+    formula_altura: 'Altura-102',
+  },
+  acessorios: [
+    { codigo:'REBACA4X10', formula_quantidade:'3', status:'em_validacao' },
+    { codigo:'GUA239', formula_quantidade:'2*(Largura+Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA007', formula_quantidade:'Largura/1000', status:'em_validacao' },
+    { codigo:'PAR435', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'NYL355', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'FEC009D', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'BRA702', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'GUA256', formula_quantidade:'2*(Largura+Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA157', formula_quantidade:'(Largura+4*Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA258', formula_quantidade:'3*Largura/1000', status:'em_validacao' },
+    { codigo:'NYL190', formula_quantidade:'8', status:'em_validacao' },
+    { codigo:'PAR1025', formula_quantidade:'8', status:'em_validacao' },
+    { codigo:'PAR1037', formula_quantidade:'8', status:'em_validacao' },
+    { codigo:'BUC755', formula_quantidade:'8', status:'em_validacao' },
+    { codigo:'SIL-PU', formula_quantidade:'2*(Largura+Altura)/12000', status:'em_validacao' },
+    { codigo:'ALMC25', formula_quantidade:'4', status:'em_validacao' },
+  ],
+}
+
+function max1SupremaItem(largura:number, altura:number, quantidade = 1): WVetroItemTecnico {
+  const l = largura
+  const h = altura
+  return {
+    Codigo: '*SUCB-MAX-01-EF',
+    Nome: 'MAXIM-AR COM 01 MÓDULO | SUPREMA',
+    Linha: 'L. SUPREMA',
+    Modelo: 'MAXIM-AR',
+    Qtde: quantidade,
+    Largura: l,
+    Altura: h,
+    Perfil: [
+      { Codigo:'MP347', Posicao:'L', Qtde:2*quantidade, Medida:(l+44)/1000 },
+      { Codigo:'MP347', Posicao:'H', Qtde:2*quantidade, Medida:(h+44)/1000 },
+      { Codigo:'SU079', Posicao:'L', Qtde:2*quantidade, Medida:(l-4)/1000 },
+      { Codigo:'SU079', Posicao:'H', Qtde:2*quantidade, Medida:(h-4)/1000 },
+      { Codigo:'SU276', Posicao:'L', Qtde:1*quantidade, Medida:(l-4)/1000 },
+      { Codigo:'SU082', Posicao:'L', Qtde:2*quantidade, Medida:(l-96)/1000 },
+      { Codigo:'SU084', Posicao:'L', Qtde:1*quantidade, Medida:(l-34)/1000 },
+      { Codigo:'SU081', Posicao:'H', Qtde:2*quantidade, Medida:(h-60)/1000 },
+      { Codigo:'SU102', Posicao:'L', Qtde:2*quantidade, Medida:(l-96)/1000 },
+      { Codigo:'SU102', Posicao:'H', Qtde:2*quantidade, Medida:(h-120)/1000 },
+    ],
+    Vidros: [{
+      Codigo:'VIDRO',
+      Qtde:1*quantidade,
+      Largura:l-102,
+      Altura:h-102,
+      Especificacao:'MINI-BOREAL 04MM - COMUM',
+    }],
+    Acessorios: [
+      { Codigo:'REBACA4X10', Qtde:3*quantidade },
+      { Codigo:'GUA239', Qtde:(2*(l+h)/1000)*quantidade },
+      { Codigo:'GUA007', Qtde:(l/1000)*quantidade },
+      { Codigo:'PAR435', Qtde:4*quantidade },
+      { Codigo:'NYL355', Qtde:2*quantidade },
+      { Codigo:'FEC009D', Qtde:1*quantidade },
+      { Codigo:'BRA702', Qtde:1*quantidade },
+      { Codigo:'GUA256', Qtde:(2*(l+h)/1000)*quantidade },
+      { Codigo:'GUA157', Qtde:((l+4*h)/1000)*quantidade },
+      { Codigo:'GUA258', Qtde:(3*l/1000)*quantidade },
+      { Codigo:'NYL190', Qtde:8*quantidade },
+      { Codigo:'PAR1025', Qtde:8*quantidade },
+      { Codigo:'PAR1037', Qtde:8*quantidade },
+      { Codigo:'BUC755', Qtde:8*quantidade },
+      { Codigo:'SIL-PU', Qtde:(2*(l+h)/12000)*quantidade },
+      { Codigo:'ALMC25', Qtde:4*quantidade },
+    ],
+  }
+}
+
+export const FIXTURES_MAX1_SUPREMA_WVETRO: WVetroItemTecnico[] = [
+  max1SupremaItem(600,600,1),
+  max1SupremaItem(800,600,1),
+  max1SupremaItem(800,800,1),
+  max1SupremaItem(900,700,2),
+  max1SupremaItem(1000,600,2),
+]
+

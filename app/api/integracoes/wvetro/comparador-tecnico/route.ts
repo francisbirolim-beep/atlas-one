@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -124,6 +124,31 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
         pecas: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.pecas,
         vidro: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.vidro,
         acessorios: FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA.acessorios || [],
+      })
+    }
+  }
+
+  if (linha.includes('SUPREMA') && modelo.includes('MAXIM-AR')) {
+    const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+    const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+    const perfisDominantes = ['MP347','SU079','SU081','SU082','SU084','SU102','SU276']
+    const acessoriosDominantes = [
+      'ALMC25','BRA702','BUC755','FEC009D','GUA007','GUA157','GUA239','GUA256',
+      'GUA258','NYL190','NYL355','PAR1025','PAR1037','PAR435','REBACA4X10','SIL-PU',
+    ]
+
+    if (conjuntoExato(perfis, perfisDominantes) && conjuntoExato(acessorios, acessoriosDominantes)) {
+      const formula = FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA
+      refs.push({
+        id: 'referencia-local-max1-suprema-dominante',
+        tipologia_id: formula.tipologia_id,
+        configuracao_label: formula.configuracao_label,
+        status: 'referencia_historica',
+        ativo: false,
+        variaveis: formula.variaveis,
+        pecas: formula.pecas,
+        vidro: formula.vidro,
+        acessorios: formula.acessorios || [],
       })
     }
   }
