@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       supabaseAdmin
         .from("wvetro_historico_suprimentos")
         .select(
-          "id,tipo_registro,chave_externa,data_referencia,data_lancamento,documento,pessoa_nome,produto_id_wvetro,produto_codigo,produto_descricao,produto_tipo,cor_nome,local_estoque,movimento_tipo,quantidade,valor_unitario,valor_total,nota_id_wvetro,nota_numero,nota_serie,nota_chave_externa,fornecedor_id_wvetro,fornecedor_nome,data_emissao,data_entrada,valor_contabil,valor_produto,valor_frete,finalizada,somente_historico",
+          "id,tipo_registro,chave_externa,data_referencia,data_lancamento,documento,pessoa_nome,produto_id_wvetro,produto_codigo,produto_descricao,produto_tipo,cor_nome,local_estoque,movimento_tipo,quantidade,valor_unitario,valor_total,produto_atlas_id,produto_vinculo_status,produto_vinculo_metodo,nota_id_wvetro,nota_numero,nota_serie,nota_chave_externa,fornecedor_id_wvetro,fornecedor_nome,data_emissao,data_entrada,valor_contabil,valor_produto,valor_frete,finalizada,somente_historico",
         )
         .eq("empresa_id", empresaId)
         .eq("somente_historico", true)
