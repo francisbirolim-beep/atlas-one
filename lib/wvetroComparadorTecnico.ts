@@ -142,6 +142,95 @@ export function classificarFamiliaPc4Suprema(item: WVetroItemTecnico): FamiliaPc
   return 'outra'
 }
 
+export type FamiliaPc1Suprema =
+  | 'vidro'
+  | 'vidro_suspensa'
+  | 'lambri'
+  | 'lambri_suspensa'
+  | 'veneziana'
+  | 'mista_vidro_veneziana'
+  | 'estrutura_ripado'
+  | 'kit_porta_pronta'
+  | 'outra'
+
+export function classificarFamiliaPc1Suprema(item: WVetroItemTecnico): FamiliaPc1Suprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 01 FOLHA')) return 'outra'
+  if (nome.includes('KIT PORTA PRONTA') || nome.includes('SINCOL') || nome.includes('SINIKIT')) return 'kit_porta_pronta'
+  if (nome.includes('ESTRUTURA') && nome.includes('RIPAD')) return 'estrutura_ripado'
+  if (nome.includes('VIDRO SUPERIOR') || codigo.includes('PC1-02')) return 'mista_vidro_veneziana'
+  if (nome.includes('VENEZIANA') || codigo.includes('PC1-03')) return 'veneziana'
+  if (nome.includes('LAMBRI') || codigo.includes('PC1-04')) return nome.includes('SUSPENSA') ? 'lambri_suspensa' : 'lambri'
+  if (nome.includes('VIDRO') || codigo.includes('PC1-01')) return nome.includes('SUSPENSA') ? 'vidro_suspensa' : 'vidro'
+  return 'outra'
+}
+
+export type FamiliaPortinholaSuprema =
+  | 'veneziana_1f'
+  | 'veneziana_2f'
+  | 'lisa_1f'
+  | 'outra'
+
+export type VariantesPortinholaSuprema = {
+  familia: FamiliaPortinholaSuprema
+  folhas: 1 | 2 | null
+  veneziana: 'cega' | 'ventilada' | 'nao_informada'
+  contramarco: 'com' | 'sem' | 'na_obra' | 'nao_informado'
+  arremate: 'com' | 'sem' | 'nao_informado'
+  fechamento: 'tranqueta' | 'trinco' | 'fechadura' | 'nao_informado'
+}
+
+export function classificarFamiliaPortinholaSuprema(item: WVetroItemTecnico): FamiliaPortinholaSuprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || modelo !== 'PORTINHOLA') return 'outra'
+  if (nome.includes('02 FOLH') || codigo.includes('PTA-04')) return 'veneziana_2f'
+  if (nome.includes('VENEZIANA') || codigo.includes('PTA-03')) return 'veneziana_1f'
+  if (codigo.includes('PTA-01') || nome.includes('01 FOLHA')) return 'lisa_1f'
+  return 'outra'
+}
+
+export function extrairVariantesPortinholaSuprema(item: WVetroItemTecnico): VariantesPortinholaSuprema {
+  const texto = `${String(item.Nome || '')} ${String(item.Modelo || '')}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const familia = classificarFamiliaPortinholaSuprema(item)
+  const folhas: 1 | 2 | null = familia === 'veneziana_2f' ? 2 : familia === 'outra' ? null : 1
+  const veneziana: VariantesPortinholaSuprema['veneziana'] =
+    texto.includes('CEGA') ? 'cega' :
+    texto.includes('VENTILAD') || texto.includes('VENTIULAD') ? 'ventilada' :
+    'nao_informada'
+  const contramarco: VariantesPortinholaSuprema['contramarco'] =
+    texto.includes('CONTRAMARCO NA OBRA') ? 'na_obra' :
+    texto.includes('SEM CONTRAMARCO') ? 'sem' :
+    texto.includes('COM CONTRAMARCO') ? 'com' :
+    'nao_informado'
+  const arremate: VariantesPortinholaSuprema['arremate'] =
+    texto.includes('SEM ARREMATE') ? 'sem' :
+    texto.includes('COM ARREMATE') ? 'com' :
+    'nao_informado'
+  const fechamento: VariantesPortinholaSuprema['fechamento'] =
+    texto.includes('TRANQUETA') ? 'tranqueta' :
+    texto.includes('TRINCO') ? 'trinco' :
+    texto.includes('FECHADURA') ? 'fechadura' :
+    'nao_informado'
+  return { familia, folhas, veneziana, contramarco, arremate, fechamento }
+}
+
 export type FamiliaPc2Suprema =
   | 'vidro_padrao'
   | 'integrada_persiana'
