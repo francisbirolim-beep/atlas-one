@@ -735,6 +735,92 @@ export async function GET(req: NextRequest) {
   if (recurso === 'mapa') {
     let testeNeon: unknown = null
     let resumoNeon: unknown = null
+    let historicoAtlas: unknown = null
+
+    try {
+      const [
+        comercialResp,
+        financeiroResp,
+        operacionalResp,
+        suprimentosResp,
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('wvetro_historico_comercial')
+          .select('cliente_id,somente_historico')
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_financeiro')
+          .select('cliente_id,somente_historico')
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_operacional')
+          .select('cliente_id,somente_historico')
+          .eq('empresa_id', usuario.empresa_id),
+        supabaseAdmin
+          .from('wvetro_historico_suprimentos')
+          .select('somente_historico')
+          .eq('empresa_id', usuario.empresa_id),
+      ])
+
+      const respostas = [
+        ['comercial', comercialResp],
+        ['financeiro', financeiroResp],
+        ['operacional', operacionalResp],
+        ['suprimentos', suprimentosResp],
+      ] as const
+
+      for (const [camada, resposta] of respostas) {
+        if (resposta.error) {
+          throw new Error(`${camada}: ${resposta.error.message}`)
+        }
+      }
+
+      const resumir = (linhas: any[], possuiCliente: boolean) => ({
+        total: linhas.length,
+        somenteHistorico: linhas.filter(item => item.somente_historico === true).length,
+        foraHistorico: linhas.filter(item => item.somente_historico !== true).length,
+        comCliente: possuiCliente
+          ? linhas.filter(item => !!item.cliente_id).length
+          : 0,
+      })
+
+      const camadas = {
+        comercial: resumir(comercialResp.data || [], true),
+        financeiro: resumir(financeiroResp.data || [], true),
+        operacional: resumir(operacionalResp.data || [], true),
+        suprimentos: resumir(suprimentosResp.data || [], false),
+      }
+
+      historicoAtlas = {
+        total:
+          camadas.comercial.total +
+          camadas.financeiro.total +
+          camadas.operacional.total +
+          camadas.suprimentos.total,
+        somenteHistorico:
+          camadas.comercial.somenteHistorico +
+          camadas.financeiro.somenteHistorico +
+          camadas.operacional.somenteHistorico +
+          camadas.suprimentos.somenteHistorico,
+        foraHistorico:
+          camadas.comercial.foraHistorico +
+          camadas.financeiro.foraHistorico +
+          camadas.operacional.foraHistorico +
+          camadas.suprimentos.foraHistorico,
+        comCliente:
+          camadas.comercial.comCliente +
+          camadas.financeiro.comCliente +
+          camadas.operacional.comCliente,
+        camadas,
+      }
+    } catch (error) {
+      historicoAtlas = {
+        erro:
+          error instanceof Error
+            ? error.message
+            : 'Falha ao carregar histórico materializado no Atlas.',
+      }
+    }
 
     if (neon.configurado) {
       try {
@@ -788,6 +874,12 @@ export async function GET(req: NextRequest) {
                       and lote.encontrado
                   )
                 )
+                and not (
+                  a.destino_recurso = 'orcamentos'
+                  and nullif(trim(a.referencia), '') is not null
+                  and a.origem_recurso in ('titulos','lotes_producao','producao_projeto','instalacoes')
+                  and a.confianca in ('documental','declarada_payload')
+                )
             ) as auditoria_pendencias_reais,
             (select max(capturado_em) from wvetro_migracao.raw) as ultima_captura
         `
@@ -822,6 +914,7 @@ export async function GET(req: NextRequest) {
         teste: testeNeon,
         resumo: resumoNeon,
       },
+      historicoAtlas,
       recursos: WVETRO_MIGRACAO_OPERACIONAL_MAPA,
     })
   }
