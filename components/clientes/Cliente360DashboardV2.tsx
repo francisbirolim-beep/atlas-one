@@ -133,7 +133,15 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     ...assistencias.map(a=>({id:`a-${a.id}`,data:a.created_at,titulo:`Assistência ${a.numero?`#${a.numero}`:''}`,detalhe:a.descricao_problema||status(a.status)})),
     ...recebimentos.map(r=>({id:`r-${r.id}`,data:r.created_at,titulo:`Recebimento ${moeda(r.valor)}`,detalhe:r.forma||''})),
     ...interacoes.map(i=>({id:`i-${i.id}`,data:i.created_at,titulo:status(i.tipo),detalhe:i.descricao||i.usuario_nome||''})),
-  ].sort((a,b)=>new Date(b.data).getTime()-new Date(a.data).getTime()).slice(0,60),[orcamentos,obras,assistencias,recebimentos,interacoes])
+    ...wvetroHistorico
+      .filter(h=>h.data_venda||h.data_emissao)
+      .map(h=>({
+        id:`wv-${h.id}`,
+        data:String(h.data_venda||h.data_emissao),
+        titulo:`${h.tipo_registro==='orcamento_historico'?'Orçamento':'Venda'} W.Vetro #${h.numero_wvetro||'—'}`,
+        detalhe:`Histórico importado · ${moeda(h.valor_total)}`,
+      })),
+  ].sort((a,b)=>new Date(b.data).getTime()-new Date(a.data).getTime()).slice(0,60),[orcamentos,obras,assistencias,recebimentos,interacoes,wvetroHistorico])
 
   async function salvarObs(){ if(!cliente)return;setSalvando(true);const {error}=await supabase.from('clientes').update({observacoes:obs.trim()||null,updated_at:new Date().toISOString()}).eq('id',cliente.id);setSalvando(false);if(error)setErro(error.message);else await carregar() }
   async function salvarRecebimento(){ if(!cliente)return;const valor=Number(recebimentoForm.valor.replace(',','.'));setSalvando(true);const r=await registrarRecebimentoCliente({clienteId:cliente.id,clienteNome:cliente.nome,valor,dataRecebimento:recebimentoForm.data,forma:recebimentoForm.forma,referencia:recebimentoForm.referencia,observacoes:recebimentoForm.observacoes,obraId:recebimentoForm.obraId||null});setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao registrar recebimento.');return}setModalRecebimento(false);setRecebimentoForm({valor:'',forma:'pix',data:new Date().toISOString().slice(0,10),obraId:'',referencia:'',observacoes:''});await carregar() }
