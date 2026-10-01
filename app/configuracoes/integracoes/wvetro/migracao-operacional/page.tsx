@@ -132,7 +132,15 @@ type AuditoriaCatalogos = {
       pendentesComUso: number
       pendentesSemUso: number
     }
-    vidros: { total: number; referenciados: number; pendentes: number; vinculadosProdutoAtlas: number }
+    vidros: {
+      total: number
+      referenciados: number
+      pendentes: number
+      aguardandoHomologacao: number
+      homologadosCatalogo: number
+      vinculadosProdutoAtlas: number
+      comCustoReferencia: number
+    }
   }
   pendencias: {
     linhas: Array<{
@@ -153,7 +161,21 @@ type AuditoriaCatalogos = {
       ocorrenciasPerfil: number
       ocorrenciasAcessorio: number
     }>
-    vidros: Array<{ nome: string; status: string; statusValidacao: string | null; produtoAtlasId: string | null }>
+    vidros: Array<{
+      nome: string
+      status: string
+      statusValidacao: string | null
+      produtoAtlasId: string | null
+      catalogoCustoId: string | null
+      catalogoCustoUnitario: number | null
+      catalogoUnidade: string | null
+      ocorrencias: number
+      ncm: string | null
+      espessuraMm: number | null
+      pesoKgM2: number | null
+      custoReferenciaM2: number | null
+      custoReferenciaFonte: string | null
+    }>
   }
 }
 
@@ -732,7 +754,10 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vidros</div>
                     <div className="mt-2 text-2xl font-bold text-slate-900">{catalogosAuditoria.resumo.vidros.total}</div>
                     <div className="mt-1 text-xs text-slate-600">
-                      {catalogosAuditoria.resumo.vidros.referenciados} referenciados · {catalogosAuditoria.resumo.vidros.pendentes} pendente(s)
+                      {catalogosAuditoria.resumo.vidros.referenciados} referenciados · {catalogosAuditoria.resumo.vidros.homologadosCatalogo} homologado(s) · {catalogosAuditoria.resumo.vidros.pendentes} para homologar
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {catalogosAuditoria.resumo.vidros.comCustoReferencia} com amostra histórica de custo/m²
                     </div>
                   </div>
                 </div>
@@ -778,16 +803,47 @@ export default function MigracaoOperacionalWVetroPage() {
                   </div>
 
                   <div className="rounded-xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Vidros para revisar</div>
-                    <div className="mt-2 space-y-2">
+                    <div className="text-sm font-semibold text-slate-900">Fila de homologação de vidros</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      Ordenada pelo uso histórico. Custo/m² abaixo é somente referência da amostra W.Vetro e não vira custo oficial.
+                    </div>
+                    <div className="mt-2 max-h-[34rem] space-y-2 overflow-auto pr-1">
                       {catalogosAuditoria.pendencias.vidros.map(item => (
-                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                          <div className="font-semibold">{item.nome}</div>
-                          <div className="mt-0.5">{item.statusValidacao || item.status}</div>
+                        <div key={item.nome} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="font-semibold">{item.nome}</div>
+                            <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              {item.ocorrencias} uso(s)
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-amber-800/80">
+                            {item.espessuraMm != null && <span>{item.espessuraMm} mm</span>}
+                            {item.pesoKgM2 != null && <span>{item.pesoKgM2} kg/m²</span>}
+                            {item.ncm && <span>NCM {item.ncm}</span>}
+                            <span>{item.statusValidacao || item.status}</span>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            {item.custoReferenciaM2 != null ? (
+                              <span className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[11px] font-semibold text-amber-800">
+                                Ref. W.Vetro: {item.custoReferenciaM2.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/m²
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-500">Sem amostra de custo válida</span>
+                            )}
+                            {item.catalogoCustoId ? (
+                              <span className="rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                Homologado no catálogo Atlas
+                              </span>
+                            ) : (
+                              <span className="rounded-md bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                                Aguardando homologação
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ))}
                       {!catalogosAuditoria.pendencias.vidros.length && (
-                        <div className="text-xs text-emerald-700">Nenhuma pendência de vidro.</div>
+                        <div className="text-xs text-emerald-700">Todos os vidros estão homologados no catálogo técnico.</div>
                       )}
                     </div>
                   </div>
