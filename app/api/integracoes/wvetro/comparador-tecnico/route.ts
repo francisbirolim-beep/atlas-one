@@ -461,11 +461,12 @@ async function matrizHistorica(req: NextRequest) {
       chave,
       payload->>'Nro' as numero,
       capturado_em,
-      item
+      item,
+      item_ordem
     from ultimos
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(payload->'Itens') = 'array' then payload->'Itens' else '[]'::jsonb end
-    ) item
+    ) with ordinality as itens(item, item_ordem)
     where coalesce(item->>'Linha','') ilike ${linhaFiltro}
       and coalesce(item->>'Modelo','') ilike ${modeloFiltro}
     order by capturado_em desc
@@ -505,9 +506,10 @@ async function matrizHistorica(req: NextRequest) {
     const assinatura = assinaturaComposicaoWVetro(item)
     const numeroRegistro = String(row?.numero || '').trim()
     const itemIdRegistro = String((item as any).Id || '').trim()
+    const itemOrdem = numeroSeguro(row?.item_ordem, 0)
     const chaveOcorrencia = numeroRegistro
-      ? JSON.stringify([numeroRegistro, itemIdRegistro, assinatura.chave])
-      : JSON.stringify([String(row?.chave || ''), itemIdRegistro, assinatura.chave])
+      ? JSON.stringify([numeroRegistro, itemIdRegistro || itemOrdem, assinatura.chave])
+      : JSON.stringify([String(row?.chave || ''), itemIdRegistro || itemOrdem, assinatura.chave])
     if (itensVistos.has(chaveOcorrencia)) continue
     itensVistos.add(chaveOcorrencia)
     const linhaItem = String(item.Linha || '').trim()
