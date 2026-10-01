@@ -113,7 +113,7 @@ type UltimoPreco = {
 };
 type HistoricoWVetroSuprimento = {
   id: string;
-  tipo_registro: "movimento_estoque" | "nota_entrada";
+  tipo_registro: "movimento_estoque" | "nota_entrada" | "item_nota_entrada";
   chave_externa: string;
   data_referencia: string | null;
   data_lancamento: string | null;
@@ -132,6 +132,7 @@ type HistoricoWVetroSuprimento = {
   nota_id_wvetro: string | null;
   nota_numero: string | null;
   nota_serie: string | null;
+  nota_chave_externa: string | null;
   fornecedor_id_wvetro: string | null;
   fornecedor_nome: string | null;
   data_emissao: string | null;
@@ -714,6 +715,9 @@ export default function ComprasPage() {
                 <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
                   {(dados?.historicoWVetroSuprimentos || []).filter((h) => h.tipo_registro === "movimento_estoque").length} movimento(s)
                 </span>
+                <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+                  {(dados?.historicoWVetroSuprimentos || []).filter((h) => h.tipo_registro === "item_nota_entrada").length} item(ns) NF
+                </span>
                 <button
                   type="button"
                   onClick={() => setHistoricoWVetroAberto((v) => !v)}
@@ -742,6 +746,7 @@ export default function ComprasPage() {
                   <tbody>
                     {(dados?.historicoWVetroSuprimentos || []).map((h) => {
                       const nota = h.tipo_registro === "nota_entrada";
+                      const itemNota = h.tipo_registro === "item_nota_entrada";
                       const data =
                         h.data_entrada ||
                         h.data_emissao ||
@@ -762,17 +767,21 @@ export default function ComprasPage() {
                               className={`inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase ${
                                 nota
                                   ? "bg-blue-50 text-blue-700"
-                                  : "bg-slate-100 text-slate-600"
+                                  : itemNota
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-slate-100 text-slate-600"
                               }`}
                             >
-                              {nota ? "Nota de entrada" : "Movimento de estoque"}
+                              {nota ? "Nota de entrada" : itemNota ? "Item de nota" : "Movimento de estoque"}
                             </span>
                           </td>
                           <td className="px-3 py-3">
                             <div className="font-medium text-slate-800">
                               {nota
                                 ? `NF ${h.nota_numero || h.documento || "—"}${h.nota_serie ? ` · Série ${h.nota_serie}` : ""}`
-                                : h.documento || h.chave_externa}
+                                : itemNota
+                                  ? `Item NF ${h.nota_numero || h.nota_id_wvetro || "—"}`
+                                  : h.documento || h.chave_externa}
                             </div>
                             <div className="mt-0.5 font-mono text-[10px] text-slate-400">
                               {h.chave_externa}
