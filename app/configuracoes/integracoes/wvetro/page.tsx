@@ -155,6 +155,7 @@ export default function IntegracaoWVetroPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/configuracoes/integracoes/wvetro/migracao-operacional" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100">Migração operacional</Link>
+            <Link href="/configuracoes/integracoes/wvetro/paridade" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">Paridade W.Vetro × Atlas</Link>
             <Link href="/configuracoes/integracoes/wvetro/base-tecnica" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Base técnica</Link>
             <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><ShieldCheck className="text-emerald-600" size={26} /></div>
           </div>
