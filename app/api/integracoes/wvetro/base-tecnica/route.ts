@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
           itens_processados: Number(execucao.itens_processados || 0) + Number(resultado.itens || 0),
           tipologias_processadas: Number(execucao.tipologias_processadas || 0) + Number(resultado.tipologias || 0),
           componentes_processados: Number(execucao.componentes_processados || 0) + Number(resultado.componentes || 0),
-          ultima_mensagem: `${data}: ${resultado.itens} item(ns), ${resultado.tipologias} tipologia(s), ${resultado.componentes} componente(s).`,
+          ultima_mensagem: `${data}: ${resultado.itens} item(ns), ${resultado.casos || 0} caso(s) individual(is), ${resultado.tipologias} tipologia(s), ${resultado.componentes} componente(s).`,
           erro: null,
           updated_at: new Date().toISOString(),
           finalizado_em: terminou ? new Date().toISOString() : null,
