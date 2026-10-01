@@ -88,6 +88,66 @@ export function classificarFamiliaPc2Suprema(item: WVetroItemTecnico): FamiliaPc
   return 'vidro_padrao'
 }
 
+export type VariantesPc2Suprema = {
+  familia: FamiliaPc2Suprema
+  montagem: 'sequencial' | 'abertura_central' | 'fixa_movel' | 'duas_moveis' | 'nao_informada'
+  contramarco: 'com' | 'sem' | 'na_obra' | 'nao_informado'
+  arremate: 'com' | 'sem' | 'nao_informado'
+  reforcoAba: boolean
+  reforcoExterno: boolean
+  trilho: 'embutido' | 'macarrao_colado' | 'nao_informado'
+  persianaAcionamento: 'motor_220v' | 'fita' | 'sem_motor' | 'nao_informado'
+}
+
+export function extrairVariantesPc2Suprema(item: WVetroItemTecnico): VariantesPc2Suprema {
+  const texto = `${String(item.Nome || '')} ${String(item.Modelo || '')}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+
+  const familia = classificarFamiliaPc2Suprema(item)
+
+  const montagem: VariantesPc2Suprema['montagem'] =
+    texto.includes('ABERTURA CENTRAL') ? 'abertura_central' :
+    texto.includes('SEQUENC') ? 'sequencial' :
+    texto.includes('1 FIXA') || texto.includes('01 FIXA') ? 'fixa_movel' :
+    texto.includes('FOLHAS MOVEIS') || texto.includes('FOLHAS MÓVEIS') ? 'duas_moveis' :
+    'nao_informada'
+
+  const contramarco: VariantesPc2Suprema['contramarco'] =
+    texto.includes('CONTRAMARCO NA OBRA') ? 'na_obra' :
+    texto.includes('SEM CONTRAMARCO') || texto.includes('SEM CONTRAMARCCO') ? 'sem' :
+    texto.includes('COM CONTRAMARCO') || texto.includes('CONTRAMARCO CM') || texto.includes('CONTRAMARCO CMO') ? 'com' :
+    'nao_informado'
+
+  const arremate: VariantesPc2Suprema['arremate'] =
+    texto.includes('SEM ARREMATE') ? 'sem' :
+    texto.includes('COM ARREMATE') || texto.includes('E ARREMATE') || texto.includes('ARREMATE MP347') ? 'com' :
+    'nao_informado'
+
+  const trilho: VariantesPc2Suprema['trilho'] =
+    texto.includes('MACARRAO COLADO') ? 'macarrao_colado' :
+    texto.includes('TRILHO EMBUTID') || texto.includes('TRILHOS EMBUTID') ? 'embutido' :
+    'nao_informado'
+
+  const persianaAcionamento: VariantesPc2Suprema['persianaAcionamento'] =
+    texto.includes('SEM MOTOR') ? 'sem_motor' :
+    texto.includes('RECOLHEDOR') || texto.includes('EM FITA') || texto.includes('NA FITA') ? 'fita' :
+    texto.includes('MOTOR') || texto.includes('220V') || texto.includes('220 V') ? 'motor_220v' :
+    'nao_informado'
+
+  return {
+    familia,
+    montagem,
+    contramarco,
+    arremate,
+    reforcoAba: texto.includes('REF DE ABA') || texto.includes('REFORCO DE ABA') || texto.includes('REF DE  ABA'),
+    reforcoExterno: texto.includes('REF EXTERNO') || texto.includes('REFO EXTERNO') || texto.includes('REF EXTR'),
+    trilho,
+    persianaAcionamento,
+  }
+}
+
 export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
   const linha = String(item.Linha || '').trim().toUpperCase()
   const modelo = String(item.Modelo || '').trim().toUpperCase()
