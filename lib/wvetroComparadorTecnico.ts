@@ -86,17 +86,38 @@ export function inferirOpcoesTecnicasWVetro(
     let evidencia = ''
     switch (variavel.chave) {
       case 'contramarco':
-        valor = codigosPerfil.has('CM200') ? 'cm200' : 'sem'
-        evidencia = codigosPerfil.has('CM200') ? 'Perfil CM200 presente.' : 'Nenhum perfil CM200 presente na composição.'
+        if (codigosPerfil.has('CM200') && variavel.opcoes.includes('cm200')) {
+          valor = 'cm200'
+          evidencia = 'Perfil CM200 presente.'
+        } else if (codigosPerfil.has('CM060') && variavel.opcoes.includes('cm060')) {
+          valor = 'cm060'
+          evidencia = 'Perfil CM060 presente.'
+        } else {
+          valor = variavel.opcoes.includes('sem') ? 'sem' : ''
+          evidencia = 'Nenhum contramarco reconhecido presente na composição.'
+        }
         break
       case 'arremate':
         valor = codigosPerfil.has('MP347') ? 'interno' : 'sem'
         evidencia = codigosPerfil.has('MP347') ? 'Perfil MP347 presente.' : 'MP347 ausente.'
         break
-      case 'trilho':
-        valor = codigosPerfil.has('TMC') ? 'macarrao' : (variavel.opcoes.includes('convencional') ? 'convencional' : '')
-        evidencia = codigosPerfil.has('TMC') ? 'Perfil TMC presente.' : 'TMC ausente.'
+      case 'trilho': {
+        const nomeModelo = `${String(item.Nome || '')} ${String(item.Modelo || '')}`.toUpperCase()
+        if (codigosPerfil.has('TMC') && variavel.opcoes.includes('macarrao')) {
+          valor = 'macarrao'
+          evidencia = 'Perfil TMC presente.'
+        } else if (nomeModelo.includes('EMBUTID') && variavel.opcoes.includes('embutido')) {
+          valor = 'embutido'
+          evidencia = 'Descrição W.Vetro identifica trilho embutido.'
+        } else if (nomeModelo.includes('CONVENCION') && variavel.opcoes.includes('convencional')) {
+          valor = 'convencional'
+          evidencia = 'Descrição W.Vetro identifica trilho convencional.'
+        } else {
+          valor = variavel.opcoes.includes('convencional') ? 'convencional' : ''
+          evidencia = 'Sem código de trilho específico; usada a opção convencional apenas quando disponível.'
+        }
         break
+      }
       case 'fechamento':
         if (codigosAcessorio.has('FRA820') || codigosAcessorio.has('CON409')) {
           valor = 'fechadura'; evidencia = 'FRA820/CON409 presentes.'
