@@ -1,5 +1,4 @@
-import { calcularFormulasCorte, type TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
-import { calcularFormulaCorteIsolada } from '@/lib/formulasCorteEngine'
+import { calcularFormulasCorte, calcularFormulaCorteIsolada, resolverFormulaCondicional, type OpcoesEscolhidas, type TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
 import { calcularAcessoriosTecnicos } from '@/lib/formulasAcessoriosEngine'
 import type { AcessorioFormulaCorte, VidroFormulaCorte } from '@/lib/engenhariaFormulasCorte'
 
@@ -170,7 +169,7 @@ function compararPerfis(
   return { linhas, perfisAtlas: calculados }
 }
 
-function compararVidro(formula: FormulaAtlasComparacao, item: WVetroItemTecnico): LinhaComparacao[] {
+function compararVidro(formula: FormulaAtlasComparacao, item: WVetroItemTecnico, opcoes: OpcoesEscolhidas): LinhaComparacao[] {
   const vidro = formula.vidro || {}
   const w = (item.Vidros || [])[0]
   if (!w && !vidro.formula_largura && !vidro.formula_altura) return []
@@ -182,20 +181,27 @@ function compararVidro(formula: FormulaAtlasComparacao, item: WVetroItemTecnico)
       observacao: 'W.Vetro possui vidro, mas a configuração Atlas não possui fórmula de vidro.',
     }]
   }
+  const formulaL = vidro.formula_largura
+    ? resolverFormulaCondicional(vidro.formula_largura, vidro.condicoes_largura, opcoes)
+    : null
+  const formulaH = vidro.formula_altura
+    ? resolverFormulaCondicional(vidro.formula_altura, vidro.condicoes_altura, opcoes)
+    : null
+
   if (!w) {
     return [{
       tipo: 'vidro', codigo: 'VIDRO', descricao: 'Vidro',
       status: 'ausente_wvetro',
       atlas: {
         quantidade: Number(vidro.quantidade || 1),
-        largura_mm: vidro.formula_largura ? calcularFormulaCorteIsolada(vidro.formula_largura, Number(item.Largura), Number(item.Altura)) : null,
-        altura_mm: vidro.formula_altura ? calcularFormulaCorteIsolada(vidro.formula_altura, Number(item.Largura), Number(item.Altura)) : null,
+        largura_mm: formulaL ? calcularFormulaCorteIsolada(formulaL, Number(item.Largura), Number(item.Altura)) : null,
+        altura_mm: formulaH ? calcularFormulaCorteIsolada(formulaH, Number(item.Largura), Number(item.Altura)) : null,
       },
     }]
   }
 
-  const aL = vidro.formula_largura ? calcularFormulaCorteIsolada(vidro.formula_largura, Number(item.Largura), Number(item.Altura)) : null
-  const aH = vidro.formula_altura ? calcularFormulaCorteIsolada(vidro.formula_altura, Number(item.Largura), Number(item.Altura)) : null
+  const aL = formulaL ? calcularFormulaCorteIsolada(formulaL, Number(item.Largura), Number(item.Altura)) : null
+  const aH = formulaH ? calcularFormulaCorteIsolada(formulaH, Number(item.Largura), Number(item.Altura)) : null
   const wL = mm(w.Largura)
   const wH = mm(w.Altura)
   const qtdIgual = Math.abs(qtd(w.Qtde) - Number(vidro.quantidade || 1)) < 0.0001
@@ -214,6 +220,7 @@ function compararAcessorios(
   formula: FormulaAtlasComparacao,
   item: WVetroItemTecnico,
   perfisAtlas: Array<{ codigo: string; tamanho: number }>,
+  opcoes: OpcoesEscolhidas,
 ): LinhaComparacao[] {
   const wMap = new Map<string, { codigo: string; descricao: string; quantidade: number }>()
   for (const a of item.Acessorios || []) {
@@ -238,14 +245,27 @@ function compararAcessorios(
   }
 
   const folhas = Math.max(1, Number(String(item.Modelo || item.Nome || '').match(/(\d+)\s*FOLH/i)?.[1] || 1))
-  const resultados = calcularAcessoriosTecnicos(defs, Number(item.Largura), Number(item.Altura), folhas, perfisAtlas)
+  const resultados = calcularAcessoriosTecnicos(defs, Number(item.Largura), Number(item.Altura), folhas, perfisAtlas, opcoes)
   const aMap = new Map<string, { codigo: string; descricao: string; quantidade: number | null }>()
   defs.forEach((def, i) => {
-    aMap.set(String(def.codigo || '').toUpperCase(), {
-      codigo: def.codigo,
-      descricao: String(def.descricao || ''),
-      quantidade: resultados[i]?.valor ?? def.quantidade_referencia ?? null,
-    })
+    const resultado = resultados[i]
+    if (resultado?.ativo === false) return
+    const k = String(def.codigo || '').toUpperCase()
+    if (!k) return
+    const quantidade = resultado?.valor ?? def.quantidade_referencia ?? null
+    const atual = aMap.get(k)
+    if (!atual) {
+      aMap.set(k, {
+        codigo: def.codigo,
+        descricao: String(def.descricao || ''),
+        quantidade,
+      })
+      return
+    }
+    atual.quantidade = atual.quantidade == null || quantidade == null
+      ? atual.quantidade ?? quantidade
+      : atual.quantidade + quantidade
+    if (!atual.descricao && def.descricao) atual.descricao = def.descricao
   })
 
   const linhas: LinhaComparacao[] = []
@@ -282,8 +302,8 @@ export function compararItemWVetroComFormulaAtlas(params: {
   const perfis = compararPerfis(formula, item, opcoes)
   const linhas = [
     ...perfis.linhas,
-    ...compararVidro(formula, item),
-    ...compararAcessorios(formula, item, perfis.perfisAtlas),
+    ...compararVidro(formula, item, opcoes),
+    ...compararAcessorios(formula, item, perfis.perfisAtlas, opcoes),
   ]
 
   const resumo = linhas.reduce((acc, linha) => {
