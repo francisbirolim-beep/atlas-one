@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { Usuario } from './tipos'
 import { calcularFormulaCorteIsolada, calcularFormulasCorte, type TipologiaFormulasCorte } from './formulasCorteEngine'
+import { calcularAcessoriosTecnicos } from './formulasAcessoriosEngine'
 import { agruparCompraDeBarras, otimizarPerfis, type CortePerfil, type SobraPerfilDisponivel } from './aproveitamentoPerfis'
 
 export type PacoteTecnico = {
@@ -132,6 +133,21 @@ function pecaEhContramarco(codigo?: string, descricao?: string) {
 
 function itemRef(item: any, indice: number) {
   return String(item?.id || `item-${indice + 1}`)
+}
+
+function folhasDoItem(item: any) {
+  const candidatos = [
+    item?.folhas,
+    item?.numero_folhas,
+    item?.qtd_folhas,
+    item?.variaveis?.folhas,
+    item?.variaveis?.Folhas,
+  ]
+  for (const candidato of candidatos) {
+    const valor = Math.floor(n(candidato))
+    if (valor > 0) return valor
+  }
+  return 1
 }
 
 async function carregarProdutosTecnicos() {
@@ -280,12 +296,19 @@ export async function gerarPacoteTecnico(
       continue
     }
 
+    let resultadosPerfis: Array<{ codigo: string; tamanho: number; grupo?: string }> = []
     try {
       const resultados = calcularFormulasCorte({
         tipologia_id: formula.tipologia_id,
         variaveis: Array.isArray(formula.variaveis) ? formula.variaveis : [],
         pecas: Array.isArray(formula.pecas) ? formula.pecas : [],
       }, largura, altura, (item?.variaveis || {}) as Record<string, string>)
+
+      resultadosPerfis = resultados.map(peca => ({
+        codigo: peca.codigo,
+        tamanho: peca.tamanho,
+        grupo: peca.grupo,
+      }))
 
       for (const peca of resultados) {
         if (semContramarco(contramarcoAtual) && pecaEhContramarco(peca.codigo, peca.descricao)) continue
@@ -321,14 +344,43 @@ export async function gerarPacoteTecnico(
     if (acessorios.length === 0) {
       materiais.push(linhaPendente(pacote.id, item, indice, 'Acessórios ainda não validados para esta tipologia.', 'acessorio'))
     } else {
-      for (const acessorio of acessorios) {
+      const resultadosAcessorios = calcularAcessoriosTecnicos(
+        acessorios,
+        largura,
+        altura,
+        folhasDoItem(item),
+        resultadosPerfis,
+        (item?.variaveis || {}) as Record<string, string>,
+      )
+
+      for (let acessorioIndice = 0; acessorioIndice < acessorios.length; acessorioIndice += 1) {
+        const acessorio = acessorios[acessorioIndice]
+        const resultadoAcessorio = resultadosAcessorios[acessorioIndice]
+        if (resultadoAcessorio?.ativo === false) continue
+
         const produto = produtos.get(codigoKey(acessorio?.codigo))
         const statusValidado = acessorio?.status === 'validada'
-        let quantidade = n(acessorio?.quantidade_referencia)
-        if (statusValidado && acessorio?.formula_quantidade) {
-          try { quantidade = calcularFormulaCorteIsolada(String(acessorio.formula_quantidade), largura, altura) } catch { /* permanece pendente */ }
-        }
+        const formulaCalculada =
+          statusValidado &&
+          !resultadoAcessorio?.erro &&
+          typeof resultadoAcessorio?.valor === 'number' &&
+          Number.isFinite(resultadoAcessorio.valor)
+
+        let quantidade = formulaCalculada
+          ? Number(resultadoAcessorio?.valor)
+          : n(acessorio?.quantidade_referencia)
         quantidade *= qtdItem
+
+        const justificativa = !statusValidado
+          ? `Referência técnica com status ${acessorio?.status || 'pendente'}; confirmar antes da compra.`
+          : resultadoAcessorio?.erro
+            ? `Fórmula do acessório não pôde ser calculada: ${resultadoAcessorio.erro}`
+            : !formulaCalculada && acessorio?.formula_quantidade
+              ? 'Fórmula do acessório não retornou quantidade válida.'
+              : !produto?.id
+                ? 'Código sem produto correspondente no cadastro.'
+                : null
+
         materiais.push({
           pacote_id: pacote.id,
           item_ref: itemRef(item, indice),
@@ -343,10 +395,10 @@ export async function gerarPacoteTecnico(
           comprimento_corte_mm: null,
           comprimento_barra_mm: null,
           origem_calculo: 'formula',
-          status_calculo: statusValidado && produto?.id ? 'calculado' : 'pendente_formula',
+          status_calculo: statusValidado && formulaCalculada && produto?.id ? 'calculado' : 'pendente_formula',
           incluido_manual: false,
           excluido: false,
-          justificativa_ajuste: statusValidado ? (!produto?.id ? 'Código sem produto correspondente no cadastro.' : null) : `Referência técnica com status ${acessorio?.status || 'pendente'}; confirmar antes da compra.`,
+          justificativa_ajuste: justificativa,
           ordem: ordem++,
         })
       }
