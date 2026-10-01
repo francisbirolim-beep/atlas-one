@@ -805,7 +805,7 @@ export async function GET(req: NextRequest) {
           catalogoCustoId: catalogo?.id || null,
           catalogoCustoUnitario: catalogo?.custo_unitario == null ? null : Number(catalogo.custo_unitario),
           catalogoUnidade: catalogo?.unidade || null,
-          ocorrencias: Number(referencia?.ocorrencias || 0),
+          ocorrencias: Number(estatistica?.ocorrencias ?? referencia?.ocorrencias ?? 0),
           ncm: String(catalogoApi.CorNCM || referencia?.ncm || '').trim() || null,
           espessuraMm: numeroSeguro(catalogoApi.CorEspessura),
           pesoKgM2: numeroSeguro(catalogoApi.CorVidroPeso),
