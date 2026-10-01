@@ -136,8 +136,8 @@ export function inferirOpcoesTecnicasWVetro(
         }
         break
       case 'montante_lateral':
-        if (codigosPerfil.has('SU280')) { valor = 'largo'; evidencia = 'SU280 presente.' }
-        else if (codigosPerfil.has('SU039')) { valor = 'estreito'; evidencia = 'SU039 presente.' }
+        if (codigosPerfil.has('SU280')) { valor = 'largo'; evidencia = 'SU280 presente (montante com reforço de aba).' }
+        else if (codigosPerfil.has('SU245') || codigosPerfil.has('SU039')) { valor = 'estreito'; evidencia = codigosPerfil.has('SU245') ? 'SU245 presente (montante lateral sem reforço de aba).' : 'SU039 presente.' }
         break
       case 'puxador':
         valor = nomesAcessorio.some(n => n.includes('PUXADOR')) ? 'sim' : 'sem'
@@ -224,7 +224,7 @@ function compararPerfis(
   formula: FormulaAtlasComparacao,
   item: WVetroItemTecnico,
   opcoes: Record<string, string>,
-): { linhas: LinhaComparacao[]; perfisAtlas: Array<{ codigo: string; tamanho: number; quantidade?: number; eixo?: 'L' | 'H'; descricao?: string }> } {
+): { linhas: LinhaComparacao[]; perfisAtlas: Array<{ codigo: string; tamanho: number; quantidade?: number; eixo?: 'L' | 'H'; descricao?: string; grupo?: string }> } {
   const largura = Number(item.Largura)
   const altura = Number(item.Altura)
   const multiplicador = quantidadeItem(item)
@@ -366,7 +366,7 @@ function compararVidro(formula: FormulaAtlasComparacao, item: WVetroItemTecnico,
 function compararAcessorios(
   formula: FormulaAtlasComparacao,
   item: WVetroItemTecnico,
-  perfisAtlas: Array<{ codigo: string; tamanho: number }>,
+  perfisAtlas: Array<{ codigo: string; tamanho: number; grupo?: string }>,
   opcoes: OpcoesEscolhidas,
 ): LinhaComparacao[] {
   const multiplicador = quantidadeItem(item)
