@@ -113,8 +113,8 @@ export async function POST(req: NextRequest) {
         tipologias_processadas: Number(execucao.tipologias_processadas || 0) + Number(resultado.tipologias || 0),
         componentes_processados: Number(execucao.componentes_processados || 0) + Number(resultado.componentes || 0),
         ultima_mensagem: estado.pendentes === 0
-          ? `${pendencia.data}: pendência resolvida. Todas as pendências foram reprocessadas.`
-          : `${pendencia.data}: pendência resolvida. Restam ${estado.pendentes}.`,
+          ? `${pendencia.data}: pendência resolvida (${resultado.casos || 0} caso(s) individual(is)). Todas as pendências foram reprocessadas.`
+          : `${pendencia.data}: pendência resolvida (${resultado.casos || 0} caso(s) individual(is)). Restam ${estado.pendentes}.`,
         erro: null,
         updated_at: resolvidoEm,
       }).eq('id', execucaoId).select('*').single()
