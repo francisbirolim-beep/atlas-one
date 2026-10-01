@@ -116,6 +116,7 @@ type AuditoriaNormalizada = {
 
 type EvidenciasAuditoria = {
   numerosHistoricoComercial: Set<string>
+  numerosHistoricoOperacional: Set<string>
   titulosHistoricoFinanceiro: Set<string>
   projetosPresentesNosLotes: Set<string>
 }
@@ -124,13 +125,18 @@ async function carregarEvidenciasAuditoria(
   empresaId: string,
   sql: ReturnType<typeof neonStaging>,
 ): Promise<EvidenciasAuditoria> {
-  const [comercial, financeiro, projetosLote] = await Promise.all([
+  const [comercial, operacional, financeiro, projetosLote] = await Promise.all([
     supabaseAdmin
       .from('wvetro_historico_comercial')
       .select('numero_wvetro')
       .eq('empresa_id', empresaId)
       .eq('somente_historico', true)
       .not('numero_wvetro', 'is', null),
+    supabaseAdmin
+      .from('wvetro_historico_operacional')
+      .select('orcamentos_wvetro')
+      .eq('empresa_id', empresaId)
+      .eq('somente_historico', true),
     supabaseAdmin
       .from('wvetro_historico_financeiro')
       .select('titulo_id_wvetro')
@@ -149,11 +155,18 @@ async function carregarEvidenciasAuditoria(
   ])
 
   if (comercial.error) throw new Error(`Falha ao consultar histórico comercial W.Vetro: ${comercial.error.message}`)
+  if (operacional.error) throw new Error(`Falha ao consultar histórico operacional W.Vetro: ${operacional.error.message}`)
   if (financeiro.error) throw new Error(`Falha ao consultar histórico financeiro W.Vetro: ${financeiro.error.message}`)
 
   return {
     numerosHistoricoComercial: new Set(
       (comercial.data || []).map((item: any) => String(item.numero_wvetro || '').trim()).filter(Boolean),
+    ),
+    numerosHistoricoOperacional: new Set(
+      (operacional.data || [])
+        .flatMap((item: any) => Array.isArray(item.orcamentos_wvetro) ? item.orcamentos_wvetro : [])
+        .map((item: unknown) => String(item || '').trim())
+        .filter(Boolean),
     ),
     titulosHistoricoFinanceiro: new Set(
       (financeiro.data || []).map((item: any) => String(item.titulo_id_wvetro || '').trim()).filter(Boolean),
@@ -205,9 +218,13 @@ function classificarAuditoria(normalizados: AuditoriaNormalizada[], evidencias: 
         classificacao = 'preservada_historico_comercial'
         explicacao = 'O snapshot não está no staging atual, mas o número existe no histórico comercial isolado do Atlas.'
         requerAtencao = false
+      } else if (evidencias.numerosHistoricoOperacional.has(item.referencia)) {
+        classificacao = 'preservada_historico_operacional'
+        explicacao = 'O snapshot do orçamento não foi localizado, mas o número está preservado de forma consistente em lote/instalação histórica do W.Vetro.'
+        requerAtencao = false
       } else {
         classificacao = 'referencia_orcamento_nao_localizada'
-        explicacao = 'O número de orçamento não foi localizado nem no staging atual nem no histórico comercial isolado.'
+        explicacao = 'O número de orçamento não foi localizado no staging nem nos históricos comercial ou operacional do Atlas.'
       }
     }
 
