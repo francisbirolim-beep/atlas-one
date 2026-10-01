@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       produtosResp,
       fornecedoresResp,
       historicoResp,
+      historicoWVetroResp,
       clientesResp,
       obrasResp,
     ] = await Promise.all([
@@ -89,6 +90,16 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false })
         .limit(3000),
       supabaseAdmin
+        .from("wvetro_historico_suprimentos")
+        .select(
+          "id,tipo_registro,chave_externa,data_referencia,data_lancamento,documento,pessoa_nome,produto_id_wvetro,produto_codigo,produto_descricao,produto_tipo,cor_nome,local_estoque,movimento_tipo,quantidade,valor_unitario,valor_total,nota_id_wvetro,nota_numero,nota_serie,fornecedor_id_wvetro,fornecedor_nome,data_emissao,data_entrada,valor_contabil,valor_produto,valor_frete,finalizada,somente_historico",
+        )
+        .eq("empresa_id", empresaId)
+        .eq("somente_historico", true)
+        .order("data_referencia", { ascending: false, nullsFirst: false })
+        .order("importado_em", { ascending: false })
+        .limit(500),
+      supabaseAdmin
         .from("clientes")
         .select("id,nome,apelido,cidade")
         .eq("empresa_id", empresaId)
@@ -108,6 +119,7 @@ export async function GET(req: NextRequest) {
       produtosResp,
       fornecedoresResp,
       historicoResp,
+      historicoWVetroResp,
       clientesResp,
       obrasResp,
     ]) {
@@ -148,6 +160,7 @@ export async function GET(req: NextRequest) {
       produtos: produtosResp.data || [],
       fornecedores: fornecedoresResp.data || [],
       ultimoPrecoPorProduto: Object.fromEntries(ultimoPorProduto),
+      historicoWVetroSuprimentos: historicoWVetroResp.data || [],
       clientes: clientesResp.data || [],
       obras: obrasResp.data || [],
     });
