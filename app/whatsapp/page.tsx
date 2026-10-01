@@ -6,7 +6,7 @@ import {
   ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus,
-  UserRoundCheck,
+  UserRoundCheck, Plus, Zap,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -67,6 +67,15 @@ type AcessoCanal = {
   dono: boolean
   principal: boolean
 }
+type Etiqueta = { id: string; nome: string; cor: string }
+type Nota = { id: string; usuario_nome?: string | null; texto: string; created_at: string }
+type MensagemRapida = {
+  id: string
+  titulo: string
+  mensagem: string
+  atalho?: string | null
+  categoria?: string | null
+}
 
 function hora(valor?: string | null) {
   if (!valor) return ''
@@ -112,6 +121,15 @@ export default function WhatsAppAtendimentoPage() {
   const [obras, setObras] = useState<ObraResumo[]>([])
   const [carregandoCliente, setCarregandoCliente] = useState(false)
   const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas'>('cliente')
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([])
+  const [etiquetasAtivas, setEtiquetasAtivas] = useState<string[]>([])
+  const [notas, setNotas] = useState<Nota[]>([])
+  const [mensagensRapidas, setMensagensRapidas] = useState<MensagemRapida[]>([])
+  const [apoioAberto, setApoioAberto] = useState<'rapidas' | 'etiquetas' | null>(null)
+  const [notaTexto, setNotaTexto] = useState('')
+  const [novaEtiqueta, setNovaEtiqueta] = useState('')
+  const [novaRapidaTitulo, setNovaRapidaTitulo] = useState('')
+  const [novaRapidaTexto, setNovaRapidaTexto] = useState('')
   const fimRef = useRef<HTMLDivElement | null>(null)
 
   async function carregarConversas(selecionar = true) {
@@ -162,10 +180,36 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
+  async function carregarApoio(conversaId: string) {
+    try {
+      const headers = await headersJson()
+      const resp = await fetch(
+        `/api/integracoes/whatsapp/apoio?conversaId=${encodeURIComponent(conversaId)}`,
+        { headers },
+      )
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao carregar recursos internos.')
+      setEtiquetas(json.etiquetas || [])
+      setEtiquetasAtivas(json.etiquetasAtivas || [])
+      setNotas(json.notas || [])
+      setMensagensRapidas(json.mensagensRapidas || [])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao carregar recursos internos.')
+    }
+  }
+
   useEffect(() => { void carregarConversas() }, [])
   useEffect(() => {
-    if (!ativa?.id) { setMensagens([]); return }
+    if (!ativa?.id) {
+      setMensagens([])
+      setEtiquetas([])
+      setEtiquetasAtivas([])
+      setNotas([])
+      setMensagensRapidas([])
+      return
+    }
     void carregarMensagens(ativa.id)
+    void carregarApoio(ativa.id)
   }, [ativa?.id])
 
   useEffect(() => {
@@ -246,6 +290,24 @@ export default function WhatsAppAtendimentoPage() {
     setDestinoId('')
     setSetorTransferencia('')
     await carregarConversas(false)
+  }
+
+  async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
+    if (!ativa) return
+    setErro('')
+    const headers = await headersJson()
+    const resp = await fetch('/api/integracoes/whatsapp/apoio', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ acao, conversaId: ativa.id, ...extra }),
+    })
+    const json = await resp.json()
+    if (!resp.ok) {
+      setErro(json.error || 'Nao foi possivel atualizar o atendimento.')
+      return false
+    }
+    await carregarApoio(ativa.id)
+    return true
   }
 
   async function enviar() {
@@ -412,6 +474,15 @@ export default function WhatsAppAtendimentoPage() {
                       Via {canalAtivo.nome}{canalAtivo.numero_declarado ? ` · ${telefoneFormatado(canalAtivo.numero_declarado)}` : ''}
                     </p>
                   )}
+                  {!!etiquetasAtivas.length && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {etiquetas.filter(e => etiquetasAtivas.includes(e.id)).map(e => (
+                        <span key={e.id} className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          {e.nome}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {ativa.cliente_id && (
                   <Link href={`/clientes/${ativa.cliente_id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold">
@@ -483,14 +554,95 @@ export default function WhatsAppAtendimentoPage() {
                 ) : (
                   <div>
                     <div className="mb-2 flex items-center gap-1 text-slate-500">
-                      <button disabled className="rounded-lg p-2 opacity-40" title="Envio de anexos entra na próxima etapa">
+                      <button disabled className="rounded-lg p-2 opacity-40" title="Anexos e mídia entram na próxima etapa">
                         <Paperclip size={18}/>
                       </button>
-                      <button disabled className="rounded-lg p-2 opacity-40" title="Etiquetas serão persistidas na próxima etapa">
+                      <button onClick={()=>setApoioAberto(apoioAberto==='etiquetas'?null:'etiquetas')}
+                        className={`rounded-lg p-2 hover:bg-slate-100 ${apoioAberto==='etiquetas'?'bg-slate-100 text-emerald-700':''}`}
+                        title="Etiquetas">
                         <Tag size={18}/>
+                      </button>
+                      <button onClick={()=>setApoioAberto(apoioAberto==='rapidas'?null:'rapidas')}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold hover:bg-slate-100 ${apoioAberto==='rapidas'?'bg-slate-100 text-blue-700':''}`}
+                        title="Mensagens rápidas">
+                        <Zap size={17}/> Rápidas
                       </button>
                       <span className="ml-auto text-[10px] text-slate-400">Enter envia · Shift+Enter quebra linha</span>
                     </div>
+
+                    {apoioAberto === 'etiquetas' && (
+                      <div className="mb-2 rounded-xl border bg-white p-3 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between">
+                          <b className="text-xs text-slate-700">Etiquetas da conversa</b>
+                          <span className="text-[10px] text-slate-400">Interno</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {etiquetas.map(e => {
+                            const ativaTag = etiquetasAtivas.includes(e.id)
+                            return (
+                              <button key={e.id}
+                                onClick={()=>void acaoApoio('etiqueta_alternar',{etiquetaId:e.id})}
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${ativaTag?'bg-emerald-50 text-emerald-700':'bg-white text-slate-600'}`}>
+                                {ativaTag ? '✓ ' : ''}{e.nome}
+                              </button>
+                            )
+                          })}
+                          {!etiquetas.length && <span className="text-xs text-slate-400">Nenhuma etiqueta cadastrada.</span>}
+                        </div>
+                        {eu?.role === 'master' && (
+                          <div className="mt-3 flex gap-2 border-t pt-3">
+                            <input value={novaEtiqueta} onChange={e=>setNovaEtiqueta(e.target.value)}
+                              placeholder="Nova etiqueta" className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs"/>
+                            <button disabled={!novaEtiqueta.trim()}
+                              onClick={async()=>{
+                                const ok=await acaoApoio('etiqueta_criar',{nome:novaEtiqueta.trim()})
+                                if(ok)setNovaEtiqueta('')
+                              }}
+                              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                              <Plus size={14}/>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {apoioAberto === 'rapidas' && (
+                      <div className="mb-2 max-h-64 overflow-y-auto rounded-xl border bg-white p-3 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between">
+                          <b className="text-xs text-slate-700">Mensagens rápidas</b>
+                          <span className="text-[10px] text-slate-400">{mensagensRapidas.length} cadastradas</span>
+                        </div>
+                        <div className="space-y-1">
+                          {mensagensRapidas.map(r=>(
+                            <button key={r.id} onClick={()=>{setTexto(r.mensagem);setApoioAberto(null)}}
+                              className="w-full rounded-lg border px-3 py-2 text-left hover:bg-slate-50">
+                              <div className="flex items-center gap-2">
+                                <b className="text-xs text-slate-800">{r.titulo}</b>
+                                {r.atalho && <span className="text-[10px] text-blue-600">{r.atalho}</span>}
+                              </div>
+                              <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">{r.mensagem}</p>
+                            </button>
+                          ))}
+                          {!mensagensRapidas.length && <p className="py-3 text-center text-xs text-slate-400">Nenhuma mensagem rápida cadastrada.</p>}
+                        </div>
+                        {eu?.role === 'master' && (
+                          <div className="mt-3 space-y-2 border-t pt-3">
+                            <input value={novaRapidaTitulo} onChange={e=>setNovaRapidaTitulo(e.target.value)}
+                              placeholder="Título da resposta" className="w-full rounded-lg border px-2 py-1.5 text-xs"/>
+                            <textarea value={novaRapidaTexto} onChange={e=>setNovaRapidaTexto(e.target.value)}
+                              placeholder="Mensagem pronta" rows={2} className="w-full resize-none rounded-lg border px-2 py-1.5 text-xs"/>
+                            <button disabled={!novaRapidaTitulo.trim()||!novaRapidaTexto.trim()}
+                              onClick={async()=>{
+                                const ok=await acaoApoio('rapida_criar',{titulo:novaRapidaTitulo.trim(),mensagem:novaRapidaTexto.trim()})
+                                if(ok){setNovaRapidaTitulo('');setNovaRapidaTexto('')}
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                              <Plus size={14}/> Criar resposta
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-end gap-2">
                       <textarea value={texto} onChange={e=>setTexto(e.target.value)}
                         onKeyDown={e=>{
@@ -646,8 +798,39 @@ export default function WhatsAppAtendimentoPage() {
                     <StickyNote size={17} className="text-amber-600"/>
                     <b className="text-sm text-slate-800">Notas internas</b>
                   </div>
-                  <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-slate-500">
-                    Notas e guias internos ficarão visíveis só para a equipe, nunca para o cliente.
+                  <div className="rounded-xl border bg-amber-50 p-3">
+                    <textarea value={notaTexto} onChange={e=>setNotaTexto(e.target.value)}
+                      rows={3} placeholder="Escreva uma nota para a equipe..."
+                      className="w-full resize-none rounded-lg border bg-white px-3 py-2 text-xs outline-none"/>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-amber-800">Nunca é enviada ao cliente.</span>
+                      <button disabled={!notaTexto.trim()}
+                        onClick={async()=>{
+                          const ok=await acaoApoio('nota_criar',{texto:notaTexto.trim()})
+                          if(ok)setNotaTexto('')
+                        }}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                        Salvar nota
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {notas.map(n=>(
+                      <div key={n.id} className="rounded-xl border bg-white p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <b className="text-[11px] text-slate-700">{n.usuario_nome || 'Equipe'}</b>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(n.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                          </span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">{n.texto}</p>
+                      </div>
+                    ))}
+                    {!notas.length && (
+                      <div className="rounded-2xl border border-dashed p-5 text-center text-xs text-slate-500">
+                        Nenhuma nota interna nesta conversa.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
