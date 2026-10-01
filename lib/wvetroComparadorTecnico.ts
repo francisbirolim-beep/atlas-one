@@ -65,7 +65,20 @@ function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
 export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
   const linha = String(item.Linha || '').trim().toUpperCase()
   const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '').trim().toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
   if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
+
+  const varianteEspecial =
+    nome.includes('INTEGRADA') ||
+    nome.includes('VENEZIANA') ||
+    nome.includes('LAMBRI') ||
+    nome.includes('BANDEIRA') ||
+    nome.includes('ABERTURA CENTRAL') ||
+    nome.includes('VIDRO SUPERIOR') ||
+    ['PC2-02','PC2-03','PC2-04','PC2-05','PC2-08','PC2-11'].some(sufixo => codigo.includes(sufixo))
+  if (varianteEspecial) return false
+
   if (!(item.Vidros || []).length) return false
 
   const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
