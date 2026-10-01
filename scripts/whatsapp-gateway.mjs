@@ -4,6 +4,7 @@ import process from 'node:process'
 import { execFile } from 'node:child_process'
 import http from 'node:http'
 import QRCode from 'qrcode'
+import webpush from 'web-push'
 import makeWASocket, {
   Browsers,
   DisconnectReason,
@@ -38,6 +39,13 @@ const GATEWAY_URL = String(
   (BASE_URL ? `${BASE_URL}/api/integracoes/whatsapp/gateway` : '')
 ).replace(/\/$/, '')
 const TOKEN = String(process.env.ATLAS_GATEWAY_TOKEN || '')
+const VAPID_PUBLIC_KEY = String(process.env.ATLAS_VAPID_PUBLIC_KEY || '')
+const VAPID_PRIVATE_KEY = String(process.env.ATLAS_VAPID_PRIVATE_KEY || '')
+const VAPID_SUBJECT = String(process.env.ATLAS_VAPID_SUBJECT || 'https://atlas-one.vercel.app')
+const PUSH_READY = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY)
+if (PUSH_READY) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+}
 const SESSIONS_DIR = process.env.ATLAS_WHATSAPP_SESSIONS_DIR ||
   path.join(process.env.HOME || '.', '.atlas-one', 'whatsapp-sessions')
 const DEVICE_NAME = 'Atlas One Mac Gateway'
@@ -54,6 +62,8 @@ const qrStates = new Map()
 let shuttingDown = false
 let refreshTimer = null
 let queueTimer = null
+let pushTimer = null
+let pushSending = false
 let panelBrowserOpened = false
 
 const LOCAL_PANEL_PORT = 3337
@@ -607,12 +617,71 @@ async function processAllQueues() {
   }
 }
 
+async function processPushQueue() {
+  if (shuttingDown || pushSending || !PUSH_READY) return
+  pushSending = true
+  try {
+    const response = await atlas('mode=push-pending', { method: 'GET' })
+    const item = response?.item
+    if (!item || item.skipped || !item.notificacao) return
+
+    const notificacao = item.notificacao
+    const payload = JSON.stringify({
+      id: notificacao.id,
+      title: String(notificacao.titulo || 'Atlas One'),
+      body: String(notificacao.mensagem || '').slice(0, 800),
+      href: String(notificacao.href || '/'),
+      tag: `atlas-${notificacao.id}`,
+      categoria: String(notificacao.categoria || 'operacao'),
+      silent: notificacao.silent === true,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+    })
+
+    const resultados = []
+    for (const assinatura of item.assinaturas || []) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: assinatura.endpoint,
+            keys: { p256dh: assinatura.p256dh, auth: assinatura.auth },
+          },
+          payload,
+          { TTL: 60 * 60, urgency: 'high' },
+        )
+        resultados.push({ assinaturaId: assinatura.id, sucesso: true })
+      } catch (error) {
+        resultados.push({
+          assinaturaId: assinatura.id,
+          sucesso: false,
+          statusCode: Number(error?.statusCode || error?.status || 0) || null,
+          erro: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'push_sent',
+        notificationId: notificacao.id,
+        resultados,
+      }),
+    })
+  } catch (error) {
+    console.error('[gateway] push:', error instanceof Error ? error.message : String(error))
+  } finally {
+    pushSending = false
+  }
+}
+
 async function shutdown(signal) {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`[gateway] encerrando por ${signal}...`)
   if (refreshTimer) clearInterval(refreshTimer)
   if (queueTimer) clearInterval(queueTimer)
+  if (pushTimer) clearInterval(pushTimer)
 
   const ids = [...sessions.keys()]
   for (const id of ids) await disconnectChannel(id, true)
@@ -623,6 +692,8 @@ process.on('SIGINT', () => void shutdown('SIGINT'))
 process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
 console.log('[gateway] iniciando gerenciador multicanal Atlas One...')
+console.log(PUSH_READY ? '[gateway] Web Push ativo.' : '[gateway] Web Push desativado: chaves VAPID ausentes.')
 await refreshChannels()
 refreshTimer = setInterval(() => void refreshChannels(), 5000)
 queueTimer = setInterval(() => void processAllQueues(), 1200)
+pushTimer = setInterval(() => void processPushQueue(), 1500)
