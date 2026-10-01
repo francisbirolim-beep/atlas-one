@@ -301,6 +301,7 @@ async function registerInbound(channel, msg, sock) {
   let mediaPath = null
   let mediaSize = null
   let mediaError = null
+  let mediaMimeType = extracted.mimeType || null
 
   if (extracted.isMedia) {
     try {
@@ -321,6 +322,7 @@ async function registerInbound(channel, msg, sock) {
       })
 
       const mimeUpload = preparado.mimeType || String(extracted.mimeType || 'application/octet-stream').split(';')[0]
+      mediaMimeType = mimeUpload
       const upload = await fetch(preparado.signedUrl, {
         method: 'PUT',
         headers: {
@@ -355,7 +357,7 @@ async function registerInbound(channel, msg, sock) {
       texto: extracted.texto,
       timestamp,
       mediaPath,
-      mimeType: preparado?.mimeType || extracted.mimeType || null,
+      mimeType: mediaMimeType,
       fileName: extracted.fileName || null,
       mediaSize,
       payload: {
