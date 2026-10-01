@@ -1,6 +1,24 @@
-import { compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { classificarFamiliaPc2Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
+
+const variantesPc2 = [
+  [{ ...FIXTURE_PC2_SUPREMA_WVETRO, Codigo:'*SUCB-PC2-08-EF*', Nome:'PORTA DE CORRER INTEGRADA 02 FOLHAS | SUPREMA' }, 'integrada_persiana'],
+  [{ ...FIXTURE_PC2_SUPREMA_WVETRO, Codigo:'*SUCB-PC2-03-EF', Nome:'PORTA DE CORRER 02 FOLHAS MÓVEIS | VENEZIANA | SUPREMA' }, 'veneziana'],
+  [{ ...FIXTURE_PC2_SUPREMA_WVETRO, Codigo:'*SUCB-PC2-04-EF', Nome:'PORTA DE CORRER 02 FOLHAS COM LAMBRI | SUPREMA' }, 'lambri'],
+  [{ ...FIXTURE_PC2_SUPREMA_WVETRO, Codigo:'SUCB-PC2-05', Nome:'PORTA DE CORRER 02 FOLHAS MÓVEIS | BANDEIRA FIXA | SUPREMA' }, 'bandeira'],
+  [{ ...FIXTURE_PC2_SUPREMA_WVETRO, Codigo:'SUCB-PC2-11', Nome:'PORTA DE CORRER 02 FOLHAS ABERTURA CENTRAL | SUPREMA' }, 'abertura_central'],
+  [{ ...FIXTURE_PC2_SUPREMA_WVETRO, Codigo:'*SUCB-PC2-02-EF', Nome:'PORTA DE CORRER 02 FOLHAS | VIDRO SUPERIOR E VENEZIANA INFERIOR | SUPREMA' }, 'mista_vidro_veneziana'],
+] as const
+
+for (const [item, esperado] of variantesPc2) {
+  const familia = classificarFamiliaPc2Suprema(item)
+  if (familia !== esperado) throw new Error(`Regressão classificação PC2: esperado ${esperado}, obtido ${familia}.`)
+}
+
+if (classificarFamiliaPc2Suprema(FIXTURE_PC2_SUPREMA_WVETRO) !== 'vidro_padrao') {
+  throw new Error('Regressão classificação PC2: fixture principal deveria ser vidro_padrao.')
+}
 
 if (!ehPc2SupremaDominante(FIXTURE_PC2_SUPREMA_WVETRO)) {
   throw new Error('Regressão PC2 dominante: a fixture histórica principal deveria ser reconhecida.')
