@@ -31,6 +31,8 @@ type AssinaturaMatriz = {
   perfis: Array<{ codigo:string; posicoes:string[]; quantidade:number }>
   acessorios: string[]
   vidros: Array<{ especificacao:string; quantidade:number }>
+  cobertura: 'referencia_local' | 'nao_validada'
+  referenciasLocais: Array<{ id:string; configuracao_label:string }>
   amostras: Array<{ numero:string; itemId:string; codigo:string; nome:string; largura:number; altura:number; recurso:string }>
 }
 
@@ -266,7 +268,7 @@ export default function ComparadorTecnicoWVetroPage() {
             <table className="min-w-full text-sm">
               <thead><tr className="border-b bg-slate-50 text-left text-xs uppercase text-slate-400"><th className="px-3 py-2">Família / modelo</th><th className="px-3 py-2">Frequência</th><th className="px-3 py-2">Faixa</th><th className="px-3 py-2">Composição</th><th className="px-3 py-2">Amostra</th></tr></thead>
               <tbody>{matriz.assinaturas.slice(0,100).map((a,i)=><tr key={`${a.familia}-${i}-${a.assinatura.slice(0,20)}`} className="border-b align-top last:border-0">
-                <td className="px-3 py-3"><b className="text-slate-800">{a.familia}</b><p className="mt-0.5 max-w-xs text-xs text-slate-500">{a.modelo}</p><p className="text-[11px] text-slate-400">{a.linha}</p></td>
+                <td className="px-3 py-3"><div className="flex flex-wrap items-center gap-1.5"><b className="text-slate-800">{a.familia}</b><span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${a.cobertura==='referencia_local'?'border-emerald-200 bg-emerald-50 text-emerald-700':'border-amber-200 bg-amber-50 text-amber-700'}`}>{a.cobertura==='referencia_local'?'Referência local':'Não validada'}</span></div><p className="mt-0.5 max-w-xs text-xs text-slate-500">{a.modelo}</p><p className="text-[11px] text-slate-400">{a.linha}</p>{a.referenciasLocais.length>0&&<p className="mt-1 max-w-xs text-[10px] text-emerald-700">{a.referenciasLocais.map(r=>r.configuracao_label).join(' · ')}</p>}</td>
                 <td className="px-3 py-3"><b>{a.ocorrencias} registros</b><p className="text-xs text-slate-500">{fmt(a.pecas,0)} peças</p></td>
                 <td className="px-3 py-3 text-xs text-slate-600"><p>L {fmt(a.larguraMin,0)}–{fmt(a.larguraMax,0)} mm</p><p>A {fmt(a.alturaMin,0)}–{fmt(a.alturaMax,0)} mm</p></td>
                 <td className="px-3 py-3 text-xs text-slate-600"><p><b>{a.perfis.length}</b> perfis · <b>{a.acessorios.length}</b> acessórios · <b>{a.vidros.length}</b> tipos de vidro</p><p className="mt-1 max-w-md break-words text-[11px] text-slate-400">{a.perfis.map(p=>p.codigo).join(', ') || 'sem perfis'}</p></td>
