@@ -155,6 +155,71 @@ export const FIXTURE_PC2_SUPREMA_GENERICA_ATLAS: FormulaAtlasComparacao = {
 }
 
 
+const PC2_SUPREMA_FIXADORES_HISTORICOS: Record<string, string> = {
+  CON409: '2',
+  FRA820: '2',
+  NYL357: '2',
+  PAR1023: '2 * CEIL(Altura / 500) + 2',
+  PAR1025: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)',
+  NYL190: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)',
+  PAR1037: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)',
+  BUC755: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)',
+}
+
+function pc2ReferenciaHistorica(label: string): FormulaAtlasComparacao {
+  return {
+    ...FIXTURE_PC2_SUPREMA_GENERICA_ATLAS,
+    configuracao_label: label,
+    acessorios: (FIXTURE_PC2_SUPREMA_GENERICA_ATLAS.acessorios || []).map(acessorio => {
+      const formula = PC2_SUPREMA_FIXADORES_HISTORICOS[String(acessorio.codigo || '').toUpperCase()]
+      return formula ? { ...acessorio, formula_quantidade: formula, status: 'validada' } : acessorio
+    }),
+  }
+}
+
+export const FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA = pc2ReferenciaHistorica(
+  'PC2 Suprema · mão-de-amigo comum com reforço externo · referência histórica',
+)
+
+export const FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA = pc2ReferenciaHistorica(
+  'PC2 Suprema · vidro padrão sem reforço da mão-de-amigo · referência histórica',
+)
+
+function pc2PadraoSemReforcoItem(largura:number, altura:number, codigo:string): WVetroItemTecnico {
+  const folha=(largura-166)/2
+  const vertical=altura-34
+  const fixacao=Math.ceil(largura/500)+2*Math.ceil(altura/500)
+  return {
+    Codigo:codigo,
+    Nome:'PORTA DE CORRER 02 FOLHAS MÓVEIS | SUPREMA SEM CONTRAMARCO',
+    Linha:'L. SUPREMA', Modelo:'PORTA DE CORRER 02 FOLHAS', Qtde:1, Largura:largura, Altura:altura,
+    Perfil:[
+      {Codigo:'MP347',Posicao:'L',Qtde:1,Medida:(largura+44)/1000},{Codigo:'MP347',Posicao:'H',Qtde:2,Medida:(altura+22)/1000},
+      {Codigo:'SU001',Posicao:'L',Qtde:1,Medida:(largura-30)/1000},{Codigo:'TMC',Posicao:'L',Qtde:2,Medida:(largura-30)/1000},
+      {Codigo:'SU007',Posicao:'H',Qtde:2,Medida:(altura-4)/1000},{Codigo:'SU008',Posicao:'H',Qtde:2,Medida:(altura-17)/1000},
+      {Codigo:'SU053',Posicao:'L',Qtde:2,Medida:folha/1000},{Codigo:'SU225',Posicao:'L',Qtde:2,Medida:folha/1000},
+      {Codigo:'SU280',Posicao:'H',Qtde:2,Medida:vertical/1000},{Codigo:'SU040',Posicao:'H',Qtde:1,Medida:vertical/1000},
+      {Codigo:'SU041',Posicao:'H',Qtde:1,Medida:vertical/1000},{Codigo:'SU102',Posicao:'L',Qtde:4,Medida:folha/1000},
+      {Codigo:'SU102',Posicao:'H',Qtde:4,Medida:(altura-185)/1000},
+    ],
+    Vidros:[{Codigo:'VIDRO',Qtde:2,Largura:Math.floor((largura-178)/2),Altura:altura-167,Especificacao:'INCOLOR 06MM - TEMPERADO'}],
+    Acessorios:[
+      {Codigo:'NYL335',Qtde:1},{Codigo:'NYL332',Qtde:8},{Codigo:'FRA820',Qtde:2},{Codigo:'CON409',Qtde:2},{Codigo:'RPCS100',Qtde:4},
+      {Codigo:'FIT206',Qtde:vertical/1000},{Codigo:'FIT246',Qtde:vertical*4/1000},{Codigo:'FIT212',Qtde:largura*4/1000},
+      {Codigo:'GUA259',Qtde:(vertical*4+folha*4)/1000},{Codigo:'GUA258',Qtde:vertical*4/1000},{Codigo:'GUA171',Qtde:folha*4/1000},
+      {Codigo:'PAR435',Qtde:16},{Codigo:'NYL042',Qtde:8},{Codigo:'PAR1023',Qtde:2*Math.ceil(altura/500)+2},
+      {Codigo:'NYL190',Qtde:fixacao},{Codigo:'PAR1025',Qtde:fixacao},{Codigo:'PAR1037',Qtde:fixacao},{Codigo:'BUC755',Qtde:fixacao},
+      {Codigo:'SIL-PU',Qtde:(largura*2+altura*2)/6000},
+    ],
+  }
+}
+
+export const FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO: WVetroItemTecnico[] = [
+  pc2PadraoSemReforcoItem(1200,2300,'WV-1035-3'),
+  pc2PadraoSemReforcoItem(1482,2531,'WV-1079-2'),
+  pc2PadraoSemReforcoItem(1990,2157,'WV-1105-2'),
+]
+
 export const FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
   tipologia_id: 'ecf93bb8-bc6f-4e1b-84eb-40f8c887485a',
   configuracao_label: 'JC2-SUPREMA · referência histórica em validação',
