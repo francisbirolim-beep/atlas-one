@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { assinaturaComposicaoWVetro, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, extrairVariantesPortinholaSuprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
@@ -331,6 +331,19 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
     throw new Error(`Variante PC4 Suprema ainda não validada tecnicamente: familia=${familiaPc4}.`)
   }
 
+  const familiaPc1 = classificarFamiliaPc1Suprema(item)
+  if (familiaPc1 !== 'outra' && !formulasReferenciaLocal(item).length) {
+    throw new Error(`Variante PC1 Suprema ainda não validada tecnicamente: familia=${familiaPc1}.`)
+  }
+
+  const familiaPortinhola = classificarFamiliaPortinholaSuprema(item)
+  if (familiaPortinhola !== 'outra' && !formulasReferenciaLocal(item).length) {
+    const variante = extrairVariantesPortinholaSuprema(item)
+    throw new Error(
+      `Variante Portinhola Suprema ainda não validada tecnicamente: familia=${variante.familia}; folhas=${variante.folhas ?? 'nao_informado'}; veneziana=${variante.veneziana}; contramarco=${variante.contramarco}; arremate=${variante.arremate}; fechamento=${variante.fechamento}.`
+    )
+  }
+
   const { data: referencia, error: refError } = await supabaseAdmin
     .from('wvetro_referencias_tipologias')
     .select('id,linha_raw,modelo_raw,tipologia_atlas_id,status_mapeamento')
@@ -429,10 +442,14 @@ function numeroSeguro(v: unknown, fallback = 0) {
 }
 
 function familiaHistorica(item: WVetroItemTecnico) {
+  const pc1 = classificarFamiliaPc1Suprema(item)
+  if (pc1 !== 'outra') return `pc1:${pc1}`
   const pc2 = classificarFamiliaPc2Suprema(item)
   if (pc2 !== 'outra') return `pc2:${pc2}`
   const pc4 = classificarFamiliaPc4Suprema(item)
   if (pc4 !== 'outra') return `pc4:${pc4}`
+  const portinhola = classificarFamiliaPortinholaSuprema(item)
+  if (portinhola !== 'outra') return `portinhola:${portinhola}`
   return String(item.Modelo || 'sem_modelo').trim().toLowerCase().replace(/\s+/g, '_')
 }
 
