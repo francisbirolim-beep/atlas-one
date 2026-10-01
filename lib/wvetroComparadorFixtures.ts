@@ -1513,3 +1513,114 @@ export const FIXTURES_PC4_SUPREMA_WVETRO: WVetroItemTecnico[] = [
   }),
 ]
 
+// Portinhola Suprema PTA-03 — família A histórica.
+// Evidência: 6 amostras com a mesma geometria (SU108 H = Altura-227,
+// SU111 H = Altura-65 e arremate MP347 nos quatro lados).
+// Referência exclusiva do comparador/regressão; não ativa produção.
+export const FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: 'c7a9d371-184c-4daa-8db1-d8c60cc3f008',
+  configuracao_label: 'PTA3-SUPREMA · veneziana · família A · arremate 4 lados · referência histórica',
+  variaveis: [],
+  pecas: [
+    { eixo:'L', codigo:'CL006', formula:'21', descricao:'Calço CL006 21 mm', quantidade:2 },
+    { eixo:'L', codigo:'CL006', formula:'30', descricao:'Calço CL006 30 mm', quantidade:4 },
+    { eixo:'L', codigo:'CL011', formula:'21', descricao:'Calço CL011 21 mm', quantidade:4 },
+    { eixo:'L', codigo:'CL011', formula:'30', descricao:'Calço CL011 30 mm', quantidade:8 },
+    { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate horizontal', quantidade:2 },
+    { eixo:'H', codigo:'MP347', formula:'Altura+44', descricao:'Arremate vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU279', formula:'Largura-4', descricao:'Marco horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU279', formula:'Altura-4', descricao:'Marco vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU111', formula:'Largura-65', descricao:'Montante folha horizontal', quantidade:1 },
+    { eixo:'H', codigo:'SU111', formula:'Altura-65', descricao:'Montante folha vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU225', formula:'Largura-165', descricao:'Travessa inferior', quantidade:1 },
+    { eixo:'L', codigo:'SU108', formula:'Largura-165', descricao:'Travessa veneziana horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU108', formula:'Altura-227', descricao:'Montante veneziana vertical', quantidade:2 },
+    {
+      eixo:'L',
+      codigo:'VZ006',
+      formula:'Largura-172',
+      descricao:'Lâmina veneziana',
+      formula_quantidade:'CEIL((Altura-217)/60)',
+    },
+  ],
+  acessorios: [
+    { codigo:'DOB840', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'FEC514', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'GUA239', formula_quantidade:'2*(Largura+Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA282', formula_quantidade:'2*Altura/1000', status:'em_validacao' },
+    { codigo:'NYL042', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'PAR435', formula_quantidade:'4', status:'em_validacao' },
+    {
+      codigo:'BUC755',
+      formula_quantidade:'2*CEIL(Largura/400)+2*CEIL(Altura/500)',
+      status:'em_validacao',
+    },
+    {
+      codigo:'NYL190',
+      formula_quantidade:'2*CEIL(Largura/400)+2*CEIL(Altura/500)',
+      status:'em_validacao',
+    },
+    {
+      codigo:'PAR1025',
+      formula_quantidade:'2*CEIL(Largura/400)+2*CEIL(Altura/500)',
+      status:'em_validacao',
+    },
+    {
+      codigo:'PAR1037',
+      formula_quantidade:'2*CEIL(Largura/400)+2*CEIL(Altura/500)',
+      status:'em_validacao',
+    },
+    { codigo:'SIL-PU', formula_quantidade:'2*(Largura+Altura)/12000', status:'em_validacao' },
+  ],
+}
+
+function pta3SupremaFamiliaAItem(largura:number, altura:number): WVetroItemTecnico {
+  const fix = 2*Math.ceil(largura/400) + 2*Math.ceil(altura/500)
+  return {
+    Codigo:'SUCB-PTA-03',
+    Nome:'PORTINHOLA DE GIRO 01 FOLHA COM VENEZIANA | SUPREMA',
+    Linha:'L. SUPREMA',
+    Modelo:'PORTINHOLA',
+    Qtde:1,
+    Largura:largura,
+    Altura:altura,
+    Perfil:[
+      {Codigo:'CL006',Posicao:'L',Qtde:2,Medida:0.021},
+      {Codigo:'CL006',Posicao:'L',Qtde:4,Medida:0.030},
+      {Codigo:'CL011',Posicao:'L',Qtde:4,Medida:0.021},
+      {Codigo:'CL011',Posicao:'L',Qtde:8,Medida:0.030},
+      {Codigo:'MP347',Posicao:'L',Qtde:2,Medida:(largura+44)/1000},
+      {Codigo:'MP347',Posicao:'H',Qtde:2,Medida:(altura+44)/1000},
+      {Codigo:'SU279',Posicao:'L',Qtde:2,Medida:(largura-4)/1000},
+      {Codigo:'SU279',Posicao:'H',Qtde:2,Medida:(altura-4)/1000},
+      {Codigo:'SU111',Posicao:'L',Qtde:1,Medida:(largura-65)/1000},
+      {Codigo:'SU111',Posicao:'H',Qtde:2,Medida:(altura-65)/1000},
+      {Codigo:'SU225',Posicao:'L',Qtde:1,Medida:(largura-165)/1000},
+      {Codigo:'SU108',Posicao:'L',Qtde:2,Medida:(largura-165)/1000},
+      {Codigo:'SU108',Posicao:'H',Qtde:2,Medida:(altura-227)/1000},
+      {Codigo:'VZ006',Posicao:'L',Qtde:Math.ceil((altura-217)/60),Medida:(largura-172)/1000},
+    ],
+    Acessorios:[
+      {Codigo:'BUC755',Qtde:fix},
+      {Codigo:'DOB840',Qtde:2},
+      {Codigo:'FEC514',Qtde:1},
+      {Codigo:'GUA239',Qtde:2*(largura+altura)/1000},
+      {Codigo:'GUA282',Qtde:2*altura/1000},
+      {Codigo:'NYL042',Qtde:4},
+      {Codigo:'NYL190',Qtde:fix},
+      {Codigo:'PAR1025',Qtde:fix},
+      {Codigo:'PAR1037',Qtde:fix},
+      {Codigo:'PAR435',Qtde:4},
+      {Codigo:'SIL-PU',Qtde:2*(largura+altura)/12000},
+    ],
+  }
+}
+
+export const FIXTURES_PTA3_SUPREMA_FAMILIA_A_WVETRO: WVetroItemTecnico[] = [
+  pta3SupremaFamiliaAItem(600,600),
+  pta3SupremaFamiliaAItem(710,720),
+  pta3SupremaFamiliaAItem(560,760),
+  pta3SupremaFamiliaAItem(854,1600),
+  pta3SupremaFamiliaAItem(909,1600),
+  pta3SupremaFamiliaAItem(700,1650),
+]
