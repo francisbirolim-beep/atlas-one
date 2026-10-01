@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { compararItemWVetroComFormulaAtlas, detectarAlertasTecnicosWVetro, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
 import {
   FIXTURE_PC2_SUPREMA_GENERICA_ATLAS,
   FIXTURE_PC2_SUPREMA_WVETRO,
@@ -210,6 +210,7 @@ export async function GET(req: NextRequest) {
         variaveis: formula.variaveis,
         opcoes: inferencia.opcoes,
         inferencias: inferencia.inferencias,
+        alertasTecnicos: detectarAlertasTecnicosWVetro(item),
         formulasDisponiveis: [],
       })
     }
@@ -285,6 +286,7 @@ export async function GET(req: NextRequest) {
       variaveis: formulaAtlas.variaveis,
       opcoes: inferencia.opcoes,
       inferencias: inferencia.inferencias,
+      alertasTecnicos: detectarAlertasTecnicosWVetro(item),
       formulasDisponiveis: carregada.disponiveis,
       itensDisponiveis: itens.map((x: any) => ({
         id: String(x.Id || ''),
