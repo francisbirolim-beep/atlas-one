@@ -131,6 +131,9 @@ type AuditoriaCatalogos = {
       pendentes: number
       pendentesComUso: number
       pendentesSemUso: number
+      candidatasPerfil: number
+      acabamentosAcessorio: number
+      usoMisto: number
     }
     vidros: {
       total: number
@@ -160,6 +163,8 @@ type AuditoriaCatalogos = {
       documentosHistoricos: number
       ocorrenciasPerfil: number
       ocorrenciasAcessorio: number
+      classificacaoUso: 'cor_perfil' | 'acabamento_acessorio' | 'uso_misto' | 'sem_uso'
+      sugestoesAtlas: Array<{ id: string; nome: string; score: number }>
     }>
     vidros: Array<{
       nome: string
@@ -747,6 +752,9 @@ export default function MigracaoOperacionalWVetroPage() {
                       {catalogosAuditoria.resumo.cores.jaNoAtlas} no Atlas · {catalogosAuditoria.resumo.cores.itensVidro} são vidro · {catalogosAuditoria.resumo.cores.pendentes} revisar
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">
+                      {catalogosAuditoria.resumo.cores.candidatasPerfil} candidata(s) de perfil · {catalogosAuditoria.resumo.cores.acabamentosAcessorio} acabamento(s) só de acessório · {catalogosAuditoria.resumo.cores.usoMisto} uso misto
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
                       {catalogosAuditoria.resumo.cores.pendentesComUso} com uso histórico · {catalogosAuditoria.resumo.cores.pendentesSemUso} sem uso no recorte
                     </div>
                   </div>
@@ -786,16 +794,51 @@ export default function MigracaoOperacionalWVetroPage() {
                   <div className="rounded-xl border border-slate-200 p-4">
                     <div className="text-sm font-semibold text-slate-900">Cores para revisar</div>
                     <div className="mt-2 max-h-72 space-y-2 overflow-auto pr-1">
-                      {catalogosAuditoria.pendencias.cores.map(item => (
-                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                          <div className="font-semibold">{item.nome}</div>
-                          <div className="mt-1 text-[11px] text-amber-700/80">
-                            {item.evidenciaUsoHistorico
-                              ? `${item.ocorrenciasComponentes} ocorrência(s) em ${item.documentosHistoricos} documento(s) · perfil ${item.ocorrenciasPerfil} · acessório ${item.ocorrenciasAcessorio}`
-                              : 'Sem uso em perfis/acessórios no recorte migrado'}
+                      {catalogosAuditoria.pendencias.cores.map(item => {
+                        const classificacao = {
+                          cor_perfil: ['Candidata a cor de perfil', 'bg-blue-100 text-blue-700'],
+                          acabamento_acessorio: ['Acabamento de acessório', 'bg-violet-100 text-violet-700'],
+                          uso_misto: ['Uso misto', 'bg-orange-100 text-orange-700'],
+                          sem_uso: ['Sem uso histórico', 'bg-slate-100 text-slate-600'],
+                        }[item.classificacaoUso] || ['Revisar', 'bg-amber-100 text-amber-700']
+
+                        return (
+                          <div key={item.nome} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="font-semibold">{item.nome}</div>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${classificacao[1]}`}>
+                                {classificacao[0]}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-amber-700/80">
+                              {item.evidenciaUsoHistorico
+                                ? `${item.ocorrenciasComponentes} ocorrência(s) em ${item.documentosHistoricos} documento(s) · perfil ${item.ocorrenciasPerfil} · acessório ${item.ocorrenciasAcessorio}`
+                                : 'Sem uso em perfis/acessórios no recorte migrado'}
+                            </div>
+                            {item.classificacaoUso === 'acabamento_acessorio' && (
+                              <div className="mt-1.5 rounded-md bg-white/70 px-2 py-1 text-[11px] text-violet-700">
+                                Não tratar como cor de alumínio automaticamente. Revisar no cadastro do acessório.
+                              </div>
+                            )}
+                            {item.classificacaoUso === 'cor_perfil' && item.sugestoesAtlas.length > 0 && (
+                              <div className="mt-1.5 rounded-md bg-white/70 px-2 py-1 text-[11px] text-blue-700">
+                                <span className="font-semibold">Sugestão nominal:</span>{' '}
+                                {item.sugestoesAtlas.map((s, index) => (
+                                  <span key={s.id}>
+                                    {index > 0 ? ' · ' : ''}
+                                    {s.nome} ({Math.round(s.score * 100)}%)
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {item.classificacaoUso === 'cor_perfil' && item.sugestoesAtlas.length === 0 && (
+                              <div className="mt-1.5 rounded-md bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+                                Sem correspondência nominal forte no cadastro Atlas.
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                       {!catalogosAuditoria.pendencias.cores.length && (
                         <div className="text-xs text-emerald-700">Nenhuma pendência de cor.</div>
                       )}
