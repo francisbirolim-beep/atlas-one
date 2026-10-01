@@ -4,6 +4,7 @@ import type { AcessorioFormulaCorte, VidroFormulaCorte } from '@/lib/engenhariaF
 
 export type WVetroPerfilTecnico = {
   Codigo?: string
+  Cor?: string
   Nome?: string
   Qtde?: string | number
   Medida?: string | number
@@ -20,6 +21,7 @@ export type WVetroVidroTecnico = {
 
 export type WVetroAcessorioTecnico = {
   Codigo?: string
+  Cor?: string
   Nome?: string
   Qtde?: string | number
 }
@@ -40,6 +42,128 @@ export type FormulaAtlasComparacao = TipologiaFormulasCorte & {
   vidro?: VidroFormulaCorte
   acessorios?: AcessorioFormulaCorte[]
   configuracao_label?: string
+}
+
+
+export type OpcaoTecnicaInferida = {
+  chave: string
+  valor: string
+  origem: 'composicao_wvetro' | 'primeira_opcao' | 'livre_sem_evidencia'
+  evidencia: string
+}
+
+function normalizarCodigo(v: unknown) {
+  return String(v || '').trim().toUpperCase()
+}
+
+export function inferirOpcoesTecnicasWVetro(
+  item: WVetroItemTecnico,
+  formula: FormulaAtlasComparacao,
+  overrides: OpcoesEscolhidas = {}
+): { opcoes: OpcoesEscolhidas; inferencias: OpcaoTecnicaInferida[] } {
+  const perfis = item.Perfil || []
+  const acessorios = item.Acessorios || []
+  const codigosPerfil = new Set(perfis.map(p => normalizarCodigo(p.Codigo)).filter(Boolean))
+  const codigosAcessorio = new Set(acessorios.map(a => normalizarCodigo(a.Codigo)).filter(Boolean))
+  const nomesAcessorio = acessorios.map(a => String(a.Nome || '').toUpperCase())
+  const opcoes: OpcoesEscolhidas = {}
+  const inferencias: OpcaoTecnicaInferida[] = []
+
+  const registrar = (chave: string, valor: string, origem: OpcaoTecnicaInferida['origem'], evidencia: string) => {
+    opcoes[chave] = valor
+    inferencias.push({ chave, valor, origem, evidencia })
+  }
+
+  for (const variavel of formula.variaveis || []) {
+    const override = overrides[variavel.chave]
+    if (override != null && String(override).trim() !== '') {
+      registrar(variavel.chave, String(override), 'composicao_wvetro', 'Valor informado manualmente no comparador.')
+      continue
+    }
+
+    let valor = ''
+    let evidencia = ''
+    switch (variavel.chave) {
+      case 'contramarco':
+        valor = codigosPerfil.has('CM200') ? 'cm200' : 'sem'
+        evidencia = codigosPerfil.has('CM200') ? 'Perfil CM200 presente.' : 'Nenhum perfil CM200 presente na composição.'
+        break
+      case 'arremate':
+        valor = codigosPerfil.has('MP347') ? 'interno' : 'sem'
+        evidencia = codigosPerfil.has('MP347') ? 'Perfil MP347 presente.' : 'MP347 ausente.'
+        break
+      case 'trilho':
+        valor = codigosPerfil.has('TMC') ? 'macarrao' : (variavel.opcoes.includes('convencional') ? 'convencional' : '')
+        evidencia = codigosPerfil.has('TMC') ? 'Perfil TMC presente.' : 'TMC ausente.'
+        break
+      case 'fechamento':
+        if (codigosAcessorio.has('FRA820') || codigosAcessorio.has('CON409')) {
+          valor = 'fechadura'; evidencia = 'FRA820/CON409 presentes.'
+        } else if (nomesAcessorio.some(n => n.includes('CONCHA'))) {
+          valor = 'concha'; evidencia = 'Acessório de concha identificado.'
+        }
+        break
+      case 'mao_amigo_largura': {
+        const largos = ['SU243','SU242','SU289','SU290']
+        valor = largos.some(x => codigosPerfil.has(x)) ? 'largo' : 'comum'
+        evidencia = valor === 'largo' ? 'Código de mão-de-amigo larga presente.' : 'Composição usa códigos de mão-de-amigo comum.'
+        break
+      }
+      case 'reforco_mao_amigo': {
+        const pares: Array<[string,string,string]> = [
+          ['SU289','SU290','interno_externo'],
+          ['SU289','SU242','interno'],
+          ['SU243','SU290','externo'],
+          ['SU243','SU242','sem_reforco'],
+          ['SU047','SU049','interno_externo'],
+          ['SU047','SU041','interno'],
+          ['SU040','SU049','externo'],
+          ['SU040','SU041','sem_reforco'],
+        ]
+        const achado = pares.find(([a,b]) => codigosPerfil.has(a) && codigosPerfil.has(b))
+        if (achado) {
+          valor = achado[2]
+          evidencia = `Par ${achado[0]} + ${achado[1]} presente.`
+        }
+        break
+      }
+      case 'roldana':
+        if (codigosAcessorio.has('RPCS100') || nomesAcessorio.some(n => n.includes('100 KG'))) {
+          valor = '100'; evidencia = 'Roldana RPCS100/100 kg presente.'
+        } else if ([...codigosAcessorio].some(c => c.includes('200')) || nomesAcessorio.some(n => n.includes('200 KG'))) {
+          valor = '200'; evidencia = 'Roldana 200 kg identificada.'
+        }
+        break
+      case 'montante_lateral':
+        if (codigosPerfil.has('SU280')) { valor = 'largo'; evidencia = 'SU280 presente.' }
+        else if (codigosPerfil.has('SU039')) { valor = 'estreito'; evidencia = 'SU039 presente.' }
+        break
+      case 'puxador':
+        valor = nomesAcessorio.some(n => n.includes('PUXADOR')) ? 'sim' : 'sem'
+        evidencia = valor === 'sim' ? 'Acessório de puxador presente.' : 'Nenhum puxador identificado.'
+        break
+      case 'cor': {
+        const cor = perfis.find(p => String(p.Cor || '').trim())?.Cor || acessorios.find(a => String(a.Cor || '').trim())?.Cor
+        if (cor) { valor = String(cor); evidencia = 'Cor lida da composição W.Vetro.' }
+        break
+      }
+      case 'vidro': {
+        const esp = item.Vidros?.find(v => String(v.Especificacao || '').trim())?.Especificacao
+        if (esp) { valor = String(esp); evidencia = 'Especificação lida do vidro W.Vetro.' }
+        break
+      }
+    }
+
+    if (valor && (variavel.opcoes.length === 0 || variavel.opcoes.includes(valor))) {
+      registrar(variavel.chave, valor, 'composicao_wvetro', evidencia || 'Inferido da composição.')
+    } else if (variavel.opcoes.length > 0) {
+      registrar(variavel.chave, variavel.opcoes[0], 'primeira_opcao', 'Sem evidência suficiente; primeira opção usada apenas para simulação.')
+    } else {
+      registrar(variavel.chave, '', 'livre_sem_evidencia', 'Campo livre sem evidência suficiente na composição.')
+    }
+  }
+
+  return { opcoes, inferencias }
 }
 
 export type StatusComparacao =
