@@ -198,7 +198,8 @@ export default function FormulasCortePage() {
         Number(largura),
         Number(altura),
         folhas,
-        linhas.map(item => ({ codigo: item.codigo, tamanho: item.tamanho }))
+        linhas.map(item => ({ codigo: item.codigo, tamanho: item.tamanho })),
+        opcoes
       )
       setLinhasPlano(linhas)
       setResultadosAcessorios(acessorios)
@@ -347,9 +348,13 @@ export default function FormulasCortePage() {
                   {definicao.variaveis.map(variavel => (
                     <label key={variavel.chave} className="text-sm font-medium text-slate-700">
                       {variavel.label}
-                      <select value={opcoes[variavel.chave] || ''} onChange={e => setOpcoes(prev => ({ ...prev, [variavel.chave]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
-                        {variavel.opcoes.map(opcao => <option key={opcao} value={opcao}>{rotuloOpcao(opcao)}</option>)}
-                      </select>
+                      {variavel.opcoes.length > 0 ? (
+                        <select value={opcoes[variavel.chave] || ''} onChange={e => setOpcoes(prev => ({ ...prev, [variavel.chave]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+                          {variavel.opcoes.map(opcao => <option key={opcao} value={opcao}>{rotuloOpcao(opcao)}</option>)}
+                        </select>
+                      ) : (
+                        <input value={opcoes[variavel.chave] || ''} onChange={e => setOpcoes(prev => ({ ...prev, [variavel.chave]: e.target.value }))} placeholder={`Informe ${variavel.label.toLowerCase()}`} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm" />
+                      )}
                     </label>
                   ))}
                 </div>
