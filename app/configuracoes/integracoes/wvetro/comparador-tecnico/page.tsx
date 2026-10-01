@@ -10,7 +10,7 @@ type Linha = {
   codigo: string
   eixo?: string | null
   descricao?: string | null
-  status: 'igual' | 'medida_diferente' | 'quantidade_diferente' | 'ausente_atlas' | 'ausente_wvetro'
+  status: 'igual' | 'medida_diferente' | 'quantidade_diferente' | 'ausente_atlas' | 'ausente_wvetro' | 'regra_pendente_atlas'
   wvetro?: { quantidade?: number | null; medida_mm?: number | null; largura_mm?: number | null; altura_mm?: number | null }
   atlas?: { quantidade?: number | null; medida_mm?: number | null; largura_mm?: number | null; altura_mm?: number | null }
   diferenca_mm?: number | null
@@ -28,7 +28,8 @@ type Resposta = {
     linhas: Linha[]
     aprovado: boolean
   }
-  formula?: { id:string; configuracao_label?:string|null; status?:string|null; ativo?:boolean|null }
+  formula?: { id:string; configuracao_label?:string|null; status?:string|null; ativo?:boolean|null; selecionada_por?:string|null; score?:number|null }
+  rankingFormulas?: Array<{ id:string; configuracao_label?:string|null; status?:string|null; ativo?:boolean|null; score:number; resumo?:Record<string,number> }>
   variaveis?: Array<{ chave:string; label:string; opcoes:string[] }>
   opcoes?: Record<string,string>
   inferencias?: Array<{ chave:string; valor:string; origem:string; evidencia:string }>
@@ -55,6 +56,7 @@ function badge(status: Linha['status']) {
     quantidade_diferente: ['Quantidade diferente', 'bg-orange-50 text-orange-700 border-orange-200'],
     ausente_atlas: ['Falta no Atlas', 'bg-red-50 text-red-700 border-red-200'],
     ausente_wvetro: ['Só no Atlas', 'bg-violet-50 text-violet-700 border-violet-200'],
+    regra_pendente_atlas: ['Regra pendente', 'bg-sky-50 text-sky-700 border-sky-200'],
   }
   const [label, cls] = mapa[status]
   return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
@@ -185,10 +187,11 @@ export default function ComparadorTecnicoWVetroPage() {
                 <div className="flex items-center gap-2">{dados.resultado.aprovado?<CheckCircle2 className="text-emerald-600" size={20}/>:<XCircle className="text-amber-600" size={20}/>}<h2 className="font-bold text-slate-900">{dados.resultado.item.nome}</h2></div>
                 <p className="mt-1 text-sm text-slate-600">{dados.resultado.item.linha} · {dados.resultado.item.modelo} · {dados.resultado.item.largura_mm} × {dados.resultado.item.altura_mm} mm</p>
                 <p className="mt-1 text-xs text-slate-500">Atlas: {dados.resultado.formula.configuracao_label || 'Configuração sem nome'}</p>
+                {dados.formula?.selecionada_por === 'melhor_compatibilidade_historica' && <p className="mt-1 text-[11px] text-blue-700">Configuração escolhida automaticamente pela menor divergência contra esta composição histórica. Score {fmt(dados.formula.score,0)}.</p>}
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${dados.resultado.aprovado?'bg-emerald-600 text-white':'bg-amber-500 text-white'}`}>{dados.resultado.aprovado?'100% compatível':'Divergências encontradas'}</span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-6">
+            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-7">
               {[
                 ['Total',dados.resultado.resumo.total],
                 ['Iguais',dados.resultado.resumo.igual],
@@ -196,6 +199,7 @@ export default function ComparadorTecnicoWVetroPage() {
                 ['Quantidade',dados.resultado.resumo.quantidade_diferente],
                 ['Falta Atlas',dados.resultado.resumo.ausente_atlas],
                 ['Só Atlas',dados.resultado.resumo.ausente_wvetro],
+                ['Regra pendente',dados.resultado.resumo.regra_pendente_atlas],
               ].map(([l,v])=><div key={String(l)} className="rounded-xl border bg-white px-3 py-2"><p className="text-[11px] uppercase text-slate-400">{l}</p><p className="text-xl font-bold text-slate-900">{v}</p></div>)}
             </div>
           </div>
