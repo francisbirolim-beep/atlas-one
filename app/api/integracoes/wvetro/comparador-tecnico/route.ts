@@ -869,5 +869,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Falha no comparador técnico.' }, { status: 500 })
   }
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
