@@ -417,6 +417,11 @@ export interface NotificacaoPreferencias {
       agenda: boolean
       chat: boolean
       operacao: boolean
+      push_ativo: boolean
+      nao_perturbe_ativo: boolean
+      nao_perturbe_inicio: string
+      nao_perturbe_fim: string
+      timezone: string
       updated_at?: string
 }
 
