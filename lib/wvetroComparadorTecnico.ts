@@ -31,6 +31,7 @@ export type WVetroItemTecnico = {
   Nome?: string
   Linha?: string
   Modelo?: string
+  Qtde?: string | number
   Largura: string | number
   Altura: string | number
   Perfil?: WVetroPerfilTecnico[]
@@ -194,6 +195,11 @@ function qtd(v: unknown): number {
   return n(v) ?? 0
 }
 
+function quantidadeItem(item: WVetroItemTecnico): number {
+  const valor = qtd(item.Qtde)
+  return valor > 0 ? valor : 1
+}
+
 function mmDeMetros(v: unknown): number | null {
   const x = n(v)
   return x == null ? null : Math.round(x * 1000 * 1000) / 1000
@@ -220,6 +226,7 @@ function compararPerfis(
 ): { linhas: LinhaComparacao[]; perfisAtlas: Array<{ codigo: string; tamanho: number; quantidade?: number; eixo?: 'L' | 'H'; descricao?: string }> } {
   const largura = Number(item.Largura)
   const altura = Number(item.Altura)
+  const multiplicador = quantidadeItem(item)
   const calculados = calcularFormulasCorte(formula, largura, altura, opcoes)
   const linhas: LinhaComparacao[] = []
 
@@ -230,7 +237,7 @@ function compararPerfis(
     const eixo = String(p.Posicao || '').trim().toUpperCase()
     const k = key(codigo, eixo)
     const atual = wMap.get(k) || { codigo, eixo, descricao: String(p.Nome || ''), quantidade: 0, medidas: [] }
-    atual.quantidade += qtd(p.Qtde)
+    atual.quantidade += qtd(p.Qtde) / multiplicador
     const medida = mmDeMetros(p.Medida)
     if (medida != null) atual.medidas.push(medida)
     wMap.set(k, atual)
@@ -295,13 +302,14 @@ function compararPerfis(
 
 function compararVidro(formula: FormulaAtlasComparacao, item: WVetroItemTecnico, opcoes: OpcoesEscolhidas): LinhaComparacao[] {
   const vidro = formula.vidro || {}
+  const multiplicador = quantidadeItem(item)
   const w = (item.Vidros || [])[0]
   if (!w && !vidro.formula_largura && !vidro.formula_altura) return []
   if (w && !vidro.formula_largura && !vidro.formula_altura) {
     return [{
       tipo: 'vidro', codigo: String(w.Codigo || 'VIDRO'), descricao: w.Especificacao || 'Vidro',
       status: 'ausente_atlas',
-      wvetro: { quantidade: qtd(w.Qtde), largura_mm: mm(w.Largura), altura_mm: mm(w.Altura) },
+      wvetro: { quantidade: qtd(w.Qtde) / multiplicador, largura_mm: mm(w.Largura), altura_mm: mm(w.Altura) },
       observacao: 'W.Vetro possui vidro, mas a configuração Atlas não possui fórmula de vidro.',
     }]
   }
@@ -328,13 +336,14 @@ function compararVidro(formula: FormulaAtlasComparacao, item: WVetroItemTecnico,
   const aH = formulaH ? calcularFormulaCorteIsolada(formulaH, Number(item.Largura), Number(item.Altura)) : null
   const wL = mm(w.Largura)
   const wH = mm(w.Altura)
-  const qtdIgual = Math.abs(qtd(w.Qtde) - Number(vidro.quantidade || 1)) < 0.0001
+  const qtdW = qtd(w.Qtde) / multiplicador
+  const qtdIgual = Math.abs(qtdW - Number(vidro.quantidade || 1)) < 0.0001
   const medidaIgual = tolerancia(wL, aL, 1) && tolerancia(wH, aH, 1)
 
   return [{
     tipo: 'vidro', codigo: String(w.Codigo || 'VIDRO'), descricao: w.Especificacao || 'Vidro',
     status: !qtdIgual ? 'quantidade_diferente' : !medidaIgual ? 'medida_diferente' : 'igual',
-    wvetro: { quantidade: qtd(w.Qtde), largura_mm: wL, altura_mm: wH },
+    wvetro: { quantidade: qtd(w.Qtde) / multiplicador, largura_mm: wL, altura_mm: wH },
     atlas: { quantidade: Number(vidro.quantidade || 1), largura_mm: aL, altura_mm: aH },
     diferenca_mm: wL != null && aL != null ? Number((aL - wL).toFixed(3)) : null,
   }]
@@ -346,13 +355,14 @@ function compararAcessorios(
   perfisAtlas: Array<{ codigo: string; tamanho: number }>,
   opcoes: OpcoesEscolhidas,
 ): LinhaComparacao[] {
+  const multiplicador = quantidadeItem(item)
   const wMap = new Map<string, { codigo: string; descricao: string; quantidade: number }>()
   for (const a of item.Acessorios || []) {
     const codigo = String(a.Codigo || '').trim()
     if (!codigo) continue
     const k = codigo.toUpperCase()
     const atual = wMap.get(k) || { codigo, descricao: String(a.Nome || ''), quantidade: 0 }
-    atual.quantidade += qtd(a.Qtde)
+    atual.quantidade += qtd(a.Qtde) / multiplicador
     wMap.set(k, atual)
   }
 
@@ -444,6 +454,7 @@ export function compararItemWVetroComFormulaAtlas(params: {
       modelo: item.Modelo || null,
       largura_mm: Number(item.Largura),
       altura_mm: Number(item.Altura),
+      quantidade: quantidadeItem(item),
     },
     formula: {
       tipologia_id: formula.tipologia_id,
