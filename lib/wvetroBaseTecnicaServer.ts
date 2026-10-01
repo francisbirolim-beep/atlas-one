@@ -342,39 +342,91 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
 export async function sincronizarCustosProdutosWVetro() {
   const { data: rows, error } = await supabaseAdmin
     .from('wvetro_tipologia_componentes')
-    .select('produto_atlas_id,custo_min,custo_max,custo_ultimo,venda_min,venda_max,venda_ultimo,ultimo_custo_em')
+    .select('id,produto_atlas_id,custo_min,custo_max,custo_ultimo,venda_min,venda_max,venda_ultimo,ultimo_custo_em,updated_at')
     .not('produto_atlas_id', 'is', null)
   if (error) throw error
+
   const agg = new Map<string, any>()
   for (const r of rows || []) {
     const id = r.produto_atlas_id as string
-    const a = agg.get(id) || { custoMin: null, custoMax: null, custoUltimo: null, vendaMin: null, vendaMax: null, vendaUltimo: null, dataUltimo: null }
+    const a = agg.get(id) || {
+      custoMin: null, custoMax: null, custoUltimo: null,
+      vendaMin: null, vendaMax: null, vendaUltimo: null,
+      dataUltimo: null, updatedAtUltimo: null, idUltimo: null,
+    }
     a.custoMin = min(a.custoMin, num(r.custo_min))
     a.custoMax = max(a.custoMax, num(r.custo_max))
     a.vendaMin = min(a.vendaMin, num(r.venda_min))
     a.vendaMax = max(a.vendaMax, num(r.venda_max))
-    if (r.ultimo_custo_em && (!a.dataUltimo || r.ultimo_custo_em >= a.dataUltimo)) {
-      a.dataUltimo = r.ultimo_custo_em
-      if (r.custo_ultimo != null) a.custoUltimo = num(r.custo_ultimo)
-      if (r.venda_ultimo != null) a.vendaUltimo = num(r.venda_ultimo)
+
+    const data = txt(r.ultimo_custo_em) || null
+    const updatedAt = txt(r.updated_at) || ''
+    const rowId = txt(r.id)
+    const maisRecente = data && (
+      !a.dataUltimo ||
+      data > a.dataUltimo ||
+      (data === a.dataUltimo && updatedAt > (a.updatedAtUltimo || '')) ||
+      (data === a.dataUltimo && updatedAt === (a.updatedAtUltimo || '') && rowId > (a.idUltimo || ''))
+    )
+    if (maisRecente) {
+      a.dataUltimo = data
+      a.updatedAtUltimo = updatedAt
+      a.idUltimo = rowId
+      a.custoUltimo = num(r.custo_ultimo)
+      a.vendaUltimo = num(r.venda_ultimo)
     }
     agg.set(id, a)
   }
+
+  const ids = Array.from(agg.keys())
+  const atuais = new Map<string, any>()
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error: erroProdutos } = await supabaseAdmin
+      .from('produtos')
+      .select('id,custo_wvetro_min,custo_wvetro_max,custo_wvetro_ultimo,custo_wvetro_atualizado_em,venda_wvetro_min,venda_wvetro_max,venda_wvetro_ultimo')
+      .in('id', ids.slice(i, i + 200))
+    if (erroProdutos) throw erroProdutos
+    for (const produto of data || []) atuais.set(produto.id, produto)
+  }
+
   let atualizados = 0
   for (const [id, a] of agg) {
-    const { error: e } = await supabaseAdmin.from('produtos').update({
-      custo_wvetro_min: a.custoMin,
-      custo_wvetro_max: a.custoMax,
-      custo_wvetro_ultimo: a.custoUltimo,
-      custo_wvetro_atualizado_em: a.dataUltimo ? `${a.dataUltimo}T12:00:00Z` : new Date().toISOString(),
-      venda_wvetro_min: a.vendaMin,
-      venda_wvetro_max: a.vendaMax,
-      venda_wvetro_ultimo: a.vendaUltimo,
-    }).eq('id', id)
-    if (e) throw e
+    const anterior = atuais.get(id) || {}
+    const dataAnterior = txt(anterior.custo_wvetro_atualizado_em).slice(0, 10) || null
+    const evidenciaMaisNova = !!a.dataUltimo && (!dataAnterior || a.dataUltimo > dataAnterior)
+
+    const proximo = {
+      custo_wvetro_min: min(num(anterior.custo_wvetro_min), a.custoMin),
+      custo_wvetro_max: max(num(anterior.custo_wvetro_max), a.custoMax),
+      custo_wvetro_ultimo: evidenciaMaisNova
+        ? (a.custoUltimo ?? num(anterior.custo_wvetro_ultimo))
+        : (num(anterior.custo_wvetro_ultimo) ?? a.custoUltimo),
+      custo_wvetro_atualizado_em: evidenciaMaisNova
+        ? `${a.dataUltimo}T12:00:00Z`
+        : (anterior.custo_wvetro_atualizado_em || (a.dataUltimo ? `${a.dataUltimo}T12:00:00Z` : new Date().toISOString())),
+      venda_wvetro_min: min(num(anterior.venda_wvetro_min), a.vendaMin),
+      venda_wvetro_max: max(num(anterior.venda_wvetro_max), a.vendaMax),
+      venda_wvetro_ultimo: evidenciaMaisNova
+        ? (a.vendaUltimo ?? num(anterior.venda_wvetro_ultimo))
+        : (num(anterior.venda_wvetro_ultimo) ?? a.vendaUltimo),
+    }
+
+    const mudou =
+      num(anterior.custo_wvetro_min) !== proximo.custo_wvetro_min ||
+      num(anterior.custo_wvetro_max) !== proximo.custo_wvetro_max ||
+      num(anterior.custo_wvetro_ultimo) !== proximo.custo_wvetro_ultimo ||
+      txt(anterior.custo_wvetro_atualizado_em) !== txt(proximo.custo_wvetro_atualizado_em) ||
+      num(anterior.venda_wvetro_min) !== proximo.venda_wvetro_min ||
+      num(anterior.venda_wvetro_max) !== proximo.venda_wvetro_max ||
+      num(anterior.venda_wvetro_ultimo) !== proximo.venda_wvetro_ultimo
+    if (!mudou) continue
+
+    const { error: erroUpdate } = await supabaseAdmin.from('produtos').update(proximo).eq('id', id)
+    if (erroUpdate) throw erroUpdate
     atualizados += 1
   }
-  return { produtosAtualizados: atualizados }
+
+  return { produtosAnalisados: agg.size, produtosAtualizados: atualizados, modo: 'historico_monotonico' }
 }
 
 export async function mapearReferenciasComponentesExatas() {
