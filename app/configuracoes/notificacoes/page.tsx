@@ -103,6 +103,27 @@ export default function ConfiguracoesNotificacoesPage() {
     setMensagem('Notificações ativadas neste dispositivo.')
   }
 
+  async function testarNotificacao() {
+    setErro('')
+    setMensagem('')
+    try {
+      const token = await (await import('@/lib/auth')).tokenAtual()
+      const resp = await fetch('/api/notificacoes/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ acao: 'teste' }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Não foi possível enviar a notificação de teste.')
+      setMensagem('Notificação de teste enviada. Ela deve aparecer em alguns segundos.')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível enviar a notificação de teste.')
+    }
+  }
+
   async function desativarNesteDispositivo() {
     setErro('')
     setMensagem('')
@@ -166,9 +187,14 @@ export default function ConfiguracoesNotificacoesPage() {
                     {push?.inscrito ? 'Ativo neste dispositivo' : 'Ainda não ativado'}
                   </span>
                   {push?.inscrito ? (
-                    <button onClick={()=>void desativarNesteDispositivo()} className="rounded-lg border px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                      Desativar neste dispositivo
-                    </button>
+                    <>
+                      <button onClick={()=>void testarNotificacao()} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">
+                        Enviar teste
+                      </button>
+                      <button onClick={()=>void desativarNesteDispositivo()} className="rounded-lg border px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                        Desativar neste dispositivo
+                      </button>
+                    </>
                   ) : (
                     <button onClick={()=>void ativarNesteDispositivo()} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700">
                       Ativar notificações
