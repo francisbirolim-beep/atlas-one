@@ -569,6 +569,6 @@ Branch: `fix/wvetro-seguranca-main-atual`
 - usuário `oculto` não acessa nem preview; usuário `consulta` pode visualizar preview, mas não confirmar importação; somente `edicao` e Master podem criar Medição Final;
 - rotas administrativas globais de W.Vetro passaram a usar um gate centralizado em `lib/wvetroAcessoServer.ts`;
 - o gate exige sessão válida, usuário Master, empresa ativa e slug compatível com `WVETRO_EMPRESA_SLUG` (fallback `esquadrifacio`);
-- rotas protegidas: auditoria, base técnica, linhas, tipologias, detalhe de tipologia, custos, imagens pendentes e reprocessamento;
+- rotas protegidas: preview, comparador técnico, migração operacional (captura e preview), auditoria, base técnica, linhas, tipologias, detalhe de tipologia, custos, imagens pendentes e reprocessamento;
 - nenhuma regra de parser, fórmula, custo, migração ou composição foi alterada;
 - validação local aprovada com TypeScript, build completo de 112 páginas e `release:check`.
