@@ -9,8 +9,9 @@
     "dev:lan": "next dev -H 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "validate": "npm run typecheck && npm run build",
-    "vercel:preview": "npx -y vercel@latest deploy",
-    "vercel:prod": "npx -y vercel@latest deploy --prod"
+    "vercel:preview": "bash scripts/vercel-preview.sh",
+    "vercel:prod": "bash scripts/vercel-prod.sh",
+    "release:check": "bash scripts/release-check.sh preview"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
