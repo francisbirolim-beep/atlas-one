@@ -1,5 +1,5 @@
 import { compararItemWVetroComFormulaAtlas, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
@@ -163,4 +163,41 @@ console.log(JSON.stringify({
   atual:pc3Atual,
   legado:{fixture:FIXTURE_PC3_SUPREMA_LEGADO_WVETRO.Codigo,iguais:pc3Legado.resumo.igual,pendentes:pc3Legado.resumo.regra_pendente_atlas,opcoesInferidas:pc3LegadoInferido.opcoes},
   discriminacaoVersao:{medidasDiferentesAoUsarLegadoEmAtual:atualContraLegado.resumo.medida_diferente},
+},null,2))
+
+
+const jc3Resultados = FIXTURES_JC3_SUPREMA_WVETRO.map(item => {
+  const inferida = inferirOpcoesTecnicasWVetro(item, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA)
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA,
+    opcoes: inferida.opcoes,
+  })
+
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        fixture:item.Codigo,
+        status,
+        opcoes:inferida.opcoes,
+        resumo:comparado.resumo,
+        divergencias:comparado.linhas.filter(l=>l.status!=='igual'&&l.status!=='regra_pendente_atlas'),
+      },null,2))
+      throw new Error(`Regressão JC3 ${item.Codigo}: status ${status} deveria ser zero.`)
+    }
+  }
+
+  return {
+    fixture:item.Codigo,
+    medida:`${item.Largura}x${item.Altura}`,
+    iguais:comparado.resumo.igual,
+    pendentes:comparado.resumo.regra_pendente_atlas,
+    opcoesInferidas:inferida.opcoes,
+  }
+})
+
+console.log(JSON.stringify({
+  ok:true,
+  fixture:'JC3 Suprema - matriz histórica moderna',
+  amostras:jc3Resultados,
 },null,2))
