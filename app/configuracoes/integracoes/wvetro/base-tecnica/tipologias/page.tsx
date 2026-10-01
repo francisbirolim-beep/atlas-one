@@ -12,6 +12,8 @@ type LinhaTipologia = {
   tipologiaAtlasId: string | null
   imagemUrl: string | null
   ocorrencias: number
+  pecasHistoricas: number
+  ocorrenciasFonte: 'historico_materializado' | 'referencia_agregada'
   statusMapeamento: string | null
   componentes: { total: number; vinculados: number; perfil: number; acessorio: number; vidro: number }
   variaveis: number
@@ -199,7 +201,10 @@ export default function ExploradorTipologiasWVetroPage() {
                         <p className="text-[11px] text-slate-400">{t.componentes.perfil} perfil · {t.componentes.acessorio} acessório · {t.componentes.vidro} vidro · {t.componentes.vinculados} vinculados a produto</p>
                       </td>
                       <td className="py-2 pr-3 text-xs">{t.variaveis}</td>
-                      <td className="py-2 pr-3 text-xs">{t.ocorrencias}</td>
+                      <td className="py-2 pr-3 text-xs">
+                        <span className="font-medium text-slate-700">{t.ocorrencias} registros</span>
+                        <p className="text-[11px] text-slate-400">{t.pecasHistoricas} peças · {t.ocorrenciasFonte === 'historico_materializado' ? 'histórico real' : 'referência agregada'}</p>
+                      </td>
                       <td className="py-2 pr-3">{t.temReceitaOficial ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><ShieldCheck size={13} /> Validada</span> : <span className="text-xs text-slate-400">Ainda não</span>}</td>
                     </tr>
                   ))}
