@@ -295,6 +295,153 @@ export const FIXTURES_JC2_SUPREMA_WVETRO: WVetroItemTecnico[] = [
 ]
 
 
+function pc3ReferenciaHistorica(versao: 'atual_17' | 'legado_21'): FormulaAtlasComparacao {
+  const atual = versao === 'atual_17'
+  return {
+    tipologia_id: 'dce9da1d-7e03-4c1c-ad1b-2f101b51a52e',
+    configuracao_label: atual
+      ? 'PC3-SUPREMA · referência histórica atual (SU008 -17)'
+      : 'PC3-SUPREMA · referência histórica legada (SU008 -21)',
+    variaveis: [
+      { chave:'contramarco', label:'Contramarco', opcoes:['sem','cm200'] },
+      { chave:'arremate', label:'Arremate', opcoes:['sem','interno'] },
+      { chave:'versao_mata_junta', label:'Versão histórica do mata-junta', opcoes:[versao] },
+    ],
+    pecas: [
+      { eixo:'L',codigo:'CM200',formula:'Largura-48',descricao:'Contramarco horizontal',quantidade:1,condicao_ativa:{contramarco:['cm200']} },
+      { eixo:'H',codigo:'CM200',formula:'Altura-24',descricao:'Contramarco vertical',quantidade:2,condicao_ativa:{contramarco:['cm200']} },
+      { eixo:'L',codigo:'MP347',formula:'Largura+44',descricao:'Arremate interno horizontal',quantidade:1,condicao_ativa:{arremate:['interno']},condicoes:[{quando:{contramarco:['cm200']},formula:'Largura+20'}] },
+      { eixo:'H',codigo:'MP347',formula:'Altura+22',descricao:'Arremate interno vertical',quantidade:2,condicao_ativa:{arremate:['interno']},condicoes:[{quando:{contramarco:['cm200']},formula:'Altura+10'}] },
+      { eixo:'L',codigo:'SU010',formula:'Largura-30',descricao:'Marco superior / correr 3',quantidade:1,condicoes:[{quando:{contramarco:['cm200']},formula:'Largura-54'}] },
+      { eixo:'L',codigo:'TMC',formula:'Largura-30',descricao:'Trilho macarrão',quantidade:3,condicoes:[{quando:{contramarco:['cm200']},formula:'Largura-54'}] },
+      { eixo:'H',codigo:'SU012',formula:'Altura-4',descricao:'Marco lateral / correr 3',quantidade:2,condicoes:[{quando:{contramarco:['cm200']},formula:'Altura-16'}] },
+      { eixo:'H',codigo:'SU008',formula:atual?'Altura-17':'Altura-21',descricao:'Mata-junta / complemento do marco',quantidade:2,condicoes:[{quando:{contramarco:['cm200']},formula:atual?'Altura-29':'Altura-33'}] },
+      { eixo:'L',codigo:'SU053',formula:'(Largura-184.4)/3',descricao:'Travessa superior da folha',quantidade:3,condicoes:[{quando:{contramarco:['cm200']},formula:'(Largura-208.4)/3'}] },
+      { eixo:'L',codigo:'SU225',formula:'(Largura-184.4)/3',descricao:'Travessa inferior da folha',quantidade:3,condicoes:[{quando:{contramarco:['cm200']},formula:'(Largura-208.4)/3'}] },
+      { eixo:'H',codigo:'SU280',formula:'Altura-34',descricao:'Montante lateral da folha',quantidade:2,condicoes:[{quando:{contramarco:['cm200']},formula:'Altura-46'}] },
+      { eixo:'H',codigo:'SU040',formula:'Altura-34',descricao:'Mão-de-amigo interna',quantidade:2,condicoes:[{quando:{contramarco:['cm200']},formula:'Altura-46'}] },
+      { eixo:'H',codigo:'SU041',formula:'Altura-34',descricao:'Mão-de-amigo externa',quantidade:2,condicoes:[{quando:{contramarco:['cm200']},formula:'Altura-46'}] },
+      { eixo:'L',codigo:'SU102',formula:'(Largura-184.4)/3',descricao:'Baguete horizontal',quantidade:6,condicoes:[{quando:{contramarco:['cm200']},formula:'(Largura-208.4)/3'}] },
+      { eixo:'H',codigo:'SU102',formula:'Altura-185',descricao:'Baguete vertical',quantidade:6,condicoes:[{quando:{contramarco:['cm200']},formula:'Altura-197'}] },
+    ],
+    vidro: {
+      quantidade:3,
+      formula_largura:'FLOOR((Largura-203)/3)',
+      formula_altura:'Altura-167',
+      condicoes_largura:[{quando:{contramarco:['cm200']},formula:'FLOOR((Largura-227)/3)'}],
+      condicoes_altura:[{quando:{contramarco:['cm200']},formula:'Altura-179'}],
+    },
+    acessorios: [
+      { codigo:'NYL335',formula_quantidade:'Folhas-1',quantidade_referencia:2,status:'em_validacao' },
+      { codigo:'NYL332',formula_quantidade:'Folhas*4',quantidade_referencia:12,status:'em_validacao' },
+      { codigo:'NYL414',formula_quantidade:'4*(Folhas-1)',quantidade_referencia:8,status:'em_validacao' },
+      { codigo:'FRA820',formula_quantidade:'2',quantidade_referencia:2,status:'em_validacao' },
+      { codigo:'CON409',formula_quantidade:'2',quantidade_referencia:2,status:'em_validacao' },
+      { codigo:'RPCS100',formula_quantidade:'Folhas*2',quantidade_referencia:6,status:'em_validacao' },
+      { codigo:'FIT206',formula_quantidade:'SU040*2/1000',status:'em_validacao' },
+      { codigo:'FIT246',formula_quantidade:'SU040*4/1000',status:'em_validacao' },
+      { codigo:'FIT212',formula_quantidade:'Largura*4/1000',status:'em_validacao',condicao_ativa:{contramarco:['sem']} },
+      { codigo:'FIT212',formula_quantidade:'(Largura-24)*4/1000',status:'em_validacao',condicao_ativa:{contramarco:['cm200']} },
+      { codigo:'GUA171',formula_quantidade:'SU053*6/1000',status:'em_validacao' },
+      { codigo:'GUA258',formula_quantidade:'SU040*6/1000',status:'em_validacao' },
+      { codigo:'GUA259',formula_quantidade:'GUA258+GUA171',status:'em_validacao' },
+      { codigo:'PAR435',formula_quantidade:'Folhas*8',quantidade_referencia:24,status:'em_validacao' },
+      { codigo:'NYL042',formula_quantidade:'Folhas*4',quantidade_referencia:12,status:'em_validacao' },
+      { codigo:'SIL-PU',formula_quantidade:'(Largura*2+Altura*2)/6000',status:'em_validacao',condicao_ativa:{contramarco:['sem']} },
+      { codigo:'SIL-PU',formula_quantidade:'((Largura-24)*2+(Altura-24)*2)/6000',status:'em_validacao',condicao_ativa:{contramarco:['cm200']} },
+      { codigo:'PAR1023',quantidade_referencia:12,status:'referencia' },
+      { codigo:'NYL190',quantidade_referencia:15,status:'referencia',condicao_ativa:{arremate:['interno']} },
+      { codigo:'PAR1025',quantidade_referencia:15,status:'referencia',condicao_ativa:{arremate:['interno']} },
+      { codigo:'PAR1037',quantidade_referencia:14,status:'referencia',condicao_ativa:{contramarco:['sem']} },
+      { codigo:'BUC755',quantidade_referencia:14,status:'referencia',condicao_ativa:{contramarco:['sem']} },
+      { codigo:'CHU838',quantidade_referencia:15,status:'referencia',condicao_ativa:{contramarco:['cm200']} },
+      { codigo:'NYL-10002',quantidade_referencia:2,status:'referencia',condicao_ativa:{contramarco:['cm200']} },
+    ],
+  }
+}
+
+export const FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA = pc3ReferenciaHistorica('atual_17')
+export const FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA = pc3ReferenciaHistorica('legado_21')
+
+function pc3Item(params:{
+  codigo:string
+  largura:number
+  altura:number
+  perfis:Array<[string,string,number,number]>
+  vidro:[number,number]
+  acessorios:Array<[string,number]>
+}): WVetroItemTecnico {
+  return {
+    Codigo:params.codigo,
+    Nome:'PORTA DE CORRER 03 FOLHAS MÓVEIS | SUPREMA',
+    Linha:'L. SUPREMA',
+    Modelo:'PORTA DE CORRER 03 FOLHAS',
+    Qtde:1,
+    Largura:params.largura,
+    Altura:params.altura,
+    Perfil:params.perfis.map(([Codigo,Posicao,Qtde,Medida])=>({Codigo,Posicao,Qtde,Medida:Medida/1000})),
+    Vidros:[{Codigo:'VIDRO',Qtde:3,Largura:params.vidro[0],Altura:params.vidro[1],Especificacao:'INCOLOR 06MM - TEMPERADO'}],
+    Acessorios:params.acessorios.map(([Codigo,Qtde])=>({Codigo,Qtde})),
+  }
+}
+
+const pc3AcessoriosBase=(p:{
+  fit206:number;fit212:number;fit246:number;gua171:number;gua258:number;gua259:number;sil:number;
+  par1023?:number;par1037?:number;buc755?:number;nyl190?:number;par1025?:number;chu838?:number;nyl10002?:number;
+}) => [
+  ['NYL335',2],['NYL332',12],['NYL414',8],['FRA820',2],['CON409',2],['RPCS100',6],
+  ['FIT206',p.fit206],['FIT212',p.fit212],['FIT246',p.fit246],['GUA171',p.gua171],['GUA258',p.gua258],['GUA259',p.gua259],
+  ['PAR435',24],['NYL042',12],['SIL-PU',p.sil],
+  ...(p.par1023!=null?[['PAR1023',p.par1023]]:[]),
+  ...(p.par1037!=null?[['PAR1037',p.par1037]]:[]),
+  ...(p.buc755!=null?[['BUC755',p.buc755]]:[]),
+  ...(p.nyl190!=null?[['NYL190',p.nyl190]]:[]),
+  ...(p.par1025!=null?[['PAR1025',p.par1025]]:[]),
+  ...(p.chu838!=null?[['CHU838',p.chu838]]:[]),
+  ...(p.nyl10002!=null?[['NYL-10002',p.nyl10002]]:[]),
+] as Array<[string,number]>
+
+export const FIXTURES_PC3_SUPREMA_ATUAL_WVETRO: WVetroItemTecnico[] = [
+  pc3Item({
+    codigo:'WV-1044-5',largura:2000,altura:2150,vidro:[599,1983],
+    perfis:[
+      ['SU010','L',1,1970],['TMC','L',3,1970],['SU012','H',2,2146],['SU008','H',2,2133],
+      ['SU053','L',3,605.2],['SU225','L',3,605.2],['SU280','H',2,2116],['SU040','H',2,2116],['SU041','H',2,2116],
+      ['SU102','L',6,605.2],['SU102','H',6,1965],
+    ],
+    acessorios:pc3AcessoriosBase({fit206:4.232,fit212:8,fit246:8.464,gua171:3.6312,gua258:12.696,gua259:16.3272,sil:1.38333,par1023:12,par1037:14,buc755:14}),
+  }),
+  pc3Item({
+    codigo:'WV-1130-3',largura:3370,altura:2200,vidro:[1055,2033],
+    perfis:[
+      ['MP347','L',1,3414],['MP347','H',2,2222],['SU010','L',1,3340],['TMC','L',3,3340],['SU012','H',2,2196],['SU008','H',2,2183],
+      ['SU053','L',3,1061.87],['SU225','L',3,1061.87],['SU280','H',2,2166],['SU040','H',2,2166],['SU041','H',2,2166],
+      ['SU102','L',6,1061.87],['SU102','H',6,2015],
+    ],
+    acessorios:pc3AcessoriosBase({fit206:4.332,fit212:13.48,fit246:8.664,gua171:6.3712,gua258:12.996,gua259:19.3672,sil:1.85667,par1023:12,par1037:17,buc755:17,nyl190:17,par1025:17}),
+  }),
+  pc3Item({
+    codigo:'WV-980-2',largura:2500,altura:2100,vidro:[757,1921],
+    perfis:[
+      ['CM200','L',1,2452],['CM200','H',2,2076],['MP347','L',1,2520],['MP347','H',2,2110],
+      ['SU010','L',1,2446],['TMC','L',3,2446],['SU012','H',2,2084],['SU008','H',2,2071],
+      ['SU053','L',3,763.87],['SU225','L',3,763.87],['SU280','H',2,2054],['SU040','H',2,2054],['SU041','H',2,2054],
+      ['SU102','L',6,763.87],['SU102','H',6,1903],
+    ],
+    acessorios:pc3AcessoriosBase({fit206:4.108,fit212:9.904,fit246:8.216,gua171:4.5832,gua258:12.324,gua259:16.9072,sil:1.51733,par1023:12,nyl190:15,par1025:15,chu838:15,nyl10002:2}),
+  }),
+]
+
+export const FIXTURE_PC3_SUPREMA_LEGADO_WVETRO: WVetroItemTecnico = pc3Item({
+  codigo:'WV-637-1',largura:1580,altura:2150,vidro:[459,1983],
+  perfis:[
+    ['MP347','L',1,1624],['MP347','H',2,2172],['SU010','L',1,1550],['TMC','L',3,1550],['SU012','H',2,2146],['SU008','H',2,2129],
+    ['SU053','L',3,465.2],['SU225','L',3,465.2],['SU280','H',2,2116],['SU040','H',2,2116],['SU041','H',2,2116],
+    ['SU102','L',6,465.2],['SU102','H',6,1965],
+  ],
+  acessorios:pc3AcessoriosBase({fit206:4.232,fit212:6.32,fit246:8.464,gua171:2.7912,gua258:12.696,gua259:15.4872,sil:1.24333,par1023:12,par1037:14,buc755:14,nyl190:14,par1025:14}),
+})
+
 export const FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
   tipologia_id: '37a87c58-2bd6-49d0-bfa2-61e3a4d7d051',
   configuracao_label: 'PG1-SUPREMA · Lambril · sem contramarco · referência histórica em validação',
