@@ -12,6 +12,8 @@
 - Mac local estava offline nesta sessão; validação disponível foi GitHub Actions. Publicação continua reservada para depois da validação local/release check.
 - PC4 Suprema (98 registros / 100 peças) possui duas fórmulas Atlas, ambas `em_validacao` e inativas. O histórico foi separado em famílias (4 planos, sequencial, abertura central, fixas+móveis e veneziana/mista) e o comparador bloqueia fallback até existir referência histórica local validada.
 - PC1 Suprema (76/76) e Portinhola Suprema (74/140) não possuem fórmula técnica cadastrada; portanto já falham de forma segura em vez de gerar receita. O histórico confirma múltiplas variantes, então não devem receber fórmula genérica sem amostra técnica por ocorrência.
+- O comparador ganhou modo `matriz`, somente leitura/Master/Neon: lê os payloads individuais do staging, deduplica orçamento/pedido equivalente, agrupa itens por assinatura estrutural (perfis + posições/quantidades estruturais + acessórios + vidros), calcula frequência/faixa de medidas e oferece amostras reais para abrir no comparador.
+- A matriz marca cada assinatura como `referencia_local` ou `nao_validada` e ordena primeiro as não validadas; se a leitura atingir o limite, a UI avisa para refinar o modelo antes de homologar.
 
 ## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
 
