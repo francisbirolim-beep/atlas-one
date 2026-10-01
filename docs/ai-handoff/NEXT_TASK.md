@@ -1,3 +1,13 @@
+## 2026-10-01 — W.VETRO / PR #556 — PRÓXIMO PASSO
+
+1. Manter PR #556 sem merge/deploy até validação local no `~/Atlas-One-Dev`.
+2. Quando o Mac estiver online: atualizar a branch, rodar `npm run test:wvetro-comparador` e `npm run release:check`.
+3. Conferir no comparador uma PC2 vidro padrão dominante e confirmar resultado aprovado sem divergências/pendências.
+4. Conferir que PC2 integrada/persiana, veneziana, lambri, bandeira, abertura central e mista ficam bloqueadas quando não há assinatura técnica validada.
+5. Para validar essas famílias especiais, usar payload bruto por ocorrência do staging W.Vetro; não derivar fórmula definitiva do BOM agregado da tipologia.
+6. Próxima prioridade técnica após PC2, pela frequência histórica real: Porta de Correr 04 Folhas Suprema (98 registros / 100 peças), depois Porta de Correr 01 Folha (76/76) e Portinhola (74/140), considerando apenas famílias ainda não validadas.
+7. Só após validação local e revisão do diff: merge manual e publicação conforme processo local-first.
+
 ## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST
 
 Antes de qualquer tarefa abaixo:
