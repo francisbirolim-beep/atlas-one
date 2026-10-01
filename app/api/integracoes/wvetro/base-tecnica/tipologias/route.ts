@@ -5,6 +5,19 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+function normalizar(v: unknown) {
+  return String(v ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+}
+
+function chaveTipologia(linha: unknown, modelo: unknown) {
+  return `${normalizar(linha)}::${normalizar(modelo)}`
+}
+
 // Endpoint só de leitura. Não interfere na carga histórica (execuções/pendências/cursor) —
 // lê exclusivamente as tabelas de referência já preenchidas por ela.
 
@@ -12,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
 
   try {
-    const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }, { data: catalogoComponentes, error: erroCatalogo }] = await Promise.all([
+    const [{ data: referencias, error: erroRefs }, { data: componentes, error: erroComp }, { data: variaveis, error: erroVar }, { data: formulas, error: erroFormulas }, { data: catalogoComponentes, error: erroCatalogo }, { data: historicoComercial, error: erroHistorico }] = await Promise.all([
       supabaseAdmin
         .from('wvetro_referencias_tipologias')
         .select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,primeiro_visto,ultimo_visto')
@@ -33,12 +46,18 @@ export async function GET(req: NextRequest) {
       supabaseAdmin
         .from('wvetro_referencias_componentes')
         .select('tipo,produto_atlas_id'),
+      supabaseAdmin
+        .from('wvetro_historico_comercial')
+        .select('itens')
+        .not('itens', 'is', null)
+        .limit(1000),
     ])
     if (erroRefs) throw erroRefs
     if (erroComp) throw erroComp
     if (erroVar) throw erroVar
     if (erroFormulas) throw erroFormulas
     if (erroCatalogo) throw erroCatalogo
+    if (erroHistorico) throw erroHistorico
 
     const compPorRef = new Map<string, { total: number; vinculados: number; perfil: number; acessorio: number; vidro: number }>()
     for (const c of componentes || []) {
@@ -64,6 +83,23 @@ export async function GET(req: NextRequest) {
       formulaPorTipologia.set(f.tipologia_id, lista)
     }
 
+    const frequenciaHistorica = new Map<string, { ocorrencias: number; pecas: number }>()
+    for (const registro of historicoComercial || []) {
+      const itens = Array.isArray(registro.itens) ? registro.itens : []
+      for (const item of itens) {
+        if (!item || typeof item !== 'object') continue
+        const linha = (item as Record<string, unknown>).linha ?? (item as Record<string, unknown>).Linha
+        const modelo = (item as Record<string, unknown>).modelo ?? (item as Record<string, unknown>).Modelo
+        if (!String(linha || '').trim() || !String(modelo || '').trim()) continue
+        const chave = chaveTipologia(linha, modelo)
+        const atual = frequenciaHistorica.get(chave) || { ocorrencias: 0, pecas: 0 }
+        atual.ocorrencias += 1
+        const quantidade = Number((item as Record<string, unknown>).quantidade ?? (item as Record<string, unknown>).Qtde ?? 1)
+        atual.pecas += Number.isFinite(quantidade) && quantidade > 0 ? quantidade : 1
+        frequenciaHistorica.set(chave, atual)
+      }
+    }
+
     const linhas = (referencias || []).map(r => {
       const comp = compPorRef.get(r.id) || { total: 0, vinculados: 0, perfil: 0, acessorio: 0, vidro: 0 }
       const statusFormulas = r.tipologia_atlas_id ? (formulaPorTipologia.get(r.tipologia_atlas_id) || []) : []
@@ -73,7 +109,9 @@ export async function GET(req: NextRequest) {
         modelo: r.modelo_raw,
         tipologiaAtlasId: r.tipologia_atlas_id,
         imagemUrl: r.imagem_url,
-        ocorrencias: Number(r.ocorrencias || 0),
+        ocorrencias: frequenciaHistorica.get(chaveTipologia(r.linha_raw, r.modelo_raw))?.ocorrencias ?? Number(r.ocorrencias || 0),
+        pecasHistoricas: frequenciaHistorica.get(chaveTipologia(r.linha_raw, r.modelo_raw))?.pecas ?? Number(r.ocorrencias || 0),
+        ocorrenciasFonte: frequenciaHistorica.has(chaveTipologia(r.linha_raw, r.modelo_raw)) ? 'historico_materializado' : 'referencia_agregada',
         statusMapeamento: r.status_mapeamento,
         primeiroVisto: r.primeiro_visto,
         ultimoVisto: r.ultimo_visto,
@@ -83,6 +121,13 @@ export async function GET(req: NextRequest) {
         receitasOficiaisStatus: statusFormulas,
       }
     })
+
+    linhas.sort((a, b) =>
+      b.ocorrencias - a.ocorrencias ||
+      b.pecasHistoricas - a.pecasHistoricas ||
+      String(a.linha).localeCompare(String(b.linha), 'pt-BR') ||
+      String(a.modelo).localeCompare(String(b.modelo), 'pt-BR')
+    )
 
     const componentesBomTotal = (componentes || []).length
     const componentesBomVinculados = (componentes || []).filter(c => !!c.produto_atlas_id).length
