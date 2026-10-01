@@ -500,7 +500,7 @@ export async function GET(req: NextRequest) {
 
     try {
       const sql = neonStaging()
-      const [linhasNeon, coresNeon, vidrosNeon, linhasAtlas, coresAtlas, vidrosAtlas] =
+      const [linhasNeon, coresNeon, vidrosNeon, pendenciasTecnicas, linhasAtlas, coresAtlas, vidrosAtlas] =
         await Promise.all([
           sql`
             select distinct payload->>'LinhaNome' as nome
@@ -522,6 +522,13 @@ export async function GET(req: NextRequest) {
             where recurso='vidros'
               and nullif(trim(payload->>'CorNome'),'') is not null
             order by 1
+          `,
+          sql`
+            select chave_externa,motivo,contexto,status
+            from wvetro_migracao.pendencias
+            where recurso='catalogos_tecnicos'
+              and tipo='validacao'
+              and status in ('pendente','em_revisao')
           `,
           supabaseAdmin
             .from('wvetro_referencias_linhas')
@@ -546,6 +553,13 @@ export async function GET(req: NextRequest) {
           .trim()
           .toLocaleUpperCase('pt-BR')
 
+      const pendenciasPorChave = new Map(
+        (pendenciasTecnicas || []).map((item: any) => [
+          String(item.chave_externa || ''),
+          item,
+        ]),
+      )
+
       const refsLinhas = new Map(
         (linhasAtlas.data || [])
           .map((item: any) => [normalizar(item.linha_raw), item] as const)
@@ -567,11 +581,19 @@ export async function GET(req: NextRequest) {
         const nome = normalizar(item.nome)
         const referencia = refsLinhas.get(nome)
         const mapeada = !!referencia?.linha_tecnica_id
+        const pendencia = pendenciasPorChave.get(`linha:${nome}`)
+        const contexto =
+          pendencia?.contexto && typeof pendencia.contexto === 'object'
+            ? pendencia.contexto
+            : {}
         return {
           nome,
           status: !referencia ? 'sem_referencia' : mapeada ? 'mapeada' : 'pendente_revisao',
           statusMapeamento: referencia?.status_mapeamento || null,
           linhaTecnicaId: referencia?.linha_tecnica_id || null,
+          evidenciaUsoHistorico: contexto.evidencia_uso_historico === true,
+          ocorrenciasHistoricas: Number(contexto.ocorrencias_itens_historicos || 0),
+          documentosHistoricos: Number(contexto.documentos || 0),
         }
       })
 
@@ -580,7 +602,20 @@ export async function GET(req: NextRequest) {
         let status = 'pendente_revisao'
         if (coresOficiais.has(nome)) status = 'cor_atlas'
         else if (nomesVidrosNeon.has(nome)) status = 'item_vidro'
-        return { nome, status }
+        const pendencia = pendenciasPorChave.get(`cor:${nome}`)
+        const contexto =
+          pendencia?.contexto && typeof pendencia.contexto === 'object'
+            ? pendencia.contexto
+            : {}
+        return {
+          nome,
+          status,
+          evidenciaUsoHistorico: contexto.evidencia_uso_historico === true,
+          ocorrenciasComponentes: Number(contexto.ocorrencias_componentes || 0),
+          documentosHistoricos: Number(contexto.documentos || 0),
+          ocorrenciasPerfil: Number(contexto.ocorrencias_perfil || 0),
+          ocorrenciasAcessorio: Number(contexto.ocorrencias_acessorio || 0),
+        }
       })
 
       const vidros = (vidrosNeon || []).map((item: any) => {
@@ -611,6 +646,12 @@ export async function GET(req: NextRequest) {
             jaNoAtlas: cores.filter(item => item.status === 'cor_atlas').length,
             itensVidro: cores.filter(item => item.status === 'item_vidro').length,
             pendentes: cores.filter(item => item.status === 'pendente_revisao').length,
+            pendentesComUso: cores.filter(
+              item => item.status === 'pendente_revisao' && item.evidenciaUsoHistorico,
+            ).length,
+            pendentesSemUso: cores.filter(
+              item => item.status === 'pendente_revisao' && !item.evidenciaUsoHistorico,
+            ).length,
           },
           vidros: {
             total: vidros.length,

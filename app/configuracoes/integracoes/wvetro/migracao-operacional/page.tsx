@@ -124,12 +124,35 @@ type AuditoriaOpcoes = {
 type AuditoriaCatalogos = {
   resumo: {
     linhas: { total: number; mapeadas: number; pendentes: number }
-    cores: { total: number; jaNoAtlas: number; itensVidro: number; pendentes: number }
+    cores: {
+      total: number
+      jaNoAtlas: number
+      itensVidro: number
+      pendentes: number
+      pendentesComUso: number
+      pendentesSemUso: number
+    }
     vidros: { total: number; referenciados: number; pendentes: number; vinculadosProdutoAtlas: number }
   }
   pendencias: {
-    linhas: Array<{ nome: string; status: string; statusMapeamento: string | null; linhaTecnicaId: string | null }>
-    cores: Array<{ nome: string; status: string }>
+    linhas: Array<{
+      nome: string
+      status: string
+      statusMapeamento: string | null
+      linhaTecnicaId: string | null
+      evidenciaUsoHistorico: boolean
+      ocorrenciasHistoricas: number
+      documentosHistoricos: number
+    }>
+    cores: Array<{
+      nome: string
+      status: string
+      evidenciaUsoHistorico: boolean
+      ocorrenciasComponentes: number
+      documentosHistoricos: number
+      ocorrenciasPerfil: number
+      ocorrenciasAcessorio: number
+    }>
     vidros: Array<{ nome: string; status: string; statusValidacao: string | null; produtoAtlasId: string | null }>
   }
 }
@@ -701,6 +724,9 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="mt-1 text-xs text-slate-600">
                       {catalogosAuditoria.resumo.cores.jaNoAtlas} no Atlas · {catalogosAuditoria.resumo.cores.itensVidro} são vidro · {catalogosAuditoria.resumo.cores.pendentes} revisar
                     </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {catalogosAuditoria.resumo.cores.pendentesComUso} com uso histórico · {catalogosAuditoria.resumo.cores.pendentesSemUso} sem uso no recorte
+                    </div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vidros</div>
@@ -719,6 +745,11 @@ export default function MigracaoOperacionalWVetroPage() {
                         <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                           <div className="font-semibold">{item.nome}</div>
                           <div className="mt-0.5">{item.statusMapeamento || item.status}</div>
+                          <div className="mt-1 text-[11px] text-amber-700/80">
+                            {item.evidenciaUsoHistorico
+                              ? `${item.ocorrenciasHistoricas} ocorrência(s) em ${item.documentosHistoricos} documento(s)`
+                              : 'Sem uso histórico no recorte migrado'}
+                          </div>
                         </div>
                       ))}
                       {!catalogosAuditoria.pendencias.linhas.length && (
@@ -731,8 +762,13 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="text-sm font-semibold text-slate-900">Cores para revisar</div>
                     <div className="mt-2 max-h-72 space-y-2 overflow-auto pr-1">
                       {catalogosAuditoria.pendencias.cores.map(item => (
-                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                          {item.nome}
+                        <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          <div className="font-semibold">{item.nome}</div>
+                          <div className="mt-1 text-[11px] text-amber-700/80">
+                            {item.evidenciaUsoHistorico
+                              ? `${item.ocorrenciasComponentes} ocorrência(s) em ${item.documentosHistoricos} documento(s) · perfil ${item.ocorrenciasPerfil} · acessório ${item.ocorrenciasAcessorio}`
+                              : 'Sem uso em perfis/acessórios no recorte migrado'}
+                          </div>
                         </div>
                       ))}
                       {!catalogosAuditoria.pendencias.cores.length && (
