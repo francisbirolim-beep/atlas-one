@@ -2,7 +2,7 @@
 //
 // A definicao e lida de engenharia_tipologia_formulas_corte. O motor nao usa
 // eval nem Function(): somente numeros, identificadores conhecidos,
-// + - * /, parenteses, ROUND(expr) e CEIL(expr) sao aceitos.
+// + - * /, parenteses, ROUND(expr), CEIL(expr) e FLOOR(expr) sao aceitos.
 
 export type VariavelTipologia = {
   chave: string
@@ -247,7 +247,7 @@ export function calcularFormulaCorteIsolada(formula: string, largura: number, al
   return avaliarFormula(formula, contextoBase(largura, altura))
 }
 
-function condicaoBate(quando: Record<string, string[]>, opcoes: OpcoesEscolhidas): boolean {
+export function condicaoBate(quando: Record<string, string[]>, opcoes: OpcoesEscolhidas): boolean {
   return Object.entries(quando).every(([chave, valoresAceitos]) => {
     const escolhido = opcoes[chave]
     return escolhido !== undefined && valoresAceitos.includes(escolhido)
@@ -260,7 +260,7 @@ function validarOpcoes(def: TipologiaFormulasCorte, opcoes: OpcoesEscolhidas) {
     if (valor === undefined || valor === '') {
       throw new FormulaCorteError(`Selecione uma opcao para "${variavel.label}" (${variavel.chave})`)
     }
-    if (!variavel.opcoes.includes(valor)) {
+    if (variavel.opcoes.length > 0 && !variavel.opcoes.includes(valor)) {
       throw new FormulaCorteError(
         `Opcao invalida "${valor}" para "${variavel.label}". Permitidas: ${variavel.opcoes.join(', ')}`
       )
@@ -268,13 +268,21 @@ function validarOpcoes(def: TipologiaFormulasCorte, opcoes: OpcoesEscolhidas) {
   }
 }
 
-function formulaComCondicoes(peca: PecaFormula, opcoes: OpcoesEscolhidas): string {
-  if (!peca.formula) throw new FormulaCorteError('Peca sem formula base')
-  let formula = peca.formula
-  for (const condicao of peca.condicoes ?? []) {
+export function resolverFormulaCondicional(
+  formulaBase: string,
+  condicoes: CondicaoFormula[] | undefined,
+  opcoes: OpcoesEscolhidas
+): string {
+  let formula = formulaBase
+  for (const condicao of condicoes ?? []) {
     if (condicaoBate(condicao.quando, opcoes)) formula = condicao.formula
   }
   return formula
+}
+
+function formulaComCondicoes(peca: PecaFormula, opcoes: OpcoesEscolhidas): string {
+  if (!peca.formula) throw new FormulaCorteError('Peca sem formula base')
+  return resolverFormulaCondicional(peca.formula, peca.condicoes, opcoes)
 }
 
 function enriquecerResultado(
