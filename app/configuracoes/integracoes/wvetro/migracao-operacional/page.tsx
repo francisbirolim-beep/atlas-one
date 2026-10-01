@@ -879,10 +879,10 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cores / acabamentos</div>
                     <div className="mt-2 text-2xl font-bold text-slate-900">{catalogosAuditoria.resumo.cores.total}</div>
                     <div className="mt-1 text-xs text-slate-600">
-                      {catalogosAuditoria.resumo.cores.jaNoAtlas} no Atlas · {catalogosAuditoria.resumo.cores.itensVidro} são vidro · {catalogosAuditoria.resumo.cores.pendentes} revisar
+                      {catalogosAuditoria.resumo.cores.jaNoAtlas} no Atlas · {catalogosAuditoria.resumo.cores.itensVidro} são vidro · {catalogosAuditoria.resumo.cores.pendentes} sem destino final
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">
-                      {catalogosAuditoria.resumo.cores.candidatasPerfil} candidata(s) de perfil · {catalogosAuditoria.resumo.cores.acabamentosAcessorio} acabamento(s) só de acessório · {catalogosAuditoria.resumo.cores.usoMisto} uso misto
+                      {catalogosAuditoria.resumo.cores.candidatasPerfil + catalogosAuditoria.resumo.cores.usoMisto} exigem decisão Master · {catalogosAuditoria.resumo.cores.acabamentosAcessorio} acabamento(s) já classificado(s) pelo uso · {catalogosAuditoria.resumo.cores.pendentesSemUso} sem uso histórico
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">
                       {catalogosAuditoria.resumo.cores.pendentesComUso} com uso histórico · {catalogosAuditoria.resumo.cores.pendentesSemUso} sem uso no recorte
@@ -902,7 +902,10 @@ export default function MigracaoOperacionalWVetroPage() {
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-3">
                   <div className="rounded-xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Linhas para revisar</div>
+                    <div className="text-sm font-semibold text-slate-900">Linhas sem destino técnico</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      Priorizar somente quando houver uso histórico ou vínculo com tipologia ativa.
+                    </div>
                     <div className="mt-2 space-y-2">
                       {catalogosAuditoria.pendencias.linhas.map(item => (
                         <div key={item.nome} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -913,6 +916,11 @@ export default function MigracaoOperacionalWVetroPage() {
                               ? `${item.ocorrenciasHistoricas} ocorrência(s) em ${item.documentosHistoricos} documento(s)`
                               : 'Sem uso histórico no recorte migrado'}
                           </div>
+                          {!item.evidenciaUsoHistorico && (
+                            <div className="mt-1.5 rounded-md bg-white/70 px-2 py-1 text-[11px] text-slate-600">
+                              Baixa prioridade: não bloqueia a paridade histórica atual.
+                            </div>
+                          )}
                         </div>
                       ))}
                       {!catalogosAuditoria.pendencias.linhas.length && (
@@ -922,7 +930,21 @@ export default function MigracaoOperacionalWVetroPage() {
                   </div>
 
                   <div className="rounded-xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Cores para revisar</div>
+                    <div className="text-sm font-semibold text-slate-900">Cores e acabamentos — prioridade real</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      Azul = decisão Master sobre cor de perfil. Roxo = acabamento de acessório já classificado pelo uso. Cinza = sem uso histórico.
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-blue-700">
+                        Decisão Master: {catalogosAuditoria.resumo.cores.candidatasPerfil + catalogosAuditoria.resumo.cores.usoMisto}
+                      </span>
+                      <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-700">
+                        Acabamentos classificados: {catalogosAuditoria.resumo.cores.acabamentosAcessorio}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+                        Sem uso: {catalogosAuditoria.resumo.cores.pendentesSemUso}
+                      </span>
+                    </div>
                     <div className="mt-2 max-h-72 space-y-2 overflow-auto pr-1">
                       {catalogosAuditoria.pendencias.cores.map(item => {
                         const classificacao = {
