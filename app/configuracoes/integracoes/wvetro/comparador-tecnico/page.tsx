@@ -17,6 +17,32 @@ type Linha = {
   observacao?: string | null
 }
 
+type AssinaturaMatriz = {
+  assinatura: string
+  linha: string
+  modelo: string
+  familia: string
+  ocorrencias: number
+  pecas: number
+  larguraMin: number | null
+  larguraMax: number | null
+  alturaMin: number | null
+  alturaMax: number | null
+  perfis: Array<{ codigo:string; posicoes:string[]; quantidade:number }>
+  acessorios: string[]
+  vidros: Array<{ especificacao:string; quantidade:number }>
+  amostras: Array<{ numero:string; itemId:string; codigo:string; nome:string; largura:number; altura:number; recurso:string }>
+}
+
+type RespostaMatriz = {
+  ok: boolean
+  modo: 'matriz'
+  filtros: { linha:string; modelo:string; limite:number }
+  totalItens: number
+  totalAssinaturas: number
+  assinaturas: AssinaturaMatriz[]
+}
+
 type Resposta = {
   ok: boolean
   modo: 'fixture' | 'historico'
@@ -47,6 +73,18 @@ async function chamar(params: URLSearchParams) {
   const json = await resp.json().catch(() => ({}))
   if (!resp.ok) throw new Error(json?.error || `Falha no comparador (${resp.status}).`)
   return json as Resposta
+}
+
+async function chamarMatriz(params: URLSearchParams) {
+  const token = await tokenAtual()
+  if (!token) throw new Error('Sessão do Atlas não encontrada.')
+  const resp = await fetch(`/api/integracoes/wvetro/comparador-tecnico?${params.toString()}`, {
+    cache: 'no-store',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const json = await resp.json().catch(() => ({}))
+  if (!resp.ok) throw new Error(json?.error || `Falha ao montar matriz (${resp.status}).`)
+  return json as RespostaMatriz
 }
 
 function badge(status: Linha['status']) {
@@ -83,18 +121,24 @@ export default function ComparadorTecnicoWVetroPage() {
   const [dados,setDados]=useState<Resposta|null>(null)
   const [carregando,setCarregando]=useState(false)
   const [erro,setErro]=useState('')
+  const [linhaMatriz,setLinhaMatriz]=useState('SUPREMA')
+  const [modeloMatriz,setModeloMatriz]=useState('')
+  const [matriz,setMatriz]=useState<RespostaMatriz|null>(null)
+  const [carregandoMatriz,setCarregandoMatriz]=useState(false)
+  const [erroMatriz,setErroMatriz]=useState('')
 
   useEffect(() => {
     usuarioAtual().then(u => setMaster(u?.role === 'master')).catch(() => setMaster(false))
   }, [])
 
-  async function executar(modo: 'fixture'|'historico', override?: { itemId?:string; formulaId?:string; opcoes?:Record<string,string>; resetOpcoes?:boolean }) {
+  async function executar(modo: 'fixture'|'historico', override?: { numero?:string; itemId?:string; formulaId?:string; opcoes?:Record<string,string>; resetOpcoes?:boolean }) {
     setCarregando(true); setErro('')
     try {
       const p = new URLSearchParams({ modo })
       if (modo === 'historico') {
-        if (!numero.trim()) throw new Error('Informe o número do orçamento/pedido W.Vetro.')
-        p.set('numero', numero.trim())
+        const numeroConsulta = (override?.numero ?? numero).trim()
+        if (!numeroConsulta) throw new Error('Informe o número do orçamento/pedido W.Vetro.')
+        p.set('numero', numeroConsulta)
         const item = override?.itemId ?? itemId
         const formula = override?.formulaId ?? formulaId
         if (item) p.set('itemId', item)
@@ -116,6 +160,27 @@ export default function ComparadorTecnicoWVetroPage() {
     } finally {
       setCarregando(false)
     }
+  }
+
+  async function carregarMatriz() {
+    setCarregandoMatriz(true); setErroMatriz('')
+    try {
+      const p = new URLSearchParams({ modo:'matriz', linha:linhaMatriz.trim(), modelo:modeloMatriz.trim(), limite:'2500' })
+      const json = await chamarMatriz(p)
+      setMatriz(json)
+    } catch (e) {
+      setErroMatriz(e instanceof Error ? e.message : 'Falha ao montar matriz histórica.')
+    } finally {
+      setCarregandoMatriz(false)
+    }
+  }
+
+  async function abrirAmostraMatriz(amostra: AssinaturaMatriz['amostras'][number]) {
+    setNumero(amostra.numero)
+    setItemId(amostra.itemId)
+    setFormulaId('')
+    setOpcoes({})
+    await executar('historico', { numero:amostra.numero, itemId:amostra.itemId, formulaId:'', resetOpcoes:true })
   }
 
   const grupos = useMemo(() => {
@@ -176,6 +241,37 @@ export default function ComparadorTecnicoWVetroPage() {
               </label>)}
             </div>
           </div>}
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-slate-900">Matriz histórica de composições</h2>
+              <p className="mt-1 text-xs text-slate-500">Agrupa snapshots técnicos reais por assinatura de perfis, acessórios e vidros. Somente leitura; não cria nem altera fórmula.</p>
+            </div>
+            {matriz && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{matriz.totalAssinaturas} assinaturas · {matriz.totalItens} itens lidos</span>}
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-[0.7fr_1fr_auto]">
+            <input value={linhaMatriz} onChange={e=>setLinhaMatriz(e.target.value)} placeholder="Linha (ex.: SUPREMA)" className="rounded-xl border border-slate-300 px-3 py-2 text-sm"/>
+            <input value={modeloMatriz} onChange={e=>setModeloMatriz(e.target.value)} placeholder="Modelo opcional (ex.: PORTA DE CORRER 04 FOLHAS)" className="rounded-xl border border-slate-300 px-3 py-2 text-sm"/>
+            <button type="button" onClick={carregarMatriz} disabled={carregandoMatriz} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              {carregandoMatriz?<Loader2 size={16} className="animate-spin"/>:<RefreshCw size={16}/>} Mapear
+            </button>
+          </div>
+          {erroMatriz && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erroMatriz}</div>}
+          {matriz && <div className="mt-4 overflow-x-auto rounded-xl border">
+            <table className="min-w-full text-sm">
+              <thead><tr className="border-b bg-slate-50 text-left text-xs uppercase text-slate-400"><th className="px-3 py-2">Família / modelo</th><th className="px-3 py-2">Frequência</th><th className="px-3 py-2">Faixa</th><th className="px-3 py-2">Composição</th><th className="px-3 py-2">Amostra</th></tr></thead>
+              <tbody>{matriz.assinaturas.slice(0,100).map((a,i)=><tr key={`${a.familia}-${i}-${a.assinatura.slice(0,20)}`} className="border-b align-top last:border-0">
+                <td className="px-3 py-3"><b className="text-slate-800">{a.familia}</b><p className="mt-0.5 max-w-xs text-xs text-slate-500">{a.modelo}</p><p className="text-[11px] text-slate-400">{a.linha}</p></td>
+                <td className="px-3 py-3"><b>{a.ocorrencias} registros</b><p className="text-xs text-slate-500">{fmt(a.pecas,0)} peças</p></td>
+                <td className="px-3 py-3 text-xs text-slate-600"><p>L {fmt(a.larguraMin,0)}–{fmt(a.larguraMax,0)} mm</p><p>A {fmt(a.alturaMin,0)}–{fmt(a.alturaMax,0)} mm</p></td>
+                <td className="px-3 py-3 text-xs text-slate-600"><p><b>{a.perfis.length}</b> perfis · <b>{a.acessorios.length}</b> acessórios · <b>{a.vidros.length}</b> tipos de vidro</p><p className="mt-1 max-w-md break-words text-[11px] text-slate-400">{a.perfis.map(p=>p.codigo).join(', ') || 'sem perfis'}</p></td>
+                <td className="px-3 py-3">{a.amostras[0]?<button type="button" onClick={()=>abrirAmostraMatriz(a.amostras[0])} disabled={carregando} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-50">#{a.amostras[0].numero} · {a.amostras[0].largura}×{a.amostras[0].altura}</button>:<span className="text-xs text-slate-400">Sem amostra</span>}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
+          {matriz && matriz.assinaturas.length>100 && <p className="mt-2 text-xs text-slate-400">Exibindo as 100 assinaturas mais frequentes de {matriz.assinaturas.length}.</p>}
         </section>
 
         {erro && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><div className="flex items-center gap-2"><AlertTriangle size={17}/><b>Não foi possível comparar</b></div><p className="mt-1">{erro}</p></div>}
