@@ -1244,3 +1244,207 @@ export const FIXTURES_BAS3_SUPREMA_WVETRO: WVetroItemTecnico[] = [
   bas3SupremaItem({largura:1019,altura:836,fixadores:14,rebaca:22,rebccc:2}),
 ]
 
+function pc4SupremaDominanteItem(params: {
+  codigo: string
+  largura: number
+  altura: number
+  arremateL: number
+  arremateH: number
+  marcoSuperior: number
+  marcoLateral: number
+  mataJunta: number
+  travessa: number
+  montante: number
+  bagueteH: number
+  vidroL: number
+  vidroH: number
+  fit206: number
+  fit246: number
+  fit212: number
+  gua171: number
+  gua258: number
+  gua259: number
+  pontosFixacao: number
+  silicone: number
+}): WVetroItemTecnico {
+  return {
+    Codigo: params.codigo,
+    Nome: 'PORTA DE CORRER 04 FOLHAS MÓVEIS EM 04 PLANOS | SUPREMA',
+    Linha: 'L. SUPREMA',
+    Modelo: 'PORTA DE CORRER 04 FOLHAS',
+    Qtde: 1,
+    Largura: params.largura,
+    Altura: params.altura,
+    Perfil: [
+      { Codigo: 'MP347', Posicao: 'L', Qtde: 1, Medida: params.arremateL / 1000 },
+      { Codigo: 'MP347', Posicao: 'H', Qtde: 1, Medida: params.arremateH / 1000 },
+      { Codigo: 'MP347', Posicao: 'H', Qtde: 1, Medida: params.arremateH / 1000 },
+      { Codigo: 'SU121', Posicao: 'L', Qtde: 1, Medida: params.marcoSuperior / 1000 },
+      { Codigo: 'TMC', Posicao: 'L', Qtde: 4, Medida: params.marcoSuperior / 1000 },
+      { Codigo: 'SU123', Posicao: 'H', Qtde: 2, Medida: params.marcoLateral / 1000 },
+      { Codigo: 'SU008', Posicao: 'H', Qtde: 2, Medida: params.mataJunta / 1000 },
+      { Codigo: 'SU053', Posicao: 'L', Qtde: 4, Medida: params.travessa / 1000 },
+      { Codigo: 'SU225', Posicao: 'L', Qtde: 4, Medida: params.travessa / 1000 },
+      { Codigo: 'SU280', Posicao: 'H', Qtde: 2, Medida: params.montante / 1000 },
+      { Codigo: 'SU040', Posicao: 'H', Qtde: 3, Medida: params.montante / 1000 },
+      { Codigo: 'SU041', Posicao: 'H', Qtde: 3, Medida: params.montante / 1000 },
+      { Codigo: 'SU102', Posicao: 'L', Qtde: 8, Medida: params.travessa / 1000 },
+      { Codigo: 'SU102', Posicao: 'H', Qtde: 8, Medida: params.bagueteH / 1000 },
+    ],
+    Vidros: [
+      {
+        Codigo: 'VIDRO',
+        Qtde: 4,
+        Largura: params.vidroL,
+        Altura: params.vidroH,
+        Especificacao: 'INCOLOR 06MM - TEMPERADO',
+      },
+    ],
+    Acessorios: [
+      { Codigo: 'NYL335', Qtde: 3 },
+      { Codigo: 'NYL332', Qtde: 16 },
+      { Codigo: 'NYL414', Qtde: 12 },
+      { Codigo: 'FRA820', Qtde: 2 },
+      { Codigo: 'CON409', Qtde: 2 },
+      { Codigo: 'RPCS100', Qtde: 8 },
+      { Codigo: 'FIT206', Qtde: params.fit206 },
+      { Codigo: 'FIT246', Qtde: params.fit246 },
+      { Codigo: 'FIT212', Qtde: params.fit212 },
+      { Codigo: 'GUA259', Qtde: params.gua259 },
+      { Codigo: 'GUA258', Qtde: params.gua258 },
+      { Codigo: 'GUA171', Qtde: params.gua171 },
+      { Codigo: 'PAR435', Qtde: 8 },
+      { Codigo: 'PAR435', Qtde: 24 },
+      { Codigo: 'NYL042', Qtde: 16 },
+      { Codigo: 'PAR1023', Qtde: 12 },
+      { Codigo: 'NYL190', Qtde: params.pontosFixacao },
+      { Codigo: 'PAR1025', Qtde: params.pontosFixacao },
+      { Codigo: 'PAR1037', Qtde: params.pontosFixacao },
+      { Codigo: 'BUC755', Qtde: params.pontosFixacao },
+      { Codigo: 'SIL-PU', Qtde: params.silicone },
+    ],
+  }
+}
+
+// Referência histórica reconstruída a partir de 22 peças PC4 Suprema com a mesma assinatura
+// de perfis/acessórios. É usada somente pelo comparador/regressão; não ativa produção.
+export const FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: 'ee553629-edd9-46bb-a68f-35eb0b9f3ef4',
+  configuracao_label: 'PC4 Suprema · 4 móveis em 4 planos · mão-amiga comum · com vidro',
+  variaveis: [],
+  pecas: [
+    { eixo: 'L', codigo: 'MP347', formula: 'LF + 48', descricao: 'Arremate interno horizontal', quantidade: 1 },
+    { eixo: 'H', codigo: 'MP347', formula: 'HF + 26', descricao: 'Arremate interno vertical', quantidade: 2 },
+    { eixo: 'L', codigo: 'SU121', formula: 'LF - 26', descricao: 'Marco superior / correr 4', quantidade: 1 },
+    { eixo: 'L', codigo: 'TMC', formula: 'LF - 26', descricao: 'Trilho macarrão embutido', quantidade: 4 },
+    { eixo: 'H', codigo: 'SU123', formula: 'HF', descricao: 'Marco lateral / correr 4', quantidade: 2 },
+    { eixo: 'H', codigo: 'SU008', formula: 'HF - 13', descricao: 'Mata-junta / complemento do marco', quantidade: 2 },
+    { eixo: 'L', codigo: 'SU053', formula: '(LF - 198.8) / 4', descricao: 'Travessa superior da folha', quantidade: 4 },
+    { eixo: 'L', codigo: 'SU225', formula: '(LF - 198.8) / 4', descricao: 'Travessa inferior da folha', quantidade: 4 },
+    { eixo: 'H', codigo: 'SU280', formula: 'HF - 30', descricao: 'Montante lateral com reforço de aba', quantidade: 2 },
+    { eixo: 'H', codigo: 'SU040', formula: 'HF - 30', descricao: 'Mão-amiga interna comum', quantidade: 3 },
+    { eixo: 'H', codigo: 'SU041', formula: 'HF - 30', descricao: 'Mão-amiga externa comum', quantidade: 3 },
+    { eixo: 'L', codigo: 'SU102', formula: '(LF - 198.8) / 4', descricao: 'Baguete horizontal', quantidade: 8 },
+    { eixo: 'H', codigo: 'SU102', formula: 'HF - 181', descricao: 'Baguete vertical', quantidade: 8 },
+  ],
+  vidro: {
+    quantidade: 4,
+    formula_largura: 'FLOOR((LF - 222.8) / 4)',
+    formula_altura: 'HF - 163',
+  },
+  acessorios: [
+    { codigo: 'NYL335', formula_quantidade: '3', descricao: 'Vedação superior' },
+    { codigo: 'NYL332', formula_quantidade: '16', descricao: 'Guia deslizante com placa' },
+    { codigo: 'NYL414', formula_quantidade: '12', descricao: 'Batedeira BAT-FLEX' },
+    { codigo: 'FRA820', formula_quantidade: '2', descricao: 'Fechadura bico de papagaio' },
+    { codigo: 'CON409', formula_quantidade: '2', descricao: 'Contrafecho lateral' },
+    { codigo: 'RPCS100', formula_quantidade: '8', descricao: 'Roldana 100 kg' },
+    { codigo: 'FIT206', formula_quantidade: '(HF - 30) * 3 / 1000', descricao: 'Fita 5 x 6 mm' },
+    { codigo: 'FIT246', formula_quantidade: '(HF - 30) * 4 / 1000', descricao: 'Fita 7,6 x 6 mm' },
+    { codigo: 'FIT212', formula_quantidade: 'Largura * 4 / 1000', descricao: 'Fita 5 x 8 mm' },
+    { codigo: 'GUA171', formula_quantidade: 'SU053 * 8 / 1000', descricao: 'Guarnição espuma 11 x 3,2 mm' },
+    { codigo: 'GUA258', formula_quantidade: 'SU280 * 8 / 1000', descricao: 'Guarnição espuma 11 x 4,8 mm' },
+    { codigo: 'GUA259', formula_quantidade: 'GUA258 + GUA171', descricao: 'Guarnição cunha do vidro' },
+    { codigo: 'PAR435', formula_quantidade: '32', descricao: 'Parafuso de marco/montagem das folhas' },
+    { codigo: 'NYL042', formula_quantidade: '16', descricao: 'Botão tampa-furo' },
+    { codigo: 'PAR1023', formula_quantidade: '12', descricao: 'Parafuso mata-junta' },
+    { codigo: 'NYL190', formula_quantidade: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)', descricao: 'Botão de fixação do arremate' },
+    { codigo: 'PAR1025', formula_quantidade: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)', descricao: 'Parafuso do arremate' },
+    { codigo: 'PAR1037', formula_quantidade: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)', descricao: 'Parafuso de fixação' },
+    { codigo: 'BUC755', formula_quantidade: 'CEIL(Largura / 500) + 2 * CEIL(Altura / 500)', descricao: 'Bucha S-8' },
+    { codigo: 'SIL-PU', formula_quantidade: '(Largura * 2 + Altura * 2) / 6000', descricao: 'Silicone PU' },
+  ],
+}
+
+export const FIXTURES_PC4_SUPREMA_WVETRO: WVetroItemTecnico[] = [
+  pc4SupremaDominanteItem({
+    codigo: 'WV-PC4-1067-5',
+    largura: 2900,
+    altura: 2150,
+    arremateL: 2944,
+    arremateH: 2172,
+    marcoSuperior: 2870,
+    marcoLateral: 2146,
+    mataJunta: 2133,
+    travessa: 674.3,
+    montante: 2116,
+    bagueteH: 1965,
+    vidroL: 668,
+    vidroH: 1983,
+    fit206: 6.348,
+    fit246: 8.464,
+    fit212: 11.6,
+    gua171: 5.3944,
+    gua258: 16.928,
+    gua259: 22.3224,
+    pontosFixacao: 16,
+    silicone: 1.68333,
+  }),
+  pc4SupremaDominanteItem({
+    codigo: 'WV-PC4-1015-4',
+    largura: 4000,
+    altura: 2200,
+    arremateL: 4044,
+    arremateH: 2222,
+    marcoSuperior: 3970,
+    marcoLateral: 2196,
+    mataJunta: 2183,
+    travessa: 949.3,
+    montante: 2166,
+    bagueteH: 2015,
+    vidroL: 943,
+    vidroH: 2033,
+    fit206: 6.498,
+    fit246: 8.664,
+    fit212: 16,
+    gua171: 7.5944,
+    gua258: 17.328,
+    gua259: 24.9224,
+    pontosFixacao: 18,
+    silicone: 2.06667,
+  }),
+  pc4SupremaDominanteItem({
+    codigo: 'WV-PC4-571-2',
+    largura: 5500,
+    altura: 2400,
+    arremateL: 5544,
+    arremateH: 2422,
+    marcoSuperior: 5470,
+    marcoLateral: 2396,
+    mataJunta: 2383,
+    travessa: 1324.3,
+    montante: 2366,
+    bagueteH: 2215,
+    vidroL: 1318,
+    vidroH: 2233,
+    fit206: 7.098,
+    fit246: 9.464,
+    fit212: 22,
+    gua171: 10.5944,
+    gua258: 18.928,
+    gua259: 29.5224,
+    pontosFixacao: 21,
+    silicone: 2.63333,
+  }),
+]
+
