@@ -8,6 +8,8 @@
 6. PC4 (98/100) já teve famílias classificadas e fallback bloqueado; para validar fórmula, capturar payload técnico por ocorrência e criar referência local por assinatura antes de liberar qualquer uma das duas fórmulas `em_validacao` do banco.
 7. PC1 (76/76) e Portinhola (74/140) continuam sem fórmula cadastrada e seguras por falha fechada; validar primeiro as variantes dominantes com payload técnico antes de criar receitas.
 8. Só após validação local e revisão do diff: merge manual e publicação conforme processo local-first.
+9. Na validação local, abrir o modo “Matriz histórica de composições”, filtrar `SUPREMA` e conferir que assinaturas sem referência aparecem primeiro; abrir pelo menos uma amostra real de PC2 e uma de PC4 direto pela matriz.
+10. Usar a matriz, e não o BOM agregado, como fonte para criar as próximas referências históricas por assinatura.
 
 ## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST
 
