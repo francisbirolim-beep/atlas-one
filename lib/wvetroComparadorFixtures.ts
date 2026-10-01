@@ -1138,3 +1138,109 @@ export const FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO: WVetroItemTecnico[]
   pg1VidroSemArremateItem({largura:948,altura:2081,fixadores:12,rebites:8}),
 ]
 
+export const FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: '2a3384fd-a47f-4ea6-846a-610da8c9dab2',
+  configuracao_label: 'BAS3-SUPREMA · Basculante · composição dominante · referência histórica',
+  variaveis: [],
+  pecas: [
+    { codigo:'CL006', formula:'22', descricao:'Calço auxiliar CL006', quantidade:8 },
+    { codigo:'CL011', formula:'22', descricao:'Calço auxiliar CL011', quantidade:16 },
+    { codigo:'BC-009', formula:'16', descricao:'Componente auxiliar BC-009', quantidade:2 },
+    { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate interno horizontal', quantidade:2 },
+    { eixo:'H', codigo:'MP347', formula:'Altura+44', descricao:'Arremate interno vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU093', formula:'Largura-4', descricao:'Marco horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU093', formula:'Altura-4', descricao:'Marco vertical', quantidade:2 },
+    { eixo:'H', codigo:'SU096', formula:'Altura-72.8', descricao:'Montante basculante', quantidade:2 },
+    { eixo:'L', codigo:'SU097', formula:'Largura-51', descricao:'Travessa superior', quantidade:1 },
+    { eixo:'L', codigo:'SU098', formula:'Largura-51', descricao:'Travessa inferior', quantidade:1 },
+    { eixo:'L', codigo:'SU100', formula:'Largura-51', descricao:'Travessa interna horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU100', formula:'Altura/2-35.5', descricao:'Travessa interna vertical', quantidade:8 },
+    { eixo:'L', codigo:'SU102', formula:'Largura-104', descricao:'Baguete horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU102', formula:'Altura-125.8', descricao:'Baguete vertical', quantidade:2 },
+    { eixo:'H', codigo:'AF-018', formula:'Altura-125.8', descricao:'Perfil auxiliar AF-018', quantidade:2 },
+  ],
+  vidro: {
+    quantidade: 1,
+    formula_largura: 'Largura-110',
+    formula_altura: 'Altura-108',
+  },
+  acessorios: [
+    { codigo:'ALA-059', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'ARR-10001', formula_quantidade:'6', status:'em_validacao' },
+    { codigo:'CON456', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'PIV753', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'GUA171', formula_quantidade:'2*(Largura+Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA259', formula_quantidade:'2*(Largura+Altura)/1000', status:'em_validacao' },
+    { codigo:'SIL-PU', formula_quantidade:'2*(Largura+Altura)/12000', status:'em_validacao' },
+    { codigo:'BUC753', quantidade_referencia:10, status:'referencia' },
+    { codigo:'NYL190', quantidade_referencia:10, status:'referencia' },
+    { codigo:'PARFIAPF04850N', quantidade_referencia:10, status:'referencia' },
+    { codigo:'PARFIAPP04216N', quantidade_referencia:10, status:'referencia' },
+    { codigo:'REBACA4X10', quantidade_referencia:18, status:'referencia' },
+    { codigo:'REBCCC-5/32X1/2', quantidade_referencia:2, status:'referencia' },
+  ],
+}
+
+function bas3SupremaItem(params:{
+  largura:number
+  altura:number
+  fixadores:number
+  rebaca:number
+  rebccc:number
+}): WVetroItemTecnico {
+  const l=params.largura,h=params.altura
+  return {
+    Codigo:'*SUCB-BAS-03EF',
+    Nome:'BASCULANTE | SUPREMA',
+    Linha:'L. SUPREMA',
+    Modelo:'BASCULANTE',
+    Qtde:1,
+    Largura:l,
+    Altura:h,
+    Perfil:[
+      {Codigo:'CL006',Qtde:8,Medida:0.022},
+      {Codigo:'CL011',Qtde:16,Medida:0.022},
+      {Codigo:'BC-009',Qtde:2,Medida:0.016},
+      {Codigo:'MP347',Posicao:'L',Qtde:2,Medida:(l+44)/1000},
+      {Codigo:'MP347',Posicao:'H',Qtde:2,Medida:(h+44)/1000},
+      {Codigo:'SU093',Posicao:'L',Qtde:2,Medida:(l-4)/1000},
+      {Codigo:'SU093',Posicao:'H',Qtde:2,Medida:(h-4)/1000},
+      {Codigo:'SU096',Posicao:'H',Qtde:2,Medida:(h-72.8)/1000},
+      {Codigo:'SU097',Posicao:'L',Qtde:1,Medida:(l-51)/1000},
+      {Codigo:'SU098',Posicao:'L',Qtde:1,Medida:(l-51)/1000},
+      {Codigo:'SU100',Posicao:'L',Qtde:2,Medida:(l-51)/1000},
+      {Codigo:'SU100',Posicao:'H',Qtde:8,Medida:(h/2-35.5)/1000},
+      {Codigo:'SU102',Posicao:'L',Qtde:2,Medida:(l-104)/1000},
+      {Codigo:'SU102',Posicao:'H',Qtde:2,Medida:(h-125.8)/1000},
+      {Codigo:'AF-018',Posicao:'H',Qtde:2,Medida:(h-125.8)/1000},
+    ],
+    Vidros:[{
+      Codigo:'VIDRO',Qtde:1,Largura:l-110,Altura:h-108,
+      Especificacao:'INCOLOR 06MM - TEMPERADO',
+    }],
+    Acessorios:[
+      {Codigo:'ALA-059',Qtde:1},
+      {Codigo:'ARR-10001',Qtde:6},
+      {Codigo:'CON456',Qtde:1},
+      {Codigo:'PIV753',Qtde:2},
+      {Codigo:'GUA171',Qtde:2*(l+h)/1000},
+      {Codigo:'GUA259',Qtde:2*(l+h)/1000},
+      {Codigo:'SIL-PU',Qtde:2*(l+h)/12000},
+      {Codigo:'BUC753',Qtde:params.fixadores},
+      {Codigo:'NYL190',Qtde:params.fixadores},
+      {Codigo:'PARFIAPF04850N',Qtde:params.fixadores},
+      {Codigo:'PARFIAPP04216N',Qtde:params.fixadores},
+      {Codigo:'REBACA4X10',Qtde:params.rebaca},
+      {Codigo:'REBCCC-5/32X1/2',Qtde:params.rebccc},
+    ],
+  }
+}
+
+export const FIXTURES_BAS3_SUPREMA_WVETRO: WVetroItemTecnico[] = [
+  bas3SupremaItem({largura:400,altura:400,fixadores:8,rebaca:16,rebccc:2}),
+  bas3SupremaItem({largura:600,altura:700,fixadores:10,rebaca:18,rebccc:2}),
+  bas3SupremaItem({largura:800,altura:400,fixadores:10,rebaca:20,rebccc:2}),
+  bas3SupremaItem({largura:950,altura:500,fixadores:10,rebaca:22,rebccc:2}),
+  bas3SupremaItem({largura:1019,altura:836,fixadores:14,rebaca:22,rebccc:2}),
+]
+
