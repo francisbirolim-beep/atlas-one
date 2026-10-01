@@ -44,6 +44,8 @@ type Mensagem = {
   tipo: string
   texto?: string | null
   media_url?: string | null
+  mime_type?: string | null
+  arquivo_nome?: string | null
   usuario_nome?: string | null
   created_at: string
 }
@@ -130,7 +132,14 @@ export default function WhatsAppAtendimentoPage() {
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
   const [novaRapidaTitulo, setNovaRapidaTitulo] = useState('')
   const [novaRapidaTexto, setNovaRapidaTexto] = useState('')
+  const [enviandoMidia, setEnviandoMidia] = useState(false)
+  const [gravando, setGravando] = useState(false)
+  const [segundosGravacao, setSegundosGravacao] = useState(0)
   const fimRef = useRef<HTMLDivElement | null>(null)
+  const arquivoInputRef = useRef<HTMLInputElement | null>(null)
+  const gravadorRef = useRef<MediaRecorder | null>(null)
+  const partesAudioRef = useRef<Blob[]>([])
+  const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function carregarConversas(selecionar = true) {
     try {
@@ -308,6 +317,128 @@ export default function WhatsAppAtendimentoPage() {
     }
     await carregarApoio(ativa.id)
     return true
+  }
+
+  function mimeDoArquivo(file: File) {
+    const informado = String(file.type || '').split(';')[0].toLowerCase()
+    if (informado) return informado
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const mapa: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic',
+      mp4: 'video/mp4', mov: 'video/quicktime',
+      webm: 'audio/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', opus: 'audio/opus', aac: 'audio/aac',
+      pdf: 'application/pdf', txt: 'text/plain', doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xls: 'application/vnd.ms-excel',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }
+    return ext ? (mapa[ext] || 'application/octet-stream') : 'application/octet-stream'
+  }
+
+  async function enviarArquivo(file: File, opcoes: { ptt?: boolean } = {}) {
+    if (!ativa || enviandoMidia) return
+    setErro('')
+    setEnviandoMidia(true)
+    try {
+      if (!file.size) throw new Error('Arquivo vazio.')
+      if (file.size > 50 * 1024 * 1024) throw new Error('O arquivo excede o limite de 50 MB.')
+
+      const mimeType = mimeDoArquivo(file)
+      const headers = await headersJson()
+      const preparar = await fetch('/api/integracoes/whatsapp/midia', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'preparar',
+          conversaId: ativa.id,
+          nome: file.name,
+          mimeType,
+          tamanho: file.size,
+        }),
+      })
+      const prep = await preparar.json()
+      if (!preparar.ok) throw new Error(prep.error || 'Não foi possível preparar o arquivo.')
+
+      const { error: uploadError } = await supabase.storage
+        .from('whatsapp-midia')
+        .uploadToSignedUrl(prep.path, prep.token, file, {
+          contentType: mimeType,
+          upsert: false,
+        })
+      if (uploadError) throw new Error(uploadError.message)
+
+      const registrar = await fetch('/api/integracoes/whatsapp/midia', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'enviar',
+          conversaId: ativa.id,
+          mediaPath: prep.path,
+          mimeType,
+          fileName: file.name,
+          tamanho: file.size,
+          ptt: opcoes.ptt === true,
+        }),
+      })
+      const envio = await registrar.json()
+      if (!registrar.ok) throw new Error(envio.error || 'Não foi possível enfileirar a mídia.')
+
+      await carregarMensagens(ativa.id)
+      await carregarConversas(false)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.')
+    } finally {
+      setEnviandoMidia(false)
+      if (arquivoInputRef.current) arquivoInputRef.current.value = ''
+    }
+  }
+
+  async function alternarAudio() {
+    if (gravando) {
+      gravadorRef.current?.stop()
+      return
+    }
+
+    try {
+      setErro('')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      partesAudioRef.current = []
+      const preferido = typeof MediaRecorder !== 'undefined' &&
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : ''
+      const gravador = preferido
+        ? new MediaRecorder(stream, { mimeType: preferido })
+        : new MediaRecorder(stream)
+      gravadorRef.current = gravador
+
+      gravador.ondataavailable = evento => {
+        if (evento.data.size) partesAudioRef.current.push(evento.data)
+      }
+      gravador.onstop = () => {
+        stream.getTracks().forEach(track => track.stop())
+        if (timerGravacaoRef.current) clearInterval(timerGravacaoRef.current)
+        timerGravacaoRef.current = null
+        setGravando(false)
+        setSegundosGravacao(0)
+
+        const blob = new Blob(partesAudioRef.current, { type: 'audio/webm' })
+        if (blob.size) {
+          const arquivo = new File([blob], `audio-${Date.now()}.webm`, { type: 'audio/webm' })
+          void enviarArquivo(arquivo, { ptt: true })
+        }
+      }
+
+      gravador.start(250)
+      setGravando(true)
+      setSegundosGravacao(0)
+      timerGravacaoRef.current = setInterval(() => {
+        setSegundosGravacao(valor => valor + 1)
+      }, 1000)
+    } catch {
+      setErro('Não foi possível acessar o microfone. Autorize o microfone para este site e tente novamente.')
+      setGravando(false)
+    }
   }
 
   async function enviar() {
@@ -528,12 +659,68 @@ export default function WhatsAppAtendimentoPage() {
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
                 {mensagens.map(m => {
                   const saida = m.direcao === 'saida'
+                  const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
+                  const midia = Boolean(m.media_url)
+                  const legendaGenerica =
+                    (m.tipo === 'audio' && texto === '🎤 Áudio') ||
+                    (m.tipo === 'imagem' && (texto === '📷 Imagem' || texto === '🖼️ Figurinha')) ||
+                    (m.tipo === 'video' && texto === '🎥 Vídeo') ||
+                    (m.tipo === 'documento' && texto === '📎 Documento')
                   return (
                     <div key={m.id} className={`flex ${saida?'justify-end':'justify-start'}`}>
                       <div className={`max-w-[82%] rounded-xl px-3 py-2 shadow-sm ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
                         {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome}</p>}
-                        {m.texto && <p className="whitespace-pre-wrap break-words text-sm text-slate-900">{m.texto}</p>}
-                        {!m.texto && <p className="text-sm text-slate-500">[{m.tipo}]</p>}
+
+                        {m.tipo === 'audio' && midia && (
+                          <audio controls preload="metadata" src={m.media_url || undefined} className="max-w-full"/>
+                        )}
+                        {m.tipo === 'audio' && !midia && (
+                          <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                            🎤 Áudio indisponível — recebido antes da captura de mídia ser ativada.
+                          </div>
+                        )}
+
+                        {m.tipo === 'imagem' && midia && (
+                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer">
+                            <img src={m.media_url || undefined} alt={m.arquivo_nome || 'Imagem do WhatsApp'}
+                              className="max-h-80 max-w-full rounded-lg object-contain"/>
+                          </a>
+                        )}
+                        {m.tipo === 'imagem' && !midia && texto && (
+                          <p className="text-sm text-slate-700">{texto}</p>
+                        )}
+
+                        {m.tipo === 'video' && midia && (
+                          <video controls preload="metadata" src={m.media_url || undefined}
+                            className="max-h-80 max-w-full rounded-lg"/>
+                        )}
+                        {m.tipo === 'video' && !midia && (
+                          <p className="text-sm text-slate-500">🎥 Vídeo indisponível nesta mensagem antiga.</p>
+                        )}
+
+                        {m.tipo === 'documento' && midia && (
+                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-white">
+                            <Paperclip size={16}/>
+                            <span className="min-w-0 truncate">{m.arquivo_nome || texto || 'Abrir documento'}</span>
+                            <ExternalLink size={13} className="ml-auto shrink-0"/>
+                          </a>
+                        )}
+                        {m.tipo === 'documento' && !midia && (
+                          <p className="text-sm text-slate-500">{texto || '📎 Documento indisponível nesta mensagem antiga.'}</p>
+                        )}
+
+                        {m.tipo === 'reacao' && (
+                          <p className="text-xs italic text-slate-500">{texto || 'Reação no WhatsApp'}</p>
+                        )}
+
+                        {!['audio','imagem','video','documento','reacao'].includes(m.tipo) && texto && (
+                          <p className="whitespace-pre-wrap break-words text-sm text-slate-900">{texto}</p>
+                        )}
+                        {midia && texto && !legendaGenerica && ['imagem','video'].includes(m.tipo) && (
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-900">{texto}</p>
+                        )}
+                        {!texto && !midia && <p className="text-sm text-slate-500">[{m.tipo}]</p>}
                         <p className="mt-1 text-right text-[10px] text-slate-400">{hora(m.created_at)}</p>
                       </div>
                     </div>
@@ -554,7 +741,15 @@ export default function WhatsAppAtendimentoPage() {
                 ) : (
                   <div>
                     <div className="mb-2 flex items-center gap-1 text-slate-500">
-                      <button disabled className="rounded-lg p-2 opacity-40" title="Anexos e mídia entram na próxima etapa">
+                      <input ref={arquivoInputRef} type="file" className="hidden"
+                        accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx"
+                        onChange={e=>{
+                          const file=e.target.files?.[0]
+                          if(file) void enviarArquivo(file)
+                        }}/>
+                      <button disabled={enviandoMidia||!canalPronto}
+                        onClick={()=>arquivoInputRef.current?.click()}
+                        className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-40" title="Enviar foto, vídeo, áudio ou documento">
                         <Paperclip size={18}/>
                       </button>
                       <button onClick={()=>setApoioAberto(apoioAberto==='etiquetas'?null:'etiquetas')}
@@ -643,6 +838,12 @@ export default function WhatsAppAtendimentoPage() {
                         )}
                       </div>
                     )}
+                    {gravando && (
+                      <div className="mb-2 flex items-center justify-between rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                        <span>● Gravando áudio · {Math.floor(segundosGravacao/60)}:{String(segundosGravacao%60).padStart(2,'0')}</span>
+                        <span>Clique no microfone para enviar</span>
+                      </div>
+                    )}
                     <div className="flex items-end gap-2">
                       <textarea value={texto} onChange={e=>setTexto(e.target.value)}
                         onKeyDown={e=>{
@@ -650,10 +851,13 @@ export default function WhatsAppAtendimentoPage() {
                         }}
                         rows={1} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
                         className="min-h-11 flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
-                      <button disabled className="grid h-11 w-11 shrink-0 place-items-center rounded-full border bg-white text-slate-400 opacity-50" title="Áudio entra na próxima etapa">
+                      <button disabled={enviandoMidia||!canalPronto}
+                        onClick={()=>void alternarAudio()}
+                        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border disabled:opacity-40 ${gravando?'bg-red-600 text-white':'bg-white text-slate-500 hover:bg-slate-50'}`}
+                        title={gravando?'Parar e enviar áudio':'Gravar áudio'}>
                         <Mic size={18}/>
                       </button>
-                      <button disabled={!texto.trim()||enviando||!canalPronto}
+                      <button disabled={!texto.trim()||enviando||enviandoMidia||gravando||!canalPronto}
                         onClick={()=>void enviar()}
                         className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white disabled:opacity-40">
                         <Send size={18}/>
