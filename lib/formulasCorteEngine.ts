@@ -28,6 +28,7 @@ export type PecaFormula = {
   mapa_codigo?: Record<string, string>
   formula_por_variavel?: Record<string, string>
   quantidade?: number
+  formula_quantidade?: string
   eixo?: 'L' | 'H'
   composicao_desconto?: string
 }
@@ -286,14 +287,26 @@ function formulaComCondicoes(peca: PecaFormula, opcoes: OpcoesEscolhidas): strin
   return resolverFormulaCondicional(peca.formula, peca.condicoes, opcoes)
 }
 
+function quantidadeResolvida(peca: PecaFormula, contexto: Record<string, number>): number | undefined {
+  if (!String(peca.formula_quantidade || '').trim()) return peca.quantidade
+  const valor = avaliarFormula(String(peca.formula_quantidade), contexto)
+  if (valor <= 0) {
+    throw new FormulaCorteError(
+      `Quantidade calculada invalida (${valor}) para "${peca.codigo || peca.grupo || 'sem-identificador'}"`
+    )
+  }
+  return valor
+}
+
 function enriquecerResultado(
   peca: PecaFormula,
-  resultado: Omit<ResultadoPeca, 'quantidade' | 'composicao_desconto'>
+  resultado: Omit<ResultadoPeca, 'quantidade' | 'composicao_desconto'>,
+  contexto: Record<string, number>,
 ): ResultadoPeca {
   return {
     ...resultado,
     grupo: peca.grupo,
-    quantidade: peca.quantidade,
+    quantidade: quantidadeResolvida(peca, contexto),
     composicao_desconto: peca.composicao_desconto,
   }
 }
@@ -316,7 +329,7 @@ function tentarResolverPeca(
         descricao: peca.descricao,
         tamanho,
         eixo: peca.eixo,
-      })]
+      }, contexto)]
     }
 
     if (peca.codigo && (peca.formula_L || peca.formula_H)) {
@@ -327,7 +340,7 @@ function tentarResolverPeca(
           descricao: peca.descricao,
           tamanho: avaliarFormula(peca.formula_L, contexto),
           eixo: 'L',
-        }))
+        }, contexto))
       }
       if (peca.formula_H) {
         resultados.push(enriquecerResultado(peca, {
@@ -335,7 +348,7 @@ function tentarResolverPeca(
           descricao: peca.descricao,
           tamanho: avaliarFormula(peca.formula_H, contexto),
           eixo: 'H',
-        }))
+        }, contexto))
       }
       return resultados
     }
@@ -359,7 +372,7 @@ function tentarResolverPeca(
         descricao: peca.descricao,
         tamanho,
         eixo: peca.eixo,
-      })]
+      }, contexto)]
     }
 
     if (peca.grupo && peca.formula_por_variavel) {
@@ -377,7 +390,7 @@ function tentarResolverPeca(
         descricao: peca.descricao,
         tamanho,
         eixo: peca.eixo,
-      })]
+      }, contexto)]
     }
 
     throw new FormulaCorteError(
