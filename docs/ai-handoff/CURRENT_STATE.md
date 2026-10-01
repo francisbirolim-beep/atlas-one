@@ -603,3 +603,6 @@ Branch: `feat/wvetro-pc2-suprema-dominante`. PR #556 permanece draft; não fazer
 - CI executa `test:wvetro-comparador` antes do build.
 - Em 01/10/2026, regressão local aprovada, build Next.js completo (112 rotas) aprovado e `release:check` retornou `PREFLIGHT_OK`.
 - Regra de saída: somente receitas historicamente comprovadas podem ficar utilizáveis; qualquer assinatura especial/desconhecida permanece bloqueada até homologação técnica.
+
+- Validação final de evidência PC1/PC4: foram encontrados 174 itens históricos materializados dessas duas tipologias, porém 0 contêm arrays de perfis, 0 arrays de acessórios e 0 arrays de vidros por ocorrência. Por isso PC1 e PC4 não podem ser promovidas a receita homologada a partir dessa tabela; permanecem bloqueadas até existir payload técnico individual suficiente.
+- CI remoto do commit final do PR #556 concluído com sucesso: regressão W.Vetro + build Next.js aprovados.
