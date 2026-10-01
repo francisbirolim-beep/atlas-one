@@ -1,3 +1,17 @@
+## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
+
+- Workspace persistente criado no Mac: `~/Atlas-One-Dev`.
+- Desenvolvimento pode ser testado em `http://localhost:3000` e, na mesma rede, pelo IP do Mac na porta 3000.
+- `npm run typecheck`, `npm run validate` e `npm run release:check` configurados.
+- Gates de release impedem producao fora da `main`, com working tree suja ou diferente de `origin/main`.
+- Integracao GitHub -> Vercel desconectada deliberadamente: commits, branches e PRs nao devem gerar deployments.
+- `vercel.json` tambem mantem `git.deploymentEnabled=false` como defesa adicional.
+- Preview e producao agora sao manuais: `npm run vercel:preview` / `npm run vercel:prod`.
+- Producao existente permaneceu ativa e respondeu HTTP 200 depois da desconexao do Git.
+- Variaveis Production/Preview permaneceram cadastradas na Vercel.
+- Preflight de producao da `main` validado com TypeScript + build completo e 111 paginas geradas.
+- Objetivo operacional: acumular mudancas, testar localmente e gastar Vercel apenas em candidatos reais de release.
+
 ## 2026-09-30 — Maiúsculas globais sem perder o onChange (PR #490)
 
 - `components/system/UppercaseInputProvider.tsx` passou a gravar o texto em maiúsculas pelo setter nativo do protótipo (`HTMLInputElement.prototype` / `HTMLTextAreaElement.prototype`), em vez de `alvo.value = ...`.
