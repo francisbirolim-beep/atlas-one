@@ -998,8 +998,7 @@ export const FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO: WVetroItemTecnico[] = [
 
 export const FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
   tipologia_id: '37a87c58-2bd6-49d0-bfa2-61e3a4d7d051',
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]  configuracao_label: 'PG1-SUPREMA · Vidro · arremate interno · kit unitário · referência histórica dominante',
+  configuracao_label: 'PG1-SUPREMA · Vidro · arremate interno · kit unitário · referência histórica dominante',
   variaveis: [],
   pecas: [
     { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate interno horizontal', quantidade:1 },
@@ -1717,5 +1716,3 @@ export const FIXTURES_PTA3_SUPREMA_FAMILIA_B_WVETRO: WVetroItemTecnico[] = [
   pta3SupremaFamiliaBItem(800,800),
   pta3SupremaFamiliaBItem(733,1654),
 ]
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
