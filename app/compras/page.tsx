@@ -111,12 +111,43 @@ type UltimoPreco = {
   fornecedorNome: string | null;
   data: string | null;
 };
+type HistoricoWVetroSuprimento = {
+  id: string;
+  tipo_registro: "movimento_estoque" | "nota_entrada";
+  chave_externa: string;
+  data_referencia: string | null;
+  data_lancamento: string | null;
+  documento: string | null;
+  pessoa_nome: string | null;
+  produto_id_wvetro: string | null;
+  produto_codigo: string | null;
+  produto_descricao: string | null;
+  produto_tipo: string | null;
+  cor_nome: string | null;
+  local_estoque: string | null;
+  movimento_tipo: string | null;
+  quantidade: number | null;
+  valor_unitario: number | null;
+  valor_total: number | null;
+  nota_id_wvetro: string | null;
+  nota_numero: string | null;
+  nota_serie: string | null;
+  fornecedor_id_wvetro: string | null;
+  fornecedor_nome: string | null;
+  data_emissao: string | null;
+  data_entrada: string | null;
+  valor_contabil: number | null;
+  valor_produto: number | null;
+  valor_frete: number | null;
+  finalizada: boolean | null;
+};
 type Dados = {
   necessidades: Necessidade[];
   cotacoes: Cotacao[];
   produtos: Produto[];
   fornecedores: Fornecedor[];
   ultimoPrecoPorProduto: Record<string, UltimoPreco>;
+  historicoWVetroSuprimentos: HistoricoWVetroSuprimento[];
   clientes: Cliente[];
   obras: Obra[];
 };
@@ -255,7 +286,8 @@ export default function ComprasPage() {
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
     [formCotacao, setFormCotacao] = useState(cotacaoVazia),
     [fornecedoresConvite, setFornecedoresConvite] = useState<string[]>([]),
-    [convidando, setConvidando] = useState(false);
+    [convidando, setConvidando] = useState(false),
+    [historicoWVetroAberto, setHistoricoWVetroAberto] = useState(false);
   const searchParams = useSearchParams();
   useEffect(() => {
     void carregar();
@@ -653,6 +685,133 @@ export default function ComprasPage() {
             label="Contas a pagar"
           />
         </section>
+        {(dados?.historicoWVetroSuprimentos?.length || 0) > 0 && (
+          <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-indigo-50 p-2 text-indigo-700">
+                  <FileClock size={20} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-semibold text-slate-900">
+                      Histórico de suprimentos W.Vetro
+                    </h2>
+                    <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-700">
+                      somente leitura
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Referência histórica. Não movimenta estoque, não cria contas,
+                    não altera custo de produto e não cadastra fornecedor automaticamente.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+                  {(dados?.historicoWVetroSuprimentos || []).filter((h) => h.tipo_registro === "nota_entrada").length} nota(s)
+                </span>
+                <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+                  {(dados?.historicoWVetroSuprimentos || []).filter((h) => h.tipo_registro === "movimento_estoque").length} movimento(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHistoricoWVetroAberto((v) => !v)}
+                  className="rounded-xl border border-indigo-200 px-4 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                >
+                  {historicoWVetroAberto ? "Ocultar histórico" : "Ver histórico"}
+                </button>
+              </div>
+            </div>
+
+            {historicoWVetroAberto && (
+              <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[1050px] text-sm">
+                  <thead className="bg-slate-100 text-left text-xs text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2">Data</th>
+                      <th className="px-3 py-2">Tipo</th>
+                      <th className="px-3 py-2">Documento / referência</th>
+                      <th className="px-3 py-2">Fornecedor / pessoa</th>
+                      <th className="px-3 py-2">Produto</th>
+                      <th className="px-3 py-2 text-right">Qtd.</th>
+                      <th className="px-3 py-2 text-right">Valor histórico</th>
+                      <th className="px-3 py-2">Local / movimento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(dados?.historicoWVetroSuprimentos || []).map((h) => {
+                      const nota = h.tipo_registro === "nota_entrada";
+                      const data =
+                        h.data_entrada ||
+                        h.data_emissao ||
+                        h.data_lancamento ||
+                        h.data_referencia;
+                      const valor =
+                        h.valor_total ??
+                        h.valor_contabil ??
+                        h.valor_produto ??
+                        null;
+                      return (
+                        <tr key={h.id} className="border-t align-top">
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            {dataBr(data)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase ${
+                                nota
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {nota ? "Nota de entrada" : "Movimento de estoque"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="font-medium text-slate-800">
+                              {nota
+                                ? `NF ${h.nota_numero || h.documento || "—"}${h.nota_serie ? ` · Série ${h.nota_serie}` : ""}`
+                                : h.documento || h.chave_externa}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                              {h.chave_externa}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            {h.fornecedor_nome || h.pessoa_nome || "—"}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="font-medium text-slate-800">
+                              {h.produto_descricao || "—"}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {[h.produto_codigo, h.produto_tipo, h.cor_nome]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            {h.quantidade ?? "—"}
+                          </td>
+                          <td className="px-3 py-3 text-right font-semibold">
+                            {moeda(valor)}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-600">
+                            {[h.local_estoque, h.movimento_tipo]
+                              .filter(Boolean)
+                              .join(" · ") || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row">
             <BuscaAtlasInput
