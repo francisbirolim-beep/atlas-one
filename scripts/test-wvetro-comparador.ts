@@ -94,6 +94,12 @@ if (ehPc2SupremaDominante(pc2VenezianaFalsa)) {
   throw new Error('Regressão PC2 dominante: variante veneziana não pode cair na assinatura de vidro padrão.')
 }
 
+for (const [item, familia] of variantesPc2) {
+  if (ehPc2SupremaDominante(item)) {
+    throw new Error(`Regressão PC2 dominante: variante especial ${familia} não pode cair na assinatura de vidro padrão.`)
+  }
+}
+
 const pc4Base = {
   ...FIXTURE_PC2_SUPREMA_WVETRO,
   Modelo:'PORTA DE CORRER 04 FOLHAS',
