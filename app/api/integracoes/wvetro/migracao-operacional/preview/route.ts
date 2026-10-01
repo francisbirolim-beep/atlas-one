@@ -472,6 +472,16 @@ export async function GET(req: NextRequest) {
           classificacao = 'resolvida_por_lote'
           explicacao = 'O projeto de produção não foi localizado, mas a instalação está vinculada a um lote confirmado.'
           requerAtencao = false
+        } else if (
+          item.destinoRecurso === 'orcamentos' &&
+          item.referencia &&
+          ['titulos', 'lotes_producao', 'producao_projeto', 'instalacoes'].includes(item.origemRecurso) &&
+          ['documental', 'declarada_payload'].includes(item.confianca)
+        ) {
+          classificacao = 'referencia_historica_sem_snapshot'
+          explicacao =
+            'A origem histórica declara o número do orçamento, mas o snapshot desse orçamento não está no staging. A referência é preservada somente como histórico e não autoriza vínculo operacional automático.'
+          requerAtencao = false
         }
 
         return { ...item, classificacao, explicacao, requerAtencao }
