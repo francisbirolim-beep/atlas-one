@@ -327,7 +327,7 @@ async function carregarFormula(item: WVetroItemTecnico, formulaId?: string) {
   }
 
   const familiaPc4 = classificarFamiliaPc4Suprema(item)
-  if (familiaPc4 !== 'outra') {
+  if (familiaPc4 !== 'outra' && !formulasReferenciaLocal(item).length) {
     throw new Error(`Variante PC4 Suprema ainda não validada tecnicamente: familia=${familiaPc4}.`)
   }
 
