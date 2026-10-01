@@ -88,10 +88,11 @@ export default function ComparadorTecnicoWVetroPage() {
     usuarioAtual().then(u => setMaster(u?.role === 'master')).catch(() => setMaster(false))
   }, [])
 
-  async function executar(modo: 'fixture'|'historico', override?: { itemId?:string; formulaId?:string; opcoes?:Record<string,string>; resetOpcoes?:boolean }) {
+  async function executar(modo: 'fixture'|'historico', override?: { itemId?:string; formulaId?:string; opcoes?:Record<string,string>; resetOpcoes?:boolean; fixture?:'pc2'|'pc3' }) {
     setCarregando(true); setErro('')
     try {
       const p = new URLSearchParams({ modo })
+      if (modo === 'fixture') p.set('fixture', override?.fixture || 'pc2')
       if (modo === 'historico') {
         if (!numero.trim()) throw new Error('Informe o número do orçamento/pedido W.Vetro.')
         p.set('numero', numero.trim())
@@ -139,9 +140,14 @@ export default function ComparadorTecnicoWVetroPage() {
               <h1 className="text-2xl font-bold text-slate-900">Comparador técnico W.Vetro × Motor Atlas</h1>
               <p className="mt-1 text-sm text-slate-600">Compara perfil por perfil, vidro e acessórios. Não grava fórmula nem altera orçamento.</p>
             </div>
-            <button type="button" onClick={() => executar('fixture')} disabled={carregando} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {carregando ? <Loader2 size={16} className="animate-spin"/> : <Beaker size={16}/>} Testar amostra PC2
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => executar('fixture',{fixture:'pc2'})} disabled={carregando} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {carregando ? <Loader2 size={16} className="animate-spin"/> : <Beaker size={16}/>} Testar PC2
+              </button>
+              <button type="button" onClick={() => executar('fixture',{fixture:'pc3'})} disabled={carregando} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {carregando ? <Loader2 size={16} className="animate-spin"/> : <Beaker size={16}/>} Testar PC3
+              </button>
+            </div>
           </div>
         </div>
 
