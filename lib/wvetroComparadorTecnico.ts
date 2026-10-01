@@ -220,7 +220,9 @@ export function extrairVariantesPortinholaSuprema(item: WVetroItemTecnico): Vari
     texto.includes('COM CONTRAMARCO') ? 'com' :
     'nao_informado'
   const arremate: VariantesPortinholaSuprema['arremate'] =
-    texto.includes('SEM ARREMATE') ? 'sem' :
+    texto.includes('SEM ARREMATE') ||
+    texto.includes('SEM CONTRAMARCO E ARREMATE') ||
+    texto.includes('SEM CONTRAMARCO E NEM ARREMATE') ? 'sem' :
     texto.includes('COM ARREMATE') ? 'com' :
     'nao_informado'
   const fechamento: VariantesPortinholaSuprema['fechamento'] =
