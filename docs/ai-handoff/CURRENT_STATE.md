@@ -589,3 +589,17 @@ Branch: `fix/wvetro-seguranca-main-atual`
 - rotas protegidas: preview, comparador técnico, migração operacional (captura e preview), auditoria, base técnica, linhas, tipologias, detalhe de tipologia, custos, imagens pendentes e reprocessamento;
 - nenhuma regra de parser, fórmula, custo, migração ou composição foi alterada;
 - validação local aprovada com TypeScript, build completo de 112 páginas e `release:check`.
+
+
+## 2026-10-01 — Homologação técnica W.Vetro (PR #556)
+
+Branch: `feat/wvetro-pc2-suprema-dominante`. PR #556 permanece draft; não fazer merge/deploy nesta etapa.
+
+- PC2 Suprema vidro padrão dominante possui assinatura histórica estrita, referência local validada e regressão sem divergência/pendência.
+- Variantes PC2 integrada/persiana, veneziana, lambri, bandeira, abertura central e mista vidro/veneziana são classificadas separadamente e não podem cair na receita dominante.
+- PC4 Suprema é classificada por famílias; fórmulas ainda não comprovadas continuam bloqueadas em falha segura.
+- PC1/Portinhola sem receita comprovada continuam sem fallback automático.
+- Comparador ganhou Matriz Histórica de Composições, cobertura por assinatura e abertura de amostra real.
+- CI executa `test:wvetro-comparador` antes do build.
+- Em 01/10/2026, regressão local aprovada, build Next.js completo (112 rotas) aprovado e `release:check` retornou `PREFLIGHT_OK`.
+- Regra de saída: somente receitas historicamente comprovadas podem ficar utilizáveis; qualquer assinatura especial/desconhecida permanece bloqueada até homologação técnica.
