@@ -62,6 +62,32 @@ function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
   return a.length === e.length && a.every((codigo, index) => codigo === e[index])
 }
 
+export type FamiliaPc4Suprema =
+  | 'quatro_planos'
+  | 'sequencial'
+  | 'abertura_central'
+  | 'fixas_moveis'
+  | 'veneziana_mista'
+  | 'outra'
+
+export function classificarFamiliaPc4Suprema(item: WVetroItemTecnico): FamiliaPc4Suprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 04 FOLHAS')) return 'outra'
+  if (nome.includes('VENEZIANA') || nome.includes('LAMBRI') || nome.includes('TELA') || codigo.includes('PC4-03') || codigo.includes('PC4-09')) return 'veneziana_mista'
+  if (nome.includes('ABERTURA CENTRAL')) return 'abertura_central'
+  if (nome.includes('FIXA') || codigo.includes('PC4-01')) return 'fixas_moveis'
+  if (nome.includes('SEQUENC')) return 'sequencial'
+  if (nome.includes('04 PLANOS') || nome.includes('4 PLANOS') || codigo.includes('PC4-02')) return 'quatro_planos'
+  return 'outra'
+}
+
 export type FamiliaPc2Suprema =
   | 'vidro_padrao'
   | 'integrada_persiana'
