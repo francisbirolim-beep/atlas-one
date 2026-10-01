@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   buscarProdutoWVetro,
@@ -11,24 +12,6 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-async function autenticarMaster(req: NextRequest) {
-  const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !data?.user) return null
-
-  const { data: usuario } = await supabaseAdmin
-    .from('usuarios')
-    .select('id, nome, role')
-    .eq('id', data.user.id)
-    .maybeSingle()
-
-  if (!usuario || usuario.role !== 'master') return null
-  return usuario
-}
 
 function dataIsoValida(valor: string | null): valor is string {
   if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false
@@ -557,7 +540,7 @@ async function reconciliarComAtlas(
 }
 
 export async function GET(req: NextRequest) {
-  const usuario = await autenticarMaster(req)
+  const usuario = await autenticarMasterWVetro(req)
   if (!usuario) {
     return NextResponse.json({ error: 'Acesso restrito a usuário master.' }, { status: 401 })
   }
