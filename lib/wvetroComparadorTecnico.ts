@@ -288,12 +288,25 @@ function compararPerfis(
         ? 'medida_diferente'
         : 'igual'
 
+    const nominal = String(a.eixo || w.eixo || '').toUpperCase() === 'H' ? altura : largura
+    const codigoNormalizado = normalizarCodigo(a.codigo || w.codigo)
+    const possivelMedidaComercialWVetro =
+      status === 'medida_diferente' &&
+      wMedida != null &&
+      aMedida != null &&
+      ['SU001', 'TMC'].includes(codigoNormalizado) &&
+      wMedida > nominal + 100 &&
+      aMedida <= nominal + 50
+
     linhas.push({
       tipo: 'perfil', codigo: a.codigo, eixo: a.eixo || null, descricao: a.descricao || w.descricao,
       status,
       wvetro: { quantidade: w.quantidade, medida_mm: wMedida },
       atlas: { quantidade: a.quantidade, medida_mm: aMedida },
       diferenca_mm: wMedida != null && aMedida != null ? Number((aMedida - wMedida).toFixed(3)) : null,
+      observacao: possivelMedidaComercialWVetro
+        ? 'A medida W.Vetro excede a dimensão nominal do vão e destoa das demais amostras desta tipologia. Tratar como possível sobra/aproveitamento/cobrança até validar; não usar automaticamente como fórmula de corte.'
+        : null,
     })
   }
 
