@@ -1325,6 +1325,152 @@ export async function GET(req: NextRequest) {
         `
         resumoNeon = rows[0] || null
 
+        const [materializacaoFonte] = await sql`
+          with
+          orc as (
+            select
+              payload->>'Nro' as nro,
+              payload->>'Situacao' as situacao,
+              regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+              upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+              coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+              jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+              coalesce(payload->>'DtVenda','') as dt_venda
+            from wvetro_migracao.raw_canonico
+            where recurso='orcamentos'
+          ),
+          ped as (
+            select
+              payload->>'Nro' as nro,
+              regexp_replace(coalesce(payload->>'ClienteCNPJ',''),'\\D','','g') as doc,
+              upper(regexp_replace(trim(coalesce(payload->>'ClienteNome','')),'\\s+',' ','g')) as nome,
+              coalesce(nullif(payload->>'Total',''),nullif(payload->>'ValorBruto',''),'0')::numeric as total,
+              jsonb_array_length(coalesce(payload->'Itens','[]'::jsonb)) as itens,
+              coalesce(payload->>'DtVenda','') as dt_venda
+            from wvetro_migracao.raw_canonico
+            where recurso='pedidos'
+          ),
+          tit as (
+            select payload->>'TituloId' as id
+            from wvetro_migracao.raw_canonico
+            where recurso='titulos'
+          ),
+          baix as (
+            select payload->>'TituloId' as id
+            from wvetro_migracao.raw_canonico
+            where recurso='titulos_baixados'
+          )
+          select
+            (select count(*)::int from orc where situacao='O') as comercial_orcamentos_abertos,
+            (select count(*)::int from orc where situacao in ('V','F')) as comercial_orcamentos_venda,
+            (select count(*)::int from ped) as comercial_pedidos,
+            (
+              select count(*)::int
+              from orc o
+              join ped p using(nro)
+              where o.nome=p.nome
+                and abs(o.total-p.total)<0.01
+                and o.itens=p.itens
+                and o.dt_venda=p.dt_venda
+                and (
+                  (o.doc<>'' and p.doc<>'' and o.doc=p.doc)
+                  or (o.doc='' and p.doc='')
+                )
+            ) as comercial_duplicacoes_pedido_orcamento,
+            (select count(*)::int from tit) as financeiro_titulos,
+            (
+              select count(*)::int
+              from baix b
+              left join tit t using(id)
+              where t.id is null
+            ) as financeiro_baixas_exclusivas,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='lotes_producao') as operacional_lotes,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='instalacoes') as operacional_instalacoes,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='notas_entrada') as suprimentos_notas,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='itens_nf') as suprimentos_itens,
+            (select count(*)::int from wvetro_migracao.raw_canonico where recurso='estoque_movimentos') as suprimentos_movimentos
+        `
+
+        if (
+          historicoAtlas &&
+          typeof historicoAtlas === 'object' &&
+          !('erro' in (historicoAtlas as any))
+        ) {
+          const fonte = materializacaoFonte as any
+          const esperadoComercial =
+            Number(fonte?.comercial_orcamentos_abertos || 0) +
+            Math.max(
+              0,
+              Number(fonte?.comercial_orcamentos_venda || 0) -
+                Number(fonte?.comercial_duplicacoes_pedido_orcamento || 0),
+            ) +
+            Number(fonte?.comercial_pedidos || 0)
+          const esperadoFinanceiro =
+            Number(fonte?.financeiro_titulos || 0) +
+            Number(fonte?.financeiro_baixas_exclusivas || 0)
+          const esperadoOperacional =
+            Number(fonte?.operacional_lotes || 0) +
+            Number(fonte?.operacional_instalacoes || 0)
+          const esperadoSuprimentos =
+            Number(fonte?.suprimentos_notas || 0) +
+            Number(fonte?.suprimentos_itens || 0) +
+            Number(fonte?.suprimentos_movimentos || 0)
+
+          const materializado = (historicoAtlas as any).camadas || {}
+          const bloco = (
+            esperado: number,
+            atual: number,
+            deduplicados = 0,
+          ) => ({
+            fonteEsperada: esperado,
+            materializados: atual,
+            deduplicados,
+            diferenca: atual - esperado,
+            completo: atual === esperado,
+          })
+
+          const reconciliacaoMaterializacao = {
+            comercial: bloco(
+              esperadoComercial,
+              Number(materializado.comercial?.total || 0),
+              Number(fonte?.comercial_duplicacoes_pedido_orcamento || 0),
+            ),
+            financeiro: bloco(
+              esperadoFinanceiro,
+              Number(materializado.financeiro?.total || 0),
+              Math.max(
+                0,
+                Number(fonte?.financeiro_titulos || 0) +
+                  Number(
+                    (
+                      await sql`
+                        select count(*)::int as qtd
+                        from wvetro_migracao.raw_canonico
+                        where recurso='titulos_baixados'
+                      `
+                    )[0]?.qtd || 0,
+                  ) -
+                  esperadoFinanceiro,
+              ),
+            ),
+            operacional: bloco(
+              esperadoOperacional,
+              Number(materializado.operacional?.total || 0),
+            ),
+            suprimentos: bloco(
+              esperadoSuprimentos,
+              Number(materializado.suprimentos?.total || 0),
+            ),
+          }
+
+          ;(historicoAtlas as any).reconciliacaoMaterializacao = {
+            ...reconciliacaoMaterializacao,
+            completo: Object.values(reconciliacaoMaterializacao).every(
+              (item: any) => item.completo,
+            ),
+          }
+        }
+
         const [projetosPorLote, lotesHistoricos] = await Promise.all([
           sql`
             select
