@@ -63,6 +63,7 @@ type NeonStagingResumo = {
   auditoria_encontradas?: number
   auditoria_ausentes?: number
   auditoria_pendencias_reais?: number
+  auditoria_referencias_pendentes_distintas?: number
   ultima_captura?: string | null
   erro?: string
 }
@@ -563,7 +564,7 @@ export default function MigracaoOperacionalWVetroPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-[11px] text-slate-500">Relações auditadas</div>
                     <div className="mt-1 text-xl font-bold text-slate-900">
@@ -586,6 +587,12 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="text-[11px] text-red-700">Pendências reais</div>
                     <div className="mt-1 text-xl font-bold text-red-800">
                       {neon.resumo.auditoria_pendencias_reais ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-3">
+                    <div className="text-[11px] text-orange-700">Referências distintas para revisar</div>
+                    <div className="mt-1 text-xl font-bold text-orange-800">
+                      {neon.resumo.auditoria_referencias_pendentes_distintas ?? 0}
                     </div>
                   </div>
                 </div>
