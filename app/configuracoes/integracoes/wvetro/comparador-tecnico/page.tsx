@@ -33,6 +33,7 @@ type Resposta = {
   variaveis?: Array<{ chave:string; label:string; opcoes:string[] }>
   opcoes?: Record<string,string>
   inferencias?: Array<{ chave:string; valor:string; origem:string; evidencia:string }>
+  alertasTecnicos?: Array<{ tipo:string; nivel:string; titulo:string; detalhe:string; dados?:Record<string,unknown> }>
   formulasDisponiveis?: Array<{ id:string; configuracao_label?:string|null; status?:string|null; ativo?:boolean|null }>
   itensDisponiveis?: Array<{ id:string; nome:string; modelo:string; linha:string; largura:number; altura:number }>
 }
@@ -185,6 +186,12 @@ export default function ComparadorTecnicoWVetroPage() {
         </section>
 
         {erro && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><div className="flex items-center gap-2"><AlertTriangle size={17}/><b>Não foi possível comparar</b></div><p className="mt-1">{erro}</p></div>}
+
+        {(dados?.alertasTecnicos?.length || 0) > 0 && <div className="space-y-2">
+          {dados?.alertasTecnicos?.map((a,i)=><div key={`${a.tipo}-${i}`} className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex items-start gap-2"><AlertTriangle size={18} className="mt-0.5 shrink-0"/><div><p className="font-bold">{a.titulo}</p><p className="mt-1 leading-relaxed">{a.detalhe}</p></div></div>
+          </div>)}
+        </div>}
 
         {dados && <section className="space-y-4">
           <div className={`rounded-2xl border p-4 ${dados.resultado.aprovado?'border-emerald-200 bg-emerald-50':'border-amber-200 bg-amber-50'}`}>
