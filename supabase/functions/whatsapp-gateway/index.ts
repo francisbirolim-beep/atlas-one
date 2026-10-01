@@ -39,11 +39,41 @@ function atlasMessageType(value: unknown) {
     localizacao: "localizacao",
     contact: "contato",
     contato: "contato",
+    reaction: "reacao",
+    reacao: "reacao",
     system: "sistema",
     sistema: "sistema",
   };
   return mapa[tipo] || "sistema";
 }
+const MEDIA_BUCKET = "whatsapp-midia";
+const MEDIA_MAX_BYTES = 50 * 1024 * 1024;
+const MIME_MEDIA = new Set([
+  "image/jpeg","image/png","image/webp","image/heic",
+  "video/mp4","video/quicktime",
+  "audio/webm","audio/mp4","audio/mpeg","audio/ogg","audio/opus","audio/aac",
+  "application/pdf","text/plain","application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+function mediaMime(value: unknown) {
+  return String(value || "application/octet-stream").split(";")[0].trim().toLowerCase();
+}
+function safeFileName(value: unknown) {
+  const raw = String(value || "arquivo").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  return raw.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 120) || "arquivo";
+}
+function validateMedia(mimeValue: unknown, sizeValue: unknown) {
+  const mime = mediaMime(mimeValue);
+  const size = Number(sizeValue || 0);
+  if (!Number.isFinite(size) || size <= 0) throw new Error("Arquivo de midia invalido.");
+  if (size > MEDIA_MAX_BYTES) throw new Error("Arquivo de midia excede 50 MB.");
+  if (!MIME_MEDIA.has(mime)) throw new Error("Tipo de arquivo nao permitido.");
+  return { mime, size };
+}
+
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -261,7 +291,26 @@ Deno.serve(async (req) => {
       }).eq("id", item.id).eq("status", "pendente");
       if (lockError) throw lockError;
 
-      return reply({ ok: true, item });
+      const payload = item.payload && typeof item.payload === "object"
+        ? { ...item.payload } as Record<string, unknown>
+        : {};
+      const mediaPath = typeof payload.mediaPath === "string" ? payload.mediaPath : "";
+      if (mediaPath) {
+        const { data: signed, error: signedError } = await db.storage
+          .from(MEDIA_BUCKET)
+          .createSignedUrl(mediaPath, 10 * 60);
+        if (signedError || !signed?.signedUrl) {
+          await db.from("atendimento_fila_saida").update({
+            status: "erro",
+            erro: signedError?.message || "Falha ao gerar URL temporaria da midia.",
+            updated_at: new Date().toISOString(),
+          }).eq("id", item.id);
+          throw signedError || new Error("Falha ao gerar URL temporaria da midia.");
+        }
+        payload.mediaUrl = signed.signedUrl;
+      }
+
+      return reply({ ok: true, item: { ...item, payload } });
     }
 
     if (req.method !== "POST") return reply({ error: "Metodo invalido." }, 405);
@@ -270,6 +319,28 @@ Deno.serve(async (req) => {
     const bodyChannelId = String(body?.channelId || "");
     const channel = await getChannel(config.empresa_id, bodyChannelId);
     if (!channel) return reply({ error: "Canal nao encontrado." }, 404);
+
+    if (type === "media_prepare") {
+      const { mime, size } = validateMedia(body.mimeType, body.size);
+      const name = safeFileName(body.fileName || `midia-${Date.now()}`);
+      const month = new Date().toISOString().slice(0, 7);
+      const reference = safeFileName(body.whatsappMessageId || channel.id);
+      const path = `${config.empresa_id}/entrada/${month}/${reference}/${crypto.randomUUID()}-${name}`;
+
+      const { data, error } = await db.storage
+        .from(MEDIA_BUCKET)
+        .createSignedUploadUrl(path);
+      if (error || !data?.token) throw error || new Error("Falha ao preparar upload da midia.");
+
+      return reply({
+        ok: true,
+        path,
+        token: data.token,
+        signedUrl: data.signedUrl,
+        mimeType: mime,
+        size,
+      });
+    }
 
     if (type === "state") {
       const now = new Date().toISOString();
@@ -345,12 +416,16 @@ Deno.serve(async (req) => {
         direcao: "entrada",
         tipo: atlasMessageType(body.messageType),
         texto: text,
+        media_url: body.mediaPath || null,
+        mime_type: body.mimeType ? mediaMime(body.mimeType) : null,
         whatsapp_message_id: body.whatsappMessageId || null,
         provider_timestamp: now,
         payload: {
           transporte: "qr_gateway",
           whatsapp_canal_id: channel.id,
           whatsapp_numero: channel.numero_declarado,
+          fileName: body.fileName || null,
+          mediaSize: Number(body.mediaSize || 0) || null,
           ...(body.payload || {}),
         },
       });
@@ -402,6 +477,15 @@ Deno.serve(async (req) => {
         updated_at: now,
       }).eq("id", queue.id);
       if (queueError) throw queueError;
+
+      if (success && queue.mensagem_id) {
+        await db.from("atendimento_mensagens").update({
+          whatsapp_message_id: body.whatsappMessageId || null,
+          provider_timestamp: now,
+        })
+          .eq("id", queue.mensagem_id)
+          .eq("empresa_id", config.empresa_id);
+      }
 
       await appendEvent(
         config.empresa_id,
