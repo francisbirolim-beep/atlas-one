@@ -1,3 +1,16 @@
+## 2026-10-01 — W.VETRO / PC2 SUPREMA DOMINANTE + PRIORIZAÇÃO HISTÓRICA
+
+- Branch: `feat/wvetro-pc2-suprema-dominante`; PR #556 draft; sem merge e sem deploy.
+- PC2 Suprema foi separada em famílias: vidro padrão, integrada/persiana, veneziana, lambri, bandeira, abertura central e mista vidro/veneziana.
+- A composição dominante de vidro padrão possui assinatura exata de perfis/acessórios e referência histórica estrita separada da fórmula genérica.
+- O comparador bloqueia qualquer variante PC2 Suprema sem receita local validada, impedindo fallback silencioso para fórmula genérica.
+- Variantes históricas extraem montagem, contramarco, arremate, reforços, trilho e acionamento de persiana a partir da descrição W.Vetro.
+- `test:wvetro-comparador` passou a executar no Build Validation antes do `next build`.
+- O explorador de tipologias passou a recalcular frequência usando `wvetro_historico_comercial.itens`, com paginação, registros e peças, porque `wvetro_referencias_tipologias.ocorrencias` estava zerado em referências Suprema.
+- Frequência PC2 Suprema observada: 217 registros / 224 peças; famílias: 123 vidro padrão, 59 integrada/persiana, 21 veneziana, 10 lambri, 2 abertura central e 2 bandeira.
+- Integração/persiana possui BOM agregado com componentes específicos identificados, mas o agregado mistura configurações e não prova todas as fórmulas de corte. Não promover offsets sem payload técnico por ocorrência.
+- Mac local estava offline nesta sessão; validação disponível foi GitHub Actions. Publicação continua reservada para depois da validação local/release check.
+
 ## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
 
 - Workspace persistente criado no Mac: `~/Atlas-One-Dev`.
