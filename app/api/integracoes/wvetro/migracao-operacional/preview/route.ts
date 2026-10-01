@@ -500,8 +500,16 @@ export async function GET(req: NextRequest) {
 
     try {
       const sql = neonStaging()
-      const [linhasNeon, coresNeon, vidrosNeon, pendenciasTecnicas, linhasAtlas, coresAtlas, vidrosAtlas] =
-        await Promise.all([
+      const [
+        linhasNeon,
+        coresNeon,
+        vidrosNeon,
+        pendenciasTecnicas,
+        linhasAtlas,
+        coresAtlas,
+        vidrosAtlas,
+        catalogoVidrosAtlas,
+      ] = await Promise.all([
           sql`
             select distinct payload->>'LinhaNome' as nome
             from wvetro_migracao.raw_canonico
@@ -539,12 +547,21 @@ export async function GET(req: NextRequest) {
             .select('nome,ativo'),
           supabaseAdmin
             .from('wvetro_referencias_vidros')
-            .select('especificacao,status_validacao,produto_atlas_id'),
+            .select('especificacao,status_validacao,produto_atlas_id,ncm,ocorrencias,dados_origem'),
+          supabaseAdmin
+            .from('catalogo_custos_tecnicos')
+            .select('id,chave,descricao,unidade,custo_unitario,ativo')
+            .eq('empresa_id', usuario.empresa_id)
+            .eq('categoria', 'vidro')
+            .eq('ativo', true),
         ])
 
       if (linhasAtlas.error) throw new Error(`Falha ao carregar linhas W.Vetro: ${linhasAtlas.error.message}`)
       if (coresAtlas.error) throw new Error(`Falha ao carregar cores Atlas: ${coresAtlas.error.message}`)
       if (vidrosAtlas.error) throw new Error(`Falha ao carregar vidros W.Vetro: ${vidrosAtlas.error.message}`)
+      if (catalogoVidrosAtlas.error) {
+        throw new Error(`Falha ao carregar catálogo técnico de vidros: ${catalogoVidrosAtlas.error.message}`)
+      }
 
       const normalizar = (valor: unknown) =>
         String(valor || '')
@@ -576,6 +593,13 @@ export async function GET(req: NextRequest) {
       const nomesVidrosNeon = new Set(
         (vidrosNeon || []).map((item: any) => normalizar(item.nome)).filter(Boolean),
       )
+      const catalogoVidros = new Map<string, any>()
+      for (const item of catalogoVidrosAtlas.data || []) {
+        for (const valor of [item.chave, item.descricao]) {
+          const nome = normalizar(valor)
+          if (nome && !catalogoVidros.has(nome)) catalogoVidros.set(nome, item)
+        }
+      }
 
       const linhas = (linhasNeon || []).map((item: any) => {
         const nome = normalizar(item.nome)
@@ -618,16 +642,54 @@ export async function GET(req: NextRequest) {
         }
       })
 
+      const numeroSeguro = (valor: unknown) => {
+        const numero = Number(valor)
+        return Number.isFinite(numero) ? numero : null
+      }
+
       const vidros = (vidrosNeon || []).map((item: any) => {
         const nome = normalizar(item.nome)
-        const referencia = referenciasVidros.get(nome)
+        const referencia: any = referenciasVidros.get(nome)
+        const catalogo = catalogoVidros.get(nome)
+        const origem =
+          referencia?.dados_origem && typeof referencia.dados_origem === 'object'
+            ? referencia.dados_origem
+            : {}
+        const catalogoApi =
+          origem?.catalogo_api?.raw && typeof origem.catalogo_api.raw === 'object'
+            ? origem.catalogo_api.raw
+            : {}
+        const area = numeroSeguro(origem.M2Arred) || numeroSeguro(origem.M2)
+        const custoAmostra = numeroSeguro(origem.CustoVlr)
+        const custoReferenciaM2 =
+          area && area > 0 && custoAmostra != null && custoAmostra > 0
+            ? Number((custoAmostra / area).toFixed(4))
+            : null
+
         return {
           nome,
-          status: referencia ? 'referencia_wvetro' : 'pendente_revisao',
+          status: catalogo
+            ? 'homologado_catalogo'
+            : referencia
+              ? 'aguardando_homologacao'
+              : 'pendente_revisao',
           statusValidacao: referencia?.status_validacao || null,
           produtoAtlasId: referencia?.produto_atlas_id || null,
+          catalogoCustoId: catalogo?.id || null,
+          catalogoCustoUnitario: catalogo?.custo_unitario == null ? null : Number(catalogo.custo_unitario),
+          catalogoUnidade: catalogo?.unidade || null,
+          ocorrencias: Number(referencia?.ocorrencias || 0),
+          ncm: String(catalogoApi.CorNCM || referencia?.ncm || '').trim() || null,
+          espessuraMm: numeroSeguro(catalogoApi.CorEspessura),
+          pesoKgM2: numeroSeguro(catalogoApi.CorVidroPeso),
+          custoReferenciaM2,
+          custoReferenciaFonte:
+            custoReferenciaM2 == null ? null : 'amostra_historica_wvetro',
         }
-      })
+      }).sort((a: any, b: any) =>
+        Number(b.ocorrencias || 0) - Number(a.ocorrencias || 0) ||
+        a.nome.localeCompare(b.nome, 'pt-BR'),
+      )
 
       return NextResponse.json({
         ok: true,
@@ -655,15 +717,18 @@ export async function GET(req: NextRequest) {
           },
           vidros: {
             total: vidros.length,
-            referenciados: vidros.filter(item => item.status === 'referencia_wvetro').length,
-            pendentes: vidros.filter(item => item.status === 'pendente_revisao').length,
+            referenciados: vidros.filter(item => item.status !== 'pendente_revisao').length,
+            pendentes: vidros.filter(item => item.status !== 'homologado_catalogo').length,
+            aguardandoHomologacao: vidros.filter(item => item.status === 'aguardando_homologacao').length,
+            homologadosCatalogo: vidros.filter(item => item.status === 'homologado_catalogo').length,
             vinculadosProdutoAtlas: vidros.filter(item => !!item.produtoAtlasId).length,
+            comCustoReferencia: vidros.filter(item => item.custoReferenciaM2 != null).length,
           },
         },
         pendencias: {
           linhas: linhas.filter(item => item.status !== 'mapeada'),
           cores: cores.filter(item => item.status === 'pendente_revisao'),
-          vidros: vidros.filter(item => item.status === 'pendente_revisao'),
+          vidros: vidros.filter(item => item.status !== 'homologado_catalogo'),
         },
       })
     } catch (error) {
