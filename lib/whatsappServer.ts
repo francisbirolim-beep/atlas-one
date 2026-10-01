@@ -51,6 +51,88 @@ type ConfigAtendimento = {
   ativo: boolean
 }
 
+type AcessoCanal = {
+  visualizar: boolean
+  atender: boolean
+  transferir: boolean
+  supervisionar: boolean
+  dono: boolean
+  principal: boolean
+}
+
+async function acessoCanalWhatsApp(
+  usuario: UsuarioTenant,
+  canalId: string | null | undefined,
+): Promise<AcessoCanal> {
+  if (usuario.role === 'master') {
+    return { visualizar: true, atender: true, transferir: true, supervisionar: true, dono: true, principal: false }
+  }
+  if (!canalId) {
+    return { visualizar: true, atender: true, transferir: false, supervisionar: false, dono: false, principal: true }
+  }
+
+  const [{ data: canal }, { data: permissao }] = await Promise.all([
+    supabaseAdmin
+      .from('atendimento_whatsapp_canais')
+      .select('id,empresa_id,principal,usuario_id,ativo')
+      .eq('id', canalId)
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('atendimento_whatsapp_permissoes')
+      .select('pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('canal_id', canalId)
+      .eq('usuario_id', usuario.id)
+      .maybeSingle(),
+  ])
+
+  if (!canal) {
+    return { visualizar: false, atender: false, transferir: false, supervisionar: false, dono: false, principal: false }
+  }
+
+  const dono = canal.usuario_id === usuario.id
+  const principal = canal.principal === true
+  return {
+    visualizar: principal || dono || Boolean(
+      permissao?.pode_visualizar || permissao?.pode_atender ||
+      permissao?.pode_transferir || permissao?.pode_supervisionar
+    ),
+    atender: principal || dono || Boolean(permissao?.pode_atender),
+    transferir: dono || Boolean(permissao?.pode_transferir),
+    supervisionar: dono || Boolean(permissao?.pode_supervisionar),
+    dono,
+    principal,
+  }
+}
+
+async function usuarioPodeAtenderCanal(
+  empresaId: string,
+  canalId: string | null | undefined,
+  usuarioId: string,
+  role?: string | null,
+) {
+  if (role === 'master' || !canalId) return true
+  const { data: canal } = await supabaseAdmin
+    .from('atendimento_whatsapp_canais')
+    .select('id,principal,usuario_id')
+    .eq('id', canalId)
+    .eq('empresa_id', empresaId)
+    .eq('ativo', true)
+    .maybeSingle()
+  if (!canal) return false
+  if (canal.principal || canal.usuario_id === usuarioId) return true
+  const { data: permissao } = await supabaseAdmin
+    .from('atendimento_whatsapp_permissoes')
+    .select('pode_atender')
+    .eq('empresa_id', empresaId)
+    .eq('canal_id', canalId)
+    .eq('usuario_id', usuarioId)
+    .maybeSingle()
+  return permissao?.pode_atender === true
+}
+
 export function normalizarTelefone(valor: string | null | undefined) {
   const digitos = String(valor || '').replace(/\D/g, '')
   if (!digitos) return ''
@@ -154,11 +236,13 @@ async function nomeUsuario(usuarioId: string | null | undefined) {
 async function clientePorTelefone(empresaId: string, telefone: string) {
   const { data } = await supabaseAdmin
     .from('clientes')
-    .select('id,nome,whatsapp')
+    .select('id,nome,whatsapp,telefone')
     .eq('empresa_id', empresaId)
     .limit(1000)
   const alvo = normalizarTelefone(telefone)
-  return (data || []).find((c: any) => normalizarTelefone(c.whatsapp) === alvo) || null
+  return (data || []).find((c: any) =>
+    normalizarTelefone(c.whatsapp) === alvo || normalizarTelefone(c.telefone) === alvo
+  ) || null
 }
 
 async function regraDeRoteamento(empresaId: string, texto: string | null) {
@@ -551,23 +635,83 @@ export async function confirmarSaidaGateway(
 }
 
 export async function conversaAcessivel(conversaId: string, usuario: UsuarioTenant, incluirFila = true) {
-  const { data } = await supabaseAdmin.from('atendimento_conversas').select('*').eq('id', conversaId).maybeSingle()
+  const { data } = await supabaseAdmin
+    .from('atendimento_conversas')
+    .select('*')
+    .eq('id', conversaId)
+    .maybeSingle()
   if (!data || data.empresa_id !== usuario.empresa_id) return null
   if (usuario.role === 'master') return data as AtendimentoConversa
+
+  const acesso = await acessoCanalWhatsApp(usuario, data.whatsapp_canal_id)
+  if (!acesso.visualizar) return null
   if (data.responsavel_id === usuario.id) return data as AtendimentoConversa
-  if (incluirFila && !data.responsavel_id) return data as AtendimentoConversa
+  if (acesso.supervisionar) return data as AtendimentoConversa
+  if (incluirFila && !data.responsavel_id && acesso.atender) return data as AtendimentoConversa
   return null
 }
 
+export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
+  const [{ data: canais, error: canaisError }, { data: permissoes, error: permissoesError }] = await Promise.all([
+    supabaseAdmin
+      .from('atendimento_whatsapp_canais')
+      .select('id,principal,usuario_id,ativo')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true),
+    supabaseAdmin
+      .from('atendimento_whatsapp_permissoes')
+      .select('canal_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('usuario_id', usuario.id),
+  ])
+  if (canaisError) throw canaisError
+  if (permissoesError) throw permissoesError
+
+  const porCanal = new Map((permissoes || []).map((p: any) => [p.canal_id, p]))
+  return (canais || []).map((canal: any) => {
+    const permissao: any = porCanal.get(canal.id) || null
+    const dono = canal.usuario_id === usuario.id
+    const principal = canal.principal === true
+    const master = usuario.role === 'master'
+    return {
+      canal_id: canal.id as string,
+      visualizar: master || principal || dono || Boolean(
+        permissao?.pode_visualizar || permissao?.pode_atender ||
+        permissao?.pode_transferir || permissao?.pode_supervisionar
+      ),
+      atender: master || principal || dono || Boolean(permissao?.pode_atender),
+      transferir: master || dono || Boolean(permissao?.pode_transferir),
+      supervisionar: master || dono || Boolean(permissao?.pode_supervisionar),
+      dono,
+      principal,
+    }
+  }).filter((acesso: any) => acesso.visualizar)
+}
+
 export async function listarConversasAtendimento(usuario: UsuarioTenant) {
-  let query = supabaseAdmin.from('atendimento_conversas').select('*')
+  const { data, error } = await supabaseAdmin
+    .from('atendimento_conversas')
+    .select('*')
     .eq('empresa_id', usuario.empresa_id)
     .eq('canal', 'whatsapp')
     .order('ultima_mensagem_em', { ascending: false, nullsFirst: false })
-  if (usuario.role !== 'master') query = query.or(`responsavel_id.eq.${usuario.id},responsavel_id.is.null`)
-  const { data, error } = await query
   if (error) throw error
-  return (data || []) as AtendimentoConversa[]
+  const conversas = (data || []) as AtendimentoConversa[]
+  if (usuario.role === 'master') return conversas
+
+  const acessos = await listarAcessosCanaisAtendimento(usuario)
+  const acessoPorCanal = new Map(acessos.map(acesso => [acesso.canal_id, acesso]))
+
+  return conversas.filter(conversa => {
+    if (!conversa.whatsapp_canal_id) {
+      return conversa.responsavel_id === usuario.id || !conversa.responsavel_id
+    }
+    const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id)
+    if (!acesso?.visualizar) return false
+    if (acesso.dono || acesso.supervisionar) return true
+    if (conversa.responsavel_id === usuario.id) return true
+    return !conversa.responsavel_id && acesso.atender
+  })
 }
 
 export async function listarMensagensAtendimento(conversaId: string, usuario: UsuarioTenant) {
@@ -612,8 +756,16 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       throw new Error(`O número ${canal.numero_declarado} não está conectado. O Master precisa escanear o QR Code desse canal.`)
     }
 
-    if (usuario.role !== 'master' && canal.usuario_id && canal.usuario_id !== usuario.id) {
-      throw new Error('Este número está vinculado a outro usuário.')
+    const acessoCanal = await acessoCanalWhatsApp(usuario, canalId)
+    if (!acessoCanal.atender) {
+      throw new Error('Você pode acompanhar este canal, mas não possui permissão para responder por ele.')
+    }
+    if (
+      usuario.role !== 'master' &&
+      conversa.responsavel_id &&
+      conversa.responsavel_id !== usuario.id
+    ) {
+      throw new Error('Este atendimento está com outro atendente. Supervisão não permite responder em nome dele.')
     }
 
     const { data: mensagem, error: mensagemError } = await supabaseAdmin
@@ -729,6 +881,10 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
 export async function assumirConversa(conversaId: string, usuario: UsuarioTenant) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não disponível.')
+  const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  if (!acessoCanal.atender) {
+    throw new Error('Você não possui permissão para atender por este canal.')
+  }
   if (conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
     throw new Error('Esta conversa já está com outro atendente.')
   }
@@ -760,12 +916,24 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
 }
 
 export async function transferirConversa(conversaId: string, destinoId: string, setor: string | null, usuario: UsuarioTenant) {
-  if (usuario.role !== 'master') throw new Error('Somente o Master pode transferir conversas.')
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não encontrada.')
+  const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  if (usuario.role !== 'master' && !acessoCanal.transferir) {
+    throw new Error('Você não possui permissão para transferir atendimentos deste canal.')
+  }
   const { data: destino } = await supabaseAdmin.from('usuarios')
-    .select('id,nome,empresa_id').eq('id', destinoId).maybeSingle()
+    .select('id,nome,role,empresa_id').eq('id', destinoId).maybeSingle()
   if (!destino || destino.empresa_id !== usuario.empresa_id) throw new Error('Usuário de destino inválido.')
+  const destinoPodeAtender = await usuarioPodeAtenderCanal(
+    usuario.empresa_id,
+    conversa.whatsapp_canal_id,
+    destino.id,
+    destino.role,
+  )
+  if (!destinoPodeAtender) {
+    throw new Error('O usuário de destino não possui permissão para atender por este canal.')
+  }
   const agora = new Date().toISOString()
   await supabaseAdmin.from('atendimento_conversas').update({
     responsavel_id: destino.id,
@@ -798,6 +966,9 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
 export async function finalizarConversa(conversaId: string, usuario: UsuarioTenant) {
   const conversa = await conversaAcessivel(conversaId, usuario, false)
   if (!conversa) throw new Error('Conversa não disponível.')
+  if (usuario.role !== 'master' && conversa.responsavel_id !== usuario.id) {
+    throw new Error('A supervisão permite acompanhar, mas somente o atendente responsável pode finalizar.')
+  }
   const agora = new Date().toISOString()
   await supabaseAdmin.from('atendimento_conversas').update({
     status: 'finalizado',

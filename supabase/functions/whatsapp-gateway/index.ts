@@ -83,11 +83,13 @@ async function userName(userId: string | null) {
 async function customerByPhone(empresaId: string, telefone: string) {
   const { data } = await db
     .from("clientes")
-    .select("id,nome,whatsapp")
+    .select("id,nome,whatsapp,telefone")
     .eq("empresa_id", empresaId)
     .limit(1500);
   const target = normalizePhone(telefone);
-  return (data || []).find((c: any) => normalizePhone(c.whatsapp) === target) || null;
+  return (data || []).find((c: any) =>
+    normalizePhone(c.whatsapp) === target || normalizePhone(c.telefone) === target
+  ) || null;
 }
 async function routingRule(empresaId: string, texto: string | null) {
   const { data } = await db

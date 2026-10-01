@@ -4,6 +4,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import {
   assumirConversa,
   finalizarConversa,
+  listarAcessosCanaisAtendimento,
   listarConversasAtendimento,
   transferirConversa,
 } from '@/lib/whatsappServer'
@@ -16,10 +17,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
   }
   try {
-    const conversas = await listarConversasAtendimento(usuario)
+    const [conversas, acessos] = await Promise.all([
+      listarConversasAtendimento(usuario),
+      listarAcessosCanaisAtendimento(usuario),
+    ])
+    const podeTransferir = usuario.role === 'master' || acessos.some(a => a.transferir)
     let usuarios: { id: string; nome: string }[] = []
 
-    if (usuario.role === 'master') {
+    if (podeTransferir) {
       const { data } = await supabaseAdmin
         .from('usuarios')
         .select('id,nome')
@@ -42,10 +47,9 @@ export async function GET(req: NextRequest) {
       .order('principal', { ascending: false })
       .order('created_at', { ascending: true })
 
+    const canaisPermitidos = new Set(acessos.map(acesso => acesso.canal_id))
     const canais = (canaisRaw || []).filter((canal: any) =>
-      usuario.role === 'master' ||
-      canal.principal === true ||
-      canal.usuario_id === usuario.id
+      usuario.role === 'master' || canaisPermitidos.has(canal.id)
     )
     const conectados = canais.filter((canal: any) => canal.gateway_status === 'connected').length
 
@@ -55,6 +59,7 @@ export async function GET(req: NextRequest) {
       conversas,
       usuarios,
       canais,
+      acessos,
       configuracao: config || null,
       canaisConectados: conectados,
       canaisTotal: canais.length,

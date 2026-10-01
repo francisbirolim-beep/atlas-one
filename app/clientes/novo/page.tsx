@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { tokenAtual } from '@/lib/auth'
 import { textoMaiusculo, textoMaiusculoOuNull } from '@/lib/texto'
 import { OrigemCliente } from '@/lib/tipos'
 import {
@@ -48,6 +49,19 @@ export default function NovoCliente() {
   const [observacoes, setObservacoes] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [conversaOrigemId, setConversaOrigemId] = useState('')
+  const [clienteCriadoId, setClienteCriadoId] = useState('')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const nomeInicial = params.get('nome') || ''
+    const whatsappInicial = params.get('whatsapp') || ''
+    const conversaId = params.get('conversaId') || ''
+    if (nomeInicial) setNome(nomeInicial.toLocaleUpperCase('pt-BR'))
+    if (whatsappInicial) setWhatsapp(whatsappInicial)
+    if (params.get('origem') === 'whatsapp') setOrigem('whatsapp')
+    if (conversaId) setConversaOrigemId(conversaId)
+  }, [])
 
   useEffect(() => {
     listarCamposConfiguraveis().then((lista) => {
@@ -76,7 +90,35 @@ export default function NovoCliente() {
     return campoNoContexto(campos, chave, 'cliente')?.placeholder || fallback
   }
 
+  async function vincularAoWhatsApp(clienteId: string) {
+    if (!conversaOrigemId) return
+    const token = await tokenAtual()
+    const resp = await fetch('/api/integracoes/whatsapp/vincular-cliente', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token || ''}`,
+      },
+      body: JSON.stringify({ conversaId: conversaOrigemId, clienteId }),
+    })
+    const json = await resp.json()
+    if (!resp.ok) throw new Error(json.error || 'Nao foi possivel vincular o Cliente 360 ao WhatsApp.')
+  }
+
   async function salvar() {
+    if (clienteCriadoId && conversaOrigemId) {
+      setErro('')
+      setSalvando(true)
+      try {
+        await vincularAoWhatsApp(clienteCriadoId)
+        router.push(`/whatsapp?conversaId=${encodeURIComponent(conversaOrigemId)}`)
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : 'Falha ao vincular Cliente 360.')
+      } finally {
+        setSalvando(false)
+      }
+      return
+    }
     const valores: Record<string, string> = {
       nome,
       apelido,
@@ -137,13 +179,29 @@ export default function NovoCliente() {
       .select('id')
       .single()
 
-    setSalvando(false)
-
     if (error) {
+      setSalvando(false)
       setErro('Erro ao salvar: ' + error.message)
       return
     }
 
+    setClienteCriadoId(data.id)
+    if (conversaOrigemId) {
+      try {
+        await vincularAoWhatsApp(data.id)
+        router.push(`/whatsapp?conversaId=${encodeURIComponent(conversaOrigemId)}`)
+        return
+      } catch (e) {
+        setSalvando(false)
+        setErro(
+          'Cliente salvo, mas o vínculo com o WhatsApp falhou. Clique em Salvar cliente novamente para tentar só o vínculo. ' +
+          (e instanceof Error ? e.message : ''),
+        )
+        return
+      }
+    }
+
+    setSalvando(false)
     router.push(`/clientes/${data.id}`)
   }
 

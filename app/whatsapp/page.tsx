@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, CheckCircle2, Clock3, MessageCircle,
-  Search, Send, Settings, ShieldCheck, Smartphone, UserRoundCheck,
+  ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
+  ExternalLink, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
+  Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus,
+  UserRoundCheck,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -45,6 +47,26 @@ type Mensagem = {
   usuario_nome?: string | null
   created_at: string
 }
+type ClienteResumo = {
+  id: string
+  nome: string
+  whatsapp?: string | null
+  telefone?: string | null
+  cidade?: string | null
+  endereco?: string | null
+  bairro?: string | null
+  observacoes?: string | null
+}
+type ObraResumo = { id: string; nome?: string | null; status?: string | null }
+type AcessoCanal = {
+  canal_id: string
+  visualizar: boolean
+  atender: boolean
+  transferir: boolean
+  supervisionar: boolean
+  dono: boolean
+  principal: boolean
+}
 
 function hora(valor?: string | null) {
   if (!valor) return ''
@@ -72,11 +94,13 @@ export default function WhatsAppAtendimentoPage() {
   const [conversas, setConversas] = useState<Conversa[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [canais, setCanais] = useState<Canal[]>([])
+  const [acessos, setAcessos] = useState<AcessoCanal[]>([])
   const [ativa, setAtiva] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<'minhas' | 'fila' | 'todas'>('minhas')
+  const [filtro, setFiltro] = useState<'minhas' | 'fila' | 'todas' | 'nao_lidas'>('minhas')
+  const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
@@ -84,6 +108,10 @@ export default function WhatsAppAtendimentoPage() {
   const [canaisTotal, setCanaisTotal] = useState(0)
   const [destinoId, setDestinoId] = useState('')
   const [setorTransferencia, setSetorTransferencia] = useState('')
+  const [cliente, setCliente] = useState<ClienteResumo | null>(null)
+  const [obras, setObras] = useState<ObraResumo[]>([])
+  const [carregandoCliente, setCarregandoCliente] = useState(false)
+  const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas'>('cliente')
   const fimRef = useRef<HTMLDivElement | null>(null)
 
   async function carregarConversas(selecionar = true) {
@@ -96,9 +124,18 @@ export default function WhatsAppAtendimentoPage() {
       setConversas(json.conversas || [])
       setUsuarios(json.usuarios || [])
       setCanais(json.canais || [])
+      setAcessos(json.acessos || [])
       setCanaisConectados(Number(json.canaisConectados || 0))
       setCanaisTotal(Number(json.canaisTotal || 0))
-      if (selecionar && !ativa && json.conversas?.[0]) setAtiva(json.conversas[0])
+      if (selecionar && !ativa && json.conversas?.[0]) {
+        const conversaId = typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('conversaId')
+          : null
+        const solicitada = conversaId
+          ? (json.conversas || []).find((c: Conversa) => c.id === conversaId)
+          : null
+        setAtiva(solicitada || json.conversas[0])
+      }
       if (ativa) {
         const atualizada = (json.conversas || []).find((c: Conversa) => c.id === ativa.id)
         if (atualizada) setAtiva(atualizada)
@@ -132,6 +169,37 @@ export default function WhatsAppAtendimentoPage() {
   }, [ativa?.id])
 
   useEffect(() => {
+    let vivo = true
+    if (!ativa?.cliente_id) {
+      setCliente(null)
+      setObras([])
+      setCarregandoCliente(false)
+      return
+    }
+    setCarregandoCliente(true)
+    Promise.all([
+      supabase.from('clientes')
+        .select('id,nome,whatsapp,telefone,cidade,endereco,bairro,observacoes')
+        .eq('id', ativa.cliente_id).maybeSingle(),
+      supabase.from('obras')
+        .select('id,nome,status')
+        .eq('cliente_id', ativa.cliente_id)
+        .order('created_at', { ascending: false }).limit(4),
+    ]).then(([clienteResp, obrasResp]) => {
+      if (!vivo) return
+      setCliente((clienteResp.data || null) as ClienteResumo | null)
+      setObras((obrasResp.data || []) as ObraResumo[])
+      setCarregandoCliente(false)
+    }).catch(() => {
+      if (!vivo) return
+      setCliente(null)
+      setObras([])
+      setCarregandoCliente(false)
+    })
+    return () => { vivo = false }
+  }, [ativa?.cliente_id])
+
+  useEffect(() => {
     if (!eu?.id) return
     const canal = supabase
       .channel(`atendimento-whatsapp-${eu.id}`)
@@ -157,11 +225,13 @@ export default function WhatsAppAtendimentoPage() {
       if (filtro === 'fila' && c.responsavel_id) return false
       if (filtro === 'minhas' && c.responsavel_id !== eu?.id) return false
       if (filtro === 'todas' && eu?.role !== 'master') return false
+      if (filtro === 'nao_lidas' && !c.nao_lidas) return false
+      if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (!q) return true
       return `${c.contato_nome || ''} ${c.telefone} ${c.responsavel_nome || ''} ${c.setor || ''}`
         .toLocaleLowerCase('pt-BR').includes(q)
     })
-  }, [conversas, busca, filtro, eu?.id, eu?.role])
+  }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
 
   async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
     if (!ativa) return
@@ -202,6 +272,13 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
+  const totais = useMemo(() => ({
+    todas: conversas.length,
+    fila: conversas.filter(c => !c.responsavel_id).length,
+    minhas: conversas.filter(c => c.responsavel_id === eu?.id).length,
+    naoLidas: conversas.reduce((acc, c) => acc + Number(c.nao_lidas || 0), 0),
+  }), [conversas, eu?.id])
+
   const podeResponder = Boolean(
     ativa && (eu?.role === 'master' || ativa.responsavel_id === eu?.id),
   )
@@ -209,10 +286,16 @@ export default function WhatsAppAtendimentoPage() {
     ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
     : null
   const canalPronto = canalAtivo?.gateway_status === 'connected'
+  const acessoCanalAtivo = ativa?.whatsapp_canal_id
+    ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
+    : null
+  const podeTransferirAtiva = Boolean(
+    ativa && (eu?.role === 'master' || acessoCanalAtivo?.transferir),
+  )
 
   return (
-    <main className="min-h-screen bg-slate-100 p-3 md:p-6">
-      <div className="mx-auto max-w-[1500px] overflow-hidden rounded-2xl border bg-white shadow-sm">
+    <main className="min-h-screen bg-slate-100 p-0 md:p-4">
+      <div className="mx-auto max-w-[1720px] overflow-hidden border bg-white shadow-sm md:rounded-2xl">
         <header className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-3">
             <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
@@ -241,22 +324,42 @@ export default function WhatsAppAtendimentoPage() {
 
         {erro && <div className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">{erro}</div>}
 
-        <div className="grid h-[calc(100dvh-170px)] min-h-[560px] md:grid-cols-[360px_1fr]">
-          <aside className="min-h-0 border-r">
+        <div className="grid h-[calc(100dvh-130px)] min-h-[620px] md:grid-cols-[340px_1fr] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+          <aside className="flex min-h-0 flex-col border-r">
             <div className="border-b p-3">
-              <div className="flex items-center gap-2 rounded-xl border px-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Conversas</p>
+                  <p className="text-[11px] text-slate-500">Fila e canais em tempo real</p>
+                </div>
+                <select value={canalFiltro} onChange={e=>setCanalFiltro(e.target.value)}
+                  className="max-w-[170px] rounded-lg border bg-white px-2 py-1.5 text-xs font-semibold text-slate-700">
+                  <option value="todos">Todos os canais</option>
+                  {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Principal':''}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
                 <Search size={16} className="text-slate-400"/>
                 <input value={busca} onChange={e=>setBusca(e.target.value)}
-                  placeholder="Cliente, telefone, setor..." className="w-full py-2.5 text-sm outline-none"/>
+                  placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
-                <button onClick={()=>setFiltro('minhas')} className={`rounded-lg px-2 py-2 ${filtro==='minhas'?'bg-white shadow-sm':''}`}>Minhas</button>
-                <button onClick={()=>setFiltro('fila')} className={`rounded-lg px-2 py-2 ${filtro==='fila'?'bg-white shadow-sm':''}`}>Em espera</button>
+              <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+                <button onClick={()=>setFiltro('minhas')} className={`rounded-lg px-2 py-2 ${filtro==='minhas'?'bg-white shadow-sm':''}`}>
+                  Minhas {totais.minhas || ''}
+                </button>
+                <button onClick={()=>setFiltro('fila')} className={`rounded-lg px-2 py-2 ${filtro==='fila'?'bg-white shadow-sm':''}`}>
+                  Aguardando {totais.fila || ''}
+                </button>
+                <button onClick={()=>setFiltro('nao_lidas')} className={`rounded-lg px-2 py-2 ${filtro==='nao_lidas'?'bg-white shadow-sm':''}`}>
+                  Não lidas {totais.naoLidas || ''}
+                </button>
                 <button disabled={eu?.role!=='master'} onClick={()=>setFiltro('todas')}
-                  className={`rounded-lg px-2 py-2 disabled:opacity-30 ${filtro==='todas'?'bg-white shadow-sm':''}`}>Todas</button>
+                  className={`rounded-lg px-2 py-2 disabled:opacity-30 ${filtro==='todas'?'bg-white shadow-sm':''}`}>
+                  Todas {eu?.role==='master' ? totais.todas : ''}
+                </button>
               </div>
             </div>
-            <div className="h-[calc(100%-126px)] overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
               ) : filtradas.length === 0 ? (
@@ -321,7 +424,8 @@ export default function WhatsAppAtendimentoPage() {
                     <UserRoundCheck size={15}/> Assumir
                   </button>
                 )}
-                {ativa.responsavel_id && ativa.status !== 'finalizado' && (
+                {ativa.responsavel_id && ativa.status !== 'finalizado' &&
+                  (eu?.role === 'master' || ativa.responsavel_id === eu?.id) && (
                   <button onClick={()=>void acaoConversa('finalizar')}
                     className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold">
                     <CheckCircle2 size={15}/> Finalizar
@@ -329,10 +433,12 @@ export default function WhatsAppAtendimentoPage() {
                 )}
               </div>
 
-              {eu?.role === 'master' && (
+              {podeTransferirAtiva && (
                 <div className="flex flex-wrap items-center gap-2 border-b bg-slate-50 px-4 py-2">
                   <ShieldCheck size={15} className="text-slate-500"/>
-                  <span className="text-xs font-semibold text-slate-600">Supervisao Master</span>
+                  <span className="text-xs font-semibold text-slate-600">
+                    {eu?.role === 'master' ? 'Supervisão Master' : 'Permissão de transferência'}
+                  </span>
                   <select value={destinoId} onChange={e=>setDestinoId(e.target.value)}
                     className="rounded-lg border bg-white px-2 py-1.5 text-xs">
                     <option value="">Transferir para...</option>
@@ -375,18 +481,32 @@ export default function WhatsAppAtendimentoPage() {
                     Atendimento de {ativa.responsavel_nome}. O Master pode acompanhar em tempo real.
                   </div>
                 ) : (
-                  <div className="flex items-end gap-2">
-                    <textarea value={texto} onChange={e=>setTexto(e.target.value)}
-                      onKeyDown={e=>{
-                        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviar()}
-                      }}
-                      rows={1} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
-                      className="min-h-11 flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
-                    <button disabled={!texto.trim()||enviando||!canalPronto}
-                      onClick={()=>void enviar()}
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white disabled:opacity-40">
-                      <Send size={18}/>
-                    </button>
+                  <div>
+                    <div className="mb-2 flex items-center gap-1 text-slate-500">
+                      <button disabled className="rounded-lg p-2 opacity-40" title="Envio de anexos entra na próxima etapa">
+                        <Paperclip size={18}/>
+                      </button>
+                      <button disabled className="rounded-lg p-2 opacity-40" title="Etiquetas serão persistidas na próxima etapa">
+                        <Tag size={18}/>
+                      </button>
+                      <span className="ml-auto text-[10px] text-slate-400">Enter envia · Shift+Enter quebra linha</span>
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <textarea value={texto} onChange={e=>setTexto(e.target.value)}
+                        onKeyDown={e=>{
+                          if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviar()}
+                        }}
+                        rows={1} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
+                        className="min-h-11 flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                      <button disabled className="grid h-11 w-11 shrink-0 place-items-center rounded-full border bg-white text-slate-400 opacity-50" title="Áudio entra na próxima etapa">
+                        <Mic size={18}/>
+                      </button>
+                      <button disabled={!texto.trim()||enviando||!canalPronto}
+                        onClick={()=>void enviar()}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white disabled:opacity-40">
+                        <Send size={18}/>
+                      </button>
+                    </div>
                   </div>
                 )}
                 <p className="mt-2 text-center text-[10px] text-slate-400">
@@ -395,6 +515,144 @@ export default function WhatsAppAtendimentoPage() {
               </div>
             </>}
           </section>
+
+          <aside className="hidden min-h-0 flex-col border-l bg-white xl:flex">
+            <div className="border-b p-4">
+              <div className="flex items-center gap-3">
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-blue-50 font-bold text-blue-700">
+                  {ativa ? (ativa.contato_nome || ativa.telefone).slice(0,1).toUpperCase() : '?'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <b className="block truncate text-sm">{ativa?.contato_nome || 'Contexto do atendimento'}</b>
+                  <p className="truncate text-xs text-slate-500">
+                    {ativa ? telefoneFormatado(ativa.telefone) : 'Selecione uma conversa'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 border-b p-2 text-xs font-bold">
+              <button onClick={()=>setPainelDireito('cliente')}
+                className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                Cliente 360
+              </button>
+              <button onClick={()=>setPainelDireito('agenda')}
+                className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                Agenda
+              </button>
+              <button onClick={()=>setPainelDireito('notas')}
+                className={`rounded-lg px-2 py-2 ${painelDireito==='notas'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                Notas
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {!ativa ? (
+                <div className="py-12 text-center text-sm text-slate-400">Selecione uma conversa.</div>
+              ) : painelDireito === 'cliente' ? (
+                carregandoCliente ? (
+                  <div className="py-10 text-center text-sm text-slate-400">Carregando Cliente 360...</div>
+                ) : cliente ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <Building2 size={17} className="text-blue-600"/>
+                        <b className="text-sm text-slate-900">{cliente.nome}</b>
+                      </div>
+                      <div className="space-y-2 text-xs text-slate-600">
+                        {(cliente.whatsapp || cliente.telefone) && (
+                          <p><b>Contato:</b> {cliente.whatsapp || cliente.telefone}</p>
+                        )}
+                        {(cliente.cidade || cliente.bairro) && (
+                          <p className="flex items-start gap-1.5">
+                            <MapPin size={14} className="mt-0.5 shrink-0"/>
+                            {[cliente.bairro,cliente.cidade].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        {cliente.endereco && <p>{cliente.endereco}</p>}
+                      </div>
+                      <Link href={'/clientes/' + cliente.id}
+                        className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
+                        Abrir Cliente 360 <ExternalLink size={13}/>
+                      </Link>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <BriefcaseBusiness size={16} className="text-slate-500"/>
+                        <b className="text-xs uppercase tracking-wide text-slate-600">Obras recentes</b>
+                      </div>
+                      {obras.length ? (
+                        <div className="space-y-2">
+                          {obras.map(o=>(
+                            <Link key={o.id} href={'/obras/' + o.id}
+                              className="block rounded-xl border p-3 hover:bg-slate-50">
+                              <p className="truncate text-sm font-semibold text-slate-800">{o.nome || 'Obra'}</p>
+                              <p className="mt-0.5 text-[11px] text-slate-500">{o.status || 'Em andamento'}</p>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                          Nenhuma obra encontrada para este cliente.
+                        </p>
+                      )}
+                    </div>
+
+                    {cliente.observacoes && (
+                      <div className="rounded-xl border-l-4 border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                        <b>Observações do cliente</b>
+                        <p className="mt-1 whitespace-pre-wrap">{cliente.observacoes}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-dashed p-5 text-center">
+                      <UserPlus className="mx-auto mb-3 text-slate-400" size={28}/>
+                      <b className="text-sm text-slate-800">Contato ainda não vinculado</b>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                        O Atlas tenta localizar o Cliente 360 automaticamente pelo telefone.
+                      </p>
+                      <Link href={'/clientes/novo?origem=whatsapp&nome=' + encodeURIComponent(ativa.contato_nome || '') + '&whatsapp=' + encodeURIComponent(ativa.telefone) + '&conversaId=' + encodeURIComponent(ativa.id)}
+                        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white">
+                        <UserPlus size={14}/> Cadastrar Cliente 360
+                      </Link>
+                    </div>
+                    <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-800">
+                      <Info size={15} className="mb-1"/>
+                      Depois do vínculo, o histórico deste atendimento continua associado ao cliente.
+                    </div>
+                  </div>
+                )
+              ) : painelDireito === 'agenda' ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays size={17} className="text-blue-600"/>
+                    <b className="text-sm text-slate-800">Agenda do atendimento</b>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                    <div className="rounded-xl bg-slate-50 p-2">Hoje</div>
+                    <div className="rounded-xl bg-slate-50 p-2">Amanhã</div>
+                    <div className="rounded-xl bg-slate-50 p-2">Futuros</div>
+                  </div>
+                  <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-slate-500">
+                    Os agendamentos vinculados ao atendimento aparecerão aqui.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <StickyNote size={17} className="text-amber-600"/>
+                    <b className="text-sm text-slate-800">Notas internas</b>
+                  </div>
+                  <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-slate-500">
+                    Notas e guias internos ficarão visíveis só para a equipe, nunca para o cliente.
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
     </main>
