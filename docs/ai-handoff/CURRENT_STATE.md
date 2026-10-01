@@ -9,11 +9,12 @@
 - O explorador de tipologias passou a recalcular frequência usando `wvetro_historico_comercial.itens`, com paginação, registros e peças, porque `wvetro_referencias_tipologias.ocorrencias` estava zerado em referências Suprema.
 - Frequência PC2 Suprema observada: 217 registros / 224 peças; famílias: 123 vidro padrão, 59 integrada/persiana, 21 veneziana, 10 lambri, 2 abertura central e 2 bandeira.
 - Integração/persiana possui BOM agregado com componentes específicos identificados, mas o agregado mistura configurações e não prova todas as fórmulas de corte. Não promover offsets sem payload técnico por ocorrência.
-- Mac local estava offline nesta sessão; validação disponível foi GitHub Actions. Publicação continua reservada para depois da validação local/release check.
+- Mac local voltou online e a branch foi validada contra a `main` atual: `npm run test:wvetro-comparador` passou e `npm run release:check` terminou com `PREFLIGHT_OK`. Publicação continua separada desta etapa.
 - PC4 Suprema (98 registros / 100 peças) possui duas fórmulas Atlas, ambas `em_validacao` e inativas. O histórico foi separado em famílias (4 planos, sequencial, abertura central, fixas+móveis e veneziana/mista) e o comparador bloqueia fallback até existir referência histórica local validada.
-- PC1 Suprema (76/76) e Portinhola Suprema (74/140) não possuem fórmula técnica cadastrada; portanto já falham de forma segura em vez de gerar receita. O histórico confirma múltiplas variantes, então não devem receber fórmula genérica sem amostra técnica por ocorrência.
+- PC1 Suprema (76/76) e Portinhola Suprema (74/140) não possuem fórmula técnica cadastrada e agora também possuem classificação explícita de famílias/variantes antes do fallback. PC1 separa vidro, suspensa, lambri, veneziana, mista, ripado e kit porta pronta; Portinhola separa 1F/2F, veneziana cega/ventilada, contramarco, arremate e fechamento. Ambas permanecem fail-closed sem referência local validada.
 - O comparador ganhou modo `matriz`, somente leitura/Master/Neon: lê os payloads individuais do staging, deduplica orçamento/pedido equivalente, agrupa itens por assinatura estrutural (perfis + posições/quantidades estruturais + acessórios + vidros), calcula frequência/faixa de medidas e oferece amostras reais para abrir no comparador.
 - A matriz marca cada assinatura como `referencia_local` ou `nao_validada` e ordena primeiro as não validadas; se a leitura atingir o limite, a UI avisa para refinar o modelo antes de homologar.
+- PR #554 foi fechado por estar supersedido pelo #556, evitando duas implementações concorrentes da PC2.
 
 ## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
 
