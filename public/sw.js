@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atlas-one-v15'
+const CACHE_NAME = 'atlas-one-v16'
 const APP_SHELL_CACHE = 'atlas-one-shell-v8'
 const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final', '/compartilhar']
 
@@ -69,7 +69,7 @@ self.addEventListener('push', (event) => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     const visivel = windows.some((client) => client.visibilityState === 'visible')
 
-    if (visivel) {
+    if (visivel && payload.forceShow !== true) {
       for (const client of windows) {
         client.postMessage({ type: 'ATLAS_PUSH_RECEBIDO', payload })
       }
