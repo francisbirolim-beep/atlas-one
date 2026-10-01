@@ -173,6 +173,7 @@ export type StatusComparacao =
   | 'quantidade_diferente'
   | 'ausente_atlas'
   | 'ausente_wvetro'
+  | 'regra_pendente_atlas'
 
 export type LinhaComparacao = {
   tipo: 'perfil' | 'vidro' | 'acessorio'
@@ -393,12 +394,13 @@ function compararAcessorios(
 
   const folhas = Math.max(1, Number(String(item.Modelo || item.Nome || '').match(/(\d+)\s*FOLH/i)?.[1] || 1))
   const resultados = calcularAcessoriosTecnicos(defs, Number(item.Largura), Number(item.Altura), folhas, perfisAtlas, opcoes)
-  const aMap = new Map<string, { codigo: string; descricao: string; quantidade: number | null }>()
+  const aMap = new Map<string, { codigo: string; descricao: string; quantidade: number | null; regraPendente: boolean }>()
   defs.forEach((def, i) => {
     const resultado = resultados[i]
     if (resultado?.ativo === false) return
     const k = String(def.codigo || '').toUpperCase()
     if (!k) return
+    const regraPendente = resultado?.ativo !== false && resultado?.valor == null && !String(def.formula_quantidade || '').trim()
     const quantidade = resultado?.valor ?? def.quantidade_referencia ?? null
     const atual = aMap.get(k)
     if (!atual) {
@@ -406,12 +408,14 @@ function compararAcessorios(
         codigo: def.codigo,
         descricao: String(def.descricao || ''),
         quantidade,
+        regraPendente,
       })
       return
     }
     atual.quantidade = atual.quantidade == null || quantidade == null
       ? atual.quantidade ?? quantidade
       : atual.quantidade + quantidade
+    atual.regraPendente = atual.regraPendente || regraPendente
     if (!atual.descricao && def.descricao) atual.descricao = def.descricao
   })
 
@@ -432,9 +436,12 @@ function compararAcessorios(
     const igual = a.quantidade != null && Math.abs(w.quantidade - a.quantidade) < 0.0001
     linhas.push({
       tipo: 'acessorio', codigo: a.codigo, descricao: a.descricao || w.descricao,
-      status: igual ? 'igual' : 'quantidade_diferente',
+      status: a.regraPendente ? 'regra_pendente_atlas' : igual ? 'igual' : 'quantidade_diferente',
       wvetro: { quantidade: w.quantidade },
       atlas: { quantidade: a.quantidade },
+      observacao: a.regraPendente
+        ? 'O Atlas conhece este acessório e possui quantidade de referência, mas a fórmula de consumo ainda não foi validada.'
+        : null,
     })
   }
   return linhas
@@ -457,7 +464,7 @@ export function compararItemWVetroComFormulaAtlas(params: {
     acc.total += 1
     acc[linha.status] = (acc[linha.status] || 0) + 1
     return acc
-  }, { total: 0, igual: 0, medida_diferente: 0, quantidade_diferente: 0, ausente_atlas: 0, ausente_wvetro: 0 } as Record<string, number>)
+  }, { total: 0, igual: 0, medida_diferente: 0, quantidade_diferente: 0, ausente_atlas: 0, ausente_wvetro: 0, regra_pendente_atlas: 0 } as Record<string, number>)
 
   return {
     item: {
@@ -475,6 +482,6 @@ export function compararItemWVetroComFormulaAtlas(params: {
     },
     resumo,
     linhas,
-    aprovado: resumo.medida_diferente === 0 && resumo.quantidade_diferente === 0 && resumo.ausente_atlas === 0 && resumo.ausente_wvetro === 0,
+    aprovado: resumo.medida_diferente === 0 && resumo.quantidade_diferente === 0 && resumo.ausente_atlas === 0 && resumo.ausente_wvetro === 0 && resumo.regra_pendente_atlas === 0,
   }
 }
