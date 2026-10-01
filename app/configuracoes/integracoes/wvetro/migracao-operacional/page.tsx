@@ -138,6 +138,15 @@ type AuditoriaOpcoes = {
   classificacoes: string[]
 }
 
+type AuditoriaResumo = {
+  total: number
+  encontradas: number
+  ausentes: number
+  pendenciasReais: number
+  referenciasPendentesDistintas?: number
+  classificacoes: Record<string, number>
+}
+
 type AuditoriaCatalogos = {
   resumo: {
     linhas: { total: number; mapeadas: number; pendentes: number }
@@ -292,12 +301,15 @@ function rotuloAuditoria(classificacao: string) {
   const mapa: Record<string, string> = {
     confirmada: 'Confirmada',
     informativa: 'Informativa',
-    reconstruivel_baixa: 'Reconstruível pela baixa',
     sem_referencia: 'Sem referência válida',
-    resolvida_por_pedido: 'Resolvida por pedido',
-    resolvida_por_lote: 'Resolvida pelo lote',
+    preservada_historico_comercial: 'Preservada no histórico comercial',
     preservada_historico_operacional: 'Preservada no histórico operacional',
+    preservada_historico_financeiro: 'Preservada no histórico financeiro',
+    preservada_no_lote: 'Preservada dentro do lote',
     referencia_historica_sem_snapshot: 'Referência histórica sem snapshot',
+    baixa_sem_historico_financeiro: 'Baixa sem histórico financeiro',
+    projeto_producao_nao_localizado: 'Projeto de produção não localizado',
+    referencia_orcamento_nao_localizada: 'Orçamento não localizado',
     pendente_revisao: 'Pendente de revisão',
   }
   return mapa[classificacao] || classificacao
@@ -353,6 +365,7 @@ export default function MigracaoOperacionalWVetroPage() {
   const [auditoriaPagina, setAuditoriaPagina] = useState(1)
   const [auditoriaPaginas, setAuditoriaPaginas] = useState(1)
   const [auditoriaTotal, setAuditoriaTotal] = useState(0)
+  const [auditoriaResumo, setAuditoriaResumo] = useState<AuditoriaResumo | null>(null)
   const [catalogosCarregando, setCatalogosCarregando] = useState(false)
   const [catalogosAuditoria, setCatalogosAuditoria] = useState<AuditoriaCatalogos | null>(null)
 
@@ -467,6 +480,17 @@ export default function MigracaoOperacionalWVetroPage() {
       setAuditoriaPaginas(Number(json.paginas || 1))
       setAuditoriaTotal(Number(json.total || 0))
       setAuditoriaItens(Array.isArray(json.itens) ? json.itens : [])
+      setAuditoriaResumo(json?.resumo ? {
+        total: Number(json.resumo.total || 0),
+        encontradas: Number(json.resumo.encontradas || 0),
+        ausentes: Number(json.resumo.ausentes || 0),
+        pendenciasReais: Number(json.resumo.pendenciasReais || 0),
+        referenciasPendentesDistintas: Number(json.resumo.referenciasPendentesDistintas || 0),
+        classificacoes:
+          json.resumo.classificacoes && typeof json.resumo.classificacoes === 'object'
+            ? json.resumo.classificacoes
+            : {},
+      } : null)
       setAuditoriaOpcoes({
         origens: Array.isArray(json?.opcoes?.origens) ? json.opcoes.origens : [],
         relacoes: Array.isArray(json?.opcoes?.relacoes) ? json.opcoes.relacoes : [],
@@ -1271,6 +1295,47 @@ export default function MigracaoOperacionalWVetroPage() {
                   </div>
                   <div className="text-sm font-semibold text-slate-700">{auditoriaTotal} relação(ões)</div>
                 </div>
+
+                {auditoriaResumo && (
+                  <>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                      {[
+                        ['Relações auditadas', auditoriaResumo.total, 'text-slate-900'],
+                        ['Encontradas', auditoriaResumo.encontradas, 'text-emerald-700'],
+                        ['Ausências brutas', auditoriaResumo.ausentes, 'text-amber-700'],
+                        ['Pendências reais', auditoriaResumo.pendenciasReais, auditoriaResumo.pendenciasReais === 0 ? 'text-emerald-700' : 'text-red-700'],
+                        ['Referências pendentes', auditoriaResumo.referenciasPendentesDistintas || 0, auditoriaResumo.referenciasPendentesDistintas === 0 ? 'text-emerald-700' : 'text-red-700'],
+                      ].map(([label, valor, cls]) => (
+                        <div key={String(label)} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <div className="text-[11px] text-slate-500">{label}</div>
+                          <div className={`mt-1 text-xl font-bold ${cls}`}>{valor}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {auditoriaResumo.pendenciasReais === 0 && (
+                      <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                        <b>Auditoria relacional fechada:</b> todas as ausências brutas possuem tratamento
+                        determinístico ou evidência histórica preservada. Não há vínculo exigindo revisão humana.
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {Object.entries(auditoriaResumo.classificacoes)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([chave, quantidade]) => (
+                          <button
+                            key={chave}
+                            type="button"
+                            onClick={() => carregarAuditoria(1, { classificacao: chave })}
+                            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                          >
+                            {rotuloAuditoria(chave)} · {quantidade}
+                          </button>
+                        ))}
+                    </div>
+                  </>
+                )}
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                   <select
