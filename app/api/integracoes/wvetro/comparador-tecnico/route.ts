@@ -114,6 +114,7 @@ function pontuarResultado(resultado: ReturnType<typeof compararItemWVetroComForm
     Number(r.ausente_atlas || 0) * 20 +
     Number(r.ausente_wvetro || 0) * 10 +
     Number(r.quantidade_diferente || 0) * 5 +
+    Number(r.regra_pendente_atlas || 0) * 3 +
     Number(r.medida_diferente || 0)
   )
 }
