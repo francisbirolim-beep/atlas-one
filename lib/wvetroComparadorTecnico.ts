@@ -62,6 +62,60 @@ function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
   return a.length === e.length && a.every((codigo, index) => codigo === e[index])
 }
 
+export type AssinaturaComposicaoWVetro = {
+  chave: string
+  perfis: Array<{ codigo: string; posicoes: string[]; quantidade: number }>
+  acessorios: string[]
+  vidros: Array<{ especificacao: string; quantidade: number }>
+}
+
+export function assinaturaComposicaoWVetro(item: WVetroItemTecnico): AssinaturaComposicaoWVetro {
+  const perfisMap = new Map<string, { codigo: string; posicoes: Set<string>; quantidade: number }>()
+  for (const perfil of item.Perfil || []) {
+    const codigo = normalizarCodigo(perfil.Codigo)
+    if (!codigo) continue
+    const atual = perfisMap.get(codigo) || { codigo, posicoes: new Set<string>(), quantidade: 0 }
+    const posicao = normalizarCodigo(perfil.Posicao)
+    if (posicao) atual.posicoes.add(posicao)
+    const quantidade = Number(perfil.Qtde || 0)
+    atual.quantidade += Number.isFinite(quantidade) ? quantidade : 0
+    perfisMap.set(codigo, atual)
+  }
+
+  const perfis = [...perfisMap.values()]
+    .map(p => ({
+      codigo: p.codigo,
+      posicoes: [...p.posicoes].sort(),
+      quantidade: Number(p.quantidade.toFixed(6)),
+    }))
+    .sort((a, b) => a.codigo.localeCompare(b.codigo))
+
+  const acessorios = [...new Set(
+    (item.Acessorios || []).map(a => normalizarCodigo(a.Codigo)).filter(Boolean)
+  )].sort()
+
+  const vidrosMap = new Map<string, number>()
+  for (const vidro of item.Vidros || []) {
+    const especificacao = String(vidro.Especificacao || 'VIDRO').trim().toUpperCase()
+    const quantidade = Number(vidro.Qtde || 0)
+    vidrosMap.set(
+      especificacao,
+      (vidrosMap.get(especificacao) || 0) + (Number.isFinite(quantidade) ? quantidade : 0)
+    )
+  }
+  const vidros = [...vidrosMap.entries()]
+    .map(([especificacao, quantidade]) => ({ especificacao, quantidade: Number(quantidade.toFixed(6)) }))
+    .sort((a, b) => a.especificacao.localeCompare(b.especificacao))
+
+  const chave = JSON.stringify({
+    p: perfis.map(p => [p.codigo, p.posicoes, p.quantidade]),
+    a: acessorios,
+    v: vidros.map(v => [v.especificacao, v.quantidade]),
+  })
+
+  return { chave, perfis, acessorios, vidros }
+}
+
 export type FamiliaPc4Suprema =
   | 'quatro_planos'
   | 'sequencial'
