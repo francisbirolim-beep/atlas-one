@@ -238,9 +238,13 @@ export const FIXTURE_PC3_SUPREMA_GENERICA_ATLAS: FormulaAtlasComparacao = {
   ],
   vidro: {
     quantidade:3,
-    formula_largura:'ROUND(SU010/3)-58',
+    formula_largura:'ROUND((Largura-30)/3)-58',
     formula_altura:'Altura-167',
-    condicoes_largura:[{quando:{mao_amigo_largura:['largo']},formula:'ROUND(SU010/3)-73'}],
+    condicoes_largura:[
+      {quando:{contramarco:['cm200','cm060']},formula:'ROUND((Largura-54)/3)-58'},
+      {quando:{mao_amigo_largura:['largo']},formula:'ROUND((Largura-30)/3)-73'},
+      {quando:{contramarco:['cm200','cm060'],mao_amigo_largura:['largo']},formula:'ROUND((Largura-54)/3)-73'},
+    ],
     condicoes_altura:[{quando:{contramarco:['cm200','cm060']},formula:'Altura-179'}],
   },
   acessorios: [
