@@ -46,6 +46,48 @@ export type FormulaAtlasComparacao = TipologiaFormulasCorte & {
 }
 
 
+export const PC2_SUPREMA_DOMINANTE_PERFIS = [
+  'MP347','SU001','TMC','SU007','SU008','SU053','SU225','SU280','SU040','SU049','SU102',
+] as const
+
+export const PC2_SUPREMA_DOMINANTE_ACESSORIOS = [
+  'NYL335','NYL332','FRA820','CON409','RPCS100','NYL357','FIT206','FIT246','FIT212',
+  'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
+  'BUC755','SIL-PU',
+] as const
+
+function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
+  const a = [...new Set(atual.map(normalizarCodigo).filter(Boolean))].sort()
+  const e = [...new Set(esperado.map(normalizarCodigo).filter(Boolean))].sort()
+  return a.length === e.length && a.every((codigo, index) => codigo === e[index])
+}
+
+export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
+  if (!(item.Vidros || []).length) return false
+
+  const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+  const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+  if (!conjuntoCodigosExato(perfis, PC2_SUPREMA_DOMINANTE_PERFIS)) return false
+  if (!conjuntoCodigosExato(acessorios, PC2_SUPREMA_DOMINANTE_ACESSORIOS)) return false
+
+  const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
+  const qtdAcessorio = (codigo: string) =>
+    (item.Acessorios || [])
+      .filter(a => normalizarCodigo(a.Codigo) === codigo)
+      .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
+
+  return (
+    Math.abs(qtdAcessorio('RPCS100') - 4) < 0.0001 &&
+    Math.abs(qtdAcessorio('NYL332') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorio('CON409') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorio('FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorio('NYL335') - 1) < 0.0001
+  )
+}
+
 export type OpcaoTecnicaInferida = {
   chave: string
   valor: string
