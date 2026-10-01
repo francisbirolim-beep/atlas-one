@@ -57,6 +57,74 @@ function normalizarCodigo(v: unknown) {
   return String(v || '').trim().toUpperCase()
 }
 
+export type AlertaTecnicoWVetro = {
+  tipo: 'contramarco_familia_historica'
+  nivel: 'atencao'
+  titulo: string
+  detalhe: string
+  dados: Record<string, string | number | boolean | null>
+}
+
+function numeroPerfil(item: WVetroItemTecnico, codigo: string, eixo?: string) {
+  const perfil = (item.Perfil || []).find(p =>
+    normalizarCodigo(p.Codigo) === codigo &&
+    (!eixo || String(p.Posicao || '').toUpperCase() === eixo)
+  )
+  const medida = Number(perfil?.Medida)
+  return Number.isFinite(medida) ? medida * 1000 : null
+}
+
+function perto(a: number | null, b: number, tolerancia = 1) {
+  return a != null && Math.abs(a - b) <= tolerancia
+}
+
+export function detectarAlertasTecnicosWVetro(item: WVetroItemTecnico): AlertaTecnicoWVetro[] {
+  const codigos = new Set((item.Perfil || []).map(p => normalizarCodigo(p.Codigo)).filter(Boolean))
+  const cm = codigos.has('CM060') ? 'CM060' : codigos.has('CM200') ? 'CM200' : ''
+  if (!cm) return []
+
+  const largura = Number(item.Largura || 0)
+  const altura = Number(item.Altura || 0)
+  const cmL = numeroPerfil(item, cm, 'L')
+  const cmH = numeroPerfil(item, cm, 'H')
+  const deltaCmL = cmL == null ? null : cmL - largura
+  const deltaCmH = cmH == null ? null : cmH - altura
+
+  let familia = 'não classificada'
+  if (perto(deltaCmL, 24) && perto(deltaCmH, 12)) familia = 'envolvente (+24 L / +12 H)'
+  else if (perto(deltaCmL, -24) && perto(deltaCmH, -12)) familia = 'recuado (-24 L / -12 H)'
+  else if (perto(deltaCmL, 0) && perto(deltaCmH, 0)) familia = 'nominal (0 / 0)'
+  else if (perto(deltaCmL, -48) && perto(deltaCmH, -24)) familia = 'recuo duplo (-48 L / -24 H)'
+
+  const su010 = numeroPerfil(item, 'SU010', 'L')
+  const su012 = numeroPerfil(item, 'SU012', 'H')
+  const lateral = numeroPerfil(item, codigos.has('SU280') ? 'SU280' : codigos.has('SU245') ? 'SU245' : 'SU039', 'H')
+  const quadroPadrao = perto(su010 == null ? null : su010 - largura, -30) &&
+    perto(su012 == null ? null : su012 - altura, -4) &&
+    perto(lateral == null ? null : lateral - altura, -34)
+  const quadroReduzido = perto(su010 == null ? null : su010 - largura, -54) &&
+    perto(su012 == null ? null : su012 - altura, -16) &&
+    perto(lateral == null ? null : lateral - altura, -46)
+  const familiaQuadro = quadroPadrao ? 'quadro padrão' : quadroReduzido ? 'quadro reduzido' : 'quadro não classificado'
+
+  const extras = ['CL006','CL011','CT001'].filter(codigo => codigos.has(codigo))
+
+  return [{
+    tipo: 'contramarco_familia_historica',
+    nivel: 'atencao',
+    titulo: 'Contramarco histórico exige regra própria',
+    detalhe: `${cm} · ${familia} · ${familiaQuadro}. O histórico W.Vetro possui mais de uma família geométrica para contramarco; não promover uma fórmula única baseada apenas em “com/sem contramarco”.${extras.length ? ` Componentes adicionais observados: ${extras.join(', ')}.` : ''}`,
+    dados: {
+      codigo: cm,
+      familia,
+      familia_quadro: familiaQuadro,
+      delta_cm_l_mm: deltaCmL == null ? null : Number(deltaCmL.toFixed(3)),
+      delta_cm_h_mm: deltaCmH == null ? null : Number(deltaCmH.toFixed(3)),
+      extras: extras.join(',') || null,
+    },
+  }]
+}
+
 export function inferirOpcoesTecnicasWVetro(
   item: WVetroItemTecnico,
   formula: FormulaAtlasComparacao,
