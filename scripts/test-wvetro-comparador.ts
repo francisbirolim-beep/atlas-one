@@ -15,10 +15,18 @@ const pc2IntegradaFalsa = {
   ...FIXTURE_PC2_SUPREMA_WVETRO,
   Codigo: '*SUCB-PC2-08-EF*',
   Nome: 'PORTA DE CORRER INTEGRADA 02 FOLHAS | SUPREMA',
-  Acessorios: [...(FIXTURE_PC2_SUPREMA_WVETRO.Acessorios || []), { Codigo: 'MOTOR220', Qtde: 1 }],
 }
 if (ehPc2SupremaDominante(pc2IntegradaFalsa)) {
   throw new Error('Regressão PC2 dominante: variante integrada/persiana não pode cair na assinatura de vidro padrão.')
+}
+
+const pc2VenezianaFalsa = {
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Codigo: '*SUCB-PC2-03-EF',
+  Nome: 'PORTA DE CORRER 02 FOLHAS MÓVEIS | VENEZIANA | SUPREMA',
+}
+if (ehPc2SupremaDominante(pc2VenezianaFalsa)) {
+  throw new Error('Regressão PC2 dominante: variante veneziana não pode cair na assinatura de vidro padrão.')
 }
 
 const inferencia = inferirOpcoesTecnicasWVetro(
