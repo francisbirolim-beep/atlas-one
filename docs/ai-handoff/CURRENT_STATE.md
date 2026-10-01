@@ -10,6 +10,8 @@
 - Frequência PC2 Suprema observada: 217 registros / 224 peças; famílias: 123 vidro padrão, 59 integrada/persiana, 21 veneziana, 10 lambri, 2 abertura central e 2 bandeira.
 - Integração/persiana possui BOM agregado com componentes específicos identificados, mas o agregado mistura configurações e não prova todas as fórmulas de corte. Não promover offsets sem payload técnico por ocorrência.
 - Mac local estava offline nesta sessão; validação disponível foi GitHub Actions. Publicação continua reservada para depois da validação local/release check.
+- PC4 Suprema (98 registros / 100 peças) possui duas fórmulas Atlas, ambas `em_validacao` e inativas. O histórico foi separado em famílias (4 planos, sequencial, abertura central, fixas+móveis e veneziana/mista) e o comparador bloqueia fallback até existir referência histórica local validada.
+- PC1 Suprema (76/76) e Portinhola Suprema (74/140) não possuem fórmula técnica cadastrada; portanto já falham de forma segura em vez de gerar receita. O histórico confirma múltiplas variantes, então não devem receber fórmula genérica sem amostra técnica por ocorrência.
 
 ## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
 
