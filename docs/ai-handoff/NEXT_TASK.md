@@ -1,3 +1,13 @@
+## 2026-10-01 — W.VETRO / CHECKLIST FINAL DO PR #556
+
+1. Manter produção intocada até a etapa explícita de publicação.
+2. PC2 coberta neste pacote: vidro padrão sem reforço e variante de reforço externo; demais assinaturas ficam fail-closed.
+3. PC4 coberta: quatro folhas móveis em quatro planos; sequencial, abertura central, fixa+móvel e mistas continuam bloqueadas.
+4. Portinhola coberta somente na assinatura histórica 1F veneziana com altura 1630; outras alturas/assinaturas permanecem bloqueadas até provar regra de palhetas.
+5. PC1 continua bloqueada até resolver a fórmula histórica de `PAR1037/BUC755`; não promover receita parcial.
+6. Antes do merge/publicação: `git fetch origin`, integrar a `main` atual, rodar `npm run test:wvetro-comparador`, `npm run typecheck` e `npm run release:check`; conferir PR mergeável e CI verde.
+7. A próxima homologação deve usar a Matriz Histórica por assinatura, começando pelas assinaturas não validadas de maior frequência.
+
 ## 2026-10-01 — W.VETRO / PR #556 — PRÓXIMO PASSO
 
 1. Validação local concluída: `npm run test:wvetro-comparador` + `npm run release:check` passaram contra a `main` atual.

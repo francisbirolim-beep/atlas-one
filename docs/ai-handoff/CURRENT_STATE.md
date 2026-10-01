@@ -1,3 +1,15 @@
+## 2026-10-01 — W.VETRO / HOMOLOGAÇÃO POR OCORRÊNCIA REAL — PR #556
+
+- O Preview manual Vercel consultou o Neon real via `wvetro_migracao.raw_canonico` e leu 464 ocorrências técnicas Suprema (somente leitura).
+- Correção de nomenclatura: a antiga PC2 “dominante” é na verdade a assinatura com mão-de-amigo comum + reforço externo (`SU040 + SU049 + NYL357`), observada em 7 ocorrências do recorte. O nome de export legado foi preservado por compatibilidade, mas labels/comentários foram corrigidos.
+- PC2 vidro padrão sem reforço (`SU040 + SU041`, sem `NYL357`) é a assinatura mais frequente do staging no recorte: 30 ocorrências. Foi criada referência local estrita e validada em 1200x2300, 1482x2531 e 1990x2157, todas com zero divergências/pendências.
+- Os fixadores da PC2 deixaram de ser constantes de uma única amostra: `PAR1023 = 2*CEIL(Altura/500)+2`; `NYL190/PAR1025/PAR1037/BUC755 = CEIL(Largura/500)+2*CEIL(Altura/500)`.
+- PC4 Suprema 4 folhas móveis em 4 planos: assinatura mais frequente do recorte com 15 ocorrências; referência local validada em 4000x2200, 5300x2200 e 4800x2500, zero divergências/pendências. As demais PC4 continuam bloqueadas.
+- Portinhola Suprema 1F veneziana: assinatura de 8 ocorrências (pedido #531, altura 1630) validada em três larguras. A referência é deliberadamente limitada a `H=1630`, pois a quantidade de palhetas ainda não foi parametrizada para outras alturas. Demais portinholas continuam bloqueadas.
+- PC1 vidro tem 14 ocorrências na assinatura principal e fórmulas geométricas claras, porém `PAR1037/BUC755` ainda variam sem regra comprovada; PC1 permanece fail-closed para não inventar fixação.
+- O diagnóstico temporário usado no Preview não faz parte do pacote final e foi removido do working tree antes de commit.
+- Validação real dos recognizers no staging: PC2 sem reforço (30) coberta; PC2 reforço externo (7) coberta; PC4 quatro planos (15) coberta; Portinhola 1F H=1630 (8) coberta.
+
 ## 2026-10-01 — W.VETRO / PC2 SUPREMA DOMINANTE + PRIORIZAÇÃO HISTÓRICA
 
 - Branch: `feat/wvetro-pc2-suprema-dominante`; PR #556 draft; sem merge e sem deploy.

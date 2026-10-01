@@ -46,14 +46,47 @@ export type FormulaAtlasComparacao = TipologiaFormulasCorte & {
 }
 
 
-export const PC2_SUPREMA_DOMINANTE_PERFIS = [
+export const PC2_SUPREMA_REFORCO_EXTERNO_PERFIS = [
   'MP347','SU001','TMC','SU007','SU008','SU053','SU225','SU280','SU040','SU049','SU102',
 ] as const
 
-export const PC2_SUPREMA_DOMINANTE_ACESSORIOS = [
+export const PC2_SUPREMA_REFORCO_EXTERNO_ACESSORIOS = [
   'NYL335','NYL332','FRA820','CON409','RPCS100','NYL357','FIT206','FIT246','FIT212',
   'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
   'BUC755','SIL-PU',
+] as const
+
+// Aliases legados: o staging por ocorrência mostrou que esta assinatura é a variante
+// com reforço externo, não a composição dominante geral da PC2.
+export const PC2_SUPREMA_DOMINANTE_PERFIS = PC2_SUPREMA_REFORCO_EXTERNO_PERFIS
+export const PC2_SUPREMA_DOMINANTE_ACESSORIOS = PC2_SUPREMA_REFORCO_EXTERNO_ACESSORIOS
+
+export const PC2_SUPREMA_PADRAO_SEM_REFORCO_PERFIS = [
+  'MP347','SU001','TMC','SU007','SU008','SU053','SU225','SU280','SU040','SU041','SU102',
+] as const
+
+export const PC2_SUPREMA_PADRAO_SEM_REFORCO_ACESSORIOS = [
+  'NYL335','NYL332','FRA820','CON409','RPCS100','FIT206','FIT246','FIT212',
+  'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
+  'BUC755','SIL-PU',
+] as const
+
+export const PC4_SUPREMA_QUATRO_PLANOS_PERFIS = [
+  'MP347','SU121','TMC','SU123','SU008','SU053','SU225','SU280','SU040','SU041','SU102',
+] as const
+
+export const PC4_SUPREMA_QUATRO_PLANOS_ACESSORIOS = [
+  'NYL335','NYL332','NYL414','FRA820','CON409','RPCS100','FIT206','FIT246','FIT212',
+  'GUA259','GUA258','GUA171','PAR435','NYL042','PAR1023','NYL190','PAR1025','PAR1037',
+  'BUC755','SIL-PU',
+] as const
+
+export const PORTINHOLA_SUPREMA_VENEZIANA_1F_PERFIS = [
+  'CL006','CL011','SU108','SU111','SU279','US285',
+] as const
+
+export const PORTINHOLA_SUPREMA_VENEZIANA_1F_ACESSORIOS = [
+  'BUC755','DOB840','FEC514','GUA239','GUA282','PAR1037','SIL-PU',
 ] as const
 
 function conjuntoCodigosExato(atual: string[], esperado: readonly string[]) {
@@ -319,31 +352,81 @@ export function extrairVariantesPc2Suprema(item: WVetroItemTecnico): VariantesPc
   }
 }
 
-export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
+function qtdAcessorioUnitario(item: WVetroItemTecnico, codigo: string) {
+  const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
+  return (item.Acessorios || [])
+    .filter(a => normalizarCodigo(a.Codigo) === codigo)
+    .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
+}
+
+function assinaturaExataItem(
+  item: WVetroItemTecnico,
+  perfisEsperados: readonly string[],
+  acessoriosEsperados: readonly string[],
+) {
+  const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+  const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+  return conjuntoCodigosExato(perfis, perfisEsperados) && conjuntoCodigosExato(acessorios, acessoriosEsperados)
+}
+
+export function ehPc2SupremaReforcoExterno(item: WVetroItemTecnico) {
   const linha = String(item.Linha || '').trim().toUpperCase()
   const modelo = String(item.Modelo || '').trim().toUpperCase()
   if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
-  if (classificarFamiliaPc2Suprema(item) !== 'vidro_padrao') return false
-
-  if (!(item.Vidros || []).length) return false
-
-  const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
-  const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
-  if (!conjuntoCodigosExato(perfis, PC2_SUPREMA_DOMINANTE_PERFIS)) return false
-  if (!conjuntoCodigosExato(acessorios, PC2_SUPREMA_DOMINANTE_ACESSORIOS)) return false
-
-  const multiplicador = Math.max(1, Number(item.Qtde || 1) || 1)
-  const qtdAcessorio = (codigo: string) =>
-    (item.Acessorios || [])
-      .filter(a => normalizarCodigo(a.Codigo) === codigo)
-      .reduce((soma, a) => soma + (Number(a.Qtde || 0) || 0), 0) / multiplicador
-
+  if (classificarFamiliaPc2Suprema(item) !== 'vidro_padrao' || !(item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PC2_SUPREMA_REFORCO_EXTERNO_PERFIS, PC2_SUPREMA_REFORCO_EXTERNO_ACESSORIOS)) return false
   return (
-    Math.abs(qtdAcessorio('RPCS100') - 4) < 0.0001 &&
-    Math.abs(qtdAcessorio('NYL332') - 8) < 0.0001 &&
-    Math.abs(qtdAcessorio('CON409') - 2) < 0.0001 &&
-    Math.abs(qtdAcessorio('FRA820') - 2) < 0.0001 &&
-    Math.abs(qtdAcessorio('NYL335') - 1) < 0.0001
+    Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 4) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL332') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL335') - 1) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL357') - 2) < 0.0001
+  )
+}
+
+// Compatibilidade com chamadas anteriores ao diagnóstico por ocorrência.
+export function ehPc2SupremaDominante(item: WVetroItemTecnico) {
+  return ehPc2SupremaReforcoExterno(item)
+}
+
+export function ehPc2SupremaPadraoSemReforco(item: WVetroItemTecnico) {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE CORRER 02 FOLHAS')) return false
+  if (classificarFamiliaPc2Suprema(item) !== 'vidro_padrao' || !(item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PC2_SUPREMA_PADRAO_SEM_REFORCO_PERFIS, PC2_SUPREMA_PADRAO_SEM_REFORCO_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 4) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL332') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL335') - 1) < 0.0001
+  )
+}
+
+export function ehPc4SupremaQuatroPlanosValidada(item: WVetroItemTecnico) {
+  if (classificarFamiliaPc4Suprema(item) !== 'quatro_planos' || !(item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PC4_SUPREMA_QUATRO_PLANOS_PERFIS, PC4_SUPREMA_QUATRO_PLANOS_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'NYL335') - 3) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL332') - 16) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'NYL414') - 12) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'RPCS100') - 8) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FRA820') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'CON409') - 2) < 0.0001
+  )
+}
+
+export function ehPortinholaSupremaVeneziana1fValidada(item: WVetroItemTecnico) {
+  if (classificarFamiliaPortinholaSuprema(item) !== 'veneziana_1f') return false
+  if ((item.Vidros || []).length) return false
+  if (!assinaturaExataItem(item, PORTINHOLA_SUPREMA_VENEZIANA_1F_PERFIS, PORTINHOLA_SUPREMA_VENEZIANA_1F_ACESSORIOS)) return false
+  return (
+    Math.abs(qtdAcessorioUnitario(item, 'DOB840') - 2) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'FEC514') - 1) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'PAR1037') - 12) < 0.0001 &&
+    Math.abs(qtdAcessorioUnitario(item, 'BUC755') - 12) < 0.0001
   )
 }
 
