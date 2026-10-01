@@ -1,15 +1,14 @@
 ## 2026-10-01 — W.VETRO / PR #556 — PRÓXIMO PASSO
 
-1. Manter PR #556 sem merge/deploy até validação local no `~/Atlas-One-Dev`.
-2. Quando o Mac estiver online: atualizar a branch, rodar `npm run test:wvetro-comparador` e `npm run release:check`.
+1. Validação local concluída: `npm run test:wvetro-comparador` + `npm run release:check` passaram contra a `main` atual.
+2. Manter PR #556 sem deploy de produção até a conferência autenticada da Matriz histórica.
 3. Conferir no comparador uma PC2 vidro padrão dominante e confirmar resultado aprovado sem divergências/pendências.
 4. Conferir que PC2 integrada/persiana, veneziana, lambri, bandeira, abertura central e mista ficam bloqueadas quando não há assinatura técnica validada.
-5. Para validar essas famílias especiais, usar payload bruto por ocorrência do staging W.Vetro; não derivar fórmula definitiva do BOM agregado da tipologia.
-6. PC4 (98/100) já teve famílias classificadas e fallback bloqueado; para validar fórmula, capturar payload técnico por ocorrência e criar referência local por assinatura antes de liberar qualquer uma das duas fórmulas `em_validacao` do banco.
-7. PC1 (76/76) e Portinhola (74/140) continuam sem fórmula cadastrada e seguras por falha fechada; validar primeiro as variantes dominantes com payload técnico antes de criar receitas.
-8. Só após validação local e revisão do diff: merge manual e publicação conforme processo local-first.
-9. Na validação local, abrir o modo “Matriz histórica de composições”, filtrar `SUPREMA` e conferir que assinaturas sem referência aparecem primeiro; abrir pelo menos uma amostra real de PC2 e uma de PC4 direto pela matriz.
-10. Usar a matriz, e não o BOM agregado, como fonte para criar as próximas referências históricas por assinatura.
+5. Conferir PC4, PC1 e Portinhola: famílias devem aparecer separadas e continuar bloqueadas sem referência local validada.
+6. Para validar fórmulas novas, usar payload bruto por ocorrência do staging W.Vetro; não derivar fórmula definitiva do BOM agregado da tipologia.
+7. Abrir o modo “Matriz histórica de composições”, filtrar `SUPREMA` e conferir que assinaturas sem referência aparecem primeiro; abrir pelo menos uma amostra real de PC2 e uma de PC4.
+8. Usar a matriz como fila de homologação para as próximas referências históricas por assinatura.
+9. Depois da conferência autenticada da matriz: revisão final do diff, merge manual e publicação conforme processo local-first.
 
 ## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST
 
