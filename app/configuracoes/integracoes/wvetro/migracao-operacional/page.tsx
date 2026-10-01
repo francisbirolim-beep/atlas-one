@@ -727,8 +727,6 @@ export default function MigracaoOperacionalWVetroPage() {
                     <div className="mt-1 text-[11px] text-slate-500">
                       {catalogosAuditoria.resumo.cores.pendentesComUso} com uso histórico · {catalogosAuditoria.resumo.cores.pendentesSemUso} sem uso no recorte
                     </div>
-                    <div className="hidden">
-                    </div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vidros</div>
