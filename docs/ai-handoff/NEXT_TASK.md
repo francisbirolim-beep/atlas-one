@@ -5,10 +5,9 @@
 3. Conferir no comparador uma PC2 vidro padrão dominante e confirmar resultado aprovado sem divergências/pendências.
 4. Conferir que PC2 integrada/persiana, veneziana, lambri, bandeira, abertura central e mista ficam bloqueadas quando não há assinatura técnica validada.
 5. Para validar essas famílias especiais, usar payload bruto por ocorrência do staging W.Vetro; não derivar fórmula definitiva do BOM agregado da tipologia.
-6. Próxima prioridade técnica após PC2, pela frequência histórica real: Porta de Correr 04 Folhas Suprema (98 registros / 100 peças), depois Porta de Correr 01 Folha (76/76) e Portinhola (74/140), considerando apenas famílias ainda não validadas.
-6. PC4 já teve famílias classificadas e fallback bloqueado; para validar fórmula, capturar payload técnico por ocorrência e criar referência local por assinatura antes de liberar qualquer uma das duas fórmulas `em_validacao` do banco.
+6. PC4 (98/100) já teve famílias classificadas e fallback bloqueado; para validar fórmula, capturar payload técnico por ocorrência e criar referência local por assinatura antes de liberar qualquer uma das duas fórmulas `em_validacao` do banco.
 7. PC1 (76/76) e Portinhola (74/140) continuam sem fórmula cadastrada e seguras por falha fechada; validar primeiro as variantes dominantes com payload técnico antes de criar receitas.
-7. Só após validação local e revisão do diff: merge manual e publicação conforme processo local-first.
+8. Só após validação local e revisão do diff: merge manual e publicação conforme processo local-first.
 
 ## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST
 
