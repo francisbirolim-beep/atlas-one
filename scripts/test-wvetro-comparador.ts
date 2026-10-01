@@ -1,4 +1,4 @@
-import { classificarFamiliaPc2Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { classificarFamiliaPc2Suprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
 import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
@@ -18,6 +18,53 @@ for (const [item, esperado] of variantesPc2) {
 
 if (classificarFamiliaPc2Suprema(FIXTURE_PC2_SUPREMA_WVETRO) !== 'vidro_padrao') {
   throw new Error('Regressão classificação PC2: fixture principal deveria ser vidro_padrao.')
+}
+
+
+const varianteIntegradaMotor = extrairVariantesPc2Suprema({
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Codigo:'*SUCB-PC2-08-EF*',
+  Nome:'PORTA DE CORRER INTEGRADA 02 FOLHAS MOVEIS COM TRILHOS EMBUTIDOS, MOTOR 220VT | SUPREMA COM CONTRAMARCO E ARREMATE',
+})
+if (
+  varianteIntegradaMotor.familia !== 'integrada_persiana' ||
+  varianteIntegradaMotor.montagem !== 'duas_moveis' ||
+  varianteIntegradaMotor.contramarco !== 'com' ||
+  varianteIntegradaMotor.arremate !== 'com' ||
+  varianteIntegradaMotor.trilho !== 'embutido' ||
+  varianteIntegradaMotor.persianaAcionamento !== 'motor_220v'
+) {
+  throw new Error(`Regressão variantes PC2 integrada motor: ${JSON.stringify(varianteIntegradaMotor)}`)
+}
+
+const varianteIntegradaFita = extrairVariantesPc2Suprema({
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Codigo:'*SUCB-PC2-08-EF*',
+  Nome:'PORTA DE CORRER INTEGRADA 02 FOLHAS MOVEIS EM TRILHOS EMBUTIDOS COM RECOLHEDOR NA FITA | SUPREMA SEM CONTRAMARCO',
+})
+if (
+  varianteIntegradaFita.familia !== 'integrada_persiana' ||
+  varianteIntegradaFita.contramarco !== 'sem' ||
+  varianteIntegradaFita.trilho !== 'embutido' ||
+  varianteIntegradaFita.persianaAcionamento !== 'fita'
+) {
+  throw new Error(`Regressão variantes PC2 integrada fita: ${JSON.stringify(varianteIntegradaFita)}`)
+}
+
+const varianteSequencial = extrairVariantesPc2Suprema({
+  ...FIXTURE_PC2_SUPREMA_WVETRO,
+  Codigo:'*SUCB-PC2-01-EF',
+  Nome:'PORTA DE CORRER 02 FOLHAS SEQUENCIAIS COM REF DE ABA E REF EXTERNO TRILHOS EMBUTIDOS | SUPREMA COM CONTRAMARCO',
+})
+if (
+  varianteSequencial.familia !== 'vidro_padrao' ||
+  varianteSequencial.montagem !== 'sequencial' ||
+  varianteSequencial.contramarco !== 'com' ||
+  !varianteSequencial.reforcoAba ||
+  !varianteSequencial.reforcoExterno ||
+  varianteSequencial.trilho !== 'embutido'
+) {
+  throw new Error(`Regressão variantes PC2 sequencial: ${JSON.stringify(varianteSequencial)}`)
 }
 
 if (!ehPc2SupremaDominante(FIXTURE_PC2_SUPREMA_WVETRO)) {
