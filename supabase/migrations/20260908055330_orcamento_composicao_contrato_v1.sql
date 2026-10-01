@@ -38,8 +38,6 @@ alter table public.orcamento_precificacao_componentes
   add column if not exists referencia_custo_valor numeric,
   add column if not exists referencia_custo_dados jsonb not null default '{}'::jsonb;
 
--- Classificação determinística da origem que já existia no Atlas.
--- Nenhum valor é recalculado e nenhuma referência externa passa a ser custo oficial.
 update public.orcamento_precificacao_componentes
 set origem_custo_oficial = case
   when origem_custo in ('produto','catalogo','calculado') then 'atlas'
