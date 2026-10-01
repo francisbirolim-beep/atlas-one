@@ -559,3 +559,16 @@ segue em andamento — reauditar quando ela concluir.
 - Compra, separação, consumo e sobra são estados distintos.
 - Venda fechada preserva snapshot; revisão exige justificativa.
 - Venda/Orçamento Balcão rápido não entra no workflow de obra.
+
+
+## 2026-10-01 — Segurança W.Vetro reaplicada sobre a main atual
+
+Branch: `fix/wvetro-seguranca-main-atual`
+
+- importação W.Vetro da Medição Final passou a respeitar o nível real do setor `/producao/medicao-final`;
+- usuário `oculto` não acessa nem preview; usuário `consulta` pode visualizar preview, mas não confirmar importação; somente `edicao` e Master podem criar Medição Final;
+- rotas administrativas globais de W.Vetro passaram a usar um gate centralizado em `lib/wvetroAcessoServer.ts`;
+- o gate exige sessão válida, usuário Master, empresa ativa e slug compatível com `WVETRO_EMPRESA_SLUG` (fallback `esquadrifacio`);
+- rotas protegidas: auditoria, base técnica, linhas, tipologias, detalhe de tipologia, custos, imagens pendentes e reprocessamento;
+- nenhuma regra de parser, fórmula, custo, migração ou composição foi alterada;
+- validação local aprovada com TypeScript, build completo de 112 páginas e `release:check`.
