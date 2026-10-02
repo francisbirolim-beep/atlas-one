@@ -154,13 +154,41 @@ function folhasDoItem(item: any) {
   return 1
 }
 
-async function carregarProdutosTecnicos() {
-  const { data } = await supabase
-    .from('produtos')
-    .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
-    .eq('ativo', true)
-    .not('codigo', 'is', null)
-  const produtos = (data || []) as ProdutoTecnico[]
+async function carregarProdutosTecnicos(codigos?: string[]) {
+  const codigosUnicos = Array.from(new Set((codigos || []).map(codigoKey).filter(Boolean)))
+  const produtos: ProdutoTecnico[] = []
+
+  // O catálogo da Esquadrifácio já passa de 1.000 itens. Uma leitura sem filtro
+  // fica sujeita ao limite padrão do PostgREST e fazia códigos válidos "sumirem"
+  // da composição. Para cálculo técnico buscamos somente os códigos usados nas
+  // fórmulas selecionadas, em lotes pequenos.
+  if (codigosUnicos.length) {
+    for (let i = 0; i < codigosUnicos.length; i += 150) {
+      const lote = codigosUnicos.slice(i, i + 150)
+      const { data } = await supabase
+        .from('produtos')
+        .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
+        .eq('ativo', true)
+        .in('codigo', lote)
+      produtos.push(...((data || []) as ProdutoTecnico[]))
+    }
+  } else {
+    // Mantém compatibilidade para chamadas sem uma receita conhecida,
+    // paginando para não truncar o catálogo.
+    const tamanhoPagina = 1000
+    for (let inicio = 0; ; inicio += tamanhoPagina) {
+      const { data } = await supabase
+        .from('produtos')
+        .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
+        .eq('ativo', true)
+        .not('codigo', 'is', null)
+        .range(inicio, inicio + tamanhoPagina - 1)
+      const pagina = (data || []) as ProdutoTecnico[]
+      produtos.push(...pagina)
+      if (pagina.length < tamanhoPagina) break
+    }
+  }
+
   const mapa = new Map<string, ProdutoTecnico>()
   produtos.forEach(p => { if (p.codigo) mapa.set(codigoKey(p.codigo), p) })
   return mapa
@@ -277,7 +305,11 @@ export async function gerarPacoteTecnico(
       formulaMapa.set(f.tipologia_id, f)
     }
   }
-  const produtos = await carregarProdutosTecnicos()
+  const codigosNecessarios = Array.from(formulaMapa.values()).flatMap(formula => [
+    ...(Array.isArray(formula.pecas) ? formula.pecas.map((p: any) => String(p?.codigo || '')) : []),
+    ...(Array.isArray(formula.acessorios) ? formula.acessorios.map((a: any) => String(a?.codigo || '')) : []),
+  ]).filter(Boolean)
+  const produtos = await carregarProdutosTecnicos(codigosNecessarios)
 
   const { data: versoes } = await supabase
     .from('pacotes_tecnicos')
