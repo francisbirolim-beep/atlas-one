@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, CheckCircle2, Loader2, Send, ShieldCheck, Sparkles, ThumbsUp } from 'lucide-react'
+import { ArrowLeft, Bot, CheckCircle2, ExternalLink, Loader2, Send, ShieldCheck, Sparkles, ThumbsUp } from 'lucide-react'
 import Link from 'next/link'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { listarPermissoesUsuario } from '@/lib/setores'
@@ -13,6 +13,7 @@ type Bolha = {
   papel: 'user' | 'assistant'
   texto: string
   interacaoId?: string | null
+  fontesPublicas?: Array<{ titulo: string; url: string; trecho?: string }>
 }
 
 export default function AtlasEspecialistasPage() {
@@ -95,6 +96,7 @@ export default function AtlasEspecialistasPage() {
         papel: 'assistant',
         texto: data.resposta || '',
         interacaoId: data.interacaoId || null,
+        fontesPublicas: Array.isArray(data.fontesPublicas) ? data.fontesPublicas : [],
       }])
     } catch (e: any) {
       setErro(e?.message || 'Erro ao falar com o especialista.')
@@ -189,6 +191,26 @@ export default function AtlasEspecialistasPage() {
                 <div key={index} className={b.papel === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                   <div className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm ${b.papel === 'user' ? 'bg-[#182444] text-white' : 'border bg-slate-50'}`}>
                     {b.texto}
+                    {b.papel === 'assistant' && b.fontesPublicas && b.fontesPublicas.length > 0 && (
+                      <div className="mt-3 border-t pt-3">
+                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fontes públicas</div>
+                        <div className="flex flex-wrap gap-2">
+                          {b.fontesPublicas.map((fonte, fonteIndex) => (
+                            <a
+                              key={fonte.url + fonteIndex}
+                              href={fonte.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={fonte.trecho || fonte.titulo}
+                              className="inline-flex max-w-full items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-xs text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                            >
+                              <span className="max-w-[260px] truncate">{fonte.titulo || new URL(fonte.url).hostname}</span>
+                              <ExternalLink size={12} className="shrink-0"/>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {b.papel === 'assistant' && (
                       <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2">
                         <BotaoOuvirResposta texto={b.texto}/>
