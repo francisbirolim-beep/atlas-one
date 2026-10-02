@@ -113,6 +113,17 @@ function tamanhoBarra(p: any) {
   return num(p?.tamanho_barra_mm) || num(p?.tamanho_barra_mm_origem) || num(p?.dados_origem?.tamanho_raw) || 0
 }
 
+const MARCADOR_EXCECAO_CUSTO_ZERO = '[EXCECAO_CUSTO_ZERO]'
+const MARCADOR_PENDENCIA_TECNICA = '[PENDENCIA_TECNICA]'
+
+function chaveExcecaoCusto(itemRefValue?: string | null, categoria?: string | null, codigo?: string | null, descricao?: string | null) {
+  return [String(itemRefValue || ''), String(categoria || ''), codigoKey(codigo), String(descricao || '').trim().toUpperCase()].join('|')
+}
+
+export function temExcecaoCustoZero(componente: Pick<ComponentePrecificacao, 'custo_unitario' | 'observacoes'>) {
+  return num(componente.custo_unitario) <= 0 && String(componente.observacoes || '').includes(MARCADOR_EXCECAO_CUSTO_ZERO)
+}
+
 async function carregarConfigs() {
   const { data } = await supabase.from('configuracoes_precificacao').select('chave,valor').in('chave', ['preco_kg_aluminio','custo_pintura_kg','margem_padrao_orcamento'])
   const map = new Map<string, number>((data || []).map((x: any) => [String(x.chave), num(x.valor)]))
@@ -229,17 +240,24 @@ async function custoMaterial(material: MaterialPacote, produto: any, catalogo: a
 }
 
 async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
-  const [{ data: materiais }, { data: produtos }, { data: catalogo }, { data: orc }] = await Promise.all([
+  const [{ data: materiais }, { data: produtos }, { data: catalogo }, { data: orc }, { data: componentesAnteriores }] = await Promise.all([
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).eq('excluido', false).order('ordem'),
     supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true),
     supabase.from('catalogo_custos_tecnicos').select('*').eq('ativo', true),
     supabase.from('orcamentos').select('margem_padrao_pct').eq('id', orcamentoId).single(),
+    supabase.from('orcamento_precificacao_componentes').select('item_ref,categoria,codigo,descricao,custo_unitario,observacoes').eq('orcamento_id', orcamentoId).eq('excluido', false),
   ])
   const cfg = await carregarConfigs()
   const pMap = new Map<string, any>(((produtos || []) as any[]).map((p: any) => [String(p.id), p]))
   const cProduto = new Map<string, any>(((catalogo || []) as any[]).filter((c: any) => c.produto_id).map((c: any) => [String(c.produto_id), c]))
   const cCodigo = new Map<string, any>(((catalogo || []) as any[]).filter((c: any) => c.codigo).map((c: any) => [codigoKey(c.codigo), c]))
   const margem = num(orc?.margem_padrao_pct, cfg.margemPadrao)
+  const excecoes = new Map<string, any>()
+  for (const anterior of (componentesAnteriores || []) as any[]) {
+    if (temExcecaoCustoZero(anterior)) {
+      excecoes.set(chaveExcecaoCusto(anterior.item_ref, anterior.categoria, anterior.codigo, anterior.descricao), anterior)
+    }
+  }
 
   await supabase.from('orcamento_precificacao_componentes').delete().eq('orcamento_id', orcamentoId).eq('incluido_manual', false)
   const linhas: any[] = []
@@ -247,30 +265,37 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
     const produto = m.produto_id ? pMap.get(m.produto_id) : null
     const cat = m.produto_id ? cProduto.get(m.produto_id) : cCodigo.get(codigoKey(m.codigo))
     const custo = await custoMaterial(m, produto, cat, cfg)
+    const categoria = categoriaMaterial(m.categoria)
+    const excecaoAnterior = excecoes.get(chaveExcecaoCusto(m.item_ref, categoria, m.codigo, m.descricao))
+    const pendenciaTecnica = m.status_calculo === 'pendente_formula'
+    const usarExcecao = Boolean(excecaoAnterior) && !pendenciaTecnica
+    const custoUnitario = usarExcecao ? 0 : custo.custo
     const quantidade = Math.max(0, num(m.quantidade_ajustada))
-    const custoTotal = custo.custo * quantidade
+    const custoTotal = custoUnitario * quantidade
     linhas.push({
       orcamento_id: orcamentoId,
       pacote_id: pacoteId,
       material_id: m.id,
       item_ref: m.item_ref || null,
-      categoria: categoriaMaterial(m.categoria),
+      categoria,
       produto_id: m.produto_id || null,
       catalogo_custo_id: cat?.id || null,
       codigo: m.codigo || null,
       descricao: m.descricao,
       unidade: m.unidade || 'UN',
       quantidade,
-      custo_unitario: custo.custo,
+      custo_unitario: custoUnitario,
       custo_total: custoTotal,
       margem_pct: margem,
       preco_venda: margemVenda(custoTotal, margem),
-      origem_custo: m.status_calculo === 'pendente_formula' ? 'pendente' : custo.origem,
-      origem_custo_oficial: m.status_calculo === 'pendente_formula' || custo.pendente ? 'pendente' : 'atlas',
-      custo_pendente: m.status_calculo === 'pendente_formula' || custo.pendente,
+      origem_custo: pendenciaTecnica ? 'pendente' : usarExcecao ? 'manual' : custo.origem,
+      origem_custo_oficial: pendenciaTecnica ? 'pendente' : usarExcecao ? 'manual' : custo.pendente ? 'pendente' : 'atlas',
+      custo_pendente: pendenciaTecnica || (usarExcecao ? false : custo.pendente),
       incluido_manual: false,
       excluido: false,
-      observacoes: [m.justificativa_ajuste, custo.motivo].filter(Boolean).join(' ') || null,
+      observacoes: usarExcecao
+        ? excecaoAnterior.observacoes
+        : [pendenciaTecnica ? MARCADOR_PENDENCIA_TECNICA : null, m.justificativa_ajuste, custo.motivo].filter(Boolean).join(' ') || null,
     })
   }
   if (linhas.length) await supabase.from('orcamento_precificacao_componentes').insert(linhas)
@@ -327,7 +352,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   const formulas: Record<string, any> = {}
   for (const f of (fs || []) as any[]) if (!formulas[f.tipologia_id] || f.status === 'validada') formulas[f.tipologia_id] = f
   const pendencias = ((componentes || []) as any[])
-    .filter((c: any) => c.custo_pendente || num(c.custo_unitario) <= 0)
+    .filter((c: any) => c.custo_pendente || (num(c.custo_unitario) <= 0 && !temExcecaoCustoZero(c)))
     .map((c: any) => `${c.codigo ? `${c.codigo} · ` : ''}${c.descricao}: custo ou regra técnica pendente.`)
   return {
     orcamento,
@@ -394,6 +419,43 @@ export async function salvarCustoComponente(componente: ComponentePrecificacao, 
     if (existente) await supabase.from('catalogo_custos_tecnicos').update(payload).eq('id', existente.id)
     else await supabase.from('catalogo_custos_tecnicos').insert(payload)
   }
+  const { data: pacote } = await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id', componente.orcamento_id).eq('origem','orcamento_simulacao').neq('status','substituido').order('versao',{ascending:false}).limit(1).maybeSingle()
+  if (pacote) await recalcularResumoPrecificacao(componente.orcamento_id, pacote.id)
+  return { ok: true as const }
+}
+
+export async function salvarExcecaoCustoZero(
+  componente: ComponentePrecificacao,
+  classificacao: 'sem_custo_aplicavel' | 'incluido_em_outro_item' | 'bonificado',
+  justificativa: string,
+) {
+  const permitidas = new Set(['sem_custo_aplicavel', 'incluido_em_outro_item', 'bonificado'])
+  if (!permitidas.has(classificacao)) return { ok: false as const, error: 'Classificação de exceção inválida.' }
+  if (justificativa.trim().length < 5) return { ok: false as const, error: 'Explique o motivo da exceção de custo zero.' }
+  if (String(componente.observacoes || '').includes(MARCADOR_PENDENCIA_TECNICA)) {
+    return { ok: false as const, error: 'Este componente possui pendência técnica. Resolva a regra técnica antes de tratar o custo.' }
+  }
+
+  const usuario = await usuarioAtual()
+  const registro = {
+    classificacao,
+    justificativa: justificativa.trim(),
+    usuario_id: usuario?.id || null,
+    usuario_nome: usuario?.nome || null,
+    registrado_em: new Date().toISOString(),
+  }
+  const observacoes = [componente.observacoes, `${MARCADOR_EXCECAO_CUSTO_ZERO} ${JSON.stringify(registro)}`].filter(Boolean).join('\n')
+  const { error } = await supabase.from('orcamento_precificacao_componentes').update({
+    custo_unitario: 0,
+    custo_total: 0,
+    preco_venda: 0,
+    origem_custo: 'manual',
+    origem_custo_oficial: 'manual',
+    custo_pendente: false,
+    observacoes,
+  }).eq('id', componente.id)
+  if (error) return { ok: false as const, error: error.message }
+
   const { data: pacote } = await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id', componente.orcamento_id).eq('origem','orcamento_simulacao').neq('status','substituido').order('versao',{ascending:false}).limit(1).maybeSingle()
   if (pacote) await recalcularResumoPrecificacao(componente.orcamento_id, pacote.id)
   return { ok: true as const }
