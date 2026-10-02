@@ -14,6 +14,15 @@ type Bolha = {
   texto: string
   interacaoId?: string | null
   fontesPublicas?: Array<{ titulo: string; url: string; trecho?: string }>
+  audioUrl?: string
+  audioDuracaoSeg?: number
+}
+
+type AudioEnviado = {
+  storagePath: string
+  mediaType: string
+  duracaoSeg: number
+  transcricaoAutomatica: boolean
 }
 
 type Anexo = {
@@ -45,6 +54,13 @@ function ehArquivoTexto(file: File) {
     || ['csv', 'json', 'md', 'xml', 'yaml', 'yml', 'log'].includes(ext)
 }
 
+function formatarDuracao(segundos: number) {
+  const total = Math.max(0, Math.floor(segundos || 0))
+  const min = Math.floor(total / 60)
+  const seg = total % 60
+  return `${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`
+}
+
 export default function AtlasEspecialistasPage() {
   const [usuario, setUsuario] = useState<any>(null)
   const [permissoes, setPermissoes] = useState<Record<string, string>>({})
@@ -61,14 +77,35 @@ export default function AtlasEspecialistasPage() {
   const [ouvindo, setOuvindo] = useState(false)
   const [modoConversa, setModoConversa] = useState(false)
   const [falandoResposta, setFalandoResposta] = useState(false)
+  const [gravacaoSuportada, setGravacaoSuportada] = useState(false)
+  const [gravandoAudio, setGravandoAudio] = useState(false)
+  const [enviandoAudio, setEnviandoAudio] = useState(false)
+  const [segundosAudio, setSegundosAudio] = useState(0)
+  const [transcricaoAudio, setTranscricaoAudio] = useState('')
 
   const fimRef = useRef<HTMLDivElement>(null)
   const arquivoRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const reconhecimentoRef = useRef<any>(null)
   const modoConversaRef = useRef(false)
+  const modoReconhecimentoRef = useRef<'ditado' | 'conversa' | null>(null)
+  const textoBaseVozRef = useRef('')
+  const textoFinalVozRef = useRef('')
+  const textoParcialVozRef = useRef('')
+  const silencioTimerRef = useRef<number | null>(null)
+  const reinicioVozTimerRef = useRef<number | null>(null)
+  const turnoConversaEnviadoRef = useRef(false)
   const carregandoRef = useRef(false)
   const falandoRef = useRef(false)
+  const gravadorRef = useRef<MediaRecorder | null>(null)
+  const streamAudioRef = useRef<MediaStream | null>(null)
+  const partesAudioRef = useRef<Blob[]>([])
+  const gravandoAudioRef = useRef(false)
+  const timerAudioRef = useRef<number | null>(null)
+  const inicioAudioRef = useRef(0)
+  const reconhecimentoAudioRef = useRef<any>(null)
+  const transcricaoAudioFinalRef = useRef('')
+  const transcricaoAudioParcialRef = useRef('')
 
   useEffect(() => {
     ;(async () => {
@@ -92,10 +129,19 @@ export default function AtlasEspecialistasPage() {
     if (typeof window === 'undefined') return
     const w = window as any
     setVozSuportada(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition))
+    setGravacaoSuportada(Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function' && typeof w.MediaRecorder !== 'undefined'))
 
     return () => {
       modoConversaRef.current = false
+      modoReconhecimentoRef.current = null
+      gravandoAudioRef.current = false
       try { reconhecimentoRef.current?.abort?.() } catch {}
+      try { reconhecimentoAudioRef.current?.abort?.() } catch {}
+      try { gravadorRef.current?.state !== 'inactive' && gravadorRef.current?.stop?.() } catch {}
+      streamAudioRef.current?.getTracks().forEach(track => track.stop())
+      if (silencioTimerRef.current) window.clearTimeout(silencioTimerRef.current)
+      if (reinicioVozTimerRef.current) window.clearTimeout(reinicioVozTimerRef.current)
+      if (timerAudioRef.current) window.clearInterval(timerAudioRef.current)
       if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     }
   }, [])
@@ -116,18 +162,56 @@ export default function AtlasEspecialistasPage() {
 
   const atual = AI_ESPECIALISTAS.find(e => e.modulo === selecionado) || AI_ESPECIALISTAS[0]
 
-  function pararReconhecimento() {
-    try { reconhecimentoRef.current?.stop?.() } catch {}
+  function limparTimersVoz() {
+    if (silencioTimerRef.current) {
+      window.clearTimeout(silencioTimerRef.current)
+      silencioTimerRef.current = null
+    }
+    if (reinicioVozTimerRef.current) {
+      window.clearTimeout(reinicioVozTimerRef.current)
+      reinicioVozTimerRef.current = null
+    }
+  }
+
+  function textoAtualVoz() {
+    return [textoBaseVozRef.current, textoFinalVozRef.current, textoParcialVozRef.current]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function pararInstanciaReconhecimento(abortar = false) {
+    const atual = reconhecimentoRef.current
     reconhecimentoRef.current = null
+    if (!atual) {
+      setOuvindo(false)
+      return
+    }
+    limparTimersVoz()
+    try {
+      if (abortar) atual.abort?.()
+      else atual.stop?.()
+    } catch {}
     setOuvindo(false)
+  }
+
+  function pararDitado() {
+    const atual = textoAtualVoz()
+    if (atual) setEntrada(atual)
+    modoReconhecimentoRef.current = null
+    pararInstanciaReconhecimento(false)
   }
 
   function pararConversa() {
     modoConversaRef.current = false
+    modoReconhecimentoRef.current = null
     setModoConversa(false)
-    pararReconhecimento()
+    turnoConversaEnviadoRef.current = false
+    pararInstanciaReconhecimento(true)
     falandoRef.current = false
     setFalandoResposta(false)
+    setEntrada('')
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }
@@ -159,7 +243,10 @@ export default function AtlasEspecialistasPage() {
     falandoRef.current = true
     setFalandoResposta(true)
 
+    let terminou = false
     const terminar = () => {
+      if (terminou) return
+      terminou = true
       falandoRef.current = false
       setFalandoResposta(false)
       aoTerminar?.()
@@ -169,8 +256,25 @@ export default function AtlasEspecialistasPage() {
     window.speechSynthesis.speak(fala)
   }
 
-  function iniciarReconhecimento(enviarAutomaticamente: boolean) {
-    if (typeof window === 'undefined' || carregandoRef.current || falandoRef.current) return
+  function finalizarTurnoConversa() {
+    if (!modoConversaRef.current || carregandoRef.current || falandoRef.current || turnoConversaEnviadoRef.current) return
+    const texto = textoAtualVoz()
+    if (!texto) {
+      iniciarReconhecimento('conversa', false)
+      return
+    }
+
+    turnoConversaEnviadoRef.current = true
+    setEntrada('')
+    pararInstanciaReconhecimento(false)
+    textoBaseVozRef.current = ''
+    textoFinalVozRef.current = ''
+    textoParcialVozRef.current = ''
+    void enviar(texto)
+  }
+
+  function iniciarReconhecimento(modo: 'ditado' | 'conversa', preservarTexto = false) {
+    if (typeof window === 'undefined' || carregandoRef.current || falandoRef.current || gravandoAudioRef.current) return
     const w = window as any
     const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!SpeechRecognition) {
@@ -178,69 +282,108 @@ export default function AtlasEspecialistasPage() {
       return
     }
 
-    pararReconhecimento()
+    pararInstanciaReconhecimento(true)
     setErro('')
+    modoReconhecimentoRef.current = modo
+
+    if (!preservarTexto) {
+      textoBaseVozRef.current = modo === 'ditado' ? entrada.trim() : ''
+      textoFinalVozRef.current = ''
+      textoParcialVozRef.current = ''
+      turnoConversaEnviadoRef.current = false
+    }
+
     const r = new SpeechRecognition()
     reconhecimentoRef.current = r
     r.lang = 'pt-BR'
     r.interimResults = true
-    r.continuous = false
+    // Alguns navegadores encerram a sessão mesmo com continuous=true.
+    // O onend abaixo reinicia enquanto o usuário mantiver Falar/Conversar ativo.
+    r.continuous = true
     r.maxAlternatives = 1
 
-    let textoFinal = ''
-    let enviado = false
+    r.onstart = () => {
+      if (reconhecimentoRef.current === r) setOuvindo(true)
+    }
 
-    r.onstart = () => setOuvindo(true)
     r.onresult = (event: any) => {
       let parcial = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const trecho = String(event.results[i]?.[0]?.transcript || '').trim()
         if (!trecho) continue
-        if (event.results[i].isFinal) textoFinal = (textoFinal + ' ' + trecho).trim()
-        else parcial = (parcial + ' ' + trecho).trim()
+        if (event.results[i].isFinal) {
+          textoFinalVozRef.current = [textoFinalVozRef.current, trecho].filter(Boolean).join(' ').trim()
+        } else {
+          parcial = [parcial, trecho].filter(Boolean).join(' ').trim()
+        }
       }
-
-      const exibido = [textoFinal, parcial].filter(Boolean).join(' ').trim()
+      textoParcialVozRef.current = parcial
+      const exibido = textoAtualVoz()
       if (exibido) setEntrada(exibido)
 
-      if (enviarAutomaticamente && textoFinal && !enviado) {
-        enviado = true
-        setEntrada('')
-        try { r.stop() } catch {}
-        void enviar(textoFinal)
+      if (modo === 'conversa' && exibido) {
+        if (silencioTimerRef.current) window.clearTimeout(silencioTimerRef.current)
+        silencioTimerRef.current = window.setTimeout(() => {
+          silencioTimerRef.current = null
+          finalizarTurnoConversa()
+        }, 2000)
       }
     }
 
     r.onerror = (event: any) => {
-      if (!['no-speech', 'aborted'].includes(String(event?.error || ''))) {
-        setErro('Não consegui entender o áudio. Tente novamente.')
+      const codigo = String(event?.error || '')
+      if (['not-allowed', 'service-not-allowed'].includes(codigo)) {
+        modoReconhecimentoRef.current = null
+        modoConversaRef.current = false
+        setModoConversa(false)
+        setErro('O navegador bloqueou o microfone. Libere a permissão do microfone para o Atlas e tente novamente.')
+        return
+      }
+      if (!['no-speech', 'aborted'].includes(codigo)) {
+        setErro('O reconhecimento de voz foi interrompido. Vou manter o texto já capturado; tente novamente se necessário.')
       }
     }
 
     r.onend = () => {
+      if (reconhecimentoRef.current === r) reconhecimentoRef.current = null
       setOuvindo(false)
-      reconhecimentoRef.current = null
-      if (modoConversaRef.current && enviarAutomaticamente && !enviado && !carregandoRef.current && !falandoRef.current) {
-        window.setTimeout(() => {
-          if (modoConversaRef.current) iniciarReconhecimento(true)
-        }, 500)
+      const modoAtual = modoReconhecimentoRef.current
+      if (modoAtual !== modo) return
+
+      const texto = textoAtualVoz()
+      if (texto) {
+        textoBaseVozRef.current = texto
+        textoFinalVozRef.current = ''
+        textoParcialVozRef.current = ''
+      }
+
+      if (!carregandoRef.current && !falandoRef.current && !gravandoAudioRef.current) {
+        reinicioVozTimerRef.current = window.setTimeout(() => {
+          reinicioVozTimerRef.current = null
+          if (modoReconhecimentoRef.current === modo && !turnoConversaEnviadoRef.current) {
+            iniciarReconhecimento(modo, true)
+          }
+        }, modo === 'conversa' ? 220 : 350)
       }
     }
 
     try {
       r.start()
     } catch {
-      setErro('Não foi possível iniciar o microfone.')
+      reconhecimentoRef.current = null
+      setOuvindo(false)
+      setErro('Não foi possível iniciar o microfone. Verifique a permissão do navegador.')
     }
   }
 
   function alternarDitado() {
-    if (ouvindo) {
-      pararReconhecimento()
+    if (modoReconhecimentoRef.current === 'ditado') {
+      pararDitado()
       return
     }
     if (modoConversaRef.current) pararConversa()
-    iniciarReconhecimento(false)
+    if (gravandoAudioRef.current) return
+    iniciarReconhecimento('ditado', false)
   }
 
   function alternarModoConversa() {
@@ -248,11 +391,220 @@ export default function AtlasEspecialistasPage() {
       pararConversa()
       return
     }
+    if (modoReconhecimentoRef.current === 'ditado') pararDitado()
+    if (gravandoAudioRef.current) return
+
     modoConversaRef.current = true
+    modoReconhecimentoRef.current = 'conversa'
     setModoConversa(true)
     setEntrada('')
     setErro('')
-    iniciarReconhecimento(true)
+    turnoConversaEnviadoRef.current = false
+    iniciarReconhecimento('conversa', false)
+  }
+
+  function pararTranscricaoGravacao() {
+    const r = reconhecimentoAudioRef.current
+    reconhecimentoAudioRef.current = null
+    if (!r) return
+    try { r.stop?.() } catch {}
+  }
+
+  function iniciarTranscricaoGravacao() {
+    if (typeof window === 'undefined' || !gravandoAudioRef.current) return
+    const w = window as any
+    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    const r = new SpeechRecognition()
+    reconhecimentoAudioRef.current = r
+    r.lang = 'pt-BR'
+    r.interimResults = true
+    r.continuous = true
+    r.maxAlternatives = 1
+
+    r.onresult = (event: any) => {
+      let parcial = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const trecho = String(event.results[i]?.[0]?.transcript || '').trim()
+        if (!trecho) continue
+        if (event.results[i].isFinal) {
+          transcricaoAudioFinalRef.current = [transcricaoAudioFinalRef.current, trecho].filter(Boolean).join(' ').trim()
+        } else {
+          parcial = [parcial, trecho].filter(Boolean).join(' ').trim()
+        }
+      }
+      transcricaoAudioParcialRef.current = parcial
+      const total = [transcricaoAudioFinalRef.current, parcial].filter(Boolean).join(' ').trim()
+      setTranscricaoAudio(total)
+    }
+
+    r.onerror = (event: any) => {
+      const codigo = String(event?.error || '')
+      if (['not-allowed', 'service-not-allowed'].includes(codigo)) {
+        setErro('O áudio continua gravando, mas o navegador não permitiu a transcrição automática.')
+      }
+    }
+
+    r.onend = () => {
+      if (reconhecimentoAudioRef.current === r) reconhecimentoAudioRef.current = null
+      if (gravandoAudioRef.current) {
+        window.setTimeout(() => {
+          if (gravandoAudioRef.current && !reconhecimentoAudioRef.current) iniciarTranscricaoGravacao()
+        }, 300)
+      }
+    }
+
+    try { r.start() } catch {}
+  }
+
+  function mimeRecorderPreferido() {
+    if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return ''
+    const candidatos = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus']
+    return candidatos.find(tipo => MediaRecorder.isTypeSupported?.(tipo)) || ''
+  }
+
+  async function processarAudioGravado(blob: Blob, mediaType: string, duracaoSeg: number) {
+    setEnviandoAudio(true)
+    setErro('')
+    try {
+      const ext = mediaType.includes('mp4') ? 'm4a' : mediaType.includes('ogg') ? 'ogg' : mediaType.includes('mpeg') ? 'mp3' : 'webm'
+      const file = new File([blob], `audio-atlas-${Date.now()}.${ext}`, { type: mediaType })
+      const form = new FormData()
+      form.append('audio', file)
+      form.append('duracaoSeg', String(duracaoSeg))
+
+      const token = await tokenAtual()
+      const resp = await fetch('/api/ia/audio', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + (token || '') },
+        body: form,
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar o áudio.')
+
+      const transcricao = [transcricaoAudioFinalRef.current, transcricaoAudioParcialRef.current]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      const audioMeta: AudioEnviado = {
+        storagePath: String(data.storagePath || ''),
+        mediaType,
+        duracaoSeg,
+        transcricaoAutomatica: Boolean(transcricao),
+      }
+
+      if (!transcricao) {
+        setBolhas(prev => [...prev, {
+          papel: 'user',
+          texto: `🎤 Áudio ${formatarDuracao(duracaoSeg)}\nNão houve transcrição automática neste navegador.`,
+          audioUrl: String(data.signedUrl || ''),
+          audioDuracaoSeg: duracaoSeg,
+        }])
+        setErro('O áudio foi salvo, mas este navegador não conseguiu transformar a fala em texto. Para a IA entender sem API paga, use Chrome/Edge com permissão de voz ou o modo Conversar.')
+        return
+      }
+
+      await enviar(transcricao, {
+        audio: audioMeta,
+        audioUrl: String(data.signedUrl || ''),
+        audioDuracaoSeg: duracaoSeg,
+      })
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível enviar o áudio.')
+    } finally {
+      setEnviandoAudio(false)
+      setTranscricaoAudio('')
+      transcricaoAudioFinalRef.current = ''
+      transcricaoAudioParcialRef.current = ''
+    }
+  }
+
+  async function iniciarGravacaoAudio() {
+    if (!gravacaoSuportada || gravandoAudioRef.current || carregandoRef.current || enviandoAudio) return
+    if (modoConversaRef.current) pararConversa()
+    if (modoReconhecimentoRef.current === 'ditado') pararDitado()
+
+    setErro('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+      streamAudioRef.current = stream
+      partesAudioRef.current = []
+      transcricaoAudioFinalRef.current = ''
+      transcricaoAudioParcialRef.current = ''
+      setTranscricaoAudio('')
+      setSegundosAudio(0)
+
+      const mimeType = mimeRecorderPreferido()
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      gravadorRef.current = mr
+      gravandoAudioRef.current = true
+      setGravandoAudio(true)
+      inicioAudioRef.current = Date.now()
+
+      timerAudioRef.current = window.setInterval(() => {
+        setSegundosAudio(Math.max(0, Math.floor((Date.now() - inicioAudioRef.current) / 1000)))
+      }, 250)
+
+      mr.ondataavailable = event => {
+        if (event.data.size) partesAudioRef.current.push(event.data)
+      }
+
+      mr.onstop = () => {
+        if (timerAudioRef.current) {
+          window.clearInterval(timerAudioRef.current)
+          timerAudioRef.current = null
+        }
+        const duracaoSeg = Math.max(1, Math.round((Date.now() - inicioAudioRef.current) / 1000))
+        const tipoBase = String(mr.mimeType || mimeType || 'audio/webm').split(';')[0] || 'audio/webm'
+        const blob = new Blob(partesAudioRef.current, { type: tipoBase })
+        partesAudioRef.current = []
+        streamAudioRef.current?.getTracks().forEach(track => track.stop())
+        streamAudioRef.current = null
+        gravadorRef.current = null
+        setGravandoAudio(false)
+        setSegundosAudio(duracaoSeg)
+        if (!blob.size) {
+          setErro('A gravação ficou vazia. Tente novamente.')
+          return
+        }
+        void processarAudioGravado(blob, tipoBase, duracaoSeg)
+      }
+
+      mr.start(500)
+      iniciarTranscricaoGravacao()
+    } catch {
+      gravandoAudioRef.current = false
+      setGravandoAudio(false)
+      streamAudioRef.current?.getTracks().forEach(track => track.stop())
+      streamAudioRef.current = null
+      setErro('Não foi possível acessar o microfone. Libere a permissão do microfone para o Atlas e tente novamente.')
+    }
+  }
+
+  function pararEEnviarGravacaoAudio() {
+    if (!gravandoAudioRef.current) return
+    gravandoAudioRef.current = false
+    pararTranscricaoGravacao()
+    if (timerAudioRef.current) {
+      window.clearInterval(timerAudioRef.current)
+      timerAudioRef.current = null
+    }
+    window.setTimeout(() => {
+      try {
+        if (gravadorRef.current?.state && gravadorRef.current.state !== 'inactive') gravadorRef.current.stop()
+      } catch {
+        setErro('Não foi possível finalizar a gravação.')
+      }
+    }, 250)
   }
 
   async function reduzirImagem(file: File): Promise<Anexo> {
@@ -366,7 +718,14 @@ export default function AtlasEspecialistasPage() {
     setErro('')
   }
 
-  async function enviar(textoForcado?: string) {
+  async function enviar(
+    textoForcado?: string,
+    opcoes?: {
+      audio?: AudioEnviado
+      audioUrl?: string
+      audioDuracaoSeg?: number
+    },
+  ) {
     const pergunta = String(textoForcado ?? entrada).trim()
     const anexoAtual = anexo
     if ((!pergunta && !anexoAtual) || carregandoRef.current) return
@@ -374,13 +733,18 @@ export default function AtlasEspecialistasPage() {
     setEntrada('')
     setAnexo(null)
     setErro('')
+    const textoUsuario = opcoes?.audio
+      ? `🎤 Áudio ${formatarDuracao(opcoes.audioDuracaoSeg || opcoes.audio.duracaoSeg)}\nTranscrição automática: ${pergunta}`
+      : (pergunta || 'Analisar arquivo anexado') + (anexoAtual ? '\n📎 ' + anexoAtual.nome : '')
     setBolhas(prev => [...prev, {
       papel: 'user',
-      texto: (pergunta || 'Analisar arquivo anexado') + (anexoAtual ? '\n📎 ' + anexoAtual.nome : ''),
+      texto: textoUsuario,
+      audioUrl: opcoes?.audioUrl,
+      audioDuracaoSeg: opcoes?.audioDuracaoSeg,
     }])
     setCarregando(true)
     carregandoRef.current = true
-    pararReconhecimento()
+    pararInstanciaReconhecimento(true)
 
     try {
       const token = await tokenAtual()
@@ -395,6 +759,7 @@ export default function AtlasEspecialistasPage() {
           pergunta,
           sessionId: sessoes[selecionado] || null,
           anexo: anexoAtual,
+          audio: opcoes?.audio || null,
         }),
       })
       const data = await resp.json()
@@ -413,12 +778,23 @@ export default function AtlasEspecialistasPage() {
 
       if (modoConversaRef.current && resposta) {
         falarResposta(resposta, () => {
-          if (modoConversaRef.current) iniciarReconhecimento(true)
+          if (modoConversaRef.current) {
+            turnoConversaEnviadoRef.current = false
+            iniciarReconhecimento('conversa', false)
+          }
         })
       }
     } catch (e: any) {
       setErro(e?.message || 'Erro ao falar com o especialista.')
       if (anexoAtual) setAnexo(anexoAtual)
+      if (modoConversaRef.current) {
+        turnoConversaEnviadoRef.current = false
+        window.setTimeout(() => {
+          if (modoConversaRef.current && !carregandoRef.current && !falandoRef.current) {
+            iniciarReconhecimento('conversa', false)
+          }
+        }, 500)
+      }
     } finally {
       setCarregando(false)
       carregandoRef.current = false
@@ -504,7 +880,7 @@ export default function AtlasEspecialistasPage() {
                   </div>
                   <h3 className="font-semibold">Converse com {atual.nome}</h3>
                   <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
-                    Digite, fale, use o modo Conversar ou envie foto/PDF para analisar junto com o especialista.
+                    Digite, dite, grave uma mensagem de voz, use o modo Conversar ou envie foto/PDF para analisar junto com o especialista.
                   </p>
                 </div>
               )}
@@ -513,6 +889,14 @@ export default function AtlasEspecialistasPage() {
                 <div key={index} className={b.papel === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                   <div className={'max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm ' + (b.papel === 'user' ? 'bg-[#182444] text-white' : 'border bg-slate-50')}>
                     {b.texto}
+                    {b.audioUrl && (
+                      <audio
+                        src={b.audioUrl}
+                        controls
+                        preload="metadata"
+                        className="mt-3 w-full max-w-sm"
+                      />
+                    )}
                     {b.papel === 'assistant' && b.fontesPublicas && b.fontesPublicas.length > 0 && (
                       <div className="mt-3 border-t pt-3">
                         <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fontes públicas</div>
@@ -580,31 +964,61 @@ export default function AtlasEspecialistasPage() {
                 onChange={e => void selecionarArquivo(e.target.files?.[0])}
               />
 
-              {vozSuportada && (
+              {(vozSuportada || gravacaoSuportada) && (
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={alternarDitado}
-                    disabled={carregando || falandoResposta || modoConversa}
-                    className={'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-40 ' + (ouvindo && !modoConversa ? 'border-red-200 bg-red-50 text-red-700' : 'bg-white text-slate-600 hover:bg-slate-50')}
-                  >
-                    {ouvindo && !modoConversa ? <Square size={14}/> : <Mic size={15}/>}
-                    {ouvindo && !modoConversa ? 'Parar' : 'Falar'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={alternarModoConversa}
-                    disabled={carregando && !modoConversa}
-                    className={'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-40 ' + (modoConversa ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'bg-white text-slate-600 hover:bg-slate-50')}
-                  >
-                    {modoConversa ? <Square size={14}/> : <MessageCircle size={15}/>}
-                    {modoConversa ? 'Encerrar conversa' : 'Conversar'}
-                  </button>
-                  {(ouvindo || falandoResposta) && (
+                  {vozSuportada && (
+                    <button
+                      type="button"
+                      onClick={alternarDitado}
+                      disabled={carregando || falandoResposta || modoConversa || gravandoAudio || enviandoAudio}
+                      className={'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-40 ' + (modoReconhecimentoRef.current === 'ditado' ? 'border-red-200 bg-red-50 text-red-700' : 'bg-white text-slate-600 hover:bg-slate-50')}
+                    >
+                      {modoReconhecimentoRef.current === 'ditado' ? <Square size={14}/> : <Mic size={15}/>}
+                      {modoReconhecimentoRef.current === 'ditado' ? 'Parar ditado' : 'Falar'}
+                    </button>
+                  )}
+
+                  {gravacaoSuportada && (
+                    <button
+                      type="button"
+                      onClick={() => gravandoAudio ? pararEEnviarGravacaoAudio() : void iniciarGravacaoAudio()}
+                      disabled={carregando || falandoResposta || modoConversa || enviandoAudio}
+                      className={'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-40 ' + (gravandoAudio ? 'border-red-300 bg-red-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50')}
+                    >
+                      {gravandoAudio ? <Square size={14}/> : <Mic size={15}/>}
+                      {gravandoAudio ? `Enviar áudio ${formatarDuracao(segundosAudio)}` : 'Gravar áudio'}
+                    </button>
+                  )}
+
+                  {vozSuportada && (
+                    <button
+                      type="button"
+                      onClick={alternarModoConversa}
+                      disabled={(carregando && !modoConversa) || gravandoAudio || enviandoAudio}
+                      className={'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-40 ' + (modoConversa ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'bg-white text-slate-600 hover:bg-slate-50')}
+                    >
+                      {modoConversa ? <Square size={14}/> : <MessageCircle size={15}/>}
+                      {modoConversa ? 'Encerrar conversa' : 'Conversar'}
+                    </button>
+                  )}
+
+                  {(ouvindo || falandoResposta || enviandoAudio) && (
                     <span className="text-xs font-medium text-slate-500">
-                      {falandoResposta ? 'Respondendo em voz alta...' : 'Ouvindo...'}
+                      {enviandoAudio ? 'Enviando e preparando o áudio...' : falandoResposta ? 'Respondendo em voz alta...' : 'Ouvindo...'}
                     </span>
                   )}
+                </div>
+              )}
+
+              {gravandoAudio && (
+                <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-red-700">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-red-600"/>
+                    Gravando mensagem de voz · {formatarDuracao(segundosAudio)}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {transcricaoAudio || (vozSuportada ? 'Pode falar normalmente. A transcrição aparece aqui enquanto você fala.' : 'Gravando áudio. Este navegador não oferece transcrição automática gratuita.')}
+                  </p>
                 </div>
               )}
 
@@ -663,7 +1077,7 @@ export default function AtlasEspecialistasPage() {
                 </button>
               </div>
               <p className="mt-2 text-center text-[11px] text-slate-400">
-                Voz usa recursos do navegador. Fotos, PDFs e arquivos de texto podem ser analisados sem API paga de voz.
+                Ditado e conversa usam os recursos de voz do navegador, sem API paga. Mensagens de voz ficam armazenadas de forma privada no Atlas.
               </p>
             </div>
           </div>
