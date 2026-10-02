@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, BookHeart, Building2, Loader2, LockKeyhole, MessageCircleHeart, Send, ShieldCheck, SmilePlus, Users } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import BotaoOuvirResposta from '@/components/ai/BotaoOuvirResposta'
 
 type DiarioItem = {
   id: string
@@ -229,6 +230,7 @@ export default function AtlasPessoasPage() {
                     <div key={item.id} className={item.papel === 'usuario' ? 'flex justify-end' : 'flex justify-start'}>
                       <div className={'max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm ' + (item.papel === 'usuario' ? 'bg-[#182444] text-white' : 'border bg-white')}>
                         {item.conteudo}
+                        {item.papel === 'assistente' && <div className="mt-2 border-t pt-1.5"><BotaoOuvirResposta texto={item.conteudo}/></div>}
                       </div>
                     </div>
                   ))}
