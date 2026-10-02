@@ -605,6 +605,21 @@ function tolerancia(a: number | null | undefined, b: number | null | undefined, 
   return Math.abs(a - b) <= limite
 }
 
+function medidasDistintas(valores: number[]): number[] {
+  const ordenadas = [...valores].sort((a, b) => a - b)
+  const unicas: number[] = []
+  for (const valor of ordenadas) {
+    if (!unicas.some(atual => Math.abs(atual - valor) < 0.001)) unicas.push(valor)
+  }
+  return unicas
+}
+
+function conjuntosMedidasIguais(a: number[], b: number[], limite = 1): boolean {
+  const aa = medidasDistintas(a)
+  const bb = medidasDistintas(b)
+  return aa.length === bb.length && aa.every((valor, index) => tolerancia(valor, bb[index], limite))
+}
+
 function compararPerfis(
   formula: FormulaAtlasComparacao,
   item: WVetroItemTecnico,
@@ -664,10 +679,12 @@ function compararPerfis(
     }
     if (!w || !a) continue
 
-    const wMedida = w.medidas[0] ?? null
-    const aMedida = a.medidas[0] ?? null
+    const wMedidas = medidasDistintas(w.medidas)
+    const aMedidas = medidasDistintas(a.medidas)
+    const wMedida = wMedidas[0] ?? null
+    const aMedida = aMedidas[0] ?? null
     const qtdIgual = Math.abs(w.quantidade - a.quantidade) < 0.0001
-    const medidaIgual = tolerancia(wMedida, aMedida, 1)
+    const medidaIgual = conjuntosMedidasIguais(wMedidas, aMedidas, 1)
     const status: StatusComparacao = !qtdIgual
       ? 'quantidade_diferente'
       : !medidaIgual
