@@ -3,9 +3,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant } from '@/lib/tenantServer'
 import {
   assumirConversa,
+  definirAcompanhamentoConversa,
   finalizarConversa,
   listarAcessosCanaisAtendimento,
   listarConversasAtendimento,
+  marcarConversaComoLida,
   transferirConversa,
 } from '@/lib/whatsappServer'
 
@@ -90,6 +92,12 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'assumir') {
       await assumirConversa(conversaId, usuario)
+    } else if (acao === 'marcar_lida') {
+      await marcarConversaComoLida(conversaId, usuario)
+    } else if (acao === 'acompanhar') {
+      await definirAcompanhamentoConversa(conversaId, true, usuario)
+    } else if (acao === 'parar_acompanhar') {
+      await definirAcompanhamentoConversa(conversaId, false, usuario)
     } else if (acao === 'transferir') {
       await transferirConversa(
         conversaId,
