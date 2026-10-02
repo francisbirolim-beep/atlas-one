@@ -1,1 +1,4 @@
 project_id = "atlas-one"
+
+[functions.ai-runtime-register]
+verify_jwt = false
