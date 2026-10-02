@@ -35,6 +35,11 @@ type Referencia = {
     vidros: number
     mapeados: number
   }
+  componentes?: Array<{
+    tipo: 'perfil' | 'acessorio' | 'vidro'
+    nome: string
+    codigo?: string | null
+  }>
 }
 
 const GRUPOS: Array<{ titulo: string; chaves: string[] }> = [
@@ -121,6 +126,8 @@ export default function ConfiguradorTecnicoWvetro({ value, onChange }: Props) {
         }
 
         if (!defaults.folhas && value.folhas) defaults.folhas = value.folhas
+        const vidrosReferencia = (ref?.componentes || []).filter(componente => componente.tipo === 'vidro')
+        if (!defaults.vidro && vidrosReferencia.length === 1) defaults.vidro = vidrosReferencia[0].nome
 
         const obrigatorias = vars.filter(v => v.obrigatorio).map(v => v.variavel.chave)
         const completas = obrigatorias.every(chave => Boolean(defaults[chave]))
@@ -253,6 +260,30 @@ export default function ConfiguradorTecnicoWvetro({ value, onChange }: Props) {
               </button>
             </div>
           )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Vidro</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">Especificação do vidro</label>
+              <input
+                type="text"
+                value={value.variaveis?.vidro || ''}
+                onChange={e => mudar('vidro', e.target.value)}
+                placeholder="Ex.: INCOLOR 06MM - TEMPERADO"
+                className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm"
+              />
+              {referencia?.componentes?.filter(componente => componente.tipo === 'vidro').map(componente => (
+                <button
+                  key={`${componente.codigo || 'VIDRO'}-${componente.nome}`}
+                  type="button"
+                  onClick={() => mudar('vidro', componente.nome)}
+                  className="mt-2 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700"
+                >
+                  Usar referência: {componente.nome}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {grupos.map(grupo => (
             <div key={grupo.titulo} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
