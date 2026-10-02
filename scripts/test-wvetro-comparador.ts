@@ -1,5 +1,5 @@
-import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PC4_SUPREMA_WVETRO, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_A_WVETRO, FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_B_WVETRO, FIXTURE_PC1_SUPREMA_VIDRO_ATLAS_REFERENCIA, FIXTURES_PC1_SUPREMA_VIDRO_DOMINANTE_WVETRO } from '../lib/wvetroComparadorFixtures'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPg2Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, extrairVariantesPc2Suprema, inferirOpcoesTecnicasWVetro } from '../lib/wvetroComparadorTecnico'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_GENERICA_ATLAS, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURES_JC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURES_PC3_SUPREMA_ATUAL_WVETRO, FIXTURE_PC3_SUPREMA_LEGADO_WVETRO, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_JC3_SUPREMA_WVETRO, FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_LAMBRIL_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_WVETRO, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_CM200_WVETRO, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_MAX1_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_WVETRO, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG1_VIDRO_SUPREMA_SEM_ARREMATE_WVETRO, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_BAS3_SUPREMA_WVETRO, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PC4_SUPREMA_WVETRO, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURES_PC2_SUPREMA_PADRAO_SEM_REFORCO_WVETRO, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_A_WVETRO, FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA, FIXTURES_PTA3_SUPREMA_FAMILIA_B_WVETRO, FIXTURE_PC1_SUPREMA_VIDRO_ATLAS_REFERENCIA, FIXTURES_PC1_SUPREMA_VIDRO_DOMINANTE_WVETRO, FIXTURE_PG2_SUPREMA_VIDRO_ARREMATE_ATLAS_REFERENCIA, FIXTURES_PG2_SUPREMA_VIDRO_ARREMATE_WVETRO } from '../lib/wvetroComparadorFixtures'
 import { calcularFormulasCorte } from '../lib/formulasCorteEngine'
 
 const inferencia = inferirOpcoesTecnicasWVetro(
@@ -630,6 +630,65 @@ console.log(JSON.stringify({
   familiasSeguras:true,
 }, null, 2))
 
+
+
+const pg2VidroResultados = FIXTURES_PG2_SUPREMA_VIDRO_ARREMATE_WVETRO.map(item => {
+  if (classificarFamiliaPg2Suprema(item) !== 'vidro') {
+    throw new Error(`Regressão PG2 ${item.Largura}x${item.Altura}: família vidro não reconhecida.`)
+  }
+
+  const comparado = compararItemWVetroComFormulaAtlas({
+    item,
+    formula: FIXTURE_PG2_SUPREMA_VIDRO_ARREMATE_ATLAS_REFERENCIA,
+    opcoes: {},
+  })
+
+  for (const status of hard) {
+    if (Number(comparado.resumo[status] || 0) !== 0) {
+      console.error(JSON.stringify({
+        medida:`${item.Largura}x${item.Altura}`,
+        status,
+        resumo:comparado.resumo,
+        divergencias:comparado.linhas.filter(l=>l.status!=='igual'&&l.status!=='regra_pendente_atlas'),
+      },null,2))
+      throw new Error(`Regressão PG2 Suprema ${item.Largura}x${item.Altura}: status ${status} deveria ser zero.`)
+    }
+  }
+
+  if (Number(comparado.resumo.regra_pendente_atlas || 0) !== 5) {
+    console.error(JSON.stringify({
+      medida:`${item.Largura}x${item.Altura}`,
+      resumo:comparado.resumo,
+      pendencias:comparado.linhas.filter(l=>l.status==='regra_pendente_atlas'),
+    },null,2))
+    throw new Error(`Regressão PG2 Suprema ${item.Largura}x${item.Altura}: esperadas 5 regras pendentes.`)
+  }
+
+  const pendentes = comparado.linhas
+    .filter(l=>l.status==='regra_pendente_atlas')
+    .map(l=>l.codigo)
+    .sort()
+  const esperadas = ['BUC755','NYL190','PAR1025','PAR1037','REBACA4X10'].sort()
+  if (JSON.stringify(pendentes) !== JSON.stringify(esperadas)) {
+    throw new Error(`Regressão PG2 Suprema: pendências inesperadas ${JSON.stringify(pendentes)}.`)
+  }
+
+  if (comparado.aprovado) {
+    throw new Error('Regressão PG2 Suprema: referência com regras pendentes não pode estar aprovada.')
+  }
+
+  return {
+    medida:`${item.Largura}x${item.Altura}`,
+    iguais:comparado.resumo.igual,
+    pendentes,
+  }
+})
+
+console.log(JSON.stringify({
+  ok:true,
+  fixture:'PG2 Suprema - vidro - arremate MP347 - sem contramarco',
+  amostras:pg2VidroResultados,
+},null,2))
 
 const pc1VidroResultados = FIXTURES_PC1_SUPREMA_VIDRO_DOMINANTE_WVETRO.map(item => {
   if (classificarFamiliaPc1Suprema(item) !== 'vidro') {

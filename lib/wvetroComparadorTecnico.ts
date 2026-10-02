@@ -197,6 +197,34 @@ export function classificarFamiliaPc1Suprema(item: WVetroItemTecnico): FamiliaPc
   return 'outra'
 }
 
+export type FamiliaPg2Suprema =
+  | 'vidro'
+  | 'veneziana'
+  | 'lambri'
+  | 'mista_vidro_veneziana'
+  | 'estrutura_ripado'
+  | 'kit_porta_pronta'
+  | 'outra'
+
+export function classificarFamiliaPg2Suprema(item: WVetroItemTecnico): FamiliaPg2Suprema {
+  const linha = String(item.Linha || '').trim().toUpperCase()
+  const modelo = String(item.Modelo || '').trim().toUpperCase()
+  const nome = String(item.Nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+  const codigo = normalizarCodigo(item.Codigo)
+
+  if (!linha.includes('SUPREMA') || !modelo.includes('PORTA DE GIRO 02 FOLHAS')) return 'outra'
+  if (nome.includes('KIT PORTA PRONTA') || nome.includes('SINCOL') || nome.includes('SINIKIT')) return 'kit_porta_pronta'
+  if (nome.includes('ESTRUTUR') && (nome.includes('RIPAD') || nome.includes('MUXARABE'))) return 'estrutura_ripado'
+  if (nome.includes('VIDRO SUPERIOR') || codigo.includes('PG2-02')) return 'mista_vidro_veneziana'
+  if (nome.includes('VENEZIANA') || codigo.includes('PG2-03')) return 'veneziana'
+  if (nome.includes('LAMBRI') || codigo.includes('PG2-05')) return 'lambri'
+  if ((item.Vidros || []).length > 0 || codigo.includes('PG2-01')) return 'vidro'
+  return 'outra'
+}
+
 export type FamiliaPortinholaSuprema =
   | 'veneziana_1f'
   | 'veneziana_2f'

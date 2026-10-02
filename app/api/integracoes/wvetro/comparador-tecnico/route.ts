@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro } from '@/lib/wvetroAcessoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { neonStaging, statusNeonStaging } from '@/lib/neonStaging'
-import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, ehPc4SupremaQuatroPlanosValidada, extrairVariantesPc2Suprema, extrairVariantesPortinholaSuprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
-import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA, FIXTURE_PC1_SUPREMA_VIDRO_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
+import { assinaturaComposicaoWVetro, classificarFamiliaPc1Suprema, classificarFamiliaPg2Suprema, classificarFamiliaPc2Suprema, classificarFamiliaPc4Suprema, classificarFamiliaPortinholaSuprema, compararItemWVetroComFormulaAtlas, ehPc2SupremaDominante, ehPc2SupremaPadraoSemReforco, ehPc4SupremaQuatroPlanosValidada, extrairVariantesPc2Suprema, extrairVariantesPortinholaSuprema, inferirOpcoesTecnicasWVetro, type FormulaAtlasComparacao, type WVetroItemTecnico } from '@/lib/wvetroComparadorTecnico'
+import { FIXTURE_JC2_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_ATLAS, FIXTURE_PC2_SUPREMA_DOMINANTE_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_PADRAO_SEM_REFORCO_ATLAS_REFERENCIA, FIXTURE_PC4_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PC2_SUPREMA_WVETRO, FIXTURE_PC3_SUPREMA_ATUAL_ATLAS_REFERENCIA, FIXTURE_PC3_SUPREMA_LEGADO_ATLAS_REFERENCIA, FIXTURE_JC3_SUPREMA_ATLAS_REFERENCIA , FIXTURE_PG1_LAMBRIL_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_CM200_ATLAS_REFERENCIA, FIXTURE_MAX1_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PG1_VIDRO_SUPREMA_SEM_ARREMATE_ATLAS_REFERENCIA, FIXTURE_BAS3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_ATLAS_REFERENCIA, FIXTURE_PTA3_SUPREMA_FAMILIA_B_ATLAS_REFERENCIA, FIXTURE_PC1_SUPREMA_VIDRO_ATLAS_REFERENCIA, FIXTURE_PG2_SUPREMA_VIDRO_ARREMATE_ATLAS_REFERENCIA } from '@/lib/wvetroComparadorFixtures'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -325,6 +325,43 @@ function formulasReferenciaLocal(item: WVetroItemTecnico) {
           acessorios: formula.acessorios || [],
         })
       }
+    }
+  }
+
+
+  if (
+    linha.includes('SUPREMA') &&
+    modelo.includes('PORTA DE GIRO 02 FOLHAS') &&
+    classificarFamiliaPg2Suprema(item) === 'vidro'
+  ) {
+    const perfis = (item.Perfil || []).map(p => String(p.Codigo || ''))
+    const acessorios = (item.Acessorios || []).map(a => String(a.Codigo || ''))
+    const perfisDominantes = [
+      '25-548 (L-715)','CL006','CL011','MP347','SU102','SU111','SU225','SU279',
+    ]
+    const acessoriosDominantes = [
+      'BUC755','CON295','DOB840','FEC338','FIT206','FRA822','GUA171','GUA239',
+      'GUA258','GUA259','MAC927','NYL042','NYL190','PAR1025','PAR1037',
+      'PAR435','REBACA4X10','SIL-PU',
+    ]
+
+    if (
+      (item.Vidros || []).length > 0 &&
+      conjuntoExato(perfis, perfisDominantes) &&
+      conjuntoExato(acessorios, acessoriosDominantes)
+    ) {
+      const formula = FIXTURE_PG2_SUPREMA_VIDRO_ARREMATE_ATLAS_REFERENCIA
+      refs.push({
+        id: 'referencia-local-pg2-suprema-vidro-arremate',
+        tipologia_id: formula.tipologia_id,
+        configuracao_label: formula.configuracao_label,
+        status: 'referencia_historica',
+        ativo: false,
+        variaveis: formula.variaveis,
+        pecas: formula.pecas,
+        vidro: formula.vidro,
+        acessorios: formula.acessorios || [],
+      })
     }
   }
 

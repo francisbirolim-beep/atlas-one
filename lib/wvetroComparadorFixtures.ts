@@ -1842,3 +1842,138 @@ export const FIXTURES_PC1_SUPREMA_VIDRO_DOMINANTE_WVETRO: WVetroItemTecnico[] = 
   pc1SupremaVidroDominanteItem(1235,2195,26,'WV-PC1-724-VIDRO'),
   pc1SupremaVidroDominanteItem(1350,2150,27,'WV-PC1-580-VIDRO'),
 ]
+
+
+// PG2 Suprema — Porta de Giro 02 Folhas com vidro, arremate MP347 e sem contramarco.
+// Evidência: 4 itens históricos com a mesma assinatura técnica.
+// Fixadores e rebites variáveis permanecem como referência até fechar a regra de espaçamento.
+export const FIXTURE_PG2_SUPREMA_VIDRO_ARREMATE_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: '27e16c88-3faf-443d-9dba-522dd138c639',
+  configuracao_label: 'PG2-SUPREMA · vidro · arremate MP347 · sem contramarco · referência histórica',
+  variaveis: [],
+  pecas: [
+    { eixo:'H', codigo:'25-548 (L-715)', formula:'Altura-30', descricao:'Marco/estrutura vertical', quantidade:2 },
+    { eixo:'L', codigo:'25-548 (L-715)', formula:'Largura/2-21', descricao:'Marco/estrutura horizontal por folha', quantidade:2 },
+    { codigo:'CL006', formula:'21', descricao:'Calço CL006 21 mm', quantidade:4 },
+    { codigo:'CL006', formula:'30', descricao:'Calço CL006 30 mm', quantidade:2 },
+    { codigo:'CL011', formula:'21', descricao:'Calço CL011 21 mm', quantidade:8 },
+    { codigo:'CL011', formula:'30', descricao:'Calço CL011 30 mm', quantidade:4 },
+    { eixo:'H', codigo:'MP347', formula:'Altura+22', descricao:'Arremate vertical', quantidade:2 },
+    { eixo:'L', codigo:'MP347', formula:'Largura+44', descricao:'Arremate horizontal', quantidade:1 },
+    { eixo:'H', codigo:'SU102', formula:'Altura-211', descricao:'Baguete vertical', quantidade:4 },
+    { eixo:'L', codigo:'SU102', formula:'Largura/2-140', descricao:'Baguete horizontal', quantidade:4 },
+    { eixo:'H', codigo:'SU111', formula:'Altura-49', descricao:'Montante da folha', quantidade:4 },
+    { eixo:'L', codigo:'SU111', formula:'Largura/2-40', descricao:'Travessa estrutural da folha', quantidade:2 },
+    { eixo:'L', codigo:'SU225', formula:'Largura/2-140', descricao:'Travessa inferior', quantidade:2 },
+    { eixo:'H', codigo:'SU279', formula:'Altura-4', descricao:'Marco vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU279', formula:'Largura-4', descricao:'Marco horizontal', quantidade:1 },
+  ],
+  vidro: {
+    quantidade:2,
+    formula_largura:'Largura/2-146',
+    formula_altura:'Altura-193',
+  },
+  acessorios: [
+    { codigo:'BUC755', quantidade_referencia:13, status:'referencia' },
+    { codigo:'CON295', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'DOB840', formula_quantidade:'6', status:'em_validacao' },
+    { codigo:'FEC338', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'FIT206', formula_quantidade:'(Largura+2*Altura)/1000', status:'em_validacao' },
+    { codigo:'FRA822', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'GUA171', formula_quantidade:'Largura/1000', status:'em_validacao' },
+    { codigo:'GUA239', formula_quantidade:'(Largura+2*Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA258', formula_quantidade:'(Largura+4*Altura)/1000', status:'em_validacao' },
+    { codigo:'GUA259', formula_quantidade:'(2*Largura+4*Altura)/1000', status:'em_validacao' },
+    { codigo:'MAC927', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'NYL042', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'NYL190', quantidade_referencia:13, status:'referencia' },
+    { codigo:'PAR1025', quantidade_referencia:13, status:'referencia' },
+    { codigo:'PAR1037', quantidade_referencia:13, status:'referencia' },
+    { codigo:'PAR435', formula_quantidade:'8', status:'em_validacao' },
+    { codigo:'REBACA4X10', quantidade_referencia:14, status:'referencia' },
+    { codigo:'SIL-PU', formula_quantidade:'(Largura+2*Altura)/12000', status:'em_validacao' },
+  ],
+}
+
+function pg2SupremaVidroArremateItem(
+  largura:number,
+  altura:number,
+  pontosFixacao:number,
+  rebites:number,
+  codigo:string,
+): WVetroItemTecnico {
+  const meia = largura / 2
+  const estruturaH = altura - 30
+  const estruturaL = meia - 21
+  const bagueteH = altura - 211
+  const bagueteL = meia - 140
+  const folhaH = altura - 49
+  const folhaL = meia - 40
+  const marcoH = altura - 4
+  const marcoL = largura - 4
+  return {
+    Codigo: codigo,
+    Nome:'PORTA DE GIRO 02 FOLHAS | SUPREMA SEM CONTRAMARCO',
+    Linha:'L. SUPREMA',
+    Modelo:'PORTA DE GIRO 02 FOLHAS',
+    Qtde:1,
+    Largura:largura,
+    Altura:altura,
+    Perfil:[
+      {Codigo:'25-548 (L-715)',Posicao:'H',Qtde:1,Medida:estruturaH/1000},
+      {Codigo:'25-548 (L-715)',Posicao:'H',Qtde:1,Medida:estruturaH/1000},
+      {Codigo:'25-548 (L-715)',Posicao:'L',Qtde:1,Medida:estruturaL/1000},
+      {Codigo:'25-548 (L-715)',Posicao:'L',Qtde:1,Medida:estruturaL/1000},
+      {Codigo:'CL006',Qtde:4,Medida:0.021},
+      {Codigo:'CL006',Qtde:2,Medida:0.030},
+      {Codigo:'CL011',Qtde:8,Medida:0.021},
+      {Codigo:'CL011',Qtde:4,Medida:0.030},
+      {Codigo:'MP347',Posicao:'H',Qtde:1,Medida:(altura+22)/1000},
+      {Codigo:'MP347',Posicao:'H',Qtde:1,Medida:(altura+22)/1000},
+      {Codigo:'MP347',Posicao:'L',Qtde:1,Medida:(largura+44)/1000},
+      {Codigo:'SU102',Posicao:'H',Qtde:4,Medida:bagueteH/1000},
+      {Codigo:'SU102',Posicao:'L',Qtde:4,Medida:bagueteL/1000},
+      {Codigo:'SU111',Posicao:'H',Qtde:2,Medida:folhaH/1000},
+      {Codigo:'SU111',Posicao:'H',Qtde:2,Medida:folhaH/1000},
+      {Codigo:'SU111',Posicao:'L',Qtde:2,Medida:folhaL/1000},
+      {Codigo:'SU225',Posicao:'L',Qtde:2,Medida:bagueteL/1000},
+      {Codigo:'SU279',Posicao:'H',Qtde:1,Medida:marcoH/1000},
+      {Codigo:'SU279',Posicao:'H',Qtde:1,Medida:marcoH/1000},
+      {Codigo:'SU279',Posicao:'L',Qtde:1,Medida:marcoL/1000},
+    ],
+    Vidros:[{
+      Codigo:'VIDRO',
+      Qtde:2,
+      Largura:meia-146,
+      Altura:altura-193,
+      Especificacao:'INCOLOR 06MM - TEMPERADO',
+    }],
+    Acessorios:[
+      {Codigo:'BUC755',Qtde:pontosFixacao},
+      {Codigo:'CON295',Qtde:1},
+      {Codigo:'DOB840',Qtde:6},
+      {Codigo:'FEC338',Qtde:2},
+      {Codigo:'FIT206',Qtde:(largura+2*altura)/1000},
+      {Codigo:'FRA822',Qtde:1},
+      {Codigo:'GUA171',Qtde:largura/1000},
+      {Codigo:'GUA239',Qtde:(largura+2*altura)/1000},
+      {Codigo:'GUA258',Qtde:(largura+4*altura)/1000},
+      {Codigo:'GUA259',Qtde:(2*largura+4*altura)/1000},
+      {Codigo:'MAC927',Qtde:1},
+      {Codigo:'NYL042',Qtde:4},
+      {Codigo:'NYL190',Qtde:pontosFixacao},
+      {Codigo:'PAR1025',Qtde:pontosFixacao},
+      {Codigo:'PAR1037',Qtde:pontosFixacao},
+      {Codigo:'PAR435',Qtde:8},
+      {Codigo:'REBACA4X10',Qtde:rebites},
+      {Codigo:'SIL-PU',Qtde:(largura+2*altura)/12000},
+    ],
+  }
+}
+
+export const FIXTURES_PG2_SUPREMA_VIDRO_ARREMATE_WVETRO: WVetroItemTecnico[] = [
+  pg2SupremaVidroArremateItem(1288,2080,13,14,'WV-PG2-1012-VIDRO'),
+  pg2SupremaVidroArremateItem(1300,2150,13,14,'WV-PG2-883-VIDRO'),
+  pg2SupremaVidroArremateItem(1680,2150,14,16,'WV-PG2-374-VIDRO'),
+  pg2SupremaVidroArremateItem(1880,2170,14,16,'WV-PG2-1143-VIDRO'),
+]
