@@ -119,11 +119,11 @@ async function acessoCanalWhatsApp(
   const dono = canal.usuario_id === usuario.id
   const principal = canal.principal === true
   return {
-    visualizar: principal || dono || Boolean(
+    visualizar: dono || Boolean(
       permissao?.pode_visualizar || permissao?.pode_atender ||
       permissao?.pode_transferir || permissao?.pode_supervisionar
     ),
-    atender: principal || dono || Boolean(permissao?.pode_atender),
+    atender: dono || Boolean(permissao?.pode_atender),
     transferir: dono || Boolean(permissao?.pode_transferir),
     supervisionar: dono || Boolean(permissao?.pode_supervisionar),
     dono,
@@ -146,7 +146,7 @@ async function usuarioPodeAtenderCanal(
     .eq('ativo', true)
     .maybeSingle()
   if (!canal) return false
-  if (canal.principal || canal.usuario_id === usuarioId) return true
+  if (canal.usuario_id === usuarioId) return true
   const { data: permissao } = await supabaseAdmin
     .from('atendimento_whatsapp_permissoes')
     .select('pode_atender')
@@ -824,11 +824,11 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
     const master = usuario.role === 'master'
     return {
       canal_id: canal.id as string,
-      visualizar: master || principal || dono || Boolean(
+      visualizar: master || dono || Boolean(
         permissao?.pode_visualizar || permissao?.pode_atender ||
         permissao?.pode_transferir || permissao?.pode_supervisionar
       ),
-      atender: master || principal || dono || Boolean(permissao?.pode_atender),
+      atender: master || dono || Boolean(permissao?.pode_atender),
       transferir: master || dono || Boolean(permissao?.pode_transferir),
       supervisionar: master || dono || Boolean(permissao?.pode_supervisionar),
       dono,
