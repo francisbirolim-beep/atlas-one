@@ -67,6 +67,23 @@ type AcessoCanal = {
   principal: boolean
 }
 
+function ehStatusOuBroadcastPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return false
+  const valor = payload as Record<string, any>
+  const jids = [
+    valor.remoteJid,
+    valor.chatJid,
+    valor.remote_jid,
+    valor.key?.remoteJid,
+  ]
+    .map(item => String(item || '').trim().toLowerCase())
+    .filter(Boolean)
+
+  return jids.some(jid =>
+    jid === 'status@broadcast' || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')
+  )
+}
+
 async function acessoCanalWhatsApp(
   usuario: UsuarioTenant,
   canalId: string | null | undefined,
@@ -1012,7 +1029,8 @@ export async function listarMensagensAtendimento(conversaId: string, usuario: Us
     .order('created_at', { ascending: true })
   if (error) throw error
 
-  const mensagens = (data || []) as any[]
+  const mensagens = ((data || []) as any[])
+    .filter(m => !ehStatusOuBroadcastPayload(m.payload))
   const caminhos = [...new Set(
     mensagens
       .map(m => String(m.media_url || ''))
