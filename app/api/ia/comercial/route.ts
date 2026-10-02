@@ -1,21 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { consultarOpenCode, statusOpenCode } from '@/lib/ai/opencode'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 type UsuarioMin = { id: string; nome?: string | null; role?: string | null; empresa_id: string }
-
-function extrairTextoResposta(data: any): string {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim()
-  const partes: string[] = []
-  for (const item of data?.output || []) {
-    if (item?.type !== 'message') continue
-    for (const c of item?.content || []) {
-      if (c?.type === 'output_text' && typeof c.text === 'string') partes.push(c.text)
-    }
-  }
-  return partes.join('\n').trim()
-}
 
 function resumirOrcamento(o: any) {
   return {
@@ -49,13 +39,16 @@ async function autenticar(req: NextRequest): Promise<UsuarioMin | null> {
   const auth = req.headers.get('authorization') || ''
   const token = auth.replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
+
   const { data: authData } = await supabaseAdmin.auth.getUser(token)
   if (!authData.user) return null
+
   const { data } = await supabaseAdmin
     .from('usuarios')
     .select('id,nome,role,empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
+
   if (!data?.empresa_id) return null
 
   if (data.role !== 'master') {
@@ -66,10 +59,34 @@ async function autenticar(req: NextRequest): Promise<UsuarioMin | null> {
       .eq('usuario_id', data.id)
       .eq('setor_id', 'crm')
       .maybeSingle()
-    if (permissaoError || !permissao || !['consulta', 'edicao'].includes(String(permissao.nivel))) return null
+
+    if (
+      permissaoError ||
+      !permissao ||
+      !['consulta', 'edicao'].includes(String(permissao.nivel))
+    ) {
+      return null
+    }
   }
 
   return data as UsuarioMin
+}
+
+async function validarSessaoOpenCode(usuario: UsuarioMin, sessionId: string | null) {
+  const id = String(sessionId || '').trim()
+  if (!id) return null
+
+  const { data, error } = await supabaseAdmin
+    .from('ai_interacoes')
+    .select('id')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('contexto', 'comercial')
+    .contains('contexto_json', { opencode_session_id: id })
+    .limit(1)
+
+  if (error || !data?.length) return null
+  return id
 }
 
 export async function POST(req: NextRequest) {
@@ -77,18 +94,32 @@ export async function POST(req: NextRequest) {
     const usuario = await autenticar(req)
     if (!usuario) return NextResponse.json({ error: 'Sem acesso à IA Comercial' }, { status: 403 })
 
+    const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
     const body = await req.json()
     const pergunta = String(body?.pergunta || '').trim()
+
     if (!pergunta) return NextResponse.json({ error: 'Digite uma pergunta' }, { status: 400 })
     if (pergunta.length > 4000) return NextResponse.json({ error: 'Pergunta muito longa' }, { status: 400 })
 
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
+    const openCodeStatus = await statusOpenCode()
+    if (!openCodeStatus.configurado) {
       return NextResponse.json(
-        { error: 'IA ainda não ativada: falta configurar OPENAI_API_KEY no ambiente de produção.', codigo: 'OPENAI_KEY_MISSING' },
-        { status: 503 }
+        {
+          error: 'IA ainda não ativada: o gateway seguro do OpenCode não está disponível.',
+          codigo: 'OPENCODE_CONFIG_MISSING',
+          detalhe: {
+            baseUrl: openCodeStatus.baseUrlConfigurada,
+            autenticacao: openCodeStatus.modoAutenticacao,
+          },
+        },
+        { status: 503 },
       )
     }
+
+    const sessionId = await validarSessaoOpenCode(
+      usuario,
+      String(body?.sessionId || '').trim() || null,
+    )
 
     const [orcResp, prodResp, tipoResp, memResp, interResp, feedbackResp] = await Promise.all([
       supabaseAdmin
@@ -97,11 +128,37 @@ export async function POST(req: NextRequest) {
         .eq('empresa_id', usuario.empresa_id)
         .order('created_at', { ascending: false })
         .limit(18),
-      supabaseAdmin.from('produtos').select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).not('unidade', 'is', null).neq('unidade', '').limit(50),
+      supabaseAdmin
+        .from('produtos')
+        .select('*')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('ativo', true)
+        .not('unidade', 'is', null)
+        .neq('unidade', '')
+        .limit(50),
       supabaseAdmin.from('tipologias').select('*').limit(80),
-      supabaseAdmin.from('ai_memorias').select('titulo,conteudo,updated_at').eq('empresa_id', usuario.empresa_id).eq('escopo', 'comercial').eq('ativo', true).order('updated_at', { ascending: false }).limit(20),
-      supabaseAdmin.from('ai_interacoes').select('id,pergunta,resposta,created_at').eq('empresa_id', usuario.empresa_id).eq('contexto', 'comercial').eq('status', 'ok').order('created_at', { ascending: false }).limit(20),
-      supabaseAdmin.from('ai_feedback').select('interacao_id,avaliacao,correcao,created_at').eq('empresa_id', usuario.empresa_id).order('created_at', { ascending: false }).limit(30),
+      supabaseAdmin
+        .from('ai_memorias')
+        .select('titulo,conteudo,updated_at')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('escopo', 'comercial')
+        .eq('ativo', true)
+        .order('updated_at', { ascending: false })
+        .limit(20),
+      supabaseAdmin
+        .from('ai_interacoes')
+        .select('id,pergunta,resposta,created_at')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('contexto', 'comercial')
+        .eq('status', 'ok')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      supabaseAdmin
+        .from('ai_feedback')
+        .select('interacao_id,avaliacao,correcao,created_at')
+        .eq('empresa_id', usuario.empresa_id)
+        .order('created_at', { ascending: false })
+        .limit(30),
     ])
 
     const feedbackMap = new Map((feedbackResp.data || []).map((f: any) => [f.interacao_id, f]))
@@ -111,7 +168,10 @@ export async function POST(req: NextRequest) {
       .slice(0, 8)
       .map((i: any) => ({
         pergunta: i.pergunta,
-        resposta_aprovada: i.feedback?.avaliacao === 'corrigido' && i.feedback?.correcao ? i.feedback.correcao : i.resposta,
+        resposta_aprovada:
+          i.feedback?.avaliacao === 'corrigido' && i.feedback?.correcao
+            ? i.feedback.correcao
+            : i.resposta,
       }))
 
     const contexto = {
@@ -135,7 +195,6 @@ export async function POST(req: NextRequest) {
       exemplos_aprovados: exemplosHumanos,
     }
 
-    const modelo = process.env.OPENAI_MODEL || 'gpt-4.1-mini'
     const instructions = [
       'Você é o Assistente Comercial do Atlas One, sistema interno da Esquadrifácio.',
       'Responda em português do Brasil, de forma objetiva e prática.',
@@ -143,28 +202,26 @@ export async function POST(req: NextRequest) {
       'Nunca invente preço, medida, cliente, prazo, desconto ou regra técnica.',
       'Você pode analisar, comparar, resumir, sugerir perguntas ao cliente e apontar pendências comerciais.',
       'Você NÃO tem permissão para criar, editar, excluir, aprovar ou mover registros. Suas respostas são sugestões.',
+      'Não use shell, terminal, arquivos locais, ferramentas de computador ou qualquer ação externa.',
       'Quando houver correção humana ou memória aprovada, priorize-a em relação a padrões inferidos.',
       'Não trate uma sugestão histórica como regra absoluta; diferencie fato registrado de inferência.',
+      'OpenCode é o orquestrador da conversa e FreeLLMAPI é o motor de requisição dos modelos.',
     ].join('\n')
 
-    const openaiResp = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelo,
-        instructions,
-        input: `CONTEXTO ATLAS:\n${JSON.stringify(contexto)}\n\nPERGUNTA DO USUÁRIO:\n${pergunta}`,
-        max_output_tokens: 900,
-        store: false,
-      }),
-    })
+    let resultadoIA: Awaited<ReturnType<typeof consultarOpenCode>>
 
-    const openaiData = await openaiResp.json().catch(() => ({}))
-    if (!openaiResp.ok) {
-      const detalhe = openaiData?.error?.message || `OpenAI respondeu ${openaiResp.status}`
+    try {
+      resultadoIA = await consultarOpenCode({
+        accessToken,
+        sessionId,
+        tituloSessao: `Atlas Comercial - ${usuario.nome || usuario.id}`,
+        system: instructions,
+        prompt: `CONTEXTO ATLAS:\n${JSON.stringify(contexto)}\n\nPERGUNTA DO USUÁRIO:\n${pergunta}`,
+      })
+    } catch (e: any) {
+      const detalhe = String(e?.message || 'Falha ao consultar o OpenCode').slice(0, 800)
+      const modeloConfigurado = `${openCodeStatus.providerId}/${openCodeStatus.modelId}`
+
       await supabaseAdmin.from('ai_interacoes').insert({
         empresa_id: usuario.empresa_id,
         contexto: 'comercial',
@@ -172,15 +229,23 @@ export async function POST(req: NextRequest) {
         usuario_nome: usuario.nome || null,
         pergunta,
         resposta: detalhe,
-        modelo,
-        contexto_json: { erro_openai: true },
+        modelo: modeloConfigurado,
+        contexto_json: {
+          erro_opencode: true,
+          orquestrador: 'opencode',
+          motor: 'freellmapi',
+        },
         status: 'erro',
       })
-      return NextResponse.json({ error: detalhe }, { status: 502 })
+
+      return NextResponse.json(
+        { error: detalhe, codigo: 'OPENCODE_REQUEST_FAILED' },
+        { status: 502 },
+      )
     }
 
-    const resposta = extrairTextoResposta(openaiData)
-    if (!resposta) return NextResponse.json({ error: 'A IA não retornou texto.' }, { status: 502 })
+    const resposta = resultadoIA.resposta
+    const modelo = `${resultadoIA.providerId}/${resultadoIA.modelId}`
 
     const { data: interacao, error: erroInsert } = await supabaseAdmin
       .from('ai_interacoes')
@@ -198,6 +263,11 @@ export async function POST(req: NextRequest) {
           qtd_tipologias: contexto.tipologias.length,
           qtd_memorias: contexto.memorias_aprovadas.length,
           qtd_exemplos_aprovados: contexto.exemplos_aprovados.length,
+          orquestrador: 'opencode',
+          motor: 'freellmapi',
+          opencode_session_id: resultadoIA.sessionId,
+          provider_id: resultadoIA.providerId,
+          model_id: resultadoIA.modelId,
         },
         status: 'ok',
       })
@@ -210,9 +280,15 @@ export async function POST(req: NextRequest) {
       resposta,
       interacaoId: interacao?.id || null,
       modelo,
+      sessionId: resultadoIA.sessionId,
+      orquestrador: 'opencode',
+      motor: 'freellmapi',
       somenteSugestao: true,
     })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erro inesperado na IA comercial' }, { status: 500 })
+    return NextResponse.json(
+      { error: e?.message || 'Erro inesperado na IA comercial' },
+      { status: 500 },
+    )
   }
 }
