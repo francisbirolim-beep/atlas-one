@@ -997,7 +997,8 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     return !conversa.responsavel_id && acesso.atender
   })
 
-  const ids = permitidas.map(conversa => conversa.id)  if (!ids.length) return permitidas
+  const ids = permitidas.map(conversa => conversa.id)
+  if (!ids.length) return permitidas
   const [transferenciasResp, acompanhamentosResp] = await Promise.all([
     supabaseAdmin
       .from('atendimento_eventos')
