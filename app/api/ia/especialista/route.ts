@@ -31,25 +31,6 @@ async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise
     return { permitido: true, escopo: 'empresa', origem: 'master', motivo: 'Usuário Master.' }
   }
 
-  const { data: override } = await supabaseAdmin
-    .from('ia_acessos_dominio')
-    .select('escopo,permitido')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-    .eq('dominio', modulo)
-    .maybeSingle()
-
-  if (override) {
-    const escopo = String(override.escopo || 'nenhum') as EscopoIA
-    const permitido = override.permitido === true && escopo !== 'nenhum'
-    return {
-      permitido,
-      escopo: permitido ? escopo : 'nenhum',
-      origem: 'configurado',
-      motivo: permitido ? 'Permissão específica da Atlas IA.' : 'Domínio bloqueado pelo Master.',
-    }
-  }
-
   const especialista = especialistaDoModulo(modulo)
   if (!especialista?.setorIds.length) {
     return { permitido: false, escopo: 'nenhum', origem: 'negado', motivo: 'Especialista sem setor configurado.' }
@@ -66,9 +47,34 @@ async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise
     return { permitido: false, escopo: 'nenhum', origem: 'negado', motivo: 'Usuário sem acesso ao setor deste especialista.' }
   }
 
-  // Padrão mais conservador para Comercial: vendedor enxerga seus próprios dados.
-  const escopo: EscopoIA = modulo === 'comercial' ? 'proprio' : 'setor'
-  return { permitido: true, escopo, origem: 'setor', motivo: 'Permissão herdada do setor do Atlas.' }
+  // A permissão do Atlas é o teto. Configuração específica da IA só pode restringir,
+  // nunca liberar um setor que o usuário não possua no sistema.
+  const escopoBase: EscopoIA = modulo === 'comercial' ? 'proprio' : 'setor'
+  const { data: override } = await supabaseAdmin
+    .from('ia_acessos_dominio')
+    .select('escopo,permitido')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('dominio', modulo)
+    .maybeSingle()
+
+  if (override) {
+    const escopoConfigurado = String(override.escopo || 'nenhum') as EscopoIA
+    if (override.permitido !== true || escopoConfigurado === 'nenhum') {
+      return { permitido: false, escopo: 'nenhum', origem: 'configurado', motivo: 'Domínio restringido pelo Master.' }
+    }
+
+    const ordem: Record<EscopoIA, number> = { nenhum: 0, proprio: 1, setor: 2, empresa: 3 }
+    const escopo = ordem[escopoConfigurado] < ordem[escopoBase] ? escopoConfigurado : escopoBase
+    return {
+      permitido: true,
+      escopo,
+      origem: 'configurado',
+      motivo: 'Permissão herdada do Atlas com restrição adicional da IA.',
+    }
+  }
+
+  return { permitido: true, escopo: escopoBase, origem: 'setor', motivo: 'Permissão herdada do setor do Atlas.' }
 }
 
 async function acessoAuxiliar(usuario: UsuarioTenant, dominio: string) {
