@@ -126,6 +126,8 @@ ambiente?: string | null
 // ainda mostram so uma foto por item; foto_urls tem a lista completa.
 foto_urls?: string[] | null
       descricao?: string
+      observacao_tempera?: string | null
+      observacao_producao?: string | null
       cor?: string | null
       // Medida final: 3 larguras (baixo/meio/cima) e 3 alturas (direita/meio/esquerda)
 largura_baixo_mm?: number | null
