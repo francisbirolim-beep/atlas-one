@@ -2,10 +2,27 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, MessageCircleMore, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, MessageCircleMore, Plus, Save, Trash2, Users } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 
 type Usuario = { id: string; nome: string }
+type CanalResumo = { id: string; nome: string; numero_declarado?: string | null; principal?: boolean }
+type GrupoWhatsApp = {
+  id: string
+  whatsapp_canal_id: string
+  grupo_jid: string
+  nome: string
+  participantes: number
+  sincronizado_em?: string | null
+}
+type GrupoAutomacao = {
+  grupoId: string
+  ativo: boolean
+  responsavelId: string
+  criarRascunho: boolean
+  criarTarefa: boolean
+  janelaAgregacaoMinutos: number
+}
 type Regra = {
   nome: string
   prioridade: number
@@ -25,6 +42,9 @@ async function authHeaders() {
 
 export default function ConfiguracaoWhatsAppPage() {
   const [usuarios,setUsuarios]=useState<Usuario[]>([])
+  const [canais,setCanais]=useState<CanalResumo[]>([])
+  const [grupos,setGrupos]=useState<GrupoWhatsApp[]>([])
+  const [gruposAutomacao,setGruposAutomacao]=useState<GrupoAutomacao[]>([])
   const [numero,setNumero]=useState('5517996355667')
   const [setorPadrao,setSetorPadrao]=useState('')
   const [usuarioPadraoId,setUsuarioPadraoId]=useState('')
@@ -42,6 +62,22 @@ export default function ConfiguracaoWhatsAppPage() {
     const json=await resp.json()
     if(!resp.ok){setErro(json.error||'Nao foi possivel carregar.');return}
     setUsuarios(json.usuarios||[])
+    setCanais(json.canais||[])
+    const gruposRecebidos:GrupoWhatsApp[]=json.grupos||[]
+    const automacoesRecebidas:any[]=json.gruposAutomacao||[]
+    const automacaoPorGrupo=new Map(automacoesRecebidas.map(a=>[a.grupo_id,a]))
+    setGrupos(gruposRecebidos)
+    setGruposAutomacao(gruposRecebidos.map(g=>{
+      const a=automacaoPorGrupo.get(g.id)
+      return {
+        grupoId:g.id,
+        ativo:Boolean(a?.ativo),
+        responsavelId:a?.responsavel_id||'',
+        criarRascunho:a?.criar_rascunho!==false,
+        criarTarefa:a?.criar_tarefa!==false,
+        janelaAgregacaoMinutos:Number(a?.janela_agregacao_minutos||5),
+      }
+    }))
     const c=json.configuracao
     if(c){
       setNumero(c.numero_principal||'5517996355667')
@@ -60,6 +96,10 @@ export default function ConfiguracaoWhatsAppPage() {
 
   function alterar(indice:number, campo:keyof Regra, valor:string|number|boolean){
     setRegras(rs=>rs.map((r,i)=>i===indice?{...r,[campo]:valor}:r))
+  }
+
+  function alterarGrupo(grupoId:string,campo:keyof GrupoAutomacao,valor:string|number|boolean){
+    setGruposAutomacao(gs=>gs.map(g=>g.grupoId===grupoId?{...g,[campo]:valor}:g))
   }
 
   function adicionar(){
@@ -87,6 +127,7 @@ export default function ConfiguracaoWhatsAppPage() {
             ...r,
             palavrasChave:r.palavrasChave.split(',').map(p=>p.trim()).filter(Boolean),
           })),
+          gruposAutomacao,
         }),
       })
       const json=await resp.json()
@@ -155,6 +196,70 @@ export default function ConfiguracaoWhatsAppPage() {
           </label>
           <p className="md:col-span-3 text-xs text-slate-500">
             Se nenhuma regra abaixo combinar, a conversa usa o usuario padrao. Sem usuario padrao, entra na fila para alguem assumir.
+          </p>
+        </section>
+
+        <section>
+          <div className="mb-3">
+            <h2 className="font-bold text-slate-900">Grupos do WhatsApp e automações</h2>
+            <p className="text-xs text-slate-500">
+              Os grupos são sincronizados por número conectado. Marque somente os grupos operacionais que devem gerar orçamento no Atlas.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {grupos.length===0&&(
+              <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-400">
+                Nenhum grupo sincronizado ainda. Com o gateway conectado, os grupos do número aparecerão aqui automaticamente.
+              </div>
+            )}
+            {grupos.map(g=>{
+              const auto=gruposAutomacao.find(a=>a.grupoId===g.id)
+              const canal=canais.find(c=>c.id===g.whatsapp_canal_id)
+              return <div key={g.id} className="grid gap-4 rounded-2xl border p-4 md:grid-cols-[minmax(0,1.4fr)_180px_210px_120px] md:items-center">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-50 text-violet-700"><Users size={17}/></span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-900">{g.nome}</p>
+                      <p className="truncate text-[11px] text-slate-500">
+                        {canal?.nome||'WhatsApp'}{canal?.principal?' · Principal':''} · {g.participantes||0} participantes
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <input type="checkbox" checked={auto?.ativo===true}
+                    onChange={e=>alterarGrupo(g.id,'ativo',e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"/>
+                  Automatizar orçamento
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Responsável
+                  <select value={auto?.responsavelId||''} disabled={!auto?.ativo}
+                    onChange={e=>{
+                      alterarGrupo(g.id,'responsavelId',e.target.value)
+                      alterarGrupo(g.id,'criarTarefa',Boolean(e.target.value))
+                    }}
+                    className="mt-1 w-full rounded-lg border bg-white px-2 py-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:text-slate-400">
+                    <option value="">Só criar rascunho no Kanban</option>
+                    {usuarios.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Agrupar por
+                  <div className="mt-1 flex items-center gap-1">
+                    <input type="number" min={1} max={120} value={auto?.janelaAgregacaoMinutos||5}
+                      disabled={!auto?.ativo}
+                      onChange={e=>alterarGrupo(g.id,'janelaAgregacaoMinutos',Number(e.target.value)||5)}
+                      className="w-16 rounded-lg border px-2 py-2 text-sm font-normal disabled:bg-slate-50"/>
+                    <span className="text-[11px] text-slate-500">min</span>
+                  </div>
+                </label>
+              </div>
+            })}
+          </div>
+          <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+            Ao receber texto, foto, áudio ou documento neste grupo, o Atlas agrupa as mensagens do mesmo remetente, cria um rascunho no Kanban e, se houver responsável, cria também uma tarefa vinculada. Informações ausentes continuam pendentes para validação.
           </p>
         </section>
 

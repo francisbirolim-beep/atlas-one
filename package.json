@@ -21,7 +21,8 @@
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-dropzone": "^14.2.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

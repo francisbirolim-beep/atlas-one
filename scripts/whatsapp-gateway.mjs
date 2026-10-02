@@ -4,9 +4,11 @@ import process from 'node:process'
 import { execFile } from 'node:child_process'
 import http from 'node:http'
 import QRCode from 'qrcode'
+import webpush from 'web-push'
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
   extractMessageContent,
   fetchLatestWaWebVersion,
   getContentType,
@@ -37,6 +39,13 @@ const GATEWAY_URL = String(
   (BASE_URL ? `${BASE_URL}/api/integracoes/whatsapp/gateway` : '')
 ).replace(/\/$/, '')
 const TOKEN = String(process.env.ATLAS_GATEWAY_TOKEN || '')
+const VAPID_PUBLIC_KEY = String(process.env.ATLAS_VAPID_PUBLIC_KEY || '')
+const VAPID_PRIVATE_KEY = String(process.env.ATLAS_VAPID_PRIVATE_KEY || '')
+const VAPID_SUBJECT = String(process.env.ATLAS_VAPID_SUBJECT || 'https://atlas-one.vercel.app')
+const PUSH_READY = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY)
+if (PUSH_READY) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+}
 const SESSIONS_DIR = process.env.ATLAS_WHATSAPP_SESSIONS_DIR ||
   path.join(process.env.HOME || '.', '.atlas-one', 'whatsapp-sessions')
 const DEVICE_NAME = 'Atlas One Mac Gateway'
@@ -50,9 +59,14 @@ fs.mkdirSync(SESSIONS_DIR, { recursive: true })
 
 const sessions = new Map()
 const qrStates = new Map()
+const groupSyncTimers = new Map()
+const groupSyncLastAt = new Map()
+const groupSyncInFlight = new Set()
 let shuttingDown = false
 let refreshTimer = null
 let queueTimer = null
+let pushTimer = null
+let pushSending = false
 let panelBrowserOpened = false
 
 const LOCAL_PANEL_PORT = 3337
@@ -161,18 +175,146 @@ async function reportState(channelId, status, extra = {}) {
   }
 }
 
-function phoneFromKey(key) {
-  const candidates = [key?.remoteJidAlt, key?.remoteJid]
-    .filter(Boolean)
-    .map(jidNormalizedUser)
-  const jid = candidates.find((value) => value.endsWith('@s.whatsapp.net'))
-  if (!jid) return null
-  return jid.split('@')[0].split(':')[0].replace(/\D/g, '')
+function phoneFromJid(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const jid = jidNormalizedUser(raw)
+  if (!jid.endsWith('@s.whatsapp.net')) return null
+  return jid.split('@')[0].split(':')[0].replace(/\D/g, '') || null
 }
 
-function extractMessage(message) {
+function phoneFromKey(key) {
+  return phoneFromJid(key?.remoteJidAlt) || phoneFromJid(key?.remoteJid)
+}
+
+function chatIdentity(key) {
+  const remote = String(key?.remoteJid || '').trim()
+  if (!remote || remote === 'status@broadcast' || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) {
+    return { kind: 'ignore', chatJid: null, telefone: null }
+  }
+
+  if (remote.endsWith('@g.us')) {
+    const telefone = phoneFromJid(key?.participantAlt) ||
+      phoneFromJid(key?.participant) ||
+      phoneFromJid(key?.remoteJidAlt)
+    return { kind: 'grupo', chatJid: remote, telefone }
+  }
+
+  const telefone = phoneFromKey(key)
+  if (!telefone) return { kind: 'ignore', chatJid: null, telefone: null }
+  const chatJid = [key?.remoteJidAlt, key?.remoteJid]
+    .filter(Boolean)
+    .map(jidNormalizedUser)
+    .find((value) => value.endsWith('@s.whatsapp.net')) || `${telefone}@s.whatsapp.net`
+  return { kind: 'contato', chatJid, telefone }
+}
+
+function isStatusOrBroadcastJid(value) {
+  const jid = String(value || '').trim().toLowerCase()
+  return jid === 'status@broadcast' || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')
+}
+
+async function syncContacts(channel, contacts) {
+  const rows = (contacts || []).map((c) => ({
+    id: c?.id || null,
+    name: c?.name || null,
+    notify: c?.notify || null,
+    short: c?.short || null,
+    verifiedName: c?.verifiedName || null,
+  })).filter((c) => c.id && !isStatusOrBroadcastJid(c.id) && !String(c.id).endsWith('@g.us'))
+
+  for (let i = 0; i < rows.length; i += 250) {
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'contacts_sync',
+        channelId: channel.id,
+        contacts: rows.slice(i, i + 250),
+      }),
+    })
+  }
+}
+
+async function syncGroups(channel, sock) {
+  if (groupSyncInFlight.has(channel.id)) return
+  groupSyncInFlight.add(channel.id)
+  groupSyncLastAt.set(channel.id, Date.now())
+  try {
+    const encontrados = await sock.groupFetchAllParticipating()
+    const entries = Object.entries(encontrados || {})
+    const groups = []
+    let metadataErros = 0
+
+    for (const [jidChave, grupo] of entries) {
+      const jid = String(grupo?.id || jidChave || '').trim()
+      if (!jid.endsWith('@g.us')) continue
+      let meta = grupo || {}
+      if (!meta?.subject || !Array.isArray(meta?.participants)) {
+        try { meta = await sock.groupMetadata(jid) || meta }
+        catch { metadataErros += 1 }
+        await new Promise((resolve) => setTimeout(resolve, 220))
+      }
+      const nome = String(meta?.subject || meta?.name || '').trim() || 'Grupo WhatsApp'
+      const participantes = Array.isArray(meta?.participants)
+        ? meta.participants.length
+        : Math.max(0, Number(meta?.size || 0))
+      groups.push({ jid, id: jid, nome, subject: nome, name: nome, participantes, size: participantes })
+    }
+
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'groups_sync',
+        channelId: channel.id,
+        groups,
+      }),
+    })
+    const nomeados = groups.filter((g) => g.nome !== 'Grupo WhatsApp').length
+    console.log(`[gateway:${channel.id}] grupos sincronizados: ${groups.length}; nomeados: ${nomeados}; metadataErros: ${metadataErros}`)
+  } catch (error) {
+    console.error(`[gateway:${channel.id}] grupos:`, error instanceof Error ? error.message : String(error))
+  } finally {
+    groupSyncLastAt.set(channel.id, Date.now())
+    groupSyncInFlight.delete(channel.id)
+  }
+}
+
+function agendarSyncGroups(channel, sock, atrasoMs = 1500) {
+  const ultima = Number(groupSyncLastAt.get(channel.id) || 0)
+  if (groupSyncInFlight.has(channel.id) || Date.now() - ultima < 30_000) return
+  const anterior = groupSyncTimers.get(channel.id)
+  if (anterior) clearTimeout(anterior)
+  const timer = setTimeout(() => {
+    groupSyncTimers.delete(channel.id)
+    void syncGroups(channel, sock)
+  }, atrasoMs)
+  groupSyncTimers.set(channel.id, timer)
+}
+
+function extensaoPorMime(mimeType, fallback = 'bin') {
+  const mime = String(mimeType || '').split(';')[0].toLowerCase()
+  const mapa = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'audio/webm': 'webm',
+    'application/pdf': 'pdf',
+  }
+  return mapa[mime] || fallback
+}
+
+function extractMessage(message, messageId = '') {
   const content = extractMessageContent(message)
   const type = getContentType(content || {}) || 'unknown'
+  const base = messageId || Date.now()
 
   if (type === 'conversation') {
     return { messageType: 'text', texto: content?.conversation || '' }
@@ -181,33 +323,169 @@ function extractMessage(message) {
     return { messageType: 'text', texto: content?.extendedTextMessage?.text || '' }
   }
   if (type === 'imageMessage') {
-    return { messageType: 'image', texto: content?.imageMessage?.caption || '📷 Imagem' }
+    const media = content?.imageMessage || {}
+    const mimeType = media.mimetype || 'image/jpeg'
+    return {
+      messageType: 'image',
+      texto: media.caption || '📷 Imagem',
+      isMedia: true,
+      mimeType,
+      fileName: media.fileName || `imagem-${base}.${extensaoPorMime(mimeType, 'jpg')}`,
+    }
   }
   if (type === 'videoMessage') {
-    return { messageType: 'video', texto: content?.videoMessage?.caption || '🎥 Vídeo' }
+    const media = content?.videoMessage || {}
+    const mimeType = media.mimetype || 'video/mp4'
+    return {
+      messageType: 'video',
+      texto: media.caption || '🎥 Vídeo',
+      isMedia: true,
+      mimeType,
+      fileName: media.fileName || `video-${base}.${extensaoPorMime(mimeType, 'mp4')}`,
+    }
   }
-  if (type === 'audioMessage') return { messageType: 'audio', texto: '🎤 Áudio' }
+  if (type === 'audioMessage') {
+    const media = content?.audioMessage || {}
+    const mimeType = media.mimetype || 'audio/ogg'
+    return {
+      messageType: 'audio',
+      texto: '🎤 Áudio',
+      isMedia: true,
+      mimeType,
+      fileName: `audio-${base}.${extensaoPorMime(mimeType, 'ogg')}`,
+      ptt: media.ptt === true,
+    }
+  }
   if (type === 'documentMessage') {
-    return { messageType: 'document', texto: content?.documentMessage?.fileName || '📎 Documento' }
+    const media = content?.documentMessage || {}
+    const mimeType = media.mimetype || 'application/pdf'
+    return {
+      messageType: 'document',
+      texto: media.fileName || '📎 Documento',
+      isMedia: true,
+      mimeType,
+      fileName: media.fileName || `documento-${base}.${extensaoPorMime(mimeType, 'bin')}`,
+    }
   }
-  if (type === 'stickerMessage') return { messageType: 'sticker', texto: '🖼️ Figurinha' }
+  if (type === 'stickerMessage') {
+    const media = content?.stickerMessage || {}
+    const mimeType = media.mimetype || 'image/webp'
+    return {
+      messageType: 'sticker',
+      texto: '🖼️ Figurinha',
+      isMedia: true,
+      mimeType,
+      fileName: `figurinha-${base}.${extensaoPorMime(mimeType, 'webp')}`,
+    }
+  }
+  if (type === 'reactionMessage') {
+    const reaction = content?.reactionMessage || {}
+    return {
+      messageType: 'reaction',
+      texto: reaction.text ? `Reagiu ${reaction.text}` : 'Reação removida',
+      reactionKey: reaction.key || null,
+    }
+  }
   if (type === 'locationMessage') return { messageType: 'location', texto: '📍 Localização' }
   if (type === 'contactMessage' || type === 'contactsArrayMessage') {
     return { messageType: 'contact', texto: '👤 Contato' }
   }
-  return { messageType: type, texto: `[${type}]` }
+  return { messageType: 'system', texto: `Mensagem do WhatsApp (${type})` }
 }
 
-async function registerInbound(channel, msg) {
-  if (!msg?.message || msg?.key?.fromMe) return
-  const telefone = phoneFromKey(msg.key)
+async function baixarMidia(sock, msg) {
+  try {
+    return await downloadMediaMessage(msg, 'buffer', {})
+  } catch (primeiroErro) {
+    try {
+      const atualizada = await sock.updateMediaMessage(msg)
+      return await downloadMediaMessage(atualizada || msg, 'buffer', {})
+    } catch {
+      throw primeiroErro
+    }
+  }
+}
+
+async function registerInbound(channel, msg, sock) {
+  if (!msg?.message) return
+
+  const identity = chatIdentity(msg.key)
+  if (identity.kind === 'ignore') return
+
+  const rawContent = extractMessageContent(msg.message)
+  const rawType = getContentType(rawContent || {}) || 'unknown'
+  const contextInfo = rawContent?.[rawType]?.contextInfo || null
+  const isForwarded = contextInfo?.isForwarded === true || Number(contextInfo?.forwardingScore || 0) > 0
+  const fromMe = msg?.key?.fromMe === true
+
+  if (fromMe && identity.kind !== 'grupo') return
+  if (fromMe && identity.kind === 'grupo' && !isForwarded) return
+
+  let grupoNome = null
+  if (identity.kind === 'grupo') {
+    try {
+      const meta = await sock.groupMetadata(identity.chatJid)
+      grupoNome = meta?.subject || null
+    } catch {}
+  }
+
+  const telefone = identity.telefone ||
+    (identity.kind === 'grupo' ? String(identity.chatJid || '').split('@')[0].replace(/\D/g, '') : null)
   if (!telefone) return
 
-  const extracted = extractMessage(msg.message)
+  const whatsappMessageId = msg.key?.id || null
+  const extracted = extractMessage(msg.message, whatsappMessageId || '')
   const rawTs = Number(msg.messageTimestamp || 0)
   const timestamp = rawTs > 0
     ? new Date(rawTs * 1000).toISOString()
     : new Date().toISOString()
+
+  let mediaPath = null
+  let mediaSize = null
+  let mediaError = null
+  let mediaMimeType = extracted.mimeType || null
+
+  if (extracted.isMedia) {
+    try {
+      const buffer = await baixarMidia(sock, msg)
+      if (!buffer?.length) throw new Error('Mídia recebida sem conteúdo.')
+      if (buffer.length > 50 * 1024 * 1024) throw new Error('Mídia recebida excede 50 MB.')
+
+      const preparado = await atlas('', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'media_prepare',
+          channelId: channel.id,
+          whatsappMessageId,
+          fileName: extracted.fileName,
+          mimeType: extracted.mimeType,
+          size: buffer.length,
+        }),
+      })
+
+      const mimeUpload = preparado.mimeType || String(extracted.mimeType || 'application/octet-stream').split(';')[0]
+      mediaMimeType = mimeUpload
+      const upload = await fetch(preparado.signedUrl, {
+        method: 'PUT',
+        headers: {
+          'content-type': mimeUpload,
+          'cache-control': 'max-age=3600',
+          'x-upsert': 'false',
+        },
+        body: buffer,
+      })
+      if (!upload.ok) {
+        const detalhe = await upload.text().catch(() => '')
+        throw new Error(`Storage respondeu HTTP ${upload.status}${detalhe ? `: ${detalhe.slice(0, 160)}` : ''}`)
+      }
+
+      mediaPath = preparado.path
+      mediaSize = buffer.length
+    } catch (error) {
+      mediaError = error instanceof Error ? error.message : String(error)
+      console.error(`[gateway:${channel.id}] mídia ${whatsappMessageId || ''}:`, mediaError)
+    }
+  }
 
   await atlas('', {
     method: 'POST',
@@ -215,14 +493,37 @@ async function registerInbound(channel, msg) {
       type: 'inbound',
       channelId: channel.id,
       telefone,
-      contatoNome: msg.pushName || null,
-      whatsappMessageId: msg.key?.id || null,
+      contatoNome: identity.kind === 'grupo' ? (grupoNome || 'Grupo WhatsApp') : (msg.pushName || null),
+      chatTipo: identity.kind,
+      chatJid: identity.chatJid,
+      grupoNome,
+      participanteJid: identity.kind === 'grupo' ? (msg.key?.participantAlt || msg.key?.participant || null) : null,
+      participanteTelefone: identity.kind === 'grupo' ? (identity.telefone || null) : null,
+      participanteNome: identity.kind === 'grupo' ? (msg.pushName || null) : null,
+      fromMe,
+      isForwarded,
+      whatsappMessageId,
       messageType: extracted.messageType,
       texto: extracted.texto,
       timestamp,
+      mediaPath,
+      mimeType: mediaMimeType,
+      fileName: extracted.fileName || null,
+      mediaSize,
       payload: {
         remoteJid: msg.key?.remoteJid || null,
         remoteJidAlt: msg.key?.remoteJidAlt || null,
+        participanteJid: msg.key?.participantAlt || msg.key?.participant || null,
+        chatTipo: identity.kind,
+        chatJid: identity.chatJid,
+        grupoNome,
+        participanteTelefone: identity.kind === 'grupo' ? (identity.telefone || null) : null,
+        participanteNome: identity.kind === 'grupo' ? (msg.pushName || null) : null,
+        fromMe,
+        isForwarded,
+        ptt: extracted.ptt === true,
+        reactionKey: extracted.reactionKey || null,
+        mediaError,
       },
     }),
   })
@@ -238,11 +539,48 @@ async function processQueue(channelId) {
     if (!item) return
 
     try {
-      if (item.tipo !== 'text') {
+      const payload = item.payload && typeof item.payload === 'object' ? item.payload : {}
+      const jid = payload.chatJid && String(payload.chatJid).endsWith('@g.us')
+        ? String(payload.chatJid)
+        : `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
+      let conteudo
+
+      if (item.tipo === 'text') {
+        conteudo = { text: String(item.texto || '') }
+      } else if (item.tipo === 'image') {
+        if (!payload.mediaUrl) throw new Error('URL da imagem não disponível.')
+        conteudo = {
+          image: { url: String(payload.mediaUrl) },
+          caption: item.texto ? String(item.texto) : undefined,
+          mimetype: payload.mimeType ? String(payload.mimeType) : undefined,
+        }
+      } else if (item.tipo === 'video') {
+        if (!payload.mediaUrl) throw new Error('URL do vídeo não disponível.')
+        conteudo = {
+          video: { url: String(payload.mediaUrl) },
+          caption: item.texto ? String(item.texto) : undefined,
+          mimetype: payload.mimeType ? String(payload.mimeType) : undefined,
+        }
+      } else if (item.tipo === 'audio') {
+        if (!payload.mediaUrl) throw new Error('URL do áudio não disponível.')
+        conteudo = {
+          audio: { url: String(payload.mediaUrl) },
+          mimetype: payload.mimeType ? String(payload.mimeType) : 'audio/ogg',
+          ptt: payload.ptt !== false,
+        }
+      } else if (item.tipo === 'document') {
+        if (!payload.mediaUrl) throw new Error('URL do documento não disponível.')
+        conteudo = {
+          document: { url: String(payload.mediaUrl) },
+          mimetype: payload.mimeType ? String(payload.mimeType) : 'application/octet-stream',
+          fileName: payload.fileName ? String(payload.fileName) : 'documento',
+          caption: item.texto ? String(item.texto) : undefined,
+        }
+      } else {
         throw new Error(`Tipo de saida ainda nao suportado: ${item.tipo}`)
       }
-      const jid = `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
-      const sent = await state.sock.sendMessage(jid, { text: String(item.texto || '') })
+
+      const sent = await state.sock.sendMessage(jid, conteudo)
       await atlas('', {
         method: 'POST',
         body: JSON.stringify({
@@ -362,6 +700,7 @@ async function connectChannel(channel) {
         console.log(
           `[gateway] conectado: ${channel.nome} -> ${result?.connectedNumber || connectedJid || 'ok'}`,
         )
+        agendarSyncGroups(channel, sock, 250)
       }
 
       if (connection === 'close') {
@@ -386,16 +725,37 @@ async function connectChannel(channel) {
       }
     })
 
+    sock.ev.on('messaging-history.set', async ({ contacts }) => {
+      try {
+        await syncContacts(channel, contacts || [])
+      } catch (error) {
+        console.error(`[gateway:${channel.id}] contatos historicos:`, error.message)
+      }
+    })
+
+    sock.ev.on('contacts.upsert', async (contacts) => {
+      try { await syncContacts(channel, contacts || []) }
+      catch (error) { console.error(`[gateway:${channel.id}] contatos:`, error.message) }
+    })
+
+    sock.ev.on('contacts.update', async (contacts) => {
+      try { await syncContacts(channel, contacts || []) }
+      catch (error) { console.error(`[gateway:${channel.id}] contatos update:`, error.message) }
+    })
+
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return
       for (const msg of messages || []) {
         try {
-          await registerInbound(channel, msg)
+          await registerInbound(channel, msg, sock)
         } catch (error) {
           console.error(`[gateway:${channel.id}] entrada:`, error.message)
         }
       }
     })
+
+    sock.ev.on('groups.upsert', () => { agendarSyncGroups(channel, sock) })
+    sock.ev.on('groups.update', () => { agendarSyncGroups(channel, sock) })
   } catch (error) {
     sessions.delete(channel.id)
     console.error(`[gateway] falha ao iniciar ${channel.nome}:`, error.message)
@@ -429,12 +789,72 @@ async function processAllQueues() {
   }
 }
 
+async function processPushQueue() {
+  if (shuttingDown || pushSending || !PUSH_READY) return
+  pushSending = true
+  try {
+    const response = await atlas('mode=push-pending', { method: 'GET' })
+    const item = response?.item
+    if (!item || item.skipped || !item.notificacao) return
+
+    const notificacao = item.notificacao
+    const payload = JSON.stringify({
+      id: notificacao.id,
+      title: String(notificacao.titulo || 'Atlas One'),
+      body: String(notificacao.mensagem || '').slice(0, 800),
+      href: String(notificacao.href || '/'),
+      tag: `atlas-${notificacao.id}`,
+      categoria: String(notificacao.categoria || 'operacao'),
+      silent: notificacao.silent === true,
+      forceShow: notificacao.tipo === 'push_teste',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+    })
+
+    const resultados = []
+    for (const assinatura of item.assinaturas || []) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: assinatura.endpoint,
+            keys: { p256dh: assinatura.p256dh, auth: assinatura.auth },
+          },
+          payload,
+          { TTL: 60 * 60, urgency: 'high' },
+        )
+        resultados.push({ assinaturaId: assinatura.id, sucesso: true })
+      } catch (error) {
+        resultados.push({
+          assinaturaId: assinatura.id,
+          sucesso: false,
+          statusCode: Number(error?.statusCode || error?.status || 0) || null,
+          erro: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'push_sent',
+        notificationId: notificacao.id,
+        resultados,
+      }),
+    })
+  } catch (error) {
+    console.error('[gateway] push:', error instanceof Error ? error.message : String(error))
+  } finally {
+    pushSending = false
+  }
+}
+
 async function shutdown(signal) {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`[gateway] encerrando por ${signal}...`)
   if (refreshTimer) clearInterval(refreshTimer)
   if (queueTimer) clearInterval(queueTimer)
+  if (pushTimer) clearInterval(pushTimer)
 
   const ids = [...sessions.keys()]
   for (const id of ids) await disconnectChannel(id, true)
@@ -445,6 +865,8 @@ process.on('SIGINT', () => void shutdown('SIGINT'))
 process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
 console.log('[gateway] iniciando gerenciador multicanal Atlas One...')
+console.log(PUSH_READY ? '[gateway] Web Push ativo.' : '[gateway] Web Push desativado: chaves VAPID ausentes.')
 await refreshChannels()
 refreshTimer = setInterval(() => void refreshChannels(), 5000)
 queueTimer = setInterval(() => void processAllQueues(), 1200)
+pushTimer = setInterval(() => void processPushQueue(), 1500)

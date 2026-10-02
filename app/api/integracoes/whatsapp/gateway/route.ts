@@ -4,6 +4,7 @@ import {
   atualizarEstadoGateway,
   confirmarSaidaGateway,
   proximaSaidaGateway,
+  prepararUploadMidiaGateway,
   registrarEntradaGateway,
 } from '@/lib/whatsappServer'
 
@@ -53,6 +54,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    if (tipo === 'media_prepare') {
+      const resultado = await prepararUploadMidiaGateway(config, {
+        channelId: String(body.channelId || ''),
+        whatsappMessageId: body.whatsappMessageId || null,
+        fileName: body.fileName || null,
+        mimeType: body.mimeType || null,
+        size: Number(body.size || 0),
+      })
+      return NextResponse.json({ ok: true, ...resultado })
+    }
+
     if (tipo === 'inbound') {
       const resultado = await registrarEntradaGateway(config, {
         telefone: String(body.telefone || ''),
@@ -61,6 +73,10 @@ export async function POST(req: NextRequest) {
         tipo: body.messageType || 'text',
         texto: body.texto || null,
         timestamp: body.timestamp || null,
+        mediaPath: body.mediaPath || null,
+        mimeType: body.mimeType || null,
+        fileName: body.fileName || null,
+        mediaSize: Number(body.mediaSize || 0) || null,
         payload: body.payload || null,
       })
       return NextResponse.json({ ok: true, ...resultado })
