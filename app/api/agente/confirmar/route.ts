@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       ...historico,
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: JSON.stringify(resultadoExecucao) }] },
     ]
-    const resultado = await rodarLoop(messages, usuario.id, usuario.nome, usuario.role, apiKey)
+    const resultado = await rodarLoop(messages, usuario.id, usuario.nome, usuario.role, apiKey, usuario.empresa_id)
 
     if (resultado.done && resultado.text) {
       await salvarMensagem(conversaId, 'assistant', resultado.text)

@@ -176,7 +176,7 @@ export const MASTER_TOOLS = [
   },
 ]
 
-export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string, usuarioNome?: string): Promise<any> {
+export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string, usuarioNome?: string, empresaId?: string): Promise<any> {
   const limite = Math.min(Number(input && input.limite) || 20, 50)
   try {
     if (nome === 'buscar_tarefas') {
@@ -203,7 +203,8 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('orcamentos')
         .select('cliente_nome,tipo_esquadria,status,temperatura,valor_estimado,created_at')
-        .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
+      q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca_cliente) q = q.ilike('cliente_nome', '%' + input.busca_cliente + '%')
       if (input && input.temperatura) q = q.eq('temperatura', input.temperatura)
@@ -214,7 +215,8 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('clientes')
         .select('nome,whatsapp,cidade,origem,responsavel')
-        .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
+      q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca) q = q.ilike('nome', '%' + input.busca + '%')
       const { data, error } = await q
@@ -224,7 +226,8 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('assistencias')
         .select('cliente_nome,descricao_problema,status,cidade,created_at')
-        .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
+      q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.status) q = q.eq('status', input.status)
       const { data, error } = await q
@@ -239,16 +242,16 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       return error ? { erro: error.message } : { setores: data }
     }
     if (nome === 'buscar_base_tecnica') {
-      return await buscarBaseTecnicaAgente(input)
+      return await buscarBaseTecnicaAgente(input, empresaId)
     }
     if (nome === 'validar_conhecimento_tecnico') {
       if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
-      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId)
+      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId, empresaId)
     }
     if (nome === 'lembrar_fato') {
       const fato = input && input.fato
       if (!fato) return { erro: 'fato vazio' }
-      await supabaseAdmin.from('agente_memorias').insert({ usuario_id: usuarioId, chave: 'fato', valor: fato })
+      await supabaseAdmin.from('agente_memorias').insert({ empresa_id: empresaId || undefined, usuario_id: usuarioId, chave: 'fato', valor: fato })
       return { ok: true, salvo: fato }
     }
     if (nome === 'ler_arquivo_codigo') {
@@ -455,11 +458,13 @@ function sanitizarMensagens(mensagens: any[]): any[] {
   return resultado
 }
 
-export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string): Promise<any> {
-  const { data: memoriasData } = await supabaseAdmin
+export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string, empresaId?: string): Promise<any> {
+  let memoriasQuery = supabaseAdmin
     .from('agente_memorias')
     .select('valor')
     .eq('usuario_id', usuarioId)
+  if (empresaId) memoriasQuery = memoriasQuery.eq('empresa_id', empresaId)
+  const { data: memoriasData } = await memoriasQuery
     .order('created_at', { ascending: false })
     .limit(30)
   const fatos = (memoriasData || []).map((m: any) => m.valor)
@@ -482,7 +487,23 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
   }
   const escopoAgente: 'setor' | 'master' = usuarioRole === 'master' ? 'master' : 'setor'
   const configAgente = await carregarConfigAgente(setorIdPrincipal, escopoAgente)
-  const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
+  let system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
+
+  const SAFE_NON_MASTER = new Set([
+    'buscar_tarefas',
+    'buscar_eventos',
+    'buscar_base_tecnica',
+    'lembrar_fato',
+    'propor_criar_tarefa',
+    'propor_criar_evento',
+  ])
+  const ferramentasDisponiveis = usuarioRole === 'master'
+    ? [...TOOLS, ...MASTER_TOOLS]
+    : TOOLS.filter((tool: any) => SAFE_NON_MASTER.has(tool.name))
+
+  if (usuarioRole !== 'master') {
+    system += '\nSEGURANCA DO ASSISTENTE GERAL: neste chat geral, nao consulte orcamentos, clientes, vendas, financeiro, RH, compras, fornecedores, estoque ou assistencias. Para dados internos, oriente o usuario a abrir Especialistas Atlas, onde o acesso e filtrado por usuario e dominio. A base tecnica nao sensivel, tarefas pessoais e calendario pessoal continuam liberados.\n'
+  }
 
   let msgs = sanitizarMensagens(messages)
   const maxPassos = usuarioRole === 'master' ? 20 : 5
@@ -494,7 +515,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
       maxTokens: configAgente.maxTokens,
       system,
       messages: msgs,
-      tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
+      tools: ferramentasDisponiveis,
     })
     const duracaoMs = Date.now() - inicioChamada
     if (!respostaIA.ok) {
@@ -523,7 +544,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
 
     const toolResults = []
     for (const t of toolUses) {
-      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole, usuarioNome)
+      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole, usuarioNome, empresaId)
       toolResults.push({ type: 'tool_result', tool_use_id: t.id, content: JSON.stringify(resultado) })
     }
     msgs = [...msgs, { role: 'user', content: toolResults }]

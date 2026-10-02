@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     await salvarMensagem(conversaId, 'user', textoParaSalvar)
 
     const messages = [...historico, { role: 'user', content }]
-    const resultado = await rodarLoop(messages, usuario.id, usuario.nome, usuario.role, apiKey)
+    const resultado = await rodarLoop(messages, usuario.id, usuario.nome, usuario.role, apiKey, usuario.empresa_id)
 
     if (resultado.done && resultado.text) {
       await salvarMensagem(conversaId, 'assistant', resultado.text)

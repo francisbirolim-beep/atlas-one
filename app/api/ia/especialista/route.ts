@@ -17,10 +17,44 @@ function contextoId(modulo: AIModulo) {
   return `especialista:${modulo}`
 }
 
-async function temAcesso(usuario: UsuarioTenant, modulo: AIModulo) {
-  if (usuario.role === 'master') return true
+type EscopoIA = 'nenhum' | 'proprio' | 'setor' | 'empresa'
+
+type AcessoIA = {
+  permitido: boolean
+  escopo: EscopoIA
+  origem: 'master' | 'configurado' | 'setor' | 'negado'
+  motivo: string
+}
+
+async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise<AcessoIA> {
+  if (usuario.role === 'master') {
+    return { permitido: true, escopo: 'empresa', origem: 'master', motivo: 'Usuário Master.' }
+  }
+
+  const { data: override } = await supabaseAdmin
+    .from('ia_acessos_dominio')
+    .select('escopo,permitido')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('dominio', modulo)
+    .maybeSingle()
+
+  if (override) {
+    const escopo = String(override.escopo || 'nenhum') as EscopoIA
+    const permitido = override.permitido === true && escopo !== 'nenhum'
+    return {
+      permitido,
+      escopo: permitido ? escopo : 'nenhum',
+      origem: 'configurado',
+      motivo: permitido ? 'Permissão específica da Atlas IA.' : 'Domínio bloqueado pelo Master.',
+    }
+  }
+
   const especialista = especialistaDoModulo(modulo)
-  if (!especialista?.setorIds.length) return false
+  if (!especialista?.setorIds.length) {
+    return { permitido: false, escopo: 'nenhum', origem: 'negado', motivo: 'Especialista sem setor configurado.' }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('permissoes')
     .select('setor_id,nivel')
@@ -28,8 +62,46 @@ async function temAcesso(usuario: UsuarioTenant, modulo: AIModulo) {
     .eq('usuario_id', usuario.id)
     .in('setor_id', especialista.setorIds)
 
-  if (error) return false
-  return (data || []).some(p => ['consulta', 'edicao'].includes(String(p.nivel)))
+  if (error || !(data || []).some(p => ['consulta', 'edicao'].includes(String(p.nivel)))) {
+    return { permitido: false, escopo: 'nenhum', origem: 'negado', motivo: 'Usuário sem acesso ao setor deste especialista.' }
+  }
+
+  // Padrão mais conservador para Comercial: vendedor enxerga seus próprios dados.
+  const escopo: EscopoIA = modulo === 'comercial' ? 'proprio' : 'setor'
+  return { permitido: true, escopo, origem: 'setor', motivo: 'Permissão herdada do setor do Atlas.' }
+}
+
+async function acessoAuxiliar(usuario: UsuarioTenant, dominio: string) {
+  if (usuario.role === 'master') return true
+  const { data } = await supabaseAdmin
+    .from('ia_acessos_dominio')
+    .select('escopo,permitido')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('dominio', dominio)
+    .maybeSingle()
+  return Boolean(data?.permitido && data?.escopo && data.escopo !== 'nenhum')
+}
+
+async function auditarAcesso(
+  usuario: UsuarioTenant,
+  modulo: AIModulo,
+  acesso: AcessoIA,
+  contexto: string,
+) {
+  try {
+    await supabaseAdmin.from('ia_auditoria_dados').insert({
+      empresa_id: usuario.empresa_id,
+      usuario_id: usuario.id,
+      dominio: modulo,
+      escopo_aplicado: acesso.escopo,
+      acao: acesso.permitido ? 'permitido' : 'bloqueado',
+      motivo: acesso.motivo,
+      contexto: contexto.slice(0, 500),
+    })
+  } catch {
+    // Auditoria não pode derrubar a conversa.
+  }
 }
 
 async function validarSessao(usuario: UsuarioTenant, modulo: AIModulo, sessionId: string | null) {
@@ -46,77 +118,196 @@ async function validarSessao(usuario: UsuarioTenant, modulo: AIModulo, sessionId
   return data?.length ? id : null
 }
 
-async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo) {
+async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: EscopoIA) {
   const empresaId = usuario.empresa_id
-  const recentes = async (table: string, select: string, order = 'created_at', limit = 20) => {
-    const { data, error } = await supabaseAdmin
+  const podeCustos = await acessoAuxiliar(usuario, 'custos_precos')
+  const podeFornecedores = await acessoAuxiliar(usuario, 'fornecedores')
+
+  const recentes = async (
+    table: string,
+    select: string,
+    order = 'created_at',
+    limit = 20,
+    proprioColumn?: string,
+  ) => {
+    if (escopo === 'nenhum') return []
+    if (escopo === 'proprio' && !proprioColumn) return []
+
+    let query = supabaseAdmin
       .from(table)
       .select(select)
       .eq('empresa_id', empresaId)
+
+    if (escopo === 'proprio' && proprioColumn) {
+      query = query.eq(proprioColumn, usuario.id)
+    }
+
+    const { data, error } = await query
       .order(order, { ascending: false })
       .limit(limit)
     return error ? [] : data || []
   }
+
   if (modulo === 'comercial') {
+    const clientes = escopo === 'proprio'
+      ? await supabaseAdmin
+          .from('clientes')
+          .select('id,nome,cidade,origem,responsavel,created_at')
+          .eq('empresa_id', empresaId)
+          .eq('responsavel', usuario.nome)
+          .order('created_at', { ascending: false })
+          .limit(25)
+      : await supabaseAdmin
+          .from('clientes')
+          .select('id,nome,cidade,origem,responsavel,created_at')
+          .eq('empresa_id', empresaId)
+          .order('created_at', { ascending: false })
+          .limit(25)
+
     return {
-      clientes: await recentes('clientes', 'id,nome,cidade,origem,responsavel,created_at', 'created_at', 25),
-      orcamentos: await recentes('orcamentos', 'id,cliente_nome,cidade,status,temperatura,valor_estimado,created_at,criado_por_nome', 'created_at', 25),
-    }
-  }
-  if (modulo === 'orcamento') {
-    return {
-      orcamentos: await recentes('orcamentos', 'id,cliente_nome,cidade,status,acabamento,contramarco,tipo_medida,valor_estimado,custo_estimado,created_at', 'created_at', 20),
-      produtos: await recentes('produtos', 'id,nome,codigo,categoria,unidade,preco,custo,linha_id,updated_at', 'updated_at', 40),
-    }
-  }
-  if (modulo === 'medicao_final') {
-    return {
-      medicoes: await recentes('medicoes_finais', 'id,orcamento_id,cliente_nome,cidade,status_operacional,responsavel_nome,versao,created_at,concluido_em,aprovado_em', 'created_at', 25),
-    }
-  }
-  if (modulo === 'engenharia') {
-    return {
-      produtos_tecnicos: await recentes('produtos', 'id,nome,codigo,categoria,unidade,linha_id,peso_kg_m,tamanho_barra_mm,status_validacao,updated_at', 'updated_at', 50),
-    }
-  }
-  if (modulo === 'compras') {
-    return {
-      necessidades: await recentes('compras_necessidades', 'id,status,descricao,categoria,quantidade,unidade,prioridade,data_limite,obra_referencia,responsavel_nome,created_at', 'created_at', 30),
-      fornecedores: await recentes('fornecedores', 'id,nome,cidade,ativo,pedido_minimo,prazo_medio_dias,prazo_entrega_dias,condicao_pagamento_padrao,updated_at', 'updated_at', 30),
-    }
-  }
-  if (modulo === 'estoque') {
-    return {
-      saldos: await recentes('estoque_saldos', 'produto_id,unidade,quantidade,quantidade_reservada,custo_medio,valor_estoque,updated_at', 'updated_at', 50),
-      produtos: await recentes('produtos', 'id,nome,codigo,categoria,unidade,estoque_minimo,estoque_ideal,updated_at', 'updated_at', 50),
-    }
-  }
-  if (modulo === 'producao') {
-    return {
-      ordens: await recentes('ordens_producao', 'id,numero,cliente_id,obra_id,orcamento_id,tipo_producao,titulo,quantidade,largura_mm,altura_mm,status,bloqueada,bloqueio_motivo,created_at,updated_at', 'updated_at', 35),
-    }
-  }
-  if (modulo === 'instalacao' || modulo === 'qualidade') {
-    return {
-      assistencias: await recentes('assistencias', 'id,numero,cliente_nome,cidade,descricao_problema,status,tecnico_nome,data_atendimento,servico_realizado,created_at,atendimento_concluido_em', 'created_at', 30),
-    }
-  }
-  if (modulo === 'financeiro') {
-    return {
-      contas_receber: await recentes('financeiro_contas_receber', 'id,cliente_nome,documento,parcela,total_parcelas,vencimento,valor,status,forma,data_pagamento,valor_pago,created_at', 'created_at', 35),
-      contas_pagar: await recentes('financeiro_contas_pagar', 'id,fornecedor_nome,documento,parcela,descricao,vencimento,valor,status,data_pagamento,valor_pago,created_at', 'created_at', 35),
-    }
-  }
-  if (modulo === 'gestao') {
-    return {
-      orcamentos: await recentes('orcamentos', 'id,cliente_nome,cidade,status,temperatura,valor_estimado,custo_estimado,created_at,criado_por_nome', 'created_at', 30),
-      producao: await recentes('ordens_producao', 'id,numero,titulo,status,bloqueada,bloqueio_motivo,created_at,updated_at', 'updated_at', 30),
-      receber: await recentes('financeiro_contas_receber', 'id,cliente_nome,vencimento,valor,status,valor_pago,created_at', 'created_at', 30),
-      pagar: await recentes('financeiro_contas_pagar', 'id,fornecedor_nome,vencimento,valor,status,valor_pago,created_at', 'created_at', 30),
+      escopo_aplicado: escopo,
+      clientes: clientes.error ? [] : clientes.data || [],
+      orcamentos: await recentes(
+        'orcamentos',
+        'id,cliente_nome,cidade,status,temperatura,valor_estimado,created_at,criado_por_nome,criado_por_id',
+        'created_at',
+        25,
+        'criado_por_id',
+      ),
     }
   }
 
-  return {}
+  if (modulo === 'orcamento') {
+    const selectOrc = podeCustos
+      ? 'id,cliente_nome,cidade,status,acabamento,contramarco,tipo_medida,valor_estimado,custo_estimado,created_at,criado_por_id'
+      : 'id,cliente_nome,cidade,status,acabamento,contramarco,tipo_medida,valor_estimado,created_at,criado_por_id'
+    const selectProd = podeCustos
+      ? 'id,nome,codigo,categoria,unidade,preco,custo,linha_id,updated_at'
+      : 'id,nome,codigo,categoria,unidade,linha_id,updated_at'
+
+    return {
+      escopo_aplicado: escopo,
+      custos_precos_liberados: podeCustos,
+      orcamentos: await recentes('orcamentos', selectOrc, 'created_at', 20, 'criado_por_id'),
+      produtos: escopo === 'proprio' ? [] : await recentes('produtos', selectProd, 'updated_at', 40),
+    }
+  }
+
+  if (modulo === 'medicao_final') {
+    return {
+      escopo_aplicado: escopo,
+      medicoes: await recentes(
+        'medicoes_finais',
+        'id,orcamento_id,cliente_nome,cidade,status_operacional,responsavel_nome,versao,created_at,concluido_em,aprovado_em,criado_por_id',
+        'created_at',
+        25,
+        'criado_por_id',
+      ),
+    }
+  }
+
+  if (modulo === 'engenharia') {
+    return {
+      escopo_aplicado: escopo,
+      produtos_tecnicos: await recentes(
+        'produtos',
+        'id,nome,codigo,categoria,unidade,linha_id,peso_kg_m,tamanho_barra_mm,status_validacao,updated_at',
+        'updated_at',
+        50,
+      ),
+    }
+  }
+
+  if (modulo === 'compras') {
+    return {
+      escopo_aplicado: escopo,
+      necessidades: await recentes(
+        'compras_necessidades',
+        'id,status,descricao,categoria,quantidade,unidade,prioridade,data_limite,obra_referencia,responsavel_nome,created_at,criado_por_id',
+        'created_at',
+        30,
+        'criado_por_id',
+      ),
+      fornecedores: podeFornecedores && escopo !== 'proprio'
+        ? await recentes('fornecedores', 'id,nome,cidade,ativo,pedido_minimo,prazo_medio_dias,prazo_entrega_dias,condicao_pagamento_padrao,updated_at', 'updated_at', 30)
+        : [],
+    }
+  }
+
+  if (modulo === 'estoque') {
+    const selectSaldo = podeCustos
+      ? 'produto_id,unidade,quantidade,quantidade_reservada,custo_medio,valor_estoque,updated_at'
+      : 'produto_id,unidade,quantidade,quantidade_reservada,updated_at'
+    return {
+      escopo_aplicado: escopo,
+      custos_precos_liberados: podeCustos,
+      saldos: escopo === 'proprio' ? [] : await recentes('estoque_saldos', selectSaldo, 'updated_at', 50),
+      produtos: escopo === 'proprio' ? [] : await recentes('produtos', 'id,nome,codigo,categoria,unidade,estoque_minimo,estoque_ideal,updated_at', 'updated_at', 50),
+    }
+  }
+
+  if (modulo === 'producao') {
+    return {
+      escopo_aplicado: escopo,
+      ordens: await recentes(
+        'ordens_producao',
+        'id,numero,cliente_id,obra_id,orcamento_id,tipo_producao,titulo,quantidade,largura_mm,altura_mm,status,bloqueada,bloqueio_motivo,created_at,updated_at,criado_por_id',
+        'updated_at',
+        35,
+        'criado_por_id',
+      ),
+    }
+  }
+
+  if (modulo === 'instalacao' || modulo === 'qualidade') {
+    return {
+      escopo_aplicado: escopo,
+      assistencias: await recentes(
+        'assistencias',
+        'id,numero,cliente_nome,cidade,descricao_problema,status,tecnico_nome,data_atendimento,servico_realizado,created_at,atendimento_concluido_em,criado_por_id',
+        'created_at',
+        30,
+        'criado_por_id',
+      ),
+    }
+  }
+
+  if (modulo === 'financeiro') {
+    return {
+      escopo_aplicado: escopo,
+      contas_receber: await recentes(
+        'financeiro_contas_receber',
+        'id,cliente_nome,documento,parcela,total_parcelas,vencimento,valor,status,forma,data_pagamento,valor_pago,created_at,criado_por_id',
+        'created_at',
+        35,
+        'criado_por_id',
+      ),
+      contas_pagar: await recentes(
+        'financeiro_contas_pagar',
+        'id,fornecedor_nome,documento,parcela,descricao,vencimento,valor,status,data_pagamento,valor_pago,created_at,criado_por_id',
+        'created_at',
+        35,
+        'criado_por_id',
+      ),
+    }
+  }
+
+  if (modulo === 'gestao') {
+    const selectOrc = podeCustos
+      ? 'id,cliente_nome,cidade,status,temperatura,valor_estimado,custo_estimado,created_at,criado_por_nome,criado_por_id'
+      : 'id,cliente_nome,cidade,status,temperatura,valor_estimado,created_at,criado_por_nome,criado_por_id'
+
+    return {
+      escopo_aplicado: escopo,
+      custos_precos_liberados: podeCustos,
+      orcamentos: await recentes('orcamentos', selectOrc, 'created_at', 30, 'criado_por_id'),
+      producao: await recentes('ordens_producao', 'id,numero,titulo,status,bloqueada,bloqueio_motivo,created_at,updated_at,criado_por_id', 'updated_at', 30, 'criado_por_id'),
+      receber: await recentes('financeiro_contas_receber', 'id,cliente_nome,vencimento,valor,status,valor_pago,created_at,criado_por_id', 'created_at', 30, 'criado_por_id'),
+      pagar: await recentes('financeiro_contas_pagar', 'id,fornecedor_nome,vencimento,valor,status,valor_pago,created_at,criado_por_id', 'created_at', 30, 'criado_por_id'),
+    }
+  }
+
+  return { escopo_aplicado: escopo }
 }
 
 async function instrucoesSetor(usuario: UsuarioTenant, modulo: AIModulo) {
@@ -183,8 +374,10 @@ export async function POST(req: NextRequest) {
 
     const especialista = especialistaDoModulo(modulo)
     if (!especialista) return NextResponse.json({ error: 'Especialista não configurado.' }, { status: 404 })
-    if (!(await temAcesso(usuario, modulo))) {
-      return NextResponse.json({ error: 'Você não possui acesso a este especialista.' }, { status: 403 })
+    const acesso = await resolverAcesso(usuario, modulo)
+    await auditarAcesso(usuario, modulo, acesso, pergunta)
+    if (!acesso.permitido) {
+      return NextResponse.json({ error: 'Você não possui acesso a estes dados no Atlas IA.' }, { status: 403 })
     }
 
     const status = await statusOpenCode()
@@ -194,7 +387,7 @@ export async function POST(req: NextRequest) {
     const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
     const sessionId = await validarSessao(usuario, modulo, String(body?.sessionId || '') || null)
     const [dados, setores, memoria] = await Promise.all([
-      dadosRecentes(usuario, modulo),
+      dadosRecentes(usuario, modulo, acesso.escopo),
       instrucoesSetor(usuario, modulo),
       memoriaEspecialista(usuario, modulo),
     ])
@@ -210,12 +403,14 @@ export async function POST(req: NextRequest) {
       'Para cálculos determinísticos, fórmulas técnicas, cortes, folgas, acessórios, custos e regras do MEE, explique que o cálculo oficial pertence ao Motor Atlas/MEE.',
       'Correções humanas e memórias aprovadas têm prioridade sobre inferências.',
       'Respeite estritamente o escopo do especialista selecionado e as permissões do usuário.',
+      'Se escopo_dados for proprio, nunca conclua ou estime números da empresa inteira a partir dos dados pessoais fornecidos.',
+      'Se um campo sensível não estiver no CONTEXTO ATLAS, informe que o usuário não possui acesso ou que o dado não foi disponibilizado.',
       'OpenCode orquestra a conversa e FreeLLMAPI executa/roteia o modelo.',
     ].join('\n')
 
     const contexto = {
       especialista: { modulo, nome: especialista.nome, objetivo: especialista.objetivo },
-      usuario: { nome: usuario.nome, role: usuario.role },
+      usuario: { nome: usuario.nome, role: usuario.role, escopo_dados: acesso.escopo },
       instrucoes_setor: setores,
       dados_operacionais: dados,
       memorias_aprovadas: memoria.memorias,
