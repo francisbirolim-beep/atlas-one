@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { consultarOpenCode, statusOpenCode, type OpenCodeAnexo } from '@/lib/ai/opencode'
 import { especialistaDoModulo } from '@/lib/ai/specialists'
+import { montarContextoAtlasGlobal } from '@/lib/ai/contextoAtlasGlobal'
 import type { AIModulo } from '@/lib/ai/types'
 import { formatarFontesParaPrompt, pesquisarPublicamente, podePesquisarPublicamente, respostaIndicaFaltaDeDado, type ResultadoPesquisaPublica } from '@/lib/ai/pesquisaPublica'
 
@@ -184,112 +185,6 @@ async function validarSessao(usuario: UsuarioTenant, modulo: AIModulo, sessionId
     .contains('contexto_json', { opencode_session_id: id })
     .limit(1)
   return data?.length ? id : null
-}
-
-const TERMOS_COMUNS_BUSCA = new Set([
-  'QUE', 'QUAL', 'QUAIS', 'COMO', 'ONDE', 'PARA', 'COM', 'SEM', 'UMA', 'UM', 'DOS', 'DAS',
-  'TEM', 'TEMOS', 'ESTA', 'ESTAO', 'CADASTRADO', 'CADASTRADOS', 'ATLAS', 'PERFIL', 'PERFIS',
-  'ACESSORIO', 'ACESSORIOS', 'PRODUTO', 'PRODUTOS', 'CODIGO', 'CODIGOS',
-])
-
-function termosBuscaInterna(pergunta: string) {
-  const texto = String(pergunta || '').trim()
-  const codigos = texto.toUpperCase().match(/\b[A-Z]{1,8}[\s-]?\d{1,6}[A-Z]?\b/g) || []
-  const palavras = texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .split(/\s+/)
-    .map(p => p.replace(/[^A-Z0-9_-]/g, ''))
-    .filter(p => p.length >= 3 && !TERMOS_COMUNS_BUSCA.has(p))
-
-  return Array.from(new Set([...codigos, ...palavras])).slice(0, 8)
-}
-
-function variantesTermoBusca(termo: string) {
-  const limpo = String(termo || '').toUpperCase().replace(/[^A-Z0-9 -]/g, '').trim()
-  if (!limpo) return []
-  const compacto = limpo.replace(/[\s-]+/g, '')
-  const m = compacto.match(/^([A-Z]{1,8})(\d{1,6}[A-Z]?)$/)
-  if (!m) return [limpo]
-  return Array.from(new Set([compacto, `${m[1]} ${m[2]}`, `${m[1]}-${m[2]}`]))
-}
-
-async function dadosRelacionadosPergunta(
-  usuario: UsuarioTenant,
-  modulo: AIModulo,
-  escopo: EscopoIA,
-  pergunta: string,
-) {
-  if (escopo === 'nenhum' || !pergunta.trim()) return null
-  if (!['engenharia', 'orcamento', 'estoque', 'compras'].includes(modulo)) return null
-
-  const empresaId = usuario.empresa_id
-  const [totalProdutos, totalPerfis, totalAcessorios] = await Promise.all([
-    supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaId),
-    supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaId).eq('categoria', 'perfil'),
-    supabaseAdmin.from('produtos').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaId).eq('categoria', 'acessorio'),
-  ])
-
-  const termos = termosBuscaInterna(pergunta)
-  const encontrados = new Map<string, any>()
-
-  for (const termo of termos) {
-    for (const variante of variantesTermoBusca(termo)) {
-      const seguro = variante.replace(/[,().]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
-      if (!seguro) continue
-      const { data } = await supabaseAdmin
-        .from('produtos')
-        .select('id,nome,codigo,categoria,unidade,linha_id,peso_kg_m,tamanho_barra_mm,status_validacao,updated_at')
-        .eq('empresa_id', empresaId)
-        .or(`codigo.ilike.%${seguro}%,nome.ilike.%${seguro}%`)
-        .limit(12)
-
-      for (const item of data || []) {
-        encontrados.set(String(item.id), item)
-      }
-      if (encontrados.size >= 30) break
-    }
-    if (encontrados.size >= 30) break
-  }
-
-  const produtos = Array.from(encontrados.values()).slice(0, 30)
-  let usosWvetro: any[] = []
-  let tipologiasWvetro: any[] = []
-
-  if (modulo === 'engenharia' && produtos.length) {
-    const idsProdutos = produtos.map((p: any) => p.id).filter(Boolean)
-    const { data: usos } = await supabaseAdmin
-      .from('wvetro_tipologia_componentes')
-      .select('referencia_tipologia_id,produto_atlas_id,tipo,codigo,codigo_wvetro,nome,cor,unidade_origem,ocorrencias,quantidade_min,quantidade_max,medida_min,medida_max,status_mapeamento')
-      .in('produto_atlas_id', idsProdutos)
-      .order('ocorrencias', { ascending: false })
-      .limit(60)
-
-    usosWvetro = usos || []
-    const idsTipologias = Array.from(new Set(usosWvetro.map((u: any) => u.referencia_tipologia_id).filter(Boolean))).slice(0, 30)
-    if (idsTipologias.length) {
-      const { data: refs } = await supabaseAdmin
-        .from('wvetro_referencias_tipologias')
-        .select('id,linha_raw,modelo_raw,largura_min_mm,largura_max_mm,altura_min_mm,altura_max_mm,ambientes_observados,nomes_observados,ocorrencias,status_mapeamento')
-        .in('id', idsTipologias)
-        .order('ocorrencias', { ascending: false })
-        .limit(30)
-      tipologiasWvetro = refs || []
-    }
-  }
-
-  return {
-    resumo_catalogo_tecnico: {
-      total_produtos: Number(totalProdutos.count || 0),
-      total_perfis: Number(totalPerfis.count || 0),
-      total_acessorios: Number(totalAcessorios.count || 0),
-    },
-    termos_consultados: termos,
-    produtos_encontrados: produtos,
-    usos_wvetro_dos_produtos_encontrados: usosWvetro,
-    tipologias_wvetro_relacionadas: tipologiasWvetro,
-  }
 }
 
 async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: EscopoIA) {
@@ -644,9 +539,9 @@ export async function POST(req: NextRequest) {
     }
     const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
     const sessionId = await validarSessao(usuario, modulo, String(body?.sessionId || '') || null)
-    const [dados, dadosRelevantes, setores, memoria] = await Promise.all([
+    const [dados, contextoAtlasGlobal, setores, memoria] = await Promise.all([
       dadosRecentes(usuario, modulo, acesso.escopo),
-      dadosRelacionadosPergunta(usuario, modulo, acesso.escopo, pergunta),
+      montarContextoAtlasGlobal({ usuario, especialistaAtual: modulo, pergunta }),
       instrucoesSetor(usuario, modulo),
       memoriaEspecialista(usuario, modulo),
     ])
@@ -670,9 +565,12 @@ export async function POST(req: NextRequest) {
       'Se escopo_dados for proprio, nunca conclua ou estime números da empresa inteira a partir dos dados pessoais fornecidos.',
       'Se um campo sensível não estiver no CONTEXTO ATLAS, informe que o usuário não possui acesso ou que o dado não foi disponibilizado.',
       'Campos com nome resumo_* contêm totais agregados confiáveis para o escopo atual.',
-      'O campo dados_relevantes_pergunta é uma busca interna feita especificamente para a pergunta atual. Para códigos de perfis, acessórios, catálogo técnico e referências do W.Vetro, priorize esse campo em relação às listas recentes.',
+      'O campo contexto_atlas_global é a camada de busca interna sob demanda. Ele pode consultar qualquer domínio do Atlas que o usuário tenha permissão para acessar, mesmo que seja diferente da especialidade selecionada.',
+      'O especialista selecionado define sua especialidade, prioridade de análise e forma de responder; ele NÃO limita a busca interna. A permissão do usuário é que limita os dados.',
+      'Dentro de contexto_atlas_global, priorize dados.dados relevantes à pergunta. Se dominios_bloqueados_solicitados tiver itens, não tente inferir nem contornar esses domínios.',
+      'O catálogo técnico sem preços/custos é conhecimento operacional compartilhado. Custos, preços, fornecedores, Financeiro e demais áreas sensíveis continuam sujeitos às permissões.',
       'Quando resumo_catalogo_tecnico estiver disponível, use seus totais como contagem consolidada do catálogo da empresa.',
-      'Produtos encontrados em dados_relevantes_pergunta pertencem ao tenant atual. Relações W.Vetro ali apresentadas foram vinculadas a esses produtos do Atlas.',
+      'Relações W.Vetro são referência histórica auditável. Não as transforme automaticamente em regra oficial do MEE sem validação humana.',
       'Campos com nome *_recentes, *_recente ou listas operacionais são amostras limitadas para contexto; NUNCA use a quantidade de itens dessas listas como total da empresa, do setor ou do usuário.',
       'Se a pergunta pedir total, quantidade geral ou visão consolidada e não houver um resumo_* correspondente, diga que o total consolidado não foi disponibilizado em vez de estimar pela amostra.',
       'OpenCode orquestra a conversa e FreeLLMAPI executa/roteia o modelo.',
@@ -683,7 +581,7 @@ export async function POST(req: NextRequest) {
       usuario: { nome: usuario.nome, role: usuario.role, escopo_dados: acesso.escopo },
       instrucoes_setor: setores,
       dados_operacionais: dados,
-      dados_relevantes_pergunta: dadosRelevantes,
+      contexto_atlas_global: contextoAtlasGlobal,
       memorias_aprovadas: memoria.memorias,
       exemplos_aprovados: memoria.exemplos,
     }
@@ -765,6 +663,13 @@ export async function POST(req: NextRequest) {
           model_id: resultado.modelId,
           orquestrador: 'opencode',
           motor: 'freellmapi',
+          busca_interna: {
+            estrategia: contextoAtlasGlobal.estrategia,
+            dominios_consultados: contextoAtlasGlobal.dominios_consultados_nesta_pergunta,
+            dominios_bloqueados_solicitados: contextoAtlasGlobal.dominios_bloqueados_solicitados,
+            custos_precos_liberados: contextoAtlasGlobal.custos_precos_liberados,
+            fornecedores_liberados: contextoAtlasGlobal.fornecedores_liberados,
+          },
           anexo: anexo ? { nome: anexo.nome, media_type: anexo.mediaType, tipo: anexo.tipo } : null,
           pesquisa_publica: pesquisaPublica ? {
             provedor: pesquisaPublica.provedor,
