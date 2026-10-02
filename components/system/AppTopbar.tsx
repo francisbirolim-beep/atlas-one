@@ -166,7 +166,7 @@ export default function AppTopbar() {
       <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
         <div className="flex h-[60px] items-center gap-1.5 px-2.5 sm:h-[68px] sm:gap-3 sm:px-4 md:px-6 lg:px-7">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 xl:max-w-[340px]">
-            <Link href="/ia/comercial" className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm transition hover:bg-slate-800 md:hidden" title="Abrir IA Atlas" aria-label="Abrir IA Atlas"><Sparkles size={17} /></Link>
+            <Link href="/atlas-ia/especialistas" className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm transition hover:bg-slate-800 md:hidden" title="Abrir IA Atlas" aria-label="Abrir IA Atlas"><Sparkles size={17} /></Link>
             <div className="min-w-0">
               <div className="flex items-center gap-2 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.18em]"><span>{contexto.grupo}</span><span className="hidden h-1 w-1 rounded-full bg-emerald-500 sm:block" /><span className="hidden normal-case tracking-normal text-slate-400 sm:block">Atlas One</span></div>
               <div className="mt-0.5 truncate text-sm font-semibold tracking-tight text-slate-950 sm:text-base">{contexto.titulo}</div>
@@ -180,7 +180,7 @@ export default function AppTopbar() {
           <div className="relative flex flex-none items-center justify-end gap-1.5 sm:flex-1 sm:gap-2 xl:max-w-[430px]">
             <HomeNotificationBell />
             <Link href="/orcamento-rapido" className="hidden h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700 sm:inline-flex" title="Criar novo orçamento rápido"><Plus size={16} /> Novo</Link>
-            <Link href="/ia/comercial" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 lg:inline-flex" title="Abrir IA Atlas"><Sparkles size={15} className="text-emerald-600" /> IA Atlas</Link>
+            <Link href="/atlas-ia/especialistas" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 lg:inline-flex" title="Abrir IA Atlas"><Sparkles size={15} className="text-emerald-600" /> IA Atlas</Link>
             <button type="button" onClick={abrirBusca} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 xl:hidden" title="Busca global"><Search size={16} /></button>
 
             <button type="button" onClick={() => setPerfilAberto(v => !v)} className="flex h-10 items-center gap-2.5 rounded-xl border border-transparent px-0.5 transition hover:border-slate-200 hover:bg-slate-50 sm:ml-1 sm:h-11 sm:px-1.5">
