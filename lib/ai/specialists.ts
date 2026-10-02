@@ -28,5 +28,3 @@ export const AI_ESPECIALISTAS: AIEspecialista[] = [
 export function especialistaDoModulo(modulo: AIModulo) {
   return AI_ESPECIALISTAS.find(item => item.modulo === modulo)
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
