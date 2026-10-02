@@ -72,8 +72,8 @@ function normalizarConsulta(pergunta: string) {
   let consulta = String(pergunta || '').trim()
   const perguntaSemAcento = consulta.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
-  const perguntaClima = /\b(chov|chuva|tempo|previsao|temperatura|clima)\b/i.test(perguntaSemAcento)
-  const temLocalExplicito = /\b(em|para|de)\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][^?]{2,}/.test(consulta)
+  const perguntaClima = /\b(chov[^\s?]*|chuva[^\s?]*|tempo|previsao|temperatura|clima)\b/i.test(perguntaSemAcento)
+  const temLocalExplicito = /\b(em|para|de)\s+[A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç][^?]{2,}/i.test(consulta)
   if (perguntaClima && !temLocalExplicito) {
     consulta += ' em José Bonifácio SP Brasil'
   }
