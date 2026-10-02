@@ -127,7 +127,7 @@ export default function IdentificarCliente() {
 
   const acoes = clienteSelecionado ? [
     { titulo: 'Pedido de orçamento', subtitulo: 'Registrar visita e enviar ao Kanban', icone: ClipboardList, href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-blue-50 text-blue-600' },
-    { titulo: 'Orçamento sob medida', subtitulo: 'Montar com tipologia e variáveis', icone: Pencil, href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-emerald-50 text-emerald-600' },
+    { titulo: 'Orçamento sob medida', subtitulo: 'Montar com tipologia e variáveis', icone: Pencil, href: `/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}&modo=sob-medida`, cor: 'bg-emerald-50 text-emerald-600' },
     { titulo: 'Balcão', subtitulo: 'Venda de produtos', icone: ShoppingCart, href: `/orcamento/balcao/novo?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-amber-50 text-amber-700' },
     { titulo: 'Medida final', subtitulo: 'Registrar medidas finais da obra', icone: Ruler, href: `/producao/medicao-final/cliente/${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-rose-50 text-rose-500' },
     { titulo: 'Assistência', subtitulo: 'Pós-venda e manutenção', icone: Headphones, href: `/assistencia?cliente=${encodeURIComponent(clienteSelecionado.id)}`, cor: 'bg-violet-50 text-violet-700' },
