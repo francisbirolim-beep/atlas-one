@@ -360,7 +360,7 @@ export default function WhatsAppAtendimentoPage() {
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     return conversas.filter(c => {
-      if (!c.ultima_mensagem_em) return false
+      if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (filtro === 'aguardando' && (c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
       if (filtro === 'com_atendente' && (!c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
@@ -556,17 +556,17 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   const totais = useMemo(() => {
-    const chats = conversas.filter(c =>
-      Boolean(c.ultima_mensagem_em) &&
-      (canalFiltro === 'todos' || c.whatsapp_canal_id === canalFiltro)
+    const doCanal = conversas.filter(c =>
+      canalFiltro === 'todos' || c.whatsapp_canal_id === canalFiltro
     )
+    const chats = doCanal.filter(c => Boolean(c.ultima_mensagem_em))
     return {
       todas: chats.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
       aguardando: chats.filter(c => !c.responsavel_id && c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado').length,
       comAtendente: chats.filter(c => Boolean(c.responsavel_id) && c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado').length,
       minhas: chats.filter(c => c.responsavel_id === eu?.id && c.status !== 'finalizado').length,
-      grupos: chats.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
+      grupos: doCanal.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
       naoLidas: chats.filter(c => Number(c.nao_lidas || 0) > 0).length,
       acompanhando: chats.filter(c => Boolean(c.acompanhando)).length,
       transferidas: chats.filter(c => Boolean(c.transferida_em)).length,
