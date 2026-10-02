@@ -9,6 +9,8 @@ import {
   type TipologiaVariavelComVariavel,
 } from '@/lib/engenhariaVariaveis'
 import { listarTipologias } from '@/lib/tipologias'
+import { listarTodasFormulasCorte, type RegistroFormulaCorte } from '@/lib/engenhariaFormulasCorte'
+import { supabase } from '@/lib/supabase'
 import type { Tipologia } from '@/lib/tipos'
 import TipologiaMiniatura from './TipologiaMiniatura'
 import type { SelecaoEsquadriaOrcamento } from './SeletorEsquadriaInteligenteV3'
@@ -16,6 +18,30 @@ import type { SelecaoEsquadriaOrcamento } from './SeletorEsquadriaInteligenteV3'
 type Props = {
   value: SelecaoEsquadriaOrcamento
   onChange: (patch: Partial<SelecaoEsquadriaOrcamento>) => void
+}
+
+type ReferenciaVariavelWVetro = {
+  id: string
+  variavelId: string | null
+  chave: string
+  label: string
+  valor: string
+  valorRaw: string | null
+  origemTipo: string
+  confianca: number
+  evidencia: string | null
+  statusMapeamento: string
+}
+
+type ReferenciaTipologiaWVetro = {
+  referenciaId: string
+  tipologiaId: string
+  linha: string
+  modelo: string
+  imagemUrl: string | null
+  ocorrencias: number
+  statusMapeamento: string
+  variaveis: ReferenciaVariavelWVetro[]
 }
 
 type CampoExtra = {
@@ -100,6 +126,32 @@ function normalizar(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
+function folhasDaTipologia(tipologia: Tipologia | null) {
+  if (!tipologia) return ''
+  const texto = normalizar(`${tipologia.label} ${tipologia.chave}`)
+  const match = texto.match(/(?:^|\s)(\d{1,2})\s*folhas?\b/)
+  if (!match) return ''
+  const numero = Number.parseInt(match[1], 10)
+  return Number.isFinite(numero) && numero > 0 ? String(numero) : ''
+}
+
+async function carregarReferenciaWVetro(tipologiaId: string): Promise<ReferenciaTipologiaWVetro | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return null
+  try {
+    const resposta = await fetch('/api/orcamento/wvetro-referencias', {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    if (!resposta.ok) return null
+    const json = await resposta.json().catch(() => ({}))
+    return (json?.referencias?.[tipologiaId] || null) as ReferenciaTipologiaWVetro | null
+  } catch {
+    return null
+  }
+}
+
 function defaultsParaTipologia(tipologia: Tipologia | null) {
   const base = Object.fromEntries(CAMPOS_WVETRO.map(campo => [campo.chave, campo.defaultValue || '']))
   if (!tipologia) return base
@@ -120,6 +172,8 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
   const [tipologia, setTipologia] = useState<Tipologia | null>(null)
   const [variaveis, setVariaveis] = useState<TipologiaVariavelComVariavel[]>([])
   const [opcoes, setOpcoes] = useState<EngenhariaVariavelOpcao[]>([])
+  const [referenciaWVetro, setReferenciaWVetro] = useState<ReferenciaTipologiaWVetro | null>(null)
+  const [formulaSelecionada, setFormulaSelecionada] = useState<RegistroFormulaCorte | null>(null)
   const [rascunho, setRascunho] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -128,6 +182,8 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
       setTipologia(null)
       setVariaveis([])
       setOpcoes([])
+      setReferenciaWVetro(null)
+      setFormulaSelecionada(null)
       return
     }
 
@@ -136,12 +192,19 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
       listarTipologias(),
       listarVariaveisDaTipologia(value.tipologiaId),
       listarTodasOpcoes(),
-    ]).then(([tipologias, vars, todasOpcoes]) => {
+      carregarReferenciaWVetro(value.tipologiaId),
+      listarTodasFormulasCorte(),
+    ]).then(([tipologias, vars, todasOpcoes, referencia, formulas]) => {
       if (!ativo) return
       const atual = tipologias.find(t => t.id === value.tipologiaId) || null
       setTipologia(atual)
       setVariaveis(vars)
       setOpcoes(todasOpcoes)
+      setReferenciaWVetro(referencia)
+      const candidatas = formulas
+        .filter(formula => formula.tipologia_id === value.tipologiaId && formula.variaveis.length > 0)
+        .sort((a, b) => Number(b.ativo) - Number(a.ativo) || (b.status === 'validada' ? 1 : 0) - (a.status === 'validada' ? 1 : 0) || b.variaveis.length - a.variaveis.length || b.versao - a.versao)
+      setFormulaSelecionada(candidatas[0] || null)
       setCarregando(false)
     }).catch(() => {
       if (ativo) setCarregando(false)
@@ -150,11 +213,36 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
     return () => { ativo = false }
   }, [value.tipologiaId])
 
-  const defaults = useMemo(() => defaultsParaTipologia(tipologia), [tipologia])
+  const folhasDefinidas = useMemo(() => folhasDaTipologia(tipologia), [tipologia])
+
+  const variaveisVisiveis = useMemo(
+    () => variaveis.filter(v => !(folhasDefinidas && v.variavel.chave === 'folhas')),
+    [variaveis, folhasDefinidas],
+  )
+
+  const variaveisFormulaVisiveis = useMemo(() => {
+    const chavesFormais = new Set(variaveisVisiveis.map(v => v.variavel.chave))
+    return (formulaSelecionada?.variaveis || []).filter(v => {
+      if (!v.chave || chavesFormais.has(v.chave)) return false
+      if (folhasDefinidas && v.chave === 'folhas') return false
+      return !['cor', 'vidro'].includes(v.chave)
+    })
+  }, [formulaSelecionada, variaveisVisiveis, folhasDefinidas])
+
+  const defaults = useMemo(() => {
+    const base = defaultsParaTipologia(tipologia)
+    const historico = Object.fromEntries(
+      (referenciaWVetro?.variaveis || [])
+        .filter(v => v.chave && v.valor)
+        .map(v => [v.chave, v.valor]),
+    )
+    if (folhasDefinidas) historico.folhas = folhasDefinidas
+    return { ...base, ...historico }
+  }, [tipologia, referenciaWVetro, folhasDefinidas])
 
   const obrigatorias = useMemo(
-    () => variaveis.filter(v => v.obrigatorio),
-    [variaveis],
+    () => variaveisVisiveis.filter(v => v.obrigatorio),
+    [variaveisVisiveis],
   )
 
   const preenchidas = useMemo(
@@ -180,8 +268,8 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
   function confirmar() {
     const obrigatoriasCompletas = obrigatorias.every(v => valorCompleto(rascunho[v.variavel.chave]))
     onChange({
-      variaveis: rascunho,
-      folhas: rascunho.folhas || value.folhas,
+      variaveis: { ...rascunho, ...(folhasDefinidas ? { folhas: folhasDefinidas } : {}) },
+      folhas: folhasDefinidas || rascunho.folhas || value.folhas,
       configuracaoPresetId: null,
       configuracaoNome: tipologia?.label || value.configuracaoNome,
       configuracaoValidada: false,
@@ -224,7 +312,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
               </div>
               <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                 <p className="text-[10px] uppercase text-slate-400">Folhas</p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-800">{value.variaveis?.folhas || value.folhas || 'A definir'}</p>
+                <p className="mt-0.5 text-sm font-semibold text-slate-800">{folhasDefinidas || value.variaveis?.folhas || value.folhas || 'A definir'}</p>
               </div>
               <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                 <p className="text-[10px] uppercase text-slate-400">Vidro</p>
@@ -312,14 +400,14 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                     <div className="mb-2 flex items-end justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-bold text-slate-800">Variáveis técnicas da tipologia</h3>
-                        <p className="text-[11px] text-slate-500">A lista vem do cadastro técnico do Atlas; não é uma lista fixa da tela.</p>
+                        <p className="text-[11px] text-slate-500">A lista vem do cadastro técnico do Atlas e os valores históricos disponíveis são carregados da própria referência W.Vetro da tipologia selecionada.</p>
                       </div>
                       <span className="text-[11px] text-slate-500">{obrigatorias.length} obrigatória(s)</span>
                     </div>
 
-                    {variaveis.length ? (
+                    {variaveisVisiveis.length ? (
                       <div className="space-y-2.5">
-                        {variaveis.map(item => {
+                        {variaveisVisiveis.map(item => {
                           const lista = opcoes.filter(opcao => opcao.variavel_id === item.variavel_id)
                           const chave = item.variavel.chave
                           const atual = rascunho[chave] || ''
@@ -355,9 +443,43 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                           )
                         })}
                       </div>
-                    ) : (
+                    ) : variaveisFormulaVisiveis.length ? null : (
                       <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
                         Esta tipologia ainda não possui variáveis técnicas cadastradas.
+                      </div>
+                    )}
+
+                    {variaveisFormulaVisiveis.length > 0 && (
+                      <div className="mt-4 space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                          <div>
+                            <p className="text-xs font-bold text-amber-900">Variáveis encontradas na receita técnica W.Vetro</p>
+                            <p className="mt-0.5 text-[11px] text-amber-800">Preencha para preservar a configuração. Enquanto a receita não estiver validada e ativa, esses campos não são usados automaticamente no cálculo.</p>
+                          </div>
+                          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-amber-800">{formulaSelecionada?.status === 'validada' && formulaSelecionada?.ativo ? 'VALIDADA' : 'EM VALIDAÇÃO'}</span>
+                        </div>
+                        {variaveisFormulaVisiveis.map(item => {
+                          const atual = rascunho[item.chave] || ''
+                          return (
+                            <div key={`formula-${item.chave}`} className="grid gap-2 rounded-xl border border-amber-100 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,340px)] sm:items-center">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                                <p className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">{item.chave}</p>
+                              </div>
+                              {item.opcoes?.length ? (
+                                <div className="relative">
+                                  <select value={atual} onChange={e => alterar(item.chave, e.target.value)} className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3 py-2.5 pr-9 text-sm">
+                                    <option value="">Selecione</option>
+                                    {item.opcoes.map(opcao => <option key={opcao} value={opcao}>{opcao.replaceAll('_', ' ')}</option>)}
+                                  </select>
+                                  <ChevronDown size={15} className="pointer-events-none absolute right-3 top-3 text-slate-400" />
+                                </div>
+                              ) : (
+                                <input type="text" value={atual} onChange={e => alterar(item.chave, e.target.value)} placeholder="Informe" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm" />
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </section>
