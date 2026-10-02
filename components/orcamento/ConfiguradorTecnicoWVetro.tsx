@@ -250,6 +250,8 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
     [obrigatorias, value.variaveis],
   )
 
+  const temVariaveisTecnicas = variaveisVisiveis.length > 0 || variaveisFormulaVisiveis.length > 0
+  const semVariaveisTecnicas = !carregando && !temVariaveisTecnicas
   const completa = obrigatorias.length > 0 && preenchidas === obrigatorias.length
 
   function rotuloValor(chave: string, valor: string) {
@@ -301,7 +303,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
       configuracaoNome: tipologia?.label || value.configuracaoNome,
       configuracaoValidada: false,
       modoConfiguracao: 'assistido',
-      configuracaoStatus: obrigatoriasCompletas ? 'preenchida' : 'pendente',
+      configuracaoStatus: temVariaveisTecnicas && obrigatoriasCompletas ? 'preenchida' : 'pendente',
     })
     setAberto(false)
   }
@@ -328,7 +330,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                 </p>
               </div>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${completa ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
-                {carregando ? 'Carregando...' : completa ? 'VARIÁVEIS PREENCHIDAS' : `${preenchidas}/${obrigatorias.length} OBRIGATÓRIAS`}
+                {carregando ? 'Carregando...' : semVariaveisTecnicas ? 'BASE TÉCNICA PENDENTE' : completa ? 'VARIÁVEIS PREENCHIDAS' : `${preenchidas}/${obrigatorias.length} OBRIGATÓRIAS`}
               </span>
             </div>
 
@@ -346,6 +348,14 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                 <p className="mt-0.5 text-sm font-semibold text-slate-800">{value.variaveis?.vidro ? value.variaveis.vidro.replaceAll('_', ' ') : 'A definir'}</p>
               </div>
             </div>
+
+            {semVariaveisTecnicas && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-bold text-amber-900">Tipologia cadastrada, mas sem variáveis técnicas homologadas</p>
+                <p className="mt-1 text-[11px] text-amber-800">{referenciaWVetro ? `O W.Vetro reconhece ${referenciaWVetro.linha} · ${referenciaWVetro.modelo}, porém a base atual ainda não trouxe as variáveis específicas dessa configuração para o Atlas.` : 'Esta tipologia ainda não possui vínculo de variáveis/receita técnica suficiente para cálculo.'}</p>
+                <p className="mt-1 text-[11px] font-semibold text-amber-900">Ela não será tratada como configuração técnica concluída até a receita ser homologada.</p>
+              </div>
+            )}
 
             {resumoSalvo.length > 0 && (
               <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3">
@@ -490,7 +500,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                       </div>
                     ) : variaveisFormulaVisiveis.length ? null : (
                       <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
-                        Esta tipologia ainda não possui variáveis técnicas cadastradas.
+                        <div><b>Base técnica pendente.</b><p className="mt-1 text-xs">Esta tipologia existe no catálogo, mas ainda não possui variáveis específicas homologadas no Atlas. {referenciaWVetro ? `Referência W.Vetro: ${referenciaWVetro.linha} · ${referenciaWVetro.modelo}.` : ''}</p></div>
                       </div>
                     )}
 
