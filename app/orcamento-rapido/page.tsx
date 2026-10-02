@@ -90,7 +90,7 @@ const ROTULOS_VARIAVEIS_TECNICAS: Record<string, string> = {
   folhas: 'Folhas', trilho: 'Trilho', perfil_contramarco: 'Perfil contramarco', montagem_contramarco: 'Montagem contramarco',
   arremate: 'Arremate', arremate_piso: 'Arremate de piso', montagem: 'Montagem', perfil_superior_folha: 'Perfil superior da folha',
   montante_lateral_movel: 'Montante lateral móvel', montante_mao_amigo: 'Mão-de-amigo', usa_travessa: 'Travessa', baguete: 'Baguete',
-  modo_fechamento: 'Fechamento', puxador: 'Puxador', roldana: 'Roldana', folga_largura_mm: 'Folga largura', folga_altura_mm: 'Folga altura',
+  modo_fechamento: 'Fechamento', puxador: 'Puxador', roldana: 'Roldana', vidro: 'Vidro', folga_largura_mm: 'Folga largura', folga_altura_mm: 'Folga altura',
 }
 
 function rotuloVariavelTecnica(chave: string) {
