@@ -86,6 +86,21 @@ function nomeTipologia(item: ItemForm) {
   return tipo ? tipo.charAt(0).toUpperCase() + tipo.slice(1) : 'Esquadria'
 }
 
+const ROTULOS_VARIAVEIS_TECNICAS: Record<string, string> = {
+  folhas: 'Folhas', trilho: 'Trilho', perfil_contramarco: 'Perfil contramarco', montagem_contramarco: 'Montagem contramarco',
+  arremate: 'Arremate', arremate_piso: 'Arremate de piso', montagem: 'Montagem', perfil_superior_folha: 'Perfil superior da folha',
+  montante_lateral_movel: 'Montante lateral móvel', montante_mao_amigo: 'Mão-de-amigo', usa_travessa: 'Travessa', baguete: 'Baguete',
+  modo_fechamento: 'Fechamento', puxador: 'Puxador', roldana: 'Roldana', folga_largura_mm: 'Folga largura', folga_altura_mm: 'Folga altura',
+}
+
+function rotuloVariavelTecnica(chave: string) {
+  return ROTULOS_VARIAVEIS_TECNICAS[chave] || chave.replace(/_/g, ' ').replace(/^./, letra => letra.toUpperCase())
+}
+
+function valorVariavelTecnica(valor: string) {
+  return valor.replace(/_/g, ' ').replace(/\b\w/g, letra => letra.toUpperCase())
+}
+
 function resumoMedidas(item: ItemForm) {
   if (item.tipoMedida !== 'final') return `${item.largura} × ${item.altura} mm`
   const larguras = item.modoLargura === 'foto' ? 'Larguras por foto' : `L ${item.larguraBaixo} / ${item.larguraMeio} / ${item.larguraCima} mm`
@@ -317,6 +332,9 @@ export default function OrcamentoRapido() {
       if (it.modoOrigem === 'produto' && !it.produtoId) return setErro(`Selecione um produto cadastrado em ${referencia}, ou troque para digitar manualmente`)
       if (!it.tipo) return setErro(`Selecione o tipo de ${referencia}`)
       if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) return setErro(`Escreva qual é o tipo de ${referencia}`)
+      if (it.tipologiaId && it.modoConfiguracao === 'assistido' && it.configuracaoStatus === 'pendente') {
+        return setErro(`Complete as variáveis técnicas obrigatórias de ${referencia}`)
+      }
 
       if (it.tipoMedida === 'final') {
         if (it.modoLargura === 'foto') {
@@ -442,6 +460,18 @@ export default function OrcamentoRapido() {
                     </div>
                     <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p><b>Medidas:</b> {resumoMedidas(item)}</p><p><b>Linha:</b> {item.linhaNome || 'Não informada'}</p><p><b>Folhas:</b> {item.folhas || 'Não informado'}</p><p><b>Cor:</b> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p></div>
                     {item.ambiente && <p className="mt-2 text-xs"><b>Ambiente:</b> {item.ambiente}</p>}
+                    {item.tipologiaId && Object.keys(item.variaveis || {}).length > 0 && (
+                      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+                        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-blue-700">Configuração técnica</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(item.variaveis || {}).filter(([chave]) => !chave.startsWith('atlas_')).map(([chave, valor]) => (
+                            <span key={chave} className="rounded-full border border-blue-200 bg-white px-2 py-1 text-[10px] text-slate-700">
+                              <b>{rotuloVariavelTecnica(chave)}:</b> {valorVariavelTecnica(String(valor))}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs"><b>Observação:</b> {item.descricao}</p>}
                   </div>
                 ))}
