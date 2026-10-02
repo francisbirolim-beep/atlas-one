@@ -435,6 +435,12 @@ export async function salvarExcecaoCustoZero(
   if (String(componente.observacoes || '').includes(MARCADOR_PENDENCIA_TECNICA)) {
     return { ok: false as const, error: 'Este componente possui pendência técnica. Resolva a regra técnica antes de tratar o custo.' }
   }
+  if (componente.material_id) {
+    const { data: material } = await supabase.from('pacote_tecnico_materiais').select('status_calculo').eq('id', componente.material_id).maybeSingle()
+    if (material?.status_calculo === 'pendente_formula') {
+      return { ok: false as const, error: 'Este componente possui fórmula/regra técnica pendente. A exceção de custo zero não pode liberar uma pendência de engenharia.' }
+    }
+  }
 
   const usuario = await usuarioAtual()
   const registro = {
