@@ -85,5 +85,3 @@ export default function PrecificacaoFinalPage() {
     <section className="sticky bottom-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white/95 p-3 shadow-lg backdrop-blur"><Link href={`/orcamento/${orcamentoId}/margem-sobra`} className="rounded-xl border px-4 py-2 text-sm font-semibold">Voltar: Margem e sobra</Link><span className="text-xs text-slate-500">Valores consolidados e liberados para proposta.</span><Link href={`/orcamento/${orcamentoId}/imprimir`} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white"><Printer size={16}/> Continuar: Proposta</Link></section>
   </div></main>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
