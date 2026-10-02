@@ -1,0 +1,1168 @@
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
+  ExternalLink, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
+  Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
+  UserRoundCheck, Plus, Zap,
+} from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { tokenAtual } from '@/lib/auth'
+
+type Usuario = { id: string; nome: string; role?: string }
+type Canal = {
+  id: string
+  nome: string
+  numero_declarado?: string | null
+  numero_conectado?: string | null
+  principal: boolean
+  usuario_id?: string | null
+  usuario_nome?: string | null
+  gateway_status: string
+}
+type Conversa = {
+  id: string
+  telefone: string
+  contato_nome?: string | null
+  cliente_id?: string | null
+  whatsapp_canal_id?: string | null
+  whatsapp_numero?: string | null
+  whatsapp_chat_tipo?: 'contato' | 'grupo' | null
+  whatsapp_chat_jid?: string | null
+  grupo_nome?: string | null
+  status: string
+  responsavel_id?: string | null
+  responsavel_nome?: string | null
+  setor?: string | null
+  ultimo_preview?: string | null
+  nao_lidas?: number | null
+  ultima_mensagem_em?: string | null
+}
+type Mensagem = {
+  id: string
+  conversa_id: string
+  direcao: 'entrada' | 'saida'
+  tipo: string
+  texto?: string | null
+  media_url?: string | null
+  mime_type?: string | null
+  arquivo_nome?: string | null
+  usuario_nome?: string | null
+  created_at: string
+}
+type ClienteResumo = {
+  id: string
+  nome: string
+  whatsapp?: string | null
+  telefone?: string | null
+  cidade?: string | null
+  endereco?: string | null
+  bairro?: string | null
+  observacoes?: string | null
+}
+type ObraResumo = { id: string; nome?: string | null; status?: string | null }
+type AcessoCanal = {
+  canal_id: string
+  visualizar: boolean
+  atender: boolean
+  transferir: boolean
+  supervisionar: boolean
+  dono: boolean
+  principal: boolean
+}
+type Etiqueta = { id: string; nome: string; cor: string }
+type Nota = { id: string; usuario_nome?: string | null; texto: string; created_at: string }
+type MensagemRapida = {
+  id: string
+  titulo: string
+  mensagem: string
+  atalho?: string | null
+  categoria?: string | null
+}
+type DiretorioWhatsApp = {
+  id: string
+  tipo: 'contato' | 'grupo'
+  jid: string
+  telefone?: string | null
+  nome: string
+  participantes?: number | null
+}
+
+function hora(valor?: string | null) {
+  if (!valor) return ''
+  return new Date(valor).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+function telefoneFormatado(valor: string) {
+  const n = valor.replace(/\D/g, '')
+  if (n.startsWith('55') && n.length >= 12) {
+    const ddd = n.slice(2, 4)
+    const local = n.slice(4)
+    return `+55 (${ddd}) ${local.slice(0, 5)}-${local.slice(5)}`
+  }
+  return valor
+}
+async function headersJson() {
+  const token = await tokenAtual()
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token || ''}`,
+  }
+}
+
+export default function WhatsAppAtendimentoPage() {
+  const [eu, setEu] = useState<Usuario | null>(null)
+  const [conversas, setConversas] = useState<Conversa[]>([])
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [canais, setCanais] = useState<Canal[]>([])
+  const [acessos, setAcessos] = useState<AcessoCanal[]>([])
+  const [ativa, setAtiva] = useState<Conversa | null>(null)
+  const [mensagens, setMensagens] = useState<Mensagem[]>([])
+  const [texto, setTexto] = useState('')
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState<'minhas' | 'fila' | 'todas' | 'nao_lidas' | 'grupos'>('minhas')
+  const [canalFiltro, setCanalFiltro] = useState('todos')
+  const [erro, setErro] = useState('')
+  const [carregando, setCarregando] = useState(true)
+  const [enviando, setEnviando] = useState(false)
+  const [canaisConectados, setCanaisConectados] = useState(0)
+  const [canaisTotal, setCanaisTotal] = useState(0)
+  const [destinoId, setDestinoId] = useState('')
+  const [setorTransferencia, setSetorTransferencia] = useState('')
+  const [cliente, setCliente] = useState<ClienteResumo | null>(null)
+  const [obras, setObras] = useState<ObraResumo[]>([])
+  const [carregandoCliente, setCarregandoCliente] = useState(false)
+  const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas'>('cliente')
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([])
+  const [etiquetasAtivas, setEtiquetasAtivas] = useState<string[]>([])
+  const [notas, setNotas] = useState<Nota[]>([])
+  const [mensagensRapidas, setMensagensRapidas] = useState<MensagemRapida[]>([])
+  const [apoioAberto, setApoioAberto] = useState<'rapidas' | 'etiquetas' | null>(null)
+  const [notaTexto, setNotaTexto] = useState('')
+  const [novaEtiqueta, setNovaEtiqueta] = useState('')
+  const [diretorioAberto, setDiretorioAberto] = useState(false)
+  const [diretorio, setDiretorio] = useState<DiretorioWhatsApp[]>([])
+  const [buscaDiretorio, setBuscaDiretorio] = useState('')
+  const [canalDiretorio, setCanalDiretorio] = useState('')
+  const [carregandoDiretorio, setCarregandoDiretorio] = useState(false)
+  const [novaRapidaTitulo, setNovaRapidaTitulo] = useState('')
+  const [novaRapidaTexto, setNovaRapidaTexto] = useState('')
+  const [enviandoMidia, setEnviandoMidia] = useState(false)
+  const [gravando, setGravando] = useState(false)
+  const [segundosGravacao, setSegundosGravacao] = useState(0)
+  const fimRef = useRef<HTMLDivElement | null>(null)
+  const arquivoInputRef = useRef<HTMLInputElement | null>(null)
+  const gravadorRef = useRef<MediaRecorder | null>(null)
+  const partesAudioRef = useRef<Blob[]>([])
+  const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function carregarConversas(selecionar = true) {
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/conversas', { headers })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao carregar conversas.')
+      setEu(json.usuario)
+      setConversas(json.conversas || [])
+      setUsuarios(json.usuarios || [])
+      setCanais(json.canais || [])
+      setAcessos(json.acessos || [])
+      setCanaisConectados(Number(json.canaisConectados || 0))
+      setCanaisTotal(Number(json.canaisTotal || 0))
+      if (selecionar && !ativa && json.conversas?.[0]) {
+        const conversaId = typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('conversaId')
+          : null
+        const solicitada = conversaId
+          ? (json.conversas || []).find((c: Conversa) => c.id === conversaId)
+          : null
+        setAtiva(solicitada || json.conversas[0])
+      }
+      if (ativa) {
+        const atualizada = (json.conversas || []).find((c: Conversa) => c.id === ativa.id)
+        if (atualizada) setAtiva(atualizada)
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao carregar atendimento.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  function abrirDiretorio() {
+    const canalPreferido = canalFiltro !== 'todos'
+      ? canalFiltro
+      : (canais.find(c => c.principal)?.id || canais[0]?.id || '')
+    setCanalDiretorio(canalPreferido)
+    setBuscaDiretorio('')
+    setDiretorio([])
+    setDiretorioAberto(true)
+  }
+
+  async function carregarDiretorio() {
+    if (!diretorioAberto || !canalDiretorio) return
+    setCarregandoDiretorio(true)
+    try {
+      const headers = await headersJson()
+      const params = new URLSearchParams({
+        canalId: canalDiretorio,
+        busca: buscaDiretorio.trim(),
+      })
+      const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao buscar contatos do WhatsApp.')
+      setDiretorio(json.itens || [])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao buscar contatos do WhatsApp.')
+      setDiretorio([])
+    } finally {
+      setCarregandoDiretorio(false)
+    }
+  }
+
+  async function iniciarDoDiretorio(item: DiretorioWhatsApp) {
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/contatos', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          canalId: canalDiretorio,
+          tipo: item.tipo,
+          jid: item.jid,
+          telefone: item.telefone || null,
+          nome: item.nome,
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao abrir conversa.')
+      setDiretorioAberto(false)
+      setAtiva(json.conversa as Conversa)
+      await carregarConversas(false)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao abrir conversa.')
+    }
+  }
+
+  async function carregarMensagens(conversaId: string) {
+    try {
+      const headers = await headersJson()
+      const resp = await fetch(
+        `/api/integracoes/whatsapp/mensagens?conversaId=${encodeURIComponent(conversaId)}`,
+        { headers },
+      )
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao carregar mensagens.')
+      setMensagens(json.mensagens || [])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao carregar mensagens.')
+    }
+  }
+
+  async function carregarApoio(conversaId: string) {
+    try {
+      const headers = await headersJson()
+      const resp = await fetch(
+        `/api/integracoes/whatsapp/apoio?conversaId=${encodeURIComponent(conversaId)}`,
+        { headers },
+      )
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao carregar recursos internos.')
+      setEtiquetas(json.etiquetas || [])
+      setEtiquetasAtivas(json.etiquetasAtivas || [])
+      setNotas(json.notas || [])
+      setMensagensRapidas(json.mensagensRapidas || [])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao carregar recursos internos.')
+    }
+  }
+
+  useEffect(() => { void carregarConversas() }, [])
+
+  useEffect(() => {
+    if (!diretorioAberto || !canalDiretorio) return
+    const timer = setTimeout(() => { void carregarDiretorio() }, 250)
+    return () => clearTimeout(timer)
+  }, [diretorioAberto, canalDiretorio, buscaDiretorio])
+
+  useEffect(() => {
+    if (!ativa?.id) {
+      setMensagens([])
+      setEtiquetas([])
+      setEtiquetasAtivas([])
+      setNotas([])
+      setMensagensRapidas([])
+      return
+    }
+    void carregarMensagens(ativa.id)
+    void carregarApoio(ativa.id)
+  }, [ativa?.id])
+
+  useEffect(() => {
+    let vivo = true
+    if (!ativa?.cliente_id) {
+      setCliente(null)
+      setObras([])
+      setCarregandoCliente(false)
+      return
+    }
+    setCarregandoCliente(true)
+    Promise.all([
+      supabase.from('clientes')
+        .select('id,nome,whatsapp,telefone,cidade,endereco,bairro,observacoes')
+        .eq('id', ativa.cliente_id).maybeSingle(),
+      supabase.from('obras')
+        .select('id,nome,status')
+        .eq('cliente_id', ativa.cliente_id)
+        .order('created_at', { ascending: false }).limit(4),
+    ]).then(([clienteResp, obrasResp]) => {
+      if (!vivo) return
+      setCliente((clienteResp.data || null) as ClienteResumo | null)
+      setObras((obrasResp.data || []) as ObraResumo[])
+      setCarregandoCliente(false)
+    }).catch(() => {
+      if (!vivo) return
+      setCliente(null)
+      setObras([])
+      setCarregandoCliente(false)
+    })
+    return () => { vivo = false }
+  }, [ativa?.cliente_id])
+
+  useEffect(() => {
+    if (!eu?.id) return
+    const canal = supabase
+      .channel(`atendimento-whatsapp-${eu.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_conversas' }, () => {
+        void carregarConversas(false)
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'atendimento_mensagens' }, p => {
+        const mensagem = p.new as Mensagem
+        if (mensagem.conversa_id === ativa?.id) void carregarMensagens(ativa.id)
+        void carregarConversas(false)
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(canal) }
+  }, [eu?.id, ativa?.id])
+
+  useEffect(() => {
+    fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [mensagens.length])
+
+  const filtradas = useMemo(() => {
+    const q = busca.toLocaleLowerCase('pt-BR').trim()
+    return conversas.filter(c => {
+      if (filtro === 'fila' && (c.responsavel_id || c.whatsapp_chat_tipo === 'grupo')) return false
+      if (filtro === 'minhas' && c.responsavel_id !== eu?.id) return false
+      if (filtro === 'todas' && eu?.role !== 'master') return false
+      if (filtro === 'nao_lidas' && !c.nao_lidas) return false
+      if (filtro === 'grupos' && c.whatsapp_chat_tipo !== 'grupo') return false
+      if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
+      if (!q) return true
+      return `${c.contato_nome || ''} ${c.grupo_nome || ''} ${c.telefone} ${c.responsavel_nome || ''} ${c.setor || ''}`
+        .toLocaleLowerCase('pt-BR').includes(q)
+    })
+  }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
+
+  async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
+    if (!ativa) return
+    setErro('')
+    const headers = await headersJson()
+    const resp = await fetch('/api/integracoes/whatsapp/conversas', {
+      method: 'POST', headers,
+      body: JSON.stringify({ acao, conversaId: ativa.id, ...extra }),
+    })
+    const json = await resp.json()
+    if (!resp.ok) { setErro(json.error || 'Nao foi possivel alterar o atendimento.'); return }
+    setDestinoId('')
+    setSetorTransferencia('')
+    await carregarConversas(false)
+  }
+
+  async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
+    if (!ativa) return
+    setErro('')
+    const headers = await headersJson()
+    const resp = await fetch('/api/integracoes/whatsapp/apoio', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ acao, conversaId: ativa.id, ...extra }),
+    })
+    const json = await resp.json()
+    if (!resp.ok) {
+      setErro(json.error || 'Nao foi possivel atualizar o atendimento.')
+      return false
+    }
+    await carregarApoio(ativa.id)
+    return true
+  }
+
+  function mimeDoArquivo(file: File) {
+    const informado = String(file.type || '').split(';')[0].toLowerCase()
+    if (informado) return informado
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const mapa: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic',
+      mp4: 'video/mp4', mov: 'video/quicktime',
+      webm: 'audio/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', opus: 'audio/opus', aac: 'audio/aac',
+      pdf: 'application/pdf', txt: 'text/plain', doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xls: 'application/vnd.ms-excel',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }
+    return ext ? (mapa[ext] || 'application/octet-stream') : 'application/octet-stream'
+  }
+
+  async function enviarArquivo(file: File, opcoes: { ptt?: boolean } = {}) {
+    if (!ativa || enviandoMidia) return
+    setErro('')
+    setEnviandoMidia(true)
+    try {
+      if (!file.size) throw new Error('Arquivo vazio.')
+      if (file.size > 50 * 1024 * 1024) throw new Error('O arquivo excede o limite de 50 MB.')
+
+      const mimeType = mimeDoArquivo(file)
+      const headers = await headersJson()
+      const preparar = await fetch('/api/integracoes/whatsapp/midia', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'preparar',
+          conversaId: ativa.id,
+          nome: file.name,
+          mimeType,
+          tamanho: file.size,
+        }),
+      })
+      const prep = await preparar.json()
+      if (!preparar.ok) throw new Error(prep.error || 'Não foi possível preparar o arquivo.')
+
+      const { error: uploadError } = await supabase.storage
+        .from('whatsapp-midia')
+        .uploadToSignedUrl(prep.path, prep.token, file, {
+          contentType: mimeType,
+          upsert: false,
+        })
+      if (uploadError) throw new Error(uploadError.message)
+
+      const registrar = await fetch('/api/integracoes/whatsapp/midia', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'enviar',
+          conversaId: ativa.id,
+          mediaPath: prep.path,
+          mimeType,
+          fileName: file.name,
+          tamanho: file.size,
+          ptt: opcoes.ptt === true,
+        }),
+      })
+      const envio = await registrar.json()
+      if (!registrar.ok) throw new Error(envio.error || 'Não foi possível enfileirar a mídia.')
+
+      await carregarMensagens(ativa.id)
+      await carregarConversas(false)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.')
+    } finally {
+      setEnviandoMidia(false)
+      if (arquivoInputRef.current) arquivoInputRef.current.value = ''
+    }
+  }
+
+  async function alternarAudio() {
+    if (gravando) {
+      gravadorRef.current?.stop()
+      return
+    }
+
+    try {
+      setErro('')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      partesAudioRef.current = []
+      const preferido = typeof MediaRecorder !== 'undefined' &&
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : ''
+      const gravador = preferido
+        ? new MediaRecorder(stream, { mimeType: preferido })
+        : new MediaRecorder(stream)
+      gravadorRef.current = gravador
+
+      gravador.ondataavailable = evento => {
+        if (evento.data.size) partesAudioRef.current.push(evento.data)
+      }
+      gravador.onstop = () => {
+        stream.getTracks().forEach(track => track.stop())
+        if (timerGravacaoRef.current) clearInterval(timerGravacaoRef.current)
+        timerGravacaoRef.current = null
+        setGravando(false)
+        setSegundosGravacao(0)
+
+        const blob = new Blob(partesAudioRef.current, { type: 'audio/webm' })
+        if (blob.size) {
+          const arquivo = new File([blob], `audio-${Date.now()}.webm`, { type: 'audio/webm' })
+          void enviarArquivo(arquivo, { ptt: true })
+        }
+      }
+
+      gravador.start(250)
+      setGravando(true)
+      setSegundosGravacao(0)
+      timerGravacaoRef.current = setInterval(() => {
+        setSegundosGravacao(valor => valor + 1)
+      }, 1000)
+    } catch {
+      setErro('Não foi possível acessar o microfone. Autorize o microfone para este site e tente novamente.')
+      setGravando(false)
+    }
+  }
+
+  async function enviar() {
+    if (!ativa || !texto.trim() || enviando) return
+    const corpo = texto.trim()
+    setTexto('')
+    setEnviando(true)
+    setErro('')
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/mensagens', {
+        method: 'POST', headers,
+        body: JSON.stringify({ conversaId: ativa.id, texto: corpo }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel enviar.')
+      await carregarMensagens(ativa.id)
+      await carregarConversas(false)
+    } catch (e) {
+      setTexto(corpo)
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel enviar.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const totais = useMemo(() => ({
+    todas: conversas.length,
+    fila: conversas.filter(c => !c.responsavel_id && c.whatsapp_chat_tipo !== 'grupo').length,
+    minhas: conversas.filter(c => c.responsavel_id === eu?.id).length,
+    grupos: conversas.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
+    naoLidas: conversas.reduce((acc, c) => acc + Number(c.nao_lidas || 0), 0),
+  }), [conversas, eu?.id])
+
+  const acessoCanalAtivo = ativa?.whatsapp_canal_id
+    ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
+    : null
+  const podeResponder = Boolean(
+    ativa && (
+      eu?.role === 'master' ||
+      ativa.responsavel_id === eu?.id ||
+      (ativa.whatsapp_chat_tipo === 'grupo' && acessoCanalAtivo?.atender)
+    ),
+  )
+  const canalAtivo = ativa?.whatsapp_canal_id
+    ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
+    : null
+  const canalPronto = canalAtivo?.gateway_status === 'connected'
+  const podeTransferirAtiva = Boolean(
+    ativa && (eu?.role === 'master' || acessoCanalAtivo?.transferir),
+  )
+
+  return (
+    <main className="min-h-screen bg-slate-100 p-0 md:p-4">
+      <div className="mx-auto max-w-[1720px] overflow-hidden border bg-white shadow-sm md:rounded-2xl">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="text-emerald-600" size={20}/>
+                <h1 className="font-bold text-slate-900">WhatsApp Atlas</h1>
+              </div>
+              <p className="text-xs text-slate-500">Multicanal · principal +55 (17) 99635-5667</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 sm:inline-flex">
+              {canaisConectados}/{canaisTotal} canais conectados
+            </span>
+            <Link href="/whatsapp/numeros" className="rounded-xl border p-2 hover:bg-slate-50" title="Gerenciar canais WhatsApp">
+              <Smartphone size={18}/>
+            </Link>
+            {eu?.role === 'master' && (
+              <Link href="/whatsapp/configuracao" className="rounded-xl border p-2 hover:bg-slate-50" title="Configurar roteamento">
+                <Settings size={18}/>
+              </Link>
+            )}
+          </div>
+        </header>
+
+        {erro && <div className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">{erro}</div>}
+
+        <div className="grid h-[calc(100dvh-130px)] min-h-[620px] md:grid-cols-[340px_1fr] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+          <aside className="flex min-h-0 flex-col border-r">
+            <div className="border-b p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Conversas</p>
+                  <p className="text-[11px] text-slate-500">Fila e canais em tempo real</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <select value={canalFiltro} onChange={e=>setCanalFiltro(e.target.value)}
+                    className="max-w-[145px] rounded-lg border bg-white px-2 py-1.5 text-xs font-semibold text-slate-700">
+                    <option value="todos">Todos os canais</option>
+                    {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Principal':''}</option>)}
+                  </select>
+                  <button onClick={abrirDiretorio}
+                    className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-700 hover:bg-slate-50"
+                    title="Nova conversa ou abrir grupo">
+                    <Plus size={16}/>
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
+                <Search size={16} className="text-slate-400"/>
+                <input value={busca} onChange={e=>setBusca(e.target.value)}
+                  placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+                <button onClick={()=>setFiltro('minhas')} className={`rounded-lg px-2 py-2 ${filtro==='minhas'?'bg-white shadow-sm':''}`}>
+                  Minhas {totais.minhas || ''}
+                </button>
+                <button onClick={()=>setFiltro('fila')} className={`rounded-lg px-2 py-2 ${filtro==='fila'?'bg-white shadow-sm':''}`}>
+                  Aguardando {totais.fila || ''}
+                </button>
+                <button onClick={()=>setFiltro('nao_lidas')} className={`rounded-lg px-2 py-2 ${filtro==='nao_lidas'?'bg-white shadow-sm':''}`}>
+                  Não lidas {totais.naoLidas || ''}
+                </button>
+                <button onClick={()=>setFiltro('grupos')} className={`rounded-lg px-2 py-2 ${filtro==='grupos'?'bg-white shadow-sm':''}`}>
+                  Grupos {totais.grupos || ''}
+                </button>
+                <button disabled={eu?.role!=='master'} onClick={()=>setFiltro('todas')}
+                  className={`rounded-lg px-2 py-2 disabled:opacity-30 ${filtro==='todas'?'bg-white shadow-sm':''}`}>
+                  Todas {eu?.role==='master' ? totais.todas : ''}
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {carregando ? (
+                <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
+              ) : filtradas.length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">Nenhuma conversa neste filtro.</div>
+              ) : filtradas.map(c => (
+                <button key={c.id} onClick={()=>setAtiva(c)}
+                  className={`flex w-full gap-3 border-b px-4 py-3 text-left hover:bg-slate-50 ${ativa?.id===c.id?'bg-emerald-50':''}`}>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-700">
+                    {c.whatsapp_chat_tipo === 'grupo'
+                      ? <Users size={18}/>
+                      : (c.contato_nome || c.telefone).slice(0,1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <b className="truncate text-sm">{c.contato_nome || telefoneFormatado(c.telefone)}</b>
+                      <span className="ml-auto shrink-0 text-[10px] text-slate-400">{hora(c.ultima_mensagem_em)}</span>
+                    </div>
+                    <p className="truncate text-xs text-slate-500">
+                      {c.ultimo_preview || (c.whatsapp_chat_tipo === 'grupo' ? 'Grupo sincronizado do WhatsApp' : 'Conversa WhatsApp')}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2 text-[10px]">
+                      {c.whatsapp_chat_tipo === 'grupo' ? (
+                        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">Grupo</span>
+                      ) : (
+                        <span className={`rounded-full px-2 py-0.5 ${c.responsavel_id?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700'}`}>
+                          {c.responsavel_nome || 'Aguardando atendente'}
+                        </span>
+                      )}
+                      {c.setor && <span className="truncate text-slate-400">{c.setor}</span>}
+                      {c.whatsapp_canal_id && (
+                        <span className="truncate text-emerald-700">
+                          {canais.find(x=>x.id===c.whatsapp_canal_id)?.nome || c.whatsapp_numero || 'WhatsApp'}
+                        </span>
+                      )}
+                      {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <section className="flex min-h-0 min-w-0 flex-col bg-[#efeae2]">
+            {!ativa ? (
+              <div className="grid h-full place-items-center text-center text-slate-500">
+                <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione um atendimento.</p></div>
+              </div>
+            ) : <>
+              <div className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <b className="block truncate">{ativa.contato_nome || telefoneFormatado(ativa.telefone)}</b>
+                  <p className="text-xs text-slate-500">
+                    {ativa.whatsapp_chat_tipo === 'grupo'
+                      ? 'Grupo WhatsApp · canal compartilhado'
+                      : `${telefoneFormatado(ativa.telefone)} · ${ativa.responsavel_nome || 'Em espera'}`}
+                    {ativa.setor ? ` · ${ativa.setor}` : ''}
+                  </p>
+                  {canalAtivo&&(
+                    <p className="mt-0.5 text-[10px] font-semibold text-emerald-700">
+                      Via {canalAtivo.nome}{canalAtivo.numero_declarado ? ` · ${telefoneFormatado(canalAtivo.numero_declarado)}` : ''}
+                    </p>
+                  )}
+                  {!!etiquetasAtivas.length && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {etiquetas.filter(e => etiquetasAtivas.includes(e.id)).map(e => (
+                        <span key={e.id} className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          {e.nome}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {ativa.cliente_id && (
+                  <Link href={`/clientes/${ativa.cliente_id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold">
+                    Cliente 360
+                  </Link>
+                )}
+                {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id && (
+                  <button onClick={()=>void acaoConversa('assumir')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
+                    <UserRoundCheck size={15}/> Assumir
+                  </button>
+                )}
+                {ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id && ativa.status !== 'finalizado' &&
+                  (eu?.role === 'master' || ativa.responsavel_id === eu?.id) && (
+                  <button onClick={()=>void acaoConversa('finalizar')}
+                    className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold">
+                    <CheckCircle2 size={15}/> Finalizar
+                  </button>
+                )}
+              </div>
+
+              {podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+                <div className="flex flex-wrap items-center gap-2 border-b bg-slate-50 px-4 py-2">
+                  <ShieldCheck size={15} className="text-slate-500"/>
+                  <span className="text-xs font-semibold text-slate-600">
+                    {eu?.role === 'master' ? 'Supervisão Master' : 'Permissão de transferência'}
+                  </span>
+                  <select value={destinoId} onChange={e=>setDestinoId(e.target.value)}
+                    className="rounded-lg border bg-white px-2 py-1.5 text-xs">
+                    <option value="">Transferir para...</option>
+                    {usuarios.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                  <input value={setorTransferencia} onChange={e=>setSetorTransferencia(e.target.value)}
+                    placeholder="Setor (opcional)" className="rounded-lg border px-2 py-1.5 text-xs"/>
+                  <button disabled={!destinoId}
+                    onClick={()=>void acaoConversa('transferir',{destinoId,setor:setorTransferencia||null})}
+                    className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                    Transferir
+                  </button>
+                </div>
+              )}
+
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+                {mensagens.map(m => {
+                  const saida = m.direcao === 'saida'
+                  const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
+                  const midia = Boolean(m.media_url)
+                  const legendaGenerica =
+                    (m.tipo === 'audio' && texto === '🎤 Áudio') ||
+                    (m.tipo === 'imagem' && (texto === '📷 Imagem' || texto === '🖼️ Figurinha')) ||
+                    (m.tipo === 'video' && texto === '🎥 Vídeo') ||
+                    (m.tipo === 'documento' && texto === '📎 Documento')
+                  return (
+                    <div key={m.id} className={`flex ${saida?'justify-end':'justify-start'}`}>
+                      <div className={`max-w-[82%] rounded-xl px-3 py-2 shadow-sm ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
+                        {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome}</p>}
+
+                        {m.tipo === 'audio' && midia && (
+                          <audio controls preload="metadata" src={m.media_url || undefined} className="max-w-full"/>
+                        )}
+                        {m.tipo === 'audio' && !midia && (
+                          <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                            🎤 Áudio indisponível — recebido antes da captura de mídia ser ativada.
+                          </div>
+                        )}
+
+                        {m.tipo === 'imagem' && midia && (
+                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer">
+                            <img src={m.media_url || undefined} alt={m.arquivo_nome || 'Imagem do WhatsApp'}
+                              className="max-h-80 max-w-full rounded-lg object-contain"/>
+                          </a>
+                        )}
+                        {m.tipo === 'imagem' && !midia && texto && (
+                          <p className="text-sm text-slate-700">{texto}</p>
+                        )}
+
+                        {m.tipo === 'video' && midia && (
+                          <video controls preload="metadata" src={m.media_url || undefined}
+                            className="max-h-80 max-w-full rounded-lg"/>
+                        )}
+                        {m.tipo === 'video' && !midia && (
+                          <p className="text-sm text-slate-500">🎥 Vídeo indisponível nesta mensagem antiga.</p>
+                        )}
+
+                        {m.tipo === 'documento' && midia && (
+                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-white">
+                            <Paperclip size={16}/>
+                            <span className="min-w-0 truncate">{m.arquivo_nome || texto || 'Abrir documento'}</span>
+                            <ExternalLink size={13} className="ml-auto shrink-0"/>
+                          </a>
+                        )}
+                        {m.tipo === 'documento' && !midia && (
+                          <p className="text-sm text-slate-500">{texto || '📎 Documento indisponível nesta mensagem antiga.'}</p>
+                        )}
+
+                        {m.tipo === 'reacao' && (
+                          <p className="text-xs italic text-slate-500">{texto || 'Reação no WhatsApp'}</p>
+                        )}
+
+                        {!['audio','imagem','video','documento','reacao'].includes(m.tipo) && texto && (
+                          <p className="whitespace-pre-wrap break-words text-sm text-slate-900">{texto}</p>
+                        )}
+                        {midia && texto && !legendaGenerica && ['imagem','video'].includes(m.tipo) && (
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-900">{texto}</p>
+                        )}
+                        {!texto && !midia && <p className="text-sm text-slate-500">[{m.tipo}]</p>}
+                        <p className="mt-1 text-right text-[10px] text-slate-400">{hora(m.created_at)}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div ref={fimRef}/>
+              </div>
+
+              <div className="border-t bg-white p-3">
+                {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id ? (
+                  <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    <Clock3 size={16}/> Esta conversa esta na fila. Assuma para responder.
+                  </div>
+                ) : !podeResponder ? (
+                  <div className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-600">
+                    Atendimento de {ativa.responsavel_nome}. O Master pode acompanhar em tempo real.
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mb-2 flex items-center gap-1 text-slate-500">
+                      <input ref={arquivoInputRef} type="file" className="hidden"
+                        accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx"
+                        onChange={e=>{
+                          const file=e.target.files?.[0]
+                          if(file) void enviarArquivo(file)
+                        }}/>
+                      <button disabled={enviandoMidia||!canalPronto}
+                        onClick={()=>arquivoInputRef.current?.click()}
+                        className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-40" title="Enviar foto, vídeo, áudio ou documento">
+                        <Paperclip size={18}/>
+                      </button>
+                      <button onClick={()=>setApoioAberto(apoioAberto==='etiquetas'?null:'etiquetas')}
+                        className={`rounded-lg p-2 hover:bg-slate-100 ${apoioAberto==='etiquetas'?'bg-slate-100 text-emerald-700':''}`}
+                        title="Etiquetas">
+                        <Tag size={18}/>
+                      </button>
+                      <button onClick={()=>setApoioAberto(apoioAberto==='rapidas'?null:'rapidas')}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold hover:bg-slate-100 ${apoioAberto==='rapidas'?'bg-slate-100 text-blue-700':''}`}
+                        title="Mensagens rápidas">
+                        <Zap size={17}/> Rápidas
+                      </button>
+                      <span className="ml-auto text-[10px] text-slate-400">Enter envia · Shift+Enter quebra linha</span>
+                    </div>
+
+                    {apoioAberto === 'etiquetas' && (
+                      <div className="mb-2 rounded-xl border bg-white p-3 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between">
+                          <b className="text-xs text-slate-700">Etiquetas da conversa</b>
+                          <span className="text-[10px] text-slate-400">Interno</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {etiquetas.map(e => {
+                            const ativaTag = etiquetasAtivas.includes(e.id)
+                            return (
+                              <button key={e.id}
+                                onClick={()=>void acaoApoio('etiqueta_alternar',{etiquetaId:e.id})}
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${ativaTag?'bg-emerald-50 text-emerald-700':'bg-white text-slate-600'}`}>
+                                {ativaTag ? '✓ ' : ''}{e.nome}
+                              </button>
+                            )
+                          })}
+                          {!etiquetas.length && <span className="text-xs text-slate-400">Nenhuma etiqueta cadastrada.</span>}
+                        </div>
+                        {eu?.role === 'master' && (
+                          <div className="mt-3 flex gap-2 border-t pt-3">
+                            <input value={novaEtiqueta} onChange={e=>setNovaEtiqueta(e.target.value)}
+                              placeholder="Nova etiqueta" className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs"/>
+                            <button disabled={!novaEtiqueta.trim()}
+                              onClick={async()=>{
+                                const ok=await acaoApoio('etiqueta_criar',{nome:novaEtiqueta.trim()})
+                                if(ok)setNovaEtiqueta('')
+                              }}
+                              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                              <Plus size={14}/>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {apoioAberto === 'rapidas' && (
+                      <div className="mb-2 max-h-64 overflow-y-auto rounded-xl border bg-white p-3 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between">
+                          <b className="text-xs text-slate-700">Mensagens rápidas</b>
+                          <span className="text-[10px] text-slate-400">{mensagensRapidas.length} cadastradas</span>
+                        </div>
+                        <div className="space-y-1">
+                          {mensagensRapidas.map(r=>(
+                            <button key={r.id} onClick={()=>{setTexto(r.mensagem);setApoioAberto(null)}}
+                              className="w-full rounded-lg border px-3 py-2 text-left hover:bg-slate-50">
+                              <div className="flex items-center gap-2">
+                                <b className="text-xs text-slate-800">{r.titulo}</b>
+                                {r.atalho && <span className="text-[10px] text-blue-600">{r.atalho}</span>}
+                              </div>
+                              <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">{r.mensagem}</p>
+                            </button>
+                          ))}
+                          {!mensagensRapidas.length && <p className="py-3 text-center text-xs text-slate-400">Nenhuma mensagem rápida cadastrada.</p>}
+                        </div>
+                        {eu?.role === 'master' && (
+                          <div className="mt-3 space-y-2 border-t pt-3">
+                            <input value={novaRapidaTitulo} onChange={e=>setNovaRapidaTitulo(e.target.value)}
+                              placeholder="Título da resposta" className="w-full rounded-lg border px-2 py-1.5 text-xs"/>
+                            <textarea value={novaRapidaTexto} onChange={e=>setNovaRapidaTexto(e.target.value)}
+                              placeholder="Mensagem pronta" rows={2} className="w-full resize-none rounded-lg border px-2 py-1.5 text-xs"/>
+                            <button disabled={!novaRapidaTitulo.trim()||!novaRapidaTexto.trim()}
+                              onClick={async()=>{
+                                const ok=await acaoApoio('rapida_criar',{titulo:novaRapidaTitulo.trim(),mensagem:novaRapidaTexto.trim()})
+                                if(ok){setNovaRapidaTitulo('');setNovaRapidaTexto('')}
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                              <Plus size={14}/> Criar resposta
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {gravando && (
+                      <div className="mb-2 flex items-center justify-between rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                        <span>● Gravando áudio · {Math.floor(segundosGravacao/60)}:{String(segundosGravacao%60).padStart(2,'0')}</span>
+                        <span>Clique no microfone para enviar</span>
+                      </div>
+                    )}
+                    <div className="flex items-end gap-2">
+                      <textarea value={texto} onChange={e=>setTexto(e.target.value)}
+                        onKeyDown={e=>{
+                          if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviar()}
+                        }}
+                        rows={1} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
+                        className="min-h-11 flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                      <button disabled={enviandoMidia||!canalPronto}
+                        onClick={()=>void alternarAudio()}
+                        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border disabled:opacity-40 ${gravando?'bg-red-600 text-white':'bg-white text-slate-500 hover:bg-slate-50'}`}
+                        title={gravando?'Parar e enviar áudio':'Gravar áudio'}>
+                        <Mic size={18}/>
+                      </button>
+                      <button disabled={!texto.trim()||enviando||enviandoMidia||gravando||!canalPronto}
+                        onClick={()=>void enviar()}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white disabled:opacity-40">
+                        <Send size={18}/>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <p className="mt-2 text-center text-[10px] text-slate-400">
+                  O Atlas preserva o historico de mensagens e eventos mesmo apos finalizar o atendimento.
+                </p>
+              </div>
+            </>}
+          </section>
+
+          <aside className="hidden min-h-0 flex-col border-l bg-white xl:flex">
+            <div className="border-b p-4">
+              <div className="flex items-center gap-3">
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-blue-50 font-bold text-blue-700">
+                  {ativa ? (ativa.contato_nome || ativa.telefone).slice(0,1).toUpperCase() : '?'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <b className="block truncate text-sm">{ativa?.contato_nome || 'Contexto do atendimento'}</b>
+                  <p className="truncate text-xs text-slate-500">
+                    {ativa ? telefoneFormatado(ativa.telefone) : 'Selecione uma conversa'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 border-b p-2 text-xs font-bold">
+              <button onClick={()=>setPainelDireito('cliente')}
+                className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                Cliente 360
+              </button>
+              <button onClick={()=>setPainelDireito('agenda')}
+                className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                Agenda
+              </button>
+              <button onClick={()=>setPainelDireito('notas')}
+                className={`rounded-lg px-2 py-2 ${painelDireito==='notas'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                Notas
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {!ativa ? (
+                <div className="py-12 text-center text-sm text-slate-400">Selecione uma conversa.</div>
+              ) : painelDireito === 'cliente' ? (
+                carregandoCliente ? (
+                  <div className="py-10 text-center text-sm text-slate-400">Carregando Cliente 360...</div>
+                ) : cliente ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border bg-slate-50 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <Building2 size={17} className="text-blue-600"/>
+                        <b className="text-sm text-slate-900">{cliente.nome}</b>
+                      </div>
+                      <div className="space-y-2 text-xs text-slate-600">
+                        {(cliente.whatsapp || cliente.telefone) && (
+                          <p><b>Contato:</b> {cliente.whatsapp || cliente.telefone}</p>
+                        )}
+                        {(cliente.cidade || cliente.bairro) && (
+                          <p className="flex items-start gap-1.5">
+                            <MapPin size={14} className="mt-0.5 shrink-0"/>
+                            {[cliente.bairro,cliente.cidade].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        {cliente.endereco && <p>{cliente.endereco}</p>}
+                      </div>
+                      <Link href={'/clientes/' + cliente.id}
+                        className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
+                        Abrir Cliente 360 <ExternalLink size={13}/>
+                      </Link>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <BriefcaseBusiness size={16} className="text-slate-500"/>
+                        <b className="text-xs uppercase tracking-wide text-slate-600">Obras recentes</b>
+                      </div>
+                      {obras.length ? (
+                        <div className="space-y-2">
+                          {obras.map(o=>(
+                            <Link key={o.id} href={'/obras/' + o.id}
+                              className="block rounded-xl border p-3 hover:bg-slate-50">
+                              <p className="truncate text-sm font-semibold text-slate-800">{o.nome || 'Obra'}</p>
+                              <p className="mt-0.5 text-[11px] text-slate-500">{o.status || 'Em andamento'}</p>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                          Nenhuma obra encontrada para este cliente.
+                        </p>
+                      )}
+                    </div>
+
+                    {cliente.observacoes && (
+                      <div className="rounded-xl border-l-4 border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                        <b>Observações do cliente</b>
+                        <p className="mt-1 whitespace-pre-wrap">{cliente.observacoes}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : ativa.whatsapp_chat_tipo === 'grupo' ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border bg-violet-50 p-5">
+                      <div className="mb-3 flex items-center gap-2 text-violet-700">
+                        <Users size={20}/>
+                        <b className="text-sm">Grupo do WhatsApp</b>
+                      </div>
+                      <p className="font-semibold text-slate-900">{ativa.grupo_nome || ativa.contato_nome || 'Grupo'}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                        Este grupo pertence ao número selecionado e não é um Cliente 360. Mensagens e anexos ficam no histórico do grupo.
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-800">
+                      <Info size={15} className="mb-1"/>
+                      Grupos configurados para Orçamento podem criar automaticamente rascunho, tarefa e card no Kanban.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-dashed p-5 text-center">
+                      <UserPlus className="mx-auto mb-3 text-slate-400" size={28}/>
+                      <b className="text-sm text-slate-800">Contato ainda não vinculado</b>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                        O Atlas tenta localizar o Cliente 360 automaticamente pelo telefone.
+                      </p>
+                      <Link href={'/clientes/novo?origem=whatsapp&nome=' + encodeURIComponent(ativa.contato_nome || '') + '&whatsapp=' + encodeURIComponent(ativa.telefone) + '&conversaId=' + encodeURIComponent(ativa.id)}
+                        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white">
+                        <UserPlus size={14}/> Cadastrar Cliente 360
+                      </Link>
+                    </div>
+                    <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-800">
+                      <Info size={15} className="mb-1"/>
+                      Depois do vínculo, o histórico deste atendimento continua associado ao cliente.
+                    </div>
+                  </div>
+                )
+              ) : painelDireito === 'agenda' ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays size={17} className="text-blue-600"/>
+                    <b className="text-sm text-slate-800">Agenda do atendimento</b>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                    <div className="rounded-xl bg-slate-50 p-2">Hoje</div>
+                    <div className="rounded-xl bg-slate-50 p-2">Amanhã</div>
+                    <div className="rounded-xl bg-slate-50 p-2">Futuros</div>
+                  </div>
+                  <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-slate-500">
+                    Os agendamentos vinculados ao atendimento aparecerão aqui.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <StickyNote size={17} className="text-amber-600"/>
+                    <b className="text-sm text-slate-800">Notas internas</b>
+                  </div>
+                  <div className="rounded-xl border bg-amber-50 p-3">
+                    <textarea value={notaTexto} onChange={e=>setNotaTexto(e.target.value)}
+                      rows={3} placeholder="Escreva uma nota para a equipe..."
+                      className="w-full resize-none rounded-lg border bg-white px-3 py-2 text-xs outline-none"/>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-amber-800">Nunca é enviada ao cliente.</span>
+                      <button disabled={!notaTexto.trim()}
+                        onClick={async()=>{
+                          const ok=await acaoApoio('nota_criar',{texto:notaTexto.trim()})
+                          if(ok)setNotaTexto('')
+                        }}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                        Salvar nota
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {notas.map(n=>(
+                      <div key={n.id} className="rounded-xl border bg-white p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <b className="text-[11px] text-slate-700">{n.usuario_nome || 'Equipe'}</b>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(n.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                          </span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">{n.texto}</p>
+                      </div>
+                    ))}
+                    {!notas.length && (
+                      <div className="rounded-2xl border border-dashed p-5 text-center text-xs text-slate-500">
+                        Nenhuma nota interna nesta conversa.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+  )
+}

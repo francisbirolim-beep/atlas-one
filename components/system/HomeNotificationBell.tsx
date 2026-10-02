@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Bell, CheckCheck, Volume2, VolumeX } from 'lucide-react'
+import { Bell, CheckCheck, Settings, Volume2, VolumeX } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
+  PREFERENCIAS_PADRAO,
   assinarNovasNotificacoes,
   carregarPreferenciasNotificacao,
   listarNotificacoes,
@@ -101,10 +102,7 @@ export default function HomeNotificationBell() {
   async function alternarSom() {
     if (!usuario) return
     const novoValor = !preferencias?.som_ativo
-    const base = preferencias || {
-      usuario_id: usuario.id, som_ativo: false, som_volume: 0.6,
-      tarefas: true, agenda: true, chat: true, operacao: true,
-    }
+    const base = preferencias || { ...PREFERENCIAS_PADRAO, usuario_id: usuario.id }
     const otimista = { ...base, som_ativo: novoValor }
     setPreferencias(otimista)
     preferenciasRef.current = otimista
@@ -141,13 +139,19 @@ export default function HomeNotificationBell() {
             <Link key={n.id} href={n.href || '/'} onClick={() => void abrirNotificacao(n)} className={`block px-4 py-3 transition hover:bg-slate-50 ${!n.lida_em ? 'bg-blue-50/45' : ''}`}>
               <div className="flex items-start gap-3">
                 <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${!n.lida_em ? 'bg-blue-500' : 'bg-slate-200'}`}/>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">{n.titulo}</span>{n.mensagem && <span className="mt-0.5 block truncate text-xs text-slate-500">{n.mensagem}</span>}<span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300">{n.categoria} · {tempoRelativo(n.created_at)}</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">{n.titulo}</span>{n.mensagem && <span className="mt-0.5 block truncate text-xs text-slate-500">{n.mensagem}</span>}<span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300">{n.categoria === 'chat' ? 'WhatsApp / mensagens' : n.categoria} · {tempoRelativo(n.created_at)}</span></span>
               </div>
             </Link>
           ))}</div>
         )}
 
-        <div className="border-t border-slate-100 px-4 py-2.5 text-center text-[11px] text-slate-400">Som é opcional e configurado por usuário.</div>
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-3 py-2.5">
+          <span className="text-[11px] text-slate-400">Configuração individual por usuário.</span>
+          <Link href="/configuracoes/notificacoes" onClick={()=>setAberto(false)}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+            <Settings size={13}/> Configurar
+          </Link>
+        </div>
       </div>}
     </div>
   )

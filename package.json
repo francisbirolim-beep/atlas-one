@@ -12,7 +12,9 @@
     "vercel:preview": "bash scripts/vercel-preview.sh",
     "vercel:prod": "bash scripts/vercel-prod.sh",
     "release:check": "bash scripts/release-check.sh preview",
-    "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts"
+    "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts",
+    "postinstall": "node scripts/patch-baileys-pairing.mjs",
+    "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -24,7 +26,10 @@
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-dropzone": "^14.2.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "qrcode": "^1.5.4",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -35,6 +40,7 @@
     "typescript": "^5.4.0",
     "tailwindcss": "^3.4.0",
     "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0"
+    "autoprefixer": "^10.4.0",
+    "@types/qrcode": "^1.5.6"
   }
 }

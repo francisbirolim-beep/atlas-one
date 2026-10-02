@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atlas-one-v14'
+const CACHE_NAME = 'atlas-one-v16'
 const APP_SHELL_CACHE = 'atlas-one-shell-v8'
 const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final', '/compartilhar']
 
@@ -55,6 +55,61 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
+})
+
+self.addEventListener('push', (event) => {
+  event.waitUntil((async () => {
+    let payload = {}
+    try {
+      payload = event.data ? event.data.json() : {}
+    } catch {
+      payload = { title: 'Atlas One', body: event.data ? event.data.text() : '' }
+    }
+
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const visivel = windows.some((client) => client.visibilityState === 'visible')
+
+    if (visivel && payload.forceShow !== true) {
+      for (const client of windows) {
+        client.postMessage({ type: 'ATLAS_PUSH_RECEBIDO', payload })
+      }
+      return
+    }
+
+    await self.registration.showNotification(payload.title || 'Atlas One', {
+      body: payload.body || '',
+      icon: payload.icon || '/icons/icon-192.png',
+      badge: payload.badge || '/icons/icon-192.png',
+      tag: payload.tag || undefined,
+      silent: payload.silent === true,
+      data: {
+        href: payload.href || '/',
+        notificationId: payload.id || null,
+        categoria: payload.categoria || 'operacao',
+      },
+    })
+  })())
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const href = event.notification?.data?.href || '/'
+  event.waitUntil((async () => {
+    const destino = new URL(href, self.location.origin).href
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+
+    for (const client of windows) {
+      if ('focus' in client) {
+        try {
+          if ('navigate' in client) await client.navigate(destino)
+        } catch {}
+        await client.focus()
+        return
+      }
+    }
+
+    if (self.clients.openWindow) await self.clients.openWindow(destino)
+  })())
 })
 
 self.addEventListener('fetch', (event) => {
