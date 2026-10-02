@@ -35,6 +35,20 @@ function imagemTipologia(t: Tipologia) {
   return String(item.foto_url || item.imagem_url || item.desenho_url || item.thumbnail_url || '').trim() || null
 }
 
+function tipologiaPertenceLinha(t: Tipologia, linha: LinhaBusca) {
+  if ((linha.tipologia_ids || []).includes(t.id)) return true
+  const item = t as any
+  const origem = normalizar(String(item.linha_origem_wvetro || ''))
+  const aliases = [linha.nome, linha.chave, ...(linha.apelidos || [])]
+    .map(normalizar)
+    .filter(Boolean)
+  if (origem && aliases.some(alias => origem === alias || origem.includes(alias) || alias.includes(origem))) return true
+  const veioWvetro = item.origem_referencia === 'wvetro' || item.origem_referencia === 'misto'
+  if (!veioWvetro) return false
+  const texto = normalizar(`${t.label} ${t.chave}`)
+  return aliases.some(alias => alias.length >= 4 && texto.includes(alias))
+}
+
 function folhasDaTipologia(t: Tipologia | null) {
   if (!t) return ''
   const texto = normalizar(`${t.label} ${t.chave}`)
@@ -110,9 +124,8 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
 
   const tipologiasDaLinha = useMemo(() => {
     if (!linhaSelecionada) return tipologias
-    const ids = new Set(linhaSelecionada.tipologia_ids || [])
     if (linhaSelecionada.virtualBox) return tipologiasBox
-    return tipologias.filter(t => ids.has(t.id))
+    return tipologias.filter(t => tipologiaPertenceLinha(t, linhaSelecionada))
   }, [linhaSelecionada, tipologias, tipologiasBox])
 
   const linhasFiltradas = useMemo(() => {
@@ -160,7 +173,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
 
   function linhaDaTipologia(t: Tipologia) {
     return linhaSelecionada
-      || linhasDisponiveis.find(l => (l.tipologia_ids || []).includes(t.id))
+      || linhasDisponiveis.find(l => tipologiaPertenceLinha(t, l))
       || (ehBox(t) ? linhasDisponiveis.find(l => normalizar(l.nome) === 'box') : null)
   }
 
