@@ -22,6 +22,7 @@ export type AtendimentoConversa = {
   ultimo_preview?: string | null
   nao_lidas?: number | null
   ultima_mensagem_em?: string | null
+  transferida_em?: string | null
   created_at: string
   updated_at: string
 }
@@ -98,10 +99,11 @@ async function acessoCanalWhatsApp(
   const [{ data: canal }, { data: permissao }] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
-      .select('id,empresa_id,principal,usuario_id,ativo')
+      .select('id,empresa_id,principal,usuario_id,ativo,gateway_status')
       .eq('id', canalId)
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true)
+      .eq('gateway_status', 'connected')
       .maybeSingle(),
     supabaseAdmin
       .from('atendimento_whatsapp_permissoes')
@@ -140,10 +142,11 @@ async function usuarioPodeAtenderCanal(
   if (role === 'master' || !canalId) return true
   const { data: canal } = await supabaseAdmin
     .from('atendimento_whatsapp_canais')
-    .select('id,principal,usuario_id')
+    .select('id,principal,usuario_id,gateway_status')
     .eq('id', canalId)
     .eq('empresa_id', empresaId)
     .eq('ativo', true)
+    .eq('gateway_status', 'connected')
     .maybeSingle()
   if (!canal) return false
   if (canal.usuario_id === usuarioId) return true
@@ -804,9 +807,10 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
   const [{ data: canais, error: canaisError }, { data: permissoes, error: permissoesError }] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
-      .select('id,principal,usuario_id,ativo')
+      .select('id,principal,usuario_id,ativo,gateway_status')
       .eq('empresa_id', usuario.empresa_id)
-      .eq('ativo', true),
+      .eq('ativo', true)
+      .eq('gateway_status', 'connected'),
     supabaseAdmin
       .from('atendimento_whatsapp_permissoes')
       .select('canal_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
@@ -838,30 +842,52 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
 }
 
 export async function listarConversasAtendimento(usuario: UsuarioTenant) {
+  const acessos = await listarAcessosCanaisAtendimento(usuario)
+  const canaisConectados = acessos.map(acesso => acesso.canal_id)
+  if (!canaisConectados.length) return []
+
   const { data, error } = await supabaseAdmin
     .from('atendimento_conversas')
     .select('*')
     .eq('empresa_id', usuario.empresa_id)
     .eq('canal', 'whatsapp')
     .eq('ocultar_da_caixa', false)
+    .in('whatsapp_canal_id', canaisConectados)
     .order('ultima_mensagem_em', { ascending: false, nullsFirst: false })
   if (error) throw error
-  const conversas = (data || []) as AtendimentoConversa[]
-  if (usuario.role === 'master') return conversas
 
-  const acessos = await listarAcessosCanaisAtendimento(usuario)
   const acessoPorCanal = new Map(acessos.map(acesso => [acesso.canal_id, acesso]))
-
-  return conversas.filter(conversa => {
-    if (!conversa.whatsapp_canal_id) {
-      return conversa.responsavel_id === usuario.id || !conversa.responsavel_id
-    }
+  const permitidas = ((data || []) as AtendimentoConversa[]).filter(conversa => {
+    if (usuario.role === 'master') return true
+    if (!conversa.whatsapp_canal_id) return false
     const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id)
     if (!acesso?.visualizar) return false
     if (acesso.dono || acesso.supervisionar) return true
     if (conversa.responsavel_id === usuario.id) return true
     return !conversa.responsavel_id && acesso.atender
   })
+
+  const ids = permitidas.map(conversa => conversa.id)
+  if (!ids.length) return permitidas
+  const { data: transferencias, error: transferenciasError } = await supabaseAdmin
+    .from('atendimento_eventos')
+    .select('conversa_id,created_at')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('tipo', 'conversa_transferida')
+    .in('conversa_id', ids)
+    .order('created_at', { ascending: false })
+  if (transferenciasError) throw transferenciasError
+
+  const ultimaTransferencia = new Map<string, string>()
+  for (const evento of transferencias || []) {
+    if (!ultimaTransferencia.has(evento.conversa_id)) {
+      ultimaTransferencia.set(evento.conversa_id, evento.created_at)
+    }
+  }
+  return permitidas.map(conversa => ({
+    ...conversa,
+    transferida_em: ultimaTransferencia.get(conversa.id) || null,
+  }))
 }
 
 export async function listarDiretorioWhatsApp(
@@ -936,6 +962,7 @@ export async function iniciarConversaWhatsApp(
     .eq('id', dados.canalId)
     .eq('empresa_id', usuario.empresa_id)
     .eq('ativo', true)
+    .eq('gateway_status', 'connected')
     .maybeSingle()
   if (!canal) throw new Error('Canal WhatsApp não encontrado.')
 
