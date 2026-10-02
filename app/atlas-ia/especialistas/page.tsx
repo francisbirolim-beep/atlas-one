@@ -7,6 +7,7 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { listarPermissoesUsuario } from '@/lib/setores'
 import { AI_ESPECIALISTAS, type AIEspecialista } from '@/lib/ai/specialists'
 import type { AIModulo } from '@/lib/ai/types'
+import BotaoOuvirResposta from '@/components/ai/BotaoOuvirResposta'
 
 type Bolha = {
   papel: 'user' | 'assistant'
@@ -188,16 +189,19 @@ export default function AtlasEspecialistasPage() {
                 <div key={index} className={b.papel === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                   <div className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm ${b.papel === 'user' ? 'bg-[#182444] text-white' : 'border bg-slate-50'}`}>
                     {b.texto}
-                    {b.papel === 'assistant' && b.interacaoId && (
-                      <div className="mt-3 border-t pt-2">
-                        <button
-                          onClick={() => aprovar(b.interacaoId!)}
-                          disabled={Boolean(avaliados[b.interacaoId])}
-                          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-emerald-700 disabled:text-emerald-700"
-                        >
-                          {avaliados[b.interacaoId] ? <CheckCircle2 size={14}/> : <ThumbsUp size={14}/>}
-                          {avaliados[b.interacaoId] ? 'Resposta aprovada' : 'Aprovar resposta'}
-                        </button>
+                    {b.papel === 'assistant' && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2">
+                        <BotaoOuvirResposta texto={b.texto}/>
+                        {b.interacaoId && (
+                          <button
+                            onClick={() => aprovar(b.interacaoId!)}
+                            disabled={Boolean(avaliados[b.interacaoId])}
+                            className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-emerald-700 disabled:text-emerald-700"
+                          >
+                            {avaliados[b.interacaoId] ? <CheckCircle2 size={14}/> : <ThumbsUp size={14}/>}
+                            {avaliados[b.interacaoId] ? 'Resposta aprovada' : 'Aprovar resposta'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

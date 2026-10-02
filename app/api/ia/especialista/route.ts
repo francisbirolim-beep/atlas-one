@@ -123,6 +123,39 @@ async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: E
   const podeCustos = await acessoAuxiliar(usuario, 'custos_precos')
   const podeFornecedores = await acessoAuxiliar(usuario, 'fornecedores')
 
+  const contar = async (
+    table: string,
+    proprioColumn?: string,
+    status?: string,
+  ) => {
+    if (escopo === 'nenhum') return 0
+    if (escopo === 'proprio' && !proprioColumn) return null
+
+    let query = supabaseAdmin
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+
+    if (escopo === 'proprio' && proprioColumn) {
+      query = query.eq(proprioColumn, usuario.id)
+    }
+    if (status) query = query.eq('status', status)
+
+    const { count, error } = await query
+    return error ? null : Number(count || 0)
+  }
+
+  const resumoOrcamentos = async () => {
+    const [total, rascunho, enviado, vendido, convertido] = await Promise.all([
+      contar('orcamentos', 'criado_por_id'),
+      contar('orcamentos', 'criado_por_id', 'rascunho'),
+      contar('orcamentos', 'criado_por_id', 'enviado'),
+      contar('orcamentos', 'criado_por_id', 'vendido'),
+      contar('orcamentos', 'criado_por_id', 'convertido'),
+    ])
+    return { total, rascunho, enviado, vendido, convertido }
+  }
+
   const recentes = async (
     table: string,
     select: string,
@@ -166,8 +199,9 @@ async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: E
 
     return {
       escopo_aplicado: escopo,
-      clientes: clientes.error ? [] : clientes.data || [],
-      orcamentos: await recentes(
+      resumo_orcamentos: await resumoOrcamentos(),
+      clientes_recentes: clientes.error ? [] : clientes.data || [],
+      orcamentos_recentes: await recentes(
         'orcamentos',
         'id,cliente_nome,cidade,status,temperatura,valor_estimado,created_at,criado_por_nome,criado_por_id',
         'created_at',
@@ -188,8 +222,9 @@ async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: E
     return {
       escopo_aplicado: escopo,
       custos_precos_liberados: podeCustos,
-      orcamentos: await recentes('orcamentos', selectOrc, 'created_at', 20, 'criado_por_id'),
-      produtos: escopo === 'proprio' ? [] : await recentes('produtos', selectProd, 'updated_at', 40),
+      resumo_orcamentos: await resumoOrcamentos(),
+      orcamentos_recentes: await recentes('orcamentos', selectOrc, 'created_at', 20, 'criado_por_id'),
+      produtos_recentes: escopo === 'proprio' ? [] : await recentes('produtos', selectProd, 'updated_at', 40),
     }
   }
 
@@ -249,7 +284,10 @@ async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: E
   if (modulo === 'producao') {
     return {
       escopo_aplicado: escopo,
-      ordens: await recentes(
+      resumo_producao: {
+        total_ordens: await contar('ordens_producao', 'criado_por_id'),
+      },
+      ordens_recentes: await recentes(
         'ordens_producao',
         'id,numero,cliente_id,obra_id,orcamento_id,tipo_producao,titulo,quantidade,largura_mm,altura_mm,status,bloqueada,bloqueio_motivo,created_at,updated_at,criado_por_id',
         'updated_at',
@@ -273,16 +311,28 @@ async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: E
   }
 
   if (modulo === 'financeiro') {
+    const [receberTotal, receberAberto, pagarTotal, pagarAberto] = await Promise.all([
+      contar('financeiro_contas_receber', 'criado_por_id'),
+      contar('financeiro_contas_receber', 'criado_por_id', 'aberto'),
+      contar('financeiro_contas_pagar', 'criado_por_id'),
+      contar('financeiro_contas_pagar', 'criado_por_id', 'aberto'),
+    ])
     return {
       escopo_aplicado: escopo,
-      contas_receber: await recentes(
+      resumo_financeiro: {
+        contas_receber_total: receberTotal,
+        contas_receber_abertas: receberAberto,
+        contas_pagar_total: pagarTotal,
+        contas_pagar_abertas: pagarAberto,
+      },
+      contas_receber_recentes: await recentes(
         'financeiro_contas_receber',
         'id,cliente_nome,documento,parcela,total_parcelas,vencimento,valor,status,forma,data_pagamento,valor_pago,created_at,criado_por_id',
         'created_at',
         35,
         'criado_por_id',
       ),
-      contas_pagar: await recentes(
+      contas_pagar_recentes: await recentes(
         'financeiro_contas_pagar',
         'id,fornecedor_nome,documento,parcela,descricao,vencimento,valor,status,data_pagamento,valor_pago,created_at,criado_por_id',
         'created_at',
@@ -297,13 +347,30 @@ async function dadosRecentes(usuario: UsuarioTenant, modulo: AIModulo, escopo: E
       ? 'id,cliente_nome,cidade,status,temperatura,valor_estimado,custo_estimado,created_at,criado_por_nome,criado_por_id'
       : 'id,cliente_nome,cidade,status,temperatura,valor_estimado,created_at,criado_por_nome,criado_por_id'
 
+    const [orcamentosResumo, producaoTotal, receberTotal, receberAberto, pagarTotal, pagarAberto] = await Promise.all([
+      resumoOrcamentos(),
+      contar('ordens_producao', 'criado_por_id'),
+      contar('financeiro_contas_receber', 'criado_por_id'),
+      contar('financeiro_contas_receber', 'criado_por_id', 'aberto'),
+      contar('financeiro_contas_pagar', 'criado_por_id'),
+      contar('financeiro_contas_pagar', 'criado_por_id', 'aberto'),
+    ])
+
     return {
       escopo_aplicado: escopo,
       custos_precos_liberados: podeCustos,
-      orcamentos: await recentes('orcamentos', selectOrc, 'created_at', 30, 'criado_por_id'),
-      producao: await recentes('ordens_producao', 'id,numero,titulo,status,bloqueada,bloqueio_motivo,created_at,updated_at,criado_por_id', 'updated_at', 30, 'criado_por_id'),
-      receber: await recentes('financeiro_contas_receber', 'id,cliente_nome,vencimento,valor,status,valor_pago,created_at,criado_por_id', 'created_at', 30, 'criado_por_id'),
-      pagar: await recentes('financeiro_contas_pagar', 'id,fornecedor_nome,vencimento,valor,status,valor_pago,created_at,criado_por_id', 'created_at', 30, 'criado_por_id'),
+      resumo_orcamentos: orcamentosResumo,
+      resumo_producao: { total_ordens: producaoTotal },
+      resumo_financeiro: {
+        contas_receber_total: receberTotal,
+        contas_receber_abertas: receberAberto,
+        contas_pagar_total: pagarTotal,
+        contas_pagar_abertas: pagarAberto,
+      },
+      orcamentos_recentes: await recentes('orcamentos', selectOrc, 'created_at', 30, 'criado_por_id'),
+      producao_recente: await recentes('ordens_producao', 'id,numero,titulo,status,bloqueada,bloqueio_motivo,created_at,updated_at,criado_por_id', 'updated_at', 30, 'criado_por_id'),
+      receber_recentes: await recentes('financeiro_contas_receber', 'id,cliente_nome,vencimento,valor,status,valor_pago,created_at,criado_por_id', 'created_at', 30, 'criado_por_id'),
+      pagar_recentes: await recentes('financeiro_contas_pagar', 'id,fornecedor_nome,vencimento,valor,status,valor_pago,created_at,criado_por_id', 'created_at', 30, 'criado_por_id'),
     }
   }
 
@@ -405,6 +472,9 @@ export async function POST(req: NextRequest) {
       'Respeite estritamente o escopo do especialista selecionado e as permissões do usuário.',
       'Se escopo_dados for proprio, nunca conclua ou estime números da empresa inteira a partir dos dados pessoais fornecidos.',
       'Se um campo sensível não estiver no CONTEXTO ATLAS, informe que o usuário não possui acesso ou que o dado não foi disponibilizado.',
+      'Campos com nome resumo_* contêm totais agregados confiáveis para o escopo atual.',
+      'Campos com nome *_recentes, *_recente ou listas operacionais são amostras limitadas para contexto; NUNCA use a quantidade de itens dessas listas como total da empresa, do setor ou do usuário.',
+      'Se a pergunta pedir total, quantidade geral ou visão consolidada e não houver um resumo_* correspondente, diga que o total consolidado não foi disponibilizado em vez de estimar pela amostra.',
       'OpenCode orquestra a conversa e FreeLLMAPI executa/roteia o modelo.',
     ].join('\n')
 
