@@ -23,6 +23,7 @@ export type AtendimentoConversa = {
   nao_lidas?: number | null
   ultima_mensagem_em?: string | null
   transferida_em?: string | null
+  acompanhando?: boolean
   created_at: string
   updated_at: string
 }
@@ -880,24 +881,35 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
 
   const ids = permitidas.map(conversa => conversa.id)
   if (!ids.length) return permitidas
-  const { data: transferencias, error: transferenciasError } = await supabaseAdmin
-    .from('atendimento_eventos')
-    .select('conversa_id,created_at')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('tipo', 'conversa_transferida')
-    .in('conversa_id', ids)
-    .order('created_at', { ascending: false })
-  if (transferenciasError) throw transferenciasError
+  const [transferenciasResp, acompanhamentosResp] = await Promise.all([
+    supabaseAdmin
+      .from('atendimento_eventos')
+      .select('conversa_id,created_at')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('tipo', 'conversa_transferida')
+      .in('conversa_id', ids)
+      .order('created_at', { ascending: false }),
+    supabaseAdmin
+      .from('atendimento_acompanhamentos')
+      .select('conversa_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('usuario_id', usuario.id)
+      .in('conversa_id', ids),
+  ])
+  if (transferenciasResp.error) throw transferenciasResp.error
+  if (acompanhamentosResp.error) throw acompanhamentosResp.error
 
   const ultimaTransferencia = new Map<string, string>()
-  for (const evento of transferencias || []) {
+  for (const evento of transferenciasResp.data || []) {
     if (!ultimaTransferencia.has(evento.conversa_id)) {
       ultimaTransferencia.set(evento.conversa_id, evento.created_at)
     }
   }
+  const acompanhadas = new Set((acompanhamentosResp.data || []).map(item => item.conversa_id))
   return permitidas.map(conversa => ({
     ...conversa,
     transferida_em: ultimaTransferencia.get(conversa.id) || null,
+    acompanhando: acompanhadas.has(conversa.id),
   }))
 }
 
@@ -1399,6 +1411,54 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
   })
 
   return { messageId, queued: false }
+}
+
+export async function marcarConversaComoLida(conversaId: string, usuario: UsuarioTenant) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  if (!conversa.nao_lidas) return
+  const { error } = await supabaseAdmin
+    .from('atendimento_conversas')
+    .update({ nao_lidas: 0, updated_at: new Date().toISOString() })
+    .eq('id', conversaId)
+    .eq('empresa_id', usuario.empresa_id)
+  if (error) throw error
+}
+
+export async function definirAcompanhamentoConversa(
+  conversaId: string,
+  acompanhar: boolean,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+
+  if (acompanhar) {
+    const { error } = await supabaseAdmin
+      .from('atendimento_acompanhamentos')
+      .upsert({
+        empresa_id: usuario.empresa_id,
+        conversa_id: conversaId,
+        usuario_id: usuario.id,
+      }, { onConflict: 'conversa_id,usuario_id' })
+    if (error) throw error
+  } else {
+    const { error } = await supabaseAdmin
+      .from('atendimento_acompanhamentos')
+      .delete()
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('conversa_id', conversaId)
+      .eq('usuario_id', usuario.id)
+    if (error) throw error
+  }
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: acompanhar ? 'conversa_acompanhada' : 'conversa_acompanhamento_removido',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+  })
 }
 
 export async function assumirConversa(conversaId: string, usuario: UsuarioTenant) {

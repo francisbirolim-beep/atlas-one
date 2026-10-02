@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
-  ExternalLink, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
+  ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap,
 } from 'lucide-react'
@@ -40,6 +40,7 @@ type Conversa = {
   nao_lidas?: number | null
   ultima_mensagem_em?: string | null
   transferida_em?: string | null
+  acompanhando?: boolean
 }
 type Mensagem = {
   id: string
@@ -122,7 +123,7 @@ export default function WhatsAppAtendimentoPage() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<'todas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
+  const [filtro, setFiltro] = useState<'todas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
@@ -303,6 +304,7 @@ export default function WhatsAppAtendimentoPage() {
     }
     void carregarMensagens(ativa.id)
     void carregarApoio(ativa.id)
+    if (Number(ativa.nao_lidas || 0) > 0) void marcarComoLida(ativa.id)
   }, [ativa?.id])
 
   useEffect(() => {
@@ -365,6 +367,7 @@ export default function WhatsAppAtendimentoPage() {
       if (filtro === 'com_atendente' && (!c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
       if (filtro === 'minhas' && (c.responsavel_id !== eu?.id || c.status === 'finalizado')) return false
       if (filtro === 'nao_lidas' && !c.nao_lidas) return false
+      if (filtro === 'acompanhando' && !c.acompanhando) return false
       if (filtro === 'transferidas' && !c.transferida_em) return false
       if (filtro === 'finalizadas' && c.status !== 'finalizado') return false
       if (filtro === 'grupos' && c.whatsapp_chat_tipo !== 'grupo') return false
@@ -387,6 +390,21 @@ export default function WhatsAppAtendimentoPage() {
     setDestinoId('')
     setSetorTransferencia('')
     await carregarConversas(false)
+  }
+
+  async function marcarComoLida(conversaId: string) {
+    setConversas(lista => lista.map(c => c.id === conversaId ? { ...c, nao_lidas: 0 } : c))
+    setAtiva(atual => atual?.id === conversaId ? { ...atual, nao_lidas: 0 } : atual)
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/conversas', {
+        method: 'POST', headers,
+        body: JSON.stringify({ acao: 'marcar_lida', conversaId }),
+      })
+      if (!resp.ok) await carregarConversas(false)
+    } catch {
+      await carregarConversas(false)
+    }
   }
 
   async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
@@ -566,6 +584,7 @@ export default function WhatsAppAtendimentoPage() {
       minhas: chats.filter(c => c.responsavel_id === eu?.id && c.status !== 'finalizado').length,
       grupos: chats.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
       naoLidas: chats.filter(c => Number(c.nao_lidas || 0) > 0).length,
+      acompanhando: chats.filter(c => Boolean(c.acompanhando)).length,
       transferidas: chats.filter(c => Boolean(c.transferida_em)).length,
       finalizadas: chats.filter(c => c.status === 'finalizado').length,
     }
@@ -682,6 +701,10 @@ export default function WhatsAppAtendimentoPage() {
                   className={`rounded-full border px-3 py-1.5 ${filtro==='minhas'?'border-blue-400 bg-blue-50 text-blue-700':'bg-white text-slate-600'}`}>
                   Minhas {totais.minhas}
                 </button>
+                <button onClick={()=>setFiltro('acompanhando')}
+                  className={`rounded-full border px-3 py-1.5 ${filtro==='acompanhando'?'border-cyan-400 bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
+                  Acompanhando {totais.acompanhando}
+                </button>
                 <button onClick={()=>setFiltro('transferidas')}
                   className={`rounded-full border px-3 py-1.5 ${filtro==='transferidas'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
                   Transferidas {totais.transferidas}
@@ -732,6 +755,9 @@ export default function WhatsAppAtendimentoPage() {
                         </span>
                       ) : (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Aguardando atendimento</span>
+                      )}
+                      {c.acompanhando && (
+                        <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-cyan-700">Acompanhando</span>
                       )}
                       {c.transferida_em && (
                         <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">Transferida</span>
@@ -789,6 +815,11 @@ export default function WhatsAppAtendimentoPage() {
                     Cliente 360
                   </Link>
                 )}
+                <button onClick={()=>void acaoConversa(ativa.acompanhando?'parar_acompanhar':'acompanhar')}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${ativa.acompanhando?'bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
+                  {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
+                  {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
+                </button>
                 {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id && (
                   <button onClick={()=>void acaoConversa('assumir')}
                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
