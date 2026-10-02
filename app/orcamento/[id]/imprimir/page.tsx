@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2, Printer, TriangleAlert } from 'lucide-react'
+import FluxoPrecificacaoEtapas from '@/components/orcamento/FluxoPrecificacaoEtapas'
 import { carregarPrecificacaoOrcamento, type PrecificacaoOrcamento } from '@/lib/orcamentoPrecificacao'
 
 function money(valor: unknown) {
@@ -69,6 +70,27 @@ export default function ImprimirOrcamentoPage() {
   const totalVenda = Number(orcamento.valor_estimado || 0)
   const temPendencias = dados.pendencias.length > 0
 
+  if (temPendencias) return (
+    <main className="min-h-screen bg-slate-50 p-4 md:p-7">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <Link href={`/orcamento/${orcamentoId}/precificacao?etapa=perfis`} className="inline-flex items-center gap-2 text-sm text-slate-500">
+          <ArrowLeft size={16} /> Voltar à conferência de custos
+        </Link>
+        <FluxoPrecificacaoEtapas orcamentoId={orcamentoId} atual="proposta" bloqueado />
+        <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6">
+          <div className="flex items-start gap-3">
+            <TriangleAlert className="mt-0.5 shrink-0 text-amber-700" />
+            <div>
+              <h1 className="text-lg font-bold text-amber-900">Proposta bloqueada</h1>
+              <p className="mt-1 text-sm text-amber-800">Existem {dados.pendencias.length} componente(s) sem custo válido ou com regra técnica pendente. A proposta não pode ser impressa nem enviada até a conferência de custos terminar.</p>
+            </div>
+          </div>
+          <Link href={`/orcamento/${orcamentoId}/precificacao?etapa=perfis`} className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white">Resolver custos</Link>
+        </section>
+      </div>
+    </main>
+  )
+
   return (
     <main className="min-h-screen bg-slate-100 p-3 sm:p-6 print:bg-white print:p-0">
       <style jsx global>{`
@@ -81,8 +103,9 @@ export default function ImprimirOrcamentoPage() {
         }
       `}</style>
 
+      <div className="nao-imprimir mx-auto mb-4 max-w-5xl"><FluxoPrecificacaoEtapas orcamentoId={orcamentoId} atual="proposta" bloqueado={false} /></div>
       <div className="nao-imprimir mx-auto mb-4 flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 shadow-sm">
-        <Link href={`/orcamento/${orcamentoId}/precificacao?etapa=resumo`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
+        <Link href={`/orcamento/${orcamentoId}/precificacao-final`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
           <ArrowLeft size={16} /> Voltar ao cálculo
         </Link>
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">

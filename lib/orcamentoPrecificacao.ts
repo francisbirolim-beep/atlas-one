@@ -29,6 +29,10 @@ export type ComponentePrecificacao = {
   margem_pct: number
   preco_venda: number
   origem_custo: 'produto' | 'catalogo' | 'calculado' | 'manual' | 'pendente'
+  origem_custo_oficial?: 'atlas' | 'manual' | 'pendente' | null
+  referencia_custo_origem?: string | null
+  referencia_custo_valor?: number | null
+  referencia_custo_dados?: Record<string, unknown> | null
   custo_pendente: boolean
   incluido_manual: boolean
   excluido: boolean
@@ -262,6 +266,7 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
       margem_pct: margem,
       preco_venda: margemVenda(custoTotal, margem),
       origem_custo: m.status_calculo === 'pendente_formula' ? 'pendente' : custo.origem,
+      origem_custo_oficial: m.status_calculo === 'pendente_formula' || custo.pendente ? 'pendente' : 'atlas',
       custo_pendente: m.status_calculo === 'pendente_formula' || custo.pendente,
       incluido_manual: false,
       excluido: false,
@@ -322,7 +327,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   const formulas: Record<string, any> = {}
   for (const f of (fs || []) as any[]) if (!formulas[f.tipologia_id] || f.status === 'validada') formulas[f.tipologia_id] = f
   const pendencias = ((componentes || []) as any[])
-    .filter((c: any) => c.custo_pendente)
+    .filter((c: any) => c.custo_pendente || num(c.custo_unitario) <= 0)
     .map((c: any) => `${c.codigo ? `${c.codigo} · ` : ''}${c.descricao}: custo ou regra técnica pendente.`)
   return {
     orcamento,
@@ -356,11 +361,13 @@ export async function salvarPoliticaItem(orcamentoId: string, itemRefValue: stri
 
 export async function salvarCustoComponente(componente: ComponentePrecificacao, custoUnitario: number, salvarCatalogo: boolean) {
   const custo = Math.max(0, num(custoUnitario))
+  if (custo <= 0) return { ok: false as const, error: 'Informe um custo maior que R$ 0,00. Custo zero continua pendente até existir uma exceção controlada com justificativa.' }
   const total = custo * num(componente.quantidade)
   const { error } = await supabase.from('orcamento_precificacao_componentes').update({
     custo_unitario: custo,
     custo_total: total,
     origem_custo: 'manual',
+    origem_custo_oficial: 'manual',
     custo_pendente: false,
   }).eq('id', componente.id)
   if (error) return { ok: false as const, error: error.message }
@@ -410,6 +417,7 @@ export async function adicionarCustoExtra(dados: { orcamentoId: string; itemRef?
     margem_pct: margem,
     preco_venda: margemVenda(total, margem),
     origem_custo: 'manual',
+    origem_custo_oficial: 'manual',
     custo_pendente: false,
     incluido_manual: true,
     excluido: false,
