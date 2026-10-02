@@ -12,6 +12,12 @@ export type OpenCodeResultado = {
   modelId: string
 }
 
+export type OpenCodeAnexo = {
+  nome: string
+  mediaType: string
+  dados: string
+}
+
 type OpenCodeMensagem = {
   info?: {
     id?: string
@@ -197,7 +203,21 @@ async function enviar(
   sessionId: string,
   system: string,
   prompt: string,
+  anexos: OpenCodeAnexo[] = [],
 ): Promise<{ data: any; resposta: string }> {
+  const parts: any[] = [{ type: 'text', text: prompt }]
+  for (const anexo of anexos) {
+    const mediaType = String(anexo.mediaType || '').trim().toLowerCase()
+    const dados = String(anexo.dados || '').trim()
+    if (!mediaType.startsWith('image/') || !dados) continue
+    parts.push({
+      type: 'file',
+      mediaType,
+      filename: String(anexo.nome || 'imagem').slice(0, 180),
+      url: `data:${mediaType};base64,${dados}`,
+    })
+  }
+
   const data = await requisitar(c, accessToken, `/session/${encodeURIComponent(sessionId)}/message`, {
     method: 'POST',
     body: JSON.stringify({
@@ -207,7 +227,7 @@ async function enviar(
         modelID: c.modelId,
       },
       system,
-      parts: [{ type: 'text', text: prompt }],
+      parts,
     }),
   })
 
@@ -222,6 +242,7 @@ export async function consultarOpenCode(params: {
   tituloSessao: string
   system: string
   prompt: string
+  anexos?: OpenCodeAnexo[]
 }): Promise<OpenCodeResultado> {
   const c = await carregarConfig()
   let sessionId = String(params.sessionId || '').trim()
@@ -231,7 +252,7 @@ export async function consultarOpenCode(params: {
   }
 
   try {
-    const { data, resposta } = await enviar(c, params.accessToken, sessionId, params.system, params.prompt)
+    const { data, resposta } = await enviar(c, params.accessToken, sessionId, params.system, params.prompt, params.anexos || [])
     const modelo = extrairModelo(data, c.providerId, c.modelId)
     return { sessionId, resposta, ...modelo }
   } catch (e: any) {
@@ -239,7 +260,7 @@ export async function consultarOpenCode(params: {
     // Recriamos somente em 404, sem mascarar erro de provider/modelo.
     if (e?.status !== 404) throw e
     sessionId = await criarSessao(c, params.accessToken, params.tituloSessao)
-    const { data, resposta } = await enviar(c, params.accessToken, sessionId, params.system, params.prompt)
+    const { data, resposta } = await enviar(c, params.accessToken, sessionId, params.system, params.prompt, params.anexos || [])
     const modelo = extrairModelo(data, c.providerId, c.modelId)
     return { sessionId, resposta, ...modelo }
   }
