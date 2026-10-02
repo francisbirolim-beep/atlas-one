@@ -324,10 +324,20 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
   const { data: fs } = tipologiaIds.length
-    ? await supabase.from('engenharia_tipologia_formulas_corte').select('id,tipologia_id,configuracao_label,versao,status,ativo').in('tipologia_id', tipologiaIds).eq('ativo', true).order('status')
+    ? await supabase
+        .from('engenharia_tipologia_formulas_corte')
+        .select('id,tipologia_id,configuracao_label,versao,status,ativo')
+        .in('tipologia_id', tipologiaIds)
+        .order('versao', { ascending: false })
     : { data: [] as any[] }
   const formulas: Record<string, any> = {}
-  for (const f of (fs || []) as any[]) if (!formulas[f.tipologia_id] || f.status === 'validada') formulas[f.tipologia_id] = f
+  for (const f of (fs || []) as any[]) {
+    if (f.status !== 'validada') continue
+    const atual = formulas[f.tipologia_id]
+    if (!atual || (f.ativo && !atual.ativo) || (Boolean(f.ativo) === Boolean(atual.ativo) && Number(f.versao || 0) > Number(atual.versao || 0))) {
+      formulas[f.tipologia_id] = f
+    }
+  }
   const pendencias = ((componentes || []) as any[])
     .filter((c: any) => c.custo_pendente || num(c.custo_unitario) <= 0)
     .map((c: any) => `${c.codigo ? `${c.codigo} · ` : ''}${c.descricao}: custo ou regra técnica pendente.`)
