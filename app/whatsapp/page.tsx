@@ -304,7 +304,6 @@ export default function WhatsAppAtendimentoPage() {
     }
     void carregarMensagens(ativa.id)
     void carregarApoio(ativa.id)
-    if (Number(ativa.nao_lidas || 0) > 0) void marcarComoLida(ativa.id)
   }, [ativa?.id])
 
   useEffect(() => {
@@ -390,21 +389,6 @@ export default function WhatsAppAtendimentoPage() {
     setDestinoId('')
     setSetorTransferencia('')
     await carregarConversas(false)
-  }
-
-  async function marcarComoLida(conversaId: string) {
-    setConversas(lista => lista.map(c => c.id === conversaId ? { ...c, nao_lidas: 0 } : c))
-    setAtiva(atual => atual?.id === conversaId ? { ...atual, nao_lidas: 0 } : atual)
-    try {
-      const headers = await headersJson()
-      const resp = await fetch('/api/integracoes/whatsapp/conversas', {
-        method: 'POST', headers,
-        body: JSON.stringify({ acao: 'marcar_lida', conversaId }),
-      })
-      if (!resp.ok) await carregarConversas(false)
-    } catch {
-      await carregarConversas(false)
-    }
   }
 
   async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
