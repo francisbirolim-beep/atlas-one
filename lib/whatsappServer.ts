@@ -1258,6 +1258,8 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
   if (!conversa) throw new Error('Conversa não disponível para este usuário.')
   const corpo = texto.trim()
   if (!corpo) throw new Error('Mensagem vazia.')
+  const nomeAtendente = String(usuario.nome || 'Equipe Esquadrifácio').trim() || 'Equipe Esquadrifácio'
+  const corpoCliente = `*${nomeAtendente}:* ${corpo}`
 
   const { data: config } = await supabaseAdmin.from('atendimento_configuracoes')
     .select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
@@ -1327,7 +1329,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       mensagem_id: mensagem.id,
       telefone: conversa.telefone,
       tipo: 'text',
-      texto: corpo,
+      texto: corpoCliente,
       payload: destinoPayload,
       status: 'pendente',
       whatsapp_canal_id: canalId,
@@ -1369,7 +1371,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       messaging_product: 'whatsapp',
       to: conversa.telefone,
       type: 'text',
-      text: { preview_url: false, body: corpo },
+      text: { preview_url: false, body: corpoCliente },
     }),
   })
   const json = await resposta.json().catch(() => ({}))
