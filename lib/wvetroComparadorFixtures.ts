@@ -1718,3 +1718,127 @@ export const FIXTURES_PTA3_SUPREMA_FAMILIA_B_WVETRO: WVetroItemTecnico[] = [
   pta3SupremaFamiliaBItem(733,1654),
 ]
 
+
+
+// PC1 Suprema — Porta de Correr 01 Folha com vidro.
+// Assinatura dominante observada em 14 itens históricos W.Vetro.
+// BUC755/PAR1037 ficam deliberadamente como referência: a regra de espaçamento
+// varia com a dimensão e ainda não foi fechada com evidência suficiente.
+export const FIXTURE_PC1_SUPREMA_VIDRO_ATLAS_REFERENCIA: FormulaAtlasComparacao = {
+  tipologia_id: 'e2f2809c-1f44-4261-a1a5-4c506da35315',
+  configuracao_label: 'PC1-SUPREMA · vidro · composição dominante · referência histórica',
+  variaveis: [],
+  pecas: [
+    { eixo:'L', codigo:'SU008', formula:'Altura', descricao:'Mata-junta / complemento', quantidade:1 },
+    { eixo:'H', codigo:'SU039', formula:'Altura-21', descricao:'Montante da folha', quantidade:2 },
+    { eixo:'L', codigo:'SU053', formula:'Largura-35.4', descricao:'Travessa superior', quantidade:1 },
+    { eixo:'L', codigo:'SU102', formula:'Largura-35.4', descricao:'Baguete horizontal', quantidade:2 },
+    { eixo:'H', codigo:'SU102', formula:'Altura-172', descricao:'Baguete vertical', quantidade:2 },
+    { eixo:'L', codigo:'SU107', formula:'21', descricao:'Calço/complemento 21 mm', quantidade:4 },
+    { eixo:'L', codigo:'SU225', formula:'Largura-35.4', descricao:'Travessa inferior', quantidade:1 },
+    { eixo:'L', codigo:'SU271', formula:'2*Largura+52.6', descricao:'Trilho/marco horizontal', quantidade:1 },
+    { eixo:'H', codigo:'T-214', formula:'Altura-21', descricao:'Complemento T vertical', quantidade:1 },
+    { eixo:'L', codigo:'TMC', formula:'2*Largura+52.6', descricao:'Trilho macarrão', quantidade:1 },
+    { eixo:'H', codigo:'TQ017', formula:'Altura', descricao:'Estrutura tubular vertical', quantidade:2 },
+    { eixo:'L', codigo:'TQ017', formula:'2*Largura+154.2', descricao:'Estrutura tubular horizontal', quantidade:1 },
+  ],
+  vidro: {
+    quantidade:1,
+    formula_largura:'Largura-42',
+    formula_altura:'Altura-154',
+  },
+  acessorios: [
+    { codigo:'BATLIMR28', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'BUC755', quantidade_referencia:24, status:'referencia' },
+    { codigo:'CON382', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'FIT206', formula_quantidade:'(Altura-21)/1000', status:'em_validacao' },
+    { codigo:'FIT212', formula_quantidade:'4*(Largura-35.4)/1000', status:'em_validacao' },
+    { codigo:'FIT214', formula_quantidade:'2*Altura/1000', status:'em_validacao' },
+    { codigo:'FRA820', formula_quantidade:'1', status:'em_validacao' },
+    { codigo:'GUA171', formula_quantidade:'2*(Largura-35.4)/1000', status:'em_validacao' },
+    { codigo:'GUA258', formula_quantidade:'2*(Altura-172)/1000', status:'em_validacao' },
+    { codigo:'GUA259', formula_quantidade:'2*(Largura-35.4)/1000 + 2*(Altura-172)/1000', status:'em_validacao' },
+    { codigo:'NYL042', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'NYL332', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'PAR1023', formula_quantidade:'7', status:'em_validacao' },
+    { codigo:'PAR1037', quantidade_referencia:24, status:'referencia' },
+    { codigo:'PAR435', formula_quantidade:'6', status:'em_validacao' },
+    { codigo:'PUX006', formula_quantidade:'2', status:'em_validacao' },
+    { codigo:'REBACA4X10', formula_quantidade:'16', status:'em_validacao' },
+    { codigo:'RPCS100', formula_quantidade:'4', status:'em_validacao' },
+    { codigo:'SIL-PU', formula_quantidade:'(Largura+Altura)/6000', status:'em_validacao' },
+  ],
+}
+
+function pc1SupremaVidroDominanteItem(
+  largura:number,
+  altura:number,
+  pontosFixacao:number,
+  codigo:string,
+): WVetroItemTecnico {
+  const travessa = largura - 35.4
+  const montante = altura - 21
+  const bagueteH = altura - 172
+  const trilho = 2 * largura + 52.6
+  const estruturaL = 2 * largura + 154.2
+  return {
+    Codigo: codigo,
+    Nome:'PORTA DE CORRER 01 FOLHA COM PUXADOR | VIDRO | SUPREMA SEM CONTRAMARCO',
+    Linha:'L. SUPREMA',
+    Modelo:'PORTA DE CORRER 01 FOLHA',
+    Qtde:1,
+    Largura:largura,
+    Altura:altura,
+    Perfil:[
+      {Codigo:'SU008',Posicao:'L',Qtde:1,Medida:altura/1000},
+      {Codigo:'SU039',Posicao:'H',Qtde:2,Medida:montante/1000},
+      {Codigo:'SU053',Posicao:'L',Qtde:1,Medida:travessa/1000},
+      {Codigo:'SU102',Posicao:'L',Qtde:2,Medida:travessa/1000},
+      {Codigo:'SU102',Posicao:'H',Qtde:2,Medida:bagueteH/1000},
+      {Codigo:'SU107',Posicao:'L',Qtde:4,Medida:0.021},
+      {Codigo:'SU225',Posicao:'L',Qtde:1,Medida:travessa/1000},
+      {Codigo:'SU271',Posicao:'L',Qtde:1,Medida:trilho/1000},
+      {Codigo:'T-214',Posicao:'H',Qtde:1,Medida:montante/1000},
+      {Codigo:'TMC',Posicao:'L',Qtde:1,Medida:trilho/1000},
+      {Codigo:'TQ017',Posicao:'H',Qtde:2,Medida:altura/1000},
+      {Codigo:'TQ017',Posicao:'L',Qtde:1,Medida:estruturaL/1000},
+    ],
+    Vidros:[{
+      Codigo:'VIDRO',
+      Qtde:1,
+      Largura:largura-42,
+      Altura:altura-154,
+      Especificacao:'INCOLOR 06MM - TEMPERADO',
+    }],
+    Acessorios:[
+      {Codigo:'BATLIMR28',Qtde:1},
+      {Codigo:'BUC755',Qtde:pontosFixacao},
+      {Codigo:'CON382',Qtde:1},
+      {Codigo:'FIT206',Qtde:(altura-21)/1000},
+      {Codigo:'FIT212',Qtde:4*travessa/1000},
+      {Codigo:'FIT214',Qtde:2*altura/1000},
+      {Codigo:'FRA820',Qtde:1},
+      {Codigo:'GUA171',Qtde:2*travessa/1000},
+      {Codigo:'GUA258',Qtde:2*bagueteH/1000},
+      {Codigo:'GUA259',Qtde:(2*travessa+2*bagueteH)/1000},
+      {Codigo:'NYL042',Qtde:2},
+      {Codigo:'NYL332',Qtde:4},
+      {Codigo:'PAR1023',Qtde:7},
+      {Codigo:'PAR1037',Qtde:pontosFixacao},
+      {Codigo:'PAR435',Qtde:6},
+      {Codigo:'PUX006',Qtde:2},
+      {Codigo:'REBACA4X10',Qtde:16},
+      {Codigo:'RPCS100',Qtde:4},
+      {Codigo:'SIL-PU',Qtde:(largura+altura)/6000},
+    ],
+  }
+}
+
+export const FIXTURES_PC1_SUPREMA_VIDRO_DOMINANTE_WVETRO: WVetroItemTecnico[] = [
+  pc1SupremaVidroDominanteItem(796,2135,23,'WV-PC1-561-VIDRO'),
+  pc1SupremaVidroDominanteItem(850,2150,23,'WV-PC1-436-VIDRO'),
+  pc1SupremaVidroDominanteItem(936,2134,24,'WV-PC1-176-VIDRO'),
+  pc1SupremaVidroDominanteItem(1000,2200,24,'WV-PC1-656-VIDRO'),
+  pc1SupremaVidroDominanteItem(1235,2195,26,'WV-PC1-724-VIDRO'),
+  pc1SupremaVidroDominanteItem(1350,2150,27,'WV-PC1-580-VIDRO'),
+]
