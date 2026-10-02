@@ -166,6 +166,8 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
 
   function mudarDescricaoLivre(texto: string) {
     const preenchido = Boolean(texto.trim())
+    setBuscaTipologia(texto)
+    setTipologiaFocada(preenchido)
     onChange({
       tipo: preenchido ? 'outro' : '',
       tipoOutroTexto: texto,
@@ -186,8 +188,8 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     setLinhaSelecionadaId(linha.id)
     setBuscaLinha(linha.nome)
     setLinhaFocada(false)
-    setBuscaTipologia('')
-    setTipologiaFocada(false)
+    setBuscaTipologia(value.tipoOutroTexto || '')
+    setTipologiaFocada(Boolean(value.tipoOutroTexto?.trim()))
     onChange({
       linhaId: linha.virtualBox ? null : linha.id,
       linhaNome: linha.nome,
@@ -242,7 +244,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       linhaNome: linhaReal?.nome || value.linhaNome || null,
       tipologiaId: t.id,
       tipo: t.chave || 'outro',
-      tipoOutroTexto: value.tipoOutroTexto,
+      tipoOutroTexto: t.label,
       folhas: folhasDefinidas,
       modoOrigem: 'manual',
       produtoId: null,
@@ -276,20 +278,20 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       `}</style>
 
       <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
-        <label className="mb-1 block text-xs font-semibold text-slate-700">2. Descrição livre da esquadria <span className="font-normal text-slate-400">(opcional)</span></label>
+        <label className="mb-1 block text-xs font-semibold text-slate-700">3. O que você precisa?</label>
         <input
           type="text"
           data-preserve-case="true"
           value={value.tipoOutroTexto || ''}
           onChange={e => mudarDescricaoLivre(e.target.value)}
-          placeholder="Ex.: Porta de correr 3 folhas - Com reforço"
+          placeholder="Ex.: Porta de correr 3 folhas"
           className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm"
         />
-        <p className="mt-1.5 text-[11px] text-blue-800">Você pode seguir somente com esta descrição. Linha e tipologia cadastradas são opcionais.</p>
+        <p className="mt-1.5 text-[11px] text-blue-800">Digite de forma simples. O Atlas usa este texto para localizar a tipologia; no Sob Medida você escolhe um projeto cadastrado antes de calcular.</p>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-        <label className="mb-1 block text-xs font-semibold text-slate-700">3. Linha <span className="font-normal text-slate-400">(opcional)</span></label>
+        <label className="mb-1 block text-xs font-semibold text-slate-700">4. Linha</label>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
@@ -322,7 +324,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       </div>
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-        <label className="mb-1 block text-xs font-semibold text-slate-700">4. Pesquisar tipologia <span className="font-normal text-slate-400">(opcional)</span></label>
+        <label className="mb-1 block text-xs font-semibold text-slate-700">5. Escolher tipologia / projeto</label>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
@@ -358,8 +360,8 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
               }) : (
                 <div className="p-3 text-xs text-slate-500">
                   {linhaSelecionada
-                    ? `Nenhuma tipologia encontrada na linha ${linhaSelecionada.nome}. Você pode continuar pela descrição livre ou limpar a linha.`
-                    : 'Nenhuma tipologia encontrada. Você pode continuar pela descrição livre.'}
+                    ? `Nenhuma tipologia encontrada na linha ${linhaSelecionada.nome}. Ajuste a busca ou limpe a linha.`
+                    : 'Nenhuma tipologia encontrada. Ajuste a busca para localizar um projeto cadastrado.'}
                 </div>
               )}
             </div>

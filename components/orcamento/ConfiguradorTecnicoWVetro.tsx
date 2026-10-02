@@ -252,6 +252,33 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
 
   const completa = obrigatorias.length > 0 && preenchidas === obrigatorias.length
 
+  function rotuloValor(chave: string, valor: string) {
+    const campo = CAMPOS_WVETRO.find(item => item.chave === chave)
+    const opcaoCampo = campo?.opcoes?.find(item => item.chave === valor)
+    if (opcaoCampo) return opcaoCampo.label
+    const variavel = variaveis.find(item => item.variavel.chave === chave)
+    const opcao = opcoes.find(item => item.variavel_id === variavel?.variavel_id && item.chave === valor)
+    if (opcao) return opcao.label
+    return valor.replaceAll('_', ' ')
+  }
+
+  function montarResumo(valores: Record<string, string>) {
+    const ignorar = new Set(['wvetro_ordem', 'folga_largura_mm', 'folga_altura_mm', 'folhas'])
+    return Object.entries(valores)
+      .filter(([chave, valor]) => valorCompleto(valor) && !ignorar.has(chave))
+      .map(([chave, valor]) => ({
+        chave,
+        label: CAMPOS_WVETRO.find(item => item.chave === chave)?.label
+          || variaveis.find(item => item.variavel.chave === chave)?.variavel.label
+          || chave.replaceAll('_', ' '),
+        valor: rotuloValor(chave, valor),
+      }))
+      .slice(0, 14)
+  }
+
+  const resumoSalvo = montarResumo(value.variaveis || {})
+  const resumoAoVivo = montarResumo(rascunho)
+
   function abrir() {
     const base = {
       ...defaults,
@@ -320,6 +347,15 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
               </div>
             </div>
 
+            {resumoSalvo.length > 0 && (
+              <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Configuração atual</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {resumoSalvo.map(item => <span key={item.chave} className="rounded-lg border border-blue-100 bg-white px-2 py-1 text-[11px] text-slate-700"><b>{item.label}:</b> {item.valor}</span>)}
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={abrir}
@@ -359,6 +395,15 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                       <p className="mt-1 text-[11px] text-slate-500">As opções abaixo ficam gravadas junto com o item do orçamento e serão a entrada da receita técnica / plano de corte.</p>
                     </div>
                   </div>
+                  {resumoAoVivo.length > 0 && (
+                    <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Configuração atual</p>
+                      <div className="mt-2 space-y-1.5">
+                        {resumoAoVivo.map(item => <div key={item.chave} className="rounded-lg bg-white px-2.5 py-2 text-[11px] text-slate-700"><b>{item.label}:</b> {item.valor}</div>)}
+                      </div>
+                      <p className="mt-2 text-[10px] text-blue-700">Este resumo muda na hora conforme você altera as variáveis.</p>
+                    </div>
+                  )}
                 </aside>
 
                 <div className="space-y-5">

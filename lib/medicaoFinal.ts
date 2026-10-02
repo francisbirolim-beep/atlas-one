@@ -217,6 +217,7 @@ export async function criarMedicaoDoOrcamento(
                     tipo_esquadria: it.tipo_esquadria,
                     tipo_outro_texto: it.tipo_outro_texto || null,
                     descricao: descricaoItemMedicao(it),
+                    observacoes_medicao: it.observacao_producao || null,
                     quantidade: it.quantidade || 1,
                     ordem: idx,
             }))
