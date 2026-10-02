@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
 
-const RUNTIME_TOKEN_SHA256 = '2d050546c40597d0f4597e081de97c2243e4b91fbafff0c4fa0793cc519407a0'
+const RUNTIME_TOKEN_SHA256 = '0413cfd7c64307c11557c1504aa285a6df978e8e210019cb335c75ce837aedfe'
 
 function tokenValido(recebido: string) {
   if (!recebido) return false
