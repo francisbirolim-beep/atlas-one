@@ -997,9 +997,7 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     return !conversa.responsavel_id && acesso.atender
   })
 
-  const ids = permitidas.map(conversa => conversa.id)
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]  if (!ids.length) return permitidas
+  const ids = permitidas.map(conversa => conversa.id)  if (!ids.length) return permitidas
   const [transferenciasResp, acompanhamentosResp] = await Promise.all([
     supabaseAdmin
       .from('atendimento_eventos')
@@ -1697,5 +1695,3 @@ export async function finalizarConversa(conversaId: string, usuario: UsuarioTena
     usuarioNome: usuario.nome,
   })
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
