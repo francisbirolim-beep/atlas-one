@@ -35,6 +35,15 @@ function imagemTipologia(t: Tipologia) {
   return String(item.foto_url || item.imagem_url || item.desenho_url || item.thumbnail_url || '').trim() || null
 }
 
+function folhasDaTipologia(t: Tipologia | null) {
+  if (!t) return ''
+  const texto = normalizar(`${t.label} ${t.chave}`)
+  const match = texto.match(/(?:^|\s)(\d{1,2})\s*folhas?\b/)
+  if (!match) return ''
+  const numero = Number.parseInt(match[1], 10)
+  return Number.isFinite(numero) && numero > 0 ? String(numero) : ''
+}
+
 export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props) {
   const [tipologias, setTipologias] = useState<Tipologia[]>([])
   const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
@@ -169,7 +178,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       configuracaoStatus: 'pendente',
       modoConfiguracao: 'rapido',
       modoOrigem: 'manual',
-      variaveis: ehBoxCantoTexto(texto) ? { ...value.variaveis, atlas_medida_layout: 'box_canto' } : {},
+      variaveis: ehBoxCantoTexto(texto) ? { atlas_medida_layout: 'box_canto' } : {},
     })
   }
 
@@ -219,6 +228,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   function selecionarTipologia(t: Tipologia) {
     const linhaReal = linhaDaTipologia(t)
     const canto = ehBoxCantoTexto(`${t.label} ${t.chave}`)
+    const folhasDefinidas = folhasDaTipologia(t)
 
     if (linhaReal) {
       setLinhaSelecionadaId(linhaReal.id)
@@ -233,6 +243,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       tipologiaId: t.id,
       tipo: t.chave || 'outro',
       tipoOutroTexto: value.tipoOutroTexto,
+      folhas: folhasDefinidas,
       modoOrigem: 'manual',
       produtoId: null,
       precoUnit: null,
@@ -241,7 +252,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       configuracaoValidada: false,
       configuracaoStatus: 'pendente',
       modoConfiguracao: 'rapido',
-      variaveis: canto ? { ...value.variaveis, atlas_medida_layout: 'box_canto' } : {},
+      variaveis: canto ? { atlas_medida_layout: 'box_canto' } : {},
     })
   }
 
