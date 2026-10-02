@@ -26,10 +26,12 @@ export default function AssistenteComercialPage() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     usuarioAtual().then(u => setNome(u?.nome || ''))
+    setSessionId(window.sessionStorage.getItem('atlas_ia_comercial_opencode_session'))
   }, [])
 
   useEffect(() => {
@@ -51,10 +53,14 @@ export default function AssistenteComercialPage() {
       const resp = await fetch('/api/ia/comercial', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pergunta: texto }),
+        body: JSON.stringify({ pergunta: texto, sessionId }),
       })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Não foi possível consultar a IA.')
+      if (json.sessionId) {
+        setSessionId(json.sessionId)
+        window.sessionStorage.setItem('atlas_ia_comercial_opencode_session', json.sessionId)
+      }
       setMensagens(prev => [
         ...prev,
         {
@@ -106,7 +112,7 @@ export default function AssistenteComercialPage() {
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-bold text-slate-800">Assistente Comercial</h1>
-            <p className="text-xs text-slate-400">IA do Atlas · aprende com feedback humano</p>
+            <p className="text-xs text-slate-400">OpenCode · FreeLLMAPI · memória supervisionada</p>
           </div>
           <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 sm:inline">Somente sugestões</span>
         </div>
