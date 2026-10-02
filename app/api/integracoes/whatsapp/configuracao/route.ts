@@ -15,7 +15,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
   }
 
-  const [configResp, regrasResp, usuariosResp] = await Promise.all([
+  const [
+    configResp,
+    regrasResp,
+    usuariosResp,
+    gruposResp,
+    gruposAutomacaoResp,
+    canaisResp,
+  ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_configuracoes')
       .select('empresa_id,numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_qr_data_url,gateway_qr_updated_at,gateway_connected_jid,gateway_last_seen_at,gateway_device_name')
@@ -31,8 +38,32 @@ export async function GET(req: NextRequest) {
       .select('id,nome')
       .eq('empresa_id', usuario.empresa_id)
       .order('nome'),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupos')
+      .select('id,whatsapp_canal_id,grupo_jid,nome,participantes,ativo,sincronizado_em')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true)
+      .order('nome'),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_automacoes')
+      .select('id,grupo_id,tipo,responsavel_id,ativo,criar_rascunho,criar_tarefa,janela_agregacao_minutos')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('tipo', 'orcamento'),
+    supabaseAdmin
+      .from('atendimento_whatsapp_canais')
+      .select('id,nome,numero_declarado,principal')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true),
   ])
-  const erro = configResp.error || regrasResp.error || usuariosResp.error
+
+  const erro =
+    configResp.error ||
+    regrasResp.error ||
+    usuariosResp.error ||
+    gruposResp.error ||
+    gruposAutomacaoResp.error ||
+    canaisResp.error
+
   if (erro) {
     return NextResponse.json({ error: erro.message }, { status: 500 })
   }
@@ -42,6 +73,9 @@ export async function GET(req: NextRequest) {
     configuracao: configResp.data || null,
     regras: regrasResp.data || [],
     usuarios: usuariosResp.data || [],
+    grupos: gruposResp.data || [],
+    gruposAutomacao: gruposAutomacaoResp.data || [],
+    canais: canaisResp.data || [],
   })
 }
 
@@ -99,6 +133,48 @@ export async function PUT(req: NextRequest) {
         .from('atendimento_regras_roteamento')
         .insert(linhas)
       if (regrasError) throw regrasError
+    }
+
+    const gruposAutomacao = Array.isArray(body?.gruposAutomacao) ? body.gruposAutomacao : []
+    const { data: gruposPermitidos, error: gruposPermitidosError } = await supabaseAdmin
+      .from('atendimento_whatsapp_grupos')
+      .select('id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true)
+    if (gruposPermitidosError) throw gruposPermitidosError
+
+    const idsPermitidos = new Set((gruposPermitidos || []).map(g => g.id))
+    const { error: limparAutomacoesError } = await supabaseAdmin
+      .from('atendimento_whatsapp_grupo_automacoes')
+      .delete()
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('tipo', 'orcamento')
+    if (limparAutomacoesError) throw limparAutomacoesError
+
+    const linhasAutomacao = gruposAutomacao
+      .filter((item: any) => item?.ativo === true && idsPermitidos.has(String(item?.grupoId || '')))
+      .map((item: any) => {
+        const responsavelId = item?.responsavelId ? String(item.responsavelId) : null
+        const janela = Number(item?.janelaAgregacaoMinutos || 5)
+        return {
+          empresa_id: usuario.empresa_id,
+          grupo_id: String(item.grupoId),
+          tipo: 'orcamento',
+          responsavel_id: responsavelId,
+          ativo: true,
+          criar_rascunho: item?.criarRascunho !== false,
+          criar_tarefa: item?.criarTarefa !== false && Boolean(responsavelId),
+          janela_agregacao_minutos: Math.max(1, Math.min(120, Number.isFinite(janela) ? janela : 5)),
+          created_by: usuario.id,
+          updated_at: new Date().toISOString(),
+        }
+      })
+
+    if (linhasAutomacao.length) {
+      const { error: automacoesError } = await supabaseAdmin
+        .from('atendimento_whatsapp_grupo_automacoes')
+        .insert(linhasAutomacao)
+      if (automacoesError) throw automacoesError
     }
 
     return NextResponse.json({ ok: true })
