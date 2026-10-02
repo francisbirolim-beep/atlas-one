@@ -37,6 +37,8 @@ export type ComponentePrecificacao = {
   incluido_manual: boolean
   excluido: boolean
   observacoes?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type PoliticaItem = {
