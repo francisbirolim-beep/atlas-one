@@ -792,6 +792,17 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
     .eq('id', conversaId)
     .maybeSingle()
   if (!data || data.empresa_id !== usuario.empresa_id) return null
+  if (!data.whatsapp_canal_id) return null
+
+  const { data: canalConectado } = await supabaseAdmin
+    .from('atendimento_whatsapp_canais')
+    .select('id')
+    .eq('id', data.whatsapp_canal_id)
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('ativo', true)
+    .eq('gateway_status', 'connected')
+    .maybeSingle()
+  if (!canalConectado) return null
   if (usuario.role === 'master') return data as AtendimentoConversa
 
   const acesso = await acessoCanalWhatsApp(usuario, data.whatsapp_canal_id)
