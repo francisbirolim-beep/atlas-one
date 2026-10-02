@@ -103,7 +103,7 @@ export default function AtlasIAPage() {
         <button onClick={() => { setBolhas([]); setHistorico([]); setImagemPendente(null) }} className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444]"><MessageSquarePlus size={17}/> Nova conversa</button>
         <div className="space-y-2 text-sm">
           <div className="rounded-xl bg-white/10 p-3"><Bot size={17} className="mb-2"/><b>Assistente geral</b><p className="mt-1 text-xs text-white/60">Consulta o Atlas conforme suas permissões.</p></div>
-          <div className="rounded-xl p-3 text-white/70"><Brain size={17} className="mb-2"/>Projetos e agentes <span className="text-xs">(próxima etapa)</span></div>
+          <Link href="/atlas-ia/especialistas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10"><Brain size={17} className="mb-2"/><b>Especialistas Atlas</b><p className="mt-1 text-xs text-white/50">14 IAs por área com acesso por setor.</p></Link>
           <Link href="/atlas-ia/conhecimento" className="block rounded-xl p-3 text-white/80 hover:bg-white/10"><FileText size={17} className="mb-2"/><b>Base de conhecimento</b><p className="mt-1 text-xs text-white/50">Revisar e validar conhecimento.</p></Link>
         </div>
         <div className="mt-auto rounded-xl bg-emerald-400/10 p-3 text-xs text-emerald-100"><ShieldCheck size={16} className="mb-1"/>Acesso aos dados respeita as permissões do usuário.</div>
