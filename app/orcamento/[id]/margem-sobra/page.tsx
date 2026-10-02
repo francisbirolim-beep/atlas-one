@@ -115,5 +115,3 @@ export default function MargemSobraPage() {
     <section className="sticky bottom-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white/95 p-3 shadow-lg backdrop-blur"><Link href={`/orcamento/${orcamentoId}/precificacao?etapa=perfis`} className="rounded-xl border px-4 py-2 text-sm font-semibold">Voltar aos custos</Link><span className="text-xs text-slate-500">Custos técnicos separados das decisões comerciais.</span><Link href={`/orcamento/${orcamentoId}/precificacao-final`} className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Continuar: Precificação final <ChevronRight size={16}/></Link></section>
   </div></main>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
