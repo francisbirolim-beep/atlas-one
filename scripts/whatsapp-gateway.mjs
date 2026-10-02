@@ -59,6 +59,9 @@ fs.mkdirSync(SESSIONS_DIR, { recursive: true })
 
 const sessions = new Map()
 const qrStates = new Map()
+const groupSyncTimers = new Map()
+const groupSyncLastAt = new Map()
+const groupSyncInFlight = new Set()
 let shuttingDown = false
 let refreshTimer = null
 let queueTimer = null
@@ -172,13 +175,120 @@ async function reportState(channelId, status, extra = {}) {
   }
 }
 
+function phoneFromJid(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const jid = jidNormalizedUser(raw)
+  if (!jid.endsWith('@s.whatsapp.net')) return null
+  return jid.split('@')[0].split(':')[0].replace(/\D/g, '') || null
+}
+
 function phoneFromKey(key) {
-  const candidates = [key?.remoteJidAlt, key?.remoteJid]
+  return phoneFromJid(key?.remoteJidAlt) || phoneFromJid(key?.remoteJid)
+}
+
+function chatIdentity(key) {
+  const remote = String(key?.remoteJid || '').trim()
+  if (!remote || remote === 'status@broadcast' || remote.endsWith('@broadcast') || remote.endsWith('@newsletter')) {
+    return { kind: 'ignore', chatJid: null, telefone: null }
+  }
+
+  if (remote.endsWith('@g.us')) {
+    const telefone = phoneFromJid(key?.participantAlt) ||
+      phoneFromJid(key?.participant) ||
+      phoneFromJid(key?.remoteJidAlt)
+    return { kind: 'grupo', chatJid: remote, telefone }
+  }
+
+  const telefone = phoneFromKey(key)
+  if (!telefone) return { kind: 'ignore', chatJid: null, telefone: null }
+  const chatJid = [key?.remoteJidAlt, key?.remoteJid]
     .filter(Boolean)
     .map(jidNormalizedUser)
-  const jid = candidates.find((value) => value.endsWith('@s.whatsapp.net'))
-  if (!jid) return null
-  return jid.split('@')[0].split(':')[0].replace(/\D/g, '')
+    .find((value) => value.endsWith('@s.whatsapp.net')) || `${telefone}@s.whatsapp.net`
+  return { kind: 'contato', chatJid, telefone }
+}
+
+function isStatusOrBroadcastJid(value) {
+  const jid = String(value || '').trim().toLowerCase()
+  return jid === 'status@broadcast' || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')
+}
+
+async function syncContacts(channel, contacts) {
+  const rows = (contacts || []).map((c) => ({
+    id: c?.id || null,
+    name: c?.name || null,
+    notify: c?.notify || null,
+    short: c?.short || null,
+    verifiedName: c?.verifiedName || null,
+  })).filter((c) => c.id && !isStatusOrBroadcastJid(c.id) && !String(c.id).endsWith('@g.us'))
+
+  for (let i = 0; i < rows.length; i += 250) {
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'contacts_sync',
+        channelId: channel.id,
+        contacts: rows.slice(i, i + 250),
+      }),
+    })
+  }
+}
+
+async function syncGroups(channel, sock) {
+  if (groupSyncInFlight.has(channel.id)) return
+  groupSyncInFlight.add(channel.id)
+  groupSyncLastAt.set(channel.id, Date.now())
+  try {
+    const encontrados = await sock.groupFetchAllParticipating()
+    const entries = Object.entries(encontrados || {})
+    const groups = []
+    let metadataErros = 0
+
+    for (const [jidChave, grupo] of entries) {
+      const jid = String(grupo?.id || jidChave || '').trim()
+      if (!jid.endsWith('@g.us')) continue
+      let meta = grupo || {}
+      if (!meta?.subject || !Array.isArray(meta?.participants)) {
+        try { meta = await sock.groupMetadata(jid) || meta }
+        catch { metadataErros += 1 }
+        await new Promise((resolve) => setTimeout(resolve, 220))
+      }
+      const nome = String(meta?.subject || meta?.name || '').trim() || 'Grupo WhatsApp'
+      const participantes = Array.isArray(meta?.participants)
+        ? meta.participants.length
+        : Math.max(0, Number(meta?.size || 0))
+      groups.push({ jid, id: jid, nome, subject: nome, name: nome, participantes, size: participantes })
+    }
+
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'groups_sync',
+        channelId: channel.id,
+        groups,
+      }),
+    })
+    const nomeados = groups.filter((g) => g.nome !== 'Grupo WhatsApp').length
+    console.log(`[gateway:${channel.id}] grupos sincronizados: ${groups.length}; nomeados: ${nomeados}; metadataErros: ${metadataErros}`)
+  } catch (error) {
+    console.error(`[gateway:${channel.id}] grupos:`, error instanceof Error ? error.message : String(error))
+  } finally {
+    groupSyncLastAt.set(channel.id, Date.now())
+    groupSyncInFlight.delete(channel.id)
+  }
+}
+
+function agendarSyncGroups(channel, sock, atrasoMs = 1500) {
+  const ultima = Number(groupSyncLastAt.get(channel.id) || 0)
+  if (groupSyncInFlight.has(channel.id) || Date.now() - ultima < 30_000) return
+  const anterior = groupSyncTimers.get(channel.id)
+  if (anterior) clearTimeout(anterior)
+  const timer = setTimeout(() => {
+    groupSyncTimers.delete(channel.id)
+    void syncGroups(channel, sock)
+  }, atrasoMs)
+  groupSyncTimers.set(channel.id, timer)
 }
 
 function extensaoPorMime(mimeType, fallback = 'bin') {
@@ -297,8 +407,30 @@ async function baixarMidia(sock, msg) {
 }
 
 async function registerInbound(channel, msg, sock) {
-  if (!msg?.message || msg?.key?.fromMe) return
-  const telefone = phoneFromKey(msg.key)
+  if (!msg?.message) return
+
+  const identity = chatIdentity(msg.key)
+  if (identity.kind === 'ignore') return
+
+  const rawContent = extractMessageContent(msg.message)
+  const rawType = getContentType(rawContent || {}) || 'unknown'
+  const contextInfo = rawContent?.[rawType]?.contextInfo || null
+  const isForwarded = contextInfo?.isForwarded === true || Number(contextInfo?.forwardingScore || 0) > 0
+  const fromMe = msg?.key?.fromMe === true
+
+  if (fromMe && identity.kind !== 'grupo') return
+  if (fromMe && identity.kind === 'grupo' && !isForwarded) return
+
+  let grupoNome = null
+  if (identity.kind === 'grupo') {
+    try {
+      const meta = await sock.groupMetadata(identity.chatJid)
+      grupoNome = meta?.subject || null
+    } catch {}
+  }
+
+  const telefone = identity.telefone ||
+    (identity.kind === 'grupo' ? String(identity.chatJid || '').split('@')[0].replace(/\D/g, '') : null)
   if (!telefone) return
 
   const whatsappMessageId = msg.key?.id || null
@@ -361,7 +493,15 @@ async function registerInbound(channel, msg, sock) {
       type: 'inbound',
       channelId: channel.id,
       telefone,
-      contatoNome: msg.pushName || null,
+      contatoNome: identity.kind === 'grupo' ? (grupoNome || 'Grupo WhatsApp') : (msg.pushName || null),
+      chatTipo: identity.kind,
+      chatJid: identity.chatJid,
+      grupoNome,
+      participanteJid: identity.kind === 'grupo' ? (msg.key?.participantAlt || msg.key?.participant || null) : null,
+      participanteTelefone: identity.kind === 'grupo' ? (identity.telefone || null) : null,
+      participanteNome: identity.kind === 'grupo' ? (msg.pushName || null) : null,
+      fromMe,
+      isForwarded,
       whatsappMessageId,
       messageType: extracted.messageType,
       texto: extracted.texto,
@@ -373,6 +513,14 @@ async function registerInbound(channel, msg, sock) {
       payload: {
         remoteJid: msg.key?.remoteJid || null,
         remoteJidAlt: msg.key?.remoteJidAlt || null,
+        participanteJid: msg.key?.participantAlt || msg.key?.participant || null,
+        chatTipo: identity.kind,
+        chatJid: identity.chatJid,
+        grupoNome,
+        participanteTelefone: identity.kind === 'grupo' ? (identity.telefone || null) : null,
+        participanteNome: identity.kind === 'grupo' ? (msg.pushName || null) : null,
+        fromMe,
+        isForwarded,
         ptt: extracted.ptt === true,
         reactionKey: extracted.reactionKey || null,
         mediaError,
@@ -391,8 +539,10 @@ async function processQueue(channelId) {
     if (!item) return
 
     try {
-      const jid = `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
       const payload = item.payload && typeof item.payload === 'object' ? item.payload : {}
+      const jid = payload.chatJid && String(payload.chatJid).endsWith('@g.us')
+        ? String(payload.chatJid)
+        : `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
       let conteudo
 
       if (item.tipo === 'text') {
@@ -550,6 +700,7 @@ async function connectChannel(channel) {
         console.log(
           `[gateway] conectado: ${channel.nome} -> ${result?.connectedNumber || connectedJid || 'ok'}`,
         )
+        agendarSyncGroups(channel, sock, 250)
       }
 
       if (connection === 'close') {
@@ -574,6 +725,24 @@ async function connectChannel(channel) {
       }
     })
 
+    sock.ev.on('messaging-history.set', async ({ contacts }) => {
+      try {
+        await syncContacts(channel, contacts || [])
+      } catch (error) {
+        console.error(`[gateway:${channel.id}] contatos historicos:`, error.message)
+      }
+    })
+
+    sock.ev.on('contacts.upsert', async (contacts) => {
+      try { await syncContacts(channel, contacts || []) }
+      catch (error) { console.error(`[gateway:${channel.id}] contatos:`, error.message) }
+    })
+
+    sock.ev.on('contacts.update', async (contacts) => {
+      try { await syncContacts(channel, contacts || []) }
+      catch (error) { console.error(`[gateway:${channel.id}] contatos update:`, error.message) }
+    })
+
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return
       for (const msg of messages || []) {
@@ -584,6 +753,9 @@ async function connectChannel(channel) {
         }
       }
     })
+
+    sock.ev.on('groups.upsert', () => { agendarSyncGroups(channel, sock) })
+    sock.ev.on('groups.update', () => { agendarSyncGroups(channel, sock) })
   } catch (error) {
     sessions.delete(channel.id)
     console.error(`[gateway] falha ao iniciar ${channel.nome}:`, error.message)
