@@ -121,7 +121,7 @@ export default function WhatsAppAtendimentoPage() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<'minhas' | 'fila' | 'todas' | 'nao_lidas' | 'grupos'>('minhas')
+  const [filtro, setFiltro] = useState<'minhas' | 'fila' | 'todas' | 'nao_lidas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
@@ -170,14 +170,14 @@ export default function WhatsAppAtendimentoPage() {
       setAcessos(json.acessos || [])
       setCanaisConectados(Number(json.canaisConectados || 0))
       setCanaisTotal(Number(json.canaisTotal || 0))
-      if (selecionar && !ativa && json.conversas?.[0]) {
+      if (selecionar && !ativa) {
         const conversaId = typeof window !== 'undefined'
           ? new URLSearchParams(window.location.search).get('conversaId')
           : null
         const solicitada = conversaId
           ? (json.conversas || []).find((c: Conversa) => c.id === conversaId)
           : null
-        setAtiva(solicitada || json.conversas[0])
+        if (solicitada) setAtiva(solicitada)
       }
       if (ativa) {
         const atualizada = (json.conversas || []).find((c: Conversa) => c.id === ativa.id)
@@ -353,9 +353,9 @@ export default function WhatsAppAtendimentoPage() {
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     return conversas.filter(c => {
+      if (!c.ultima_mensagem_em) return false
       if (filtro === 'fila' && (c.responsavel_id || c.whatsapp_chat_tipo === 'grupo')) return false
       if (filtro === 'minhas' && c.responsavel_id !== eu?.id) return false
-      if (filtro === 'todas' && eu?.role !== 'master') return false
       if (filtro === 'nao_lidas' && !c.nao_lidas) return false
       if (filtro === 'grupos' && c.whatsapp_chat_tipo !== 'grupo') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
@@ -544,13 +544,16 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
-  const totais = useMemo(() => ({
-    todas: conversas.length,
-    fila: conversas.filter(c => !c.responsavel_id && c.whatsapp_chat_tipo !== 'grupo').length,
-    minhas: conversas.filter(c => c.responsavel_id === eu?.id).length,
-    grupos: conversas.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
-    naoLidas: conversas.reduce((acc, c) => acc + Number(c.nao_lidas || 0), 0),
-  }), [conversas, eu?.id])
+  const totais = useMemo(() => {
+    const chats = conversas.filter(c => Boolean(c.ultima_mensagem_em))
+    return {
+      todas: chats.length,
+      fila: chats.filter(c => !c.responsavel_id && c.whatsapp_chat_tipo !== 'grupo').length,
+      minhas: chats.filter(c => c.responsavel_id === eu?.id).length,
+      grupos: chats.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
+      naoLidas: chats.filter(c => Number(c.nao_lidas || 0) > 0).length,
+    }
+  }, [conversas, eu?.id])
 
   const acessoCanalAtivo = ativa?.whatsapp_canal_id
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
@@ -607,14 +610,16 @@ export default function WhatsAppAtendimentoPage() {
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-bold text-slate-900">Conversas</p>
-                  <p className="text-[11px] text-slate-500">Fila e canais em tempo real</p>
+                  <p className="text-[11px] text-slate-500">Conversas recentes em tempo real</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <select value={canalFiltro} onChange={e=>setCanalFiltro(e.target.value)}
-                    className="max-w-[145px] rounded-lg border bg-white px-2 py-1.5 text-xs font-semibold text-slate-700">
-                    <option value="todos">Todos os canais</option>
-                    {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Principal':''}</option>)}
-                  </select>
+                  {canais.length > 1 && (
+                    <select value={canalFiltro} onChange={e=>setCanalFiltro(e.target.value)}
+                      className="max-w-[145px] rounded-lg border bg-white px-2 py-1.5 text-xs font-semibold text-slate-700">
+                      <option value="todos">Todos os canais</option>
+                      {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Principal':''}</option>)}
+                    </select>
+                  )}
                   <button onClick={abrirDiretorio}
                     className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-700 hover:bg-slate-50"
                     title="Nova conversa ou abrir grupo">
@@ -627,22 +632,26 @@ export default function WhatsAppAtendimentoPage() {
                 <input value={busca} onChange={e=>setBusca(e.target.value)}
                   placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
-                <button onClick={()=>setFiltro('minhas')} className={`rounded-lg px-2 py-2 ${filtro==='minhas'?'bg-white shadow-sm':''}`}>
-                  Minhas {totais.minhas || ''}
+              <div className="mt-2 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+                <button onClick={()=>setFiltro('todas')}
+                  className={`shrink-0 rounded-lg px-3 py-2 ${filtro==='todas'?'bg-white shadow-sm':''}`}>
+                  Todas {totais.todas || ''}
                 </button>
-                <button onClick={()=>setFiltro('fila')} className={`rounded-lg px-2 py-2 ${filtro==='fila'?'bg-white shadow-sm':''}`}>
-                  Aguardando {totais.fila || ''}
-                </button>
-                <button onClick={()=>setFiltro('nao_lidas')} className={`rounded-lg px-2 py-2 ${filtro==='nao_lidas'?'bg-white shadow-sm':''}`}>
+                <button onClick={()=>setFiltro('nao_lidas')}
+                  className={`shrink-0 rounded-lg px-3 py-2 ${filtro==='nao_lidas'?'bg-white shadow-sm':''}`}>
                   Não lidas {totais.naoLidas || ''}
                 </button>
-                <button onClick={()=>setFiltro('grupos')} className={`rounded-lg px-2 py-2 ${filtro==='grupos'?'bg-white shadow-sm':''}`}>
-                  Grupos {totais.grupos || ''}
+                <button onClick={()=>setFiltro('fila')}
+                  className={`shrink-0 rounded-lg px-3 py-2 ${filtro==='fila'?'bg-white shadow-sm':''}`}>
+                  Em espera {totais.fila || ''}
                 </button>
-                <button disabled={eu?.role!=='master'} onClick={()=>setFiltro('todas')}
-                  className={`rounded-lg px-2 py-2 disabled:opacity-30 ${filtro==='todas'?'bg-white shadow-sm':''}`}>
-                  Todas {eu?.role==='master' ? totais.todas : ''}
+                <button onClick={()=>setFiltro('minhas')}
+                  className={`shrink-0 rounded-lg px-3 py-2 ${filtro==='minhas'?'bg-white shadow-sm':''}`}>
+                  Minhas {totais.minhas || ''}
+                </button>
+                <button onClick={()=>setFiltro('grupos')}
+                  className={`shrink-0 rounded-lg px-3 py-2 ${filtro==='grupos'?'bg-white shadow-sm':''}`}>
+                  Grupos {totais.grupos || ''}
                 </button>
               </div>
             </div>
@@ -661,7 +670,11 @@ export default function WhatsAppAtendimentoPage() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <b className="truncate text-sm">{c.contato_nome || telefoneFormatado(c.telefone)}</b>
+                      <b className="truncate text-sm">
+                        {c.whatsapp_chat_tipo === 'grupo'
+                          ? (c.grupo_nome || c.contato_nome || 'Grupo WhatsApp')
+                          : (c.contato_nome || telefoneFormatado(c.telefone))}
+                      </b>
                       <span className="ml-auto shrink-0 text-[10px] text-slate-400">{hora(c.ultima_mensagem_em)}</span>
                     </div>
                     <p className="truncate text-xs text-slate-500">
@@ -692,12 +705,16 @@ export default function WhatsAppAtendimentoPage() {
           <section className="flex min-h-0 min-w-0 flex-col bg-[#efeae2]">
             {!ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
-                <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione um atendimento.</p></div>
+                <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione uma conversa.</p></div>
               </div>
             ) : <>
               <div className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <b className="block truncate">{ativa.contato_nome || telefoneFormatado(ativa.telefone)}</b>
+                  <b className="block truncate">
+                    {ativa.whatsapp_chat_tipo === 'grupo'
+                      ? (ativa.grupo_nome || ativa.contato_nome || 'Grupo WhatsApp')
+                      : (ativa.contato_nome || telefoneFormatado(ativa.telefone))}
+                  </b>
                   <p className="text-xs text-slate-500">
                     {ativa.whatsapp_chat_tipo === 'grupo'
                       ? 'Grupo WhatsApp · canal compartilhado'
