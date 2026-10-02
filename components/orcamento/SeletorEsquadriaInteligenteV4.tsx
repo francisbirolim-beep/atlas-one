@@ -6,6 +6,7 @@ import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import type { SelecaoEsquadriaOrcamento, StatusConfiguracaoOrcamento } from './SeletorEsquadriaInteligenteV3'
+import ConfiguradorTecnicoWVetro from './ConfiguradorTecnicoWVetro'
 
 export type { SelecaoEsquadriaOrcamento, StatusConfiguracaoOrcamento }
 
@@ -359,6 +360,8 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
           </div>
         </div>
       )}
+
+      {value.tipologiaId && <ConfiguradorTecnicoWVetro value={value} onChange={onChange} />}
 
       {carregando && <p className="text-[11px] text-slate-400">Carregando catálogo...</p>}
     </div>
