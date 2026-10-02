@@ -664,5 +664,3 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
 
   return { ok: true as const, valorTotal, custoOtimizado: otimizado, sobraCobrada }
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
