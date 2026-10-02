@@ -645,9 +645,9 @@ export default function WhatsAppAtendimentoPage() {
                       {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Principal':''}</option>)}
                     </select>
                   )}
-                  <button onClick={abrirDiretorio}
-                    className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-700 hover:bg-slate-50"
-                    title="Nova conversa ou abrir grupo">
+                  <button onClick={abrirDiretorio} disabled={canais.length===0}
+                    className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={canais.length ? 'Nova conversa ou abrir grupo' : 'Conecte um WhatsApp primeiro'}>
                     <Plus size={16}/>
                   </button>
                 </div>
