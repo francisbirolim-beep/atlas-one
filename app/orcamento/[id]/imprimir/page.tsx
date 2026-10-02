@@ -82,7 +82,7 @@ export default function ImprimirOrcamentoPage() {
       `}</style>
 
       <div className="nao-imprimir mx-auto mb-4 flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 shadow-sm">
-        <Link href={`/orcamento/${orcamentoId}/precificacao`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
+        <Link href={`/orcamento/${orcamentoId}/precificacao?etapa=resumo`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
           <ArrowLeft size={16} /> Voltar ao cálculo
         </Link>
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
