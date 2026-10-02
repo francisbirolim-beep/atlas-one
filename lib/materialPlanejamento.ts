@@ -93,7 +93,10 @@ export type SeparacaoPacote = {
 }
 
 type FormulaRow = {
+  id?: string
   tipologia_id: string
+  configuracao_label?: string | null
+  versao?: number | null
   variaveis: TipologiaFormulasCorte['variaveis']
   pecas: TipologiaFormulasCorte['pecas']
   acessorios?: any[] | null
@@ -219,8 +222,10 @@ function linhaPendente(pacoteId: string, item: any, indice: number, descricao: s
 
 /**
  * Gera o snapshot técnico a partir do orçamento/venda atual.
- * Somente fórmulas com status `validada` entram como cálculo automático.
- * Fórmulas em validação/referência viram pendência editável, nunca compra automática.
+ * Somente fórmulas com status validada entram como cálculo automático.
+ * No orçamento de simulação, uma fórmula validada pode ser usada como referência
+ * W.Vetro mesmo se ainda estiver inativa para produção. Nos demais fluxos, além
+ * de validada ela precisa estar ativa. Fórmulas em validação continuam pendentes.
  */
 export async function gerarPacoteTecnico(
   orcamentoId: string,
@@ -241,10 +246,37 @@ export async function gerarPacoteTecnico(
 
   const tipologiaIds = Array.from(new Set(itens.map((i: any) => i?.tipologia_id).filter(Boolean))) as string[]
   const formulas = tipologiaIds.length > 0
-    ? await supabase.from('engenharia_tipologia_formulas_corte').select('tipologia_id,variaveis,pecas,acessorios,vidro,status,ativo').in('tipologia_id', tipologiaIds).eq('ativo', true)
+    ? await supabase
+        .from('engenharia_tipologia_formulas_corte')
+        .select('id,tipologia_id,configuracao_label,versao,variaveis,pecas,acessorios,vidro,status,ativo')
+        .in('tipologia_id', tipologiaIds)
+        .order('versao', { ascending: false })
     : { data: [] as any[] }
+
   const formulaMapa = new Map<string, FormulaRow>()
-  ;((formulas.data || []) as FormulaRow[]).forEach(f => formulaMapa.set(f.tipologia_id, f))
+  for (const f of (formulas.data || []) as FormulaRow[]) {
+    const atual = formulaMapa.get(f.tipologia_id)
+    const liberadaParaOrigem =
+      f.status === 'validada' &&
+      (origem === 'orcamento_simulacao' || f.ativo === true)
+
+    if (!liberadaParaOrigem) continue
+    if (!atual) {
+      formulaMapa.set(f.tipologia_id, f)
+      continue
+    }
+
+    // No orçamento, uma fórmula validada pode ser usada como referência W.Vetro
+    // mesmo ainda não estando ativa para produção. Entre fórmulas válidas, prioriza
+    // a ativa e depois a maior versão.
+    const atualAtiva = atual.ativo === true
+    const candidataAtiva = f.ativo === true
+    const atualVersao = n(atual.versao)
+    const candidataVersao = n(f.versao)
+    if ((candidataAtiva && !atualAtiva) || (candidataAtiva === atualAtiva && candidataVersao > atualVersao)) {
+      formulaMapa.set(f.tipologia_id, f)
+    }
+  }
   const produtos = await carregarProdutosTecnicos()
 
   const { data: versoes } = await supabase
