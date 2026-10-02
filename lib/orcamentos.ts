@@ -55,6 +55,14 @@ export interface DadosOrcamentoForm {
   clienteId?: string | null
   obraId?: string | null
   orcamentoIdDestino?: string | null
+  wvetroFluxo?: {
+    referencia?: string
+    codigoReferenciaInterna?: string
+    vendedorNome?: string
+    arrematePadrao?: string
+    arrematePisoPadrao?: string
+    tipoMedidaContramarco?: string
+  }
   itens: ItemOrcamentoForm[]
   clienteNome: string
   clienteWhatsapp: string
@@ -153,6 +161,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
+    wvetroFluxo,
   } = dados
   const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
 
@@ -330,6 +339,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     acabamento, acabamento_outro_texto: acabamento === 'outro' ? acabamentoOutroTexto : null,
     temperatura, contramarco, itens: itensSalvos, fotos_urls: fotosUrls, anexos: anexosSalvos,
     tipo_medida: tipoMedidaOrcamento,
+    wvetro_fluxo: wvetroFluxo || {},
     revisao_grupo_id: novoId,
     descricao_livre: null, valor_estimado: null, status: 'rascunho', modo_entrada: 'formulario',
     coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString(),
@@ -401,3 +411,5 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true, id: idResultado }
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
