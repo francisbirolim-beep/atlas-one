@@ -6,6 +6,7 @@ import SeletorV4, {
   type SelecaoEsquadriaOrcamento,
   type StatusConfiguracaoOrcamento,
 } from './SeletorEsquadriaInteligenteV4'
+import ConfiguradorTecnicoWvetro from './ConfiguradorTecnicoWvetro'
 
 export type { SelecaoEsquadriaOrcamento, StatusConfiguracaoOrcamento }
 
@@ -216,7 +217,10 @@ export default function SeletorEsquadriaInteligenteV5({ value, onChange }: Props
       <datalist id={descricaoListId}>
         {sugestoesDescricao.map(opcao => <option key={opcao} value={opcao} />)}
       </datalist>
-      <SeletorV4 value={value} onChange={aplicarPatch} />
+      <div className="space-y-4">
+        <SeletorV4 value={value} onChange={aplicarPatch} />
+        <ConfiguradorTecnicoWvetro value={value} onChange={aplicarPatch} />
+      </div>
     </div>
   )
 }
