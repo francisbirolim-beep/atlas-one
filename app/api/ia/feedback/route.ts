@@ -11,10 +11,10 @@ async function autenticar(req: NextRequest) {
   if (!authData.user) return null
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome')
+    .select('id,nome,empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
-  return data || { id: authData.user.id, nome: null }
+  return data?.empresa_id ? data : null
 }
 
 export async function POST(req: NextRequest) {
@@ -37,8 +37,9 @@ export async function POST(req: NextRequest) {
 
     const { data: interacao } = await supabaseAdmin
       .from('ai_interacoes')
-      .select('id,pergunta,resposta,contexto')
+      .select('id,pergunta,resposta,contexto,empresa_id')
       .eq('id', interacaoId)
+      .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
     if (!interacao) return NextResponse.json({ error: 'Interação não encontrada' }, { status: 404 })
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       .from('ai_feedback')
       .upsert(
         {
+          empresa_id: usuario.empresa_id,
           interacao_id: interacaoId,
           usuario_id: usuario.id,
           usuario_nome: usuario.nome || null,
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest) {
     // exemplo supervisionado no histórico, sem lotar a memória com duplicatas.
     if (avaliacao === 'corrigido' && correcao) {
       await supabaseAdmin.from('ai_memorias').insert({
+        empresa_id: usuario.empresa_id,
         escopo: interacao.contexto || 'comercial',
         titulo: `Correção humana: ${String(interacao.pergunta).slice(0, 120)}`,
         conteudo: correcao,
