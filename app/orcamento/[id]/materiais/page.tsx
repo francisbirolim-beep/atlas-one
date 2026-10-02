@@ -178,5 +178,3 @@ export default function ListaMateriaisOrcamentoPage() {
     </div>
   </main>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
