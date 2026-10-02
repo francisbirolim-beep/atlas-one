@@ -1,8 +1,11 @@
 'use client'
 
-// Entrada estável do Orçamento: V5 prioriza descrição livre, busca opcional e tratamento específico do Box de Canto.
-export { default } from './SeletorEsquadriaInteligenteV5'
+// Fluxo Sob Medida: seleção visual + configuração técnica no padrão operacional do W.Vetro.
+// V2 mantém a matriz técnica/variáveis; a camada atual reproduz o modal de variáveis gravado em 2026-10-01.
+export { default } from './SeletorEsquadriaInteligenteV2'
 export type {
   SelecaoEsquadriaOrcamento,
   StatusConfiguracaoOrcamento,
-} from './SeletorEsquadriaInteligenteV5'
+} from './SeletorEsquadriaInteligenteV2'
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
