@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     gruposResp,
     gruposAutomacaoResp,
     canaisResp,
+    permissoesResp,
   ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_configuracoes')
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
       .order('prioridade'),
     supabaseAdmin
       .from('usuarios')
-      .select('id,nome')
+      .select('id,nome,role')
       .eq('empresa_id', usuario.empresa_id)
       .order('nome'),
     supabaseAdmin
@@ -51,9 +52,14 @@ export async function GET(req: NextRequest) {
       .eq('tipo', 'orcamento'),
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
-      .select('id,nome,numero_declarado,principal')
+      .select('id,nome,numero_declarado,principal,gateway_status')
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true),
+    supabaseAdmin
+      .from('atendimento_whatsapp_permissoes')
+      .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
+      .eq('empresa_id', usuario.empresa_id)
+      .order('created_at'),
   ])
 
   const erro =
@@ -62,7 +68,8 @@ export async function GET(req: NextRequest) {
     usuariosResp.error ||
     gruposResp.error ||
     gruposAutomacaoResp.error ||
-    canaisResp.error
+    canaisResp.error ||
+    permissoesResp.error
 
   if (erro) {
     return NextResponse.json({ error: erro.message }, { status: 500 })
@@ -76,6 +83,7 @@ export async function GET(req: NextRequest) {
     grupos: gruposResp.data || [],
     gruposAutomacao: gruposAutomacaoResp.data || [],
     canais: canaisResp.data || [],
+    permissoes: permissoesResp.data || [],
   })
 }
 

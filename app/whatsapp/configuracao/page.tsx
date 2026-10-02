@@ -2,11 +2,26 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, MessageCircleMore, Plus, Save, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, MessageCircleMore, Plus, Save, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 
-type Usuario = { id: string; nome: string }
-type CanalResumo = { id: string; nome: string; numero_declarado?: string | null; principal?: boolean }
+type Usuario = { id: string; nome: string; role?: string | null }
+type CanalResumo = {
+  id: string
+  nome: string
+  numero_declarado?: string | null
+  principal?: boolean
+  gateway_status?: string | null
+}
+type PermissaoCanal = {
+  id?: string
+  canal_id: string
+  usuario_id: string
+  pode_visualizar: boolean
+  pode_atender: boolean
+  pode_transferir: boolean
+  pode_supervisionar: boolean
+}
 type GrupoWhatsApp = {
   id: string
   whatsapp_canal_id: string
@@ -43,6 +58,7 @@ async function authHeaders() {
 export default function ConfiguracaoWhatsAppPage() {
   const [usuarios,setUsuarios]=useState<Usuario[]>([])
   const [canais,setCanais]=useState<CanalResumo[]>([])
+  const [permissoes,setPermissoes]=useState<PermissaoCanal[]>([])
   const [grupos,setGrupos]=useState<GrupoWhatsApp[]>([])
   const [gruposAutomacao,setGruposAutomacao]=useState<GrupoAutomacao[]>([])
   const [numero,setNumero]=useState('5517996355667')
@@ -63,6 +79,7 @@ export default function ConfiguracaoWhatsAppPage() {
     if(!resp.ok){setErro(json.error||'Nao foi possivel carregar.');return}
     setUsuarios(json.usuarios||[])
     setCanais(json.canais||[])
+    setPermissoes(json.permissoes||[])
     const gruposRecebidos:GrupoWhatsApp[]=json.grupos||[]
     const automacoesRecebidas:any[]=json.gruposAutomacao||[]
     const automacaoPorGrupo=new Map(automacoesRecebidas.map(a=>[a.grupo_id,a]))
@@ -100,6 +117,65 @@ export default function ConfiguracaoWhatsAppPage() {
 
   function alterarGrupo(grupoId:string,campo:keyof GrupoAutomacao,valor:string|number|boolean){
     setGruposAutomacao(gs=>gs.map(g=>g.grupoId===grupoId?{...g,[campo]:valor}:g))
+  }
+
+  function permissaoDoUsuario(canalId:string,usuarioId:string):PermissaoCanal {
+    return permissoes.find(p=>p.canal_id===canalId&&p.usuario_id===usuarioId)||{
+      canal_id:canalId,
+      usuario_id:usuarioId,
+      pode_visualizar:false,
+      pode_atender:false,
+      pode_transferir:false,
+      pode_supervisionar:false,
+    }
+  }
+
+  async function salvarPermissao(
+    canalId:string,
+    usuarioId:string,
+    campo:'pode_visualizar'|'pode_atender'|'pode_transferir'|'pode_supervisionar',
+    valor:boolean,
+  ){
+    setErro('')
+    try{
+      const atual=permissaoDoUsuario(canalId,usuarioId)
+      const proxima={...atual,[campo]:valor}
+      if(campo!=='pode_visualizar'&&valor)proxima.pode_visualizar=true
+      const headers=await authHeaders()
+      const resp=await fetch('/api/integracoes/whatsapp/canais/permissoes',{
+        method:'PUT',headers,
+        body:JSON.stringify({
+          canalId,usuarioId,
+          podeVisualizar:proxima.pode_visualizar,
+          podeAtender:proxima.pode_atender,
+          podeTransferir:proxima.pode_transferir,
+          podeSupervisionar:proxima.pode_supervisionar,
+        }),
+      })
+      const json=await resp.json()
+      if(!resp.ok)throw new Error(json.error||'Nao foi possivel salvar a permissao.')
+      setPermissoes(lista=>[
+        ...lista.filter(p=>!(p.canal_id===canalId&&p.usuario_id===usuarioId)),
+        json.permissao,
+      ])
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Nao foi possivel salvar a permissao.')
+    }
+  }
+
+  async function revogarPermissao(canalId:string,usuarioId:string){
+    setErro('')
+    try{
+      const headers=await authHeaders()
+      const resp=await fetch(`/api/integracoes/whatsapp/canais/permissoes?canalId=${encodeURIComponent(canalId)}&usuarioId=${encodeURIComponent(usuarioId)}`,{
+        method:'DELETE',headers,
+      })
+      const json=await resp.json()
+      if(!resp.ok)throw new Error(json.error||'Nao foi possivel revogar a permissao.')
+      setPermissoes(lista=>lista.filter(p=>!(p.canal_id===canalId&&p.usuario_id===usuarioId)))
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Nao foi possivel revogar a permissao.')
+    }
   }
 
   function adicionar(){
@@ -145,8 +221,8 @@ export default function ConfiguracaoWhatsAppPage() {
         <div className="flex items-center gap-3">
           <Link href="/whatsapp" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={18}/></Link>
           <div>
-            <h1 className="font-bold text-slate-900">Roteamento do WhatsApp</h1>
-            <p className="text-xs text-slate-500">Configuracao exclusiva do usuario Master</p>
+            <h1 className="font-bold text-slate-900">Configurações do WhatsApp</h1>
+            <p className="text-xs text-slate-500">Multiatendimento, equipe, permissões, filas e automações</p>
           </div>
         </div>
         <button onClick={()=>void salvar()} disabled={salvando}
@@ -173,6 +249,79 @@ export default function ConfiguracaoWhatsAppPage() {
             className="rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-bold text-white">
             Gerenciar números
           </Link>
+        </section>
+
+        <section className="rounded-2xl border p-5">
+          <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={20} className="text-blue-600"/>
+                <h2 className="font-bold text-slate-900">Equipe e permissões</h2>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Todo usuário cadastrado no Atlas aparece aqui automaticamente. O Master sempre possui acesso total.
+              </p>
+            </div>
+            <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
+              {usuarios.filter(u=>u.role!=='master').length} usuários configuráveis
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {canais.map(canal=>(
+              <div key={canal.id} className="overflow-hidden rounded-2xl border">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 px-4 py-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <b className="text-sm text-slate-900">{canal.nome}</b>
+                      {canal.principal&&(
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                          PRINCIPAL
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {canal.gateway_status==='connected'?'Conectado':'Desconectado'}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Ver · Atender · Transferir · Supervisionar</p>
+                </div>
+
+                <div className="divide-y">
+                  {usuarios.filter(u=>u.role!=='master').map(u=>{
+                    const p=permissaoDoUsuario(canal.id,u.id)
+                    const ativa=Boolean(
+                      p.id||p.pode_visualizar||p.pode_atender||p.pode_transferir||p.pode_supervisionar
+                    )
+                    return (
+                      <div key={u.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(140px,1fr)_repeat(4,110px)_70px] md:items-center">
+                        <div className="min-w-0">
+                          <b className="block truncate text-sm text-slate-800">{u.nome}</b>
+                          <span className="text-[10px] uppercase tracking-wide text-slate-400">{u.role||'usuario'}</span>
+                        </div>
+                        {([
+                          ['pode_visualizar','Ver'],
+                          ['pode_atender','Atender'],
+                          ['pode_transferir','Transferir'],
+                          ['pode_supervisionar','Supervisionar'],
+                        ] as const).map(([campo,rotulo])=>(
+                          <label key={campo} className="flex cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
+                            <input type="checkbox" checked={Boolean(p[campo])}
+                              onChange={e=>void salvarPermissao(canal.id,u.id,campo,e.target.checked)}/>
+                            <span>{rotulo}</span>
+                          </label>
+                        ))}
+                        <button disabled={!ativa} onClick={()=>void revogarPermissao(canal.id,u.id)}
+                          className="text-xs font-bold text-red-600 disabled:cursor-not-allowed disabled:opacity-25">
+                          Revogar
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="grid gap-4 rounded-2xl border p-4 md:grid-cols-3">
