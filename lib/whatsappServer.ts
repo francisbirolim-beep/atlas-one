@@ -22,6 +22,8 @@ export type AtendimentoConversa = {
   ultimo_preview?: string | null
   nao_lidas?: number | null
   ultima_mensagem_em?: string | null
+  transferida_em?: string | null
+  acompanhando?: boolean
   created_at: string
   updated_at: string
 }
@@ -98,10 +100,11 @@ async function acessoCanalWhatsApp(
   const [{ data: canal }, { data: permissao }] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
-      .select('id,empresa_id,principal,usuario_id,ativo')
+      .select('id,empresa_id,principal,usuario_id,ativo,gateway_status')
       .eq('id', canalId)
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true)
+      .eq('gateway_status', 'connected')
       .maybeSingle(),
     supabaseAdmin
       .from('atendimento_whatsapp_permissoes')
@@ -140,10 +143,11 @@ async function usuarioPodeAtenderCanal(
   if (role === 'master' || !canalId) return true
   const { data: canal } = await supabaseAdmin
     .from('atendimento_whatsapp_canais')
-    .select('id,principal,usuario_id')
+    .select('id,principal,usuario_id,gateway_status')
     .eq('id', canalId)
     .eq('empresa_id', empresaId)
     .eq('ativo', true)
+    .eq('gateway_status', 'connected')
     .maybeSingle()
   if (!canal) return false
   if (canal.usuario_id === usuarioId) return true
@@ -342,6 +346,114 @@ async function regraDeRoteamento(empresaId: string, texto: string | null) {
   }) || null
 }
 
+function normalizarNomeMencao(valor: string | null | undefined) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function extrairMencaoDirecionamento(texto: string | null | undefined) {
+  const match = String(texto || '').match(/(?:^|\s)@([A-Za-zÀ-ÖØ-öø-ÿ0-9._-]+)/)
+  if (!match?.[1]) return null
+  const mencao = match[1].replace(/[.,;:!?]+$/g, '').trim()
+  return mencao || null
+}
+
+async function direcionarConversaPorMencao(params: {
+  conversa: AtendimentoConversa
+  texto?: string | null
+  sessaoId?: string | null
+}) {
+  const mencao = extrairMencaoDirecionamento(params.texto)
+  if (!mencao) return params.conversa
+
+  const alvo = normalizarNomeMencao(mencao)
+  const { data: usuarios, error } = await supabaseAdmin
+    .from('usuarios')
+    .select('id,nome,role,empresa_id')
+    .eq('empresa_id', params.conversa.empresa_id)
+    .order('nome')
+  if (error) throw error
+
+  const candidatos = (usuarios || []).filter((usuario: any) => {
+    const nome = normalizarNomeMencao(usuario.nome)
+    const primeiroNome = nome.split(' ')[0]
+    return nome === alvo || primeiroNome === alvo
+  })
+
+  if (candidatos.length !== 1) {
+    await registrarEvento({
+      empresaId: params.conversa.empresa_id,
+      conversaId: params.conversa.id,
+      sessaoId: params.sessaoId || null,
+      tipo: 'mencao_direcionamento_nao_resolvida',
+      dados: {
+        mencao,
+        motivo: candidatos.length > 1 ? 'ambiguo' : 'usuario_nao_encontrado',
+        candidatos: candidatos.map((item: any) => ({ id: item.id, nome: item.nome })),
+      },
+    })
+    return params.conversa
+  }
+
+  const destino = candidatos[0] as { id: string; nome: string; role?: string | null }
+  const podeAtender = await usuarioPodeAtenderCanal(
+    params.conversa.empresa_id,
+    params.conversa.whatsapp_canal_id,
+    destino.id,
+    destino.role,
+  )
+  if (!podeAtender) {
+    await registrarEvento({
+      empresaId: params.conversa.empresa_id,
+      conversaId: params.conversa.id,
+      sessaoId: params.sessaoId || null,
+      tipo: 'mencao_direcionamento_nao_resolvida',
+      dados: { mencao, motivo: 'sem_permissao_no_canal', destino_id: destino.id, destino_nome: destino.nome },
+    })
+    return params.conversa
+  }
+
+  const agora = new Date().toISOString()
+  const { data: atualizada, error: updateError } = await supabaseAdmin
+    .from('atendimento_conversas')
+    .update({
+      responsavel_id: destino.id,
+      responsavel_nome: destino.nome,
+      status: 'em_atendimento',
+      updated_at: agora,
+    })
+    .eq('id', params.conversa.id)
+    .select('*')
+    .single()
+  if (updateError) throw updateError
+
+  if (params.sessaoId) {
+    const { error: sessaoError } = await supabaseAdmin
+      .from('atendimento_sessoes')
+      .update({
+        responsavel_id: destino.id,
+        responsavel_nome: destino.nome,
+        status: 'em_atendimento',
+        assigned_at: agora,
+      })
+      .eq('id', params.sessaoId)
+    if (sessaoError) throw sessaoError
+  }
+
+  await registrarEvento({
+    empresaId: params.conversa.empresa_id,
+    conversaId: params.conversa.id,
+    sessaoId: params.sessaoId || null,
+    tipo: 'conversa_direcionada_mencao',
+    dados: { mencao, destino_id: destino.id, destino_nome: destino.nome },
+  })
+  return atualizada as AtendimentoConversa
+}
+
 async function garantirSessao(conversa: AtendimentoConversa) {
   const { data: aberta } = await supabaseAdmin
     .from('atendimento_sessoes')
@@ -462,6 +574,11 @@ export async function processarWebhookMeta(payload: any) {
           texto,
         })
         const sessao = await garantirSessao(conversa)
+        const conversaRoteada = await direcionarConversaPorMencao({
+          conversa,
+          texto,
+          sessaoId: sessao?.id || null,
+        })
         const media = mediaDaMensagem(msg)
         const dataMeta = msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : null
         const { error } = await supabaseAdmin.from('atendimento_mensagens').insert({
@@ -481,9 +598,9 @@ export async function processarWebhookMeta(payload: any) {
         if (error) throw error
         recebidas += 1
         await supabaseAdmin.from('atendimento_conversas').update({
-          status: conversa.responsavel_id ? 'em_atendimento' : 'aguardando',
+          status: conversaRoteada.responsavel_id ? 'em_atendimento' : 'aguardando',
           ultimo_preview: texto,
-          nao_lidas: (conversa.nao_lidas || 0) + 1,
+          nao_lidas: (conversaRoteada.nao_lidas || 0) + 1,
           ultima_mensagem_em: dataMeta || new Date().toISOString(),
           ultima_entrada_em: dataMeta || new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -637,6 +754,11 @@ export async function registrarEntradaGateway(
     texto: dados.texto || null,
   })
   const sessao = await garantirSessao(conversa)
+  const conversaRoteada = await direcionarConversaPorMencao({
+    conversa,
+    texto: dados.texto || null,
+    sessaoId: sessao?.id || null,
+  })
   const agora = dados.timestamp || new Date().toISOString()
   const texto = dados.texto || (
     dados.tipo === 'image' ? '📷 Imagem' :
@@ -669,10 +791,10 @@ export async function registrarEntradaGateway(
 
   await supabaseAdmin.from('atendimento_conversas').update({
     ultimo_preview: texto,
-    nao_lidas: (conversa.nao_lidas || 0) + 1,
+    nao_lidas: (conversaRoteada.nao_lidas || 0) + 1,
     ultima_mensagem_em: agora,
     ultima_entrada_em: agora,
-    status: conversa.responsavel_id ? 'em_atendimento' : 'aguardando',
+    status: conversaRoteada.responsavel_id ? 'em_atendimento' : 'aguardando',
     updated_at: new Date().toISOString(),
   }).eq('id', conversa.id)
 
@@ -789,6 +911,17 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
     .eq('id', conversaId)
     .maybeSingle()
   if (!data || data.empresa_id !== usuario.empresa_id) return null
+  if (!data.whatsapp_canal_id) return null
+
+  const { data: canalConectado } = await supabaseAdmin
+    .from('atendimento_whatsapp_canais')
+    .select('id')
+    .eq('id', data.whatsapp_canal_id)
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('ativo', true)
+    .eq('gateway_status', 'connected')
+    .maybeSingle()
+  if (!canalConectado) return null
   if (usuario.role === 'master') return data as AtendimentoConversa
 
   const acesso = await acessoCanalWhatsApp(usuario, data.whatsapp_canal_id)
@@ -804,9 +937,10 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
   const [{ data: canais, error: canaisError }, { data: permissoes, error: permissoesError }] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
-      .select('id,principal,usuario_id,ativo')
+      .select('id,principal,usuario_id,ativo,gateway_status')
       .eq('empresa_id', usuario.empresa_id)
-      .eq('ativo', true),
+      .eq('ativo', true)
+      .eq('gateway_status', 'connected'),
     supabaseAdmin
       .from('atendimento_whatsapp_permissoes')
       .select('canal_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
@@ -838,30 +972,63 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
 }
 
 export async function listarConversasAtendimento(usuario: UsuarioTenant) {
+  const acessos = await listarAcessosCanaisAtendimento(usuario)
+  const canaisConectados = acessos.map(acesso => acesso.canal_id)
+  if (!canaisConectados.length) return []
+
   const { data, error } = await supabaseAdmin
     .from('atendimento_conversas')
     .select('*')
     .eq('empresa_id', usuario.empresa_id)
     .eq('canal', 'whatsapp')
     .eq('ocultar_da_caixa', false)
+    .in('whatsapp_canal_id', canaisConectados)
     .order('ultima_mensagem_em', { ascending: false, nullsFirst: false })
   if (error) throw error
-  const conversas = (data || []) as AtendimentoConversa[]
-  if (usuario.role === 'master') return conversas
 
-  const acessos = await listarAcessosCanaisAtendimento(usuario)
   const acessoPorCanal = new Map(acessos.map(acesso => [acesso.canal_id, acesso]))
-
-  return conversas.filter(conversa => {
-    if (!conversa.whatsapp_canal_id) {
-      return conversa.responsavel_id === usuario.id || !conversa.responsavel_id
-    }
+  const permitidas = ((data || []) as AtendimentoConversa[]).filter(conversa => {
+    if (usuario.role === 'master') return true
+    if (!conversa.whatsapp_canal_id) return false
     const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id)
     if (!acesso?.visualizar) return false
     if (acesso.dono || acesso.supervisionar) return true
     if (conversa.responsavel_id === usuario.id) return true
     return !conversa.responsavel_id && acesso.atender
   })
+
+  const ids = permitidas.map(conversa => conversa.id)
+  if (!ids.length) return permitidas
+  const [transferenciasResp, acompanhamentosResp] = await Promise.all([
+    supabaseAdmin
+      .from('atendimento_eventos')
+      .select('conversa_id,created_at')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('tipo', 'conversa_transferida')
+      .in('conversa_id', ids)
+      .order('created_at', { ascending: false }),
+    supabaseAdmin
+      .from('atendimento_acompanhamentos')
+      .select('conversa_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('usuario_id', usuario.id)
+      .in('conversa_id', ids),
+  ])
+  if (transferenciasResp.error) throw transferenciasResp.error
+  if (acompanhamentosResp.error) throw acompanhamentosResp.error
+
+  const ultimaTransferencia = new Map<string, string>()
+  for (const evento of transferenciasResp.data || []) {
+    if (!ultimaTransferencia.has(evento.conversa_id)) {
+      ultimaTransferencia.set(evento.conversa_id, evento.created_at)
+    }
+  }
+  const acompanhadas = new Set((acompanhamentosResp.data || []).map(item => item.conversa_id))
+  return permitidas.map(conversa => ({
+    ...conversa,
+    transferida_em: ultimaTransferencia.get(conversa.id) || null,
+    acompanhando: acompanhadas.has(conversa.id),
+  }))
 }
 
 export async function listarDiretorioWhatsApp(
@@ -936,6 +1103,7 @@ export async function iniciarConversaWhatsApp(
     .eq('id', dados.canalId)
     .eq('empresa_id', usuario.empresa_id)
     .eq('ativo', true)
+    .eq('gateway_status', 'connected')
     .maybeSingle()
   if (!canal) throw new Error('Canal WhatsApp não encontrado.')
 
@@ -1208,6 +1376,8 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
   if (!conversa) throw new Error('Conversa não disponível para este usuário.')
   const corpo = texto.trim()
   if (!corpo) throw new Error('Mensagem vazia.')
+  const nomeAtendente = String(usuario.nome || 'Equipe Esquadrifácio').trim() || 'Equipe Esquadrifácio'
+  const corpoCliente = `*${nomeAtendente}:* ${corpo}`
 
   const { data: config } = await supabaseAdmin.from('atendimento_configuracoes')
     .select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
@@ -1277,7 +1447,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       mensagem_id: mensagem.id,
       telefone: conversa.telefone,
       tipo: 'text',
-      texto: corpo,
+      texto: corpoCliente,
       payload: destinoPayload,
       status: 'pendente',
       whatsapp_canal_id: canalId,
@@ -1319,7 +1489,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       messaging_product: 'whatsapp',
       to: conversa.telefone,
       type: 'text',
-      text: { preview_url: false, body: corpo },
+      text: { preview_url: false, body: corpoCliente },
     }),
   })
   const json = await resposta.json().catch(() => ({}))
@@ -1361,6 +1531,54 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
   })
 
   return { messageId, queued: false }
+}
+
+export async function marcarConversaComoLida(conversaId: string, usuario: UsuarioTenant) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  if (!conversa.nao_lidas) return
+  const { error } = await supabaseAdmin
+    .from('atendimento_conversas')
+    .update({ nao_lidas: 0, updated_at: new Date().toISOString() })
+    .eq('id', conversaId)
+    .eq('empresa_id', usuario.empresa_id)
+  if (error) throw error
+}
+
+export async function definirAcompanhamentoConversa(
+  conversaId: string,
+  acompanhar: boolean,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+
+  if (acompanhar) {
+    const { error } = await supabaseAdmin
+      .from('atendimento_acompanhamentos')
+      .upsert({
+        empresa_id: usuario.empresa_id,
+        conversa_id: conversaId,
+        usuario_id: usuario.id,
+      }, { onConflict: 'conversa_id,usuario_id' })
+    if (error) throw error
+  } else {
+    const { error } = await supabaseAdmin
+      .from('atendimento_acompanhamentos')
+      .delete()
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('conversa_id', conversaId)
+      .eq('usuario_id', usuario.id)
+    if (error) throw error
+  }
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: acompanhar ? 'conversa_acompanhada' : 'conversa_acompanhamento_removido',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+  })
 }
 
 export async function assumirConversa(conversaId: string, usuario: UsuarioTenant) {

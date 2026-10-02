@@ -11,6 +11,35 @@ export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'prop
 // Nome fixo da empresa para fins de auditoria. Ainda nao existe conceito de multi-tenant no schema atual.
 const EMPRESA_PADRAO = 'Atlas One'
 
+const NIVEIS_COM_ACESSO = new Set(['consulta', 'edicao'])
+const FERRAMENTA_SETORES: Record<string, string[]> = {
+  buscar_orcamentos: ['orcamentos', 'fazer-orcamento-msanfyvj'],
+  buscar_clientes: ['crm'],
+  buscar_assistencias: ['pos-venda', 'assistencia-abrir', 'assistencia-painel'],
+  buscar_financeiro: ['financeiro'],
+}
+
+async function buscarSetoresPermitidos(usuarioId: string, empresaId?: string): Promise<string[]> {
+  let query = supabaseAdmin
+    .from('permissoes')
+    .select('setor_id,nivel')
+    .eq('usuario_id', usuarioId)
+  if (empresaId) query = query.eq('empresa_id', empresaId)
+  const { data, error } = await query
+  if (error) return []
+  return (data || [])
+    .filter((p: any) => NIVEIS_COM_ACESSO.has(String(p.nivel)))
+    .map((p: any) => String(p.setor_id))
+}
+
+async function usuarioPodeUsarFerramenta(nome: string, usuarioId: string, usuarioRole: string, empresaId?: string) {
+  if (usuarioRole === 'master') return true
+  const setoresNecessarios = FERRAMENTA_SETORES[nome]
+  if (!setoresNecessarios?.length) return true
+  const setoresPermitidos = new Set(await buscarSetoresPermitidos(usuarioId, empresaId))
+  return setoresNecessarios.some(setorId => setoresPermitidos.has(setorId))
+}
+
 export const TOOLS = [
   {
     name: 'buscar_tarefas',
@@ -62,6 +91,18 @@ export const TOOLS = [
       properties: {
         status: { type: 'string', description: 'Status do chamado' },
         limite: { type: 'number', description: 'Numero maximo de resultados, padrao 20' },
+      },
+    },
+  },
+  {
+    name: 'buscar_financeiro',
+    description: 'Consulta contas a receber e a pagar do Financeiro. Disponivel somente quando o usuario possui permissao ativa no setor Financeiro.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: 'receber, pagar ou ambos. Padrao: ambos' },
+        status: { type: 'string', description: 'Status para filtrar, opcional' },
+        limite: { type: 'number', description: 'Numero maximo por lista, padrao 20' },
       },
     },
   },
@@ -176,9 +217,12 @@ export const MASTER_TOOLS = [
   },
 ]
 
-export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string, usuarioNome?: string): Promise<any> {
+export async function executarFerramenta(nome: string, input: any, usuarioId: string, usuarioRole: string, usuarioNome?: string, empresaId?: string): Promise<any> {
   const limite = Math.min(Number(input && input.limite) || 20, 50)
   try {
+    if (!(await usuarioPodeUsarFerramenta(nome, usuarioId, usuarioRole, empresaId))) {
+      return { erro: 'Acesso negado: este usuario nao possui permissao ativa no setor necessario para esta consulta.' }
+    }
     if (nome === 'buscar_tarefas') {
       let q = supabaseAdmin
         .from('tarefas')
@@ -203,7 +247,8 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('orcamentos')
         .select('cliente_nome,tipo_esquadria,status,temperatura,valor_estimado,created_at')
-        .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
+      q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca_cliente) q = q.ilike('cliente_nome', '%' + input.busca_cliente + '%')
       if (input && input.temperatura) q = q.eq('temperatura', input.temperatura)
@@ -214,7 +259,8 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('clientes')
         .select('nome,whatsapp,cidade,origem,responsavel')
-        .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
+      q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca) q = q.ilike('nome', '%' + input.busca + '%')
       const { data, error } = await q
@@ -224,11 +270,39 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       let q = supabaseAdmin
         .from('assistencias')
         .select('cliente_nome,descricao_problema,status,cidade,created_at')
-        .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
+      q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.status) q = q.eq('status', input.status)
       const { data, error } = await q
       return error ? { erro: error.message } : { assistencias: data }
+    }
+    if (nome === 'buscar_financeiro') {
+      const tipo = String(input?.tipo || 'ambos').toLowerCase()
+      const status = String(input?.status || '').trim()
+      const resultado: any = {}
+
+      if (tipo !== 'pagar') {
+        let qReceber = supabaseAdmin
+          .from('financeiro_contas_receber')
+          .select('cliente_nome,documento,parcela,total_parcelas,vencimento,valor,valor_pago,status,forma')
+        if (empresaId) qReceber = qReceber.eq('empresa_id', empresaId)
+        if (status) qReceber = qReceber.eq('status', status)
+        const { data, error } = await qReceber.order('vencimento', { ascending: true }).limit(limite)
+        resultado.contas_receber = error ? { erro: error.message } : data
+      }
+
+      if (tipo !== 'receber') {
+        let qPagar = supabaseAdmin
+          .from('financeiro_contas_pagar')
+          .select('fornecedor_nome,documento,parcela,descricao,vencimento,valor,valor_pago,status,forma_pagamento')
+        if (empresaId) qPagar = qPagar.eq('empresa_id', empresaId)
+        if (status) qPagar = qPagar.eq('status', status)
+        const { data, error } = await qPagar.order('vencimento', { ascending: true }).limit(limite)
+        resultado.contas_pagar = error ? { erro: error.message } : data
+      }
+
+      return resultado
     }
     if (nome === 'buscar_setores') {
       const { data, error } = await supabaseAdmin
@@ -239,16 +313,16 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       return error ? { erro: error.message } : { setores: data }
     }
     if (nome === 'buscar_base_tecnica') {
-      return await buscarBaseTecnicaAgente(input)
+      return await buscarBaseTecnicaAgente(input, empresaId)
     }
     if (nome === 'validar_conhecimento_tecnico') {
       if (usuarioRole !== 'master') return { erro: 'Ferramenta disponivel apenas para o usuario master' }
-      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId)
+      return await validarConhecimentoTecnicoAgente(input, usuarioId, usuarioNome || usuarioId, empresaId)
     }
     if (nome === 'lembrar_fato') {
       const fato = input && input.fato
       if (!fato) return { erro: 'fato vazio' }
-      await supabaseAdmin.from('agente_memorias').insert({ usuario_id: usuarioId, chave: 'fato', valor: fato })
+      await supabaseAdmin.from('agente_memorias').insert({ empresa_id: empresaId || undefined, usuario_id: usuarioId, chave: 'fato', valor: fato })
       return { ok: true, salvo: fato }
     }
     if (nome === 'ler_arquivo_codigo') {
@@ -455,34 +529,55 @@ function sanitizarMensagens(mensagens: any[]): any[] {
   return resultado
 }
 
-export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string): Promise<any> {
-  const { data: memoriasData } = await supabaseAdmin
+export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome: string, usuarioRole: string, apiKey: string, empresaId?: string): Promise<any> {
+  let memoriasQuery = supabaseAdmin
     .from('agente_memorias')
     .select('valor')
     .eq('usuario_id', usuarioId)
+  if (empresaId) memoriasQuery = memoriasQuery.eq('empresa_id', empresaId)
+  const { data: memoriasData } = await memoriasQuery
     .order('created_at', { ascending: false })
     .limit(30)
   const fatos = (memoriasData || []).map((m: any) => m.valor)
   let setoresInfo: any[] = []
   let setorIdPrincipal: string | null = null
+  let setorIdsPermitidos: string[] = []
   if (usuarioRole !== 'master') {
-    const { data: permData } = await supabaseAdmin
-      .from('permissoes')
-      .select('setor_id')
-      .eq('usuario_id', usuarioId)
-    const setorIds = (permData || []).map((p: any) => p.setor_id)
-    setorIdPrincipal = setorIds[0] || null
-    if (setorIds.length > 0) {
+    setorIdsPermitidos = await buscarSetoresPermitidos(usuarioId, empresaId)
+    setorIdPrincipal = setorIdsPermitidos[0] || null
+    if (setorIdsPermitidos.length > 0) {
       const { data: setoresData } = await supabaseAdmin
         .from('setores')
         .select('nome,instrucoes_ia')
-        .in('id', setorIds)
+        .in('id', setorIdsPermitidos)
       setoresInfo = setoresData || []
     }
   }
   const escopoAgente: 'setor' | 'master' = usuarioRole === 'master' ? 'master' : 'setor'
   const configAgente = await carregarConfigAgente(setorIdPrincipal, escopoAgente)
-  const system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
+  let system = montarSystemPrompt(usuarioNome, usuarioRole, fatos, setoresInfo)
+
+  const BASE_NON_MASTER = new Set([
+    'buscar_tarefas',
+    'buscar_eventos',
+    'buscar_setores',
+    'buscar_base_tecnica',
+    'lembrar_fato',
+    'propor_criar_tarefa',
+    'propor_criar_evento',
+  ])
+  const setoresPermitidosSet = new Set(setorIdsPermitidos)
+  const ferramentasDisponiveis = usuarioRole === 'master'
+    ? [...TOOLS, ...MASTER_TOOLS]
+    : TOOLS.filter((tool: any) => {
+        if (BASE_NON_MASTER.has(tool.name)) return true
+        const setoresNecessarios = FERRAMENTA_SETORES[tool.name] || []
+        return setoresNecessarios.some(setorId => setoresPermitidosSet.has(setorId))
+      })
+
+  if (usuarioRole !== 'master') {
+    system += '\nSEGURANCA E PERMISSOES: a IA herda exatamente as permissoes ativas deste usuario no Atlas. Nivel oculto nao concede acesso. Use somente as ferramentas liberadas nesta conversa. Se o usuario pedir dados de um setor sem permissao, informe objetivamente que ele nao tem acesso e que a liberacao deve ser feita pelo administrador. Nao sugira que outro chat ou especialista contorna a restricao: todas as IAs obedecem as mesmas permissoes do Atlas.\n'
+  }
 
   let msgs = sanitizarMensagens(messages)
   const maxPassos = usuarioRole === 'master' ? 20 : 5
@@ -494,7 +589,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
       maxTokens: configAgente.maxTokens,
       system,
       messages: msgs,
-      tools: (usuarioRole === 'master' ? [...TOOLS, ...MASTER_TOOLS] : TOOLS),
+      tools: ferramentasDisponiveis,
     })
     const duracaoMs = Date.now() - inicioChamada
     if (!respostaIA.ok) {
@@ -523,7 +618,7 @@ export async function rodarLoop(messages: any[], usuarioId: string, usuarioNome:
 
     const toolResults = []
     for (const t of toolUses) {
-      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole, usuarioNome)
+      const resultado = await executarFerramenta(t.name, t.input, usuarioId, usuarioRole, usuarioNome, empresaId)
       toolResults.push({ type: 'tool_result', tool_use_id: t.id, content: JSON.stringify(resultado) })
     }
     msgs = [...msgs, { role: 'user', content: toolResults }]

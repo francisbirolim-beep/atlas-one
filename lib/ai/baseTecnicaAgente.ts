@@ -47,23 +47,31 @@ type MemoriaTecnica = {
   registrado_em?: string
 }
 
-export async function buscarBaseTecnicaAgente(input: any) {
+export async function buscarBaseTecnicaAgente(input: any, empresaId?: string) {
   const busca = String(input?.busca || input?.descricao || '').trim()
   const categoria = String(input?.categoria || '').trim().toLowerCase()
   const linhaSolicitada = String(input?.linha || '').trim()
   const limite = Math.min(Math.max(Number(input?.limite) || 8, 1), 20)
   const termos = tokensBusca(`${busca} ${linhaSolicitada}`)
 
+  let produtosQuery = supabaseAdmin.from('produtos').select('*').eq('ativo', true)
+  let vinculosQuery = supabaseAdmin.from('linha_produtos').select('produto_id,linha_id')
+  let memoriasQuery = supabaseAdmin
+    .from('agente_memorias')
+    .select('chave,valor,created_at')
+    .like('chave', `${PREFIXO_APRENDIZADO}%`)
+
+  if (empresaId) {
+    produtosQuery = produtosQuery.eq('empresa_id', empresaId)
+    vinculosQuery = vinculosQuery.eq('empresa_id', empresaId)
+    memoriasQuery = memoriasQuery.eq('empresa_id', empresaId)
+  }
+
   const [produtosResp, linhasResp, vinculosResp, memoriasResp] = await Promise.all([
-    supabaseAdmin.from('produtos').select('*').eq('ativo', true).limit(5000),
+    produtosQuery.limit(5000),
     supabaseAdmin.from('linhas_tecnicas').select('*').limit(1000),
-    supabaseAdmin.from('linha_produtos').select('produto_id,linha_id').limit(20000),
-    supabaseAdmin
-      .from('agente_memorias')
-      .select('chave,valor,created_at')
-      .like('chave', `${PREFIXO_APRENDIZADO}%`)
-      .order('created_at', { ascending: false })
-      .limit(5000),
+    vinculosQuery.limit(20000),
+    memoriasQuery.order('created_at', { ascending: false }).limit(5000),
   ])
 
   if (produtosResp.error) return { erro: produtosResp.error.message }
@@ -167,12 +175,13 @@ export async function buscarBaseTecnicaAgente(input: any) {
   }
 }
 
-export async function validarConhecimentoTecnicoAgente(input: any, usuarioId: string, usuarioNome: string) {
+export async function validarConhecimentoTecnicoAgente(input: any, usuarioId: string, usuarioNome: string, empresaId?: string) {
   const produtoId = String(input?.produto_id || '').trim()
   const codigoInformado = String(input?.codigo || '').trim()
   if (!produtoId && !codigoInformado) return { erro: 'Informe produto_id ou código do perfil/produto que está sendo validado.' }
 
   let query = supabaseAdmin.from('produtos').select('*')
+  if (empresaId) query = query.eq('empresa_id', empresaId)
   if (produtoId) query = query.eq('id', produtoId)
   else query = query.or(`codigo.eq.${codigoInformado},codigo_origem.eq.${codigoInformado}`)
   const { data: produto, error } = await query.limit(1).maybeSingle()
@@ -211,6 +220,7 @@ export async function validarConhecimentoTecnicoAgente(input: any, usuarioId: st
   }
 
   const { error: memoriaError } = await supabaseAdmin.from('agente_memorias').insert({
+    empresa_id: empresaId || undefined,
     usuario_id: usuarioId,
     chave: `${PREFIXO_APRENDIZADO}${evento.dominio}`,
     valor: JSON.stringify(evento),

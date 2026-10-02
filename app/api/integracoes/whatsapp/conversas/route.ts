@@ -3,9 +3,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant } from '@/lib/tenantServer'
 import {
   assumirConversa,
+  definirAcompanhamentoConversa,
   finalizarConversa,
   listarAcessosCanaisAtendimento,
   listarConversasAtendimento,
+  marcarConversaComoLida,
   transferirConversa,
 } from '@/lib/whatsappServer'
 
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest) {
       .select('id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,gateway_status,gateway_last_seen_at')
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true)
+      .eq('gateway_status', 'connected')
       .order('principal', { ascending: false })
       .order('created_at', { ascending: true })
 
@@ -51,7 +54,7 @@ export async function GET(req: NextRequest) {
     const canais = (canaisRaw || []).filter((canal: any) =>
       usuario.role === 'master' || canaisPermitidos.has(canal.id)
     )
-    const conectados = canais.filter((canal: any) => canal.gateway_status === 'connected').length
+    const conectados = canais.length
 
     return NextResponse.json({
       ok: true,
@@ -62,7 +65,7 @@ export async function GET(req: NextRequest) {
       acessos,
       configuracao: config || null,
       canaisConectados: conectados,
-      canaisTotal: canais.length,
+      canaisTotal: conectados,
     })
   } catch (error) {
     console.error('Erro ao listar conversas WhatsApp:', error)
@@ -89,6 +92,12 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'assumir') {
       await assumirConversa(conversaId, usuario)
+    } else if (acao === 'marcar_lida') {
+      await marcarConversaComoLida(conversaId, usuario)
+    } else if (acao === 'acompanhar') {
+      await definirAcompanhamentoConversa(conversaId, true, usuario)
+    } else if (acao === 'parar_acompanhar') {
+      await definirAcompanhamentoConversa(conversaId, false, usuario)
     } else if (acao === 'transferir') {
       await transferirConversa(
         conversaId,

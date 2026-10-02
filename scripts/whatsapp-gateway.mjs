@@ -529,6 +529,161 @@ async function registerInbound(channel, msg, sock) {
   })
 }
 
+
+function lidMapFromHistory(lidPnMappings = []) {
+  const map = new Map()
+  for (const item of lidPnMappings || []) {
+    const lid = String(item?.lid || '').trim()
+    const pn = String(item?.pn || '').trim()
+    if (!lid || !pn) continue
+    map.set(jidNormalizedUser(lid), jidNormalizedUser(pn))
+  }
+  return map
+}
+
+function resolvePnJid(value, lidToPn) {
+  const jid = String(value || '').trim()
+  if (!jid) return ''
+  const normalized = jidNormalizedUser(jid)
+  return lidToPn?.get(normalized) || normalized
+}
+
+function historyChatPayload(chat, lidToPn) {
+  const rawJid = String(chat?.id || chat?.jid || '').trim()
+  if (!rawJid || isStatusOrBroadcastJid(rawJid)) return null
+
+  if (rawJid.endsWith('@g.us')) {
+    const telefone = rawJid.split('@')[0].replace(/\D/g, '')
+    return {
+      jid: rawJid,
+      chatTipo: 'grupo',
+      telefone: telefone || null,
+      nome: String(chat?.name || chat?.subject || '').trim() || 'Grupo WhatsApp',
+      grupoNome: String(chat?.name || chat?.subject || '').trim() || 'Grupo WhatsApp',
+      archived: chat?.archived === true,
+      unreadCount: Math.max(0, Number(chat?.unreadCount || 0)),
+      timestamp: Number(chat?.conversationTimestamp || 0) || null,
+    }
+  }
+
+  const pnJid = resolvePnJid(rawJid, lidToPn)
+  const telefone = phoneFromJid(pnJid)
+  if (!telefone) return null
+  return {
+    jid: pnJid,
+    chatTipo: 'contato',
+    telefone,
+    nome: String(chat?.name || chat?.notify || '').trim() || null,
+    grupoNome: null,
+    archived: chat?.archived === true,
+    unreadCount: Math.max(0, Number(chat?.unreadCount || 0)),
+    timestamp: Number(chat?.conversationTimestamp || 0) || null,
+  }
+}
+
+function historyMessagePayload(msg, lidToPn) {
+  if (!msg?.message || !msg?.key?.id) return null
+
+  const remoteRaw = String(msg.key?.remoteJid || '').trim()
+  if (!remoteRaw || isStatusOrBroadcastJid(remoteRaw)) return null
+
+  let chatTipo = 'contato'
+  let chatJid = ''
+  let telefone = null
+
+  if (remoteRaw.endsWith('@g.us')) {
+    chatTipo = 'grupo'
+    chatJid = remoteRaw
+    telefone = phoneFromJid(resolvePnJid(msg.key?.participantAlt || msg.key?.participant || '', lidToPn))
+      || remoteRaw.split('@')[0].replace(/\D/g, '')
+  } else {
+    const candidate = resolvePnJid(msg.key?.remoteJidAlt || remoteRaw, lidToPn)
+    telefone = phoneFromJid(candidate)
+    if (!telefone) return null
+    chatJid = candidate
+  }
+
+  const extracted = extractMessage(msg.message, msg.key.id)
+  const rawTs = Number(msg.messageTimestamp?.toString?.() || msg.messageTimestamp || 0)
+  const timestamp = rawTs > 0 ? new Date(rawTs * 1000).toISOString() : null
+
+  return {
+    telefone,
+    contatoNome: msg.pushName || null,
+    chatTipo,
+    chatJid,
+    grupoNome: null,
+    participanteJid: chatTipo === 'grupo' ? resolvePnJid(msg.key?.participantAlt || msg.key?.participant || '', lidToPn) : null,
+    participanteTelefone: chatTipo === 'grupo'
+      ? phoneFromJid(resolvePnJid(msg.key?.participantAlt || msg.key?.participant || '', lidToPn))
+      : null,
+    participanteNome: chatTipo === 'grupo' ? (msg.pushName || null) : null,
+    fromMe: msg.key?.fromMe === true,
+    whatsappMessageId: msg.key.id,
+    messageType: extracted.messageType,
+    texto: extracted.texto,
+    timestamp,
+    mimeType: extracted.mimeType || null,
+    fileName: extracted.fileName || null,
+    payload: {
+      remoteJid: msg.key?.remoteJid || null,
+      remoteJidAlt: msg.key?.remoteJidAlt || null,
+      participanteJid: msg.key?.participantAlt || msg.key?.participant || null,
+      historico: true,
+      ptt: extracted.ptt === true,
+      reactionKey: extracted.reactionKey || null,
+    },
+  }
+}
+
+async function syncHistoryChats(channel, chats, lidToPn) {
+  const rows = (chats || []).map((chat) => historyChatPayload(chat, lidToPn)).filter(Boolean)
+  for (let i = 0; i < rows.length; i += 150) {
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'chats_sync',
+        channelId: channel.id,
+        chats: rows.slice(i, i + 150),
+      }),
+    })
+  }
+  return rows.length
+}
+
+async function syncHistoryMessages(channel, messages, lidToPn) {
+  const rows = (messages || []).map((msg) => historyMessagePayload(msg, lidToPn)).filter(Boolean)
+  for (let i = 0; i < rows.length; i += 75) {
+    await atlas('', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'history_messages_sync',
+        channelId: channel.id,
+        messages: rows.slice(i, i + 75),
+      }),
+    })
+  }
+  return rows.length
+}
+
+async function syncHistoryBundle(channel, data) {
+  const lidToPn = lidMapFromHistory(data.lidPnMappings || [])
+  const contacts = (data.contacts || []).map((contact) => {
+    const rawId = String(contact?.id || '').trim()
+    const resolvedId = resolvePnJid(rawId, lidToPn)
+    return { ...contact, id: resolvedId || rawId }
+  })
+
+  await syncContacts(channel, contacts)
+  const chats = await syncHistoryChats(channel, data.chats || [], lidToPn)
+  const messages = await syncHistoryMessages(channel, data.messages || [], lidToPn)
+
+  console.log(
+    `[gateway:${channel.id}] historico sincronizado: chats=${chats}; mensagens=${messages}; contatos=${contacts.length}; progresso=${data.progress ?? '?'}; tipo=${data.syncType ?? '?'}`,
+  )
+}
+
+
 async function processQueue(channelId) {
   const state = sessions.get(channelId)
   if (!state?.sock?.user || state.sending) return
@@ -639,6 +794,7 @@ async function connectChannel(channel) {
   try {
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
     const versionInfo = await fetchLatestWaWebVersion().catch(() => null)
+    const pareamentoNovo = !state?.creds?.me?.id
 
     await reportState(channel.id, 'connecting')
 
@@ -646,7 +802,8 @@ async function connectChannel(channel) {
       auth: state,
       browser: Browsers.macOS('Desktop'),
       markOnlineOnConnect: false,
-      syncFullHistory: false,
+      syncFullHistory: pareamentoNovo,
+      ...(pareamentoNovo ? { shouldSyncHistoryMessage: () => true } : {}),
       ...(versionInfo?.version ? { version: versionInfo.version } : {}),
     })
     stateEntry.sock = sock
@@ -725,12 +882,29 @@ async function connectChannel(channel) {
       }
     })
 
-    sock.ev.on('messaging-history.set', async ({ contacts }) => {
+    sock.ev.on('messaging-history.set', async ({ chats, contacts, messages, lidPnMappings, progress, syncType }) => {
       try {
-        await syncContacts(channel, contacts || [])
+        await syncHistoryBundle(channel, {
+          chats: chats || [],
+          contacts: contacts || [],
+          messages: messages || [],
+          lidPnMappings: lidPnMappings || [],
+          progress,
+          syncType,
+        })
       } catch (error) {
-        console.error(`[gateway:${channel.id}] contatos historicos:`, error.message)
+        console.error(`[gateway:${channel.id}] historico:`, error.message)
       }
+    })
+
+    sock.ev.on('chats.upsert', async (chats) => {
+      try { await syncHistoryChats(channel, chats || [], new Map()) }
+      catch (error) { console.error(`[gateway:${channel.id}] chats:`, error.message) }
+    })
+
+    sock.ev.on('chats.update', async (chats) => {
+      try { await syncHistoryChats(channel, chats || [], new Map()) }
+      catch (error) { console.error(`[gateway:${channel.id}] chats update:`, error.message) }
     })
 
     sock.ev.on('contacts.upsert', async (contacts) => {
