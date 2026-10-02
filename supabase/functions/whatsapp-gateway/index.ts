@@ -472,6 +472,241 @@ async function syncGroups(config: any, channel: any, rawGroups: any[]) {
   return { total: groups.length };
 }
 
+
+function historyIsoTimestamp(value: unknown) {
+  const raw = Number(value || 0);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  const ms = raw > 10_000_000_000 ? raw : raw * 1000;
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+async function syncChats(config: any, channel: any, rawChats: any[]) {
+  const chats = (Array.isArray(rawChats) ? rawChats : [])
+    .map((item: any) => {
+      const jid = String(item?.jid || "").trim();
+      const chatTipo = String(item?.chatTipo || "") === "grupo" ? "grupo" : "contato";
+      const telefone = normalizePhone(item?.telefone || "") || digits(jid.split("@")[0]) || null;
+      if (!jid || (!telefone && chatTipo !== "grupo")) return null;
+      return {
+        jid,
+        chatTipo,
+        telefone: telefone || "0",
+        nome: String(item?.nome || "").trim() || null,
+        grupoNome: String(item?.grupoNome || "").trim() || null,
+        archived: item?.archived === true,
+        unreadCount: Math.max(0, Number(item?.unreadCount || 0)),
+        timestamp: historyIsoTimestamp(item?.timestamp),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 1000) as any[];
+
+  if (!chats.length) return { total: 0, criadas: 0, atualizadas: 0 };
+
+  const jids = [...new Set(chats.map((item: any) => item.jid))];
+  const { data: existingRows, error: existingError } = await db
+    .from("atendimento_conversas")
+    .select("id,whatsapp_chat_jid,contato_nome,grupo_nome,status,ultima_mensagem_em")
+    .eq("empresa_id", config.empresa_id)
+    .eq("whatsapp_canal_id", channel.id)
+    .in("whatsapp_chat_jid", jids);
+  if (existingError) throw existingError;
+
+  const existingByJid = new Map((existingRows || []).map((row: any) => [String(row.whatsapp_chat_jid || ""), row]));
+  let criadas = 0;
+  let atualizadas = 0;
+  const now = new Date().toISOString();
+
+  for (const chat of chats) {
+    const existing = existingByJid.get(chat.jid);
+    const displayName = chat.chatTipo === "grupo"
+      ? (chat.grupoNome || chat.nome || "Grupo WhatsApp")
+      : (chat.nome || chat.telefone || "Contato WhatsApp");
+
+    if (existing) {
+      const payload: Record<string, unknown> = {
+        contato_nome: displayName || existing.contato_nome || null,
+        whatsapp_numero: channel.numero_declarado,
+        whatsapp_chat_tipo: chat.chatTipo,
+        grupo_nome: chat.chatTipo === "grupo" ? (chat.grupoNome || displayName) : null,
+        ocultar_da_caixa: false,
+        updated_at: now,
+      };
+      if (chat.timestamp && !existing.ultima_mensagem_em) payload.ultima_mensagem_em = chat.timestamp;
+      const { error } = await db.from("atendimento_conversas").update(payload).eq("id", existing.id);
+      if (error) throw error;
+      atualizadas += 1;
+      continue;
+    }
+
+    const { data: created, error } = await db.from("atendimento_conversas").insert({
+      empresa_id: config.empresa_id,
+      canal: "whatsapp",
+      telefone: chat.telefone || "0",
+      contato_nome: displayName,
+      cliente_id: null,
+      whatsapp_canal_id: channel.id,
+      whatsapp_numero: channel.numero_declarado,
+      whatsapp_chat_tipo: chat.chatTipo,
+      whatsapp_chat_jid: chat.jid,
+      grupo_nome: chat.chatTipo === "grupo" ? (chat.grupoNome || displayName) : null,
+      ocultar_da_caixa: false,
+      status: "finalizado",
+      responsavel_id: null,
+      responsavel_nome: null,
+      nao_lidas: 0,
+      ultima_mensagem_em: chat.timestamp,
+      updated_at: now,
+    }).select("id,whatsapp_chat_jid,contato_nome,grupo_nome,status,ultima_mensagem_em").single();
+    if (error) throw error;
+    existingByJid.set(chat.jid, created);
+    criadas += 1;
+  }
+
+  return { total: chats.length, criadas, atualizadas };
+}
+
+async function syncHistoryMessages(config: any, channel: any, rawMessages: any[]) {
+  const messages = (Array.isArray(rawMessages) ? rawMessages : [])
+    .map((item: any) => {
+      const whatsappMessageId = String(item?.whatsappMessageId || "").trim();
+      const chatJid = String(item?.chatJid || "").trim();
+      const chatTipo = String(item?.chatTipo || "") === "grupo" ? "grupo" : "contato";
+      const telefone = normalizePhone(item?.telefone || "") || digits(chatJid.split("@")[0]) || null;
+      if (!whatsappMessageId || !chatJid || (!telefone && chatTipo !== "grupo")) return null;
+      const timestamp = item?.timestamp ? new Date(String(item.timestamp)).toISOString() : null;
+      return {
+        whatsappMessageId,
+        chatJid,
+        chatTipo,
+        telefone: telefone || "0",
+        contatoNome: String(item?.contatoNome || "").trim() || null,
+        grupoNome: String(item?.grupoNome || "").trim() || null,
+        participanteJid: String(item?.participanteJid || "").trim() || null,
+        participanteTelefone: normalizePhone(item?.participanteTelefone || "") || null,
+        participanteNome: String(item?.participanteNome || "").trim() || null,
+        fromMe: item?.fromMe === true,
+        messageType: String(item?.messageType || "text"),
+        texto: String(item?.texto || "[Mensagem]"),
+        timestamp,
+        mimeType: item?.mimeType ? mediaMime(item.mimeType) : null,
+        fileName: String(item?.fileName || "").trim() || null,
+        payload: item?.payload && typeof item.payload === "object" ? item.payload : {},
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 500) as any[];
+
+  if (!messages.length) return { total: 0, inseridas: 0, duplicadas: 0 };
+
+  const chatsMap = new Map<string, any>();
+  for (const msg of messages) {
+    if (!chatsMap.has(msg.chatJid)) {
+      chatsMap.set(msg.chatJid, {
+        jid: msg.chatJid,
+        chatTipo: msg.chatTipo,
+        telefone: msg.telefone,
+        nome: msg.contatoNome,
+        grupoNome: msg.grupoNome,
+        timestamp: msg.timestamp ? Math.floor(new Date(msg.timestamp).getTime() / 1000) : null,
+      });
+    }
+  }
+  await syncChats(config, channel, [...chatsMap.values()]);
+
+  const ids = [...new Set(messages.map((item: any) => item.whatsappMessageId))];
+  const { data: existingMessages, error: existingMsgError } = await db
+    .from("atendimento_mensagens")
+    .select("whatsapp_message_id")
+    .eq("empresa_id", config.empresa_id)
+    .in("whatsapp_message_id", ids);
+  if (existingMsgError) throw existingMsgError;
+  const existingIds = new Set((existingMessages || []).map((row: any) => String(row.whatsapp_message_id || "")));
+
+  const jids = [...new Set(messages.map((item: any) => item.chatJid))];
+  const { data: conversations, error: convReadError } = await db
+    .from("atendimento_conversas")
+    .select("id,whatsapp_chat_jid,ultima_mensagem_em,ultimo_preview,ultima_entrada_em,ultima_saida_em")
+    .eq("empresa_id", config.empresa_id)
+    .eq("whatsapp_canal_id", channel.id)
+    .in("whatsapp_chat_jid", jids);
+  if (convReadError) throw convReadError;
+  const conversationByJid = new Map((conversations || []).map((row: any) => [String(row.whatsapp_chat_jid || ""), row]));
+
+  const rows = messages
+    .filter((msg: any) => !existingIds.has(msg.whatsappMessageId))
+    .map((msg: any) => {
+      const conversation = conversationByJid.get(msg.chatJid);
+      if (!conversation) return null;
+      return {
+        empresa_id: config.empresa_id,
+        conversa_id: conversation.id,
+        sessao_id: null,
+        direcao: msg.fromMe ? "saida" : "entrada",
+        tipo: atlasMessageType(msg.messageType),
+        texto: msg.texto,
+        media_url: null,
+        mime_type: msg.mimeType,
+        whatsapp_message_id: msg.whatsappMessageId,
+        provider_timestamp: msg.timestamp,
+        created_at: msg.timestamp || new Date().toISOString(),
+        payload: {
+          transporte: "qr_gateway",
+          origem: "historico_whatsapp",
+          whatsapp_canal_id: channel.id,
+          whatsapp_numero: channel.numero_declarado,
+          fileName: msg.fileName,
+          historico: true,
+          participante_jid: msg.participanteJid,
+          participante_telefone: msg.participanteTelefone,
+          participante_nome: msg.participanteNome,
+          ...(msg.payload || {}),
+        },
+      };
+    })
+    .filter(Boolean);
+
+  if (rows.length) {
+    const { error: insertError } = await db.from("atendimento_mensagens").insert(rows);
+    if (insertError && insertError.code !== "23505") throw insertError;
+  }
+
+  const latestByJid = new Map<string, any>();
+  for (const msg of messages) {
+    if (!msg.timestamp) continue;
+    const current = latestByJid.get(msg.chatJid);
+    if (!current || new Date(msg.timestamp).getTime() > new Date(current.timestamp).getTime()) {
+      latestByJid.set(msg.chatJid, msg);
+    }
+  }
+
+  for (const [jid, msg] of latestByJid) {
+    const conversation = conversationByJid.get(jid);
+    if (!conversation) continue;
+    const currentTs = conversation.ultima_mensagem_em ? new Date(conversation.ultima_mensagem_em).getTime() : 0;
+    const incomingTs = new Date(msg.timestamp).getTime();
+    if (!Number.isFinite(incomingTs) || incomingTs <= currentTs) continue;
+
+    const payload: Record<string, unknown> = {
+      ultimo_preview: msg.texto,
+      ultima_mensagem_em: msg.timestamp,
+      updated_at: new Date().toISOString(),
+    };
+    if (msg.fromMe) payload.ultima_saida_em = msg.timestamp;
+    else payload.ultima_entrada_em = msg.timestamp;
+    const { error } = await db.from("atendimento_conversas").update(payload).eq("id", conversation.id);
+    if (error) throw error;
+  }
+
+  return {
+    total: messages.length,
+    inseridas: rows.length,
+    duplicadas: messages.length - rows.length,
+  };
+}
+
+
 async function ensureTaskColumn(empresaId: string, usuarioId: string) {
   const { data: existing } = await db.from("tarefa_colunas")
     .select("id")
@@ -1148,6 +1383,16 @@ Deno.serve(async (req) => {
 
     if (type === "groups_sync") {
       const result = await syncGroups(config, channel, body.groups || []);
+      return reply({ ok: true, ...result });
+    }
+
+    if (type === "chats_sync") {
+      const result = await syncChats(config, channel, body.chats || []);
+      return reply({ ok: true, ...result });
+    }
+
+    if (type === "history_messages_sync") {
+      const result = await syncHistoryMessages(config, channel, body.messages || []);
       return reply({ ok: true, ...result });
     }
 
