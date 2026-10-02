@@ -135,6 +135,13 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       .map(item => item.t)
   }, [buscaTipologia, tipologiasDaLinha])
 
+  const projetosVisiveis = useMemo(() => {
+    if (!linhaSelecionada || buscaTipologia.trim()) return []
+    return [...tipologiasDaLinha]
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+      .slice(0, 24)
+  }, [buscaTipologia, linhaSelecionada, tipologiasDaLinha])
+
   const tipologiaAtual = tipologias.find(t => t.id === value.tipologiaId) || null
   const boxCanto = Boolean(
     (tipologiaAtual && ehBoxCantoTexto(`${tipologiaAtual.label} ${tipologiaAtual.chave}`)) ||
@@ -347,6 +354,46 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
             </div>
           )}
         </div>
+
+        {linhaSelecionada && !buscaTipologia.trim() && (
+          <div className="mt-4 border-t border-emerald-100 pt-4">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Escolha o desenho / projeto</p>
+                <p className="text-[11px] text-slate-500">Projetos vinculados à linha {linhaSelecionada.nome}. Clique no desenho para configurar.</p>
+              </div>
+              <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-emerald-700">{tipologiasDaLinha.length} projeto(s)</span>
+            </div>
+            {projetosVisiveis.length ? (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {projetosVisiveis.map(t => {
+                  const imagem = imagemTipologia(t)
+                  const selecionada = value.tipologiaId === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => selecionarTipologia(t)}
+                      className={`overflow-hidden rounded-xl border bg-white text-left transition ${selecionada ? 'border-emerald-500 ring-2 ring-emerald-100' : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm'}`}
+                    >
+                      <span className="flex aspect-[4/3] w-full items-center justify-center border-b border-slate-100 bg-slate-50 p-2">
+                        {imagem ? <img src={imagem} alt={`Desenho de ${t.label}`} className="h-full w-full object-contain" /> : <span className="flex flex-col items-center gap-1 text-center text-[10px] text-slate-400"><ImageIcon size={26}/><span>Desenho pendente</span></span>}
+                      </span>
+                      <span className="block p-3">
+                        <span className="block text-xs font-bold leading-snug text-slate-800">{t.label}</span>
+                        <span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-400">{(t as any).categoria || 'Projeto'}</span>
+                        {selecionada && <span className="mt-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">SELECIONADO</span>}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-emerald-200 bg-white p-4 text-center text-xs text-slate-500">Nenhum projeto vinculado a esta linha.</div>
+            )}
+            {tipologiasDaLinha.length > projetosVisiveis.length && <p className="mt-2 text-[11px] text-slate-500">Mostrando os primeiros {projetosVisiveis.length}. Use a busca acima para localizar outros projetos.</p>}
+          </div>
+        )}
       </div>
 
       {boxCanto && (
