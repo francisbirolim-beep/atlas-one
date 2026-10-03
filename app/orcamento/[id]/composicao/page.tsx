@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Boxes, ChevronRight, FileText, Loader2, RefreshCw, TriangleAlert } from 'lucide-react'
@@ -19,6 +19,7 @@ const GRUPOS: Array<{ id: Grupo; label: string }> = [
 
 function relacao(valor: any) { return Array.isArray(valor) ? valor[0] : valor }
 function qtd(valor: unknown) { const n = Number(valor); return (Number.isFinite(n) ? n : 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) }
+function money(valor: unknown) { const n = Number(valor); return (Number.isFinite(n) ? n : 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
 function nomeGrupo(grupo: GrupoMaterialOrcamento) { return grupo === 'perfis' ? 'Perfis' : grupo === 'acessorios' ? 'Acessórios' : grupo === 'vidros' ? 'Vidros' : 'Outros' }
 
 function Linha({ linha }: { linha: LinhaMaterialOrcamento }) {
@@ -38,10 +39,22 @@ export default function ComposicaoOrcamentoPage() {
   const [carregando, setCarregando] = useState(true)
   const [recalculando, setRecalculando] = useState(false)
   const [erro, setErro] = useState('')
+  const geracaoAutomatica = useRef(false)
 
   async function carregar() {
     setCarregando(true)
-    setDados(await carregarListaMateriaisOrcamento(orcamentoId))
+    const atual = await carregarListaMateriaisOrcamento(orcamentoId)
+    const importadoWvetro = atual?.orcamento?.wvetro_fluxo?.origem === 'wvetro_api'
+    if (atual && !atual.pacote && importadoWvetro && !geracaoAutomatica.current) {
+      geracaoAutomatica.current = true
+      setRecalculando(true)
+      const gerado = await gerarBasePrecificacao(orcamentoId, { perdaCorteMm: 0, minimoSobraReaproveitavelMm: 300 })
+      setRecalculando(false)
+      if (!gerado.ok) setErro(gerado.error)
+      else setDados(await carregarListaMateriaisOrcamento(orcamentoId))
+    } else {
+      setDados(atual)
+    }
     setCarregando(false)
   }
 
@@ -72,6 +85,9 @@ export default function ComposicaoOrcamentoPage() {
   const cliente = relacao(dados.orcamento.clientes)?.nome || dados.orcamento.cliente_nome || 'Cliente'
   const obra = relacao(dados.orcamento.obras)
   const total = dados.individual.length
+  const itensOriginais: any[] = Array.isArray(dados.orcamento.itens) ? dados.orcamento.itens : []
+  const fluxoWvetro = dados.orcamento.wvetro_fluxo || null
+  const importadoWvetro = fluxoWvetro?.origem === 'wvetro_api'
   const contagens = Object.fromEntries(GRUPOS.map(g => [g.id, dados.individual.filter(l => l.grupo === g.id).length])) as Record<Grupo, number>
 
   return <main className="min-h-screen bg-slate-50 p-4 md:p-7">
@@ -83,6 +99,20 @@ export default function ComposicaoOrcamentoPage() {
         </div>
         <div className="flex flex-wrap gap-2"><Link href={`/orcamento/${orcamentoId}/materiais`} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold"><FileText size={15}/> Lista de materiais</Link><button onClick={()=>void recalcular()} disabled={recalculando} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50">{recalculando?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>} Recalcular composição</button></div>
       </header>
+
+      {importadoWvetro && <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><p className="text-xs font-bold uppercase tracking-wide text-blue-500">Orçamento original do W.Vetro</p><h2 className="mt-1 text-lg font-bold text-slate-900">W.Vetro #{fluxoWvetro?.numero || '—'} · {itensOriginais.length} item(ns)</h2><p className="mt-1 text-xs text-slate-500">Os itens abaixo foram copiados diretamente do orçamento sincronizado. A composição técnica usa primeiro esses dados reais.</p></div>
+          <div className="text-right"><p className="text-xs text-slate-500">Valor do orçamento</p><p className="text-xl font-bold text-slate-900">{money(dados.orcamento.valor_estimado)}</p></div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">{itensOriginais.map((item:any,idx:number)=>{
+          const raw=item?.wvetro_item || {}
+          const perfis=Array.isArray(item?.wvetro_composicao?.perfis)?item.wvetro_composicao.perfis.length:0
+          const acessorios=Array.isArray(item?.wvetro_composicao?.acessorios)?item.wvetro_composicao.acessorios.length:0
+          const vidros=Array.isArray(item?.wvetro_composicao?.vidros)?item.wvetro_composicao.vidros.length:0
+          return <div key={item?.id||idx} className="rounded-xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[11px] font-bold uppercase text-slate-400">Item {idx+1}</p><h3 className="font-bold text-slate-900">{raw?.Modelo || item?.configuracao_nome || item?.tipo_outro_texto || item?.tipo_esquadria || 'Tipologia'}</h3><p className="mt-1 text-xs text-slate-500">{raw?.Linha || item?.linha_nome || 'Linha não informada'} · {raw?.Ambiente || item?.ambiente || 'Sem ambiente'}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">Qtd. {item?.quantidade || raw?.Qtde || 1}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"><div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-400">Medida</span><b className="block">{item?.largura_mm || raw?.Largura || '—'} × {item?.altura_mm || raw?.Altura || '—'} mm</b></div><div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-400">Perfis</span><b className="block">{perfis}</b></div><div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-400">Acessórios</span><b className="block">{acessorios}</b></div><div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-400">Vidros</span><b className="block">{vidros}</b></div></div><div className="mt-3 flex justify-between border-t pt-3 text-xs"><span className="text-slate-500">{raw?.Nome || item?.descricao || ''}</span><b className="whitespace-nowrap">{money(item?.preco_total || raw?.ValorTotalAlterado || raw?.ValorTotal)}</b></div></div>
+        })}</div>
+      </section>}
 
       <FluxoPrecificacaoEtapas orcamentoId={orcamentoId} atual="composicao" bloqueado={dados.pendencias > 0}/>
 
