@@ -6,6 +6,7 @@ import {
   FileText,
   KeyRound,
   LayoutGrid,
+  Lightbulb,
   Settings,
 } from 'lucide-react'
 
@@ -66,6 +67,13 @@ export const ITENS_ADMIN: ItemAdmin[] = [
     descricao: 'Regras técnicas de produção',
     icon: Calculator,
     palavras: 'formula corte engenharia perfil produção receita plano corte',
+  },
+  {
+    href: '/administracao/melhorias-atlas',
+    label: 'Melhorias Atlas',
+    descricao: 'Defeitos, sugestões, análise e aprovações',
+    icon: Lightbulb,
+    palavras: 'melhoria bug defeito sugestao feedback aprovacao ia desenvolvimento sistema',
   },
   {
     href: '/configuracoes',
