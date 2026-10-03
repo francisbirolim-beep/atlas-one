@@ -144,7 +144,7 @@ export default function ListaMateriaisOrcamentoPage() {
     <div className="folha-impressao mx-auto max-w-7xl space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-300 pb-4">
         <div>
-          <Link href={`/orcamento/${orcamentoId}/precificacao`} className="nao-imprimir mb-2 inline-flex items-center gap-2 text-sm text-slate-500"><ArrowLeft size={16} /> Voltar para composição</Link>
+          <Link href={`/orcamento/${orcamentoId}/composicao`} className="nao-imprimir mb-2 inline-flex items-center gap-2 text-sm text-slate-500"><ArrowLeft size={16} /> Voltar para composição</Link>
           <div className="flex items-center gap-3"><Boxes className="nao-imprimir text-amber-600" /><div><h1 className="text-2xl font-bold text-slate-900">Lista de Materiais — Cotação</h1><p className="text-sm text-slate-500">Sem margem, desconto ou preço de venda.</p></div></div>
         </div>
         <button onClick={() => window.print()} className="nao-imprimir inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white"><Printer size={16} /> Imprimir / Salvar PDF</button>

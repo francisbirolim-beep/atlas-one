@@ -28,6 +28,7 @@ export function identificarItensMedicao(itens: MedicaoItem[], origem: ItemEsquad
     return {
       ...item,
       descricao: descricaoGenericaMedicao(item.descricao) ? descricaoItemMedicao(origemItem || item) : item.descricao,
+      observacoes_medicao: item.observacoes_medicao || origemItem?.observacao_producao || null,
       ambiente: origemItem?.ambiente || item.ambiente || null,
       folhas: origemItem?.folhas || item.folhas || null,
     }
