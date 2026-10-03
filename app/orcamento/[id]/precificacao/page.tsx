@@ -45,6 +45,7 @@ function statusCusto(c:ComponentePrecificacao){
   if(c.custo_pendente)return {label:'Pendente regra',cls:'bg-amber-100 text-amber-800'}
   if(Number(c.custo_unitario||0)<=0)return {label:'Sem custo',cls:'bg-red-100 text-red-700'}
   if(c.origem_custo_oficial==='manual'||c.origem_custo==='manual')return {label:'Validado manualmente',cls:'bg-blue-100 text-blue-700'}
+  if(c.referencia_custo_origem==='wvetro'&&c.origem_custo_oficial==='pendente')return {label:'Ref. W.Vetro',cls:'bg-violet-100 text-violet-700'}
   return {label:'Custo válido',cls:'bg-emerald-100 text-emerald-700'}
 }
 function origemCusto(c:ComponentePrecificacao){
