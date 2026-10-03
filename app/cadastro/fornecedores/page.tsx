@@ -45,6 +45,22 @@ export default function Fornecedores() {
 
   useEffect(()=>{ void carregar() },[])
 
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search)
+    if(params.get('novo')==='1'||params.get('origem')==='whatsapp'){
+      const nomeInicial=params.get('nome')||''
+      const whatsappInicial=params.get('whatsapp')||''
+      setForm(prev=>({
+        ...prev,
+        nome:nomeInicial||prev.nome,
+        contato:nomeInicial||prev.contato,
+        whatsapp:whatsappInicial||prev.whatsapp,
+        telefone:whatsappInicial||prev.telefone,
+      }))
+      setNovoAberto(true)
+    }
+  },[])
+
   async function carregar() {
     setCarregando(true)
     const me=await usuarioAtual()
