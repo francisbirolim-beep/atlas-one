@@ -259,7 +259,11 @@ export async function gerarPacoteTecnico(
   orcamentoId: string,
   origem: PacoteTecnico['origem'],
   usuario: Usuario | null,
-  opcoes: { perdaCorteMm?: number; minimoSobraReaproveitavelMm?: number } = {}
+  opcoes: {
+    perdaCorteMm?: number
+    minimoSobraReaproveitavelMm?: number
+    referenciasWvetro?: Record<string, any>
+  } = {}
 ): Promise<{ ok: true; pacote: PacoteTecnico } | { ok: false; error: string }> {
   const { data: orcamento, error: erroOrc } = await supabase
     .from('orcamentos')
@@ -475,24 +479,32 @@ export async function gerarPacoteTecnico(
         const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura)
         const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura)
         const qtdVidro = Math.max(1, n(vidro.quantidade, 1)) * qtdItem
+        const areaVidroM2 = (larguraVidro / 1000) * (alturaVidro / 1000) * qtdVidro
+        const emOrcamento = origem === 'orcamento_simulacao'
         materiais.push({
           pacote_id: pacote.id,
           item_ref: itemRef(item, indice),
           categoria: 'vidro',
           produto_id: null,
-          codigo: null,
-          descricao: `Vidro provisório ${Math.round(larguraVidro)} × ${Math.round(alturaVidro)} mm`,
-          unidade: 'UN',
-          cor_ref: null,
-          quantidade_tecnica: qtdVidro,
-          quantidade_ajustada: qtdVidro,
+          codigo: 'VIDRO',
+          descricao: emOrcamento
+            ? `${qtdVidro} vidro(s) ${Math.round(larguraVidro)} × ${Math.round(alturaVidro)} mm`
+            : `Vidro ${Math.round(larguraVidro)} × ${Math.round(alturaVidro)} mm`,
+          unidade: emOrcamento ? 'M2' : 'UN',
+          cor_ref: String(item?.variaveis?.vidro || item?.vidro || '').trim() || null,
+          quantidade_tecnica: emOrcamento ? areaVidroM2 : qtdVidro,
+          quantidade_ajustada: emOrcamento ? areaVidroM2 : qtdVidro,
           comprimento_corte_mm: null,
           comprimento_barra_mm: null,
           origem_calculo: 'formula',
-          status_calculo: origem === 'medicao_final' ? 'calculado' : 'pendente_formula',
+          status_calculo: emOrcamento || origem === 'medicao_final' ? 'calculado' : 'pendente_formula',
           incluido_manual: false,
           excluido: false,
-          justificativa_ajuste: origem === 'medicao_final' ? null : 'Dimensão provisória. Compra/corte do vidro só é liberado após Medição Final aprovada.',
+          justificativa_ajuste: emOrcamento
+            ? 'Dimensão usada para orçamento comercial. Compra/corte definitivo continua condicionado à Medição Final aprovada.'
+            : origem === 'medicao_final'
+              ? null
+              : 'Dimensão provisória. Compra/corte do vidro só é liberado após Medição Final aprovada.',
           ordem: ordem++,
         })
       } catch {
