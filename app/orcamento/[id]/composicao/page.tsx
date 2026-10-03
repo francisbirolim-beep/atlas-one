@@ -45,7 +45,7 @@ export default function ComposicaoOrcamentoPage() {
     setCarregando(true)
     const atual = await carregarListaMateriaisOrcamento(orcamentoId)
     const importadoWvetro = atual?.orcamento?.wvetro_fluxo?.origem === 'wvetro_api'
-    if (atual && !atual.pacote && importadoWvetro && !geracaoAutomatica.current) {
+    if (atual && importadoWvetro && (!atual.pacote || atual.individual.length === 0) && !geracaoAutomatica.current) {
       geracaoAutomatica.current = true
       setRecalculando(true)
       const gerado = await gerarBasePrecificacao(orcamentoId, { perdaCorteMm: 0, minimoSobraReaproveitavelMm: 300 })
