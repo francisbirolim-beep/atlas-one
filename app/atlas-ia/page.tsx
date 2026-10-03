@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, FileText, HeartHandshake, ImageIcon, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
@@ -22,9 +22,11 @@ type Bolha = {
 }
 type Anexo = { nome: string; mediaType: string; tipo: 'imagem' | 'pdf' | 'texto'; dados: string }
 type ImagemPendente = { prompt: string; usd: number; model: string; quality: string; size: string }
+type RelatoSugerido = { texto: string; anexo: Anexo | null; audioStoragePath?: string | null }
 
 const MAX = 8 * 1024 * 1024
 const PEDIDO_IMAGEM = /\b(gere|gerar|crie|criar|faça|faca|produza|desenhe|imagem|foto)\b.*\b(imagem|foto|porta|janela|esquadria|desenho|render)\b/i
+const RELATO_MELHORIA = /\b(achei um erro|tem um erro|deu erro|bug|defeito|falha|não funciona|nao funciona|não aparece|nao aparece|travando|travou|sumiu|perdeu|melhoria|sugestão|sugestao|poderia ter|seria bom|deveria ter)\b/i
 export default function AtlasIAPage() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [permissoes, setPermissoes] = useState<Record<string, string>>({})
@@ -37,6 +39,9 @@ export default function AtlasIAPage() {
   const [erro, setErro] = useState('')
   const [anexo, setAnexo] = useState<Anexo | null>(null)
   const [imagemPendente, setImagemPendente] = useState<ImagemPendente | null>(null)
+  const [relatoSugerido, setRelatoSugerido] = useState<RelatoSugerido | null>(null)
+  const [registrandoMelhoria, setRegistrandoMelhoria] = useState(false)
+  const [mensagemMelhoria, setMensagemMelhoria] = useState('')
   const arquivoRef = useRef<HTMLInputElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
 
@@ -69,6 +74,55 @@ export default function AtlasIAPage() {
 
   function nomeModo() {
     return especialistaAtual?.nome || 'Conversa livre'
+  }
+
+  async function registrarRelato(relato: RelatoSugerido, limparComposer = false) {
+    if (registrandoMelhoria || relato.texto.trim().length < 5) return
+    setRegistrandoMelhoria(true)
+    setMensagemMelhoria('')
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      const tela = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/atlas-ia'
+      const viewport = typeof window !== 'undefined' ? { largura: window.innerWidth, altura: window.innerHeight } : null
+      const r = await fetch('/api/ia/melhorias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+        body: JSON.stringify({
+          descricao: relato.texto,
+          tela,
+          origem: 'atlas_ia_chat',
+          anexo: relato.anexo && relato.anexo.tipo !== 'texto' ? relato.anexo : null,
+          audioStoragePath: relato.audioStoragePath || null,
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          viewport,
+        }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não foi possível registrar a melhoria.')
+      const numero = j.item?.numero ? '#' + j.item.numero : ''
+      setMensagemMelhoria(j.duplicado
+        ? 'Esse relato já existia. O Atlas somou esta ocorrência ao chamado ' + numero + '.'
+        : 'Relato ' + numero + ' registrado em Melhorias Atlas e enviado para análise/aprovação.')
+      setRelatoSugerido(null)
+      if (limparComposer) {
+        setEntrada('')
+        setAnexo(null)
+      }
+    } catch (e: any) {
+      setErro(e?.message || 'Erro ao registrar melhoria.')
+    } finally {
+      setRegistrandoMelhoria(false)
+    }
+  }
+
+  function registrarDoComposer() {
+    const texto = entrada.trim()
+    if (texto.length < 5) {
+      setErro('Escreva no campo abaixo o defeito ou melhoria que você encontrou.')
+      return
+    }
+    void registrarRelato({ texto, anexo }, true)
   }
 
   function novaConversa() {
@@ -205,6 +259,15 @@ export default function AtlasIAPage() {
         }
     ])
 
+    if (modo === 'livre' && texto && RELATO_MELHORIA.test(texto)) {
+      setRelatoSugerido({
+        texto,
+        anexo: atual && atual.tipo !== 'texto' ? atual : null,
+        audioStoragePath: audio?.storagePath || null,
+      })
+      setMensagemMelhoria('')
+    }
+
     if (modo === 'livre' && !atual && !audio && PEDIDO_IMAGEM.test(texto)) {
       await prepararImagem(texto)
       return
@@ -288,6 +351,10 @@ export default function AtlasIAPage() {
             <HeartHandshake size={17} className="mb-2"/><b>Atlas Pessoas</b>
             <p className="mt-1 text-xs text-white/50">Diário privado, clima e compartilhamento voluntário.</p>
           </Link>
+          {usuario?.role === 'master' && <Link href="/administracao/melhorias-atlas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
+            <Lightbulb size={17} className="mb-2"/><b>Melhorias Atlas</b>
+            <p className="mt-1 text-xs text-white/50">Analisar defeitos, sugestões e aprovações.</p>
+          </Link>}
         </div>
         <div className="mt-auto rounded-xl bg-emerald-400/10 p-3 text-xs text-emerald-100">
           <ShieldCheck size={16} className="mb-1"/>Dados internos continuam limitados às permissões do usuário.
@@ -331,6 +398,17 @@ export default function AtlasIAPage() {
               <p className="text-slate-600">Esta ação usa geração de imagem paga. Estimativa: <b>US$ {imagemPendente.usd.toFixed(3)}</b> para {imagemPendente.size}, qualidade {imagemPendente.quality}. O custo real pode variar.</p>
               <div className="mt-3 flex gap-2"><button onClick={gerarImagem} className="rounded-xl bg-[#182444] px-4 py-2 font-semibold text-white">Pode gerar</button><button onClick={() => setImagemPendente(null)} className="rounded-xl border px-4 py-2">Cancelar</button></div>
             </div></div>}
+            {relatoSugerido && <div className="flex justify-start"><div className="max-w-[92%] rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm shadow-sm">
+              <div className="flex items-center gap-2 font-semibold text-amber-900"><Bug size={17}/> Isso parece um defeito ou melhoria do Atlas</div>
+              <p className="mt-2 text-amber-800">Posso registrar este relato na central Melhorias Atlas. A IA classifica o impacto e o risco, mas nenhuma alteração é publicada sem aprovação.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button disabled={registrandoMelhoria} onClick={() => void registrarRelato(relatoSugerido)} className="rounded-xl bg-[#182444] px-4 py-2 font-semibold text-white disabled:opacity-40">
+                  {registrandoMelhoria ? 'Registrando...' : 'Registrar melhoria'}
+                </button>
+                <button onClick={() => setRelatoSugerido(null)} className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-amber-900">Não registrar</button>
+              </div>
+            </div></div>}
+            {mensagemMelhoria && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemMelhoria}</div>}
             {carregando && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={16}/> {modo === 'livre' ? 'Atlas IA está pensando...' : nomeModo() + ' está analisando...'}</div>}
             {erro && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
             <div ref={fimRef}/>
@@ -341,17 +419,28 @@ export default function AtlasIAPage() {
           <div className="mx-auto max-w-3xl">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs font-medium text-slate-500">Modo da conversa</div>
-              <select
-                value={modo}
-                onChange={e => trocarModo(e.target.value as ModoChat)}
-                className="max-w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
-                aria-label="Escolher modo da conversa"
-              >
-                <option value="livre">✨ Conversa livre</option>
-                {especialistas.length > 0 && <optgroup label="Especialistas">
-                  {especialistas.map(especialista => <option key={especialista.modulo} value={especialista.modulo}>{especialista.nome}</option>)}
-                </optgroup>}
-              </select>
+              <div className="flex flex-wrap items-center gap-2">
+                {modo === 'livre' && <button
+                  type="button"
+                  onClick={registrarDoComposer}
+                  disabled={registrandoMelhoria}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40"
+                  title="Registrar o texto digitado como defeito ou melhoria"
+                >
+                  <Bug size={14}/>{registrandoMelhoria ? 'Registrando...' : 'Relatar defeito / melhoria'}
+                </button>}
+                <select
+                  value={modo}
+                  onChange={e => trocarModo(e.target.value as ModoChat)}
+                  className="max-w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+                  aria-label="Escolher modo da conversa"
+                >
+                  <option value="livre">✨ Conversa livre</option>
+                  {especialistas.length > 0 && <optgroup label="Especialistas">
+                    {especialistas.map(especialista => <option key={especialista.modulo} value={especialista.modulo}>{especialista.nome}</option>)}
+                  </optgroup>}
+                </select>
+              </div>
             </div>
 
             <input ref={arquivoRef} className="hidden" type="file" accept="image/*,application/pdf,text/plain,text/csv,application/json" onChange={selecionarArquivo}/>
