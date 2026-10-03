@@ -24,6 +24,7 @@ export default function OrcamentosWVetroPage(){
   const [ocupado,setOcupado]=useState(false)
   const [erro,setErro]=useState('')
   const [resumo,setResumo]=useState<any>(null)
+  const [base,setBase]=useState<any>(null)
   const [orcamentos,setOrcamentos]=useState<any[]>([])
 
   async function carregar(){
@@ -32,9 +33,16 @@ export default function OrcamentosWVetroPage(){
   useEffect(()=>{usuarioAtual().then(async u=>{const m=u?.role==='master';setMaster(m);if(m)try{await carregar()}catch(e){setErro(e instanceof Error?e.message:'Falha ao carregar.')}})},[])
 
   async function sincronizar(){
-    setOcupado(true);setErro('')
-    try{const j=await api('POST',{inicio,fim});setResumo(j);await carregar()}
-    catch(e){setErro(e instanceof Error?e.message:'Falha ao sincronizar.')}
+    setOcupado(true);setErro('');setBase(null)
+    try{
+      const j=await api('POST',{inicio,fim});setResumo(j)
+      const token=await tokenAtual()
+      if(!token) throw new Error('Sessão expirada.')
+      const r=await fetch('/api/integracoes/wvetro/sincronizar-tudo',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({inicio,fim})})
+      const b=await r.json().catch(()=>({}))
+      if(!r.ok) throw new Error(b?.error||`Falha ao sincronizar base técnica (${r.status}).`)
+      setBase(b);await carregar()
+    } catch(e){setErro(e instanceof Error?e.message:'Falha ao sincronizar.')}
     finally{setOcupado(false)}
   }
 
@@ -47,14 +55,28 @@ export default function OrcamentosWVetroPage(){
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <label className="text-sm text-slate-600">Início<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
         <label className="text-sm text-slate-600">Fim<input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
-        <div className="flex items-end"><button onClick={sincronizar} disabled={ocupado} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-50">{ocupado?<Loader2 size={16} className="animate-spin"/>:<RefreshCw size={16}/>} Sincronizar</button></div>
+        <div className="flex items-end"><button onClick={sincronizar} disabled={ocupado} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-50">{ocupado?<Loader2 size={16} className="animate-spin"/>:<RefreshCw size={16}/>} Sincronizar tudo</button></div>
       </div>
-      <p className="mt-3 text-xs text-slate-500">A API W.Vetro aceita lotes de até 7 dias. Repetir o mesmo período atualiza o mesmo orçamento; não cria duplicata.</p>
+      <p className="mt-3 text-xs text-slate-500">A API W.Vetro aceita lotes de até 7 dias. O botão sincroniza orçamentos, linhas, tipologias, perfis, acessórios, composição e custos/preços observados. Repetir o período atualiza sem duplicar.</p>
     </section>
 
     {resumo&&<section className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">{[
       ['Lidos',resumo.lidos],['Criados',resumo.criados],['Atualizados',resumo.atualizados],['Sem alteração',resumo.semAlteracao],['Itens mapeados',resumo.itensMapeados],['Itens pendentes',resumo.itensPendentes],
     ].map(([l,v])=><div key={String(l)} className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-500">{l}</p><p className="mt-1 text-2xl font-bold">{v||0}</p></div>)}</section>}
+
+    {base&&<section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+      <div><h2 className="font-bold text-slate-900">Base W.Vetro sincronizada</h2><p className="mt-1 text-xs text-slate-500">Dados copiados do W.Vetro permanecem como evidência até homologação técnica no Atlas.</p></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          ['Linhas',base.linhas?.encontradas],['Perfis catálogo',base.catalogos?.perfis?.quantidadeApi],
+          ['Acessórios catálogo',base.catalogos?.acessorios?.quantidadeApi],['Tipologias referência',base.resumo?.tipologiasReferencia],
+          ['Componentes por tipologia',base.resumo?.componentesPorTipologia],['Componentes mapeados',base.resumo?.componentesMapeados],
+          ['Produtos com custo',base.resumo?.produtosComCustoWvetro],['Perfis importados',base.catalogos?.perfis?.importados],
+          ['Acessórios importados',base.catalogos?.acessorios?.importados],['Esquadrias catálogo',base.catalogos?.esquadrias?.encontrados],
+        ].map(([l,v])=><div key={String(l)} className="rounded-xl border bg-slate-50 p-3"><p className="text-[11px] text-slate-500">{l}</p><p className="mt-1 text-xl font-bold text-slate-900">{Number(v||0)}</p></div>)}
+      </div>
+      <div className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800"><b>Aprendizado Atlas:</b> cada sincronização registra evidência observada. Repetições ajudam a IA a reconhecer padrões; regra técnica oficial continua exigindo homologação.</div>
+    </section>}
 
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Últimos sincronizados</h2><p className="text-xs text-slate-500">Até 50 orçamentos importados da API.</p></div><button onClick={()=>carregar()} className="rounded-lg border p-2"><RefreshCw size={15}/></button></div>
