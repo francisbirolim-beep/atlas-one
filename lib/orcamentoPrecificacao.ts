@@ -29,10 +29,16 @@ export type ComponentePrecificacao = {
   margem_pct: number
   preco_venda: number
   origem_custo: 'produto' | 'catalogo' | 'calculado' | 'manual' | 'pendente'
+  origem_custo_oficial?: 'atlas' | 'manual' | 'pendente' | null
+  referencia_custo_origem?: string | null
+  referencia_custo_valor?: number | null
+  referencia_custo_dados?: Record<string, unknown> | null
   custo_pendente: boolean
   incluido_manual: boolean
   excluido: boolean
   observacoes?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type PoliticaItem = {
@@ -109,6 +115,90 @@ function tamanhoBarra(p: any) {
   return num(p?.tamanho_barra_mm) || num(p?.tamanho_barra_mm_origem) || num(p?.dados_origem?.tamanho_raw) || 0
 }
 
+async function carregarProdutosAtivosPaginados() {
+  const produtos: any[] = []
+  const tamanhoPagina = 1000
+  for (let inicio = 0; ; inicio += tamanhoPagina) {
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('id,codigo,nome,categoria,unidade,unidade_origem,custo,preco,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem')
+      .eq('ativo', true)
+      .order('id')
+      .range(inicio, inicio + tamanhoPagina - 1)
+    if (error) break
+    const pagina = (data || []) as any[]
+    produtos.push(...pagina)
+    if (pagina.length < tamanhoPagina) break
+  }
+  return produtos
+}
+
+type ReferenciaWvetroPrecificacao = {
+  referenciaId?: string
+  componentes?: Array<{
+    tipo?: string
+    produtoId?: string | null
+    codigo?: string | null
+    codigoWvetro?: string | null
+    nome?: string | null
+    unidadeOrigem?: string | null
+    unidadeAtlas?: string | null
+    custoAtlas?: number | null
+    pesoKgM?: number | null
+    tamanhoBarraMm?: number | null
+    custoUltimo?: number | null
+    vendaUltimo?: number | null
+    medidaMin?: number | null
+    medidaMax?: number | null
+    quantidadeMin?: number | null
+    quantidadeMax?: number | null
+    quantidadeMedia?: number | null
+    cortes?: unknown[]
+    posicoes?: unknown[]
+    ultimoCustoEm?: string | null
+  }>
+}
+
+async function carregarReferenciasWvetroPrecificacao(): Promise<Record<string, ReferenciaWvetroPrecificacao>> {
+  if (typeof window === 'undefined') return {}
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return {}
+  try {
+    const resposta = await fetch('/api/orcamento/wvetro-referencias', {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    if (!resposta.ok) return {}
+    const json = await resposta.json().catch(() => ({}))
+    return (json?.referencias || {}) as Record<string, ReferenciaWvetroPrecificacao>
+  } catch {
+    return {}
+  }
+}
+
+function referenciaComponenteWvetro(
+  referencias: Record<string, ReferenciaWvetroPrecificacao>,
+  tipologiaId: string | null | undefined,
+  categoria: string,
+  codigo?: string | null,
+) {
+  if (!tipologiaId) return null
+  const lista = referencias[String(tipologiaId)]?.componentes || []
+  const codigoBuscado = codigoKey(codigo)
+  return lista.find(c => {
+    const tipo = String(c.tipo || '')
+    const categoriaCompativel =
+      categoria === 'contramarco' ? tipo === 'perfil' :
+      categoria === 'perfil' ? tipo === 'perfil' :
+      categoria === 'acessorio' ? tipo === 'acessorio' :
+      categoria === 'vidro' ? tipo === 'vidro' : false
+    if (!categoriaCompativel) return false
+    if (categoria === 'vidro') return !codigoBuscado || codigoKey(c.codigo) === codigoBuscado || codigoKey(c.codigoWvetro) === codigoBuscado
+    return codigoKey(c.codigo) === codigoBuscado || codigoKey(c.codigoWvetro) === codigoBuscado
+  }) || null
+}
+
 async function carregarConfigs() {
   const { data } = await supabase.from('configuracoes_precificacao').select('chave,valor').in('chave', ['preco_kg_aluminio','custo_pintura_kg','margem_padrao_orcamento'])
   const map = new Map<string, number>((data || []).map((x: any) => [String(x.chave), num(x.valor)]))
@@ -120,10 +210,10 @@ async function carregarConfigs() {
 }
 
 async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
-  const [{ data: overrides }, { data: materiais }, { data: produtos }] = await Promise.all([
+  const [{ data: overrides }, { data: materiais }, produtos] = await Promise.all([
     supabase.from('orcamento_item_componentes_overrides').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).order('ordem'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem').eq('ativo', true),
+    carregarProdutosAtivosPaginados(),
   ])
   const produtoMap = new Map<string, any>()
   ;(produtos || []).forEach((p: any) => { if (p.codigo) produtoMap.set(codigoKey(p.codigo), p) })
@@ -224,12 +314,12 @@ async function custoMaterial(material: MaterialPacote, produto: any, catalogo: a
   return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: 'Custo oficial ainda não cadastrado.' }
 }
 
-async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
-  const [{ data: materiais }, { data: produtos }, { data: catalogo }, { data: orc }] = await Promise.all([
+async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, referenciasWvetro: Record<string, ReferenciaWvetroPrecificacao> = {}) {
+  const [{ data: materiais }, produtos, { data: catalogo }, { data: orc }] = await Promise.all([
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).eq('excluido', false).order('ordem'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true),
+    carregarProdutosAtivosPaginados(),
     supabase.from('catalogo_custos_tecnicos').select('*').eq('ativo', true),
-    supabase.from('orcamentos').select('margem_padrao_pct').eq('id', orcamentoId).single(),
+    supabase.from('orcamentos').select('margem_padrao_pct,itens').eq('id', orcamentoId).single(),
   ])
   const cfg = await carregarConfigs()
   const pMap = new Map<string, any>(((produtos || []) as any[]).map((p: any) => [String(p.id), p]))
@@ -239,10 +329,51 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
 
   await supabase.from('orcamento_precificacao_componentes').delete().eq('orcamento_id', orcamentoId).eq('incluido_manual', false)
   const linhas: any[] = []
+  const itensOrcamento: any[] = Array.isArray(orc?.itens) ? orc.itens : []
+  const tipologiaPorItemRef = new Map<string, string>()
+  itensOrcamento.forEach((item: any, idx: number) => {
+    const tipologiaId = String(item?.tipologia_id || '')
+    if (tipologiaId) tipologiaPorItemRef.set(itemRef(item, idx), tipologiaId)
+  })
+
   for (const m of (materiais || []) as MaterialPacote[]) {
     const produto = m.produto_id ? pMap.get(m.produto_id) : null
     const cat = m.produto_id ? cProduto.get(m.produto_id) : cCodigo.get(codigoKey(m.codigo))
-    const custo = await custoMaterial(m, produto, cat, cfg)
+    let custo: {
+      custo: number
+      origem: 'produto' | 'catalogo' | 'calculado' | 'pendente'
+      pendente: boolean
+      motivo: string | null
+    } = await custoMaterial(m, produto, cat, cfg)
+    const tipologiaId = m.item_ref ? tipologiaPorItemRef.get(String(m.item_ref)) : null
+    const referencia = referenciaComponenteWvetro(referenciasWvetro, tipologiaId, m.categoria, m.codigo)
+    let referenciaCustoUnitario: number | null = null
+    let referenciaDados: Record<string, unknown> | null = null
+
+    // No orçamento comercial o vidro pode usar a referência histórica W.Vetro
+    // em R$/m². Isso NÃO transforma o valor em custo oficial de compra/produção.
+    if (m.categoria === 'vidro' && custo.pendente && referencia) {
+      const custoHistoricoTotal = num(referencia.custoUltimo)
+      const medidaHistoricaM2 = num(referencia.medidaMax) || num(referencia.medidaMin)
+      if (custoHistoricoTotal > 0 && medidaHistoricaM2 > 0 && unidadeKey(m.unidade) === 'M2') {
+        referenciaCustoUnitario = custoHistoricoTotal / medidaHistoricaM2
+        custo = {
+          custo: referenciaCustoUnitario,
+          origem: 'calculado' as const,
+          pendente: false,
+          motivo: 'Custo comercial provisório calculado pela referência W.Vetro em R$/m². Não libera compra/corte para produção.',
+        }
+        referenciaDados = {
+          custo_historico_total: custoHistoricoTotal,
+          medida_historica_m2: medidaHistoricaM2,
+          custo_referencia_m2: referenciaCustoUnitario,
+          quantidade_min: referencia.quantidadeMin ?? null,
+          quantidade_max: referencia.quantidadeMax ?? null,
+          ultimo_custo_em: referencia.ultimoCustoEm ?? null,
+        }
+      }
+    }
+
     const quantidade = Math.max(0, num(m.quantidade_ajustada))
     const custoTotal = custo.custo * quantidade
     linhas.push({
@@ -262,6 +393,10 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
       margem_pct: margem,
       preco_venda: margemVenda(custoTotal, margem),
       origem_custo: m.status_calculo === 'pendente_formula' ? 'pendente' : custo.origem,
+      origem_custo_oficial: referenciaCustoUnitario != null ? 'pendente' : (m.status_calculo === 'pendente_formula' || custo.pendente ? 'pendente' : 'atlas'),
+      referencia_custo_origem: referenciaCustoUnitario != null ? 'wvetro' : null,
+      referencia_custo_valor: referenciaCustoUnitario,
+      referencia_custo_dados: referenciaDados,
       custo_pendente: m.status_calculo === 'pendente_formula' || custo.pendente,
       incluido_manual: false,
       excluido: false,
@@ -293,12 +428,13 @@ export async function gerarBasePrecificacao(orcamentoId: string, opcoes: { perda
   const usuario = await usuarioAtual()
   const { data: orcamento } = await supabase.from('orcamentos').select('*').eq('id', orcamentoId).maybeSingle()
   if (!orcamento) return { ok: false as const, error: 'Orçamento não encontrado.' }
-  const gerado = await gerarPacoteTecnico(orcamentoId, 'orcamento_simulacao', usuario, opcoes)
+  const referenciasWvetro = await carregarReferenciasWvetroPrecificacao()
+  const gerado = await gerarPacoteTecnico(orcamentoId, 'orcamento_simulacao', usuario, { ...opcoes, referenciasWvetro })
   if (!gerado.ok) return gerado
   await supabase.from('pacotes_tecnicos').update({ status: 'substituido' }).eq('orcamento_id', orcamentoId).eq('origem', 'orcamento_simulacao').neq('id', gerado.pacote.id)
   await aplicarOverridesAoPacote(orcamentoId, gerado.pacote.id)
   await garantirPoliticas(orcamento)
-  await gerarComponentesDoPacote(orcamentoId, gerado.pacote.id)
+  await gerarComponentesDoPacote(orcamentoId, gerado.pacote.id, referenciasWvetro)
   await recalcularResumoPrecificacao(orcamentoId, gerado.pacote.id)
   return { ok: true as const, pacoteId: gerado.pacote.id }
 }
@@ -309,20 +445,30 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   await garantirPoliticas(orcamento)
   const { data: pacote } = await supabase.from('pacotes_tecnicos').select('*').eq('orcamento_id', orcamentoId).eq('origem', 'orcamento_simulacao').neq('status', 'substituido').order('versao', { ascending: false }).limit(1).maybeSingle()
   const completo = pacote ? await carregarPacoteCompleto(pacote.id) : { materiais: [], barras: [], cortes: [] }
-  const [{ data: componentes }, { data: politicas }, { data: produtos }] = await Promise.all([
+  const [{ data: componentes }, { data: politicas }, produtos] = await Promise.all([
     supabase.from('orcamento_precificacao_componentes').select('*').eq('orcamento_id', orcamentoId).eq('excluido', false).order('categoria').order('descricao'),
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true).order('categoria').order('nome'),
+    carregarProdutosAtivosPaginados(),
   ])
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
   const { data: fs } = tipologiaIds.length
-    ? await supabase.from('engenharia_tipologia_formulas_corte').select('id,tipologia_id,configuracao_label,versao,status,ativo').in('tipologia_id', tipologiaIds).eq('ativo', true).order('status')
+    ? await supabase
+        .from('engenharia_tipologia_formulas_corte')
+        .select('id,tipologia_id,configuracao_label,versao,status,ativo')
+        .in('tipologia_id', tipologiaIds)
+        .order('versao', { ascending: false })
     : { data: [] as any[] }
   const formulas: Record<string, any> = {}
-  for (const f of (fs || []) as any[]) if (!formulas[f.tipologia_id] || f.status === 'validada') formulas[f.tipologia_id] = f
+  for (const f of (fs || []) as any[]) {
+    if (f.status !== 'validada') continue
+    const atual = formulas[f.tipologia_id]
+    if (!atual || (f.ativo && !atual.ativo) || (Boolean(f.ativo) === Boolean(atual.ativo) && Number(f.versao || 0) > Number(atual.versao || 0))) {
+      formulas[f.tipologia_id] = f
+    }
+  }
   const pendencias = ((componentes || []) as any[])
-    .filter((c: any) => c.custo_pendente)
+    .filter((c: any) => c.custo_pendente || num(c.custo_unitario) <= 0)
     .map((c: any) => `${c.codigo ? `${c.codigo} · ` : ''}${c.descricao}: custo ou regra técnica pendente.`)
   return {
     orcamento,
@@ -356,11 +502,13 @@ export async function salvarPoliticaItem(orcamentoId: string, itemRefValue: stri
 
 export async function salvarCustoComponente(componente: ComponentePrecificacao, custoUnitario: number, salvarCatalogo: boolean) {
   const custo = Math.max(0, num(custoUnitario))
+  if (custo <= 0) return { ok: false as const, error: 'Informe um custo maior que R$ 0,00. Custo zero continua pendente até existir uma exceção controlada com justificativa.' }
   const total = custo * num(componente.quantidade)
   const { error } = await supabase.from('orcamento_precificacao_componentes').update({
     custo_unitario: custo,
     custo_total: total,
     origem_custo: 'manual',
+    origem_custo_oficial: 'manual',
     custo_pendente: false,
   }).eq('id', componente.id)
   if (error) return { ok: false as const, error: error.message }
@@ -410,6 +558,7 @@ export async function adicionarCustoExtra(dados: { orcamentoId: string; itemRef?
     margem_pct: margem,
     preco_venda: margemVenda(total, margem),
     origem_custo: 'manual',
+    origem_custo_oficial: 'manual',
     custo_pendente: false,
     incluido_manual: true,
     excluido: false,
@@ -542,13 +691,13 @@ export async function removerComponenteOrcamento(dados: {
 }
 
 export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId: string) {
-  const [{ data: orc }, { data: politicas }, { data: comps }, { data: barras }, { data: cortes }, { data: produtos }] = await Promise.all([
+  const [{ data: orc }, { data: politicas }, { data: comps }, { data: barras }, { data: cortes }, produtos] = await Promise.all([
     supabase.from('orcamentos').select('id,itens,margem_padrao_pct,cobrar_sobra_padrao').eq('id', orcamentoId).single(),
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId),
     supabase.from('orcamento_precificacao_componentes').select('*').eq('orcamento_id', orcamentoId).eq('excluido', false),
     supabase.from('pacote_tecnico_barras').select('*').eq('pacote_id', pacoteId),
     supabase.from('pacote_tecnico_cortes').select('*,pacote_tecnico_barras!inner(pacote_id)').eq('pacote_tecnico_barras.pacote_id', pacoteId),
-    supabase.from('produtos').select('id,peso_kg_m').eq('ativo', true),
+    carregarProdutosAtivosPaginados(),
   ])
   if (!orc) return { ok: false as const, error: 'Orçamento não encontrado.' }
 

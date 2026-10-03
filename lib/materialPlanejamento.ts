@@ -93,7 +93,10 @@ export type SeparacaoPacote = {
 }
 
 type FormulaRow = {
+  id?: string
   tipologia_id: string
+  configuracao_label?: string | null
+  versao?: number | null
   variaveis: TipologiaFormulasCorte['variaveis']
   pecas: TipologiaFormulasCorte['pecas']
   acessorios?: any[] | null
@@ -151,13 +154,41 @@ function folhasDoItem(item: any) {
   return 1
 }
 
-async function carregarProdutosTecnicos() {
-  const { data } = await supabase
-    .from('produtos')
-    .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
-    .eq('ativo', true)
-    .not('codigo', 'is', null)
-  const produtos = (data || []) as ProdutoTecnico[]
+async function carregarProdutosTecnicos(codigos?: string[]) {
+  const codigosUnicos = Array.from(new Set((codigos || []).map(codigoKey).filter(Boolean)))
+  const produtos: ProdutoTecnico[] = []
+
+  // O catálogo da Esquadrifácio já passa de 1.000 itens. Uma leitura sem filtro
+  // fica sujeita ao limite padrão do PostgREST e fazia códigos válidos "sumirem"
+  // da composição. Para cálculo técnico buscamos somente os códigos usados nas
+  // fórmulas selecionadas, em lotes pequenos.
+  if (codigosUnicos.length) {
+    for (let i = 0; i < codigosUnicos.length; i += 150) {
+      const lote = codigosUnicos.slice(i, i + 150)
+      const { data } = await supabase
+        .from('produtos')
+        .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
+        .eq('ativo', true)
+        .in('codigo', lote)
+      produtos.push(...((data || []) as ProdutoTecnico[]))
+    }
+  } else {
+    // Mantém compatibilidade para chamadas sem uma receita conhecida,
+    // paginando para não truncar o catálogo.
+    const tamanhoPagina = 1000
+    for (let inicio = 0; ; inicio += tamanhoPagina) {
+      const { data } = await supabase
+        .from('produtos')
+        .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
+        .eq('ativo', true)
+        .not('codigo', 'is', null)
+        .range(inicio, inicio + tamanhoPagina - 1)
+      const pagina = (data || []) as ProdutoTecnico[]
+      produtos.push(...pagina)
+      if (pagina.length < tamanhoPagina) break
+    }
+  }
+
   const mapa = new Map<string, ProdutoTecnico>()
   produtos.forEach(p => { if (p.codigo) mapa.set(codigoKey(p.codigo), p) })
   return mapa
@@ -195,6 +226,136 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
   }
 }
 
+
+function candidatosCodigoWvetro(raw: any) {
+  const codigo = String(raw?.Codigo || raw?.codigo || '').trim()
+  const seuCodigo = String(raw?.SeuCodigo || raw?.seuCodigo || '').trim()
+  const antesParenteses = codigo.split('(')[0]?.trim()
+  const dentroParenteses = codigo.match(/\(([^)]+)\)/)?.[1]?.trim() || ''
+  return Array.from(new Set([seuCodigo, codigo, antesParenteses, dentroParenteses].filter(Boolean)))
+}
+
+function produtoWvetro(raw: any, produtos: Map<string, ProdutoTecnico>) {
+  for (const codigo of candidatosCodigoWvetro(raw)) {
+    const produto = produtos.get(codigoKey(codigo))
+    if (produto) return produto
+  }
+  return null
+}
+
+function materiaisDoOrcamentoWvetro(
+  pacoteId: string,
+  item: any,
+  indice: number,
+  produtos: Map<string, ProdutoTecnico>,
+  corRef: string | null,
+  ordemInicial: number,
+) {
+  const comp = item?.wvetro_composicao
+  if (!comp || typeof comp !== 'object') return { linhas: [] as any[], proximaOrdem: ordemInicial }
+
+  const grupos: Array<{ categoria: 'perfil' | 'acessorio' | 'vidro'; lista: any[] }> = [
+    { categoria: 'perfil', lista: Array.isArray(comp.perfis) ? comp.perfis : [] },
+    { categoria: 'acessorio', lista: Array.isArray(comp.acessorios) ? comp.acessorios : [] },
+    { categoria: 'vidro', lista: Array.isArray(comp.vidros) ? comp.vidros : [] },
+  ]
+  const linhas: any[] = []
+  let ordem = ordemInicial
+
+  for (const grupo of grupos) {
+    for (const raw of grupo.lista) {
+      const produto = produtoWvetro(raw, produtos)
+      const quantidade = grupo.categoria === 'vidro'
+        ? Math.max(0, n(raw?.M2 ?? raw?.M2Arred ?? raw?.Qtde, 0))
+        : Math.max(0, n(raw?.Qtde ?? raw?.Quantidade, 0))
+      const medidaM = grupo.categoria === 'perfil' ? Math.max(0, n(raw?.Medida, 0)) : 0
+      const comprimentoMm = medidaM > 0 ? Math.round(medidaM * 1000) : null
+      const codigo = String(raw?.Codigo || raw?.SeuCodigo || produto?.codigo || '').trim() || null
+      const descricao = String(raw?.Nome || raw?.Especificacao || produto?.nome || codigo || 'Componente W.Vetro').trim()
+      const unidade = grupo.categoria === 'vidro'
+        ? 'M2'
+        : (produto?.unidade_origem || produto?.unidade || (grupo.categoria === 'perfil' ? 'UN' : 'UN'))
+      const detalhes = [
+        raw?.Posicao ? `posição ${raw.Posicao}` : '',
+        raw?.Corte ? `corte ${raw.Corte}` : '',
+        raw?.CustoVlr ? `custo W.Vetro R$ ${raw.CustoVlr}` : '',
+        raw?.VendaVlr ? `venda W.Vetro R$ ${raw.VendaVlr}` : '',
+      ].filter(Boolean).join(' · ')
+
+      linhas.push({
+        pacote_id: pacoteId,
+        item_ref: itemRef(item, indice),
+        categoria: grupo.categoria,
+        produto_id: produto?.id || null,
+        codigo,
+        descricao,
+        unidade,
+        cor_ref: String(raw?.Cor || corRef || '').trim() || null,
+        quantidade_tecnica: quantidade,
+        quantidade_ajustada: quantidade,
+        comprimento_corte_mm: comprimentoMm,
+        comprimento_barra_mm: grupo.categoria === 'perfil' ? Math.max(0, n(produto?.tamanho_barra_mm, 0)) || null : null,
+        origem_calculo: 'receita',
+        status_calculo: quantidade > 0 ? 'manual' : 'pendente_formula',
+        incluido_manual: false,
+        excluido: false,
+        justificativa_ajuste: detalhes
+          ? `Copiado do orçamento W.Vetro: ${detalhes}.`
+          : 'Copiado diretamente da composição do orçamento W.Vetro.',
+        ordem: ordem++,
+      })
+    }
+  }
+
+  return { linhas, proximaOrdem: ordem }
+}
+
+function materiaisReferenciaWvetro(
+  pacoteId: string,
+  item: any,
+  indice: number,
+  referencia: any,
+  qtdItem: number,
+  corRef: string | null,
+  ordemInicial: number,
+) {
+  const componentes = Array.isArray(referencia?.componentes) ? referencia.componentes : []
+  let ordem = ordemInicial
+  const linhas: any[] = []
+  for (const c of componentes) {
+    const tipo = String(c?.tipo || '').toLowerCase()
+    const categoria = tipo === 'perfil' ? 'perfil' : tipo === 'acessorio' ? 'acessorio' : tipo === 'vidro' ? 'vidro' : 'outro'
+    const quantidadeRef = Math.max(0, n(c?.quantidadeMedia ?? c?.quantidadeMax ?? c?.quantidadeMin, 0))
+    const quantidade = quantidadeRef * qtdItem
+    const medidaRef = Math.max(0, n(c?.medidaMax ?? c?.medidaMin, 0))
+    const comprimentoMm = categoria === 'perfil' && medidaRef > 0 ? medidaRef * 1000 : null
+    const unidade = categoria === 'vidro' ? 'M2' : (c?.unidadeAtlas || c?.unidadeOrigem || (categoria === 'perfil' ? 'BR' : 'UN'))
+    linhas.push({
+      pacote_id: pacoteId,
+      item_ref: itemRef(item, indice),
+      categoria,
+      produto_id: c?.produtoId || null,
+      codigo: c?.codigo || c?.codigoWvetro || null,
+      descricao: c?.nome || c?.codigo || c?.codigoWvetro || 'Componente W.Vetro',
+      unidade,
+      cor_ref: corRef,
+      quantidade_tecnica: quantidade,
+      quantidade_ajustada: quantidade,
+      comprimento_corte_mm: comprimentoMm,
+      comprimento_barra_mm: categoria === 'perfil' ? Math.max(0, n(c?.tamanhoBarraMm, 0)) || null : null,
+      origem_calculo: 'receita',
+      status_calculo: quantidade > 0 ? 'manual' : 'pendente_formula',
+      incluido_manual: false,
+      excluido: false,
+      justificativa_ajuste: quantidade > 0
+        ? 'Composição preservada da referência W.Vetro. Quantidade/medida histórica usada no orçamento até homologação da fórmula dinâmica Atlas.'
+        : 'Componente existe na referência W.Vetro, mas sem quantidade histórica suficiente.',
+      ordem: ordem++,
+    })
+  }
+  return { linhas, proximaOrdem: ordem }
+}
+
 function linhaPendente(pacoteId: string, item: any, indice: number, descricao: string, categoria: MaterialPacote['categoria'] = 'perfil') {
   return {
     pacote_id: pacoteId,
@@ -219,14 +380,20 @@ function linhaPendente(pacoteId: string, item: any, indice: number, descricao: s
 
 /**
  * Gera o snapshot técnico a partir do orçamento/venda atual.
- * Somente fórmulas com status `validada` entram como cálculo automático.
- * Fórmulas em validação/referência viram pendência editável, nunca compra automática.
+ * Somente fórmulas com status validada entram como cálculo automático.
+ * No orçamento de simulação, uma fórmula validada pode ser usada como referência
+ * W.Vetro mesmo se ainda estiver inativa para produção. Nos demais fluxos, além
+ * de validada ela precisa estar ativa. Fórmulas em validação continuam pendentes.
  */
 export async function gerarPacoteTecnico(
   orcamentoId: string,
   origem: PacoteTecnico['origem'],
   usuario: Usuario | null,
-  opcoes: { perdaCorteMm?: number; minimoSobraReaproveitavelMm?: number } = {}
+  opcoes: {
+    perdaCorteMm?: number
+    minimoSobraReaproveitavelMm?: number
+    referenciasWvetro?: Record<string, any>
+  } = {}
 ): Promise<{ ok: true; pacote: PacoteTecnico } | { ok: false; error: string }> {
   const { data: orcamento, error: erroOrc } = await supabase
     .from('orcamentos')
@@ -241,11 +408,52 @@ export async function gerarPacoteTecnico(
 
   const tipologiaIds = Array.from(new Set(itens.map((i: any) => i?.tipologia_id).filter(Boolean))) as string[]
   const formulas = tipologiaIds.length > 0
-    ? await supabase.from('engenharia_tipologia_formulas_corte').select('tipologia_id,variaveis,pecas,acessorios,vidro,status,ativo').in('tipologia_id', tipologiaIds).eq('ativo', true)
+    ? await supabase
+        .from('engenharia_tipologia_formulas_corte')
+        .select('id,tipologia_id,configuracao_label,versao,variaveis,pecas,acessorios,vidro,status,ativo')
+        .in('tipologia_id', tipologiaIds)
+        .order('versao', { ascending: false })
     : { data: [] as any[] }
+
   const formulaMapa = new Map<string, FormulaRow>()
-  ;((formulas.data || []) as FormulaRow[]).forEach(f => formulaMapa.set(f.tipologia_id, f))
-  const produtos = await carregarProdutosTecnicos()
+  for (const f of (formulas.data || []) as FormulaRow[]) {
+    const atual = formulaMapa.get(f.tipologia_id)
+    const liberadaParaOrigem =
+      f.status === 'validada' &&
+      (origem === 'orcamento_simulacao' || f.ativo === true)
+
+    if (!liberadaParaOrigem) continue
+    if (!atual) {
+      formulaMapa.set(f.tipologia_id, f)
+      continue
+    }
+
+    // No orçamento, uma fórmula validada pode ser usada como referência W.Vetro
+    // mesmo ainda não estando ativa para produção. Entre fórmulas válidas, prioriza
+    // a ativa e depois a maior versão.
+    const atualAtiva = atual.ativo === true
+    const candidataAtiva = f.ativo === true
+    const atualVersao = n(atual.versao)
+    const candidataVersao = n(f.versao)
+    if ((candidataAtiva && !atualAtiva) || (candidataAtiva === atualAtiva && candidataVersao > atualVersao)) {
+      formulaMapa.set(f.tipologia_id, f)
+    }
+  }
+  const codigosFormula = Array.from(formulaMapa.values()).flatMap(formula => [
+    ...(Array.isArray(formula.pecas) ? formula.pecas.map((p: any) => String(p?.codigo || '')) : []),
+    ...(Array.isArray(formula.acessorios) ? formula.acessorios.map((a: any) => String(a?.codigo || '')) : []),
+  ]).filter(Boolean)
+  const codigosWvetro = itens.flatMap((item: any) => {
+    const comp = item?.wvetro_composicao
+    if (!comp || typeof comp !== 'object') return []
+    const raws = [
+      ...(Array.isArray(comp.perfis) ? comp.perfis : []),
+      ...(Array.isArray(comp.acessorios) ? comp.acessorios : []),
+      ...(Array.isArray(comp.vidros) ? comp.vidros : []),
+    ]
+    return raws.flatMap((raw: any) => candidatosCodigoWvetro(raw))
+  })
+  const produtos = await carregarProdutosTecnicos([...codigosFormula, ...codigosWvetro])
 
   const { data: versoes } = await supabase
     .from('pacotes_tecnicos')
@@ -287,9 +495,23 @@ export async function gerarPacoteTecnico(
     const corRef = item?.cor || estado.config?.acabamento || orcamento.acabamento || null
     const contramarcoAtual = item?.contramarco || estado.config?.contramarco || orcamento.contramarco
 
+    const diretoWvetro = materiaisDoOrcamentoWvetro(pacote.id, item, indice, produtos, corRef, ordem)
+    if (diretoWvetro.linhas.length) {
+      materiais.push(...diretoWvetro.linhas)
+      ordem = diretoWvetro.proximaOrdem
+      continue
+    }
+
     if (!tipologiaId || !formula || formula.status !== 'validada') {
-      materiais.push(linhaPendente(pacote.id, item, indice, 'Perfis: fórmula técnica desta tipologia ainda não está validada.'))
-      materiais.push(linhaPendente(pacote.id, item, indice, 'Acessórios: conferir/complementar manualmente antes da compra.', 'acessorio'))
+      const referencia = tipologiaId ? opcoes.referenciasWvetro?.[String(tipologiaId)] : null
+      const fallback = materiaisReferenciaWvetro(pacote.id, item, indice, referencia, qtdItem, corRef, ordem)
+      if (fallback.linhas.length) {
+        materiais.push(...fallback.linhas)
+        ordem = fallback.proximaOrdem
+      } else {
+        materiais.push(linhaPendente(pacote.id, item, indice, 'Perfis: fórmula técnica desta tipologia ainda não está validada.'))
+        materiais.push(linhaPendente(pacote.id, item, indice, 'Acessórios: conferir/complementar manualmente antes da compra.', 'acessorio'))
+      }
       continue
     }
     if (largura <= 0 || altura <= 0) {
@@ -411,24 +633,32 @@ export async function gerarPacoteTecnico(
         const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura)
         const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura)
         const qtdVidro = Math.max(1, n(vidro.quantidade, 1)) * qtdItem
+        const areaVidroM2 = (larguraVidro / 1000) * (alturaVidro / 1000) * qtdVidro
+        const emOrcamento = origem === 'orcamento_simulacao'
         materiais.push({
           pacote_id: pacote.id,
           item_ref: itemRef(item, indice),
           categoria: 'vidro',
           produto_id: null,
-          codigo: null,
-          descricao: `Vidro provisório ${Math.round(larguraVidro)} × ${Math.round(alturaVidro)} mm`,
-          unidade: 'UN',
-          cor_ref: null,
-          quantidade_tecnica: qtdVidro,
-          quantidade_ajustada: qtdVidro,
+          codigo: 'VIDRO',
+          descricao: emOrcamento
+            ? `${qtdVidro} vidro(s) ${Math.round(larguraVidro)} × ${Math.round(alturaVidro)} mm`
+            : `Vidro ${Math.round(larguraVidro)} × ${Math.round(alturaVidro)} mm`,
+          unidade: emOrcamento ? 'M2' : 'UN',
+          cor_ref: String(item?.variaveis?.vidro || item?.vidro || '').trim() || null,
+          quantidade_tecnica: emOrcamento ? areaVidroM2 : qtdVidro,
+          quantidade_ajustada: emOrcamento ? areaVidroM2 : qtdVidro,
           comprimento_corte_mm: null,
           comprimento_barra_mm: null,
           origem_calculo: 'formula',
-          status_calculo: origem === 'medicao_final' ? 'calculado' : 'pendente_formula',
+          status_calculo: emOrcamento || origem === 'medicao_final' ? 'calculado' : 'pendente_formula',
           incluido_manual: false,
           excluido: false,
-          justificativa_ajuste: origem === 'medicao_final' ? null : 'Dimensão provisória. Compra/corte do vidro só é liberado após Medição Final aprovada.',
+          justificativa_ajuste: emOrcamento
+            ? 'Dimensão usada para orçamento comercial. Compra/corte definitivo continua condicionado à Medição Final aprovada.'
+            : origem === 'medicao_final'
+              ? null
+              : 'Dimensão provisória. Compra/corte do vidro só é liberado após Medição Final aprovada.',
           ordem: ordem++,
         })
       } catch {

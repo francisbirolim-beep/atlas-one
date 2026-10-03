@@ -24,6 +24,8 @@ export interface ItemOrcamentoForm {
   altura: string
   quantidade: string
   descricao: string
+  observacaoTempera?: string
+  observacaoProducao?: string
   cor: string
   fotos: File[]
   tipoMedida?: 'comum' | 'final'
@@ -278,7 +280,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         foto_larguras_url, foto_alturas_url, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || foto_larguras_url || foto_alturas_url || null,
         foto_urls: todasFotosItem.length ? todasFotosItem : null,
-        descricao: it.descricao || undefined, cor: it.cor || null, produto_id, preco_unit, preco_total,
+        descricao: it.descricao || undefined, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao,
       })
     } else {
@@ -288,7 +290,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         tipo_medida: tipoMedidaItem,
         largura_mm: parseFloat(it.largura), altura_mm: parseFloat(it.altura), quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || null, foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
-        descricao: it.descricao || undefined, cor: it.cor || null, produto_id, preco_unit, preco_total,
+        descricao: it.descricao || undefined, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao,
       })
     }
