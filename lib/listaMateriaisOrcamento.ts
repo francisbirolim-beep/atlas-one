@@ -157,7 +157,7 @@ async function pacoteAtualDoOrcamento(orcamentoId: string) {
 export async function carregarListaMateriaisOrcamento(orcamentoId: string): Promise<ListaMateriaisOrcamento | null> {
   const { data: orcamento, error: erroOrcamento } = await supabase
     .from('orcamentos')
-    .select('id,numero,cliente_nome,cidade,obra_cidade,created_at,itens,clientes(id,nome),obras(id,nome,cidade)')
+    .select('id,numero,cliente_nome,cidade,obra_cidade,created_at,itens,wvetro_fluxo,valor_estimado,clientes(id,nome),obras(id,nome,cidade)')
     .eq('id', orcamentoId)
     .maybeSingle()
 
