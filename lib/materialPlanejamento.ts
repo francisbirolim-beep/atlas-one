@@ -226,6 +226,53 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
   }
 }
 
+
+function materiaisReferenciaWvetro(
+  pacoteId: string,
+  item: any,
+  indice: number,
+  referencia: any,
+  qtdItem: number,
+  corRef: string | null,
+  ordemInicial: number,
+) {
+  const componentes = Array.isArray(referencia?.componentes) ? referencia.componentes : []
+  let ordem = ordemInicial
+  const linhas: any[] = []
+  for (const c of componentes) {
+    const tipo = String(c?.tipo || '').toLowerCase()
+    const categoria = tipo === 'perfil' ? 'perfil' : tipo === 'acessorio' ? 'acessorio' : tipo === 'vidro' ? 'vidro' : 'outro'
+    const quantidadeRef = Math.max(0, n(c?.quantidadeMedia ?? c?.quantidadeMax ?? c?.quantidadeMin, 0))
+    const quantidade = quantidadeRef * qtdItem
+    const medidaRef = Math.max(0, n(c?.medidaMax ?? c?.medidaMin, 0))
+    const comprimentoMm = categoria === 'perfil' && medidaRef > 0 ? medidaRef * 1000 : null
+    const unidade = categoria === 'perfil' ? 'UN' : categoria === 'vidro' ? 'M2' : (c?.unidadeOrigem || 'UN')
+    linhas.push({
+      pacote_id: pacoteId,
+      item_ref: itemRef(item, indice),
+      categoria,
+      produto_id: c?.produtoId || null,
+      codigo: c?.codigo || c?.codigoWvetro || null,
+      descricao: c?.nome || c?.codigo || c?.codigoWvetro || 'Componente W.Vetro',
+      unidade,
+      cor_ref: corRef,
+      quantidade_tecnica: quantidade,
+      quantidade_ajustada: quantidade,
+      comprimento_corte_mm: comprimentoMm,
+      comprimento_barra_mm: null,
+      origem_calculo: 'wvetro_referencia',
+      status_calculo: quantidade > 0 ? 'manual' : 'pendente_formula',
+      incluido_manual: false,
+      excluido: false,
+      justificativa_ajuste: quantidade > 0
+        ? 'Composição preservada da referência W.Vetro. Quantidade/medida histórica usada no orçamento até homologação da fórmula dinâmica Atlas.'
+        : 'Componente existe na referência W.Vetro, mas sem quantidade histórica suficiente.',
+      ordem: ordem++,
+    })
+  }
+  return { linhas, proximaOrdem: ordem }
+}
+
 function linhaPendente(pacoteId: string, item: any, indice: number, descricao: string, categoria: MaterialPacote['categoria'] = 'perfil') {
   return {
     pacote_id: pacoteId,
@@ -356,8 +403,15 @@ export async function gerarPacoteTecnico(
     const contramarcoAtual = item?.contramarco || estado.config?.contramarco || orcamento.contramarco
 
     if (!tipologiaId || !formula || formula.status !== 'validada') {
-      materiais.push(linhaPendente(pacote.id, item, indice, 'Perfis: fórmula técnica desta tipologia ainda não está validada.'))
-      materiais.push(linhaPendente(pacote.id, item, indice, 'Acessórios: conferir/complementar manualmente antes da compra.', 'acessorio'))
+      const referencia = tipologiaId ? opcoes.referenciasWvetro?.[String(tipologiaId)] : null
+      const fallback = materiaisReferenciaWvetro(pacote.id, item, indice, referencia, qtdItem, corRef, ordem)
+      if (fallback.linhas.length) {
+        materiais.push(...fallback.linhas)
+        ordem = fallback.proximaOrdem
+      } else {
+        materiais.push(linhaPendente(pacote.id, item, indice, 'Perfis: fórmula técnica desta tipologia ainda não está validada.'))
+        materiais.push(linhaPendente(pacote.id, item, indice, 'Acessórios: conferir/complementar manualmente antes da compra.', 'acessorio'))
+      }
       continue
     }
     if (largura <= 0 || altura <= 0) {
