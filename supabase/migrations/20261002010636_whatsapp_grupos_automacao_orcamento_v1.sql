@@ -4,8 +4,7 @@
 alter table public.atendimento_conversas
   add column if not exists whatsapp_chat_tipo text not null default 'contato',
   add column if not exists whatsapp_chat_jid text,
-  add column if not exists grupo_nome text,
-  add column if not exists ocultar_da_caixa boolean not null default false;
+  add column if not exists grupo_nome text;
 
 update public.atendimento_conversas
 set whatsapp_chat_tipo = coalesce(nullif(whatsapp_chat_tipo, ''), 'contato'),
@@ -35,46 +34,6 @@ end $$;
 create index if not exists atendimento_conversas_chat_jid_idx
   on public.atendimento_conversas (empresa_id, whatsapp_canal_id, whatsapp_chat_jid, ultima_mensagem_em desc);
 
-create index if not exists atendimento_conversas_caixa_whatsapp_idx
-  on public.atendimento_conversas (empresa_id, ocultar_da_caixa, ultima_mensagem_em desc)
-  where canal = 'whatsapp';
-
--- Preserva historico antigo, mas tira da caixa somente conversas que nasceram exclusivamente de Status/Stories.
-update public.atendimento_conversas c
-set ocultar_da_caixa = true,
-    updated_at = now()
-where c.canal = 'whatsapp'
-  and exists (
-    select 1
-    from public.atendimento_mensagens m
-    where m.conversa_id = c.id
-      and m.payload->>'remoteJid' = 'status@broadcast'
-  )
-  and not exists (
-    select 1
-    from public.atendimento_mensagens m
-    where m.conversa_id = c.id
-      and (
-        m.direcao = 'saida'
-        or coalesce(m.payload->>'remoteJid','') <> 'status@broadcast'
-      )
-  );
-
-create table if not exists public.atendimento_whatsapp_contatos (
-  id uuid primary key default gen_random_uuid(),
-  empresa_id uuid not null references public.empresas(id) on delete cascade,
-  whatsapp_canal_id uuid not null references public.atendimento_whatsapp_canais(id) on delete cascade,
-  contato_jid text not null,
-  telefone text,
-  nome text,
-  nome_verificado text,
-  ativo boolean not null default true,
-  sincronizado_em timestamptz not null default now(),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (empresa_id, whatsapp_canal_id, contato_jid)
-);
-
 create table if not exists public.atendimento_whatsapp_grupos (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references public.empresas(id) on delete cascade,
@@ -98,7 +57,7 @@ create table if not exists public.atendimento_whatsapp_grupo_automacoes (
   ativo boolean not null default true,
   criar_rascunho boolean not null default true,
   criar_tarefa boolean not null default true,
-  janela_agregacao_minutos integer not null default 5,
+  janela_agregacao_minutos integer not null default 10,
   created_by uuid references public.usuarios(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -122,21 +81,12 @@ create table if not exists public.atendimento_whatsapp_intakes (
   conteudo_bruto text not null default '',
   mensagens_ids jsonb not null default '[]'::jsonb,
   anexos jsonb not null default '[]'::jsonb,
-  ai_status text not null default 'pendente',
-  ai_session_id text,
-  ai_resultado jsonb,
-  ai_erro text,
-  ai_processado_em timestamptz,
   primeira_mensagem_em timestamptz not null default now(),
   ultima_mensagem_em timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (status in ('aberto', 'rascunho_criado', 'processado', 'erro')),
-  check (ai_status in ('pendente', 'processando', 'concluido', 'erro'))
+  check (status in ('aberto', 'rascunho_criado', 'processado', 'erro'))
 );
-
-create index if not exists atendimento_whatsapp_contatos_canal_idx
-  on public.atendimento_whatsapp_contatos (empresa_id, whatsapp_canal_id, ativo, nome);
 
 create index if not exists atendimento_whatsapp_grupos_canal_idx
   on public.atendimento_whatsapp_grupos (empresa_id, whatsapp_canal_id, ativo, nome);
@@ -146,88 +96,22 @@ create index if not exists atendimento_whatsapp_intakes_abertos_idx
     empresa_id, automacao_id, participante_jid, status, ultima_mensagem_em desc
   );
 
-alter table public.atendimento_whatsapp_contatos enable row level security;
 alter table public.atendimento_whatsapp_grupos enable row level security;
 alter table public.atendimento_whatsapp_grupo_automacoes enable row level security;
 alter table public.atendimento_whatsapp_intakes enable row level security;
 
-revoke all on public.atendimento_whatsapp_contatos from authenticated;
 revoke all on public.atendimento_whatsapp_grupos from authenticated;
 revoke all on public.atendimento_whatsapp_grupo_automacoes from authenticated;
 revoke all on public.atendimento_whatsapp_intakes from authenticated;
 
-grant select on public.atendimento_whatsapp_contatos to authenticated;
 grant select on public.atendimento_whatsapp_grupos to authenticated;
 grant select on public.atendimento_whatsapp_grupo_automacoes to authenticated;
 grant select on public.atendimento_whatsapp_intakes to authenticated;
 
-drop policy if exists atendimento_whatsapp_contatos_select_v1 on public.atendimento_whatsapp_contatos;
-create policy atendimento_whatsapp_contatos_select_v1
-on public.atendimento_whatsapp_contatos for select to authenticated
-using (
-  empresa_id = (select private.current_empresa_id())
-  and (
-    (select private.is_master_atlas())
-    or exists (
-      select 1
-      from public.atendimento_whatsapp_canais c
-      where c.id = whatsapp_canal_id
-        and c.empresa_id = empresa_id
-        and c.ativo = true
-        and (
-          c.principal = true
-          or c.usuario_id = (select auth.uid())
-          or exists (
-            select 1
-            from public.atendimento_whatsapp_permissoes p
-            where p.empresa_id = empresa_id
-              and p.canal_id = c.id
-              and p.usuario_id = (select auth.uid())
-              and (
-                p.pode_visualizar = true
-                or p.pode_atender = true
-                or p.pode_transferir = true
-                or p.pode_supervisionar = true
-              )
-          )
-        )
-    )
-  )
-);
-
 drop policy if exists atendimento_whatsapp_grupos_select_v1 on public.atendimento_whatsapp_grupos;
 create policy atendimento_whatsapp_grupos_select_v1
 on public.atendimento_whatsapp_grupos for select to authenticated
-using (
-  empresa_id = (select private.current_empresa_id())
-  and (
-    (select private.is_master_atlas())
-    or exists (
-      select 1
-      from public.atendimento_whatsapp_canais c
-      where c.id = whatsapp_canal_id
-        and c.empresa_id = empresa_id
-        and c.ativo = true
-        and (
-          c.principal = true
-          or c.usuario_id = (select auth.uid())
-          or exists (
-            select 1
-            from public.atendimento_whatsapp_permissoes p
-            where p.empresa_id = empresa_id
-              and p.canal_id = c.id
-              and p.usuario_id = (select auth.uid())
-              and (
-                p.pode_visualizar = true
-                or p.pode_atender = true
-                or p.pode_transferir = true
-                or p.pode_supervisionar = true
-              )
-          )
-        )
-    )
-  )
-);
+using (empresa_id = (select private.current_empresa_id()));
 
 drop policy if exists atendimento_whatsapp_grupo_automacoes_select_v1 on public.atendimento_whatsapp_grupo_automacoes;
 create policy atendimento_whatsapp_grupo_automacoes_select_v1
@@ -252,9 +136,6 @@ using (
     )
   )
 );
-
-comment on table public.atendimento_whatsapp_contatos is
-  'Diretorio de contatos sincronizados por numero WhatsApp, respeitando permissao do canal.';
 
 comment on table public.atendimento_whatsapp_grupos is
   'Grupos sincronizados de cada numero WhatsApp conectado ao Atlas. Status/Stories nao entram aqui.';
