@@ -824,8 +824,8 @@ export default function AtlasEspecialistasPage() {
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-4">
           <Link href="/atlas-ia" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={20}/></Link>
           <div>
-            <h1 className="font-semibold">Especialistas Atlas IA</h1>
-            <p className="text-xs text-slate-500">14 especialistas · OpenCode + FreeLLMAPI · acesso por setor</p>
+            <h1 className="font-semibold">Atlas IA</h1>
+            <p className="text-xs text-slate-500">Conversa geral ou especialistas por área</p>
           </div>
         </div>
       </header>
@@ -833,9 +833,23 @@ export default function AtlasEspecialistasPage() {
       <div className="mx-auto grid max-w-7xl gap-4 p-4 lg:grid-cols-[330px_1fr]">
         <aside className="rounded-2xl border bg-white p-3 shadow-sm">
           <div className="mb-3 flex items-center gap-2 px-2 text-sm font-semibold text-slate-700">
-            <Sparkles size={17}/> Escolha o especialista
+            <Sparkles size={17}/> Escolha como conversar
           </div>
           <div className="space-y-1.5">
+            <Link
+              href="/atlas-ia"
+              className="block w-full rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-left transition hover:bg-emerald-100"
+            >
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                <MessageCircle size={16}/> Conversa geral
+              </div>
+              <p className="mt-1 text-xs text-emerald-700">
+                Converse livremente sobre qualquer assunto, sem escolher especialista.
+              </p>
+            </Link>
+            <div className="px-2 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Especialistas
+            </div>
             {especialistas.map(e => (
               <button
                 key={e.modulo}
