@@ -151,6 +151,8 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
   const [filtro, setFiltro] = useState<FiltroVisual>('todos')
   const [variaveisTipologia, setVariaveisTipologia] = useState<TipologiaVariavelComVariavel[]>([])
   const [imagemAmpliada, setImagemAmpliada] = useState<{ url: string; nome: string; origem: string } | null>(null)
+  const [modalVariaveisAberto, setModalVariaveisAberto] = useState(false)
+  const [padraoVariaveisSalvo, setPadraoVariaveisSalvo] = useState(false)
 
   async function carregarCatalogo() {
     setCarregando(true)
@@ -201,6 +203,7 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
   const produtoAtual = catalogo.produtos.find(p => p.id === value.produtoId) || null
   const statusTipologiaAtual = value.tipologiaId ? statusTipologias[value.tipologiaId] || null : null
   const referenciaAtual = value.tipologiaId ? referenciasWVetro[value.tipologiaId] || null : null
+  const imagemVariaveis = tipologiaAtual ? imagemTipologia(tipologiaAtual) : { url: null, origem: 'Sem imagem' }
 
   const tipologiasCompativeis = useMemo(() => {
     if (!linha) return []
@@ -400,11 +403,21 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
 
   function mudarModo(modo: 'rapido' | 'assistido') {
     if (modo === 'rapido') {
+      setModalVariaveisAberto(false)
       onChange({ modoConfiguracao: modo, configuracaoStatus: value.configuracaoValidada ? 'validada' : 'pendente' })
       return
     }
 
-    const novos = { ...(value.variaveis || {}) }
+    let padraoLocal: Record<string, string> = {}
+    if (typeof window !== 'undefined' && value.tipologiaId) {
+      try {
+        const bruto = window.localStorage.getItem('atlas:wvetro:variaveis:' + value.tipologiaId)
+        if (bruto) padraoLocal = JSON.parse(bruto) as Record<string, string>
+      } catch {
+        padraoLocal = {}
+      }
+    }
+    const novos = { ...padraoLocal, ...(value.variaveis || {}) }
     for (const ref of referenciaAtual?.variaveis || []) {
       if (!novos[ref.chave] && ref.valor) novos[ref.chave] = ref.valor
     }
@@ -417,6 +430,18 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
       folhas: novos.folhas || value.folhas,
       configuracaoStatus: completas && temValores ? 'preenchida' : 'pendente',
     })
+    setModalVariaveisAberto(true)
+  }
+
+  function salvarVariaveisComoPadrao() {
+    if (typeof window === 'undefined' || !value.tipologiaId) return
+    try {
+      window.localStorage.setItem('atlas:wvetro:variaveis:' + value.tipologiaId, JSON.stringify(value.variaveis || {}))
+      setPadraoVariaveisSalvo(true)
+      window.setTimeout(() => setPadraoVariaveisSalvo(false), 2500)
+    } catch {
+      setPadraoVariaveisSalvo(false)
+    }
   }
 
   function mudarVariavel(chave: string, valor: string) {
@@ -445,8 +470,12 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
 
   return (
     <div className="space-y-4">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-brand-navy">Escolha o desenho | projeto</p>
+        <p className="mt-1 text-[11px] text-slate-500">Selecione a linha e o modelo como no W.Vetro; a busca livre continua disponível como contingência.</p>
+      </div>
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-        <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo de esquadria / descrição livre</label>
+        <label className="block text-xs font-semibold text-slate-700 mb-1">Pesquisa / descrição livre (opcional)</label>
         <input
           type="text"
           value={value.tipo === 'outro' ? value.tipoOutroTexto : ''}
@@ -454,15 +483,15 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
           placeholder="Ex.: Porta de correr 3 folhas - Linha Suprema"
           className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white"
         />
-        <p className="mt-1.5 text-[11px] text-emerald-800">Use este campo quando a esquadria ainda não estiver cadastrada. Linha e Modelo abaixo são opcionais.</p>
+        <p className="mt-1.5 text-[11px] text-emerald-800">Use este campo somente quando a esquadria ainda não estiver cadastrada. No fluxo normal, escolha Linha e Modelo abaixo.</p>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">1. Linha <span className="font-normal text-slate-400">(opcional)</span></label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">1. Linha</label>
           <div className="relative">
             <select value={value.linhaId || ''} onChange={e => selecionarLinha(e.target.value)} className="w-full appearance-none border border-slate-300 rounded-lg p-2.5 pr-8 text-sm bg-white">
-              <option value="">Selecione a linha (opcional)</option>
+              <option value="">Selecione a linha</option>
               {catalogo.linhas.map(l => <option key={l.id} value={l.id}>{l.nome}{(l as any).origem_referencia === 'wvetro' ? ' · WVETRO' : ''}</option>)}
             </select>
             <ChevronDown size={15} className="pointer-events-none absolute right-2.5 top-3 text-slate-400" />
@@ -635,8 +664,28 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700 flex items-center gap-2"><Sparkles size={13} /> Configuração selecionada: <strong>{value.configuracaoNome}</strong></div>
       )}
 
-      {value.tipologiaId && value.modoConfiguracao === 'assistido' && !value.configuracaoValidada && (
-        <div className="space-y-3 rounded-xl border border-brand-navy/15 bg-brand-navyLight/40 p-3">
+      {value.tipologiaId && value.modoConfiguracao === 'assistido' && !value.configuracaoValidada && modalVariaveisAberto && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5" onMouseDown={() => setModalVariaveisAberto(false)}>
+          <div className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between border-b bg-slate-50 px-4 py-3 sm:px-5">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-brand-navy">Informe as variáveis</p>
+                <h3 className="mt-0.5 text-base font-bold text-slate-900">{tipologiaAtual?.label || 'Projeto selecionado'}</h3>
+                <p className="mt-1 text-[11px] text-slate-500">Fluxo espelhado do W.Vetro. As escolhas ficam gravadas no item do orçamento.</p>
+              </div>
+              <button type="button" onClick={() => setModalVariaveisAberto(false)} className="rounded-lg border bg-white p-2 text-slate-600"><X size={17}/></button>
+            </div>
+            <div className="grid min-h-0 flex-1 overflow-hidden md:grid-cols-[300px_minmax(0,1fr)]">
+              <aside className="hidden min-h-0 border-r bg-slate-50 p-4 md:block">
+                <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border bg-white">
+                  {imagemVariaveis.url ? <img src={imagemVariaveis.url} alt={tipologiaAtual?.label || 'Projeto'} className="h-full w-full object-contain" /> : <div className="text-center text-xs text-slate-400"><ImageIcon size={38} className="mx-auto mb-2"/>Desenho ainda não cadastrado</div>}
+                </div>
+                <p className="mt-3 text-sm font-semibold text-slate-800">{tipologiaAtual?.label}</p>
+                <p className="mt-1 text-xs text-slate-500">{linha?.nome || value.linhaNome || 'Linha não informada'}</p>
+                {referenciaAtual && <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-[11px] text-blue-800"><b>Referência W.Vetro carregada.</b><br/>{referenciaAtual.variaveis.length} variável(is) explícita(s) disponíveis.</div>}
+              </aside>
+              <div className="min-h-0 overflow-y-auto p-4 sm:p-5">
+                <div className="space-y-3 rounded-xl border border-brand-navy/15 bg-brand-navyLight/40 p-3">
           {(referenciaAtual?.variaveis.length || 0) > 0 && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-[11px] text-blue-800">
               <strong>{referenciaAtual?.variaveis.length} variável(is) explícita(s) carregada(s) do W.Vetro.</strong> São referências de origem, não validação da receita Atlas. Você pode alterar os valores antes de continuar.
@@ -662,17 +711,34 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
                         {v.referencia && atual && !refAtiva && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[8px] font-bold text-amber-700">AJUSTADA</span>}
                       </div>
                     </div>
-                    <select value={atual} onChange={e => mudarVariavel(v.chave, e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white">
-                      <option value="">A definir</option>
-                      {!possuiOpcaoRef && v.referencia?.valor && <option value={v.referencia.valor}>{v.referencia.valor} · W.Vetro</option>}
-                      {opcoes.map(o => <option key={o.id} value={o.chave}>{o.label}</option>)}
-                    </select>
+                    {v.chave.endsWith('_mm') ? (
+                      <div className="relative">
+                        <input type="number" step="0.1" value={atual} onChange={e => mudarVariavel(v.chave, e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white p-2.5 pr-11 text-sm" placeholder="0" />
+                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-slate-400">mm</span>
+                      </div>
+                    ) : (
+                      <select value={atual} onChange={e => mudarVariavel(v.chave, e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white">
+                        <option value="">A definir</option>
+                        {!possuiOpcaoRef && v.referencia?.valor && <option value={v.referencia.valor}>{v.referencia.valor} · W.Vetro</option>}
+                        {opcoes.map(o => <option key={o.id} value={o.chave}>{o.label}</option>)}
+                      </select>
+                    )}
                     {v.referencia?.evidencia && <p className="mt-1.5 text-[9px] text-blue-600">Origem: {v.referencia.evidencia}</p>}
                   </div>
                 )
               })}
             </div>
           )}
+                </div>
+              </div>
+            </div>
+            <div className="grid shrink-0 gap-2 border-t bg-slate-50 px-4 pb-[max(0.8rem,env(safe-area-inset-bottom))] pt-3 sm:grid-cols-2 sm:px-5 sm:py-4">
+              <button type="button" onClick={salvarVariaveisComoPadrao} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+                {padraoVariaveisSalvo ? '✓ Padrão salvo neste dispositivo' : 'Salvar variáveis como padrão'}
+              </button>
+              <button type="button" onClick={() => setModalVariaveisAberto(false)} className="rounded-xl bg-brand-teal px-4 py-3 text-sm font-bold text-white">Confirmar variáveis</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -695,3 +761,5 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
     </div>
   )
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]

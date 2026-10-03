@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Camera, CheckCircle, Keyboard, Paperclip, Pencil, Plus, Send, Trash2, WifiOff, X } from 'lucide-react'
+import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Paperclip, Pencil, Plus, Send, Trash2, WifiOff, X } from 'lucide-react'
 import Link from 'next/link'
 import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
@@ -21,6 +21,24 @@ const acabamentos: { value: Acabamento; label: string }[] = [
 
 type TipoItemLancamento = 'sob_medida' | 'medida_padrao' | 'kit_porta_pronta' | 'material_avulso'
 type CategoriaMaterial = 'perfil' | 'acessorio' | 'vidro' | 'outros'
+
+type WVetroFluxoForm = {
+  referencia: string
+  codigoReferenciaInterna: string
+  vendedorNome: string
+  arrematePadrao: 'face_interna' | 'sem' | ''
+  arrematePisoPadrao: 'sim' | 'nao' | ''
+  tipoMedidaContramarco: 'externa' | 'interna' | ''
+}
+
+const WVETRO_FLUXO_INICIAL: WVetroFluxoForm = {
+  referencia: '',
+  codigoReferenciaInterna: '',
+  vendedorNome: '',
+  arrematePadrao: 'face_interna',
+  arrematePisoPadrao: 'nao',
+  tipoMedidaContramarco: 'externa',
+}
 
 interface ItemForm {
   id: string
@@ -122,6 +140,7 @@ type ArquivoRascunho = { nome: string; tipo: string; ultimaModificacao: number; 
 
 interface RascunhoOrcamentoRapido {
   itens: ItemForm[]
+  wvetroFluxo?: WVetroFluxoForm
   clienteIdOrigem: string | null
   clienteNome: string
   clienteWhatsapp: string
@@ -138,6 +157,7 @@ interface RascunhoOrcamentoRapido {
 
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
+  const [wvetroFluxo, setWvetroFluxo] = useState<WVetroFluxoForm>(WVETRO_FLUXO_INICIAL)
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
@@ -181,6 +201,7 @@ export default function OrcamentoRapido() {
           const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
           return { ...item, fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined }
         }))
+        setWvetroFluxo({ ...WVETRO_FLUXO_INICIAL, ...(d.wvetroFluxo || {}) })
         setClienteIdOrigem(d.clienteIdOrigem || null)
         setClienteNome(d.clienteNome || '')
         setClienteWhatsapp(d.clienteWhatsapp || '')
@@ -205,6 +226,7 @@ export default function OrcamentoRapido() {
     const timer = window.setTimeout(() => {
       const dados: RascunhoOrcamentoRapido = {
         itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
+        wvetroFluxo,
         clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura,
         acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
         arquivos: arquivos.map(arquivoParaRascunho),
@@ -212,7 +234,7 @@ export default function OrcamentoRapido() {
       salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, wvetroFluxo, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
@@ -240,6 +262,28 @@ export default function OrcamentoRapido() {
 
   function atualizarItemCampos(id: string, patch: Partial<ItemForm>) {
     setItens(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it))
+  }
+
+  function atualizarVariavelItem(id: string, chave: string, valor: string) {
+    setItens(prev => prev.map(it => it.id === id ? { ...it, variaveis: { ...(it.variaveis || {}), [chave]: valor } } : it))
+  }
+
+  function duplicarItemNovaMedida(id: string) {
+    setItens(prev => {
+      const base = prev.find(it => it.id === id)
+      if (!base) return prev
+      const copia: ItemForm = {
+        ...base,
+        id: uuidv4(),
+        largura: '', altura: '', quantidade: '1',
+        larguraBaixo: '', larguraMeio: '', larguraCima: '',
+        alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
+        fotoLargura: undefined, fotoLarguraPreview: undefined,
+        fotoAltura: undefined, fotoAlturaPreview: undefined,
+        fotos: [], fotosPreviews: [],
+      }
+      return [...prev, copia]
+    })
   }
 
   function adicionarFotoItem(id: string, files: FileList | null) {
@@ -286,6 +330,7 @@ export default function OrcamentoRapido() {
     const tipoMedida = itens.every(item => item.tipoMedida === 'final') ? 'final' : 'comum'
     const dadosForm: DadosOrcamentoForm = {
       clienteId: clienteIdOrigem, orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), itens: itens.map(item => ({ ...item, itemTipo: item.itemTipo || 'sob_medida' })), clienteNome, clienteWhatsapp, cidade, origem,
+      wvetroFluxo,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
@@ -345,7 +390,7 @@ export default function OrcamentoRapido() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setPedidoEnviadoId(null); setSalvoOffline(false); setErro(''); setConferenciaAberta(false)
-    setItens([novoItem()]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
+    setItens([novoItem()]); setWvetroFluxo(WVETRO_FLUXO_INICIAL); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -356,7 +401,7 @@ export default function OrcamentoRapido() {
 
   if (salvoOffline) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center"><WifiOff size={48} className="text-amber-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Salvo neste aparelho!</h2><p className="text-slate-500 mb-6">Sem internet agora. O pedido de {clienteNome} foi guardado e será enviado quando a internet voltar.</p><button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg">Novo pedido</button></div></div>
 
-  if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Pedido enviado!</h2><p className="text-slate-500 mb-6">{clienteNome} entrou no painel de orçamentos.</p><div className="grid gap-3">{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 bg-brand-teal text-white rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> Editar este pedido</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo pedido</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
+  if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Orçamento criado!</h2><p className="text-slate-500 mb-6">{clienteNome} entrou no painel com tipologia, medidas e variáveis gravadas.</p><div className="grid gap-3">{pedidoEnviadoId && <><Link href={`/orcamento/${pedidoEnviadoId}/precificacao`} className="w-full px-4 py-3 bg-brand-navy text-white rounded-xl flex items-center justify-center gap-2 font-semibold"><Calculator size={17} /> Calcular / Precificar orçamento</Link><Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 bg-brand-teal text-white rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> Editar este pedido</Link></>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-slate-900 text-white rounded-xl">Novo pedido</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
 
   const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
 
@@ -365,6 +410,18 @@ export default function OrcamentoRapido() {
       <header className="bg-white border-b border-slate-200"><div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div><h1 className="text-lg font-bold text-slate-800">Orçamento</h1><p className="text-sm text-slate-500">Registre o pedido e mande pro painel</p></div></div></header>
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
+
+        <section className="bg-white rounded-2xl border border-blue-200 p-6 space-y-4">
+          <div><h3 className="text-sm font-bold text-slate-800">Cadastro do orçamento · fluxo W.Vetro</h3><p className="mt-1 text-xs text-slate-500">Cabeçalho do orçamento antes de escolher o projeto. Esses dados ficam congelados junto com o orçamento.</p></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div><label className="mb-1 block text-xs text-slate-500">Referência</label><input data-preserve-case="true" value={wvetroFluxo.referencia} onChange={e=>setWvetroFluxo(p=>({...p,referencia:e.target.value}))} placeholder="Ex.: Residência Silva" className="w-full rounded-xl border border-slate-300 p-3 text-sm"/></div>
+            <div><label className="mb-1 block text-xs text-slate-500">Cód. ref. interna</label><input data-preserve-case="true" value={wvetroFluxo.codigoReferenciaInterna} onChange={e=>setWvetroFluxo(p=>({...p,codigoReferenciaInterna:e.target.value}))} placeholder="Código interno (opcional)" className="w-full rounded-xl border border-slate-300 p-3 text-sm"/></div>
+            <div><label className="mb-1 block text-xs text-slate-500">Vendedor</label><input data-preserve-case="true" value={wvetroFluxo.vendedorNome} onChange={e=>setWvetroFluxo(p=>({...p,vendedorNome:e.target.value}))} placeholder="Nome do vendedor" className="w-full rounded-xl border border-slate-300 p-3 text-sm"/></div>
+            <div><label className="mb-1 block text-xs text-slate-500">Montagem do arremate</label><select value={wvetroFluxo.arrematePadrao} onChange={e=>setWvetroFluxo(p=>({...p,arrematePadrao:e.target.value as WVetroFluxoForm['arrematePadrao']}))} className="w-full rounded-xl border border-slate-300 p-3 text-sm"><option value="face_interna">Face interna</option><option value="sem">Sem arremate</option></select></div>
+            <div><label className="mb-1 block text-xs text-slate-500">Arremate de piso</label><select value={wvetroFluxo.arrematePisoPadrao} onChange={e=>setWvetroFluxo(p=>({...p,arrematePisoPadrao:e.target.value as WVetroFluxoForm['arrematePisoPadrao']}))} className="w-full rounded-xl border border-slate-300 p-3 text-sm"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
+            <div><label className="mb-1 block text-xs text-slate-500">Tipo medida contramarco</label><select value={wvetroFluxo.tipoMedidaContramarco} onChange={e=>setWvetroFluxo(p=>({...p,tipoMedidaContramarco:e.target.value as WVetroFluxoForm['tipoMedidaContramarco']}))} className="w-full rounded-xl border border-slate-300 p-3 text-sm"><option value="externa">Externa</option><option value="interna">Interna</option></select></div>
+          </div>
+        </section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => setTemperatura(t)} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => setAcabamento(a.value)} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input data-preserve-case="true" value={acabamentoOutroTexto} onChange={e => setAcabamentoOutroTexto(e.target.value)} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>
@@ -377,6 +434,22 @@ export default function OrcamentoRapido() {
           {!item.itemTipo ? <div className="space-y-3"><div><p className="text-sm font-semibold text-slate-800">O que você vai adicionar?</p><p className="text-xs text-slate-500">Escolha primeiro o tipo do item.</p></div><div className="grid grid-cols-2 gap-2">{([['sob_medida','Sob medida'],['medida_padrao','Medida padrão'],['kit_porta_pronta','Kit porta pronta'],['material_avulso','Material avulso']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>atualizarItemCampos(item.id,{itemTipo:v,materialCategoria:v==='material_avulso'?'perfil':null,tipo:v==='sob_medida'?'':'outro',tipoOutroTexto:''})} className="min-h-20 rounded-xl border-2 border-slate-200 bg-white p-3 text-left text-sm font-semibold text-slate-800 hover:border-brand-navy"><span className="block">{l}</span><span className="mt-1 block text-[11px] font-normal text-slate-500">{v==='sob_medida'?'Tipologia e variáveis técnicas':v==='medida_padrao'?'Produto com medidas cadastradas':v==='kit_porta_pronta'?'Kit previamente cadastrado':'Perfil, acessório, vidro ou outros'}</span></button>)}</div></div> : <><button type="button" onClick={()=>atualizarItemCampos(item.id,{itemTipo:'',produtoId:null,produtoNome:null,materialCategoria:null,contramarcoOverride:null})} className="text-xs font-semibold text-brand-navy">← Trocar tipo de item</button>
           <div><label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label><input data-preserve-case="true" value={item.ambiente} onChange={e => atualizarItem(item.id,'ambiente',e.target.value)} placeholder="Ex: Sala, Quarto 1, Cozinha..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
           {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
+          {item.itemTipo==='sob_medida' && item.tipologiaId && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+            <div><p className="text-xs font-bold uppercase tracking-wide text-brand-navy">Dados do projeto para o orçamento</p><p className="mt-1 text-[11px] text-slate-500">Mesma etapa usada no W.Vetro depois de escolher o desenho/projeto.</p></div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><label className="mb-1 block text-xs text-slate-500">Cor acessórios</label><input value={item.variaveis?.cor_acessorios||''} onChange={e=>atualizarVariavelItem(item.id,'cor_acessorios',e.target.value)} placeholder="Ex.: Preto" className="w-full rounded-lg border p-2.5 text-sm"/></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Cor alumínio / perfil</label><input value={item.cor} onChange={e=>atualizarItem(item.id,'cor',e.target.value)} placeholder="Ex.: Preto" className="w-full rounded-lg border p-2.5 text-sm"/></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Vidro</label><input value={item.variaveis?.vidro||''} onChange={e=>atualizarVariavelItem(item.id,'vidro',e.target.value)} placeholder="Ex.: Incolor 8 mm" className="w-full rounded-lg border p-2.5 text-sm"/></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Tipo</label><input value={item.variaveis?.tipo_orcamento||''} onChange={e=>atualizarVariavelItem(item.id,'tipo_orcamento',e.target.value)} placeholder="Tipo / classificação" className="w-full rounded-lg border p-2.5 text-sm"/></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Data entrega</label><input type="date" value={item.variaveis?.data_entrega||''} onChange={e=>atualizarVariavelItem(item.id,'data_entrega',e.target.value)} className="w-full rounded-lg border p-2.5 text-sm"/></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Ordem</label><input value={item.variaveis?.ordem||String(idx+1)} onChange={e=>atualizarVariavelItem(item.id,'ordem',e.target.value)} className="w-full rounded-lg border p-2.5 text-sm"/></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Arremate</label><select value={item.variaveis?.arremate_item||wvetroFluxo.arrematePadrao} onChange={e=>atualizarVariavelItem(item.id,'arremate_item',e.target.value)} className="w-full rounded-lg border p-2.5 text-sm"><option value="face_interna">Face interna</option><option value="sem">Sem arremate</option></select></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Arremate piso</label><select value={item.variaveis?.arremate_piso_item||wvetroFluxo.arrematePisoPadrao} onChange={e=>atualizarVariavelItem(item.id,'arremate_piso_item',e.target.value)} className="w-full rounded-lg border p-2.5 text-sm"><option value="nao">Não</option><option value="sim">Sim</option></select></div>
+              <div><label className="mb-1 block text-xs text-slate-500">Tipo medida contramarco</label><select value={item.variaveis?.tipo_medida_contramarco_item||wvetroFluxo.tipoMedidaContramarco} onChange={e=>atualizarVariavelItem(item.id,'tipo_medida_contramarco_item',e.target.value)} className="w-full rounded-lg border p-2.5 text-sm"><option value="externa">Externa</option><option value="interna">Interna</option></select></div>
+            </div>
+            <div className="grid gap-3"><textarea value={item.variaveis?.obs_cliente||''} onChange={e=>atualizarVariavelItem(item.id,'obs_cliente',e.target.value)} placeholder="Obs. do projeto para o cliente" className="min-h-16 w-full rounded-lg border p-2.5 text-sm"/><textarea value={item.variaveis?.obs_tempera||''} onChange={e=>atualizarVariavelItem(item.id,'obs_tempera',e.target.value)} placeholder="Observação para têmpera" className="min-h-16 w-full rounded-lg border p-2.5 text-sm"/><textarea value={item.variaveis?.obs_producao||''} onChange={e=>atualizarVariavelItem(item.id,'obs_producao',e.target.value)} placeholder="Observações para produção" className="min-h-16 w-full rounded-lg border p-2.5 text-sm"/></div>
+            <button type="button" onClick={()=>duplicarItemNovaMedida(item.id)} className="w-full rounded-xl border border-blue-300 bg-white px-3 py-2.5 text-sm font-semibold text-brand-navy">Incluir mesmo item e informar nova medida</button>
+          </div>}
           {item.itemTipo==='sob_medida' && item.tipo && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
 
           {item.itemTipo==='sob_medida' ? <>
@@ -403,7 +476,7 @@ export default function OrcamentoRapido() {
           </div>}
 
           <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotosPreviews.map((src,i) => <div key={i} className="relative w-24 h-24"><img src={src} alt="Foto" onClick={() => setFotoAmpliada(src)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
-          <div><label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label><input data-preserve-case="true" value={item.cor} onChange={e => atualizarItem(item.id,'cor',e.target.value)} placeholder="Só preencha se for diferente da cor geral" className="w-full border rounded-lg p-2.5 text-sm"/></div>
+          {item.itemTipo!=='sob_medida' && <div><label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label><input data-preserve-case="true" value={item.cor} onChange={e => atualizarItem(item.id,'cor',e.target.value)} placeholder="Só preencha se for diferente da cor geral" className="w-full border rounded-lg p-2.5 text-sm"/></div>}
           <div><label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Alguma observação da obra pro orçamentista saber..." className="w-full h-16 border rounded-lg p-2.5 text-sm resize-none"/></div></>}
         </div>)}<button onClick={() => setItens(prev => [...prev,novoItem()])} className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500"><Plus size={16}/>Adicionar outra esquadria</button></div>
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}<button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium flex items-center justify-center gap-2"><Send size={18}/>{salvando ? 'Enviando...' : 'Enviar pedido'}</button>
@@ -459,3 +532,4 @@ export default function OrcamentoRapido() {
     </div>
   )
 }
+
