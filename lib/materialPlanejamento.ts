@@ -246,7 +246,7 @@ function materiaisReferenciaWvetro(
     const quantidade = quantidadeRef * qtdItem
     const medidaRef = Math.max(0, n(c?.medidaMax ?? c?.medidaMin, 0))
     const comprimentoMm = categoria === 'perfil' && medidaRef > 0 ? medidaRef * 1000 : null
-    const unidade = categoria === 'perfil' ? 'UN' : categoria === 'vidro' ? 'M2' : (c?.unidadeOrigem || 'UN')
+    const unidade = categoria === 'vidro' ? 'M2' : (c?.unidadeAtlas || c?.unidadeOrigem || (categoria === 'perfil' ? 'BR' : 'UN'))
     linhas.push({
       pacote_id: pacoteId,
       item_ref: itemRef(item, indice),
@@ -259,7 +259,7 @@ function materiaisReferenciaWvetro(
       quantidade_tecnica: quantidade,
       quantidade_ajustada: quantidade,
       comprimento_corte_mm: comprimentoMm,
-      comprimento_barra_mm: null,
+      comprimento_barra_mm: categoria === 'perfil' ? Math.max(0, n(c?.tamanhoBarraMm, 0)) || null : null,
       origem_calculo: 'wvetro_referencia',
       status_calculo: quantidade > 0 ? 'manual' : 'pendente_formula',
       incluido_manual: false,
