@@ -9,6 +9,7 @@ import {
   FileText,
   KeyRound,
   LayoutGrid,
+  Lightbulb,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -53,6 +54,7 @@ const GRUPOS: { titulo: string; descricao: string; itens: Atalho[] }[] = [
     itens: [
       { href: '/configuracoes/campos', titulo: 'Campos adicionais', descricao: 'Campos personalizados usados nas rotinas do Atlas.', icon: SlidersHorizontal },
       { href: '/administracao/ia', titulo: 'Controle Master · Atlas IA', descricao: 'Uso por usuário, permissões de dados, auditoria, clima e voz do colaborador.', icon: ShieldCheck },
+      { href: '/administracao/melhorias-atlas', titulo: 'Melhorias Atlas', descricao: 'Analisar bugs, sugestões, risco, aprovação e andamento das melhorias relatadas pela equipe.', icon: Lightbulb },
       { href: '/configuracoes', titulo: 'Configurações Avançadas', descricao: 'Automações, metas, backup, Kanban, SLA, IA e outros ajustes.', icon: Settings },
     ],
   },
