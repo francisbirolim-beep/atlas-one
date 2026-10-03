@@ -254,6 +254,10 @@ export async function GET(req: NextRequest) {
     const statusParam = String(req.nextUrl.searchParams.get('status') || '').trim()
     const permitidos = await modulosPermitidos(usuario)
 
+    if (!permitidos.length) {
+      return NextResponse.json({ itens: [], modulos: [] })
+    }
+
     if (moduloParam && (!MODULOS.has(moduloParam) || !permitidos.includes(moduloParam))) {
       return NextResponse.json({ error: 'Você não possui acesso a este especialista.' }, { status: 403 })
     }
