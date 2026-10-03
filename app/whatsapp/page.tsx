@@ -6,7 +6,7 @@ import {
   ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
-  UserRoundCheck, Plus, Zap,
+  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -90,6 +90,7 @@ type DiretorioWhatsApp = {
   telefone?: string | null
   nome: string
   participantes?: number | null
+  canalId?: string
 }
 
 function hora(valor?: string | null) {
@@ -132,10 +133,12 @@ export default function WhatsAppAtendimentoPage() {
   const [canaisTotal, setCanaisTotal] = useState(0)
   const [destinoId, setDestinoId] = useState('')
   const [setorTransferencia, setSetorTransferencia] = useState('')
+  const [transferenciaAberta, setTransferenciaAberta] = useState(false)
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [obras, setObras] = useState<ObraResumo[]>([])
   const [carregandoCliente, setCarregandoCliente] = useState(false)
   const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas'>('cliente')
+  const [painelDireitoRecolhido, setPainelDireitoRecolhido] = useState(true)
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([])
   const [etiquetasAtivas, setEtiquetasAtivas] = useState<string[]>([])
   const [notas, setNotas] = useState<Nota[]>([])
@@ -148,6 +151,8 @@ export default function WhatsAppAtendimentoPage() {
   const [buscaDiretorio, setBuscaDiretorio] = useState('')
   const [canalDiretorio, setCanalDiretorio] = useState('')
   const [carregandoDiretorio, setCarregandoDiretorio] = useState(false)
+  const [contatosBusca, setContatosBusca] = useState<DiretorioWhatsApp[]>([])
+  const [buscandoContatos, setBuscandoContatos] = useState(false)
   const [novaRapidaTitulo, setNovaRapidaTitulo] = useState('')
   const [novaRapidaTexto, setNovaRapidaTexto] = useState('')
   const [enviandoMidia, setEnviandoMidia] = useState(false)
@@ -158,6 +163,23 @@ export default function WhatsAppAtendimentoPage() {
   const gravadorRef = useRef<MediaRecorder | null>(null)
   const partesAudioRef = useRef<Blob[]>([])
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem('atlas-whatsapp-painel-direito-recolhido')
+      setPainelDireitoRecolhido(salvo === null ? true : salvo === '1')
+    } catch {}
+  }, [])
+
+  function alternarPainelDireitoRecolhido(valor?: boolean) {
+    setPainelDireitoRecolhido(atual => {
+      const proximo = typeof valor === 'boolean' ? valor : !atual
+      try {
+        localStorage.setItem('atlas-whatsapp-painel-direito-recolhido', proximo ? '1' : '0')
+      } catch {}
+      return proximo
+    })
+  }
 
   async function carregarConversas(selecionar = true) {
     try {
@@ -230,12 +252,14 @@ export default function WhatsAppAtendimentoPage() {
 
   async function iniciarDoDiretorio(item: DiretorioWhatsApp) {
     try {
+      const canalId = item.canalId || canalDiretorio
+      if (!canalId) throw new Error('Canal WhatsApp não identificado.')
       const headers = await headersJson()
       const resp = await fetch('/api/integracoes/whatsapp/contatos', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          canalId: canalDiretorio,
+          canalId,
           tipo: item.tipo,
           jid: item.jid,
           telefone: item.telefone || null,
@@ -292,6 +316,52 @@ export default function WhatsAppAtendimentoPage() {
     const timer = setTimeout(() => { void carregarDiretorio() }, 250)
     return () => clearTimeout(timer)
   }, [diretorioAberto, canalDiretorio, buscaDiretorio])
+
+  useEffect(() => {
+    const q = busca.trim()
+    if (q.length < 2 || canais.length === 0) {
+      setContatosBusca([])
+      setBuscandoContatos(false)
+      return
+    }
+
+    let ativo = true
+    const timer = setTimeout(() => {
+      void (async () => {
+        setBuscandoContatos(true)
+        try {
+          const headers = await headersJson()
+          const ids = canalFiltro === 'todos'
+            ? canais.map(c => c.id)
+            : canais.filter(c => c.id === canalFiltro).map(c => c.id)
+          const respostas = await Promise.all(ids.map(async canalId => {
+            const params = new URLSearchParams({ canalId, busca: q })
+            const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers })
+            const json = await resp.json()
+            if (!resp.ok) return [] as DiretorioWhatsApp[]
+            return ((json.itens || []) as DiretorioWhatsApp[]).map(item => ({ ...item, canalId }))
+          }))
+          if (ativo) {
+            const unicos = new Map<string, DiretorioWhatsApp>()
+            for (const item of respostas.flat()) {
+              const chave = `${item.canalId || ''}:${item.jid}`
+              if (!unicos.has(chave)) unicos.set(chave, item)
+            }
+            setContatosBusca([...unicos.values()].slice(0, 40))
+          }
+        } catch {
+          if (ativo) setContatosBusca([])
+        } finally {
+          if (ativo) setBuscandoContatos(false)
+        }
+      })()
+    }, 220)
+
+    return () => {
+      ativo = false
+      clearTimeout(timer)
+    }
+  }, [busca, canalFiltro, canais])
 
   useEffect(() => {
     if (!ativa?.id) {
@@ -376,6 +446,23 @@ export default function WhatsAppAtendimentoPage() {
     })
   }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
 
+  const contatosBuscaVisiveis = useMemo(() => {
+    if (busca.trim().length < 2) return []
+    const visiveis = new Set(
+      filtradas.flatMap(c => [
+        c.whatsapp_chat_jid ? `${c.whatsapp_canal_id || ''}:${c.whatsapp_chat_jid}` : '',
+        c.telefone ? `${c.whatsapp_canal_id || ''}:tel:${c.telefone.replace(/\D/g, '')}` : '',
+      ]).filter(Boolean),
+    )
+    return contatosBusca.filter(item => {
+      const porJid = `${item.canalId || ''}:${item.jid}`
+      const porTelefone = item.telefone
+        ? `${item.canalId || ''}:tel:${item.telefone.replace(/\D/g, '')}`
+        : ''
+      return !visiveis.has(porJid) && (!porTelefone || !visiveis.has(porTelefone))
+    })
+  }, [contatosBusca, filtradas, busca])
+
   async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
     if (!ativa) return
     setErro('')
@@ -388,6 +475,7 @@ export default function WhatsAppAtendimentoPage() {
     if (!resp.ok) { setErro(json.error || 'Nao foi possivel alterar o atendimento.'); return }
     setDestinoId('')
     setSetorTransferencia('')
+    setTransferenciaAberta(false)
     await carregarConversas(false)
   }
 
@@ -592,10 +680,23 @@ export default function WhatsAppAtendimentoPage() {
     ativa && (eu?.role === 'master' || acessoCanalAtivo?.transferir),
   )
 
+  const cadastroNome = ativa?.contato_nome || ''
+  const cadastroWhatsApp = ativa?.telefone || ''
+  const cadastroConversaId = ativa?.id || ''
+  const urlCadastroCliente = ativa
+    ? '/clientes/novo?origem=whatsapp&nome=' + encodeURIComponent(cadastroNome) + '&whatsapp=' + encodeURIComponent(cadastroWhatsApp) + '&conversaId=' + encodeURIComponent(cadastroConversaId)
+    : '/clientes/novo'
+  const urlCadastroColaborador = ativa
+    ? '/cadastro?aba=usuarios&origem=whatsapp&nome=' + encodeURIComponent(cadastroNome) + '&whatsapp=' + encodeURIComponent(cadastroWhatsApp)
+    : '/cadastro?aba=usuarios'
+  const urlCadastroFornecedor = ativa
+    ? '/cadastro/fornecedores?novo=1&origem=whatsapp&nome=' + encodeURIComponent(cadastroNome) + '&whatsapp=' + encodeURIComponent(cadastroWhatsApp)
+    : '/cadastro/fornecedores'
+
   return (
-    <main className="min-h-screen bg-slate-100 p-0 md:p-4">
-      <div className="mx-auto max-w-[1720px] overflow-hidden border bg-white shadow-sm md:rounded-2xl">
-        <header className="flex items-center justify-between border-b px-4 py-3">
+    <main className="h-screen min-h-0 overflow-hidden bg-white p-0">
+      <div className="h-screen w-full overflow-hidden bg-white">
+        <header className="flex h-16 items-center justify-between border-b bg-white px-4">
           <div className="flex items-center gap-3">
             <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
             <div>
@@ -632,7 +733,7 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className="grid h-[calc(100dvh-130px)] min-h-[620px] md:grid-cols-[340px_1fr] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+        <div className={`grid h-[calc(100dvh-64px)] min-h-0 md:grid-cols-[280px_1fr] ${painelDireitoRecolhido ? 'xl:grid-cols-[280px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[280px_minmax(0,1fr)_260px]'}`}>
           <aside className="flex min-h-0 flex-col border-r">
             <div className="border-b p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -706,8 +807,10 @@ export default function WhatsAppAtendimentoPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 ? (
-                <div className="p-8 text-center text-sm text-slate-400">Nenhuma conversa neste filtro.</div>
+              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && !buscandoContatos ? (
+                <div className="p-8 text-center text-sm text-slate-400">
+                  {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
+                </div>
               ) : filtradas.map(c => (
                 <button key={c.id} onClick={()=>setAtiva(c)}
                   className={`flex w-full gap-3 border-b px-4 py-3 text-left hover:bg-slate-50 ${ativa?.id===c.id?'bg-emerald-50':''}`}>
@@ -757,10 +860,38 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 </button>
               ))}
+              {busca.trim().length >= 2 && (buscandoContatos || contatosBuscaVisiveis.length > 0) && (
+                <div className="border-t border-slate-200">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Contatos do WhatsApp</span>
+                    {buscandoContatos && <span className="text-[10px] text-slate-400">Buscando...</span>}
+                  </div>
+                  {contatosBuscaVisiveis.map(item => (
+                    <button
+                      key={`${item.canalId || ''}:${item.jid}`}
+                      onClick={() => void iniciarDoDiretorio(item)}
+                      className="flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 text-left hover:bg-emerald-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700">
+                        {item.tipo === 'grupo' ? <Users size={16}/> : item.nome.slice(0,1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">{item.nome}</p>
+                        <p className="truncate text-[11px] text-slate-400">
+                          {item.tipo === 'grupo'
+                            ? `Grupo · ${item.participantes || 0} participantes`
+                            : (item.telefone ? telefoneFormatado(item.telefone) : 'Contato salvo no WhatsApp')}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-semibold text-emerald-700">Abrir</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </aside>
 
-          <section className="flex min-h-0 min-w-0 flex-col bg-[#efeae2]">
+          <section className="flex min-h-0 min-w-0 flex-col bg-white">
             {!ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
                 <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione uma conversa.</p></div>
@@ -817,14 +948,16 @@ export default function WhatsAppAtendimentoPage() {
                     <CheckCircle2 size={15}/> Finalizar
                   </button>
                 )}
+                {podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+                  <button onClick={()=>setTransferenciaAberta(aberta=>!aberta)}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${transferenciaAberta?'bg-slate-100 text-slate-900':'bg-white text-slate-600'}`}>
+                    <ShieldCheck size={15}/> Transferir
+                  </button>
+                )}
               </div>
 
-              {podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
-                <div className="flex flex-wrap items-center gap-2 border-b bg-slate-50 px-4 py-2">
-                  <ShieldCheck size={15} className="text-slate-500"/>
-                  <span className="text-xs font-semibold text-slate-600">
-                    {eu?.role === 'master' ? 'Supervisão Master' : 'Permissão de transferência'}
-                  </span>
+              {transferenciaAberta && podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+                <div className="flex flex-wrap items-center justify-end gap-2 border-b bg-slate-50 px-4 py-2">
                   <select value={destinoId} onChange={e=>setDestinoId(e.target.value)}
                     className="rounded-lg border bg-white px-2 py-1.5 text-xs">
                     <option value="">Transferir para...</option>
@@ -835,12 +968,12 @@ export default function WhatsAppAtendimentoPage() {
                   <button disabled={!destinoId}
                     onClick={()=>void acaoConversa('transferir',{destinoId,setor:setorTransferencia||null})}
                     className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
-                    Transferir
+                    Confirmar transferência
                   </button>
                 </div>
               )}
 
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[#fbfcfe] p-4">
                 {mensagens.map(m => {
                   const saida = m.direcao === 'saida'
                   const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
@@ -1033,8 +1166,8 @@ export default function WhatsAppAtendimentoPage() {
                         onKeyDown={e=>{
                           if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviar()}
                         }}
-                        rows={1} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
-                        className="min-h-11 flex-1 resize-none rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                        rows={2} placeholder={canalPronto?'Digite uma mensagem':'Conecte o WhatsApp pelo QR Code'}
+                        className="min-h-[58px] max-h-32 flex-1 resize-y rounded-2xl border px-4 py-3 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-emerald-200"/>
                       <button disabled={enviandoMidia||!canalPronto}
                         onClick={()=>void alternarAudio()}
                         className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border disabled:opacity-40 ${gravando?'bg-red-600 text-white':'bg-white text-slate-500 hover:bg-slate-50'}`}
@@ -1056,10 +1189,33 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className="hidden min-h-0 flex-col border-l bg-white xl:flex">
-            <div className="border-b p-4">
-              <div className="flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-full bg-blue-50 font-bold text-blue-700">
+          <aside className={`hidden min-h-0 border-l bg-white xl:flex ${painelDireitoRecolhido ? 'flex-col items-center' : 'flex-col'}`}>
+            {painelDireitoRecolhido ? (
+              <div className="flex h-full w-full flex-col items-center gap-2 py-3">
+                <button
+                  onClick={()=>alternarPainelDireitoRecolhido(false)}
+                  className="grid h-9 w-9 place-items-center rounded-lg border text-slate-600 hover:bg-slate-50"
+                  title="Abrir painel lateral">
+                  <ChevronLeft size={18}/>
+                </button>
+                <div className="my-1 h-px w-7 bg-slate-200"/>
+                <button onClick={()=>{setPainelDireito('cliente');alternarPainelDireitoRecolhido(false)}}
+                  className="grid h-9 w-9 place-items-center rounded-lg text-blue-700 hover:bg-blue-50" title="Cadastro 360">
+                  <UserPlus size={17}/>
+                </button>
+                <button onClick={()=>{setPainelDireito('agenda');alternarPainelDireitoRecolhido(false)}}
+                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Agenda">
+                  <CalendarDays size={17}/>
+                </button>
+                <button onClick={()=>{setPainelDireito('notas');alternarPainelDireitoRecolhido(false)}}
+                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Notas">
+                  <StickyNote size={17}/>
+                </button>
+              </div>
+            ) : <>
+            <div className="border-b p-3">
+              <div className="flex items-center gap-2">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-50 font-bold text-blue-700">
                   {ativa ? (ativa.contato_nome || ativa.telefone).slice(0,1).toUpperCase() : '?'}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -1068,13 +1224,19 @@ export default function WhatsAppAtendimentoPage() {
                     {ativa ? telefoneFormatado(ativa.telefone) : 'Selecione uma conversa'}
                   </p>
                 </div>
+                <button
+                  onClick={()=>alternarPainelDireitoRecolhido(true)}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-slate-500 hover:bg-slate-50"
+                  title="Recolher painel e ampliar conversa">
+                  <ChevronRight size={17}/>
+                </button>
               </div>
             </div>
 
             <div className="grid grid-cols-3 border-b p-2 text-xs font-bold">
               <button onClick={()=>setPainelDireito('cliente')}
                 className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
-                Cliente 360
+                Cadastro 360
               </button>
               <button onClick={()=>setPainelDireito('agenda')}
                 className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
@@ -1165,20 +1327,39 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="rounded-2xl border border-dashed p-5 text-center">
-                      <UserPlus className="mx-auto mb-3 text-slate-400" size={28}/>
-                      <b className="text-sm text-slate-800">Contato ainda não vinculado</b>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                        O Atlas tenta localizar o Cliente 360 automaticamente pelo telefone.
-                      </p>
-                      <Link href={'/clientes/novo?origem=whatsapp&nome=' + encodeURIComponent(ativa.contato_nome || '') + '&whatsapp=' + encodeURIComponent(ativa.telefone) + '&conversaId=' + encodeURIComponent(ativa.id)}
-                        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white">
-                        <UserPlus size={14}/> Cadastrar Cliente 360
-                      </Link>
+                    <div className="rounded-2xl border border-dashed p-4">
+                      <div className="text-center">
+                        <UserPlus className="mx-auto mb-2 text-slate-400" size={26}/>
+                        <b className="text-sm text-slate-800">Como deseja cadastrar este contato?</b>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                          Nome e WhatsApp seguem preenchidos para o cadastro escolhido.
+                        </p>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        <Link href={urlCadastroCliente}
+                          className="flex items-center gap-3 rounded-xl border bg-emerald-50/70 p-3 hover:border-emerald-300">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700"><UserPlus size={17}/></span>
+                          <span><b className="block text-xs text-slate-800">Cliente</b><span className="text-[11px] text-slate-500">Cria Cliente 360 e vincula esta conversa.</span></span>
+                        </Link>
+                        <Link href={urlCadastroColaborador} target="_blank"
+                          className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700"><Users size={17}/></span>
+                          <span><b className="block text-xs text-slate-800">Colaborador</b><span className="text-[11px] text-slate-500">Abre o cadastro da equipe.</span></span>
+                        </Link>
+                        <Link href={urlCadastroFornecedor} target="_blank"
+                          className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-700"><BriefcaseBusiness size={17}/></span>
+                          <span><b className="block text-xs text-slate-800">Fornecedor</b><span className="text-[11px] text-slate-500">Abre o cadastro comercial.</span></span>
+                        </Link>
+                        <Link href="/cadastros" target="_blank"
+                          className="flex items-center justify-center rounded-xl border border-dashed px-3 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
+                          Outros cadastros
+                        </Link>
+                      </div>
                     </div>
                     <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-800">
                       <Info size={15} className="mb-1"/>
-                      Depois do vínculo, o histórico deste atendimento continua associado ao cliente.
+                      Se cadastrar como cliente, o histórico deste atendimento fica vinculado ao Cliente 360.
                     </div>
                   </div>
                 )
@@ -1240,6 +1421,7 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
               )}
             </div>
+            </>}
           </aside>
         </div>
       </div>
