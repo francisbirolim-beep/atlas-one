@@ -154,6 +154,7 @@ export default function IntegracaoWVetroPage() {
             <p className="mt-1 text-sm text-slate-600">Conferência somente leitura. Nenhum cadastro oficial do Atlas é alterado.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Link href="/configuracoes/integracoes/wvetro/orcamentos" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100">Orçamentos W.Vetro → Atlas</Link>
             <Link href="/configuracoes/integracoes/wvetro/comparador-tecnico" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">Comparador técnico</Link>
             <Link href="/configuracoes/integracoes/wvetro/migracao-operacional" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100">Migração operacional</Link>
             <Link href="/configuracoes/integracoes/wvetro/base-tecnica" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Base técnica</Link>
