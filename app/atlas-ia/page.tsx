@@ -344,8 +344,8 @@ export default function AtlasIAPage() {
             <p className="mt-1 text-xs text-white/50">Veja os especialistas e suas funções.</p>
           </Link>
           <Link href="/atlas-ia/conhecimento" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
-            <FileText size={17} className="mb-2"/><b>Base de conhecimento</b>
-            <p className="mt-1 text-xs text-white/50">Revisar e validar conhecimento.</p>
+            <FileText size={17} className="mb-2"/><b>Conhecimento por setor</b>
+            <p className="mt-1 text-xs text-white/50">Enviar catálogos, ensinar especialistas e validar o que vira regra oficial.</p>
           </Link>
           <Link href="/atlas-ia/pessoas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <HeartHandshake size={17} className="mb-2"/><b>Atlas Pessoas</b>
@@ -380,7 +380,7 @@ export default function AtlasIAPage() {
               <h2 className="text-xl font-semibold">{modo === 'livre' ? 'Conversa livre' : nomeModo()}</h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
                 {modo === 'livre'
-                  ? 'Converse sobre qualquer assunto, como em um chat geral. Quando quiser uma área específica, escolha um especialista no filtro abaixo.'
+                  ? 'Converse normalmente. O Atlas identifica o assunto e consulta por trás o conhecimento validado dos setores que você pode acessar; se quiser, também pode escolher um especialista diretamente.'
                   : especialistaAtual?.objetivo || 'Converse com o especialista selecionado.'}
               </p>
             </div>}
