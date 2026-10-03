@@ -463,20 +463,37 @@ export default function WhatsAppAtendimentoPage() {
     })
   }, [contatosBusca, filtradas, busca])
 
-  async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
-    if (!ativa) return
+  async function acaoConversaPorId(conversaId: string, acao: string, extra: Record<string, unknown> = {}) {
+    if (!conversaId) return false
     setErro('')
     const headers = await headersJson()
     const resp = await fetch('/api/integracoes/whatsapp/conversas', {
       method: 'POST', headers,
-      body: JSON.stringify({ acao, conversaId: ativa.id, ...extra }),
+      body: JSON.stringify({ acao, conversaId, ...extra }),
     })
     const json = await resp.json()
-    if (!resp.ok) { setErro(json.error || 'Nao foi possivel alterar o atendimento.'); return }
+    if (!resp.ok) {
+      setErro(json.error || 'Nao foi possivel alterar o atendimento.')
+      return false
+    }
     setDestinoId('')
     setSetorTransferencia('')
     setTransferenciaAberta(false)
     await carregarConversas(false)
+    return true
+  }
+
+  async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
+    if (!ativa) return
+    await acaoConversaPorId(ativa.id, acao, extra)
+  }
+
+  function podeTransferirConversa(conversa: Conversa) {
+    if (eu?.role === 'master') return true
+    const acesso = conversa.whatsapp_canal_id
+      ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
+      : null
+    return Boolean(acesso?.transferir)
   }
 
   async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
@@ -812,8 +829,10 @@ export default function WhatsAppAtendimentoPage() {
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
               ) : filtradas.map(c => (
-                <button key={c.id} onClick={()=>setAtiva(c)}
-                  className={`flex w-full gap-3 border-b px-4 py-3 text-left hover:bg-slate-50 ${ativa?.id===c.id?'bg-emerald-50':''}`}>
+                <div key={c.id} role="button" tabIndex={0}
+                  onClick={()=>setAtiva(c)}
+                  onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setAtiva(c)}}}
+                  className={`group flex w-full cursor-pointer gap-3 border-b px-4 py-3 text-left outline-none transition hover:bg-slate-50 focus:bg-slate-50 ${ativa?.id===c.id?'bg-emerald-50':''}`}>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-700">
                     {c.whatsapp_chat_tipo === 'grupo'
                       ? <Users size={18}/>
@@ -838,7 +857,7 @@ export default function WhatsAppAtendimentoPage() {
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">Finalizado</span>
                       ) : c.responsavel_id ? (
                         <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                          {c.responsavel_nome || 'Com atendente'}
+                          {c.responsavel_id===eu?.id ? 'Meu atendimento' : (c.responsavel_nome || 'Com atendente')}
                         </span>
                       ) : (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Aguardando atendimento</span>
@@ -857,8 +876,36 @@ export default function WhatsAppAtendimentoPage() {
                       )}
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
+                    {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && (
+                      <div className="mt-2 hidden flex-wrap gap-1.5 group-hover:flex group-focus-within:flex">
+                        <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
+                          className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${c.acompanhando?'border-cyan-200 bg-cyan-50 text-cyan-700':'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                          {c.acompanhando?'Parar acompanhamento':'Acompanhar'}
+                        </button>
+                        {podeTransferirConversa(c) && (
+                          <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setTransferenciaAberta(true)}}
+                            className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                            Transferir
+                          </button>
+                        )}
+                        <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setApoioAberto('etiquetas')}}
+                          className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                          Etiquetas
+                        </button>
+                        {!c.responsavel_id && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
+                            className="rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-700">
+                            Atender
+                          </button>
+                        )}
+                        <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c)}}
+                          className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                          Ver tudo
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </button>
+                </div>
               ))}
               {busca.trim().length >= 2 && (buscandoContatos || contatosBuscaVisiveis.length > 0) && (
                 <div className="border-t border-slate-200">
@@ -938,7 +985,7 @@ export default function WhatsAppAtendimentoPage() {
                 {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id && (
                   <button onClick={()=>void acaoConversa('assumir')}
                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
-                    <UserRoundCheck size={15}/> Assumir
+                    <UserRoundCheck size={15}/> Atender
                   </button>
                 )}
                 {ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id && ativa.status !== 'finalizado' &&
@@ -1047,6 +1094,41 @@ export default function WhatsAppAtendimentoPage() {
               </div>
 
               <div className="border-t bg-white p-3">
+                {apoioAberto === 'etiquetas' && (
+                  <div className="mb-2 rounded-xl border bg-white p-3 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <b className="text-xs text-slate-700">Etiquetas da conversa</b>
+                      <button onClick={()=>setApoioAberto(null)} className="text-[10px] font-semibold text-slate-400 hover:text-slate-700">Fechar</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {etiquetas.map(e => {
+                        const ativaTag = etiquetasAtivas.includes(e.id)
+                        return (
+                          <button key={e.id}
+                            onClick={()=>void acaoApoio('etiqueta_alternar',{etiquetaId:e.id})}
+                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${ativaTag?'bg-emerald-50 text-emerald-700':'bg-white text-slate-600'}`}>
+                            {ativaTag ? '✓ ' : ''}{e.nome}
+                          </button>
+                        )
+                      })}
+                      {!etiquetas.length && <span className="text-xs text-slate-400">Nenhuma etiqueta cadastrada.</span>}
+                    </div>
+                    {eu?.role === 'master' && (
+                      <div className="mt-3 flex gap-2 border-t pt-3">
+                        <input value={novaEtiqueta} onChange={e=>setNovaEtiqueta(e.target.value)}
+                          placeholder="Nova etiqueta" className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs"/>
+                        <button disabled={!novaEtiqueta.trim()}
+                          onClick={async()=>{
+                            const ok=await acaoApoio('etiqueta_criar',{nome:novaEtiqueta.trim()})
+                            if(ok)setNovaEtiqueta('')
+                          }}
+                          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+                          <Plus size={14}/>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id ? (
                   <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
                     <Clock3 size={16}/> Esta conversa esta na fila. Assuma para responder.
@@ -1081,42 +1163,6 @@ export default function WhatsAppAtendimentoPage() {
                       </button>
                       <span className="ml-auto text-[10px] text-slate-400">Enter envia · Shift+Enter quebra linha</span>
                     </div>
-
-                    {apoioAberto === 'etiquetas' && (
-                      <div className="mb-2 rounded-xl border bg-white p-3 shadow-sm">
-                        <div className="mb-2 flex items-center justify-between">
-                          <b className="text-xs text-slate-700">Etiquetas da conversa</b>
-                          <span className="text-[10px] text-slate-400">Interno</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {etiquetas.map(e => {
-                            const ativaTag = etiquetasAtivas.includes(e.id)
-                            return (
-                              <button key={e.id}
-                                onClick={()=>void acaoApoio('etiqueta_alternar',{etiquetaId:e.id})}
-                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${ativaTag?'bg-emerald-50 text-emerald-700':'bg-white text-slate-600'}`}>
-                                {ativaTag ? '✓ ' : ''}{e.nome}
-                              </button>
-                            )
-                          })}
-                          {!etiquetas.length && <span className="text-xs text-slate-400">Nenhuma etiqueta cadastrada.</span>}
-                        </div>
-                        {eu?.role === 'master' && (
-                          <div className="mt-3 flex gap-2 border-t pt-3">
-                            <input value={novaEtiqueta} onChange={e=>setNovaEtiqueta(e.target.value)}
-                              placeholder="Nova etiqueta" className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs"/>
-                            <button disabled={!novaEtiqueta.trim()}
-                              onClick={async()=>{
-                                const ok=await acaoApoio('etiqueta_criar',{nome:novaEtiqueta.trim()})
-                                if(ok)setNovaEtiqueta('')
-                              }}
-                              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
-                              <Plus size={14}/>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {apoioAberto === 'rapidas' && (
                       <div className="mb-2 max-h-64 overflow-y-auto rounded-xl border bg-white p-3 shadow-sm">
