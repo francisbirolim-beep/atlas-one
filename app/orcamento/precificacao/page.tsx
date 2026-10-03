@@ -45,7 +45,7 @@ export default function ListaPrecificacao() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-2 text-right"><b className="text-emerald-700">{moeda(o.valor_estimado)}</b><p className="text-xs text-slate-400">custo otimizado {moeda(o.custo_otimizado)}</p></div>
             <Link href={`/orcamento/${o.id}/materiais`} className="inline-flex items-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Boxes size={15} /> Materiais</Link>
-            <Link href={`/orcamento/${o.id}/precificacao`} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white">Composição</Link>
+            <Link href={`/orcamento/${o.id}/composicao`} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white">Composição</Link>
           </div>
         </div>)}
         {lista.length === 0 && <p className="p-8 text-center text-sm text-slate-400">Nenhum orçamento encontrado.</p>}
