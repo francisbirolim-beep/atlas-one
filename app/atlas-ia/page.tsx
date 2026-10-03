@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
 import { listarPermissoesUsuario } from '@/lib/setores'
@@ -30,6 +31,7 @@ const RELATO_MELHORIA = /\b(achei um erro|tem um erro|deu erro|bug|defeito|falha
 export default function AtlasIAPage() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [permissoes, setPermissoes] = useState<Record<string, string>>({})
+  const [permissoesProntas, setPermissoesProntas] = useState(false)
   const [modo, setModo] = useState<ModoChat>('livre')
   const [bolhas, setBolhas] = useState<Bolha[]>([])
   const [historico, setHistorico] = useState<any[]>([])
@@ -44,6 +46,8 @@ export default function AtlasIAPage() {
   const [mensagemMelhoria, setMensagemMelhoria] = useState('')
   const arquivoRef = useRef<HTMLInputElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
+  const modoInicialAplicadoRef = useRef(false)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     ;(async () => {
@@ -52,6 +56,7 @@ export default function AtlasIAPage() {
       if (atual?.id && atual.role !== 'master') {
         setPermissoes(await listarPermissoesUsuario(atual.id))
       }
+      setPermissoesProntas(true)
     })()
   }, [])
 
@@ -66,6 +71,16 @@ export default function AtlasIAPage() {
       especialista.setorIds.some(id => ['consulta', 'edicao'].includes(String(permissoes[id] || '')))
     )
   }, [usuario, permissoes])
+
+  useEffect(() => {
+    if (modoInicialAplicadoRef.current || !usuario || !permissoesProntas) return
+    const solicitado = String(searchParams.get('modo') || '').trim() as AIModulo
+    if (solicitado && especialistas.some(especialista => especialista.modulo === solicitado)) {
+      setModo(solicitado)
+    }
+    modoInicialAplicadoRef.current = true
+  }, [usuario, permissoesProntas, especialistas, searchParams])
+
   const especialistaAtual = modo === 'livre'
     ? null
     : especialistas.find(especialista => especialista.modulo === modo)
@@ -367,8 +382,17 @@ export default function AtlasIAPage() {
             <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={20}/></Link>
             <div><h1 className="font-semibold">Atlas IA</h1><p className="text-xs text-slate-500">{nomeModo()}</p></div>
           </div>
-          <div className="text-right text-xs text-slate-500">
-            <b className="block text-slate-700">{usuario?.nome || 'Usuário'}</b>{modo === 'livre' ? 'Conversa geral' : 'Especialista ativo'}
+          <div className="flex items-center gap-2">
+            {modo !== 'livre' && <Link
+              href={'/atlas-ia/conhecimento?modulo=' + modo}
+              className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              title="Enviar catálogo, regra, PDF ou imagem para validação deste especialista"
+            >
+              <FileText size={15}/><span className="hidden sm:inline">Ensinar / validar</span>
+            </Link>}
+            <div className="text-right text-xs text-slate-500">
+              <b className="block text-slate-700">{usuario?.nome || 'Usuário'}</b>{modo === 'livre' ? 'Conversa geral' : 'Especialista ativo'}
+            </div>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
