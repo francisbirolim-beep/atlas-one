@@ -137,6 +137,7 @@ type ReferenciaWvetroPrecificacao = {
   referenciaId?: string
   componentes?: Array<{
     tipo?: string
+    produtoId?: string | null
     codigo?: string | null
     codigoWvetro?: string | null
     nome?: string | null
@@ -147,6 +148,9 @@ type ReferenciaWvetroPrecificacao = {
     medidaMax?: number | null
     quantidadeMin?: number | null
     quantidadeMax?: number | null
+    quantidadeMedia?: number | null
+    cortes?: unknown[]
+    posicoes?: unknown[]
     ultimoCustoEm?: string | null
   }>
 }
