@@ -92,6 +92,17 @@ export async function GET(req: NextRequest) {
     if (erroVars) throw erroVars
     if (erroComps) throw erroComps
 
+    const produtoIds = Array.from(new Set(((comps || []) as RefComponente[]).map(c => c.produto_atlas_id).filter(Boolean))) as string[]
+    const produtosPorId = new Map<string, any>()
+    for (let i = 0; i < produtoIds.length; i += 200) {
+      const { data: produtos, error: erroProdutos } = await supabaseAdmin
+        .from('produtos')
+        .select('id,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm')
+        .in('id', produtoIds.slice(i, i + 200))
+      if (erroProdutos) throw erroProdutos
+      for (const produto of produtos || []) produtosPorId.set(String(produto.id), produto)
+    }
+
     const variaveisPorRef = new Map<string, RefVariavel[]>()
     for (const variavel of (vars || []) as RefVariavel[]) {
       const lista = variaveisPorRef.get(variavel.referencia_tipologia_id) || []
@@ -138,6 +149,10 @@ export async function GET(req: NextRequest) {
           nome: c.nome,
           cor: c.cor,
           unidadeOrigem: c.unidade_origem,
+          unidadeAtlas: c.produto_atlas_id ? (produtosPorId.get(String(c.produto_atlas_id))?.unidade_origem || produtosPorId.get(String(c.produto_atlas_id))?.unidade || null) : null,
+          custoAtlas: c.produto_atlas_id ? Number(produtosPorId.get(String(c.produto_atlas_id))?.custo || 0) || null : null,
+          pesoKgM: c.produto_atlas_id ? Number(produtosPorId.get(String(c.produto_atlas_id))?.peso_kg_m || 0) || null : null,
+          tamanhoBarraMm: c.produto_atlas_id ? Number(produtosPorId.get(String(c.produto_atlas_id))?.tamanho_barra_mm || 0) || null : null,
           ncm: c.ncm,
           imagemUrl: c.imagem_url,
           ocorrencias: Number(c.ocorrencias || 0),
