@@ -94,6 +94,22 @@ export default function Cadastro() {
     carregar()
   }, [])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('aba') === 'usuarios') {
+      setAbaAtiva('usuarios')
+      setNovoUsuarioAberto(true)
+    }
+    if (params.get('origem') === 'whatsapp') {
+      const nomeInicial = params.get('nome') || ''
+      const whatsappInicial = params.get('whatsapp') || ''
+      if (nomeInicial) setNome(nomeInicial)
+      if (whatsappInicial) setWhatsappNovo(whatsappInicial)
+      setAbaAtiva('usuarios')
+      setNovoUsuarioAberto(true)
+    }
+  }, [])
+
   async function carregar() {
     setCarregando(true)
     const me = await usuarioAtual()
