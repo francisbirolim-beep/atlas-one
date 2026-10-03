@@ -142,6 +142,10 @@ type ReferenciaWvetroPrecificacao = {
     codigoWvetro?: string | null
     nome?: string | null
     unidadeOrigem?: string | null
+    unidadeAtlas?: string | null
+    custoAtlas?: number | null
+    pesoKgM?: number | null
+    tamanhoBarraMm?: number | null
     custoUltimo?: number | null
     vendaUltimo?: number | null
     medidaMin?: number | null
