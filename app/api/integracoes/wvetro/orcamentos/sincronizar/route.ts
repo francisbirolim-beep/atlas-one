@@ -363,7 +363,11 @@ export async function POST(req: NextRequest) { return sincronizar(req) }
 
 export async function GET(req: NextRequest) {
   const usuarioCron = await autenticarSchedulerWVetro(req)
-  if (usuarioCron) return sincronizar(req, usuarioCron, 2)
+  if (usuarioCron) {
+    const diasSolicitados = Number(req.nextUrl.searchParams.get('dias') || 2)
+    const dias = Math.min(7, Math.max(1, Number.isFinite(diasSolicitados) ? Math.round(diasSolicitados) : 2))
+    return sincronizar(req, usuarioCron, dias)
+  }
 
   const usuario = await autenticarMasterWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 401 })
