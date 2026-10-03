@@ -115,6 +115,24 @@ function tamanhoBarra(p: any) {
   return num(p?.tamanho_barra_mm) || num(p?.tamanho_barra_mm_origem) || num(p?.dados_origem?.tamanho_raw) || 0
 }
 
+async function carregarProdutosAtivosPaginados() {
+  const produtos: any[] = []
+  const tamanhoPagina = 1000
+  for (let inicio = 0; ; inicio += tamanhoPagina) {
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('id,codigo,nome,categoria,unidade,unidade_origem,custo,preco,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem')
+      .eq('ativo', true)
+      .order('id')
+      .range(inicio, inicio + tamanhoPagina - 1)
+    if (error) break
+    const pagina = (data || []) as any[]
+    produtos.push(...pagina)
+    if (pagina.length < tamanhoPagina) break
+  }
+  return produtos
+}
+
 async function carregarConfigs() {
   const { data } = await supabase.from('configuracoes_precificacao').select('chave,valor').in('chave', ['preco_kg_aluminio','custo_pintura_kg','margem_padrao_orcamento'])
   const map = new Map<string, number>((data || []).map((x: any) => [String(x.chave), num(x.valor)]))
@@ -126,10 +144,10 @@ async function carregarConfigs() {
 }
 
 async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
-  const [{ data: overrides }, { data: materiais }, { data: produtos }] = await Promise.all([
+  const [{ data: overrides }, { data: materiais }, produtos] = await Promise.all([
     supabase.from('orcamento_item_componentes_overrides').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).order('ordem'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem').eq('ativo', true),
+    carregarProdutosAtivosPaginados(),
   ])
   const produtoMap = new Map<string, any>()
   ;(produtos || []).forEach((p: any) => { if (p.codigo) produtoMap.set(codigoKey(p.codigo), p) })
@@ -231,9 +249,9 @@ async function custoMaterial(material: MaterialPacote, produto: any, catalogo: a
 }
 
 async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string) {
-  const [{ data: materiais }, { data: produtos }, { data: catalogo }, { data: orc }] = await Promise.all([
+  const [{ data: materiais }, produtos, { data: catalogo }, { data: orc }] = await Promise.all([
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).eq('excluido', false).order('ordem'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true),
+    carregarProdutosAtivosPaginados(),
     supabase.from('catalogo_custos_tecnicos').select('*').eq('ativo', true),
     supabase.from('orcamentos').select('margem_padrao_pct').eq('id', orcamentoId).single(),
   ])
@@ -316,10 +334,10 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   await garantirPoliticas(orcamento)
   const { data: pacote } = await supabase.from('pacotes_tecnicos').select('*').eq('orcamento_id', orcamentoId).eq('origem', 'orcamento_simulacao').neq('status', 'substituido').order('versao', { ascending: false }).limit(1).maybeSingle()
   const completo = pacote ? await carregarPacoteCompleto(pacote.id) : { materiais: [], barras: [], cortes: [] }
-  const [{ data: componentes }, { data: politicas }, { data: produtos }] = await Promise.all([
+  const [{ data: componentes }, { data: politicas }, produtos] = await Promise.all([
     supabase.from('orcamento_precificacao_componentes').select('*').eq('orcamento_id', orcamentoId).eq('excluido', false).order('categoria').order('descricao'),
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
-    supabase.from('produtos').select('id,codigo,nome,categoria,unidade,unidade_origem,custo,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem').eq('ativo', true).order('categoria').order('nome'),
+    carregarProdutosAtivosPaginados(),
   ])
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
@@ -562,13 +580,13 @@ export async function removerComponenteOrcamento(dados: {
 }
 
 export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId: string) {
-  const [{ data: orc }, { data: politicas }, { data: comps }, { data: barras }, { data: cortes }, { data: produtos }] = await Promise.all([
+  const [{ data: orc }, { data: politicas }, { data: comps }, { data: barras }, { data: cortes }, produtos] = await Promise.all([
     supabase.from('orcamentos').select('id,itens,margem_padrao_pct,cobrar_sobra_padrao').eq('id', orcamentoId).single(),
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId),
     supabase.from('orcamento_precificacao_componentes').select('*').eq('orcamento_id', orcamentoId).eq('excluido', false),
     supabase.from('pacote_tecnico_barras').select('*').eq('pacote_id', pacoteId),
     supabase.from('pacote_tecnico_cortes').select('*,pacote_tecnico_barras!inner(pacote_id)').eq('pacote_tecnico_barras.pacote_id', pacoteId),
-    supabase.from('produtos').select('id,peso_kg_m').eq('ativo', true),
+    carregarProdutosAtivosPaginados(),
   ])
   if (!orc) return { ok: false as const, error: 'Orçamento não encontrado.' }
 
