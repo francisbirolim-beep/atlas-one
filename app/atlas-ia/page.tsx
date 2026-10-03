@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, FileText, HeartHandshake, ImageIcon, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, FileText, HeartHandshake, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { Usuario } from '@/lib/tipos'
@@ -103,6 +103,18 @@ export default function AtlasIAPage() {
         return proximo
       })
     }
+  }
+
+  function iniciarRelatoMelhoria() {
+    if (modo !== 'livre') {
+      setModo('livre')
+      setBolhas([])
+      setHistorico([])
+      setImagemPendente(null)
+      setAnexo(null)
+      setErro('')
+    }
+    setEntrada('Quero registrar um problema ou uma melhoria no Atlas: ')
   }
 
   async function selecionarArquivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -276,6 +288,16 @@ export default function AtlasIAPage() {
             <Bot size={17} className="mb-2"/><b>Conversa livre</b>
             <p className="mt-1 text-xs text-white/60">Pergunte qualquer coisa. O Atlas usa dados internos só quando fizer sentido.</p>
           </button>
+          <button onClick={iniciarRelatoMelhoria} className="w-full rounded-xl p-3 text-left text-white/80 hover:bg-white/10">
+            <Lightbulb size={17} className="mb-2"/><b>Relatar problema ou melhoria</b>
+            <p className="mt-1 text-xs text-white/50">Conte o que encontrou. A IA organiza, classifica e envia para a Central de Melhorias.</p>
+          </button>
+          {usuario?.role === 'master' && (
+            <Link href="/administracao/melhorias" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
+              <ShieldCheck size={17} className="mb-2"/><b>Central de Melhorias</b>
+              <p className="mt-1 text-xs text-white/50">Revisar, aprovar e acompanhar os relatos da equipe.</p>
+            </Link>
+          )}
           <Link href="/atlas-ia/especialistas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <Brain size={17} className="mb-2"/><b>Especialistas Atlas</b>
             <p className="mt-1 text-xs text-white/50">Veja os especialistas e suas funções.</p>
@@ -353,6 +375,13 @@ export default function AtlasIAPage() {
                 </optgroup>}
               </select>
             </div>
+            <button
+              type="button"
+              onClick={iniciarRelatoMelhoria}
+              className="mb-2 inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              <Lightbulb size={14}/> Relatar problema ou melhoria
+            </button>
 
             <input ref={arquivoRef} className="hidden" type="file" accept="image/*,application/pdf,text/plain,text/csv,application/json" onChange={selecionarArquivo}/>
             {anexo && <div className="mb-2 inline-flex rounded-lg bg-slate-100 px-3 py-1.5 text-xs">📎 {anexo.nome}</div>}

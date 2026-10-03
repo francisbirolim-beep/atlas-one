@@ -24,6 +24,7 @@ using (
     )
   )
 );
+
 drop policy if exists atendimento_conversas_select_v3 on public.atendimento_conversas;
 drop policy if exists atendimento_conversas_select_v4 on public.atendimento_conversas;
 create policy atendimento_conversas_select_v4
@@ -53,6 +54,7 @@ using (
     )
   )
 );
+
 drop policy if exists atendimento_sessoes_select_v3 on public.atendimento_sessoes;
 drop policy if exists atendimento_sessoes_select_v4 on public.atendimento_sessoes;
 create policy atendimento_sessoes_select_v4
@@ -84,6 +86,7 @@ using (
       )
   )
 );
+
 drop policy if exists atendimento_mensagens_select_v3 on public.atendimento_mensagens;
 drop policy if exists atendimento_mensagens_select_v4 on public.atendimento_mensagens;
 create policy atendimento_mensagens_select_v4
@@ -115,6 +118,7 @@ using (
       )
   )
 );
+
 drop policy if exists atendimento_eventos_select_v3 on public.atendimento_eventos;
 drop policy if exists atendimento_eventos_select_v4 on public.atendimento_eventos;
 create policy atendimento_eventos_select_v4
