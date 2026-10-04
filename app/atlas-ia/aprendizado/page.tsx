@@ -147,7 +147,7 @@ export default function CentralAprendizadoPage(){
       setMensagem(j.mensagem||'Material enviado para análise.')
       setTitulo('');setDescricao('');setArquivo(null);setTipo('outro')
       await carregar()
-      if((j.total_candidatos||0)>0)setAba('validacoes')
+      if((j.pendencias||0)>0)setAba('validacoes')
     }catch(e:any){setErro(e?.message||'Erro ao enviar material.')}
     finally{setEnviando(false)}
   }
@@ -195,7 +195,7 @@ export default function CentralAprendizadoPage(){
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#182444] text-white"><Sparkles size={20}/></div>
           <div>
             <h1 className="font-semibold">Central de Aprendizado</h1>
-            <p className="text-xs text-slate-500">Catálogos, cursos, tabelas, fotos, regras e conversas — tudo com validação antes de virar padrão.</p>
+            <p className="text-xs text-slate-500">Catálogos e tabelas entram automaticamente; somente exceções, regras e conhecimento operacional precisam de validação.</p>
           </div>
         </div>
         <button onClick={()=>void carregar()} disabled={carregando} className="rounded-xl border bg-white p-2.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
