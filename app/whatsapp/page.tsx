@@ -6,7 +6,7 @@ import {
   ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
-  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight,
+  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -92,6 +92,14 @@ type DiretorioWhatsApp = {
   participantes?: number | null
   canalId?: string
 }
+type SugestaoIA = {
+  id: string
+  texto: string
+  setor?: string | null
+  confianca?: number | null
+  status: string
+  created_at: string
+}
 
 function hora(valor?: string | null) {
   if (!valor) return ''
@@ -123,6 +131,8 @@ export default function WhatsAppAtendimentoPage() {
   const [ativa, setAtiva] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
+  const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
+  const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<'todas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
@@ -326,6 +336,31 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
+  async function carregarSugestaoIA(conversaId: string) {
+    try {
+      const headers = await headersJson()
+      const resp = await fetch(`/api/integracoes/whatsapp/ia?conversaId=${encodeURIComponent(conversaId)}`, { headers, cache: 'no-store' })
+      const json = await resp.json()
+      if (!resp.ok) return
+      setSugestaoIA((json.sugestao || null) as SugestaoIA | null)
+      setModoIA((json.modo || 'observando') as 'observando' | 'sugerindo' | 'automatico')
+    } catch {}
+  }
+
+  async function acaoSugestaoIA(acao: 'usar' | 'rejeitar') {
+    if (!sugestaoIA) return
+    const atual = sugestaoIA
+    if (acao === 'usar') setTexto(atual.texto)
+    setSugestaoIA(null)
+    try {
+      const headers = await headersJson()
+      await fetch('/api/integracoes/whatsapp/ia', {
+        method: 'POST', headers,
+        body: JSON.stringify({ sugestaoId: atual.id, acao }),
+      })
+    } catch {}
+  }
+
   async function carregarApoio(conversaId: string) {
     try {
       const headers = await headersJson()
@@ -409,6 +444,18 @@ export default function WhatsAppAtendimentoPage() {
     }
     void carregarMensagens(ativa.id)
     void carregarApoio(ativa.id)
+  }, [ativa?.id])
+
+  useEffect(() => {
+    if (!ativa?.id) {
+      setSugestaoIA(null)
+      setModoIA('observando')
+      return
+    }
+    const conversaId = ativa.id
+    void carregarSugestaoIA(conversaId)
+    const timer = setInterval(() => { void carregarSugestaoIA(conversaId) }, 4000)
+    return () => clearInterval(timer)
   }, [ativa?.id])
 
   useEffect(() => {
@@ -1174,6 +1221,28 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 ) : (
                   <div>
+                    {sugestaoIA && (
+                      <div className="mb-3 rounded-2xl border border-violet-200 bg-violet-50 p-3 shadow-sm">
+                        <div className="flex items-start gap-2">
+                          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-700"><Sparkles size={16}/></div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <b className="text-xs text-violet-900">Sugestão da IA</b>
+                              {sugestaoIA.setor && <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-violet-700">{sugestaoIA.setor}</span>}
+                              {typeof sugestaoIA.confianca === 'number' && <span className="text-[10px] text-violet-500">{Math.round(sugestaoIA.confianca*100)}% confiança</span>}
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{sugestaoIA.texto}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button onClick={()=>void acaoSugestaoIA('usar')} className="rounded-lg bg-violet-700 px-3 py-1.5 text-xs font-bold text-white">Usar e editar</button>
+                              <button onClick={()=>void acaoSugestaoIA('rejeitar')} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold text-slate-600"><X size={13}/>Descartar</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {!sugestaoIA && modoIA === 'observando' && eu?.role === 'master' && (
+                      <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-blue-600"><Sparkles size={12}/>IA observando e aprendendo · sem responder</div>
+                    )}
                     <div className="mb-2 flex items-center gap-1 text-slate-500">
                       <input ref={arquivoInputRef} type="file" className="hidden"
                         accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx"
