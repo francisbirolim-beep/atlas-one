@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, History, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -24,6 +24,7 @@ type Bolha = {
 type Anexo = { nome: string; mediaType: string; tipo: 'imagem' | 'pdf' | 'texto'; dados: string }
 type ImagemPendente = { prompt: string; usd: number; model: string; quality: string; size: string }
 type RelatoSugerido = { texto: string; anexo: Anexo | null; audioStoragePath?: string | null }
+type ConversaResumo = { id: string; titulo: string; preview: string; createdAt: string; updatedAt: string; mensagens: number }
 
 const MAX = 8 * 1024 * 1024
 const PEDIDO_IMAGEM = /\b(gere|gerar|crie|criar|faça|faca|produza|desenhe|imagem|foto)\b.*\b(imagem|foto|porta|janela|esquadria|desenho|render)\b/i
@@ -47,7 +48,11 @@ export default function AtlasIAPage() {
   const [conversaLivreId, setConversaLivreId] = useState<string | null>(null)
   const [criandoConversa, setCriandoConversa] = useState(false)
   const [novaConversaPendente, setNovaConversaPendente] = useState(false)
+  const [conversas, setConversas] = useState<ConversaResumo[]>([])
+  const [carregandoConversas, setCarregandoConversas] = useState(false)
+  const [carregandoConversa, setCarregandoConversa] = useState(false)
   const arquivoRef = useRef<HTMLInputElement>(null)
+  const entradaRef = useRef<HTMLTextAreaElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
   const modoInicialAplicadoRef = useRef(false)
   const searchParams = useSearchParams()
@@ -66,6 +71,11 @@ export default function AtlasIAPage() {
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [bolhas, carregando, imagemPendente])
+
+  useEffect(() => {
+    if (!usuario?.id) return
+    void carregarConversas()
+  }, [usuario?.id])
 
   const especialistas = useMemo(() => {
     if (!usuario) return []
@@ -143,19 +153,73 @@ export default function AtlasIAPage() {
     void registrarRelato({ texto, anexo }, true)
   }
 
-  async function criarNovaConversaLivre() {
-    const token = await tokenAtual()
-    const r = await fetch('/api/agente/conversas', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token || ''}` },
-    })
-    const j = await r.json()
-    if (!r.ok || !j.conversaId) throw new Error(j.error || 'Não foi possível iniciar uma nova conversa.')
-    return String(j.conversaId)
+  async function carregarConversas() {
+    if (carregandoConversas) return
+    setCarregandoConversas(true)
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/agente/conversas', {
+        headers: { Authorization: 'Bearer ' + (token || '') },
+        cache: 'no-store',
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não foi possível carregar as conversas.')
+      setConversas(Array.isArray(j.conversas) ? j.conversas : [])
+    } catch {
+      // O histórico não pode impedir o usuário de conversar.
+    } finally {
+      setCarregandoConversas(false)
+    }
+  }
+
+  async function carregarConversa(id: string) {
+    if (!id || carregando || carregandoConversa) return
+    setCarregandoConversa(true)
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/agente/conversas?id=' + encodeURIComponent(id), {
+        headers: { Authorization: 'Bearer ' + (token || '') },
+        cache: 'no-store',
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não foi possível abrir a conversa.')
+      const mensagens = Array.isArray(j.mensagens) ? j.mensagens : []
+      setModo('livre')
+      setConversaLivreId(String(j.conversaId || id))
+      setNovaConversaPendente(false)
+      setBolhas(mensagens
+        .filter((m: any) => m.papel === 'user' || m.papel === 'assistant')
+        .map((m: any) => ({
+          papel: m.papel as 'user' | 'assistant',
+          texto: String(m.conteudo || ''),
+          modo: 'Conversa livre',
+        })))
+      setHistorico(mensagens
+        .filter((m: any) => m.papel === 'user' || m.papel === 'assistant')
+        .map((m: any) => ({
+          role: m.papel === 'assistant' ? 'assistant' : 'user',
+          content: String(m.conteudo || ''),
+        })))
+      setImagemPendente(null)
+      setRelatoSugerido(null)
+      setMensagemMelhoria('')
+      setEntrada('')
+      setAnexo(null)
+      window.setTimeout(() => entradaRef.current?.focus(), 50)
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível abrir a conversa.')
+    } finally {
+      setCarregandoConversa(false)
+    }
   }
 
   async function novaConversa() {
-    if (criandoConversa) return
+    if (criandoConversa || carregando) return
+    setCriandoConversa(true)
+    setModo('livre')
+    setConversaLivreId(null)
+    setNovaConversaPendente(true)
     setBolhas([])
     setHistorico([])
     setImagemPendente(null)
@@ -164,30 +228,10 @@ export default function AtlasIAPage() {
     setRelatoSugerido(null)
     setMensagemMelhoria('')
     setErro('')
-
-    if (modo === 'livre') {
-      setConversaLivreId(null)
-      setNovaConversaPendente(true)
-      setCriandoConversa(true)
-      try {
-        const id = await criarNovaConversaLivre()
-        setConversaLivreId(id)
-        setNovaConversaPendente(false)
-      } catch (e: any) {
-        setErro(e?.message || 'Não foi possível iniciar uma nova conversa.')
-      } finally {
-        setCriandoConversa(false)
-      }
-      return
-    }
-
-    setSessoesEspecialistas(prev => {
-      const proximo = { ...prev }
-      delete proximo[modo]
-      return proximo
-    })
+    setSessoesEspecialistas({})
+    window.setTimeout(() => entradaRef.current?.focus(), 50)
+    setCriandoConversa(false)
   }
-
   function trocarModo(novo: ModoChat) {
     if (novo === modo) return
     setModo(novo)
@@ -324,21 +368,25 @@ export default function AtlasIAPage() {
     try {
       const token = await tokenAtual()
       if (modo === 'livre') {
-        let conversaIdParaEnviar = conversaLivreId
-        if (novaConversaPendente && !conversaIdParaEnviar) {
-          conversaIdParaEnviar = await criarNovaConversaLivre()
-          setConversaLivreId(conversaIdParaEnviar)
-          setNovaConversaPendente(false)
-        }
         const r = await fetch('/api/agente/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` },
-          body: JSON.stringify({ mensagem: texto, anexo: atual, messages: historico, conversaId: conversaIdParaEnviar }),
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+          body: JSON.stringify({
+            mensagem: texto,
+            anexo: atual,
+            messages: historico,
+            conversaId: conversaLivreId,
+            novaConversa: novaConversaPendente && !conversaLivreId,
+          }),
         })
         const j = await r.json()
         if (!r.ok) throw new Error(j.error || 'Erro ao falar com o Atlas IA')
-        if (j.conversaId) setConversaLivreId(String(j.conversaId))
+        if (j.conversaId) {
+          setConversaLivreId(String(j.conversaId))
+          setNovaConversaPendente(false)
+        }
         setHistorico(j.messages || [])
+        void carregarConversas()
         if (j.text) setBolhas(prev => [...prev, {
           papel: 'assistant',
           texto: j.text,
@@ -390,14 +438,32 @@ export default function AtlasIAPage() {
           disabled={criandoConversa || carregando}
           className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444] disabled:opacity-60"
         >
-          {criandoConversa ? <Loader2 size={17} className="animate-spin"/> : <MessageSquarePlus size={17}/>}
-          {criandoConversa ? 'Iniciando...' : 'Nova conversa'}
+          <MessageSquarePlus size={17}/> Nova conversa
         </button>
         <div className="space-y-2 text-sm">
           <button onClick={() => trocarModo('livre')} className={"w-full rounded-xl p-3 text-left " + (modo === 'livre' ? 'bg-white/10' : 'text-white/80 hover:bg-white/10')}>
             <Bot size={17} className="mb-2"/><b>Conversa livre</b>
             <p className="mt-1 text-xs text-white/60">Pergunte qualquer coisa. O Atlas usa dados internos só quando fizer sentido.</p>
           </button>
+          <div className="pt-2">
+            <div className="mb-2 flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+              <span className="flex items-center gap-1.5"><History size={13}/> Conversas recentes</span>
+              {carregandoConversas && <Loader2 size={12} className="animate-spin"/>}
+            </div>
+            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+              {conversas.length === 0 && !carregandoConversas && <p className="px-2 py-2 text-xs text-white/35">As conversas salvas aparecerão aqui.</p>}
+              {conversas.slice(0, 12).map(c => <button
+                key={c.id}
+                onClick={() => void carregarConversa(c.id)}
+                disabled={carregandoConversa}
+                className={"w-full rounded-lg px-2.5 py-2 text-left transition " + (conversaLivreId === c.id && modo === 'livre' ? 'bg-white/15' : 'text-white/70 hover:bg-white/10')}
+                title={c.preview || c.titulo}
+              >
+                <div className="truncate text-xs font-semibold">{c.titulo}</div>
+                <div className="mt-0.5 text-[10px] text-white/35">{new Date(c.updatedAt).toLocaleDateString('pt-BR')}</div>
+              </button>)}
+            </div>
+          </div>
           <Link href="/atlas-ia/especialistas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <Brain size={17} className="mb-2"/><b>Especialistas Atlas</b>
             <p className="mt-1 text-xs text-white/50">Veja os especialistas e suas funções.</p>
@@ -431,6 +497,15 @@ export default function AtlasIAPage() {
             <div><h1 className="font-semibold">Atlas IA</h1><p className="text-xs text-slate-500">{nomeModo()}</p></div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void novaConversa()}
+              disabled={carregando || criandoConversa}
+              className="inline-flex items-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 md:hidden"
+              title="Nova conversa"
+            >
+              <MessageSquarePlus size={15}/><span className="hidden sm:inline">Nova</span>
+            </button>
             {modo === 'livre' && <Link
               href="/atlas-ia/aprendizado"
               className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -527,6 +602,7 @@ export default function AtlasIAPage() {
             <div className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-sm focus-within:ring-2 focus-within:ring-slate-200">
               <button onClick={() => arquivoRef.current?.click()} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Anexar arquivo"><Paperclip size={20}/></button>
               <textarea
+                ref={entradaRef}
                 value={entrada}
                 onChange={e => setEntrada(e.target.value)}
                 onKeyDown={e => {
@@ -540,10 +616,10 @@ export default function AtlasIAPage() {
                 className="max-h-36 min-h-10 flex-1 resize-none border-0 px-2 py-2 text-sm outline-none"
               />
               <GravadorAudioChat
-                disabled={carregando || !!anexo}
+                disabled={carregando || carregandoConversa || !!anexo}
                 onEnviar={audio => enviarMensagem(audio.transcricao, audio)}
               />
-              <button onClick={enviar} disabled={carregando || (!entrada.trim() && !anexo)} className="rounded-xl bg-[#182444] p-2.5 text-white disabled:opacity-40">
+              <button onClick={enviar} disabled={carregando || carregandoConversa || (!entrada.trim() && !anexo)} className="rounded-xl bg-[#182444] p-2.5 text-white disabled:opacity-40">
                 <Send size={19}/>
               </button>
             </div>
