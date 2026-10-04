@@ -6,6 +6,7 @@ import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsul
 import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacionalServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadastroPendenciasServer'
+import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -163,7 +164,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,cidade').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,valor_estimado,itens,wvetro_fluxo').eq('empresa_id', empresaId),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id').eq('empresa_id', empresaId),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -327,13 +328,42 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
   const inicio = txt(body.inicio) || new Date(Date.now() - (Math.max(1, diasPadrao) - 1) * 86400000).toISOString().slice(0, 10)
 
   try {
-    const payload = await consultarRecursoOperacionalWVetro('orcamentos', { inicio, fim })
-    const staging = transformarPayloadWVetroEmStaging('orcamentos', payload)
+    const [payloadOrcamentos, payloadPedidos] = await Promise.all([
+      consultarRecursoOperacionalWVetro('orcamentos', { inicio, fim }),
+      consultarRecursoOperacionalWVetro('pedidos', { inicio, fim }),
+    ])
+    const stagingOrcamentos = transformarPayloadWVetroEmStaging('orcamentos', payloadOrcamentos)
+    const stagingPedidos = transformarPayloadWVetroEmStaging('pedidos', payloadPedidos)
+
+    // O mesmo número pode aparecer como orçamento e depois como pedido vendido.
+    // Pedido tem precedência porque representa o estado comercial mais recente.
+    const porNumero = new Map<string, { registro: any; fonteRegistro: 'orcamento' | 'pedido' }>()
+    for (const registro of stagingOrcamentos.registros) {
+      const numero = txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid)
+      if (numero) porNumero.set(numero, { registro, fonteRegistro: 'orcamento' })
+    }
+    for (const registro of stagingPedidos.registros) {
+      const numero = txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid)
+      if (numero) porNumero.set(numero, { registro, fonteRegistro: 'pedido' })
+    }
+
+    const numerosSolicitados = new Set(
+      (Array.isArray(body.numerosWvetro) ? body.numerosWvetro : [])
+        .map((v: unknown) => String(v ?? '').trim())
+        .filter(Boolean),
+    )
+    const registros = Array.from(porNumero.entries())
+      .filter(([numero]) => numerosSolicitados.size === 0 || numerosSolicitados.has(numero))
+      .map(([, valor]) => valor)
+
     const ctx = await carregarContexto(usuario.empresa_id)
+    const margensCidade = new Map<string, Awaited<ReturnType<typeof resolverMargemOrcamentoPorCidade>>>()
     let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0
     const resultados: any[] = []
 
-    for (const registro of staging.registros) {
+    for (const entrada of registros) {
+      const registro = entrada.registro
+      const fonteRegistro = entrada.fonteRegistro
       const p = registro.payload
       const numeroW = txt(p.Nro, p.OrcamentoId, p.Orcamentoid)
       if (!numeroW) continue
@@ -347,6 +377,13 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       if (clienteResolvido.criado) clientesCriados += 1
       if (clienteResolvido.pendencia) pendenciasCadastro += 1
       const nome = nomeCliente(p)
+      const cidadeOrcamento = txt(p.Cidade, p.PessoaCidade, p.ClienteCidade, cliente?.cidade)
+      const chaveCidade = normalizarCidadeMargem(cidadeOrcamento)
+      let regraMargem = margensCidade.get(chaveCidade)
+      if (!regraMargem) {
+        regraMargem = await resolverMargemOrcamentoPorCidade(usuario.empresa_id, cidadeOrcamento)
+        margensCidade.set(chaveCidade, regraMargem)
+      }
       const valor = num(p.ValorTotal, p.Total, p.ValorBruto, p.Valor)
       const primeiro = itens[0] || {}
       const fluxo = {
@@ -358,6 +395,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
         sincronizado_em: new Date().toISOString(),
         situacao: txt(p.Situacao, p.Status) || null,
         vendedor: txt(p.VendedorNome, p.NomeVendedor) || null,
+        fonte_registro: fonteRegistro,
         cliente_codigo_wvetro: txt(p.ClienteCodigo, p.PessoaCodigo) || null,
         payload_bruto: p,
         mapeamento_versao: 2,
@@ -385,9 +423,15 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
           altura_mm: primeiro.altura_mm || null,
           quantidade: primeiro.quantidade || 1,
           acabamento: txt(p.Cor, p.Acabamento) || null,
+          cidade: cidadeOrcamento || existente.cidade || null,
           valor_estimado: valor > 0 ? valor : null,
           updated_at: new Date().toISOString(),
           wvetro_fluxo: fluxo,
+          ...(String(existente.margem_padrao_origem || 'sistema') !== 'manual' ? {
+            margem_padrao_pct: regraMargem.margem,
+            margem_padrao_origem: regraMargem.origem,
+            margem_regra_cidade_id: regraMargem.regraId,
+          } : {}),
         }
         const { error } = await supabaseAdmin.from('orcamentos').update(patch).eq('id', existente.id).eq('empresa_id', usuario.empresa_id)
         if (error) throw error
@@ -401,7 +445,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
           cliente_id: cliente?.id || null,
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
-          cidade: txt(p.Cidade, p.PessoaCidade) || null,
+          cidade: cidadeOrcamento || null,
           origem: 'W.Vetro',
           tipo_esquadria: primeiro.tipo_esquadria || 'outro',
           largura_mm: primeiro.largura_mm || null,
@@ -411,6 +455,9 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
           modo_entrada: 'wvetro_api',
           descricao_livre: null,
           valor_estimado: valor > 0 ? valor : null,
+          margem_padrao_pct: regraMargem.margem,
+          margem_padrao_origem: regraMargem.origem,
+          margem_regra_cidade_id: regraMargem.regraId,
           status: 'rascunho',
           contramarco: null,
           itens,
@@ -434,8 +481,8 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
 
     return NextResponse.json({
       ok: true, inicio, fim,
-      lidos: staging.registros.length,
-      semChave: staging.semChave.length,
+      lidos: registros.length,
+      semChave: stagingOrcamentos.semChave.length + stagingPedidos.semChave.length,
       criados, atualizados, semAlteracao,
       clientesVinculados, clientesCriados, itensMapeados, itensPendentes, pendenciasCadastro,
       forcar,
@@ -459,13 +506,16 @@ export async function GET(req: NextRequest) {
 
   const usuario = await autenticarMasterWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 401 })
-  const { data, error } = await supabaseAdmin
+  const clienteId = String(req.nextUrl.searchParams.get('clienteId') || '').trim()
+  let query = supabaseAdmin
     .from('orcamentos')
-    .select('id,numero,cliente_nome,valor_estimado,updated_at,wvetro_fluxo,itens')
+    .select('id,numero,cliente_id,cliente_nome,valor_estimado,updated_at,wvetro_fluxo,itens')
     .eq('empresa_id', usuario.empresa_id)
     .contains('wvetro_fluxo', { origem: 'wvetro_api' })
     .order('updated_at', { ascending: false })
-    .limit(200)
+    .limit(500)
+  if (clienteId) query = query.eq('cliente_id', clienteId)
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({
     ok: true,

@@ -593,7 +593,12 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
 }
 
 export async function salvarPoliticaGeral(orcamentoId: string, margem: number, cobrarSobra: boolean) {
-  const { error } = await supabase.from('orcamentos').update({ margem_padrao_pct: Math.max(0, num(margem)), cobrar_sobra_padrao: cobrarSobra }).eq('id', orcamentoId)
+  const { error } = await supabase.from('orcamentos').update({
+    margem_padrao_pct: Math.max(0, num(margem)),
+    margem_padrao_origem: 'manual',
+    margem_regra_cidade_id: null,
+    cobrar_sobra_padrao: cobrarSobra,
+  }).eq('id', orcamentoId)
   if (error) return { ok: false as const, error: error.message }
   const { data: pacote } = await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id', orcamentoId).eq('origem', 'orcamento_simulacao').neq('status','substituido').order('versao',{ascending:false}).limit(1).maybeSingle()
   if (pacote) await recalcularResumoPrecificacao(orcamentoId, pacote.id)

@@ -205,15 +205,39 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
       const fim=new Date()
       const inicio=new Date(); inicio.setDate(inicio.getDate()-6)
-      const resp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar',{
-        method:'POST',
-        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({inicio:dataInputLocal(inicio),fim:dataInputLocal(fim),forcar:true,modo:'corrigir_tudo'}),
-      })
-      const json=await resp.json().catch(()=>({}))
-      if(!resp.ok)throw new Error(json?.error||`Falha ao sincronizar W.Vetro (${resp.status}).`)
+      const chamadas:Array<{inicio:string;fim:string;numerosWvetro?:string[]}>= [{
+        inicio:dataInputLocal(inicio),
+        fim:dataInputLocal(fim),
+      }]
 
-      const listaResp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar',{
+      // Além da janela recente, revisita as datas históricas já vinculadas com segurança
+      // ao cliente. Assim um orçamento antigo (ou pedido vendido) pode virar espelho
+      // técnico completo no Atlas sem sincronizar o histórico inteiro de todos os clientes.
+      const historicosPorData=new Map<string,string[]>()
+      for(const h of wvetroHistorico){
+        const data=String(h.tipo_registro==='venda_historica_pedido'?(h.data_venda||h.data_emissao):(h.data_emissao||h.data_venda)||'').slice(0,10)
+        const numero=String(h.numero_wvetro||'').trim()
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(data)||!numero)continue
+        if(data>=dataInputLocal(inicio)&&data<=dataInputLocal(fim))continue
+        historicosPorData.set(data,Array.from(new Set([...(historicosPorData.get(data)||[]),numero])))
+      }
+      for(const [data,numerosWvetro] of historicosPorData)chamadas.push({inicio:data,fim:data,numerosWvetro})
+
+      let lidos=0,criados=0,atualizados=0
+      for(let i=0;i<chamadas.length;i+=1){
+        setMensagemSyncWVetro(`Sincronizando W.Vetro: ${i+1}/${chamadas.length} período(s)...`)
+        const chamada=chamadas[i]
+        const resp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar',{
+          method:'POST',
+          headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+          body:JSON.stringify({...chamada,forcar:true,modo:'corrigir_tudo'}),
+        })
+        const json=await resp.json().catch(()=>({}))
+        if(!resp.ok)throw new Error(json?.error||`Falha ao sincronizar W.Vetro (${resp.status}).`)
+        lidos+=Number(json.lidos||0);criados+=Number(json.criados||0);atualizados+=Number(json.atualizados||0)
+      }
+
+      const listaResp=await fetch(`/api/integracoes/wvetro/orcamentos/sincronizar?clienteId=${encodeURIComponent(clienteId)}`,{
         method:'GET',
         cache:'no-store',
         headers:{Authorization:`Bearer ${token}`},
@@ -231,7 +255,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
       const { count: vinculadosCliente }=await supabase.from('orcamentos').select('id',{count:'exact',head:true}).eq('cliente_id',clienteId).contains('wvetro_fluxo',{origem:'wvetro_api'})
       await carregar()
-      setMensagemSyncWVetro(`Conferência concluída: ${Number(json.lidos||0)} lido(s), ${Number(json.criados||0)} novo(s), ${Number(json.atualizados||0)} atualizado(s) · ${corrigidos} orçamento(s) W.Vetro recalculado(s), ${falhas} com pendência. Este cliente tem ${Number(vinculadosCliente||0)} W.Vetro vinculado(s).`)
+      setMensagemSyncWVetro(`Conferência concluída: ${lidos} lido(s), ${criados} novo(s), ${atualizados} atualizado(s) · ${corrigidos} orçamento(s) W.Vetro recalculado(s), ${falhas} com pendência. Este cliente tem ${Number(vinculadosCliente||0)} W.Vetro vinculado(s).`)
     }catch(e){setErro(e instanceof Error?e.message:'Não foi possível sincronizar o W.Vetro.')}
     finally{setSincronizandoWVetro(false)}
   }

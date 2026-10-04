@@ -6,6 +6,7 @@ import { usuarioAtual, tokenAtual } from './auth'
 import { registrarHistorico } from './historico'
 import { executarAutomacoesColuna } from './automacoes'
 import { registrarConfiguracaoTecnicaAtlas, registrarEventoAprendizadoAtlas } from './ai/aprendizadoAtlas'
+import { resolverMargemOrcamentoCliente } from './orcamentoMargensCidade'
 import { v4 as uuidv4 } from 'uuid'
 import { TipoEsquadria, Acabamento, OrigemCliente, Contramarco, ItemEsquadria, TemperaturaLead, Anexo } from './tipos'
 
@@ -324,6 +325,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     error = atualizado.error
     idResultado = orcamentoIdDestino
   } else {
+    const margemInicial = await resolverMargemOrcamentoCliente(obraCidade || cidade)
     const inserido = await supabase.from('orcamentos').insert({
     id: novoId, cliente_id: clienteId, obra_id: obraIdEfetiva || null, cliente_nome: clienteNome,
     cliente_whatsapp: clienteWhatsapp, cidade, origem,
@@ -334,6 +336,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     tipo_medida: tipoMedidaOrcamento,
     revisao_grupo_id: novoId,
     descricao_livre: null, valor_estimado: null, status: 'rascunho', modo_entrada: 'formulario',
+    margem_padrao_pct: margemInicial.margem, margem_padrao_origem: margemInicial.origem, margem_regra_cidade_id: margemInicial.regraId,
     coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString(),
     arquiteto_nome: arquitetoNome || null, arquiteto_contato: arquitetoContato || null,
     criado_por_nome: usuario?.nome || null, criado_por_id: usuario?.id || null,
