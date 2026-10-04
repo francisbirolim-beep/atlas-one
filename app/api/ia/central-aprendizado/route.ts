@@ -25,6 +25,20 @@ function num(v: unknown): number|null {
 }
 function norm(v: unknown){ return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\s+/g,' ').trim() }
 function cod(v: unknown){ return txt(v,120).toUpperCase().replace(/[^A-Z0-9]/g,'') }
+function tokensNome(v: unknown){
+  return new Set(norm(v).split(' ').filter(t=>t.length>=3&&!['LTDA','EIRELI','INDUSTRIA','COMERCIO','DISTRIBUIDORA','DISTRIBUICAO'].includes(t)))
+}
+function similaridadeNome(a: unknown,b: unknown){
+  const na=norm(a), nb=norm(b)
+  if(!na||!nb)return 0
+  if(na===nb)return 1
+  if((na.includes(nb)||nb.includes(na))&&Math.min(na.length,nb.length)>=6)return .9
+  const ta=tokensNome(a), tb=tokensNome(b)
+  if(!ta.size||!tb.size)return 0
+  let inter=0
+  for(const t of ta)if(tb.has(t))inter++
+  return inter/Math.max(ta.size,tb.size)
+}
 function jsonIA(v:string){
   const s=String(v||'').trim().replace(/^\s*```(?:json)?\s*/i,'').replace(/\s*```\s*$/i,'').trim()
   try{return JSON.parse(s)}catch{}
@@ -97,7 +111,9 @@ async function analisar(token:string,tipo:string,descricao:string,nome:string|nu
   const st=await statusOpenCode()
   if(!st.configurado)return {documento:{tipo,titulo:nome||descricao.slice(0,100)||'Material',resumo:descricao||texto.slice(0,1200),setores:[]},itens:descricao?[{tipo:'conhecimento',titulo:descricao.slice(0,120),conteudo:descricao,confianca:.5}]:[]}
   const system=`Você analisa materiais da Central de Aprendizado do ERP Atlas One (esquadrias de alumínio).
-Tudo que você extrair é CANDIDATO para revisão humana. Não invente código, preço, peso, dimensão, linha, aplicação, fornecedor nem regra.
+Não invente código, preço, peso, dimensão, linha, aplicação, fornecedor nem regra.
+Catálogo e tabela oficial de fornecedor são fontes documentais confiáveis: extraia tudo que estiver explícito para reconciliação automática. Só divergências, ambiguidades ou campos insuficientes serão enviados à validação humana.
+Para foto, conversa, curso, fórmula, procedimento, plano/lista de corte ou regra operacional, extraia como conhecimento candidato e preserve a necessidade de validação humana antes de virar regra do Atlas.
 Classifique o documento entre catalogo,tabela_preco,curso,apostila,regra,foto,arquivo,conversa,outro.
 Módulos válidos: gestao,comercial,orcamento,medicao_final,engenharia,compras,estoque,producao,instalacao,financeiro,marketing,rh,qualidade,pd.
 Extraia fornecedor (nome,CNPJ,contato,telefone,email,cidade) quando houver.
@@ -109,13 +125,26 @@ Responda SOMENTE JSON válido:
   return jsonIA(r.resposta)||{documento:{tipo,titulo:nome||'Material',resumo:r.resposta.slice(0,4000),setores:[]},itens:[]}
 }
 async function fornecedorExistente(empresaId:string,f:any){
-  if(!f)return null
+  if(!f)return {existente:null as any,ambiguos:[] as any[]}
   const {data}=await supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf,contato,telefone,email,cidade').eq('empresa_id',empresaId).limit(3000)
+  const lista=data||[]
   const c=dig(f.cnpj)
-  if(c){ const x=(data||[]).find((i:any)=>dig(i.cnpj_cpf)===c); if(x)return x }
+  if(c){
+    const x=lista.find((i:any)=>dig(i.cnpj_cpf)===c)
+    if(x)return {existente:x,ambiguos:[]}
+  }
   const n=norm(f.nome)
-  if(n){ const xs=(data||[]).filter((i:any)=>norm(i.nome)===n); if(xs.length===1)return xs[0] }
-  return null
+  if(n){
+    const exatos=lista.filter((i:any)=>norm(i.nome)===n)
+    if(exatos.length===1)return {existente:exatos[0],ambiguos:[]}
+    const proximos=lista
+      .map((i:any)=>({item:i,score:similaridadeNome(f.nome,i.nome)}))
+      .filter((x:any)=>x.score>=.92)
+      .sort((a:any,b:any)=>b.score-a.score)
+      .slice(0,2)
+    if(proximos.length===1)return {existente:proximos[0].item,ambiguos:[]}
+  }
+  return {existente:null,ambiguos:[]}
 }
 async function produtoExistente(empresaId:string,fornecedorId:string|null,codigo:string,descricao:string){
   const c=cod(codigo)
@@ -134,17 +163,41 @@ async function produtoExistente(empresaId:string,fornecedorId:string|null,codigo
   if(n){ const xs=(data||[]).filter((p:any)=>norm(p.nome)===n); if(xs.length===1)return {produto:xs[0],metodo:'nome_exato',confianca:.9}; if(xs.length>1)return {produto:null,metodo:'ambiguo',confianca:.3,ambiguos:xs.slice(0,8)} }
   return {produto:null,metodo:'novo',confianca:c?.length?0.8:0.6}
 }
-async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,fornecedor:any){
+async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,fornecedorInfo:any){
   const rows:any[]=[]
   const f=x?.documento?.fornecedor||null
-  if(f?.nome||f?.cnpj)rows.push({entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'fornecedor',modulo:'compras',titulo:fornecedor?`Confirmar fornecedor: ${fornecedor.nome}`:`Cadastrar fornecedor: ${txt(f.nome,180)||'novo'}`,dados:{nome:txt(f.nome,220)||null,cnpj_cpf:dig(f.cnpj)||null,contato:txt(f.contato,180)||null,telefone:txt(f.telefone,80)||null,email:txt(f.email,180)||null,cidade:txt(f.cidade,120)||null},deduplicacao:{existente:fornecedor||null},acao_sugerida:fornecedor?'usar_existente':'cadastrar_novo',confianca:fornecedor?1:.85,destino_id:fornecedor?.id||null})
+  const fornecedor=fornecedorInfo?.existente||null
+  const fornecedorAmbiguos=fornecedorInfo?.ambiguos||[]
+  const ehCatalogo=['catalogo','tabela_preco'].includes(String(x?.documento?.tipo||''))
+  if(f?.nome||f?.cnpj||ehCatalogo)rows.push({
+    entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'fornecedor',modulo:'compras',
+    titulo:fornecedor?`Fornecedor identificado: ${fornecedor.nome}`:fornecedorAmbiguos.length?`Confirmar fornecedor: ${txt(f?.nome,180)||'catálogo'}`:f?.nome?`Cadastrar fornecedor: ${txt(f.nome,180)}`:'Identificar fornecedor do catálogo',
+    dados:{nome:txt(f?.nome,220)||null,cnpj_cpf:dig(f?.cnpj)||null,contato:txt(f?.contato,180)||null,telefone:txt(f?.telefone,80)||null,email:txt(f?.email,180)||null,cidade:txt(f?.cidade,120)||null},
+    deduplicacao:{existente:fornecedor||null,ambiguos:fornecedorAmbiguos},
+    acao_sugerida:fornecedor?'usar_existente':fornecedorAmbiguos.length?'revisar_ambiguidade':'cadastrar_novo',
+    confianca:fornecedor?1:fornecedorAmbiguos.length?.55:.9,
+    destino_id:fornecedor?.id||null,
+  })
+  const chavesProdutos=new Set<string>()
   for(const item of Array.isArray(x?.itens)?x.itens.slice(0,1200):[]){
     if(String(item.tipo)==='produto'||String(item.tipo)==='preco'){
       const codigo=txt(item.codigo,120), descricao=txt(item.descricao||item.titulo,400)
       if(!codigo&&!descricao)continue
+      const chaveProduto=codigo?'COD:'+cod(codigo):'DESC:'+norm(descricao)
+      if(chavesProdutos.has(chaveProduto))continue
+      chavesProdutos.add(chaveProduto)
       const p=await produtoExistente(usuario.empresa_id,fornecedor?.id||null,codigo,descricao)
       const cat=CATEGORIAS.has(txt(item.categoria,80).toLowerCase())?txt(item.categoria,80).toLowerCase():'outro'
-      rows.push({entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'produto',modulo:MODULOS.has(txt(item.modulo,50))?txt(item.modulo,50):'engenharia',titulo:codigo?`${codigo} — ${descricao||'Produto'}`:descricao,dados:{codigo:codigo||null,descricao:descricao||null,categoria:cat,unidade:txt(item.unidade,30)||null,preco_fornecedor:num(item.preco),peso_kg_m:num(item.peso_kg_m),tamanho_barra_mm:num(item.tamanho_barra_mm),linha:txt(item.linha,120)||null,aplicacao:txt(item.aplicacao,1000)||null,fornecedor_nome:txt(f?.nome,220)||null,fornecedor_cnpj:dig(f?.cnpj)||null},deduplicacao:{metodo:p.metodo,produto_existente:p.produto||null,ambiguos:(p as any).ambiguos||[]},acao_sugerida:p.produto?'vincular_existente':p.metodo==='ambiguo'?'revisar_ambiguidade':'cadastrar_novo',confianca:Math.min(num(item.confianca)??p.confianca,p.produto?1:.95),destino_id:p.produto?.id||null})
+      rows.push({
+        entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'produto',
+        modulo:MODULOS.has(txt(item.modulo,50))?txt(item.modulo,50):'engenharia',
+        titulo:codigo?`${codigo} — ${descricao||'Produto'}`:descricao,
+        dados:{codigo:codigo||null,descricao:descricao||null,categoria:cat,unidade:txt(item.unidade,30)||null,preco_fornecedor:num(item.preco),peso_kg_m:num(item.peso_kg_m),tamanho_barra_mm:num(item.tamanho_barra_mm),linha:txt(item.linha,120)||null,aplicacao:txt(item.aplicacao,1000)||null,fornecedor_nome:txt(f?.nome,220)||null,fornecedor_cnpj:dig(f?.cnpj)||null},
+        deduplicacao:{metodo:p.metodo,produto_existente:p.produto||null,ambiguos:(p as any).ambiguos||[]},
+        acao_sugerida:p.produto?'vincular_existente':p.metodo==='ambiguo'?'revisar_ambiguidade':'cadastrar_novo',
+        confianca:Math.min(num(item.confianca)??p.confianca,p.produto?1:.95),
+        destino_id:p.produto?.id||null,
+      })
     } else if(String(item.tipo)==='conhecimento'){
       const conteudo=txt(item.conteudo||item.descricao,30000); if(!conteudo)continue
       const modulo=MODULOS.has(txt(item.modulo,50))?txt(item.modulo,50):null
@@ -213,6 +266,114 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any){
   }
   throw new Error('Tipo de candidato não suportado.')
 }
+function conflitosProdutoCatalogo(c:any){
+  const d=c?.dados||{}, p=c?.deduplicacao?.produto_existente
+  const conflitos:Array<{campo:string;atlas:any;catalogo:any}>=[]
+  if(!p)return conflitos
+  const cat=String(d.categoria||'')
+  if(cat&&cat!=='outro'&&p.categoria&&String(p.categoria)!=='outro'&&norm(cat)!==norm(p.categoria))conflitos.push({campo:'categoria',atlas:p.categoria,catalogo:cat})
+  if(d.unidade&&p.unidade&&norm(d.unidade)!==norm(p.unidade))conflitos.push({campo:'unidade',atlas:p.unidade,catalogo:d.unidade})
+  const pesoNovo=num(d.peso_kg_m), pesoAtlas=num(p.peso_kg_m)
+  if(pesoNovo!==null&&pesoAtlas!==null&&Math.abs(pesoNovo-pesoAtlas)>Math.max(.01,Math.abs(pesoAtlas)*.03))conflitos.push({campo:'peso_kg_m',atlas:pesoAtlas,catalogo:pesoNovo})
+  const barraNova=num(d.tamanho_barra_mm), barraAtlas=num(p.tamanho_barra_mm)
+  if(barraNova!==null&&barraAtlas!==null&&Math.abs(barraNova-barraAtlas)>2)conflitos.push({campo:'tamanho_barra_mm',atlas:barraAtlas,catalogo:barraNova})
+  return conflitos
+}
+
+function motivoPendenciaCatalogo(c:any){
+  if(c.tipo==='fornecedor'){
+    if(c.acao_sugerida==='revisar_ambiguidade')return 'Encontrei fornecedor parecido. Confirme qual é para evitar duplicidade.'
+    if(!txt(c.dados?.nome,220)&&!dig(c.dados?.cnpj_cpf))return 'Não consegui identificar o fornecedor com segurança.'
+    return null
+  }
+  if(c.tipo==='produto'){
+    if(c.acao_sugerida==='revisar_ambiguidade')return 'Encontrei mais de um produto possível para o mesmo item.'
+    if(!txt(c.dados?.codigo,120))return 'O catálogo não trouxe código suficiente para vincular este item.'
+    if(conflitosProdutoCatalogo(c).length)return 'O catálogo diverge de dados técnicos já cadastrados no Atlas.'
+    if(Number(c.confianca??0)<.72)return 'A leitura deste item ficou com confiança baixa.'
+    return null
+  }
+  if(c.tipo==='conhecimento'){
+    if(!c.modulo)return 'A IA não conseguiu definir o setor deste conhecimento.'
+    if(Number(c.confianca??0)<.85)return 'O conteúdo técnico ficou com confiança baixa.'
+    return null
+  }
+  return 'Item precisa de revisão.'
+}
+
+async function pendenciarCatalogo(usuario:UsuarioTenant,c:any,motivo:string){
+  const conflitos=c.tipo==='produto'?conflitosProdutoCatalogo(c):[]
+  await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+    status:'pendente',
+    acao_sugerida:conflitos.length?'revisar_conflito':c.acao_sugerida==='revisar_ambiguidade'?'revisar_ambiguidade':'revisar_pendencia',
+    deduplicacao:{...(c.deduplicacao||{}),conflitos},
+    observacao_validacao:motivo,
+    updated_at:new Date().toISOString()
+  }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+  await log(usuario,'catalogo_pendencia_detectada',c.entrada_id,c.id,{motivo,conflitos})
+}
+
+async function aplicarCatalogoAutomatico(usuario:UsuarioTenant,c:any,entrada:any){
+  const destino=await aplicar(usuario,c,entrada)
+  await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+    status:'aplicado',destino_id:destino,validado_por_id:usuario.id,
+    validado_por_nome:'Atlas — catálogo oficial',validado_em:new Date().toISOString(),
+    observacao_validacao:'Aplicado automaticamente a partir de catálogo/tabela oficial do fornecedor.',
+    updated_at:new Date().toISOString()
+  }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+  await log(usuario,'catalogo_item_aplicado_automaticamente',entrada.id,c.id,{tipo:c.tipo,destino_id:destino})
+}
+
+async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:string){
+  let {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',usuario.empresa_id).eq('id',entradaId).maybeSingle()
+  if(!entrada)return {aplicados:0,pendentes:0}
+  const {data:lista}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*')
+    .eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId)
+    .in('status',['pendente','corrigido','aprovado']).order('created_at',{ascending:true})
+  let aplicados=0
+
+  for(const c of (lista||[]).filter((x:any)=>x.tipo==='fornecedor')){
+    const motivo=motivoPendenciaCatalogo(c)
+    if(motivo){await pendenciarCatalogo(usuario,c,motivo);continue}
+    await aplicarCatalogoAutomatico(usuario,c,entrada);aplicados++
+    const r=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',usuario.empresa_id).eq('id',entradaId).maybeSingle()
+    entrada=r.data||entrada
+  }
+
+  const fornecedorNecessario=entrada.tipo==='catalogo'||entrada.tipo==='tabela_preco'||Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
+  const fornecedorId=await resolverFornecedor(usuario,entrada,null)
+  if(fornecedorId)await copiarFonte(usuario,entrada,fornecedorId)
+  const outros=(lista||[]).filter((x:any)=>x.tipo!=='fornecedor')
+  for(let i=0;i<outros.length;i+=5){
+    const lote=outros.slice(i,i+5)
+    const resultados=await Promise.all(lote.map(async(c:any)=>{
+      if(c.tipo==='produto'&&fornecedorNecessario&&!fornecedorId){
+        await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+          acao_sugerida:'aguardar_fornecedor',
+          observacao_validacao:'Aguardando apenas a confirmação do fornecedor; depois o Atlas continua este catálogo automaticamente.',
+          updated_at:new Date().toISOString()
+        }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+        return 0
+      }
+      const motivo=motivoPendenciaCatalogo(c)
+      if(motivo){await pendenciarCatalogo(usuario,c,motivo);return 0}
+      await aplicarCatalogoAutomatico(usuario,c,entrada)
+      return 1
+    }))
+    aplicados+=resultados.reduce((s:number,n:number)=>s+n,0)
+  }
+
+  const {data:restantes}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('id,acao_sugerida')
+    .eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId).in('status',['pendente','corrigido','aprovado'])
+  const reais=(restantes||[]).filter((c:any)=>c.acao_sugerida!=='aguardar_fornecedor')
+  await supabaseAdmin.from('ai_aprendizado_entradas').update({
+    status:reais.length?'aguardando_validacao':'concluido',
+    metadados:{...(entrada.metadados||{}),modo_catalogo:'automatico_por_excecao',itens_aplicados_automaticamente:aplicados,pendencias_reais:reais.length},
+    updated_at:new Date().toISOString()
+  }).eq('empresa_id',usuario.empresa_id).eq('id',entradaId)
+  return {aplicados,pendentes:reais.length}
+}
+
 async function concluir(empresaId:string,entradaId:string){
   const {data}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('status').eq('empresa_id',empresaId).eq('entrada_id',entradaId)
   if(!(data||[]).some((c:any)=>['pendente','corrigido','aprovado'].includes(c.status)))await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'concluido',updated_at:new Date().toISOString()}).eq('empresa_id',empresaId).eq('id',entradaId)
@@ -227,7 +388,7 @@ export async function GET(req:NextRequest){
     let qc=supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(3000);if(entradaId)qc=qc.eq('entrada_id',entradaId);if(['pendente','aprovado','rejeitado','corrigido','aplicado'].includes(status))qc=qc.eq('status',status)
     const {data:candidatos,error:e2}=await qc;if(e2)throw e2
     const cs=await Promise.all((candidatos||[]).map(async(c:any)=>({...c,pode_validar:await podeValidar(u,c)})))
-    return NextResponse.json({entradas:await Promise.all((entradas||[]).map(assinar)),candidatos:cs,totais:{pendentes:cs.filter(c=>['pendente','corrigido'].includes(c.status)).length,aplicados:cs.filter(c=>c.status==='aplicado').length,rejeitados:cs.filter(c=>c.status==='rejeitado').length}})
+    return NextResponse.json({entradas:await Promise.all((entradas||[]).map(assinar)),candidatos:cs,totais:{pendentes:cs.filter(c=>['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length,aplicados:cs.filter(c=>c.status==='aplicado').length,rejeitados:cs.filter(c=>c.status==='rejeitado').length}})
   }catch(e:any){return NextResponse.json({error:e?.message||'Erro ao carregar Central.'},{status:500})}
 }
 
@@ -245,9 +406,26 @@ export async function POST(req:NextRequest){
     if((a as any)?.ingestPath)await supabaseAdmin.storage.from('atlas-aprendizado').remove([(a as any).ingestPath])
     const x=await analisar(token,tipo,descricao,a?.nome||null,fonte.texto,fonte.imagens), fd=x?.documento?.fornecedor||null, f=await fornecedorExistente(u.empresa_id,fd)
     const total=await criarCandidatos(u,entradaId,x,f), tipoDetectado=TIPOS.has(txt(x?.documento?.tipo,40))?txt(x.documento.tipo,40):tipo, setores=Array.isArray(x?.documento?.setores)?x.documento.setores.filter((s:any)=>MODULOS.has(String(s))).slice(0,15):[]
-    const {data:at,error:ue}=await supabaseAdmin.from('ai_aprendizado_entradas').update({tipo:tipoDetectado,titulo:txt(x?.documento?.titulo,180)||entrada.titulo,resumo_ia:txt(x?.documento?.resumo,8000)||null,setores_sugeridos:setores,fornecedor_id_sugerido:f?.id||null,fornecedor_nome_sugerido:txt(fd?.nome,220)||null,fornecedor_cnpj_sugerido:dig(fd?.cnpj)||null,status:'aguardando_validacao',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId).select('*').single();if(ue)throw ue
-    await log(u,'analise_concluida',entradaId,null,{tipo_detectado:tipoDetectado,total_candidatos:total,fornecedor_existente_id:f?.id||null})
-    return NextResponse.json({entrada:await assinar(at),total_candidatos:total,mensagem:`Material analisado. ${total} item(ns) aguardam validação.`},{status:201})
+    const catalogoAutomatico=tipoDetectado==='catalogo'||tipoDetectado==='tabela_preco'
+    const {data:at,error:ue}=await supabaseAdmin.from('ai_aprendizado_entradas').update({
+      tipo:tipoDetectado,titulo:txt(x?.documento?.titulo,180)||entrada.titulo,resumo_ia:txt(x?.documento?.resumo,8000)||null,
+      setores_sugeridos:setores,fornecedor_id_sugerido:f?.existente?.id||null,fornecedor_nome_sugerido:txt(fd?.nome,220)||null,
+      fornecedor_cnpj_sugerido:dig(fd?.cnpj)||null,status:catalogoAutomatico?'analisando':'aguardando_validacao',erro:null,
+      metadados:{...(entrada.metadados||{}),validacao:catalogoAutomatico?'por_excecao':'humana'},
+      updated_at:new Date().toISOString()
+    }).eq('empresa_id',u.empresa_id).eq('id',entradaId).select('*').single();if(ue)throw ue
+    await log(u,'analise_concluida',entradaId,null,{tipo_detectado:tipoDetectado,total_candidatos:total,fornecedor_existente_id:f?.existente?.id||null})
+    if(catalogoAutomatico){
+      const auto=await processarCatalogoAutomatico(u,entradaId)
+      const {data:final}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).single()
+      return NextResponse.json({
+        entrada:await assinar(final||at),total_candidatos:total,pendencias:auto.pendentes,
+        mensagem:auto.pendentes
+          ?`Catálogo processado: ${auto.aplicados} item(ns) aplicados automaticamente e ${auto.pendentes} pendência(s) reais para validar.`
+          :`Catálogo processado automaticamente: ${auto.aplicados} item(ns) cadastrados/vinculados, sem pendências para validação.`
+      },{status:201})
+    }
+    return NextResponse.json({entrada:await assinar(at),total_candidatos:total,pendencias:total,mensagem:`Material analisado. ${total} item(ns) seguem para validação antes de virar regra.`},{status:201})
   }catch(e:any){if(id)await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'erro',erro:String(e?.message||'Erro').slice(0,1000),updated_at:new Date().toISOString()}).eq('id',id);return NextResponse.json({error:e?.message||'Erro ao analisar material.'},{status:500})}
 }
 
@@ -267,10 +445,24 @@ export async function PATCH(req:NextRequest){
     if(acao==='aprovar'){
       if(!['pendente','corrigido','aprovado'].includes(String(c.status)))return NextResponse.json({error:'Item já concluído.'},{status:409})
       await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aprovado',validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id)
-      const destino=await aplicar(u,c,entrada)
+      const candidatoAplicar={...c,dados:b?.dados&&typeof b.dados==='object'?b.dados:c.dados}
+      const destino=await aplicar(u,candidatoAplicar,entrada)
       const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aplicado',destino_id:destino,validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error
-      await log(u,'candidato_aplicado',entrada.id,id,{tipo:c.tipo,destino_id:destino});await concluir(u.empresa_id,entrada.id)
-      return NextResponse.json({candidato:{...data,pode_validar:true},mensagem:c.tipo==='conhecimento'?'Conhecimento aprovado e incorporado ao especialista.':c.tipo==='fornecedor'?'Fornecedor confirmado e vinculado ao material.':'Item aprovado e vinculado/cadastrado no Atlas.'})
+      await log(u,'candidato_aplicado',entrada.id,id,{tipo:c.tipo,destino_id:destino})
+      let autoRestante:{aplicados:number;pendentes:number}|null=null
+      if(c.tipo==='fornecedor'&&(entrada.tipo==='catalogo'||entrada.tipo==='tabela_preco')){
+        autoRestante=await processarCatalogoAutomatico(u,entrada.id)
+      }else{
+        await concluir(u.empresa_id,entrada.id)
+      }
+      return NextResponse.json({
+        candidato:{...data,pode_validar:true},
+        mensagem:autoRestante
+          ?`Fornecedor confirmado. O Atlas retomou o catálogo: ${autoRestante.aplicados} item(ns) processados automaticamente e ${autoRestante.pendentes} pendência(s) restantes.`
+          :c.tipo==='conhecimento'?'Conhecimento aprovado e incorporado ao especialista.'
+          :c.tipo==='fornecedor'?'Fornecedor confirmado e vinculado ao material.'
+          :'Item aprovado e vinculado/cadastrado no Atlas.'
+      })
     }
     return NextResponse.json({error:'Ação inválida.'},{status:400})
   }catch(e:any){return NextResponse.json({error:e?.message||'Erro ao validar item.'},{status:500})}

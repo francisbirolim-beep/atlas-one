@@ -84,6 +84,9 @@ function labelAcao(v?:string|null){
   if(v==='revisar_ambiguidade')return 'Revisar possível duplicidade'
   if(v==='validar_conhecimento_setorial')return 'Validar conhecimento do setor'
   if(v==='definir_setor')return 'Definir setor'
+  if(v==='revisar_conflito')return 'Divergência encontrada'
+  if(v==='revisar_pendencia')return 'Pendência real'
+  if(v==='aguardar_fornecedor')return 'Aguardando fornecedor'
   return v||'Revisar'
 }
 function limparNomeArquivo(nome:string){ return nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').slice(0,120) }
@@ -144,14 +147,14 @@ export default function CentralAprendizadoPage(){
       setMensagem(j.mensagem||'Material enviado para análise.')
       setTitulo('');setDescricao('');setArquivo(null);setTipo('outro')
       await carregar()
-      if((j.total_candidatos||0)>0)setAba('validacoes')
+      if((j.pendencias||0)>0)setAba('validacoes')
     }catch(e:any){setErro(e?.message||'Erro ao enviar material.')}
     finally{setEnviando(false)}
   }
 
   function entradaDo(id:string){ return dados.entradas.find(e=>e.id===id) }
   const pendentes=useMemo(()=>dados.candidatos
-    .filter(c=>['pendente','corrigido'].includes(c.status))
+    .filter(c=>['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
     .sort((a,b)=>{
       const pa=a.tipo==='fornecedor'?0:a.tipo==='produto'?1:2
       const pb=b.tipo==='fornecedor'?0:b.tipo==='produto'?1:2
@@ -192,7 +195,7 @@ export default function CentralAprendizadoPage(){
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#182444] text-white"><Sparkles size={20}/></div>
           <div>
             <h1 className="font-semibold">Central de Aprendizado</h1>
-            <p className="text-xs text-slate-500">Catálogos, cursos, tabelas, fotos, regras e conversas — tudo com validação antes de virar padrão.</p>
+            <p className="text-xs text-slate-500">Catálogos e tabelas entram automaticamente; somente exceções, regras e conhecimento operacional precisam de validação.</p>
           </div>
         </div>
         <button onClick={()=>void carregar()} disabled={carregando} className="rounded-xl border bg-white p-2.5 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
@@ -233,10 +236,10 @@ export default function CentralAprendizadoPage(){
           {arquivo&&<button onClick={()=>setArquivo(null)} className="mt-2 w-full text-xs font-semibold text-slate-400">Remover arquivo</button>}
           <button onClick={()=>void enviar()} disabled={enviando||(!descricao.trim()&&!arquivo)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#182444] px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">
             {enviando?<Loader2 size={17} className="animate-spin"/>:<Sparkles size={17}/>}
-            {enviando?'Lendo, classificando e comparando...':'Analisar e mandar para validação'}
+            {enviando?'Lendo, classificando e comparando...':'Analisar e processar'}
           </button>
           <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
-            <b className="text-slate-700">Regra:</b> a IA pode identificar e sugerir. Cadastro técnico, preço e conhecimento oficial só entram depois da aprovação de alguém autorizado.
+            <b className="text-slate-700">Regra:</b> catálogo e tabela oficial de fornecedor entram por validação de exceção: o Atlas cadastra/vincula o que estiver claro e manda para validação somente divergências. Fórmulas, processos, fotos técnicas e regras internas continuam exigindo validação humana.
           </div>
         </aside>
 
@@ -263,10 +266,10 @@ export default function CentralAprendizadoPage(){
         </div>
       </div> : <div>
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <b>Fila de validação.</b> Confirme, rejeite ou corrija. Fornecedor aparece primeiro; depois vêm os itens do catálogo. O Atlas mostra quando já encontrou algo parecido para evitar cadastro duplicado.
+          <b>Fila de exceções.</b> Aqui aparecem somente conflitos, ambiguidades ou informações insuficientes. Catálogos e tabelas oficiais são processados automaticamente quando os dados batem; fórmulas, planos de corte e regras operacionais continuam vindo para validação antes de virar padrão.
         </div>
         {carregando?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando...</div>
-        :pendentes.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>Nada aguardando validação.</b><p className="mt-1 text-sm text-slate-500">Novos materiais enviados na Entrada Geral aparecerão aqui.</p></div>
+        :pendentes.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>Nada aguardando validação.</b><p className="mt-1 text-sm text-slate-500">Somente exceções que realmente precisam de decisão humana aparecerão aqui.</p></div>
         :<div className="space-y-3">{pendentes.map(c=>{
           const e=edicoes[c.id]||{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}
           const origem=entradaDo(c.entrada_id)
@@ -285,6 +288,7 @@ export default function CentralAprendizadoPage(){
                   <p className="mt-1 text-xs text-slate-400">Origem: {origem?.titulo||'Material'} · enviado por {origem?.criado_por_nome||'usuário'}</p>
                   {c.deduplicacao?.produto_existente&&<p className="mt-2 text-sm text-emerald-700"><b>Já existe no Atlas:</b> {c.deduplicacao.produto_existente.codigo||''} {c.deduplicacao.produto_existente.nome}</p>}
                   {(c.deduplicacao?.ambiguos||[]).length>0&&<p className="mt-2 text-sm text-amber-700"><b>Atenção:</b> encontrei mais de um possível item parecido. Revise antes de aprovar.</p>}
+                  {(c.deduplicacao?.conflitos||[]).length>0&&<div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900"><b>Divergências encontradas:</b>{(c.deduplicacao.conflitos||[]).map((x:any,i:number)=><div key={i}>{x.campo}: Atlas <b>{String(x.atlas??'—')}</b> × catálogo <b>{String(x.catalogo??'—')}</b></div>)}</div>}
                 </div>
                 {abertoAgora?<ChevronUp size={18}/>:<ChevronDown size={18}/>}
               </div>
