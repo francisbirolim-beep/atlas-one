@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { ChevronLeft, ChevronRight, Clock, AlertTriangle, Plus, Check, X, Download, MapPin, Repeat, Square } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento, Setor } from '@/lib/tipos'
@@ -37,6 +38,7 @@ export default function Home() {
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
   const [carregandoPainel, setCarregandoPainel] = useState(true)
+  const [cadastrosPendentes, setCadastrosPendentes] = useState(0)
   const [setoresFavoritos, setSetoresFavoritos] = useState<Setor[]>([])
   const [guiasFavoritas, setGuiasFavoritas] = useState<Guia[]>([])
   const [mesVisto, setMesVisto] = useState(() => { const d = new Date(); d.setDate(1); return d })
@@ -83,14 +85,19 @@ export default function Home() {
 
   async function carregarPainel(usuarioId: string) {
     setCarregandoPainel(true)
-    const [tfs, cols, evs] = await Promise.all([
+    const [tfs, cols, evs, pendenciasCadastro] = await Promise.all([
       listarTarefas(usuarioId),
       listarColunasTarefas(usuarioId),
       listarEventosDoUsuario(usuarioId),
+      supabase
+        .from('cadastro_pendencias')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['pendente', 'em_analise']),
     ])
     setTarefas(tfs)
     setColunas(cols)
     setEventos(evs)
+    setCadastrosPendentes(pendenciasCadastro.count || 0)
     setCarregandoPainel(false)
   }
 
@@ -287,11 +294,16 @@ export default function Home() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-10">
-        <section className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+        <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          <Link href="/cadastros/pendencias" className="rounded-2xl border border-amber-200 bg-amber-50 p-3 transition hover:border-amber-300 sm:p-4">
+            <p className="text-[11px] font-medium text-amber-700">Pendências cadastro</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{carregandoPainel ? '—' : cadastrosPendentes}</p>
+            <p className="text-[11px] text-amber-700">clientes para validar</p>
+          </Link>
           <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
-            <p className="text-[11px] text-slate-400">Pendencias</p>
+            <p className="text-[11px] text-slate-400">Tarefas atrasadas</p>
             <p className="mt-1 text-xl font-bold text-slate-800">{tarefasAtrasadasResumo.length}</p>
-            <p className="text-[11px] text-slate-400">tarefas atrasadas</p>
+            <p className="text-[11px] text-slate-400">precisam de atenção</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
             <p className="text-[11px] text-slate-400">Hoje</p>
