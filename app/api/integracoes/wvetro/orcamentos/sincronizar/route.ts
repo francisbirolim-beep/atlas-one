@@ -259,6 +259,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
   const usuario = usuarioForcado || await autenticarMasterWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 401 })
   const body = await req.json().catch(() => ({})) as Record<string, any>
+  const forcar = body.forcar === true || String(body.modo || '').trim().toLowerCase() === 'corrigir_tudo'
   const fim = txt(body.fim) || new Date().toISOString().slice(0, 10)
   const inicio = txt(body.inicio) || new Date(Date.now() - (Math.max(1, diasPadrao) - 1) * 86400000).toISOString().slice(0, 10)
 
@@ -305,7 +306,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
         const precisaReprocessarMapeamento =
           Number(anterior?.mapeamento_versao || 0) < 2 ||
           num(existente.valor_estimado) <= 0
-        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento) {
+        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento && !forcar) {
           semAlteracao += 1
           resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'sem_alteracao', cliente: nome, itens: itens.length })
           continue
@@ -373,7 +374,8 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       semChave: staging.semChave.length,
       criados, atualizados, semAlteracao,
       clientesVinculados, clientesCriados, itensMapeados, itensPendentes,
-      resultados: resultados.slice(0, 100),
+      forcar,
+      resultados: resultados.slice(0, 200),
     })
   } catch (e) {
     console.error('Erro ao sincronizar orçamentos W.Vetro:', e)
@@ -399,7 +401,7 @@ export async function GET(req: NextRequest) {
     .eq('empresa_id', usuario.empresa_id)
     .contains('wvetro_fluxo', { origem: 'wvetro_api' })
     .order('updated_at', { ascending: false })
-    .limit(50)
+    .limit(200)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({
     ok: true,
