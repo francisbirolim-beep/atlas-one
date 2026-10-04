@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarUsuario, rodarLoop, obterOuCriarConversaHoje, validarConversaAgente, salvarMensagem } from '@/lib/agente'
+import { verificarUsuario, rodarLoop, obterOuCriarConversaHoje, criarConversaAgente, validarConversaAgente, salvarMensagem } from '@/lib/agente'
 
 const TAMANHO_MAX_BASE64 = 12_000_000
 
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     const historico = Array.isArray(body.messages) ? body.messages : []
     const anexo = body.anexo && typeof body.anexo === 'object' ? body.anexo : null
     const conversaSolicitada = String(body.conversaId || '').trim()
+    const forcarNovaConversa = body.novaConversa === true
 
     if (!mensagemTexto && !anexo) {
       return NextResponse.json({ error: 'Mensagem vazia' }, { status: 400 })
@@ -48,6 +49,8 @@ export async function POST(req: NextRequest) {
       const validada = await validarConversaAgente(conversaSolicitada, usuario.id, usuario.empresa_id)
       if (!validada) return NextResponse.json({ error: 'Conversa não encontrada para este usuário.' }, { status: 404 })
       conversaId = validada
+    } else if (forcarNovaConversa) {
+      conversaId = await criarConversaAgente(usuario.id, usuario.empresa_id)
     } else {
       conversaId = await obterOuCriarConversaHoje(usuario.id, usuario.empresa_id)
     }
