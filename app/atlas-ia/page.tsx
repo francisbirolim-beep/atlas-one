@@ -438,14 +438,32 @@ export default function AtlasIAPage() {
           disabled={criandoConversa || carregando}
           className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444] disabled:opacity-60"
         >
-          {criandoConversa ? <Loader2 size={17} className="animate-spin"/> : <MessageSquarePlus size={17}/>}
-          {criandoConversa ? 'Iniciando...' : 'Nova conversa'}
+          <MessageSquarePlus size={17}/> Nova conversa
         </button>
         <div className="space-y-2 text-sm">
           <button onClick={() => trocarModo('livre')} className={"w-full rounded-xl p-3 text-left " + (modo === 'livre' ? 'bg-white/10' : 'text-white/80 hover:bg-white/10')}>
             <Bot size={17} className="mb-2"/><b>Conversa livre</b>
             <p className="mt-1 text-xs text-white/60">Pergunte qualquer coisa. O Atlas usa dados internos só quando fizer sentido.</p>
           </button>
+          <div className="pt-2">
+            <div className="mb-2 flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+              <span className="flex items-center gap-1.5"><History size={13}/> Conversas recentes</span>
+              {carregandoConversas && <Loader2 size={12} className="animate-spin"/>}
+            </div>
+            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+              {conversas.length === 0 && !carregandoConversas && <p className="px-2 py-2 text-xs text-white/35">As conversas salvas aparecerão aqui.</p>}
+              {conversas.slice(0, 12).map(c => <button
+                key={c.id}
+                onClick={() => void carregarConversa(c.id)}
+                disabled={carregandoConversa}
+                className={"w-full rounded-lg px-2.5 py-2 text-left transition " + (conversaLivreId === c.id && modo === 'livre' ? 'bg-white/15' : 'text-white/70 hover:bg-white/10')}
+                title={c.preview || c.titulo}
+              >
+                <div className="truncate text-xs font-semibold">{c.titulo}</div>
+                <div className="mt-0.5 text-[10px] text-white/35">{new Date(c.updatedAt).toLocaleDateString('pt-BR')}</div>
+              </button>)}
+            </div>
+          </div>
           <Link href="/atlas-ia/especialistas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <Brain size={17} className="mb-2"/><b>Especialistas Atlas</b>
             <p className="mt-1 text-xs text-white/50">Veja os especialistas e suas funções.</p>
@@ -479,6 +497,15 @@ export default function AtlasIAPage() {
             <div><h1 className="font-semibold">Atlas IA</h1><p className="text-xs text-slate-500">{nomeModo()}</p></div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void novaConversa()}
+              disabled={carregando || criandoConversa}
+              className="inline-flex items-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 md:hidden"
+              title="Nova conversa"
+            >
+              <MessageSquarePlus size={15}/><span className="hidden sm:inline">Nova</span>
+            </button>
             {modo === 'livre' && <Link
               href="/atlas-ia/aprendizado"
               className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -575,6 +602,7 @@ export default function AtlasIAPage() {
             <div className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-sm focus-within:ring-2 focus-within:ring-slate-200">
               <button onClick={() => arquivoRef.current?.click()} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Anexar arquivo"><Paperclip size={20}/></button>
               <textarea
+                ref={entradaRef}
                 value={entrada}
                 onChange={e => setEntrada(e.target.value)}
                 onKeyDown={e => {
@@ -588,10 +616,10 @@ export default function AtlasIAPage() {
                 className="max-h-36 min-h-10 flex-1 resize-none border-0 px-2 py-2 text-sm outline-none"
               />
               <GravadorAudioChat
-                disabled={carregando || !!anexo}
+                disabled={carregando || carregandoConversa || !!anexo}
                 onEnviar={audio => enviarMensagem(audio.transcricao, audio)}
               />
-              <button onClick={enviar} disabled={carregando || (!entrada.trim() && !anexo)} className="rounded-xl bg-[#182444] p-2.5 text-white disabled:opacity-40">
+              <button onClick={enviar} disabled={carregando || carregandoConversa || (!entrada.trim() && !anexo)} className="rounded-xl bg-[#182444] p-2.5 text-white disabled:opacity-40">
                 <Send size={19}/>
               </button>
             </div>
