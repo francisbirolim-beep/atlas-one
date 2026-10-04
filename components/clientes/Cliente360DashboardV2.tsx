@@ -1,3 +1,5 @@
+[Reading 315 lines from start (total: 315 lines, 0 remaining)]
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -5,13 +7,13 @@ import Link from 'next/link'
 import {
   Activity, ArrowLeft, Building2, CalendarDays, FileText, GitBranch, Mail,
   MapPin, MessageCircle, Phone, Plus, Receipt, Save, ShoppingCart, Upload,
-  Wallet, Wrench, X, Ruler, FileUp,
+  Wallet, Wrench, X, Ruler, FileUp, RefreshCw, Loader2, ExternalLink,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/tipos'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente } from '@/lib/medicaoFinal'
 import { useRouter } from 'next/navigation'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
   adicionarDocumentoCliente,
@@ -34,7 +36,24 @@ import {
 interface Props { clienteId: string }
 type Aba = 'visao'|'orcamentos'|'obras'|'financeiro'|'medicoes'|'assistencias'|'compras'|'documentos'|'historico'|'observacoes'
 
-type Orcamento = { id:string; numero?:number|null; created_at:string; valor_estimado?:number|null; status?:string|null; obra_id?:string|null; revisao_versao?:number|null; revisao_atual?:boolean|null; revisao_tipo?:string|null; revisao_motivo?:string|null }
+type Orcamento = {
+  id:string
+  numero?:number|null
+  created_at:string
+  updated_at?:string|null
+  valor_estimado?:number|null
+  status?:string|null
+  obra_id?:string|null
+  revisao_versao?:number|null
+  revisao_atual?:boolean|null
+  revisao_tipo?:string|null
+  revisao_motivo?:string|null
+  origem?:string|null
+  modo_entrada?:string|null
+  descricao_livre?:string|null
+  itens?: Array<{ descricao?:string|null; configuracao_nome?:string|null; tipo_outro_texto?:string|null; ambiente?:string|null; quantidade?:number|null }> | null
+  wvetro_fluxo?: { origem?:string|null; numero?:string|null; situacao?:string|null; sincronizado_em?:string|null; vendedor?:string|null } | null
+}
 type HistoricoWVetroComercial = {
   id:string
   tipo_registro:'orcamento_historico'|'venda_historica_orcamento'|'venda_historica_pedido'
@@ -90,6 +109,16 @@ type Evento = { id:string; data:string; titulo:string; detalhe?:string }
 function moeda(v?:number|null){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
 function dataBR(v?:string|null){ if(!v)return '—'; const d=new Date(v.length===10?`${v}T12:00:00`:v); return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR') }
 function status(v?:string|null){ return v ? v.replace(/_/g,' ').replace(/^./,s=>s.toUpperCase()) : '—' }
+function ehWVetro(o:Orcamento){ return o.modo_entrada==='wvetro_api'||o.wvetro_fluxo?.origem==='wvetro_api'||o.origem==='W.Vetro' }
+function numeroOrcamento(o:Orcamento){ return ehWVetro(o) ? (o.wvetro_fluxo?.numero||o.numero||'—') : (o.numero||'—') }
+function descricaoOrcamento(o:Orcamento){
+  if(o.descricao_livre?.trim())return o.descricao_livre.trim()
+  const item=Array.isArray(o.itens)?o.itens[0]:null
+  const base=item?.descricao||item?.configuracao_nome||item?.tipo_outro_texto||''
+  const ambiente=item?.ambiente?.trim()
+  return [base,ambiente].filter(Boolean).join(' · ')
+}
+function dataInputLocal(d:Date){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function saldo(c:ContaReceberCliente360){ return Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)) }
 
 function Kpi({titulo,valor,detalhe,destaque}:{titulo:string;valor:string;detalhe?:string;destaque?:boolean}){
@@ -131,6 +160,8 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [modalMedidaFinal,setModalMedidaFinal]=useState(false)
   const [obraMedidaId,setObraMedidaId]=useState('')
   const [orcamentoMedidaId,setOrcamentoMedidaId]=useState('')
+  const [sincronizandoWVetro,setSincronizandoWVetro]=useState(false)
+  const [mensagemSyncWVetro,setMensagemSyncWVetro]=useState('')
 
   useEffect(()=>{void carregar(); void usuarioAtual().then(setUsuario)},[clienteId])
   async function carregar(){
@@ -138,7 +169,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     const [c,os,orc,wvh,wvf,wvo,ass,med,comp,int,cr,rec,docs]=await Promise.all([
       supabase.from('clientes').select('*').eq('id',clienteId).maybeSingle(),
       listarObrasCliente(clienteId),
-      supabase.from('orcamentos').select('id,numero,created_at,valor_estimado,status,obra_id,revisao_versao,revisao_atual,revisao_tipo,revisao_motivo').eq('cliente_id',clienteId).or('modo_entrada.is.null,modo_entrada.neq.balcao').order('created_at',{ascending:false}),
+      supabase.from('orcamentos').select('id,numero,created_at,updated_at,valor_estimado,status,obra_id,revisao_versao,revisao_atual,revisao_tipo,revisao_motivo,origem,modo_entrada,descricao_livre,itens,wvetro_fluxo').eq('cliente_id',clienteId).or('modo_entrada.is.null,modo_entrada.neq.balcao').order('created_at',{ascending:false}),
       supabase.from('wvetro_historico_comercial').select('id,tipo_registro,chave_externa,numero_wvetro,situacao_wvetro,data_emissao,data_venda,valor_total,metodo_identidade,status_vinculo,itens').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_venda',{ascending:false,nullsFirst:false}).order('data_emissao',{ascending:false,nullsFirst:false}),
       supabase.from('wvetro_historico_financeiro').select('id,titulo_id_wvetro,fonte_wvetro,tipo_titulo,origem_titulo,documento,orcamento_wvetro,data_emissao,data_vencimento,data_baixa,valor_titulo,valor_recebido,valor_saldo,centro_custo_descricao,status_vinculo').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_vencimento',{ascending:false,nullsFirst:false}),
       supabase.from('wvetro_historico_operacional').select('id,tipo_registro,chave_externa,numero_wvetro,data_programacao,data_inicio,data_termino,equipe_nome,observacao,quantidade_prevista,quantidade_realizada,orcamentos_wvetro,status_vinculo').eq('cliente_id',clienteId).eq('status_vinculo','seguro').eq('somente_historico',true).order('data_programacao',{ascending:false,nullsFirst:false}),
@@ -151,6 +182,28 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     if(c.error||!c.data){setErro('Cliente não encontrado.');setCarregando(false);return}
     const r=rec||[]; const alo=await listarAlocacoesCliente(r.map(x=>x.id))
     setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]) as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setWvetroOperacional((wvo.data||[]) as HistoricoWVetroOperacional[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
+  }
+
+  async function sincronizarWVetroAgora(){
+    if(usuario?.role!=='master')return
+    setSincronizandoWVetro(true);setMensagemSyncWVetro('');setErro('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const fim=new Date()
+      const inicio=new Date(); inicio.setDate(inicio.getDate()-6)
+      const resp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar',{
+        method:'POST',
+        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+        body:JSON.stringify({inicio:dataInputLocal(inicio),fim:dataInputLocal(fim)}),
+      })
+      const json=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw new Error(json?.error||`Falha ao sincronizar W.Vetro (${resp.status}).`)
+      const { count: vinculadosCliente }=await supabase.from('orcamentos').select('id',{count:'exact',head:true}).eq('cliente_id',clienteId).contains('wvetro_fluxo',{origem:'wvetro_api'})
+      await carregar()
+      setMensagemSyncWVetro(`Conferência concluída: ${Number(json.lidos||0)} lido(s) no período, ${Number(json.criados||0)} novo(s), ${Number(json.atualizados||0)} atualizado(s). Este cliente tem ${Number(vinculadosCliente||0)} orçamento(s) W.Vetro vinculado(s).`)
+    }catch(e){setErro(e instanceof Error?e.message:'Não foi possível sincronizar o W.Vetro.')}
+    finally{setSincronizandoWVetro(false)}
   }
 
   const obraPorId=useMemo(()=>Object.fromEntries(obras.map(o=>[o.id,o])),[obras])
@@ -221,9 +274,16 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
       <div className="mt-5 space-y-5">
         {aba==='visao'&&<><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Link href={`/orcamento-rapido?cliente=${cliente.id}`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><FileText className="mb-2 text-blue-600"/>Pedido de orçamento</Link><Link href={`/orcamento-rapido?cliente=${cliente.id}&modo=sob-medida&novo=1`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><Building2 className="mb-2 text-indigo-600"/>Orçamento sob medida</Link><Link href={`/balcao/orcamentos/novo?cliente=${cliente.id}`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><ShoppingCart className="mb-2 text-amber-600"/>Balcão</Link><Link href={`/assistencia?cliente=${cliente.id}`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><Wrench className="mb-2 text-rose-600"/>Assistência</Link><button onClick={()=>setAba('compras')} className="rounded-2xl border bg-white p-4 text-left font-bold text-slate-800 shadow-sm"><Receipt className="mb-2 text-emerald-600"/>Pedido de compra</button></div>
-          <div className="grid gap-5 xl:grid-cols-2"><Box titulo="Financeiro do cliente" acao={<button onClick={()=>setModalRecebimento(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}><div className="mb-3 flex justify-between text-sm"><span>Recebido {moeda(totalRecebido)}</span><span>A receber {moeda(aReceber)}</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{width:`${pct}%`}}/></div><button onClick={()=>setAba('financeiro')} className="mt-4 text-sm font-bold text-brand-navy">Ver parcelas</button></Box><Box titulo="Últimos orçamentos"><div className="space-y-2">{versoesAtuais.slice(0,5).map(o=><div key={o.id} className="flex justify-between rounded-xl border p-3"><div><b>#{o.numero||'—'} · V{o.revisao_versao||1}</b><p className="text-xs text-slate-500">{dataBR(o.created_at)} · {status(o.status)}</p></div><b>{moeda(o.valor_estimado)}</b></div>)}{!versoesAtuais.length&&<p className="text-sm text-slate-400">Nenhum orçamento.</p>}</div></Box></div></>}
+          <div className="grid gap-5 xl:grid-cols-2"><Box titulo="Financeiro do cliente" acao={<button onClick={()=>setModalRecebimento(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}><div className="mb-3 flex justify-between text-sm"><span>Recebido {moeda(totalRecebido)}</span><span>A receber {moeda(aReceber)}</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{width:`${pct}%`}}/></div><button onClick={()=>setAba('financeiro')} className="mt-4 text-sm font-bold text-brand-navy">Ver parcelas</button></Box><Box titulo="Últimos orçamentos"><div className="space-y-2">{versoesAtuais.slice(0,5).map(o=><Link href={`/orcamento/${o.id}/composicao`} key={o.id} className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy"><div className="min-w-0"><div className="flex items-center gap-2"><b>Orçamento #{numeroOrcamento(o)}</b>{ehWVetro(o)&&<span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-700">W.VETRO</span>}</div><p className="truncate text-xs text-slate-500">{descricaoOrcamento(o)||`${dataBR(o.created_at)} · ${status(o.status)}`}</p></div><b className="whitespace-nowrap">{moeda(o.valor_estimado)}</b></Link>)}{!versoesAtuais.length&&<p className="text-sm text-slate-400">Nenhum orçamento.</p>}</div></Box></div></>}
 
-        {aba==='orcamentos'&&<div className="space-y-5"><Box titulo="Orçamentos e versões" acao={<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Gerenciar V1/V2/V3</Link>}><div className="space-y-2">{orcamentos.map(o=><div key={o.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${o.revisao_atual===false?'bg-slate-50 opacity-70':'bg-white'}`}><div><p className="font-bold">Orçamento #{o.numero||'—'} · V{o.revisao_versao||1}{o.revisao_atual!==false&&<span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700">ATUAL</span>}</p><p className="text-xs text-slate-500">{dataBR(o.created_at)} · {o.revisao_tipo?status(o.revisao_tipo):'Original'}{o.revisao_motivo?` · ${o.revisao_motivo}`:''}</p></div><b>{moeda(o.valor_estimado)}</b></div>)}{!orcamentos.length&&<p className="text-sm text-slate-400">Nenhum orçamento do Atlas.</p>}</div></Box><Box titulo="Histórico W.Vetro"><div className="mb-3 rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs text-cyan-800">Histórico comercial consolidado e somente para consulta. Não entra no Kanban, Financeiro, Engenharia nem altera a numeração dos orçamentos do Atlas.</div><div className="space-y-2">{wvetroHistorico.map(o=>{const venda=o.tipo_registro!=='orcamento_historico';const itens=Array.isArray(o.itens)?o.itens:[];return <div key={o.id} className="rounded-xl border bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold">W.Vetro #{o.numero_wvetro||'—'}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${venda?'bg-emerald-100 text-emerald-700':'bg-cyan-100 text-cyan-700'}`}>{venda?'VENDA HISTÓRICA':'ORÇAMENTO HISTÓRICO'}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(o.data_venda||o.data_emissao)}{o.situacao_wvetro?` · Situação ${o.situacao_wvetro}`:''}</p><p className="mt-1 text-xs text-slate-400">{itens.length} item(ns) · vínculo seguro por {o.metodo_identidade==='documento'?'documento':o.metodo_identidade==='codigo_nome'?'código + nome':'reconciliação'}</p></div><b>{moeda(o.valor_total)}</b></div>{itens.length>0&&<div className="mt-3 border-t border-slate-100 pt-2">{itens.slice(0,3).map((item,idx)=><div key={`${o.id}-${item.id||idx}`} className="flex justify-between gap-3 py-1 text-xs text-slate-500"><span className="min-w-0 truncate">{item.quantidade?`${item.quantidade}× `:''}{item.nome||item.codigo||'Item W.Vetro'}{item.ambiente?` · ${item.ambiente}`:''}</span><span className="shrink-0">{item.valor_total_alterado||item.valor_total?moeda(Number(item.valor_total_alterado||item.valor_total)):''}</span></div>)}{itens.length>3&&<p className="mt-1 text-[11px] text-slate-400">+ {itens.length-3} item(ns) no histórico consolidado.</p>}</div>}</div>})}{!wvetroHistorico.length&&<p className="text-sm text-slate-400">Nenhum histórico W.Vetro consolidado e vinculado com segurança a este cliente.</p>}</div></Box></div>}
+        {aba==='orcamentos'&&<div className="space-y-5">
+          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{usuario?.role==='master'&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando...':'Sincronizar W.Vetro agora'}</button>}<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link></div>}>
+            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-800"><b>Sincronização automática ativa.</b> Orçamentos novos ou alterados no W.Vetro entram no Atlas e são vinculados a este Cliente 360 quando a identificação é segura. O botão acima apenas força uma conferência imediata dos últimos 7 dias.</div>
+            {mensagemSyncWVetro&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{mensagemSyncWVetro}</div>}
+            <div className="space-y-2">{orcamentos.map(o=>{const w=ehWVetro(o);const descricao=descricaoOrcamento(o);const itens=Array.isArray(o.itens)?o.itens.length:0;return <Link href={`/orcamento/${o.id}/composicao`} key={o.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 transition hover:border-brand-navy hover:shadow-sm ${o.revisao_atual===false?'bg-slate-50 opacity-70':'bg-white'}`}><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">Orçamento #{numeroOrcamento(o)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${w?'bg-violet-100 text-violet-700':'bg-blue-100 text-blue-700'}`}>{w?'W.VETRO':'ATLAS'}</span>{!w&&o.revisao_atual!==false&&<span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">ATUAL</span>}</div>{descricao&&<p className="mt-1 truncate text-sm text-slate-600">{descricao}</p>}<p className="mt-1 text-xs text-slate-400">{dataBR(o.created_at)} · {w?(o.wvetro_fluxo?.situacao?status(o.wvetro_fluxo.situacao):status(o.status)):(o.revisao_tipo?status(o.revisao_tipo):status(o.status))}{itens? ` · ${itens} item(ns)`:''}{w&&o.wvetro_fluxo?.vendedor?` · ${o.wvetro_fluxo.vendedor}`:''}</p></div><div className="flex items-center gap-3"><b className="whitespace-nowrap text-slate-900">{moeda(o.valor_estimado)}</b><ExternalLink size={15} className="text-slate-400"/></div></Link>})}{!orcamentos.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum orçamento vinculado a este cliente.</p>}</div>
+          </Box>
+          <Box titulo="Histórico W.Vetro anterior"><div className="mb-3 rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs text-cyan-800">Histórico comercial antigo permanece separado para consulta. Os novos orçamentos sincronizados aparecem acima como orçamentos normais do Atlas, preservando a origem W.Vetro.</div><div className="space-y-2">{wvetroHistorico.map(o=>{const venda=o.tipo_registro!=='orcamento_historico';const itens=Array.isArray(o.itens)?o.itens:[];return <div key={o.id} className="rounded-xl border bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold">W.Vetro #{o.numero_wvetro||'—'}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${venda?'bg-emerald-100 text-emerald-700':'bg-cyan-100 text-cyan-700'}`}>{venda?'VENDA HISTÓRICA':'ORÇAMENTO HISTÓRICO'}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(o.data_venda||o.data_emissao)}{o.situacao_wvetro?` · Situação ${o.situacao_wvetro}`:''}</p><p className="mt-1 text-xs text-slate-400">{itens.length} item(ns) · vínculo seguro por {o.metodo_identidade==='documento'?'documento':o.metodo_identidade==='codigo_nome'?'código + nome':'reconciliação'}</p></div><b>{moeda(o.valor_total)}</b></div></div>})}{!wvetroHistorico.length&&<p className="text-sm text-slate-400">Nenhum histórico anterior do W.Vetro vinculado a este cliente.</p>}</div></Box>
+        </div>}
 
         {aba==='obras'&&<Box titulo="Obras do cliente" acao={<button onClick={()=>setModalObra(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Nova obra</button>}><div className="grid gap-3 md:grid-cols-2">{obras.map(o=><div key={o.id} className="rounded-xl border p-4"><div className="flex justify-between"><b>{o.nome}</b><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{status(o.status)}</span></div><p className="mt-2 text-xs text-slate-500">Obra #{o.numero}{o.cidade?` · ${o.cidade}`:''} · previsão {dataBR(o.previsao_entrega)}</p></div>)}</div></Box>}
 
@@ -255,3 +315,5 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     {modalObra&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5"><div className="flex justify-between"><h2 className="font-bold">Nova obra</h2><button onClick={()=>setModalObra(false)}><X size={18}/></button></div><input value={obraForm.nome} onChange={e=>setObraForm(f=>({...f,nome:e.target.value}))} className="mt-4 w-full rounded-lg border px-3 py-2" placeholder="Nome da obra"/><textarea value={obraForm.observacoes||''} onChange={e=>setObraForm(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalObra(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} onClick={salvarObra} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white">Criar obra</button></div></div></div>}
   </div>
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]

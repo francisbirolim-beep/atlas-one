@@ -1,3 +1,5 @@
+[Reading 397 lines from start (total: 397 lines, 0 remaining)]
+
 ## 2026-09-30 — Maiúsculas globais sem perder o onChange (PR #490)
 
 - `components/system/UppercaseInputProvider.tsx` passou a gravar o texto em maiúsculas pelo setter nativo do protótipo (`HTMLInputElement.prototype` / `HTMLTextAreaElement.prototype`), em vez de `alvo.value = ...`.
@@ -388,3 +390,12 @@ Nenhum merge para `main`.
 - Adicionado `WVETRO_EMPRESA_SLUG=esquadrifacio` ao `.env.example`.
 - A importação `/api/medicao-final/importar-wvetro` agora usa o mesmo modelo de permissão do setor de Medição Final: oculto bloqueia, consulta permite preview, edição permite confirmar.
 - Validação local aprovada com `npm run validate` e `npm run release:check`.
+
+## 2026-10-04 — Cliente 360 + sincronização W.Vetro por cliente
+
+- A lista de Orçamentos do Cliente 360 foi simplificada e passou a distinguir origem Atlas/W.Vetro.
+- Orçamentos W.Vetro sincronizados exibem o número de origem e uma descrição curta quando disponível.
+- Foi acrescentada conferência manual dos últimos 7 dias para Master, mantendo a automação periódica já existente.
+- O clique abre a composição técnica atual; a nova apresentação comercial Atlas fica para a etapa seguinte.
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]

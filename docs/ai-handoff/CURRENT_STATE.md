@@ -1,3 +1,5 @@
+[Reading 585 lines from start (total: 585 lines, 0 remaining)]
+
 ## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
 
 - Workspace persistente criado no Mac: `~/Atlas-One-Dev`.
@@ -572,3 +574,16 @@ Branch: `fix/wvetro-seguranca-main-atual`
 - rotas protegidas: preview, comparador técnico, migração operacional (captura e preview), auditoria, base técnica, linhas, tipologias, detalhe de tipologia, custos, imagens pendentes e reprocessamento;
 - nenhuma regra de parser, fórmula, custo, migração ou composição foi alterada;
 - validação local aprovada com TypeScript, build completo de 112 páginas e `release:check`.
+
+## 2026-10-04 — Cliente 360: orçamentos W.Vetro sincronizados por cliente
+
+Branch: `feat/cliente360-wvetro-orcamentos-20261004`
+
+- Cliente 360 passou a carregar nos orçamentos os metadados de origem W.Vetro (`modo_entrada`, `wvetro_fluxo`) e os itens necessários para descrição curta.
+- A aba **Orçamentos** mostra os orçamentos correntes do Atlas e os sincronizados do W.Vetro na mesma lista, preservando selo de origem.
+- Para orçamento W.Vetro, o número principal exibido é o número W.Vetro; quando houver, é mostrada uma descrição curta derivada do orçamento/item.
+- Cada orçamento abre a composição técnica existente do Atlas; a futura apresentação comercial Atlas será uma etapa separada.
+- Master ganhou **Sincronizar W.Vetro agora**, que força a conferência dos últimos 7 dias e recarrega o Cliente 360. A automação periódica existente continua sendo a fonte normal de atualização.
+- O histórico W.Vetro antigo continua separado para consulta e não é confundido com os novos orçamentos operacionais sincronizados.
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]

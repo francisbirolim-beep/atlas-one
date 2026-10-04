@@ -1,3 +1,5 @@
+[Reading 437 lines from start (total: 437 lines, 0 remaining)]
+
 ## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST
 
 Antes de qualquer tarefa abaixo:
@@ -426,3 +428,14 @@ Branch: `fix/wvetro-seguranca-main-atual`
    - usuário com consulta consegue preview, mas não confirmar;
    - usuário com edição consegue importar;
    - empresa diferente da configurada em `WVETRO_EMPRESA_SLUG` não acessa rotas administrativas globais.
+
+## PRÓXIMO PASSO — Apresentação comercial Atlas para orçamento sincronizado W.Vetro
+
+Depois de validar a sincronização por Cliente 360:
+1. criar uma ficha comercial do orçamento com identidade visual Atlas, preservando a origem/número W.Vetro;
+2. usar essa ficha como abertura principal ao clicar no orçamento;
+3. manter o original W.Vetro/PDF como evidência quando disponível;
+4. na ficha, oferecer atalhos para composição, perfis, acessórios, vidros, lista de materiais e, quando aplicável, plano de corte/barras;
+5. permitir visão consolidada do orçamento inteiro e visão individual por tipologia, reaproveitando os motores técnicos existentes em vez de duplicar cálculo.
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
