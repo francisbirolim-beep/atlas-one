@@ -11,7 +11,7 @@ export function somenteDigitos(valor: string | null | undefined): string {
 }
 
 export function textoMaiusculo(valor: string | null | undefined): string {
-  return String(valor || '').trim().toLocaleUpperCase('pt-BR')
+  return String(valor || '').trim()
 }
 
 export function textoMaiusculoOuNull(valor: string | null | undefined): string | null {
