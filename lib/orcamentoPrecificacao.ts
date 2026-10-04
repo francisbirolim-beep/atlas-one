@@ -95,8 +95,8 @@ function categoriaMaterial(categoria: string): CategoriaPrecificacao {
   return 'outro'
 }
 function margemVenda(custo: number, margem: number) {
-  const m = Math.min(99.9, Math.max(0, margem))
-  return custo <= 0 ? 0 : custo / (1 - m / 100)
+  const m = Math.max(0, num(margem))
+  return custo <= 0 ? 0 : custo * (1 + m / 100)
 }
 function codigoKey(v?: string | null) { return (v || '').trim().toUpperCase() }
 function unidadeKey(v?: string | null) {
@@ -593,7 +593,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
 }
 
 export async function salvarPoliticaGeral(orcamentoId: string, margem: number, cobrarSobra: boolean) {
-  const { error } = await supabase.from('orcamentos').update({ margem_padrao_pct: Math.min(99.9, Math.max(0, margem)), cobrar_sobra_padrao: cobrarSobra }).eq('id', orcamentoId)
+  const { error } = await supabase.from('orcamentos').update({ margem_padrao_pct: Math.max(0, num(margem)), cobrar_sobra_padrao: cobrarSobra }).eq('id', orcamentoId)
   if (error) return { ok: false as const, error: error.message }
   const { data: pacote } = await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id', orcamentoId).eq('origem', 'orcamento_simulacao').neq('status','substituido').order('versao',{ascending:false}).limit(1).maybeSingle()
   if (pacote) await recalcularResumoPrecificacao(orcamentoId, pacote.id)
@@ -876,13 +876,8 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
     const margem = pol.margem_herda_geral === false ? num(pol.margem_pct, margemGeral) : margemGeral
     const c = custos.get(ref) || { produtivo: 0, extras: 0, sobra: 0 }
     const base = c.produtivo + c.extras
-    const itemAtual = itens.find((item: any, index: number) => itemRef(item, index) === ref)
-    const ehWvetro = orc.modo_entrada === 'wvetro_api' || orc?.wvetro_fluxo?.origem === 'wvetro_api' || orc.origem === 'W.Vetro'
-    const vendaOriginalWvetro = ehWvetro
-      ? num(itemAtual?.wvetro_item?.ValorTotalAlterado) || num(itemAtual?.preco_total) || num(itemAtual?.wvetro_item?.ValorTotal) || num(itemAtual?.wvetro_item?.Total)
-      : 0
     const cobrarSobra = pol ? (pol.sobra_herda_geral ? sobraGeral : Boolean(pol.cobrar_sobra)) : sobraGeral
-    const vendaBase = vendaOriginalWvetro > 0 ? vendaOriginalWvetro : margemVenda(base, margem)
+    const vendaBase = margemVenda(base, margem)
     const venda = vendaBase + (cobrarSobra ? c.sobra : 0)
     valorTotal += venda
     custoProdutivoTotal += base
@@ -916,6 +911,7 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
       custo_sobra_total: sobraTotalCusto,
       custo_sobra_cobrada: sobraCobrada,
       margem_geral_pct: margemGeral,
+      markup_versao: 1,
       atualizado_em: new Date().toISOString(),
     },
   }).eq('id', orcamentoId)

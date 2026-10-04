@@ -10,6 +10,7 @@ import {
 import {
   carregarPrecificacaoOrcamento,
   gerarBasePrecificacao,
+  salvarPoliticaGeral,
   salvarPoliticaItem,
   type PrecificacaoOrcamento,
 } from '@/lib/orcamentoPrecificacao'
@@ -57,20 +58,22 @@ export default function ComposicaoOrcamentoPage(){
   const [erro,setErro]=useState('')
   const [selecionados,setSelecionados]=useState<Set<string>>(new Set())
   const [menuItem,setMenuItem]=useState<string|null>(null)
+  const [margemGeralEdit,setMargemGeralEdit]=useState('')
   const geracaoAutomatica=useRef(false)
 
   async function carregar(){
     setCarregando(true);setErro('')
     let d=await carregarPrecificacaoOrcamento(orcamentoId)
     const wv=d?.orcamento?.wvetro_fluxo?.origem==='wvetro_api'
-    if(d&&wv&&(!d.pacote||d.componentes.length===0)&&!geracaoAutomatica.current){
+    const markupVersao=Number(d?.orcamento?.otimizacao_orcamento?.markup_versao||0)
+    if(d&&wv&&(!d.pacote||d.componentes.length===0||markupVersao<1)&&!geracaoAutomatica.current){
       geracaoAutomatica.current=true;setOcupado(true)
       const g=await gerarBasePrecificacao(orcamentoId,{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
       setOcupado(false)
       if(!g.ok)setErro(g.error)
       d=await carregarPrecificacaoOrcamento(orcamentoId)
     }
-    setDados(d);setCarregando(false)
+    setDados(d);setMargemGeralEdit(String(d?.orcamento?.margem_padrao_pct??40));setCarregando(false)
   }
   useEffect(()=>{if(orcamentoId)void carregar()},[orcamentoId])
 
@@ -87,6 +90,9 @@ export default function ComposicaoOrcamentoPage(){
   function alternarTodos(){setSelecionados(todosSelecionados?new Set():new Set(todosRefs))}
   async function recalcular(){setOcupado(true);setErro('');const r=await gerarBasePrecificacao(orcamentoId,{perdaCorteMm:0,minimoSobraReaproveitavelMm:300});setOcupado(false);if(!r.ok)setErro(r.error);else await carregar()}
   async function mudarSobra(ref:string,valor:boolean){setOcupado(true);const r=await salvarPoliticaItem(orcamentoId,ref,{sobra_herda_geral:false,cobrar_sobra:valor});setOcupado(false);if(!r.ok)setErro(r.error);else await carregar()}
+  async function salvarMargemGeralAtual(){const valor=Math.max(0,numero(margemGeralEdit));if(Math.abs(valor-numero(dados?.orcamento?.margem_padrao_pct))<0.0001)return;setOcupado(true);const r=await salvarPoliticaGeral(orcamentoId,valor,Boolean(dados?.orcamento?.cobrar_sobra_padrao));setOcupado(false);if(!r.ok)setErro(r.error);else await carregar()}
+  async function salvarMargemItem(ref:string,valor:number){setOcupado(true);const r=await salvarPoliticaItem(orcamentoId,ref,{margem_herda_geral:false,margem_pct:Math.max(0,valor)});setOcupado(false);if(!r.ok)setErro(r.error);else await carregar()}
+  async function usarMargemGeral(ref:string){setOcupado(true);const r=await salvarPoliticaItem(orcamentoId,ref,{margem_herda_geral:true,margem_pct:null});setOcupado(false);if(!r.ok)setErro(r.error);else await carregar()}
   async function cobrarTodas(valor:boolean){setOcupado(true);for(const ref of todosRefs){const r=await salvarPoliticaItem(orcamentoId,ref,{sobra_herda_geral:false,cobrar_sobra:valor});if(!r.ok){setErro(r.error);break}}setOcupado(false);await carregar()}
 
   if(carregando)return <div className="grid min-h-screen place-items-center bg-slate-50 text-slate-500"><Loader2 className="animate-spin"/></div>
@@ -104,8 +110,6 @@ export default function ComposicaoOrcamentoPage(){
   const totalVendaBanco=numero(orc.valor_estimado)
   const totalVenda=totalVendaBanco>0?totalVendaBanco:totalVendaOriginal
   const sobraCobradaTotal=(dados.politicas||[]).reduce((s,p)=>{const cobrar=p.sobra_herda_geral===false?Boolean(p.cobrar_sobra):Boolean(orc.cobrar_sobra_padrao);return s+(cobrar?numero(p.custo_sobra):0)},0)
-  const margem=totalVenda-totalCusto-sobraCobradaTotal
-  const margemPct=totalVenda>0?(margem/totalVenda)*100:0
   const refsQuery=[...selecionados].join(',')
   const escopoHref=(base:string)=>selecionados.size? `${base}?refs=${encodeURIComponent(refsQuery)}`:base
 
@@ -131,7 +135,7 @@ export default function ComposicaoOrcamentoPage(){
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Descontos</p><p className="mt-1 text-xl font-bold">{money(0)}</p></div>
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Valor final</p><p className="mt-1 text-xl font-bold text-emerald-700">{money(totalVenda)}</p></div>
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Custo total</p><p className="mt-1 text-xl font-bold">{money(totalCusto)}</p></div>
-      <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Margem</p><p className="mt-1 text-xl font-bold">{money(margem)}</p><p className="text-xs text-slate-500">{pct(margemPct)}%</p></div>
+      <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Margem geral</p><div className="mt-1 flex items-center gap-2"><input type="number" min="0" step="1" value={margemGeralEdit} onChange={e=>setMargemGeralEdit(e.target.value)} onBlur={()=>void salvarMargemGeralAtual()} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}} disabled={ocupado} className="w-24 rounded-lg border px-2 py-1.5 text-xl font-bold"/><span className="text-lg font-bold">%</span></div><p className="mt-1 text-[11px] text-slate-500">Acréscimo sobre o custo</p></div>
     </section>
 
     <section className="flex flex-wrap items-center gap-2 rounded-2xl border bg-white p-3">
@@ -151,7 +155,7 @@ export default function ComposicaoOrcamentoPage(){
       <div className="overflow-x-auto"><table className="w-full min-w-[1220px] text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400"><tr>
           <th className="px-4 py-3"><button onClick={alternarTodos}>{todosSelecionados?<CheckSquare size={17}/>:<Square size={17}/>}</button></th>
-          <th className="px-3 py-3">#</th><th className="px-3 py-3">Tipologia / Descrição</th><th className="px-3 py-3">Ambiente</th><th className="px-3 py-3">Medida</th><th className="px-3 py-3">Qtd.</th><th className="px-3 py-3">Custo</th><th className="px-3 py-3">Sobra</th><th className="px-3 py-3">Custo c/ sobra</th><th className="px-3 py-3">Venda</th><th className="px-3 py-3">Margem</th><th className="px-3 py-3">Cobrar sobra</th><th className="px-3 py-3">Ações</th>
+          <th className="px-3 py-3">#</th><th className="px-3 py-3">Tipologia / Descrição</th><th className="px-3 py-3">Ambiente</th><th className="px-3 py-3">Medida</th><th className="px-3 py-3">Qtd.</th><th className="px-3 py-3">Custo</th><th className="px-3 py-3">Sobra</th><th className="px-3 py-3">Custo c/ sobra</th><th className="px-3 py-3">Venda</th><th className="px-3 py-3">Margem %</th><th className="px-3 py-3">Cobrar sobra</th><th className="px-3 py-3">Ações</th>
         </tr></thead>
         <tbody className="divide-y">{itens.map((item:any,index:number)=>{
           const ref=itemRef(item,index),pol=politicas.get(ref),comps=componentesPorItem.get(ref)||[]
@@ -159,13 +163,15 @@ export default function ComposicaoOrcamentoPage(){
           const vendaPrecificada=numero(pol?.preco_venda)
           const vendaOriginal=numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
           const cobrar=pol?.sobra_herda_geral===false?Boolean(pol?.cobrar_sobra):Boolean(orc.cobrar_sobra_padrao)
-          const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal, marg=venda-(custo+(cobrar?sobra:0)), margPct=venda>0?(marg/venda)*100:0
+          const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal
+          const margemEfetiva=pol?.margem_herda_geral===false?numero(pol?.margem_pct):numero(orc.margem_padrao_pct)
+          const margemIndividual=pol?.margem_herda_geral===false
           return <tr key={ref} className="hover:bg-slate-50/70">
             <td className="px-4 py-3"><button onClick={()=>alternar(ref)}>{selecionados.has(ref)?<CheckSquare size={17} className="text-blue-600"/>:<Square size={17} className="text-slate-400"/>}</button></td>
             <td className="px-3 py-3">{index+1}</td>
             <td className="px-3 py-3"><Link href={`/orcamento/${orcamentoId}/tipologia/${encodeURIComponent(ref)}`} className="font-bold text-slate-900 hover:text-blue-700">{itemNome(item,index)}</Link><p className="max-w-[330px] text-xs text-slate-500">{itemDescricao(item)}</p><p className="mt-1 text-[10px] text-slate-400">{comps.filter(c=>c.categoria==='perfil').length} perfis · {comps.filter(c=>c.categoria==='acessorio').length} acessórios · {comps.filter(c=>c.categoria==='vidro').length} vidros · Cor {itemCor(item,orc)}</p></td>
             <td className="px-3 py-3">{item?.ambiente||item?.wvetro_item?.Ambiente||'—'}</td><td className="px-3 py-3 whitespace-nowrap">{itemMedida(item)}</td><td className="px-3 py-3">{item?.quantidade||item?.wvetro_item?.Qtde||1}</td>
-            <td className="px-3 py-3 whitespace-nowrap">{money(custo)}</td><td className="px-3 py-3 whitespace-nowrap">{money(sobra)}</td><td className="px-3 py-3 whitespace-nowrap font-semibold">{money(custo+sobra)}</td><td className="px-3 py-3 whitespace-nowrap font-bold">{money(venda)}</td><td className="px-3 py-3 whitespace-nowrap">{money(marg)}<div className="text-xs text-slate-500">{pct(margPct)}%</div></td>
+            <td className="px-3 py-3 whitespace-nowrap">{money(custo)}</td><td className="px-3 py-3 whitespace-nowrap">{money(sobra)}</td><td className="px-3 py-3 whitespace-nowrap font-semibold">{money(custo+sobra)}</td><td className="px-3 py-3 whitespace-nowrap font-bold">{money(venda)}</td><td className="px-3 py-3"><div className="flex min-w-[118px] items-center gap-1"><input key={`${ref}-${margemEfetiva}`} type="number" min="0" step="1" defaultValue={margemEfetiva} onBlur={e=>{const v=Math.max(0,numero(e.target.value));if(Math.abs(v-margemEfetiva)>0.0001)void salvarMargemItem(ref,v)}} disabled={ocupado} className={`w-20 rounded-lg border px-2 py-1.5 text-right font-semibold ${margemIndividual?'border-amber-300 bg-amber-50':'bg-white'}`}/><span>%</span></div>{margemIndividual?<button onClick={()=>void usarMargemGeral(ref)} disabled={ocupado} className="mt-1 text-[10px] font-semibold text-blue-600 hover:underline">Usar geral ({pct(orc.margem_padrao_pct)}%)</button>:<div className="mt-1 text-[10px] text-slate-400">Margem geral</div>}</td>
             <td className="px-3 py-3"><button onClick={()=>void mudarSobra(ref,!cobrar)} disabled={ocupado} className={`relative h-7 w-12 rounded-full transition ${cobrar?'bg-blue-600':'bg-slate-300'}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${cobrar?'left-6':'left-1'}`}/></button></td>
             <td className="relative px-3 py-3"><button onClick={()=>setMenuItem(menuItem===ref?null:ref)} className="rounded-lg border p-2"><MoreVertical size={16}/></button>{menuItem===ref&&<div className="absolute right-3 top-11 z-30 w-64 rounded-xl border bg-white p-2 shadow-xl">
               <Link href={`/orcamento/${orcamentoId}/tipologia/${encodeURIComponent(ref)}`} className="block rounded-lg px-3 py-2 hover:bg-slate-50">Ver detalhes da tipologia</Link>
