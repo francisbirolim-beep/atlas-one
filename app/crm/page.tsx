@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
 import { listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import {
   STATUS_FUNIL, calcularTaxaConversao, mesAtual, listarMetas, salvarMeta,
   listarTarefasPendentes, concluirTarefa,
@@ -49,25 +50,37 @@ export default function CRM() {
     if (me && me.role !== 'master') mapa = await listarPermissoesUsuario(me.id)
     const nv = nivelEfetivo(me, 'crm', mapa)
     setNivel(nv)
-    if (nv !== 'oculto') {
+    if (nv !== 'oculto' && me) {
+      const acesso = await lerAcessoUsuarioConfig(me)
+      let orcQuery = supabase.from('orcamentos').select('*').order('created_at', { ascending: false })
+      if (me.role !== 'master' && acesso.crmEscopo === 'proprios') orcQuery = orcQuery.eq('criado_por_id', me.id)
+
       const [{ data: orcs }, { data: interacoes }, tarefasPendentes, metas] = await Promise.all([
-        supabase.from('orcamentos').select('*').order('created_at', { ascending: false }),
+        orcQuery,
         supabase.from('crm_interacoes').select('cliente_id, created_at').order('created_at', { ascending: false }).limit(1000),
         listarTarefasPendentes(),
         listarMetas(mesAtual()),
       ])
-      if (orcs) setCards(orcs as OrcamentoRapido[])
+      const orcsVisiveis = (orcs || []) as OrcamentoRapido[]
+      setCards(orcsVisiveis)
       const ultimoContato: Record<string, string> = {}
+      const clientesVisiveis = new Set(orcsVisiveis.map(o => o.cliente_id).filter(Boolean))
       ;(interacoes || []).forEach((it: any) => {
+        if (me.role !== 'master' && acesso.crmEscopo === 'proprios' && !clientesVisiveis.has(it.cliente_id)) return
         if (!ultimoContato[it.cliente_id]) ultimoContato[it.cliente_id] = it.created_at
       })
       setUltimoContatoPorCliente(ultimoContato)
-      setTarefas(tarefasPendentes)
-      const geral = metas.find(m => !m.usuario_id)
+      setTarefas(me.role !== 'master' && acesso.crmEscopo === 'proprios'
+        ? tarefasPendentes.filter(t => t.responsavel_id === me.id)
+        : tarefasPendentes)
+      const metasVisiveis = me.role !== 'master' && acesso.crmEscopo === 'proprios'
+        ? metas.filter(m => !m.usuario_id || m.usuario_id === me.id)
+        : metas
+      const geral = metasVisiveis.find(m => !m.usuario_id)
       setMetaGeral({ valor: geral?.meta_valor ?? null, quantidade: geral?.meta_quantidade ?? null })
       if (nv === 'edicao') {
         const metasIniciais: Record<string, { valor: string; quantidade: string }> = {}
-        metas.forEach(m => {
+        metasVisiveis.forEach(m => {
           const chave = m.usuario_id || 'geral'
           metasIniciais[chave] = {
             valor: m.meta_valor != null ? String(m.meta_valor) : '',
@@ -75,8 +88,12 @@ export default function CRM() {
           }
         })
         setMetas(metasIniciais)
-        const { data: users } = await supabase.from('usuarios').select('id, nome').order('created_at', { ascending: true })
-        setUsuariosMeta(users || [])
+        if (me.role !== 'master' && acesso.crmEscopo === 'proprios') {
+          setUsuariosMeta([{ id: me.id, nome: me.nome }])
+        } else {
+          const { data: users } = await supabase.from('usuarios').select('id, nome').order('created_at', { ascending: true })
+          setUsuariosMeta(users || [])
+        }
       }
     }
     setCarregando(false)

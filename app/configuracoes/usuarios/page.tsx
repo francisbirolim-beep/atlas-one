@@ -5,6 +5,8 @@ import Link from 'next/link'
 import {
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   KeyRound,
   LayoutDashboard,
   Loader2,
@@ -31,7 +33,9 @@ import {
   type HomeUsuarioConfig,
 } from '@/lib/homeUsuario'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
-import { agruparSetores, listarGruposComItens, listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
+import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
+import { montarBlocosPermissao, type BlocoPermissaoId } from '@/lib/permissoesBlocos'
+import { acessoUsuarioPadrao, lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import {
   CADASTROS_360,
   cadastrosConfigPadrao,
@@ -69,6 +73,8 @@ export default function UsuariosSenhasPage() {
   const [carregandoPermissoes, setCarregandoPermissoes] = useState(false)
   const [salvandoPermissoes, setSalvandoPermissoes] = useState(false)
   const [msgPermissoes, setMsgPermissoes] = useState('')
+  const [acessoConfig, setAcessoConfig] = useState<AcessoUsuarioConfig>(() => acessoUsuarioPadrao('funcionario'))
+  const [blocosAbertos, setBlocosAbertos] = useState<Record<string, boolean>>({ comercial:true })
   const [perfilEdit, setPerfilEdit] = useState({
     nome: '', email: '', whatsapp: '', cargo: '', setor_principal_id: '',
     role: 'funcionario' as Usuario['role'], observacoes_perfil: '',
@@ -119,8 +125,7 @@ export default function UsuariosSenhasPage() {
     })
   }, [busca, usuarios, setores])
 
-  const setoresPorGrupo = useMemo(() => agruparSetores(setores), [setores])
-  const gruposSetores = useMemo(() => listarGruposComItens(setores), [setores])
+  const blocosPermissoes = useMemo(() => montarBlocosPermissao(setores), [setores])
 
   async function selecionarUsuario(id: string) {
     setUsuarioId(id)
@@ -145,14 +150,16 @@ export default function UsuariosSenhasPage() {
     })
     setCarregandoHome(true)
     setCarregandoPermissoes(true)
-    const [home, cadastros, permissoes] = await Promise.all([
+    const [home, cadastros, permissoes, acesso] = await Promise.all([
       lerHomeUsuarioConfig(usuario),
       lerCadastrosUsuarioConfig(usuario),
       listarPermissoesUsuario(usuario.id),
+      lerAcessoUsuarioConfig(usuario),
     ])
     setHomeConfig(home)
     setCadastrosConfig(cadastros)
     setPermissoesSetores(Object.fromEntries(setores.map(s => [s.id, permissoes[s.id] || 'oculto'])) as Record<string, NivelPermissao>)
+    setAcessoConfig(acesso)
     setCarregandoHome(false)
     setCarregandoPermissoes(false)
   }
@@ -241,13 +248,36 @@ export default function UsuariosSenhasPage() {
     setPermissoesSetores(prev => ({ ...prev, [setorId]: nivel }))
   }
 
+  function aplicarNivelBloco(blocoId: BlocoPermissaoId, nivel: NivelPermissao) {
+    const bloco = blocosPermissoes.find(item => item.id === blocoId)
+    if (!bloco) return
+    setPermissoesSetores(prev => ({
+      ...prev,
+      ...Object.fromEntries(bloco.itens.map(item => [item.setorId, nivel])),
+    }))
+  }
+
+  function aplicarNivelTodos(nivel: NivelPermissao) {
+    setPermissoesSetores(prev => ({
+      ...prev,
+      ...Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.map(item => [item.setorId, nivel]))),
+    }))
+  }
+
+  function alternarBloco(blocoId: BlocoPermissaoId) {
+    setBlocosAbertos(prev => ({ ...prev, [blocoId]: !prev[blocoId] }))
+  }
+
   async function salvarAcessosSetores() {
     if (!usuarioSelecionado) return
     setSalvandoPermissoes(true)
     setMsgPermissoes('')
-    const resultado = await salvarPermissoesUsuario(usuarioSelecionado.id, permissoesSetores)
+    const [resultado, escoposOk] = await Promise.all([
+      salvarPermissoesUsuario(usuarioSelecionado.id, permissoesSetores),
+      salvarAcessoUsuarioConfig(usuarioSelecionado.id, acessoConfig),
+    ])
     setSalvandoPermissoes(false)
-    setMsgPermissoes(resultado.error ? 'Não foi possível salvar as permissões.' : 'Permissões por setor salvas.')
+    setMsgPermissoes(resultado.error || !escoposOk ? 'Não foi possível salvar todos os acessos.' : 'Acessos por bloco salvos.')
   }
 
   async function salvarSenha(e: React.FormEvent) {
@@ -467,7 +497,7 @@ export default function UsuariosSenhasPage() {
           </section>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_560px]">
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="relative mb-4"><Search className="absolute left-3 top-3 text-slate-400" size={17} /><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar usuário por nome ou e-mail" className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm" /></div>
             <div className="space-y-2">
@@ -506,12 +536,95 @@ export default function UsuariosSenhasPage() {
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-start gap-2"><Building2 size={18} className="mt-0.5 text-blue-600"/><div><h2 className="font-semibold text-slate-900">Permissões por setor</h2><p className="text-xs text-slate-500">Defina o que {usuarioSelecionado.nome.split(' ')[0]} pode consultar ou editar.</p></div></div>
-                  {perfilEdit.role === 'master' ? <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-700">Usuário Master tem acesso total a todos os setores.</div> : carregandoPermissoes ? <div className="grid place-items-center py-8 text-slate-400"><Loader2 className="animate-spin" size={20}/></div> : <div className="space-y-4">
-                    {gruposSetores.map(grupo=><div key={grupo}><p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{grupo}</p><div className="space-y-1.5">{(setoresPorGrupo[grupo]||[]).filter(s=>s.ativo).map(setor=><div key={setor.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-2.5"><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-700">{setor.nome}</p></div><select value={permissoesSetores[setor.id]||'oculto'} onChange={e=>mudarPermissaoSetor(setor.id,e.target.value as NivelPermissao)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"><option value="oculto">Oculto</option><option value="consulta">Consultar</option><option value="edicao">Editar</option></select></div>)}</div></div>)}
-                    {msgPermissoes && <p className="text-xs text-slate-600">{msgPermissoes}</p>}
-                    <button type="button" onClick={()=>void salvarAcessosSetores()} disabled={salvandoPermissoes} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">{salvandoPermissoes?<Loader2 size={17} className="animate-spin"/>:<ShieldCheck size={17}/>}Salvar permissões por setor</button>
-                  </div>}
+                  <div className="mb-4 flex items-start gap-2">
+                    <Building2 size={18} className="mt-0.5 text-blue-600"/>
+                    <div>
+                      <h2 className="font-semibold text-slate-900">Acessos por bloco</h2>
+                      <p className="text-xs text-slate-500">Escolha o que {usuarioSelecionado.nome.split(' ')[0]} pode ver ou alterar dentro de cada área do Atlas.</p>
+                    </div>
+                  </div>
+
+                  {perfilEdit.role === 'master' ? (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-700">Usuário Master tem acesso total a todos os blocos e escopo geral.</div>
+                  ) : carregandoPermissoes ? (
+                    <div className="grid place-items-center py-8 text-slate-400"><Loader2 className="animate-spin" size={20}/></div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                        <p className="text-xs font-semibold text-blue-900">Aplicar em todos os blocos</p>
+                        <p className="mt-0.5 text-[11px] text-blue-700">Atalho para começar uma configuração; depois você pode ajustar item por item.</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" onClick={()=>aplicarNivelTodos('edicao')} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[11px] font-semibold text-white">Editar tudo</button>
+                          <button type="button" onClick={()=>aplicarNivelTodos('consulta')} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-blue-700">Consultar tudo</button>
+                          <button type="button" onClick={()=>aplicarNivelTodos('oculto')} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600">Ocultar tudo</button>
+                        </div>
+                      </div>
+
+                      {blocosPermissoes.map(bloco => {
+                        const aberto = !!blocosAbertos[bloco.id]
+                        const edicao = bloco.itens.filter(item => (permissoesSetores[item.setorId] || 'oculto') === 'edicao').length
+                        const consulta = bloco.itens.filter(item => (permissoesSetores[item.setorId] || 'oculto') === 'consulta').length
+                        const ocultos = bloco.itens.length - edicao - consulta
+                        return (
+                          <div key={bloco.id} className="overflow-hidden rounded-xl border border-slate-200">
+                            <div className="bg-slate-50 p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <button type="button" onClick={()=>alternarBloco(bloco.id)} className="min-w-0 flex-1 text-left">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-slate-800">{bloco.label}</span>
+                                    {aberto ? <ChevronUp size={15} className="text-slate-400"/> : <ChevronDown size={15} className="text-slate-400"/>}
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{bloco.descricao}</p>
+                                  <p className="mt-1 text-[10px] text-slate-400">{edicao} editar · {consulta} consultar · {ocultos} oculto(s)</p>
+                                </button>
+                                <div className="flex shrink-0 flex-col gap-1">
+                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'edicao')} className="rounded-md bg-blue-700 px-2 py-1 text-[10px] font-semibold text-white">Editar tudo</button>
+                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'consulta')} className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700">Consultar</button>
+                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'oculto')} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500">Ocultar</button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {aberto && (
+                              <div className="space-y-2 border-t border-slate-100 p-3">
+                                {bloco.itens.map(item => {
+                                  const nivelAtual = permissoesSetores[item.setorId] || 'oculto'
+                                  return (
+                                    <div key={item.setorId} className="rounded-xl border border-slate-200 p-3">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-semibold text-slate-800">{item.label}</p>
+                                          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.descricao}</p>
+                                        </div>
+                                        <select value={nivelAtual} onChange={e=>mudarPermissaoSetor(item.setorId,e.target.value as NivelPermissao)} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs">
+                                          <option value="oculto">Sem acesso</option>
+                                          <option value="consulta">Consultar</option>
+                                          <option value="edicao">Editar</option>
+                                        </select>
+                                      </div>
+
+                                      {item.escopo === 'crm' && nivelAtual !== 'oculto' && (
+                                        <label className="mt-3 block rounded-lg bg-amber-50 p-2.5 text-[11px] font-medium text-amber-900">
+                                          O que aparece no CRM
+                                          <select value={acessoConfig.crmEscopo} onChange={e=>setAcessoConfig({...acessoConfig,crmEscopo:e.target.value as AcessoUsuarioConfig['crmEscopo']})} className="mt-1 w-full rounded-lg border border-amber-200 bg-white p-2 text-xs text-slate-800">
+                                            <option value="proprios">Somente a carteira própria</option>
+                                            <option value="todos">Todos os clientes e oportunidades</option>
+                                          </select>
+                                        </label>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {msgPermissoes && <p className="text-xs text-slate-600">{msgPermissoes}</p>}
+                      <button type="button" onClick={()=>void salvarAcessosSetores()} disabled={salvandoPermissoes} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">{salvandoPermissoes?<Loader2 size={17} className="animate-spin"/>:<ShieldCheck size={17}/>}Salvar acessos por bloco</button>
+                    </div>
+                  )}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
