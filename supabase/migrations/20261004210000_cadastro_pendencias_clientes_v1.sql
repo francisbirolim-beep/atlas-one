@@ -81,7 +81,7 @@ declare
   v_nome text;
   v_chave text;
 begin
-  v_nome := regexp_replace(trim(coalesce(new.nome, '')), '\\s+', ' ', 'g');
+  v_nome := regexp_replace(trim(coalesce(new.nome, '')), '[[:space:]]+', ' ', 'g');
   v_chave := 'cliente:' || new.id::text || ':nome_incompleto';
 
   if v_nome <> ''
@@ -304,7 +304,7 @@ select
   )
 from public.clientes c
 where trim(c.nome) <> ''
-  and position(' ' in regexp_replace(trim(c.nome), '\\s+', ' ', 'g')) = 0
+  and position(' ' in regexp_replace(trim(c.nome), '[[:space:]]+', ' ', 'g')) = 0
   and upper(trim(c.nome)) not like 'TESTE%'
 on conflict (empresa_id, chave_unica) do nothing;
 
@@ -314,7 +314,7 @@ with base as (
     c.id,
     c.empresa_id,
     c.nome,
-    upper(regexp_replace(trim(c.nome), '\\s+', ' ', 'g')) as nome_norm
+    upper(regexp_replace(trim(c.nome), '[[:space:]]+', ' ', 'g')) as nome_norm
   from public.clientes c
   where trim(c.nome) <> ''
     and upper(trim(c.nome)) not like 'TESTE%'
