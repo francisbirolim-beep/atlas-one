@@ -107,7 +107,153 @@ async function preparar(usuario:UsuarioTenant,id:string,a:any){
   if(error)throw new Error(error.message)
   return {path,texto,imagens,size:b.length}
 }
+
+function limparLinhaCatalogo(v: unknown){
+  return String(v??'').replace(/[\x00-\x1f\x7f-\x9f]/g,' ').replace(/\s+/g,' ').trim()
+}
+function ehCodigoCatalogo(v: unknown){
+  const x=limparLinhaCatalogo(v).toUpperCase().replace(/\s+/g,'')
+  if(/^[A-Z]{1,8}[A-Z0-9]*[-_/][A-Z0-9]{2,12}$/.test(x))return x
+  if(/^[A-Z]{2,8}\d{2,10}$/.test(x))return x
+  return ''
+}
+function pesoKgM(v: unknown){
+  const x=limparLinhaCatalogo(v).toUpperCase().replace(/\s+/g,'')
+  const m=x.match(/(\d{1,3}(?:[.,]\d{2,4}))KG\/?M/)
+  if(!m)return null
+  const n=Number(m[1].replace(',','.'))
+  return Number.isFinite(n)?n:null
+}
+function linhaNumericaCatalogo(v: unknown){
+  const x=limparLinhaCatalogo(v)
+  return Boolean(x)&&/^[\d\s.,xX/]+$/.test(x)
+}
+function ruidoCatalogo(v: unknown,fornecedorNome?:string|null){
+  const x=norm(limparLinhaCatalogo(v))
+  if(!x)return true
+  if(x==='LINHA'||/^A L U M I N I O S$/.test(x)||x==='ALUMINIOS')return true
+  if(/^AS INFORMACOES CONTIDAS NESTE CAT/.test(x)||/ESTAO SUJEITAS A ALTERACOES/.test(x))return true
+  if(/^PAGINA\b/.test(x))return true
+  if(fornecedorNome){
+    const fn=norm(fornecedorNome), partes=fn.split(' ').filter(Boolean)
+    if(x===fn)return true
+    if(partes.length>1&&x===partes[partes.length-1])return true
+  }
+  return false
+}
+function catalogoProvavel(tipo:string,nome:string|null,texto:string){
+  if(tipo==='catalogo'||tipo==='tabela_preco')return true
+  const n=norm(nome)
+  if(/\bCATALOG/.test(n)||/\bTABELA\b/.test(n))return true
+  const t=norm(texto.slice(0,12000))
+  return /\bCATALOGO DE PRODUTOS\b/.test(t)||(/\bCATALOGO\b/.test(t)&&/\bLINHA/.test(t))
+}
+function nomeFornecedorCatalogo(texto:string){
+  const linhas=texto.split(/\r?\n/).map(limparLinhaCatalogo).filter(Boolean).slice(0,220)
+  for(const l of linhas){
+    const m=l.match(/Alum[ií]nios?\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9&.-]{2,40})/i)
+    if(m?.[1])return 'Alumínios '+m[1]
+  }
+  const i=linhas.findIndex(l=>/CAT.?LOGO DE PRODUTOS/i.test(l))
+  if(i>0){
+    const partes=linhas.slice(Math.max(0,i-3),i).map(x=>x.replace(/[^A-Za-zÀ-ÿ]/g,'')).filter(x=>x.length>=2&&x.length<=12)
+    const junto=partes.join('')
+    if(junto.length>=4&&junto.length<=24)return junto
+  }
+  return null
+}
+function categoriaCatalogo(descricao:string,peso:number|null){
+  if(peso!==null)return 'perfil'
+  const x=norm(descricao)
+  if(/ROLDANA|FECHADURA|PUXADOR|PARAFUSO|ESCOVA|BORRACHA|VEDA|GUIA|CONCHA|CREMONA|DOBRADICA|ACESSORIO/.test(x))return 'acessorio'
+  if(/VIDRO|LAMINADO|TEMPERADO|REFLETIVO|INCOLOR/.test(x))return 'vidro'
+  if(/PERFIL|TUBO|CANTONEIRA|BARRA|MONTANTE|TRAVESSA|MARCO|CONTRAMARCO|BAGUETE|TRILHO|COLUNA|CAPA|CADEIRINHA/.test(x))return 'perfil'
+  return 'outro'
+}
+function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null){
+  const linhas=texto.split(/\r?\n/).map(limparLinhaCatalogo)
+  const linhaPorIndice:string[]=[]
+  let linhaAtual=''
+  for(let i=0;i<linhas.length;i++){
+    const atual=norm(linhas[i])
+    if(atual==='LINHA'){
+      const partes:string[]=[]
+      for(let j=i-1;j>=0&&j>=i-3;j--){
+        if(ruidoCatalogo(linhas[j],fornecedorNome)||pesoKgM(linhas[j])!==null||linhaNumericaCatalogo(linhas[j])||ehCodigoCatalogo(linhas[j]))continue
+        partes.unshift(limparLinhaCatalogo(linhas[j]))
+      }
+      if(partes.length)linhaAtual=partes.join(' ').slice(0,120)
+    }
+    linhaPorIndice[i]=linhaAtual
+  }
+
+  const itens:any[]=[]
+  const vistos=new Set<string>()
+  for(let i=0;i<linhas.length;i++){
+    const codigo=ehCodigoCatalogo(linhas[i])
+    if(!codigo||vistos.has(codigo))continue
+
+    let peso:number|null=null
+    for(const j of [i-2,i-1,i+1,i+2]){
+      if(j>=0&&j<linhas.length){
+        const p=pesoKgM(linhas[j])
+        if(p!==null){peso=p;break}
+      }
+    }
+
+    let descricao=''
+    for(let j=i-1;j>=0&&j>=i-5;j--){
+      const l=linhas[j]
+      if(!l||ruidoCatalogo(l,fornecedorNome)||pesoKgM(l)!==null||linhaNumericaCatalogo(l))continue
+      if(ehCodigoCatalogo(l))break
+      const n=norm(l)
+      if(n==='LINHA'||/^PERFIL \d+(?:MM)?$/.test(n))continue
+      descricao=l
+      break
+    }
+    if(!descricao){
+      for(let j=i+1;j<linhas.length&&j<=i+4;j++){
+        const l=linhas[j]
+        if(!l||ruidoCatalogo(l,fornecedorNome)||pesoKgM(l)!==null||linhaNumericaCatalogo(l)||ehCodigoCatalogo(l))continue
+        descricao=l
+        break
+      }
+    }
+    if(!descricao)descricao='Perfil '+codigo
+
+    vistos.add(codigo)
+    itens.push({
+      tipo:'produto',titulo:codigo+' — '+descricao,modulo:'engenharia',
+      codigo,descricao,categoria:categoriaCatalogo(descricao,peso),unidade:null,
+      preco:null,peso_kg_m:peso,tamanho_barra_mm:null,linha:linhaPorIndice[i]||null,
+      aplicacao:null,conteudo:null,confianca:peso!==null?.97:.9,
+    })
+    if(itens.length>=1200)break
+  }
+  return itens
+}
+function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,texto:string){
+  const fornecedorNome=nomeFornecedorCatalogo(texto)
+  const itens=extrairProdutosCatalogoLocal(texto,fornecedorNome)
+  const tipoDetectado=tipo==='tabela_preco'?'tabela_preco':'catalogo'
+  return {
+    documento:{
+      tipo:tipoDetectado,
+      titulo:nome||descricao.slice(0,100)||'Catálogo de fornecedor',
+      resumo:'Catálogo identificado e lido localmente pelo Atlas, sem depender do OpenCode. '+itens.length+' código(s) de produto foram extraídos para reconciliação automática.',
+      setores:['compras','engenharia'],
+      fornecedor:fornecedorNome?{nome:fornecedorNome,cnpj:'',contato:'',telefone:'',email:'',cidade:''}:null,
+      extracao_metodo:'catalogo_local',
+    },
+    itens,
+  }
+}
+
 async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[]){
+  if(catalogoProvavel(tipo,nome,texto)){
+    const local=analisarCatalogoLocal(tipo,descricao,nome,texto)
+    if(local.itens.length>0)return local
+  }
   const st=await statusOpenCode()
   if(!st.configurado)return {documento:{tipo,titulo:nome||descricao.slice(0,100)||'Material',resumo:descricao||texto.slice(0,1200),setores:[]},itens:descricao?[{tipo:'conhecimento',titulo:descricao.slice(0,120),conteudo:descricao,confianca:.5}]:[]}
   const system=`Você analisa materiais da Central de Aprendizado do ERP Atlas One (esquadrias de alumínio).
@@ -179,6 +325,41 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
     destino_id:fornecedor?.id||null,
   })
   const chavesProdutos=new Set<string>()
+  let produtosCatalogo:any[]=[]
+  let vinculosCatalogo:any[]=[]
+  if(ehCatalogo){
+    const [rp,rv]=await Promise.all([
+      supabaseAdmin.from('produtos').select('id,nome,codigo,codigo_origem,categoria,unidade,peso_kg_m,tamanho_barra_mm,status_validacao').eq('empresa_id',usuario.empresa_id).limit(12000),
+      fornecedor?.id
+        ?supabaseAdmin.from('produto_fornecedores').select('produto_id,codigo_fornecedor,produtos(id,nome,codigo,categoria,unidade,peso_kg_m,tamanho_barra_mm)').eq('empresa_id',usuario.empresa_id).eq('fornecedor_id',fornecedor.id).eq('ativo',true).limit(12000)
+        :Promise.resolve({data:[] as any[]}),
+    ])
+    produtosCatalogo=rp.data||[]
+    vinculosCatalogo=rv.data||[]
+  }
+  function produtoCatalogo(codigo:string,descricao:string){
+    const c=cod(codigo)
+    if(fornecedor?.id&&c){
+      const v=vinculosCatalogo.find((i:any)=>cod(i.codigo_fornecedor)===c)
+      if(v)return {produto:(v as any).produtos,metodo:'codigo_fornecedor',confianca:1}
+    }
+    if(c){
+      const xs=produtosCatalogo.filter((p:any)=>[p.codigo,p.codigo_origem].some(v=>cod(v)===c))
+      if(xs.length===1){
+        const mesmoNome=norm(xs[0].nome)===norm(descricao)
+        if(mesmoNome)return {produto:xs[0],metodo:'codigo_atlas_nome',confianca:.99}
+        return {produto:null,metodo:'ambiguo',confianca:.45,ambiguos:xs}
+      }
+      if(xs.length>1)return {produto:null,metodo:'ambiguo',confianca:.3,ambiguos:xs.slice(0,8)}
+    }
+    const n=norm(descricao)
+    if(n){
+      const xs=produtosCatalogo.filter((p:any)=>norm(p.nome)===n)
+      if(xs.length===1)return {produto:xs[0],metodo:'nome_exato',confianca:.9}
+      if(xs.length>1)return {produto:null,metodo:'ambiguo',confianca:.3,ambiguos:xs.slice(0,8)}
+    }
+    return {produto:null,metodo:'novo',confianca:c?.length?0.8:0.6}
+  }
   for(const item of Array.isArray(x?.itens)?x.itens.slice(0,1200):[]){
     if(String(item.tipo)==='produto'||String(item.tipo)==='preco'){
       const codigo=txt(item.codigo,120), descricao=txt(item.descricao||item.titulo,400)
@@ -186,7 +367,7 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
       const chaveProduto=codigo?'COD:'+cod(codigo):'DESC:'+norm(descricao)
       if(chavesProdutos.has(chaveProduto))continue
       chavesProdutos.add(chaveProduto)
-      const p=await produtoExistente(usuario.empresa_id,fornecedor?.id||null,codigo,descricao)
+      const p=ehCatalogo?produtoCatalogo(codigo,descricao):await produtoExistente(usuario.empresa_id,fornecedor?.id||null,codigo,descricao)
       const cat=CATEGORIAS.has(txt(item.categoria,80).toLowerCase())?txt(item.categoria,80).toLowerCase():'outro'
       rows.push({
         entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'produto',
@@ -231,7 +412,7 @@ async function copiarFonte(usuario:UsuarioTenant,entrada:any,fornecedorId:string
   const {data:doc}=await supabaseAdmin.from('fornecedor_documentos').insert({empresa_id:usuario.empresa_id,fornecedor_id:fornecedorId,tipo:entrada.tipo==='tabela_preco'?'tabela_preco':'catalogo',nome_arquivo:entrada.fonte_nome,url:pub.publicUrl,mime_type:entrada.mime_type,tamanho_bytes:entrada.tamanho_bytes,status:'processado',texto_extraido:entrada.texto_extraido,extracao_metodo:'central_aprendizado_validada',custo_modelo:0,criado_por_id:usuario.id,criado_por_nome:usuario.nome}).select('id').single()
   return doc?.id||null
 }
-async function aplicar(usuario:UsuarioTenant,c:any,entrada:any){
+async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornecedorId?:string|null;documentoId?:string|null}){
   if(c.tipo==='fornecedor'){
     if(c.destino_id){await supabaseAdmin.from('ai_aprendizado_entradas').update({fornecedor_id_sugerido:c.destino_id,updated_at:new Date().toISOString()}).eq('empresa_id',usuario.empresa_id).eq('id',entrada.id);await copiarFonte(usuario,entrada,c.destino_id);return c.destino_id}
     const d=c.dados||{}, cnpj=dig(d.cnpj_cpf), nome=txt(d.nome,220)
@@ -243,13 +424,13 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any){
     const d=c.dados||{};let produtoId=c.destino_id as string|null
     if(!produtoId){
       const descricao=txt(d.descricao||c.titulo,400),codigo=txt(d.codigo,120)||null,categoria=CATEGORIAS.has(String(d.categoria||''))?String(d.categoria):'outro'
-      const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||'UN',preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single();if(error)throw new Error(error.message);produtoId=data.id
+      const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||(categoria==='perfil'?'BR':'UN'),preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single();if(error)throw new Error(error.message);produtoId=data.id
     }
-    const fornecedorId=await resolverFornecedor(usuario,entrada,null)
+    const fornecedorId=contexto?.fornecedorId!==undefined?contexto.fornecedorId:await resolverFornecedor(usuario,entrada,null)
     const temFornecedorNoMaterial=Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
     if(temFornecedorNoMaterial&&!fornecedorId)throw new Error('Valide o fornecedor deste material antes de aprovar os produtos.')
     if(fornecedorId){
-      const docId=await copiarFonte(usuario,entrada,fornecedorId)
+      const docId=contexto?.documentoId!==undefined?contexto.documentoId:await copiarFonte(usuario,entrada,fornecedorId)
       const codigo=txt(d.codigo,120)
       if(!codigo)throw new Error('Informe o código do fornecedor antes de aprovar este item.')
       const {data:v,error}=await supabaseAdmin.from('produto_fornecedores').upsert({empresa_id:usuario.empresa_id,produto_id:produtoId,fornecedor_id:fornecedorId,codigo_fornecedor:codigo,descricao_fornecedor:txt(d.descricao,400)||c.titulo,unidade_compra:txt(d.unidade,30)||null,preco_atual:num(d.preco_fornecedor),documento_origem_id:docId,preco_atualizado_em:num(d.preco_fornecedor)!==null?new Date().toISOString():null,preferencial:false,ativo:true,criado_por_id:usuario.id,criado_por_nome:usuario.nome,updated_at:new Date().toISOString()},{onConflict:'fornecedor_id,codigo_fornecedor'}).select('id').single();if(error)throw new Error(error.message)
@@ -313,8 +494,8 @@ async function pendenciarCatalogo(usuario:UsuarioTenant,c:any,motivo:string){
   await log(usuario,'catalogo_pendencia_detectada',c.entrada_id,c.id,{motivo,conflitos})
 }
 
-async function aplicarCatalogoAutomatico(usuario:UsuarioTenant,c:any,entrada:any){
-  const destino=await aplicar(usuario,c,entrada)
+async function aplicarCatalogoAutomatico(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornecedorId?:string|null;documentoId?:string|null}){
+  const destino=await aplicar(usuario,c,entrada,contexto)
   await supabaseAdmin.from('ai_aprendizado_candidatos').update({
     status:'aplicado',destino_id:destino,validado_por_id:usuario.id,
     validado_por_nome:'Atlas — catálogo oficial',validado_em:new Date().toISOString(),
@@ -342,10 +523,10 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
 
   const fornecedorNecessario=entrada.tipo==='catalogo'||entrada.tipo==='tabela_preco'||Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
   const fornecedorId=await resolverFornecedor(usuario,entrada,null)
-  if(fornecedorId)await copiarFonte(usuario,entrada,fornecedorId)
+  const documentoId=fornecedorId?await copiarFonte(usuario,entrada,fornecedorId):null
   const outros=(lista||[]).filter((x:any)=>x.tipo!=='fornecedor')
-  for(let i=0;i<outros.length;i+=5){
-    const lote=outros.slice(i,i+5)
+  for(let i=0;i<outros.length;i+=12){
+    const lote=outros.slice(i,i+12)
     const resultados=await Promise.all(lote.map(async(c:any)=>{
       if(c.tipo==='produto'&&fornecedorNecessario&&!fornecedorId){
         await supabaseAdmin.from('ai_aprendizado_candidatos').update({
@@ -357,7 +538,7 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
       }
       const motivo=motivoPendenciaCatalogo(c)
       if(motivo){await pendenciarCatalogo(usuario,c,motivo);return 0}
-      await aplicarCatalogoAutomatico(usuario,c,entrada)
+      await aplicarCatalogoAutomatico(usuario,c,entrada,{fornecedorId,documentoId})
       return 1
     }))
     aplicados+=resultados.reduce((s:number,n:number)=>s+n,0)
@@ -411,7 +592,7 @@ export async function POST(req:NextRequest){
       tipo:tipoDetectado,titulo:txt(x?.documento?.titulo,180)||entrada.titulo,resumo_ia:txt(x?.documento?.resumo,8000)||null,
       setores_sugeridos:setores,fornecedor_id_sugerido:f?.existente?.id||null,fornecedor_nome_sugerido:txt(fd?.nome,220)||null,
       fornecedor_cnpj_sugerido:dig(fd?.cnpj)||null,status:catalogoAutomatico?'analisando':'aguardando_validacao',erro:null,
-      metadados:{...(entrada.metadados||{}),validacao:catalogoAutomatico?'por_excecao':'humana'},
+      metadados:{...(entrada.metadados||{}),validacao:catalogoAutomatico?'por_excecao':'humana',extracao_metodo:txt(x?.documento?.extracao_metodo,80)||'ia'},
       updated_at:new Date().toISOString()
     }).eq('empresa_id',u.empresa_id).eq('id',entradaId).select('*').single();if(ue)throw ue
     await log(u,'analise_concluida',entradaId,null,{tipo_detectado:tipoDetectado,total_candidatos:total,fornecedor_existente_id:f?.existente?.id||null})
