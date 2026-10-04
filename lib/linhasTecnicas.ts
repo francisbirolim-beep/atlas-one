@@ -56,10 +56,10 @@ export async function salvarLinhaTecnica(dados: {
 }): Promise<string> {
   const nova = !dados.id
   const payload = {
-    nome: dados.nome.trim().toUpperCase(),
-    fabricante: dados.fabricante?.trim().toUpperCase() || null,
-    descricao: dados.descricao?.trim().toUpperCase() || null,
-    apelidos: (dados.apelidos || []).map(a => a.trim().toUpperCase()).filter(Boolean),
+    nome: dados.nome.trim(),
+    fabricante: dados.fabricante?.trim() || null,
+    descricao: dados.descricao?.trim() || null,
+    apelidos: (dados.apelidos || []).map(a => a.trim()).filter(Boolean),
     ativo: nova ? false : dados.ativo === true,
     status_validacao: dados.status_validacao || (nova ? 'em_validacao' : undefined),
     etapa_cadastro: dados.etapa_cadastro || (nova ? 'dados_linha' : undefined),
