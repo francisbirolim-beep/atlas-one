@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Loader2, RefreshCw } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { gerarBasePrecificacao } from '@/lib/orcamentoPrecificacao'
 
 function dataLocal(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -26,22 +27,40 @@ export default function OrcamentosWVetroPage(){
   const [resumo,setResumo]=useState<any>(null)
   const [base,setBase]=useState<any>(null)
   const [orcamentos,setOrcamentos]=useState<any[]>([])
+  const [reparo,setReparo]=useState<{atual:number;total:number;corrigidos:number;falhas:number}|null>(null)
 
   async function carregar(){
     const j=await api('GET'); setOrcamentos(j.orcamentos||[])
   }
   useEffect(()=>{usuarioAtual().then(async u=>{const m=u?.role==='master';setMaster(m);if(m)try{await carregar()}catch(e){setErro(e instanceof Error?e.message:'Falha ao carregar.')}})},[])
 
+  async function corrigirTodosImportados(){
+    const lista=await api('GET')
+    const alvos=Array.isArray(lista.orcamentos)?lista.orcamentos:[]
+    let corrigidos=0, falhas=0
+    setReparo({atual:0,total:alvos.length,corrigidos,falhas})
+    for(let i=0;i<alvos.length;i+=1){
+      const o=alvos[i]
+      const resultado=await gerarBasePrecificacao(String(o.id),{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
+      if(resultado.ok)corrigidos+=1
+      else falhas+=1
+      setReparo({atual:i+1,total:alvos.length,corrigidos,falhas})
+    }
+    return {total:alvos.length,corrigidos,falhas}
+  }
+
   async function sincronizar(){
-    setOcupado(true);setErro('');setBase(null)
+    setOcupado(true);setErro('');setBase(null);setReparo(null)
     try{
-      const j=await api('POST',{inicio,fim});setResumo(j)
+      const j=await api('POST',{inicio,fim,forcar:true,modo:'corrigir_tudo'});setResumo(j)
       const token=await tokenAtual()
       if(!token) throw new Error('Sessão expirada.')
       const r=await fetch('/api/integracoes/wvetro/sincronizar-tudo',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({inicio,fim})})
       const b=await r.json().catch(()=>({}))
       if(!r.ok) throw new Error(b?.error||`Falha ao sincronizar base técnica (${r.status}).`)
-      setBase(b);await carregar()
+      setBase(b)
+      await corrigirTodosImportados()
+      await carregar()
     } catch(e){setErro(e instanceof Error?e.message:'Falha ao sincronizar.')}
     finally{setOcupado(false)}
   }
@@ -55,9 +74,10 @@ export default function OrcamentosWVetroPage(){
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <label className="text-sm text-slate-600">Início<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
         <label className="text-sm text-slate-600">Fim<input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
-        <div className="flex items-end"><button onClick={sincronizar} disabled={ocupado} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-50">{ocupado?<Loader2 size={16} className="animate-spin"/>:<RefreshCw size={16}/>} Sincronizar tudo</button></div>
+        <div className="flex items-end"><button onClick={sincronizar} disabled={ocupado} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-50">{ocupado?<Loader2 size={16} className="animate-spin"/>:<RefreshCw size={16}/>} Sincronizar + corrigir tudo</button></div>
       </div>
-      <p className="mt-3 text-xs text-slate-500">A API W.Vetro aceita lotes de até 7 dias. O botão sincroniza orçamentos, linhas, tipologias, perfis, acessórios, composição e custos/preços observados. Repetir o período atualiza sem duplicar.</p>
+      <p className="mt-3 text-xs text-slate-500">A API W.Vetro aceita lotes de até 7 dias. O botão força a releitura do período e, em seguida, reprocessa todos os orçamentos W.Vetro já importados no Atlas para reconstruir composição, custos, sobra e margem sem duplicar registros.</p>
+      {reparo&&<div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800"><b>Correção em lote:</b> {reparo.atual}/{reparo.total} processado(s) · {reparo.corrigidos} corrigido(s) · {reparo.falhas} com pendência.</div>}
       <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"><b>Automação ativa:</b> orçamentos novos ou alterados são verificados a cada 10 minutos; catálogo, perfis, acessórios, tipologias, custos e base técnica são atualizados diariamente. O Atlas reaproveita o número W.Vetro e vincula ou cria o Cliente 360 quando houver identificação suficiente.</div>
     </section>
 
