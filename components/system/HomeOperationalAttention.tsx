@@ -20,6 +20,7 @@ type Alertas = {
   tarefasVencidas: number
   tarefasHoje: number
   assistenciasAtivas: number
+  cadastrosPendentes: number
 }
 
 const inicial: Alertas = {
@@ -27,6 +28,7 @@ const inicial: Alertas = {
   tarefasVencidas: 0,
   tarefasHoje: 0,
   assistenciasAtivas: 0,
+  cadastrosPendentes: 0,
 }
 
 function dataLocalIso() {
@@ -56,12 +58,16 @@ export default function HomeOperationalAttention() {
             .is('concluida_em', null)
         : Promise.resolve({ data: [] as { id: string; data_hora: string | null; concluida_em: string | null }[] })
 
-      const [tarefas, assistencias] = await Promise.all([
+      const [tarefas, assistencias, cadastrosPendentes] = await Promise.all([
         tarefasPromise,
         supabase
           .from('assistencias')
           .select('id', { count: 'exact', head: true })
           .in('status', ['aberto', 'em_atendimento']),
+        supabase
+          .from('cadastro_pendencias')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pendente', 'em_analise']),
       ])
 
       if (!ativo) return
@@ -82,6 +88,7 @@ export default function HomeOperationalAttention() {
         tarefasVencidas: vencidas,
         tarefasHoje: paraHoje,
         assistenciasAtivas: assistencias.count || 0,
+        cadastrosPendentes: cadastrosPendentes.count || 0,
       })
       setCarregando(false)
     }
@@ -112,6 +119,13 @@ export default function HomeOperationalAttention() {
       href: '/assistencias',
       icon: Headset,
     },
+    {
+      label: 'Cadastros para validar',
+      valor: dados.cadastrosPendentes,
+      detalhe: 'completar, vincular ou mesclar',
+      href: '/cadastros/pendencias',
+      icon: Users,
+    },
   ]
 
   const acoes = [
@@ -134,7 +148,7 @@ export default function HomeOperationalAttention() {
           </Link>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {alertas.map((alerta) => {
             const Icon = alerta.icon
             return (
