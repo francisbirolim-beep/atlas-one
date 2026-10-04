@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarUsuario, rodarLoop, obterOuCriarConversaHoje, salvarMensagem } from '@/lib/agente'
+import { verificarUsuario, rodarLoop, obterOuCriarConversaHoje, validarConversaAgente, salvarMensagem } from '@/lib/agente'
 
 const TAMANHO_MAX_BASE64 = 12_000_000
 
@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const mensagemTexto = (body.mensagem || '').trim()
     const historico = Array.isArray(body.messages) ? body.messages : []
     const anexo = body.anexo && typeof body.anexo === 'object' ? body.anexo : null
+    const conversaSolicitada = String(body.conversaId || '').trim()
 
     if (!mensagemTexto && !anexo) {
       return NextResponse.json({ error: 'Mensagem vazia' }, { status: 400 })
@@ -42,7 +43,14 @@ export async function POST(req: NextRequest) {
       textoParaSalvar = (mensagemTexto ? mensagemTexto + '\n\n' : '') + '[Anexo: ' + (anexo.nome || 'arquivo') + ']'
     }
 
-    const conversaId = await obterOuCriarConversaHoje(usuario.id)
+    let conversaId: string
+    if (conversaSolicitada) {
+      const validada = await validarConversaAgente(conversaSolicitada, usuario.id, usuario.empresa_id)
+      if (!validada) return NextResponse.json({ error: 'Conversa não encontrada para este usuário.' }, { status: 404 })
+      conversaId = validada
+    } else {
+      conversaId = await obterOuCriarConversaHoje(usuario.id, usuario.empresa_id)
+    }
     await salvarMensagem(conversaId, 'user', textoParaSalvar)
 
     const messages = [...historico, { role: 'user', content }]

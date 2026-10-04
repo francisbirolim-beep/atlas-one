@@ -44,6 +44,9 @@ export default function AtlasIAPage() {
   const [relatoSugerido, setRelatoSugerido] = useState<RelatoSugerido | null>(null)
   const [registrandoMelhoria, setRegistrandoMelhoria] = useState(false)
   const [mensagemMelhoria, setMensagemMelhoria] = useState('')
+  const [conversaLivreId, setConversaLivreId] = useState<string | null>(null)
+  const [criandoConversa, setCriandoConversa] = useState(false)
+  const [novaConversaPendente, setNovaConversaPendente] = useState(false)
   const arquivoRef = useRef<HTMLInputElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
   const modoInicialAplicadoRef = useRef(false)
@@ -140,20 +143,49 @@ export default function AtlasIAPage() {
     void registrarRelato({ texto, anexo }, true)
   }
 
-  function novaConversa() {
+  async function criarNovaConversaLivre() {
+    const token = await tokenAtual()
+    const r = await fetch('/api/agente/conversas', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token || ''}` },
+    })
+    const j = await r.json()
+    if (!r.ok || !j.conversaId) throw new Error(j.error || 'Não foi possível iniciar uma nova conversa.')
+    return String(j.conversaId)
+  }
+
+  async function novaConversa() {
+    if (criandoConversa) return
     setBolhas([])
     setHistorico([])
     setImagemPendente(null)
     setEntrada('')
     setAnexo(null)
+    setRelatoSugerido(null)
+    setMensagemMelhoria('')
     setErro('')
-    if (modo !== 'livre') {
-      setSessoesEspecialistas(prev => {
-        const proximo = { ...prev }
-        delete proximo[modo]
-        return proximo
-      })
+
+    if (modo === 'livre') {
+      setConversaLivreId(null)
+      setNovaConversaPendente(true)
+      setCriandoConversa(true)
+      try {
+        const id = await criarNovaConversaLivre()
+        setConversaLivreId(id)
+        setNovaConversaPendente(false)
+      } catch (e: any) {
+        setErro(e?.message || 'Não foi possível iniciar uma nova conversa.')
+      } finally {
+        setCriandoConversa(false)
+      }
+      return
     }
+
+    setSessoesEspecialistas(prev => {
+      const proximo = { ...prev }
+      delete proximo[modo]
+      return proximo
+    })
   }
 
   function trocarModo(novo: ModoChat) {
@@ -252,7 +284,7 @@ export default function AtlasIAPage() {
   async function enviarMensagem(textoDireto?: string, audio?: AudioChatEnviado) {
     const texto = String(textoDireto ?? entrada).trim()
     const atual = textoDireto === undefined ? anexo : null
-    if ((!texto && !atual) || carregando) return
+    if ((!texto && !atual) || carregando || criandoConversa) return
 
     if (textoDireto === undefined) {
       setEntrada('')
@@ -292,13 +324,20 @@ export default function AtlasIAPage() {
     try {
       const token = await tokenAtual()
       if (modo === 'livre') {
+        let conversaIdParaEnviar = conversaLivreId
+        if (novaConversaPendente && !conversaIdParaEnviar) {
+          conversaIdParaEnviar = await criarNovaConversaLivre()
+          setConversaLivreId(conversaIdParaEnviar)
+          setNovaConversaPendente(false)
+        }
         const r = await fetch('/api/agente/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` },
-          body: JSON.stringify({ mensagem: texto, anexo: atual, messages: historico }),
+          body: JSON.stringify({ mensagem: texto, anexo: atual, messages: historico, conversaId: conversaIdParaEnviar }),
         })
         const j = await r.json()
         if (!r.ok) throw new Error(j.error || 'Erro ao falar com o Atlas IA')
+        if (j.conversaId) setConversaLivreId(String(j.conversaId))
         setHistorico(j.messages || [])
         if (j.text) setBolhas(prev => [...prev, {
           papel: 'assistant',
@@ -346,8 +385,13 @@ export default function AtlasIAPage() {
           <div className="rounded-xl bg-white/10 p-2"><Sparkles size={22}/></div>
           <div><b>Atlas IA</b><p className="text-xs text-white/60">Inteligência da Esquadrifácio</p></div>
         </div>
-        <button onClick={novaConversa} className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444]">
-          <MessageSquarePlus size={17}/> Nova conversa
+        <button
+          onClick={() => void novaConversa()}
+          disabled={criandoConversa || carregando}
+          className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444] disabled:opacity-60"
+        >
+          {criandoConversa ? <Loader2 size={17} className="animate-spin"/> : <MessageSquarePlus size={17}/>}
+          {criandoConversa ? 'Iniciando...' : 'Nova conversa'}
         </button>
         <div className="space-y-2 text-sm">
           <button onClick={() => trocarModo('livre')} className={"w-full rounded-xl p-3 text-left " + (modo === 'livre' ? 'bg-white/10' : 'text-white/80 hover:bg-white/10')}>
