@@ -21,6 +21,7 @@ import {
 } from '@/lib/guias'
 import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/setores'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
+import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
 import type { Guia } from '@/lib/guias'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 
@@ -118,7 +119,7 @@ export default function MobileNavigationControls() {
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {
     const filtradas = termo
-      ? guiasPermitidas.filter(guia => normalizar(`${guia.label} ${guia.grupo}`).includes(termo))
+      ? guiasPermitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : guiasPermitidas
     return agruparGuias(filtradas)
   }, [guiasPermitidas, termo])
@@ -127,13 +128,23 @@ export default function MobileNavigationControls() {
   const setoresExtras = useMemo(() => setores.filter(setor => {
     if (!setor.ativo || !setor.rota || hrefsGuias.has(setor.rota)) return false
     if (usuario?.role !== 'master' && nivelEfetivo(usuario, setor.id, permissoes) === 'oculto') return false
-    return !termo || normalizar(`${setor.nome} ${setor.grupo} ${setor.descricao || ''}`).includes(termo)
+    return !termo || correspondePesquisaAtlas(termo, setor.nome, setor.grupo, setor.descricao || '', setor.rota)
   }), [hrefsGuias, permissoes, setores, termo, usuario])
 
   const adminVisiveis = useMemo(() => {
     if (usuario?.role !== 'master') return []
     if (!termo) return ITENS_ADMIN
-    return ITENS_ADMIN.filter(item => normalizar(`${item.label} ${item.descricao} ${item.palavras}`).includes(termo))
+    return ITENS_ADMIN.filter(item => correspondePesquisaAtlas(termo, item.label, item.descricao, item.palavras, item.href))
+  }, [termo, usuario?.role])
+
+  const atalhosVisiveis = useMemo(() => {
+    if (!termo) return []
+    const ocupados = new Set([...GUIAS.map(item => item.href), ...ITENS_ADMIN.map(item => item.href)])
+    return ATALHOS_PESQUISA_ATLAS
+      .filter(item => (!item.masterOnly || usuario?.role === 'master'))
+      .filter(item => !ocupados.has(item.href))
+      .filter(item => correspondePesquisaAtlas(termo, item.label, item.grupo, item.descricao, item.palavras, item.href))
+      .slice(0, 18)
   }, [termo, usuario?.role])
 
   const podeAbrirKanban = guiasPermitidas.some(guia => guia.href === '/kanban')
@@ -242,7 +253,7 @@ export default function MobileNavigationControls() {
                 <input
                   value={busca}
                   onChange={event => setBusca(event.target.value)}
-                  placeholder="Buscar no menu..."
+                  placeholder="Buscar qualquer tela..."
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
@@ -270,6 +281,28 @@ export default function MobileNavigationControls() {
                         >
                           <LayoutGrid size={19} className="shrink-0" />
                           <span>{setor.nome}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {atalhosVisiveis.length > 0 && (
+                  <section>
+                    <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-600">Atalhos do Atlas</p>
+                    <div className="space-y-1">
+                      {atalhosVisiveis.map(item => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={fecharMenu}
+                          className="flex items-start gap-3 rounded-xl px-3 py-3 text-slate-700 active:bg-slate-100"
+                        >
+                          <Search size={18} className="mt-0.5 shrink-0 text-emerald-600" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold leading-5">{item.label}</span>
+                            <span className="block text-[10px] leading-4 text-slate-500">{item.grupo} · {item.descricao}</span>
+                          </span>
                         </Link>
                       ))}
                     </div>

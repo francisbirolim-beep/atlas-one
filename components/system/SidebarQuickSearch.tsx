@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Search, X, ArrowUpRight, LayoutGrid } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { GUIAS } from '@/lib/guias'
+import { ATALHOS_PESQUISA_ATLAS, pontuarPesquisaAtlas } from '@/lib/navegacaoPesquisa'
 import { listarSetores, listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 
@@ -118,6 +119,17 @@ export default function SidebarQuickSearch() {
         }))
       : []
 
+    const telasProfundas: Resultado[] = ATALHOS_PESQUISA_ATLAS
+      .filter((item) => !item.masterOnly || usuario.role === 'master')
+      .map((item) => ({
+        id: `atalho:${item.href}`,
+        titulo: item.label,
+        subtitulo: item.grupo,
+        href: item.href,
+        busca: normalizar(`${item.label} ${item.grupo} ${item.descricao} ${item.palavras} ${item.href}`),
+        tipo: 'tela' as const,
+      }))
+
     const setoresVisiveis = setores
       .filter((setor) => nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto')
       .map((setor) => {
@@ -133,7 +145,7 @@ export default function SidebarQuickSearch() {
       })
 
     const mapa = new Map<string, Resultado>()
-    ;[...telas, ...telasAdmin, ...setoresVisiveis].forEach((item) => {
+    ;[...telas, ...telasAdmin, ...telasProfundas, ...setoresVisiveis].forEach((item) => {
       if (!mapa.has(item.href)) mapa.set(item.href, item)
     })
     return Array.from(mapa.values())
@@ -142,18 +154,12 @@ export default function SidebarQuickSearch() {
   const resultados = useMemo(() => {
     const q = normalizar(termo)
     if (!q) return resultadosBase.slice(0, 8)
-    const palavras = q.split(/\s+/).filter(Boolean)
     return resultadosBase
       .map((item) => ({
         item,
-        pontos: palavras.reduce((total, palavra) => {
-          if (normalizar(item.titulo).startsWith(palavra)) return total + 5
-          if (normalizar(item.titulo).includes(palavra)) return total + 3
-          if (item.busca.includes(palavra)) return total + 1
-          return total - 20
-        }, 0),
+        pontos: pontuarPesquisaAtlas(q, item.titulo, item.busca),
       }))
-      .filter(({ pontos }) => pontos >= palavras.length)
+      .filter(({ pontos }) => pontos >= 0)
       .sort((a, b) => b.pontos - a.pontos || a.item.titulo.localeCompare(b.item.titulo))
       .slice(0, 12)
       .map(({ item }) => item)
@@ -191,7 +197,7 @@ export default function SidebarQuickSearch() {
                   ref={inputRef}
                   value={termo}
                   onChange={(e) => setTermo(e.target.value)}
-                  placeholder="Ex.: cadastro, perfil, produção..."
+                  placeholder="Ex.: integração, W.Vetro, produção..."
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
                 />
                 {termo && (
@@ -200,7 +206,7 @@ export default function SidebarQuickSearch() {
                   </button>
                 )}
               </div>
-              <p className="mt-2 px-1 text-[11px] text-slate-400">Pesquise telas, cadastros e setores. Atalho: Ctrl+B.</p>
+              <p className="mt-2 px-1 text-[11px] text-slate-400">Pesquise qualquer tela, integração, cadastro ou setor. Atalho: Ctrl+B.</p>
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto p-2">

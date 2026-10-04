@@ -16,6 +16,7 @@ import { logout, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { agruparGuias, GUIAS } from '@/lib/guias'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
+import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
 
 type TemaAtlas = 'escuro' | 'claro'
 
@@ -73,18 +74,30 @@ export default function Sidebar() {
 
   const gruposVisiveis = useMemo(() => {
     const filtradas = termo
-      ? GUIAS.filter(guia => normalizar(`${guia.label} ${guia.grupo}`).includes(termo))
+      ? GUIAS.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : GUIAS
     return agruparGuias(filtradas)
   }, [termo])
 
   const adminVisiveis = useMemo(() => {
     if (!termo) return ITENS_ADMIN
-    return ITENS_ADMIN.filter(item => normalizar(`${item.label} ${item.descricao} ${item.palavras}`).includes(termo))
+    return ITENS_ADMIN.filter(item => correspondePesquisaAtlas(termo, item.label, item.descricao, item.palavras, item.href))
   }, [termo])
 
+  const atalhosVisiveis = useMemo(() => {
+    if (!termo) return []
+    const ocupados = new Set([...GUIAS.map(item => item.href), ...ITENS_ADMIN.map(item => item.href)])
+    return ATALHOS_PESQUISA_ATLAS
+      .filter(item => (!item.masterOnly || usuario?.role === 'master'))
+      .filter(item => !ocupados.has(item.href))
+      .filter(item => correspondePesquisaAtlas(termo, item.label, item.grupo, item.descricao, item.palavras, item.href))
+      .slice(0, 18)
+  }, [termo, usuario?.role])
+
   const mostrarAdmin = usuario?.role === 'master' && (adminAberto || !!termo)
-  const semResultados = gruposVisiveis.length === 0 && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
+  const semResultados = gruposVisiveis.length === 0
+    && atalhosVisiveis.length === 0
+    && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
 
   return (
     <nav className="atlas-sidebar-shell hidden h-screen w-60 flex-shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-5 md:flex">
@@ -102,7 +115,7 @@ export default function Sidebar() {
           <input
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar no menu..."
+            placeholder="Buscar qualquer tela..."
             className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100"
           />
         </div>
@@ -135,6 +148,29 @@ export default function Sidebar() {
               </div>
             </section>
           ))}
+
+          {atalhosVisiveis.length > 0 && (
+            <section>
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-500">Atalhos do Atlas</p>
+              <div className="space-y-1">
+                {atalhosVisiveis.map(item => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.descricao}
+                    onClick={() => setBusca('')}
+                    className="group flex items-start gap-3 rounded-xl px-3 py-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                  >
+                    <Search size={17} className="mt-0.5 shrink-0 text-emerald-500" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium leading-5">{item.label}</span>
+                      <span className="mt-0.5 block truncate text-[10px] leading-4 text-slate-400">{item.grupo} · {item.descricao}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           {usuario?.role === 'master' && (
             <section className="border-t border-slate-100 pt-3">
