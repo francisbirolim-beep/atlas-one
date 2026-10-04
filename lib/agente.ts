@@ -754,20 +754,44 @@ export async function verificarUsuario(authHeader: string | null): Promise<any> 
   return usuario || null
 }
 
-export async function obterOuCriarConversaHoje(usuarioId: string): Promise<string | null> {
+export async function criarConversaAgente(usuarioId: string, empresaId: string): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('agente_conversas')
+    .insert({ usuario_id: usuarioId, empresa_id: empresaId })
+    .select('id')
+    .single()
+  if (error || !data?.id) throw new Error(error?.message || 'Nao foi possivel criar a conversa.')
+  return String(data.id)
+}
+
+export async function validarConversaAgente(conversaId: string, usuarioId: string, empresaId: string): Promise<string | null> {
+  if (!conversaId) return null
+  const { data, error } = await supabaseAdmin
+    .from('agente_conversas')
+    .select('id')
+    .eq('id', conversaId)
+    .eq('usuario_id', usuarioId)
+    .eq('empresa_id', empresaId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ? String(data.id) : null
+}
+
+export async function obterOuCriarConversaHoje(usuarioId: string, empresaId: string): Promise<string> {
   const inicioHoje = new Date()
   inicioHoje.setHours(0, 0, 0, 0)
-  const { data: existente } = await supabaseAdmin
+  const { data: existente, error } = await supabaseAdmin
     .from('agente_conversas')
     .select('id')
     .eq('usuario_id', usuarioId)
+    .eq('empresa_id', empresaId)
     .gte('created_at', inicioHoje.toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (existente) return existente.id
-  const { data: nova } = await supabaseAdmin.from('agente_conversas').insert({ usuario_id: usuarioId }).select('id').single()
-  return nova ? nova.id : null
+  if (error) throw new Error(error.message)
+  if (existente?.id) return String(existente.id)
+  return criarConversaAgente(usuarioId, empresaId)
 }
 
 export async function salvarMensagem(conversaId: string | null, papel: string, conteudo: string): Promise<void> {
