@@ -113,8 +113,11 @@ function limparLinhaCatalogo(v: unknown){
 }
 function ehCodigoCatalogo(v: unknown){
   const x=limparLinhaCatalogo(v).toUpperCase().replace(/\s+/g,'')
-  if(/^[A-Z]{1,8}[A-Z0-9]*[-_/][A-Z0-9]{2,12}$/.test(x))return x
-  if(/^[A-Z]{2,8}\d{2,10}$/.test(x))return x
+  if(!x||x.length>24||!/\d/.test(x))return ''
+  const prefixo=x.split(/[-_/]/)[0]||''
+  if(['VISTA','PERFIL','LINHA','BARRA','ACABAMENTO','SUPERIOR','INFERIOR','LATERAL','TRAVESSA','MONTANTE'].includes(prefixo))return ''
+  if(/^[A-Z]{1,6}\d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x))return x
+  if(/^[A-Z]{2,6}\d{2,8}$/.test(x))return x
   return ''
 }
 function pesoKgM(v: unknown){
@@ -226,7 +229,7 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null){
       tipo:'produto',titulo:codigo+' — '+descricao,modulo:'engenharia',
       codigo,descricao,categoria:categoriaCatalogo(descricao,peso),unidade:null,
       preco:null,peso_kg_m:peso,tamanho_barra_mm:null,linha:linhaPorIndice[i]||null,
-      aplicacao:null,conteudo:null,confianca:peso!==null?.97:.9,
+      aplicacao:null,conteudo:null,confianca:peso!==null?.97:.65,
     })
     if(itens.length>=1200)break
   }
@@ -309,6 +312,36 @@ async function produtoExistente(empresaId:string,fornecedorId:string|null,codigo
   if(n){ const xs=(data||[]).filter((p:any)=>norm(p.nome)===n); if(xs.length===1)return {produto:xs[0],metodo:'nome_exato',confianca:.9}; if(xs.length>1)return {produto:null,metodo:'ambiguo',confianca:.3,ambiguos:xs.slice(0,8)} }
   return {produto:null,metodo:'novo',confianca:c?.length?0.8:0.6}
 }
+async function produtoPorCodigoBanco(empresaId:string,codigo:string){
+  const c=txt(codigo,120)
+  if(!c)return null
+  const {data,error}=await supabaseAdmin.from('produtos')
+    .select('id,nome,descricao,codigo,codigo_origem,categoria,unidade,peso_kg_m,tamanho_barra_mm,status_validacao')
+    .eq('empresa_id',empresaId).ilike('codigo',c).limit(2)
+  if(error)throw new Error(error.message)
+  return (data||[])[0]||null
+}
+async function reconciliarProdutoCatalogoNoBanco(usuario:UsuarioTenant,c:any){
+  if(c?.tipo!=='produto')return c
+  const codigo=txt(c?.dados?.codigo,120)
+  if(!codigo)return c
+  const existente=await produtoPorCodigoBanco(usuario.empresa_id,codigo)
+  if(!existente)return c
+  const atualizado={
+    ...c,
+    destino_id:existente.id,
+    acao_sugerida:'vincular_existente',
+    deduplicacao:{...(c.deduplicacao||{}),metodo:'codigo_banco',produto_existente:existente,ambiguos:[]}
+  }
+  await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+    destino_id:existente.id,
+    acao_sugerida:'vincular_existente',
+    deduplicacao:atualizado.deduplicacao,
+    updated_at:new Date().toISOString()
+  }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+  return atualizado
+}
+
 async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,fornecedorInfo:any){
   const rows:any[]=[]
   const f=x?.documento?.fornecedor||null
@@ -424,7 +457,20 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
     const d=c.dados||{};let produtoId=c.destino_id as string|null
     if(!produtoId){
       const descricao=txt(d.descricao||c.titulo,400),codigo=txt(d.codigo,120)||null,categoria=CATEGORIAS.has(String(d.categoria||''))?String(d.categoria):'outro'
-      const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||(categoria==='perfil'?'BR':'UN'),preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single();if(error)throw new Error(error.message);produtoId=data.id
+      if(codigo){
+        const existente=await produtoPorCodigoBanco(usuario.empresa_id,codigo)
+        if(existente)produtoId=existente.id
+      }
+      if(!produtoId){
+        const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||(categoria==='perfil'?'BR':'UN'),preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single()
+        if(error){
+          if((error as any)?.code==='23505'&&codigo){
+            const existente=await produtoPorCodigoBanco(usuario.empresa_id,codigo)
+            if(existente)produtoId=existente.id
+            else throw new Error(error.message)
+          }else throw new Error(error.message)
+        }else produtoId=data.id
+      }
     }
     const fornecedorId=contexto?.fornecedorId!==undefined?contexto.fornecedorId:await resolverFornecedor(usuario,entrada,null)
     const temFornecedorNoMaterial=Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
@@ -451,6 +497,9 @@ function conflitosProdutoCatalogo(c:any){
   const d=c?.dados||{}, p=c?.deduplicacao?.produto_existente
   const conflitos:Array<{campo:string;atlas:any;catalogo:any}>=[]
   if(!p)return conflitos
+  const descAtlas=txt(p.nome||p.descricao,400), descCatalogo=txt(d.descricao,400)
+  const na=norm(descAtlas), nc=norm(descCatalogo)
+  if(na&&nc&&na!==nc&&!na.includes(nc)&&!nc.includes(na))conflitos.push({campo:'descricao',atlas:descAtlas,catalogo:descCatalogo})
   const cat=String(d.categoria||'')
   if(cat&&cat!=='outro'&&p.categoria&&String(p.categoria)!=='outro'&&norm(cat)!==norm(p.categoria))conflitos.push({campo:'categoria',atlas:p.categoria,catalogo:cat})
   if(d.unidade&&p.unidade&&norm(d.unidade)!==norm(p.unidade))conflitos.push({campo:'unidade',atlas:p.unidade,catalogo:d.unidade})
@@ -536,9 +585,10 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
         }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
         return 0
       }
-      const motivo=motivoPendenciaCatalogo(c)
-      if(motivo){await pendenciarCatalogo(usuario,c,motivo);return 0}
-      await aplicarCatalogoAutomatico(usuario,c,entrada,{fornecedorId,documentoId})
+      const reconciliado=c.tipo==='produto'?await reconciliarProdutoCatalogoNoBanco(usuario,c):c
+      const motivo=motivoPendenciaCatalogo(reconciliado)
+      if(motivo){await pendenciarCatalogo(usuario,reconciliado,motivo);return 0}
+      await aplicarCatalogoAutomatico(usuario,reconciliado,entrada,{fornecedorId,documentoId})
       return 1
     }))
     aplicados+=resultados.reduce((s:number,n:number)=>s+n,0)
