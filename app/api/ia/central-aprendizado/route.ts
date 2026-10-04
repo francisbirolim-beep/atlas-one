@@ -9,7 +9,7 @@ import type { AIModulo } from '@/lib/ai/types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 const MAX = 50 * 1024 * 1024
 const MODULOS = new Set(['gestao','comercial','orcamento','medicao_final','engenharia','compras','estoque','producao','instalacao','financeiro','marketing','rh','qualidade','pd'])
