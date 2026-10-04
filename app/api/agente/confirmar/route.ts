@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       resultadoExecucao = { ok: false, erro: 'Acao nao implementada.' }
     }
 
-    const conversaId = await obterOuCriarConversaHoje(usuario.id)
+    const conversaId = await obterOuCriarConversaHoje(usuario.id, usuario.empresa_id)
 
     const messages = [
       ...historico,
