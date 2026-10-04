@@ -276,9 +276,14 @@ export default function AdminIAPage() {
               <p className="text-xs text-slate-500">Uso, permissões, auditoria e Atlas Pessoas</p>
             </div>
           </div>
-          <button onClick={() => void carregar()} className="rounded-xl border bg-white p-2 text-slate-500 hover:bg-slate-50" title="Atualizar">
-            <RefreshCw size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/administracao/ia/whatsapp" className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+              <Bot size={17} /> Assistente WhatsApp
+            </Link>
+            <button onClick={() => void carregar()} className="rounded-xl border bg-white p-2 text-slate-500 hover:bg-slate-50" title="Atualizar">
+              <RefreshCw size={18} />
+            </button>
+          </div>
         </div>
       </header>
 

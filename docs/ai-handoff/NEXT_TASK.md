@@ -1,3 +1,17 @@
+## TAREFA ATUAL — validar Assistente IA do WhatsApp
+
+Branch: `feat/whatsapp-ia-aprendizado-v1`
+
+1. Abrir `/administracao/ia/whatsapp` como Master e confirmar que o modo inicial está em **Observando**.
+2. Confirmar que o número da Esquadrifácio aparece como fonte de aprendizado e que **IA pode responder** permanece desligado.
+3. Enviar conversas controladas de trabalho e conferir classificação por setor e criação de candidatos na Central de Aprendizado.
+4. Conectar o WhatsApp particular de Francis em `/whatsapp/numeros` como canal pessoal.
+5. No particular, testar três casos: conversa claramente de cliente/empresa, conversa pessoal e conversa ambígua.
+6. Confirmar que a conversa pessoal aparece apenas como classificada/ignorada e não cria candidato de conhecimento.
+7. Validar alguns aprendizados empresariais na Central de Aprendizado.
+8. Somente depois, mudar para **Sugerindo** e testar **Usar e editar** / **Descartar**, conferindo as métricas.
+9. Manter **Automático** desligado durante a fase inicial; liberar depois apenas em cenário simples e controlado, quando o índice de sugestões estiver confiável.
+
 [Reading 437 lines from start (total: 437 lines, 0 remaining)]
 
 ## PROCESSO OBRIGATORIO DE VALIDACAO — LOCAL FIRST

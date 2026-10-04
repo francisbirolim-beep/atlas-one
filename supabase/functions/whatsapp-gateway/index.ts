@@ -1003,6 +1003,386 @@ function executarEmBackground(promise: Promise<unknown>) {
   }
 }
 
+const IA_SETORES = new Set([
+  "gestao","comercial","orcamento","medicao_final","engenharia","compras","estoque",
+  "producao","instalacao","financeiro","marketing","rh","qualidade","pd",
+]);
+
+function normalizarSetorIA(value: unknown) {
+  const v = String(value || "").trim().toLowerCase();
+  return IA_SETORES.has(v) ? v : "comercial";
+}
+
+function limiteConfianca(value: unknown, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+}
+
+async function criarConhecimentoCandidatoWhatsapp(params: {
+  config: any;
+  channel: any;
+  conversation: any;
+  messageRowId: string;
+  setor: string;
+  resultado: any;
+}) {
+  const aprendizado = params.resultado?.aprendizado;
+  const titulo = String(aprendizado?.titulo || "").trim().slice(0, 180);
+  const conteudo = String(aprendizado?.conteudo || "").trim().slice(0, 12000);
+  const confianca = limiteConfianca(aprendizado?.confianca, limiteConfianca(params.resultado?.confianca, 0));
+  if (!titulo || !conteudo || confianca < 0.72) return { entradaId: null, candidatoId: null };
+
+  const { data: existente } = await db.from("ai_aprendizado_entradas")
+    .select("id")
+    .eq("empresa_id", params.config.empresa_id)
+    .contains("metadados", { origem: "whatsapp_ia", mensagem_id: params.messageRowId })
+    .limit(1)
+    .maybeSingle();
+  if (existente?.id) {
+    const { data: candidato } = await db.from("ai_aprendizado_candidatos")
+      .select("id")
+      .eq("empresa_id", params.config.empresa_id)
+      .eq("entrada_id", existente.id)
+      .eq("tipo", "conhecimento")
+      .limit(1)
+      .maybeSingle();
+    return { entradaId: existente.id, candidatoId: candidato?.id || null };
+  }
+
+  const { data: entrada, error: entradaError } = await db.from("ai_aprendizado_entradas").insert({
+    empresa_id: params.config.empresa_id,
+    tipo: "conversa",
+    titulo: `WhatsApp · ${params.channel.nome || "Canal"} · ${titulo}`.slice(0, 220),
+    descricao: "Aprendizado candidato observado automaticamente pelo Assistente IA do WhatsApp.",
+    status: "aguardando_validacao",
+    fonte_nome: params.channel.nome || "WhatsApp",
+    resumo_ia: titulo,
+    setores_sugeridos: [params.setor],
+    criado_por_id: params.channel.usuario_id || null,
+    criado_por_nome: params.channel.usuario_nome || "Atlas IA",
+    metadados: {
+      origem: "whatsapp_ia",
+      canal_id: params.channel.id,
+      conversa_id: params.conversation.id,
+      mensagem_id: params.messageRowId,
+    },
+  }).select("id").single();
+  if (entradaError || !entrada?.id) throw entradaError || new Error("Falha ao registrar aprendizado WhatsApp.");
+
+  const { data: candidato, error: candidatoError } = await db.from("ai_aprendizado_candidatos").insert({
+    entrada_id: entrada.id,
+    empresa_id: params.config.empresa_id,
+    tipo: "conhecimento",
+    modulo: params.setor,
+    titulo,
+    dados: { conteudo, aplicacao: String(aprendizado?.aplicacao || "").trim().slice(0, 1000) || null },
+    deduplicacao: { origem: "whatsapp_ia" },
+    acao_sugerida: "validar_conhecimento_setorial",
+    confianca,
+    status: "pendente",
+  }).select("id").single();
+  if (candidatoError) throw candidatoError;
+
+  await db.from("ai_aprendizado_eventos").insert({
+    empresa_id: params.config.empresa_id,
+    entrada_id: entrada.id,
+    candidato_id: candidato?.id || null,
+    usuario_id: params.channel.usuario_id || null,
+    usuario_nome: params.channel.usuario_nome || "Atlas IA",
+    evento: "whatsapp_aprendizado_observado",
+    detalhe: { canal_id: params.channel.id, conversa_id: params.conversation.id },
+  });
+
+  return { entradaId: entrada.id, candidatoId: candidato?.id || null };
+}
+
+async function enfileirarRespostaAutomaticaWhatsapp(params: {
+  config: any;
+  channel: any;
+  conversation: any;
+  suggestionId: string;
+  texto: string;
+}) {
+  const corpo = String(params.texto || "").trim();
+  if (!corpo) return null;
+  const agora = new Date().toISOString();
+  const textoCliente = `Atlas IA diz:\n${corpo}`;
+  const payload = {
+    transporte: "qr_gateway",
+    origem: "whatsapp_ia_automatico",
+    whatsapp_canal_id: params.channel.id,
+    whatsapp_numero: params.channel.numero_declarado,
+    chatJid: params.conversation.whatsapp_chat_jid || null,
+    chatTipo: params.conversation.whatsapp_chat_tipo || "contato",
+    sugestao_id: params.suggestionId,
+  };
+
+  const { data: mensagem, error: mensagemError } = await db.from("atendimento_mensagens").insert({
+    empresa_id: params.config.empresa_id,
+    conversa_id: params.conversation.id,
+    sessao_id: null,
+    direcao: "saida",
+    tipo: "texto",
+    texto: corpo,
+    usuario_id: null,
+    usuario_nome: "Atlas IA",
+    provider_timestamp: agora,
+    payload,
+  }).select("id").single();
+  if (mensagemError) throw mensagemError;
+
+  const { error: filaError } = await db.from("atendimento_fila_saida").insert({
+    empresa_id: params.config.empresa_id,
+    conversa_id: params.conversation.id,
+    mensagem_id: mensagem.id,
+    telefone: params.conversation.telefone,
+    tipo: "text",
+    texto: textoCliente,
+    payload,
+    status: "pendente",
+    whatsapp_canal_id: params.channel.id,
+  });
+  if (filaError) throw filaError;
+
+  await db.from("atendimento_conversas").update({
+    ultimo_preview: corpo,
+    ultima_mensagem_em: agora,
+    ultima_saida_em: agora,
+    nao_lidas: 0,
+    status: "em_atendimento",
+    updated_at: agora,
+  }).eq("id", params.conversation.id);
+
+  return mensagem.id;
+}
+
+async function processarAssistenteWhatsapp(params: {
+  config: any;
+  channel: any;
+  conversation: any;
+  body: any;
+  messageRowId: string;
+  text: string;
+  fromMe: boolean;
+  gatewayToken: string;
+}) {
+  const textoAtual = String(params.text || "").trim();
+  if (!params.gatewayToken || !textoAtual || textoAtual === "[Mensagem]") return;
+
+  let { data: iaConfig } = await db.from("atendimento_whatsapp_ia_config")
+    .select("*")
+    .eq("empresa_id", params.config.empresa_id)
+    .maybeSingle();
+  if (!iaConfig) {
+    const { data } = await db.from("atendimento_whatsapp_ia_config").insert({
+      empresa_id: params.config.empresa_id,
+      modo: "observando",
+      ativo: true,
+    }).select("*").single();
+    iaConfig = data;
+  }
+  if (!iaConfig?.ativo) return;
+
+  const { data: canalConfig } = await db.from("atendimento_whatsapp_ia_canais")
+    .select("*")
+    .eq("empresa_id", params.config.empresa_id)
+    .eq("canal_id", params.channel.id)
+    .maybeSingle();
+
+  const aprender = canalConfig?.aprender !== false && iaConfig.aprender_todos_canais !== false;
+  if (!aprender) return;
+
+  const { data: jaObservada } = await db.from("atendimento_whatsapp_ia_observacoes")
+    .select("id")
+    .eq("empresa_id", params.config.empresa_id)
+    .eq("mensagem_id", params.messageRowId)
+    .maybeSingle();
+  if (jaObservada?.id) return;
+
+  const { data: mensagens } = await db.from("atendimento_mensagens")
+    .select("id,direcao,texto,usuario_nome,created_at")
+    .eq("empresa_id", params.config.empresa_id)
+    .eq("conversa_id", params.conversation.id)
+    .order("created_at", { ascending: false })
+    .limit(14);
+  const historico = (mensagens || []).slice().reverse().map((m: any) => ({
+    direcao: m.direcao,
+    por: m.usuario_nome || (m.direcao === "saida" ? params.channel.usuario_nome || "Equipe" : "Cliente"),
+    texto: String(m.texto || "").slice(0, 1800),
+  }));
+
+  const { data: memorias } = await db.from("ai_memorias")
+    .select("escopo,titulo,conteudo")
+    .eq("empresa_id", params.config.empresa_id)
+    .eq("ativo", true)
+    .order("updated_at", { ascending: false })
+    .limit(24);
+
+  const { data: endpoint, error: endpointError } = await db.from("ai_runtime_endpoints")
+    .select("base_url")
+    .eq("chave", "opencode_gateway")
+    .eq("ativo", true)
+    .maybeSingle();
+  if (endpointError) throw endpointError;
+  const baseUrl = String(endpoint?.base_url || "").replace(/\/$/, "");
+  if (!baseUrl) return;
+
+  const sessao = await aiGatewayCall(baseUrl, params.gatewayToken, "/session", {
+    title: `WhatsApp IA - ${params.conversation.id}`.slice(0, 120),
+  });
+  const sessionId = String(sessao?.data?.id || sessao?.id || "").trim();
+  if (!sessionId) return;
+
+  const canalPessoal = String(params.channel.tipo_conta || "") === "pessoal";
+  const classificacaoForcada = String(canalConfig?.classificacao || "auto");
+  const modo = String(iaConfig.modo || "observando");
+
+  const system = [
+    "Voce e o classificador e assistente supervisionado do WhatsApp do Atlas One para a Esquadrifacio.",
+    "Responda SOMENTE com JSON valido, sem markdown.",
+    "Classifique a conversa como empresa, pessoal ou duvida. Em canal pessoal, seja conservador: somente empresa quando houver contexto claro de cliente, obra, fornecedor, funcionario ou assunto da Esquadrifacio.",
+    "Conteudo pessoal nunca deve virar aprendizado, sugestao ou memoria da empresa.",
+    "Identifique o setor usando apenas: gestao, comercial, orcamento, medicao_final, engenharia, compras, estoque, producao, instalacao, financeiro, marketing, rh, qualidade, pd.",
+    "Extraia aprendizado SOMENTE quando houver uma regra, explicacao, procedimento, resposta recorrente ou conhecimento reutilizavel. Nao transforme nome, telefone, preco negociado, endereco, dado pessoal ou caso unico do cliente em regra geral.",
+    "Quando houver aprendizado, devolva aprendizado={titulo,conteudo,aplicacao,confianca}; senao aprendizado=null.",
+    "Se a mensagem atual for entrada e for assunto da empresa, voce pode sugerir resposta curta e natural. Use as memorias validadas quando forem relevantes.",
+    "Nunca invente preco, desconto, prazo, medida, disponibilidade ou regra tecnica. Se depender de verificacao humana, a sugestao deve pedir ou encaminhar a informacao sem assumir.",
+    "automatico_seguro so pode ser true para resposta informativa simples, sem desconto, negociacao, reclamacao, cobranca sensivel, promessa de prazo, decisao tecnica arriscada ou dado que nao esteja sustentado pelo contexto.",
+    "Schema: {classe:'empresa'|'pessoal'|'duvida',setor:string,confianca:number,motivo:string,aprendizado:null|{titulo:string,conteudo:string,aplicacao:string|null,confianca:number},resposta_sugerida:string|null,automatico_seguro:boolean}.",
+  ].join("\n");
+
+  const resposta = await aiGatewayCall(
+    baseUrl,
+    params.gatewayToken,
+    `/session/${encodeURIComponent(sessionId)}/message`,
+    {
+      agent: "atlas-comercial",
+      model: { providerID: "freellmapi", modelID: "auto" },
+      system,
+      parts: [{
+        type: "text",
+        text: JSON.stringify({
+          canal: {
+            nome: params.channel.nome || null,
+            tipo: params.channel.tipo_conta || null,
+            usuario: params.channel.usuario_nome || null,
+            pessoal: canalPessoal,
+            classificacao_forcada: classificacaoForcada,
+          },
+          mensagem_atual: {
+            direcao: params.fromMe ? "saida" : "entrada",
+            texto: textoAtual.slice(0, 3000),
+          },
+          historico_recente: historico,
+          memorias_validadas: (memorias || []).map((m: any) => ({
+            escopo: m.escopo,
+            titulo: m.titulo,
+            conteudo: String(m.conteudo || "").slice(0, 1800),
+          })),
+        }),
+      }],
+    },
+  );
+  const resultado = parseJsonObject(openCodeText(resposta));
+
+  let classe = ["empresa","pessoal","duvida"].includes(String(resultado?.classe))
+    ? String(resultado.classe)
+    : "duvida";
+  if (classificacaoForcada === "empresa" || classificacaoForcada === "pessoal") {
+    classe = classificacaoForcada;
+  } else if (!canalPessoal && String(params.channel.tipo_conta || "") === "business") {
+    classe = "empresa";
+  }
+
+  const setor = normalizarSetorIA(canalConfig?.setor_padrao || resultado?.setor);
+  const confianca = limiteConfianca(resultado?.confianca, 0);
+  const motivo = String(resultado?.motivo || "").trim().slice(0, 600) || null;
+
+  let entradaId: string | null = null;
+  let candidatoId: string | null = null;
+  const aprendizadoResumo = classe === "empresa"
+    ? String(resultado?.aprendizado?.titulo || "").trim().slice(0, 300) || null
+    : null;
+
+  if (classe === "empresa" && resultado?.aprendizado) {
+    const conhecimento = await criarConhecimentoCandidatoWhatsapp({
+      config: params.config,
+      channel: params.channel,
+      conversation: params.conversation,
+      messageRowId: params.messageRowId,
+      setor,
+      resultado,
+    });
+    entradaId = conhecimento.entradaId;
+    candidatoId = conhecimento.candidatoId;
+  }
+
+  const { error: observacaoError } = await db.from("atendimento_whatsapp_ia_observacoes").insert({
+    empresa_id: params.config.empresa_id,
+    canal_id: params.channel.id,
+    conversa_id: params.conversation.id,
+    mensagem_id: params.messageRowId,
+    classe,
+    setor: classe === "empresa" ? setor : null,
+    confianca,
+    aprendizado_resumo: aprendizadoResumo,
+    motivo,
+    entrada_aprendizado_id: entradaId,
+    candidato_aprendizado_id: candidatoId,
+    metadados: {
+      canal_tipo: params.channel.tipo_conta || null,
+      modo,
+      de_mim: params.fromMe,
+      conteudo_persistido: classe === "empresa",
+    },
+  });
+  if (observacaoError) throw observacaoError;
+
+  if (params.fromMe || classe !== "empresa" || !["sugerindo","automatico"].includes(modo)) return;
+  if (canalConfig?.permitir_sugestoes === false) return;
+
+  const textoSugestao = String(resultado?.resposta_sugerida || "").trim();
+  const minSugestao = limiteConfianca(iaConfig.confianca_minima_sugestao, 0.70);
+  if (!textoSugestao || confianca < minSugestao) return;
+
+  const { data: sugestao, error: sugestaoError } = await db.from("atendimento_whatsapp_ia_sugestoes").insert({
+    empresa_id: params.config.empresa_id,
+    canal_id: params.channel.id,
+    conversa_id: params.conversation.id,
+    mensagem_id: params.messageRowId,
+    texto: textoSugestao.slice(0, 5000),
+    setor,
+    confianca,
+    status: "pendente",
+    metadados: { automatico_seguro: resultado?.automatico_seguro === true },
+  }).select("id").single();
+  if (sugestaoError || !sugestao?.id) throw sugestaoError || new Error("Falha ao salvar sugestao.");
+
+  const minAutomatico = limiteConfianca(iaConfig.confianca_minima_automatico, 0.92);
+  const automaticoPermitido =
+    modo === "automatico" &&
+    canalConfig?.permitir_automatico === true &&
+    resultado?.automatico_seguro === true &&
+    confianca >= minAutomatico;
+  if (!automaticoPermitido) return;
+
+  const mensagemId = await enfileirarRespostaAutomaticaWhatsapp({
+    config: params.config,
+    channel: params.channel,
+    conversation: params.conversation,
+    suggestionId: sugestao.id,
+    texto: textoSugestao,
+  });
+  await db.from("atendimento_whatsapp_ia_sugestoes").update({
+    status: "enviada_automaticamente",
+    texto_final: textoSugestao,
+    usuario_nome: "Atlas IA",
+    decidido_em: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    metadados: { automatico_seguro: true, mensagem_saida_id: mensagemId },
+  }).eq("id", sugestao.id);
+}
+
 async function processGroupBudgetIntake(
   config: any,
   channel: any,
@@ -1534,6 +1914,14 @@ Deno.serve(async (req) => {
         .update(conversaUpdate)
         .eq("id", conversation.id);
       if (convError) throw convError;
+
+      if (gatewayToken) {
+        executarEmBackground(processarAssistenteWhatsapp({
+          config, channel, conversation, body,
+          messageRowId: messageRow.id,
+          text, fromMe, gatewayToken,
+        }));
+      }
 
       const intake = await processGroupBudgetIntake(
         config,
