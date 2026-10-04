@@ -4,7 +4,7 @@ import { autenticarBalcao } from '@/lib/balcaoServer'
 
 export const runtime='nodejs';export const dynamic='force-dynamic'
 export async function GET(req:NextRequest){
- const u=await autenticarBalcao(req,'relatorios-balcao','consulta');if(!u)return NextResponse.json({error:'Sem permissão para relatórios do balcão.'},{status:403})
+ const u=await autenticarBalcao(req,'relatorios-balcao','consulta','financeiro.relatorios.relatorio');if(!u)return NextResponse.json({error:'Sem permissão para relatórios do balcão.'},{status:403})
  try{
   const hoje=new Date();const inicioDefault=new Date(hoje);inicioDefault.setDate(hoje.getDate()-30)
   const de=req.nextUrl.searchParams.get('de')||inicioDefault.toISOString().slice(0,10);const ate=req.nextUrl.searchParams.get('ate')||hoje.toISOString().slice(0,10)

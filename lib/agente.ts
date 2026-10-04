@@ -7,6 +7,7 @@ import { estimarCustoUSD } from './ai/custo'
 import { buscarBaseTecnicaAgente, validarConhecimentoTecnicoAgente } from './ai/baseTecnicaAgente'
 import { pesquisarPublicamente, podePesquisarPublicamente } from './ai/pesquisaPublica'
 import { AI_ESPECIALISTAS, especialistaDoModulo } from './ai/specialists'
+import { usuarioPodeAcaoServer } from './acessoUsuarioServer'
 
 export const ACTION_TOOLS = ['propor_criar_tarefa', 'propor_criar_evento', 'propor_editar_arquivo_codigo']
 
@@ -36,6 +37,9 @@ async function buscarSetoresPermitidos(usuarioId: string, empresaId?: string): P
 
 async function usuarioPodeUsarFerramenta(nome: string, usuarioId: string, usuarioRole: string, empresaId?: string) {
   if (usuarioRole === 'master') return true
+  if (nome === 'buscar_financeiro') {
+    return await usuarioPodeAcaoServer({ usuarioId, role: usuarioRole, empresaId, setorId: 'financeiro', acaoId: 'financeiro.ia.consultar', minimo: 'consulta' })
+  }
   const setoresNecessarios = FERRAMENTA_SETORES[nome]
   if (!setoresNecessarios?.length) return true
   const setoresPermitidos = new Set(await buscarSetoresPermitidos(usuarioId, empresaId))

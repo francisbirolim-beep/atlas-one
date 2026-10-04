@@ -34,7 +34,7 @@ import {
 } from '@/lib/homeUsuario'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
-import { montarBlocosPermissao, type BlocoPermissaoId } from '@/lib/permissoesBlocos'
+import { montarBlocosPermissao, type BlocoPermissaoId, type ItemPermissaoBloco } from '@/lib/permissoesBlocos'
 import { acessoUsuarioPadrao, lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import {
   CADASTROS_360,
@@ -158,8 +158,13 @@ export default function UsuariosSenhasPage() {
     ])
     setHomeConfig(home)
     setCadastrosConfig(cadastros)
-    setPermissoesSetores(Object.fromEntries(setores.map(s => [s.id, permissoes[s.id] || 'oculto'])) as Record<string, NivelPermissao>)
-    setAcessoConfig(acesso)
+    const mapaSetores = Object.fromEntries(setores.map(s => [s.id, permissoes[s.id] || 'oculto'])) as Record<string, NivelPermissao>
+    setPermissoesSetores(mapaSetores)
+    const acoesComFallback: Record<string, NivelPermissao> = {}
+    blocosPermissoes.forEach(bloco => bloco.itens.forEach(item => item.acoes.forEach(acao => {
+      acoesComFallback[acao.id] = acesso.acoes?.[acao.id] || mapaSetores[item.setorId] || 'oculto'
+    })))
+    setAcessoConfig({ ...acesso, acoes: acoesComFallback })
     setCarregandoHome(false)
     setCarregandoPermissoes(false)
   }
@@ -244,13 +249,40 @@ export default function UsuariosSenhasPage() {
     setMsgPerfil('Perfil funcional salvo com sucesso.')
   }
 
-  function mudarPermissaoSetor(setorId: string, nivel: NivelPermissao) {
-    setPermissoesSetores(prev => ({ ...prev, [setorId]: nivel }))
+  const pesoNivel: Record<NivelPermissao, number> = { oculto: 0, consulta: 1, edicao: 2 }
+
+  function nivelAcao(item: ItemPermissaoBloco, acaoId: string): NivelPermissao {
+    return acessoConfig.acoes?.[acaoId] || permissoesSetores[item.setorId] || 'oculto'
+  }
+
+  function maiorNivelDoSetor(setorId: string, proximasAcoes: Record<string, NivelPermissao>): NivelPermissao {
+    const acoesDoSetor = blocosPermissoes.flatMap(bloco => bloco.itens)
+      .filter(item => item.setorId === setorId)
+      .flatMap(item => item.acoes)
+    return acoesDoSetor.reduce<NivelPermissao>((atual, acao) => {
+      const n = proximasAcoes[acao.id] || 'oculto'
+      return pesoNivel[n] > pesoNivel[atual] ? n : atual
+    }, 'oculto')
+  }
+
+  function mudarPermissaoAcao(item: ItemPermissaoBloco, acaoId: string, nivel: NivelPermissao) {
+    const proximasAcoes = { ...acessoConfig.acoes, [acaoId]: nivel }
+    setAcessoConfig(prev => ({ ...prev, acoes: proximasAcoes }))
+    setPermissoesSetores(prev => ({ ...prev, [item.setorId]: maiorNivelDoSetor(item.setorId, proximasAcoes) }))
+  }
+
+  function aplicarNivelModulo(item: ItemPermissaoBloco, nivel: NivelPermissao) {
+    const alteracoes = Object.fromEntries(item.acoes.map(acao => [acao.id, nivel])) as Record<string, NivelPermissao>
+    const proximasAcoes = { ...acessoConfig.acoes, ...alteracoes }
+    setAcessoConfig(prev => ({ ...prev, acoes: proximasAcoes }))
+    setPermissoesSetores(prev => ({ ...prev, [item.setorId]: maiorNivelDoSetor(item.setorId, proximasAcoes) }))
   }
 
   function aplicarNivelBloco(blocoId: BlocoPermissaoId, nivel: NivelPermissao) {
     const bloco = blocosPermissoes.find(item => item.id === blocoId)
     if (!bloco) return
+    const alteracoesAcoes = Object.fromEntries(bloco.itens.flatMap(item => item.acoes.map(acao => [acao.id, nivel]))) as Record<string, NivelPermissao>
+    setAcessoConfig(prev => ({ ...prev, acoes: { ...prev.acoes, ...alteracoesAcoes } }))
     setPermissoesSetores(prev => ({
       ...prev,
       ...Object.fromEntries(bloco.itens.map(item => [item.setorId, nivel])),
@@ -258,6 +290,8 @@ export default function UsuariosSenhasPage() {
   }
 
   function aplicarNivelTodos(nivel: NivelPermissao) {
+    const alteracoesAcoes = Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.flatMap(item => item.acoes.map(acao => [acao.id, nivel])))) as Record<string, NivelPermissao>
+    setAcessoConfig(prev => ({ ...prev, acoes: { ...prev.acoes, ...alteracoesAcoes } }))
     setPermissoesSetores(prev => ({
       ...prev,
       ...Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.map(item => [item.setorId, nivel]))),
@@ -526,7 +560,7 @@ export default function UsuariosSenhasPage() {
                     <label className="block text-xs font-medium text-slate-600">WhatsApp<input value={perfilEdit.whatsapp} onChange={e=>setPerfilEdit({...perfilEdit,whatsapp:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block text-xs font-medium text-slate-600">Cargo / função<input value={perfilEdit.cargo} onChange={e=>setPerfilEdit({...perfilEdit,cargo:e.target.value})} placeholder="Ex.: Financeiro, RH, Vendas" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
-                      <label className="block text-xs font-medium text-slate-600">Setor principal<select value={perfilEdit.setor_principal_id} onChange={e=>setPerfilEdit({...perfilEdit,setor_principal_id:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"><option value="">Não definido</option>{setores.filter(s=>s.ativo).map(s=><option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+                      <label className="block text-xs font-medium text-slate-600">Setor principal<select value={perfilEdit.setor_principal_id} onChange={e=>setPerfilEdit({...perfilEdit,setor_principal_id:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"><option value="">Não definido</option>{setores.map(s=><option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
                     </div>
                     <label className="block text-xs font-medium text-slate-600">Tipo de acesso<select value={perfilEdit.role} onChange={e=>setPerfilEdit({...perfilEdit,role:e.target.value as Usuario['role']})} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"><option value="funcionario">Funcionário — acessos definidos abaixo</option><option value="master">Master — acesso total</option></select></label>
                     <label className="block text-xs font-medium text-slate-600">Observações do perfil<textarea value={perfilEdit.observacoes_perfil} onChange={e=>setPerfilEdit({...perfilEdit,observacoes_perfil:e.target.value})} rows={2} placeholder="Responsabilidades, observações internas..." className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
@@ -562,9 +596,10 @@ export default function UsuariosSenhasPage() {
 
                       {blocosPermissoes.map(bloco => {
                         const aberto = !!blocosAbertos[bloco.id]
-                        const edicao = bloco.itens.filter(item => (permissoesSetores[item.setorId] || 'oculto') === 'edicao').length
-                        const consulta = bloco.itens.filter(item => (permissoesSetores[item.setorId] || 'oculto') === 'consulta').length
-                        const ocultos = bloco.itens.length - edicao - consulta
+                        const acoesBloco = bloco.itens.flatMap(item => item.acoes.map(acao => nivelAcao(item, acao.id)))
+                        const edicao = acoesBloco.filter(n => n === 'edicao').length
+                        const consulta = acoesBloco.filter(n => n === 'consulta').length
+                        const ocultos = acoesBloco.length - edicao - consulta
                         return (
                           <div key={bloco.id} className="overflow-hidden rounded-xl border border-slate-200">
                             <div className="bg-slate-50 p-3">
@@ -575,43 +610,66 @@ export default function UsuariosSenhasPage() {
                                     {aberto ? <ChevronUp size={15} className="text-slate-400"/> : <ChevronDown size={15} className="text-slate-400"/>}
                                   </div>
                                   <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{bloco.descricao}</p>
-                                  <p className="mt-1 text-[10px] text-slate-400">{edicao} editar · {consulta} consultar · {ocultos} oculto(s)</p>
+                                  <p className="mt-1 text-[10px] text-slate-400">{edicao} editar/executar · {consulta} consultar · {ocultos} sem acesso</p>
                                 </button>
                                 <div className="flex shrink-0 flex-col gap-1">
-                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'edicao')} className="rounded-md bg-blue-700 px-2 py-1 text-[10px] font-semibold text-white">Editar tudo</button>
-                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'consulta')} className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700">Consultar</button>
-                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'oculto')} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500">Ocultar</button>
+                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'edicao')} className="rounded-md bg-blue-700 px-2 py-1 text-[10px] font-semibold text-white">Geral: editar</button>
+                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'consulta')} className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700">Geral: consultar</button>
+                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'oculto')} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500">Geral: ocultar</button>
                                 </div>
                               </div>
                             </div>
 
                             {aberto && (
-                              <div className="space-y-2 border-t border-slate-100 p-3">
+                              <div className="space-y-3 border-t border-slate-100 p-3">
                                 {bloco.itens.map(item => {
-                                  const nivelAtual = permissoesSetores[item.setorId] || 'oculto'
+                                  const niveis = item.acoes.map(acao => nivelAcao(item, acao.id))
+                                  const todosIguais = niveis.every(n => n === niveis[0])
+                                  const geralModulo = todosIguais ? niveis[0] : 'personalizado'
                                   return (
-                                    <div key={item.setorId} className="rounded-xl border border-slate-200 p-3">
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-semibold text-slate-800">{item.label}</p>
-                                          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.descricao}</p>
+                                    <div key={item.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                      <div className="border-b border-slate-100 bg-white p-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <p className="text-xs font-bold text-slate-800">{item.label}</p>
+                                            <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.descricao}</p>
+                                          </div>
+                                          <label className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Geral
+                                            <select value={geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700">
+                                              {geralModulo === 'personalizado' && <option value="personalizado" disabled>Personalizado</option>}
+                                              <option value="oculto">Sem acesso</option>
+                                              <option value="consulta">Consultar</option>
+                                              <option value="edicao">Editar/Executar</option>
+                                            </select>
+                                          </label>
                                         </div>
-                                        <select value={nivelAtual} onChange={e=>mudarPermissaoSetor(item.setorId,e.target.value as NivelPermissao)} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs">
-                                          <option value="oculto">Sem acesso</option>
-                                          <option value="consulta">Consultar</option>
-                                          <option value="edicao">Editar</option>
-                                        </select>
+
+                                        {item.escopo === 'crm' && niveis.some(n => n !== 'oculto') && (
+                                          <label className="mt-3 block rounded-lg bg-amber-50 p-2.5 text-[11px] font-medium text-amber-900">
+                                            Escopo do CRM
+                                            <select value={acessoConfig.crmEscopo} onChange={e=>setAcessoConfig({...acessoConfig,crmEscopo:e.target.value as AcessoUsuarioConfig['crmEscopo']})} className="mt-1 w-full rounded-lg border border-amber-200 bg-white p-2 text-xs text-slate-800">
+                                              <option value="proprios">Somente a carteira própria</option>
+                                              <option value="todos">Todos os clientes e oportunidades</option>
+                                            </select>
+                                          </label>
+                                        )}
                                       </div>
 
-                                      {item.escopo === 'crm' && nivelAtual !== 'oculto' && (
-                                        <label className="mt-3 block rounded-lg bg-amber-50 p-2.5 text-[11px] font-medium text-amber-900">
-                                          O que aparece no CRM
-                                          <select value={acessoConfig.crmEscopo} onChange={e=>setAcessoConfig({...acessoConfig,crmEscopo:e.target.value as AcessoUsuarioConfig['crmEscopo']})} className="mt-1 w-full rounded-lg border border-amber-200 bg-white p-2 text-xs text-slate-800">
-                                            <option value="proprios">Somente a carteira própria</option>
-                                            <option value="todos">Todos os clientes e oportunidades</option>
-                                          </select>
-                                        </label>
-                                      )}
+                                      <div className="divide-y divide-slate-100">
+                                        {item.acoes.map(acao => (
+                                          <div key={acao.id} className="flex items-start justify-between gap-3 p-3">
+                                            <div className="min-w-0 pr-2">
+                                              <p className="text-[11px] font-semibold text-slate-700">{acao.label}</p>
+                                              <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{acao.descricao}</p>
+                                            </div>
+                                            <select value={nivelAcao(item,acao.id)} onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.value as NivelPermissao)} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px]">
+                                              <option value="oculto">Sem acesso</option>
+                                              <option value="consulta">Consultar</option>
+                                              <option value="edicao">Editar/Executar</option>
+                                            </select>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   )
                                 })}

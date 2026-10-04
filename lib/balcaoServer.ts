@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { nivelAcaoUsuarioServer } from '@/lib/acessoUsuarioServer'
 
 export type NivelBalcao = 'oculto' | 'consulta' | 'edicao'
 export type UsuarioBalcao = { id: string; nome: string; role: string; empresa_id: string; nivel: NivelBalcao }
@@ -9,7 +10,8 @@ const peso: Record<NivelBalcao, number> = { oculto: 0, consulta: 1, edicao: 2 }
 export async function autenticarBalcao(
   req: NextRequest,
   setorId = 'venda-balcao',
-  minimo: NivelBalcao = 'consulta'
+  minimo: NivelBalcao = 'consulta',
+  acaoId?: string
 ): Promise<UsuarioBalcao | null> {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
@@ -35,6 +37,15 @@ export async function autenticarBalcao(
     nivel = (permissao?.nivel as NivelBalcao) || 'oculto'
   }
 
+  if (acaoId) {
+    nivel = await nivelAcaoUsuarioServer({
+      usuarioId: usuario.id,
+      role: usuario.role,
+      empresaId: usuario.empresa_id,
+      setorId,
+      acaoId,
+    })
+  }
   if (peso[nivel] < peso[minimo]) return null
   return { ...usuario, nivel }
 }

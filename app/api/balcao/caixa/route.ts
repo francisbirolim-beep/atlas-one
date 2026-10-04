@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarBalcao, parseNumero } from '@/lib/balcaoServer'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,7 +39,7 @@ async function listarPontosCaixa(empresaId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const usuario = await autenticarBalcao(req, 'venda-balcao', 'consulta') || await autenticarBalcao(req, 'caixa-balcao', 'consulta')
+  const usuario = await autenticarBalcao(req, 'caixa-balcao', 'consulta', 'financeiro.caixa.consultar')
   if (!usuario) return NextResponse.json({ error: 'Sem acesso ao caixa do balcão.' }, { status: 403 })
   try {
     const [caixa, pontosCaixa] = await Promise.all([
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const acao = String(body.acao || '')
+    const acaoPermissao: Record<string,string> = { abrir:'financeiro.caixa.abrir', suprimento:'financeiro.caixa.suprimento', sangria:'financeiro.caixa.sangria', fechar:'financeiro.caixa.fechar' }
+    const permissao = acaoPermissao[acao]
+    if (!permissao || !(await usuarioPodeAcaoServer({ usuarioId:usuario.id, role:usuario.role, empresaId:usuario.empresa_id, setorId:'caixa-balcao', acaoId:permissao, minimo:'edicao' }))) return NextResponse.json({ error: 'Sem permissão para esta operação de caixa.' }, { status: 403 })
     if (acao === 'abrir') {
       const existente = await carregarCaixa(usuario.id, usuario.role, usuario.empresa_id)
       if (existente) return NextResponse.json({ error: 'Você já possui um caixa aberto.' }, { status: 409 })
