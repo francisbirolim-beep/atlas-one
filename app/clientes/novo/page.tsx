@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
-import { textoMaiusculo, textoMaiusculoOuNull } from '@/lib/texto'
 import { OrigemCliente } from '@/lib/tipos'
 import {
   CampoConfiguravel,
@@ -57,7 +56,7 @@ export default function NovoCliente() {
     const nomeInicial = params.get('nome') || ''
     const whatsappInicial = params.get('whatsapp') || ''
     const conversaId = params.get('conversaId') || ''
-    if (nomeInicial) setNome(nomeInicial.toLocaleUpperCase('pt-BR'))
+    if (nomeInicial) setNome(nomeInicial)
     if (whatsappInicial) setWhatsapp(whatsappInicial)
     if (params.get('origem') === 'whatsapp') setOrigem('whatsapp')
     if (conversaId) setConversaOrigemId(conversaId)
@@ -162,19 +161,19 @@ export default function NovoCliente() {
     const { data, error } = await supabase
       .from('clientes')
       .insert({
-        nome: textoMaiusculo(nome),
-        apelido: textoMaiusculoOuNull(apelido),
+        nome: nome.trim(),
+        apelido: apelido.trim() || null,
         whatsapp: whatsapp.trim() || null,
         telefone: telefone.trim() || null,
         email: email.trim().toLowerCase() || null,
-        cidade: textoMaiusculoOuNull(cidade),
+        cidade: cidade.trim() || null,
         cpf_cnpj: cpfCnpj.trim() || null,
-        endereco: textoMaiusculoOuNull(endereco),
-        bairro: textoMaiusculoOuNull(bairro),
+        endereco: endereco.trim() || null,
+        bairro: bairro.trim() || null,
         cep: cep.trim() || null,
         data_nascimento: dataNascimento || null,
         origem,
-        observacoes: textoMaiusculoOuNull(observacoes),
+        observacoes: observacoes.trim() || null,
       })
       .select('id')
       .single()
@@ -206,7 +205,6 @@ export default function NovoCliente() {
   }
 
   const estrela = (chave: string) => (obrigatorio(chave) ? ' *' : '')
-  const classeTexto = 'uppercase'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -231,12 +229,12 @@ export default function NovoCliente() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('nome', 'Nome completo')}{estrela('nome')}</label>
-              <input value={nome} onChange={e => setNome(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('nome', 'Nome completo')} />
+              <input value={nome} onChange={e => setNome(e.target.value)} className={`w-full border border-slate-300 rounded-xl p-3 text-sm`} placeholder={placeholder('nome', 'Nome completo')} />
             </div>
             {visivel('apelido') && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('apelido', 'Apelido / nome conhecido')}{estrela('apelido')}</label>
-                <input value={apelido} onChange={e => setApelido(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('apelido', 'Ex.: Zé da Fazenda')} />
+                <input value={apelido} onChange={e => setApelido(e.target.value)} className={`w-full border border-slate-300 rounded-xl p-3 text-sm`} placeholder={placeholder('apelido', 'Ex.: Zé da Fazenda')} />
               </div>
             )}
           </div>
@@ -257,23 +255,23 @@ export default function NovoCliente() {
 
           {(visivel('cidade') || visivel('cpf_cnpj')) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visivel('cidade') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cidade', 'Cidade')}{estrela('cidade')}</label><input value={cidade} onChange={e => setCidade(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('cidade', 'Cidade da obra')} /></div>}
+              {visivel('cidade') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cidade', 'Cidade')}{estrela('cidade')}</label><input value={cidade} onChange={e => setCidade(e.target.value)} className={`w-full border border-slate-300 rounded-xl p-3 text-sm`} placeholder={placeholder('cidade', 'Cidade da obra')} /></div>}
               {visivel('cpf_cnpj') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cpf_cnpj', 'CPF ou CNPJ')}{estrela('cpf_cnpj')}</label><input value={cpfCnpj} onChange={e => setCpfCnpj(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" /></div>}
             </div>
           )}
 
           {visivel('origem') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('origem', 'Origem')}{estrela('origem')}</label><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">{origens.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>}
 
-          {visivel('endereco') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('endereco', 'Endereço da obra')}{estrela('endereco')}</label><input value={endereco} onChange={e => setEndereco(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} placeholder={placeholder('endereco', 'Rua, número')} /></div>}
+          {visivel('endereco') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('endereco', 'Endereço da obra')}{estrela('endereco')}</label><input value={endereco} onChange={e => setEndereco(e.target.value)} className={`w-full border border-slate-300 rounded-xl p-3 text-sm`} placeholder={placeholder('endereco', 'Rua, número')} /></div>}
 
           {(visivel('bairro') || visivel('cep')) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {visivel('bairro') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('bairro', 'Bairro')}{estrela('bairro')}</label><input value={bairro} onChange={e => setBairro(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full border border-slate-300 rounded-xl p-3 text-sm ${classeTexto}`} /></div>}
+              {visivel('bairro') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('bairro', 'Bairro')}{estrela('bairro')}</label><input value={bairro} onChange={e => setBairro(e.target.value)} className={`w-full border border-slate-300 rounded-xl p-3 text-sm`} /></div>}
               {visivel('cep') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('cep', 'CEP')}{estrela('cep')}</label><input value={cep} onChange={e => setCep(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm" placeholder={placeholder('cep', '00000-000')} /></div>}
             </div>
           )}
 
-          {visivel('observacoes') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('observacoes', 'Observações')}{estrela('observacoes')}</label><textarea value={observacoes} onChange={e => setObservacoes(e.target.value.toLocaleUpperCase('pt-BR'))} className={`w-full h-20 border border-slate-300 rounded-xl p-3 text-sm resize-none ${classeTexto}`} /></div>}
+          {visivel('observacoes') && <div><label className="block text-sm font-medium text-slate-700 mb-1">{rotulo('observacoes', 'Observações')}{estrela('observacoes')}</label><textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} className={`w-full h-20 border border-slate-300 rounded-xl p-3 text-sm resize-none`} /></div>}
 
           {erro && <p className="text-red-500 text-sm">{erro}</p>}
 
