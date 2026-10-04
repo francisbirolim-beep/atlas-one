@@ -3,73 +3,35 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 
-const TIPOS_SEM_ASSISTENCIA = new Set([
-  'hidden',
-  'password',
-  'file',
-  'checkbox',
-  'radio',
-  'number',
-  'range',
-  'color',
-  'date',
-  'datetime-local',
-  'time',
-  'month',
-  'week',
-  'tel',
-  'email',
-  'url',
-])
-
-function prepararCampo(elemento: HTMLInputElement | HTMLTextAreaElement | HTMLElement) {
-  if (elemento instanceof HTMLInputElement && TIPOS_SEM_ASSISTENCIA.has((elemento.type || 'text').toLowerCase())) {
-    return
-  }
-
-  if (!elemento.hasAttribute('lang')) elemento.setAttribute('lang', 'pt-BR')
-  if (!elemento.hasAttribute('spellcheck')) elemento.setAttribute('spellcheck', 'true')
-  if (!elemento.hasAttribute('autocorrect')) elemento.setAttribute('autocorrect', 'on')
-
-  if (elemento instanceof HTMLInputElement) {
-    if (!elemento.hasAttribute('autocomplete')) elemento.setAttribute('autocomplete', 'on')
-    if (
-      !elemento.hasAttribute('autocapitalize') &&
-      (elemento.type || 'text').toLowerCase() !== 'search'
-    ) {
-      elemento.setAttribute('autocapitalize', 'sentences')
-    }
-    return
-  }
-
-  if (!elemento.hasAttribute('autocapitalize')) elemento.setAttribute('autocapitalize', 'sentences')
-}
-
 export default function UppercaseInputProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const aplicar = (raiz: ParentNode) => {
-      raiz
-        .querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLElement>(
-          'input, textarea, [contenteditable="true"]',
-        )
-        .forEach(prepararCampo)
+      raiz.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach(el => {
+        const tipo = el instanceof HTMLInputElement ? (el.type || 'text').toLowerCase() : 'textarea'
+        if (['hidden','password','file','checkbox','radio','range','color'].includes(tipo)) return
+
+        if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'on')
+
+        const campoTexto = !['email','url','number','tel','date','datetime-local','time','month','week'].includes(tipo)
+        if (campoTexto) {
+          if (!el.hasAttribute('autocapitalize')) el.setAttribute('autocapitalize', 'sentences')
+          if (!el.hasAttribute('spellcheck')) el.setAttribute('spellcheck', 'true')
+          if (!el.hasAttribute('autocorrect')) el.setAttribute('autocorrect', 'on')
+        }
+      })
     }
 
     aplicar(document)
-
-    const observer = new MutationObserver(registros => {
-      registros.forEach(registro => {
+    const observer = new MutationObserver(registros =>
+      registros.forEach(registro =>
         registro.addedNodes.forEach(node => {
-          if (!(node instanceof HTMLElement)) return
-          prepararCampo(node)
-          aplicar(node)
-        })
-      })
-    })
-
+          if (node instanceof HTMLElement) aplicar(node)
+        }),
+      ),
+    )
     observer.observe(document.body, { childList: true, subtree: true })
     return () => observer.disconnect()
   }, [])
 
-  return <>{children}</>
+  return <div className="contents">{children}</div>
 }
