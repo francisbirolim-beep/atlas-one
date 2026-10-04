@@ -5,6 +5,7 @@ import { autenticarSchedulerWVetro } from '@/lib/wvetroSchedulerServer'
 import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsultaServer'
 import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacionalServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadastroPendenciasServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -160,7 +161,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('wvetro_referencias_tipologias').select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url'),
     supabaseAdmin.from('wvetro_referencias_linhas').select('linha_raw,linha_tecnica_id'),
     supabaseAdmin.from('tipologias').select('id,chave,label'),
-    supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone').eq('empresa_id', empresaId),
+    supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,cidade').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
     supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,valor_estimado,itens,wvetro_fluxo').eq('empresa_id', empresaId),
   ])
@@ -175,9 +176,14 @@ async function carregarContexto(empresaId: string) {
   const clientes = (clientesR.data || []) as any[]
   const porDoc = new Map<string, any[]>(), porFone = new Map<string, any[]>(), porNome = new Map<string, any[]>()
   for (const c of clientes) {
-    const d = digitos(c.cpf_cnpj); if (d) porDoc.set(d, [...(porDoc.get(d) || []), c])
-    const f = digitos(c.whatsapp || c.telefone); if (f) porFone.set(f.slice(-11), [...(porFone.get(f.slice(-11)) || []), c])
-    const n = norm(c.nome); if (n) porNome.set(n, [...(porNome.get(n) || []), c])
+    const d = digitos(c.cpf_cnpj)
+    if (d) porDoc.set(d, [...(porDoc.get(d) || []), c])
+    for (const contato of [c.whatsapp, c.telefone]) {
+      const f = digitos(contato).slice(-11)
+      if (f) porFone.set(f, [...(porFone.get(f) || []), c])
+    }
+    const n = norm(c.nome)
+    if (n) porNome.set(n, [...(porNome.get(n) || []), c])
   }
   const colunas = (colunasR.data || []) as any[]
   const coluna = colunas.find(c => norm(c.nome) === 'FAZER ORCAMENTO') || colunas[0] || null
@@ -187,7 +193,7 @@ async function carregarContexto(empresaId: string) {
     const numero = txt(fluxo?.numero, fluxo?.numero_wvetro)
     if (numero) existentes.set(numero, o)
   }
-  return { refs, linhas, tipologias, porDoc, porFone, porNome, coluna, existentes }
+  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, existentes }
 }
 
 function acharCliente(p: Record<string, any>, ctx: Awaited<ReturnType<typeof carregarContexto>>) {
@@ -195,8 +201,8 @@ function acharCliente(p: Record<string, any>, ctx: Awaited<ReturnType<typeof car
   if (d && ctx.porDoc.get(d)?.length === 1) return ctx.porDoc.get(d)![0]
   const f = digitos(telefoneCliente(p)).slice(-11)
   if (f && ctx.porFone.get(f)?.length === 1) return ctx.porFone.get(f)![0]
-  const n = norm(nomeCliente(p))
-  if (n && ctx.porNome.get(n)?.length === 1) return ctx.porNome.get(n)![0]
+
+  // Nome, sozinho, nunca gera vínculo automático.
   return null
 }
 
@@ -213,19 +219,55 @@ async function garantirCliente(
   p: Record<string, any>,
   ctx: Awaited<ReturnType<typeof carregarContexto>>,
   empresaId: string,
+  numeroWvetro: string,
 ) {
   const existente = acharCliente(p, ctx)
-  if (existente) return { cliente: existente, criado: false }
+  if (existente) return { cliente: existente, criado: false, pendencia: false }
 
   const nome = nomeCliente(p)
-  if (!nome || norm(nome) === 'CLIENTE W.VETRO') return { cliente: null, criado: false }
+  if (!nome || norm(nome) === 'CLIENTE W.VETRO') return { cliente: null, criado: false, pendencia: false }
 
   const documento = documentoCliente(p)
   const telefone = telefoneCliente(p)
   const nomeNorm = norm(nome)
-  const homonimos = ctx.porNome.get(nomeNorm) || []
-  if (!documento && !telefone && homonimos.length > 0) {
-    return { cliente: null, criado: false }
+  const codigoWvetro = txt(p.ClienteCodigo, p.PessoaCodigo, p.PessoaId, p.ClienteId)
+  const semIdentificadorForte = !digitos(documento) && !digitos(telefone)
+
+  if (semIdentificadorForte) {
+    const candidatos = ctx.clientes
+      .filter((c: any) => {
+        const atual = norm(c.nome)
+        if (!atual || !nomeNorm) return false
+        return atual === nomeNorm || atual.startsWith(`${nomeNorm} `) || nomeNorm.startsWith(`${atual} `)
+      })
+      .slice(0, 20)
+
+    if (candidatos.length > 0) {
+      await registrarPendenciaCadastro({
+        empresaId,
+        tipo: 'vinculo_wvetro',
+        chaveUnica: `wvetro:cliente:${codigoWvetro || nomeNorm}`,
+        titulo: `Vincular cliente W.Vetro: ${nome}`,
+        descricao: 'O W.Vetro enviou o cliente sem CPF/CNPJ ou telefone confiável e há cadastro compatível no Atlas. Confirme o vínculo antes de unir os históricos.',
+        origem: 'wvetro',
+        dados: {
+          numero_wvetro: numeroWvetro,
+          cliente_codigo_wvetro: codigoWvetro || null,
+          nome,
+          documento: documento || null,
+          telefone: telefone || null,
+          candidatos: candidatos.map((c: any) => ({
+            id: c.id,
+            nome: c.nome,
+            cpf_cnpj: c.cpf_cnpj || null,
+            whatsapp: c.whatsapp || null,
+            telefone: c.telefone || null,
+            cidade: c.cidade || null,
+          })),
+        },
+      })
+      return { cliente: null, criado: false, pendencia: true }
+    }
   }
 
   const payload = {
@@ -246,13 +288,34 @@ async function garantirCliente(
   const { data, error } = await supabaseAdmin
     .from('clientes')
     .insert(payload)
-    .select('id,nome,cpf_cnpj,whatsapp,telefone')
+    .select('id,nome,cpf_cnpj,whatsapp,telefone,cidade')
     .single()
   if (error) throw error
 
   const cliente = { ...payload, ...data }
   adicionarClienteAoContexto(cliente, ctx)
-  return { cliente, criado: true }
+
+  const incompleto = nomeCadastroIncompleto(nome)
+  if (incompleto) {
+    await registrarPendenciaCadastro({
+      empresaId,
+      tipo: 'cadastro_incompleto',
+      chaveUnica: `cliente:${data.id}:nome_incompleto`,
+      titulo: `Completar cadastro de ${nome}`,
+      descricao: 'O W.Vetro enviou apenas um nome. Complete nome e sobrenome ou valide se este cadastro deve ser vinculado a um cliente já existente.',
+      origem: 'wvetro',
+      clienteId: data.id,
+      dados: {
+        numero_wvetro: numeroWvetro,
+        cliente_codigo_wvetro: codigoWvetro || null,
+        nome,
+        documento: documento || null,
+        telefone: telefone || null,
+      },
+    })
+  }
+
+  return { cliente, criado: true, pendencia: incompleto }
 }
 
 async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, diasPadrao = 7) {
@@ -267,7 +330,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
     const payload = await consultarRecursoOperacionalWVetro('orcamentos', { inicio, fim })
     const staging = transformarPayloadWVetroEmStaging('orcamentos', payload)
     const ctx = await carregarContexto(usuario.empresa_id)
-    let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0
+    let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0
     const resultados: any[] = []
 
     for (const registro of staging.registros) {
@@ -278,10 +341,11 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       const itens = rawItens.map((x, i) => itemWVetro(obj(x) || {}, i, ctx.refs, ctx.linhas, ctx.tipologias))
       itensMapeados += itens.filter(i => i.tipologia_id).length
       itensPendentes += itens.filter(i => !i.tipologia_id).length
-      const clienteResolvido = await garantirCliente(p, ctx, usuario.empresa_id)
+      const clienteResolvido = await garantirCliente(p, ctx, usuario.empresa_id, numeroW)
       const cliente = clienteResolvido.cliente
       if (cliente) clientesVinculados += 1
       if (clienteResolvido.criado) clientesCriados += 1
+      if (clienteResolvido.pendencia) pendenciasCadastro += 1
       const nome = nomeCliente(p)
       const valor = num(p.ValorTotal, p.Total, p.ValorBruto, p.Valor)
       const primeiro = itens[0] || {}
@@ -302,7 +366,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       if (existente) {
         const anterior = obj(existente.wvetro_fluxo)
         const mesmoPayload = txt(anterior?.payload_hash) === registro.payloadHash
-        const clienteJaVinculado = !cliente?.id || existente.cliente_id === cliente.id
+        const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
         const precisaReprocessarMapeamento =
           Number(anterior?.mapeamento_versao || 0) < 2 ||
           num(existente.valor_estimado) <= 0
@@ -314,7 +378,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
         const patch: any = {
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
-          cliente_id: cliente?.id || existente.cliente_id || null,
+          cliente_id: cliente?.id || (clienteResolvido.pendencia ? null : existente.cliente_id || null),
           itens,
           tipo_esquadria: primeiro.tipo_esquadria || 'outro',
           largura_mm: primeiro.largura_mm || null,
@@ -373,7 +437,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       lidos: staging.registros.length,
       semChave: staging.semChave.length,
       criados, atualizados, semAlteracao,
-      clientesVinculados, clientesCriados, itensMapeados, itensPendentes,
+      clientesVinculados, clientesCriados, itensMapeados, itensPendentes, pendenciasCadastro,
       forcar,
       resultados: resultados.slice(0, 200),
     })
