@@ -14,8 +14,20 @@ import {
   type PrecificacaoOrcamento,
 } from '@/lib/orcamentoPrecificacao'
 
-function money(v: unknown) { return Number(v || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }) }
-function pct(v: unknown) { return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits:2 }) }
+function numero(v: unknown) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  let s = String(v ?? '').trim().replace(/[^0-9,.-]/g, '')
+  if (!s) return 0
+  if (s.includes(',') && s.includes('.')) {
+    s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '')
+  } else if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  }
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
+function money(v: unknown) { return numero(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }) }
+function pct(v: unknown) { return numero(v).toLocaleString('pt-BR', { maximumFractionDigits:2 }) }
 function itemRef(item:any,index:number){ return String(item?.id || `item-${index+1}`) }
 function itemNome(item:any,index:number){
   const raw=item?.wvetro_item||{}
@@ -87,7 +99,9 @@ export default function ComposicaoOrcamentoPage(){
   const numero=wv?(fluxo?.numero||orc.numero):orc.numero
   const pdf=wv?acharPdf(fluxo?.payload_bruto):null
   const totalCusto=(dados.politicas||[]).reduce((s,p)=>s+Number(p.custo_total||0),0)+(dados.componentes||[]).filter(c=>!c.item_ref).reduce((s,c)=>s+Number(c.custo_total||0),0)
-  const totalVenda=Number(orc.valor_estimado||0)
+  const totalVendaBanco=numero(orc.valor_estimado)
+  const totalVendaItens=itens.reduce((s:any,item:any)=>s+numero(item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total),0)
+  const totalVenda=totalVendaBanco>0?totalVendaBanco:totalVendaItens
   const margem=totalVenda-totalCusto
   const margemPct=totalVenda>0?(margem/totalVenda)*100:0
   const refsQuery=[...selecionados].join(',')
@@ -139,7 +153,10 @@ export default function ComposicaoOrcamentoPage(){
         </tr></thead>
         <tbody className="divide-y">{itens.map((item:any,index:number)=>{
           const ref=itemRef(item,index),pol=politicas.get(ref),comps=componentesPorItem.get(ref)||[]
-          const custo=Number(pol?.custo_produtivo||0)+Number(pol?.custo_extras||0), sobra=Number(pol?.custo_sobra||0), venda=Number(pol?.preco_venda||item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||0), marg=venda-(custo+sobra), margPct=venda>0?(marg/venda)*100:0
+          const custo=numero(pol?.custo_produtivo)+numero(pol?.custo_extras), sobra=numero(pol?.custo_sobra)
+          const vendaPrecificada=numero(pol?.preco_venda)
+          const vendaOriginal=numero(item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
+          const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal, marg=venda-(custo+sobra), margPct=venda>0?(marg/venda)*100:0
           const cobrar=pol?.sobra_herda_geral===false?Boolean(pol?.cobrar_sobra):Boolean(orc.cobrar_sobra_padrao)
           return <tr key={ref} className="hover:bg-slate-50/70">
             <td className="px-4 py-3"><button onClick={()=>alternar(ref)}>{selecionados.has(ref)?<CheckSquare size={17} className="text-blue-600"/>:<Square size={17} className="text-slate-400"/>}</button></td>
