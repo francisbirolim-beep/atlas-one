@@ -1033,7 +1033,7 @@ export default function WhatsAppAtendimentoPage() {
                   return (
                     <div key={m.id} className={`flex ${saida?'justify-end':'justify-start'}`}>
                       <div className={`max-w-[82%] rounded-xl px-3 py-2 shadow-sm ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
-                        {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome}</p>}
+                        {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome} diz</p>}
 
                         {m.tipo === 'audio' && midia && (
                           <audio controls preload="metadata" src={m.media_url || undefined} className="max-w-full"/>
