@@ -368,21 +368,25 @@ export default function AtlasIAPage() {
     try {
       const token = await tokenAtual()
       if (modo === 'livre') {
-        let conversaIdParaEnviar = conversaLivreId
-        if (novaConversaPendente && !conversaIdParaEnviar) {
-          conversaIdParaEnviar = await criarNovaConversaLivre()
-          setConversaLivreId(conversaIdParaEnviar)
-          setNovaConversaPendente(false)
-        }
         const r = await fetch('/api/agente/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` },
-          body: JSON.stringify({ mensagem: texto, anexo: atual, messages: historico, conversaId: conversaIdParaEnviar }),
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+          body: JSON.stringify({
+            mensagem: texto,
+            anexo: atual,
+            messages: historico,
+            conversaId: conversaLivreId,
+            novaConversa: novaConversaPendente && !conversaLivreId,
+          }),
         })
         const j = await r.json()
         if (!r.ok) throw new Error(j.error || 'Erro ao falar com o Atlas IA')
-        if (j.conversaId) setConversaLivreId(String(j.conversaId))
+        if (j.conversaId) {
+          setConversaLivreId(String(j.conversaId))
+          setNovaConversaPendente(false)
+        }
         setHistorico(j.messages || [])
+        void carregarConversas()
         if (j.text) setBolhas(prev => [...prev, {
           papel: 'assistant',
           texto: j.text,
