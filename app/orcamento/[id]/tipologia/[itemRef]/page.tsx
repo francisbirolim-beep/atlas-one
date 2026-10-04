@@ -61,7 +61,7 @@ export default function TipologiaOrcamentoPage(){
   const custo=numero(politica?.custo_produtivo)+numero(politica?.custo_extras)
   const sobra=numero(politica?.custo_sobra)
   const vendaPrecificada=numero(politica?.preco_venda)
-  const vendaOriginal=numero(item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
+  const vendaOriginal=numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
   const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal
   const margem=venda-(custo+sobra), margemPct=venda>0?margem/venda*100:0
   const cobrar=politica?.sobra_herda_geral===false?Boolean(politica?.cobrar_sobra):Boolean(dados?.orcamento?.cobrar_sobra_padrao)

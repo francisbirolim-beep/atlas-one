@@ -100,7 +100,7 @@ function itemWVetro(
   const folhasMatch = modeloRaw.match(/(\d+)\s*folhas?/i)
   const folhas = txt(item.Folhas, folhasMatch?.[1])
   const id = randomUUID()
-  const precoTotal = num(item.ValorTotal, item.Total)
+  const precoTotal = num(item.ValorTotalAlterado, item.ValorTotal, item.Total)
   const precoUnit = num(item.ValorUnitario, item.ValorUnit, item.PrecoUnitario) || (precoTotal > 0 ? precoTotal / quantidade : 0)
 
   return {
@@ -162,7 +162,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,wvetro_fluxo').eq('empresa_id', empresaId),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,valor_estimado,itens,wvetro_fluxo').eq('empresa_id', empresaId),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -282,7 +282,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       if (cliente) clientesVinculados += 1
       if (clienteResolvido.criado) clientesCriados += 1
       const nome = nomeCliente(p)
-      const valor = num(p.ValorTotal, p.Total, p.Valor)
+      const valor = num(p.ValorTotal, p.Total, p.ValorBruto, p.Valor)
       const primeiro = itens[0] || {}
       const fluxo = {
         origem: 'wvetro_api',
@@ -295,13 +295,17 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
         vendedor: txt(p.VendedorNome, p.NomeVendedor) || null,
         cliente_codigo_wvetro: txt(p.ClienteCodigo, p.PessoaCodigo) || null,
         payload_bruto: p,
+        mapeamento_versao: 2,
       }
       const existente = ctx.existentes.get(numeroW)
       if (existente) {
         const anterior = obj(existente.wvetro_fluxo)
         const mesmoPayload = txt(anterior?.payload_hash) === registro.payloadHash
         const clienteJaVinculado = !cliente?.id || existente.cliente_id === cliente.id
-        if (mesmoPayload && clienteJaVinculado) {
+        const precisaReprocessarMapeamento =
+          Number(anterior?.mapeamento_versao || 0) < 2 ||
+          num(existente.valor_estimado) <= 0
+        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento) {
           semAlteracao += 1
           resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'sem_alteracao', cliente: nome, itens: itens.length })
           continue

@@ -96,11 +96,11 @@ export default function ComposicaoOrcamentoPage(){
   const cliente=(Array.isArray(orc.clientes)?orc.clientes[0]:orc.clientes)?.nome||orc.cliente_nome||'Cliente'
   const fluxo=orc.wvetro_fluxo||null
   const wv=fluxo?.origem==='wvetro_api'
-  const numero=wv?(fluxo?.numero||orc.numero):orc.numero
+  const numeroOrcamento=wv?(fluxo?.numero||orc.numero):orc.numero
   const pdf=wv?acharPdf(fluxo?.payload_bruto):null
   const totalCusto=(dados.politicas||[]).reduce((s,p)=>s+Number(p.custo_total||0),0)+(dados.componentes||[]).filter(c=>!c.item_ref).reduce((s,c)=>s+Number(c.custo_total||0),0)
   const totalVendaBanco=numero(orc.valor_estimado)
-  const totalVendaItens=itens.reduce((s:any,item:any)=>s+numero(item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total),0)
+  const totalVendaItens=itens.reduce((s:any,item:any)=>s+numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total),0)
   const totalVenda=totalVendaBanco>0?totalVendaBanco:totalVendaItens
   const margem=totalVenda-totalCusto
   const margemPct=totalVenda>0?(margem/totalVenda)*100:0
@@ -110,7 +110,7 @@ export default function ComposicaoOrcamentoPage(){
   return <main className="min-h-screen bg-slate-50 p-4 md:p-7"><div className="mx-auto max-w-[1500px] space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><Link href={orc.cliente_id?`/clientes/${orc.cliente_id}/central`:'/clientes'} className="mb-2 inline-flex items-center gap-2 text-sm text-slate-500"><ArrowLeft size={16}/> Voltar</Link>
-        <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold text-slate-900">Orçamento Atlas #{numero||'—'}</h1>{wv&&<span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">Origem: W.Vetro</span>}<span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Sincronizado</span></div>
+        <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold text-slate-900">Orçamento Atlas #{numeroOrcamento||'—'}</h1>{wv&&<span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">Origem: W.Vetro</span>}<span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">Sincronizado</span></div>
         <p className="mt-1 text-sm text-slate-500">Cliente: {cliente}{fluxo?.vendedor?` · Vendedor: ${fluxo.vendedor}`:''}{fluxo?.sincronizado_em?` · Última sincronização: ${new Date(fluxo.sincronizado_em).toLocaleString('pt-BR')}`:''}</p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -155,7 +155,7 @@ export default function ComposicaoOrcamentoPage(){
           const ref=itemRef(item,index),pol=politicas.get(ref),comps=componentesPorItem.get(ref)||[]
           const custo=numero(pol?.custo_produtivo)+numero(pol?.custo_extras), sobra=numero(pol?.custo_sobra)
           const vendaPrecificada=numero(pol?.preco_venda)
-          const vendaOriginal=numero(item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
+          const vendaOriginal=numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
           const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal, marg=venda-(custo+sobra), margPct=venda>0?(marg/venda)*100:0
           const cobrar=pol?.sobra_herda_geral===false?Boolean(pol?.cobrar_sobra):Boolean(orc.cobrar_sobra_padrao)
           return <tr key={ref} className="hover:bg-slate-50/70">
