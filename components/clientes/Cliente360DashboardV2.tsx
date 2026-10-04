@@ -1,5 +1,3 @@
-[Reading 315 lines from start (total: 315 lines, 0 remaining)]
-
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -315,5 +313,3 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     {modalObra&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5"><div className="flex justify-between"><h2 className="font-bold">Nova obra</h2><button onClick={()=>setModalObra(false)}><X size={18}/></button></div><input value={obraForm.nome} onChange={e=>setObraForm(f=>({...f,nome:e.target.value}))} className="mt-4 w-full rounded-lg border px-3 py-2" placeholder="Nome da obra"/><textarea value={obraForm.observacoes||''} onChange={e=>setObraForm(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalObra(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} onClick={salvarObra} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white">Criar obra</button></div></div></div>}
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
