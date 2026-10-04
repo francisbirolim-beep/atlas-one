@@ -178,10 +178,14 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
     confianca:fornecedor?1:fornecedorAmbiguos.length?.55:.9,
     destino_id:fornecedor?.id||null,
   })
+  const chavesProdutos=new Set<string>()
   for(const item of Array.isArray(x?.itens)?x.itens.slice(0,1200):[]){
     if(String(item.tipo)==='produto'||String(item.tipo)==='preco'){
       const codigo=txt(item.codigo,120), descricao=txt(item.descricao||item.titulo,400)
       if(!codigo&&!descricao)continue
+      const chaveProduto=codigo?'COD:'+cod(codigo):'DESC:'+norm(descricao)
+      if(chavesProdutos.has(chaveProduto))continue
+      chavesProdutos.add(chaveProduto)
       const p=await produtoExistente(usuario.empresa_id,fornecedor?.id||null,codigo,descricao)
       const cat=CATEGORIAS.has(txt(item.categoria,80).toLowerCase())?txt(item.categoria,80).toLowerCase():'outro'
       rows.push({
@@ -338,18 +342,25 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
 
   const fornecedorNecessario=entrada.tipo==='catalogo'||entrada.tipo==='tabela_preco'||Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
   const fornecedorId=await resolverFornecedor(usuario,entrada,null)
-  for(const c of (lista||[]).filter((x:any)=>x.tipo!=='fornecedor')){
-    if(c.tipo==='produto'&&fornecedorNecessario&&!fornecedorId){
-      await supabaseAdmin.from('ai_aprendizado_candidatos').update({
-        acao_sugerida:'aguardar_fornecedor',
-        observacao_validacao:'Aguardando apenas a confirmação do fornecedor; depois o Atlas continua este catálogo automaticamente.',
-        updated_at:new Date().toISOString()
-      }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
-      continue
-    }
-    const motivo=motivoPendenciaCatalogo(c)
-    if(motivo){await pendenciarCatalogo(usuario,c,motivo);continue}
-    await aplicarCatalogoAutomatico(usuario,c,entrada);aplicados++
+  if(fornecedorId)await copiarFonte(usuario,entrada,fornecedorId)
+  const outros=(lista||[]).filter((x:any)=>x.tipo!=='fornecedor')
+  for(let i=0;i<outros.length;i+=5){
+    const lote=outros.slice(i,i+5)
+    const resultados=await Promise.all(lote.map(async(c:any)=>{
+      if(c.tipo==='produto'&&fornecedorNecessario&&!fornecedorId){
+        await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+          acao_sugerida:'aguardar_fornecedor',
+          observacao_validacao:'Aguardando apenas a confirmação do fornecedor; depois o Atlas continua este catálogo automaticamente.',
+          updated_at:new Date().toISOString()
+        }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+        return 0
+      }
+      const motivo=motivoPendenciaCatalogo(c)
+      if(motivo){await pendenciarCatalogo(usuario,c,motivo);return 0}
+      await aplicarCatalogoAutomatico(usuario,c,entrada)
+      return 1
+    }))
+    aplicados+=resultados.reduce((s:number,n:number)=>s+n,0)
   }
 
   const {data:restantes}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('id,acao_sugerida')
@@ -408,13 +419,13 @@ export async function POST(req:NextRequest){
       const auto=await processarCatalogoAutomatico(u,entradaId)
       const {data:final}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).single()
       return NextResponse.json({
-        entrada:await assinar(final||at),total_candidatos:total,
+        entrada:await assinar(final||at),total_candidatos:total,pendencias:auto.pendentes,
         mensagem:auto.pendentes
           ?`Catálogo processado: ${auto.aplicados} item(ns) aplicados automaticamente e ${auto.pendentes} pendência(s) reais para validar.`
           :`Catálogo processado automaticamente: ${auto.aplicados} item(ns) cadastrados/vinculados, sem pendências para validação.`
       },{status:201})
     }
-    return NextResponse.json({entrada:await assinar(at),total_candidatos:total,mensagem:`Material analisado. ${total} item(ns) seguem para validação antes de virar regra.`},{status:201})
+    return NextResponse.json({entrada:await assinar(at),total_candidatos:total,pendencias:total,mensagem:`Material analisado. ${total} item(ns) seguem para validação antes de virar regra.`},{status:201})
   }catch(e:any){if(id)await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'erro',erro:String(e?.message||'Erro').slice(0,1000),updated_at:new Date().toISOString()}).eq('id',id);return NextResponse.json({error:e?.message||'Erro ao analisar material.'},{status:500})}
 }
 
