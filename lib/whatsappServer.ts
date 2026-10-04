@@ -1377,7 +1377,7 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
   const corpo = texto.trim()
   if (!corpo) throw new Error('Mensagem vazia.')
   const nomeAtendente = String(usuario.nome || 'Equipe Esquadrifácio').trim() || 'Equipe Esquadrifácio'
-  const corpoCliente = `*${nomeAtendente}:* ${corpo}`
+  const corpoCliente = `*${nomeAtendente} diz:* ${corpo}`
 
   const { data: config } = await supabaseAdmin.from('atendimento_configuracoes')
     .select('*').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
