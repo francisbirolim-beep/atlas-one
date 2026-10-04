@@ -63,8 +63,8 @@ export default function TipologiaOrcamentoPage(){
   const vendaPrecificada=numero(politica?.preco_venda)
   const vendaOriginal=numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
   const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal
-  const margem=venda-(custo+sobra), margemPct=venda>0?margem/venda*100:0
   const cobrar=politica?.sobra_herda_geral===false?Boolean(politica?.cobrar_sobra):Boolean(dados?.orcamento?.cobrar_sobra_padrao)
+  const margem=venda-(custo+(cobrar?sobra:0)), margemPct=venda>0?margem/venda*100:0
 
   async function mudarSobra(){setOcupado(true);setErro('');const r=await salvarPoliticaItem(orcamentoId,ref,{sobra_herda_geral:false,cobrar_sobra:!cobrar});setOcupado(false);if(!r.ok)setErro(r.error);else await carregar()}
 

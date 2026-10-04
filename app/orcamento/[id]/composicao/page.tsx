@@ -63,7 +63,7 @@ export default function ComposicaoOrcamentoPage(){
     setCarregando(true);setErro('')
     let d=await carregarPrecificacaoOrcamento(orcamentoId)
     const wv=d?.orcamento?.wvetro_fluxo?.origem==='wvetro_api'
-    if(d&&wv&&!d.pacote&&!geracaoAutomatica.current){
+    if(d&&wv&&(!d.pacote||d.componentes.length===0)&&!geracaoAutomatica.current){
       geracaoAutomatica.current=true;setOcupado(true)
       const g=await gerarBasePrecificacao(orcamentoId,{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
       setOcupado(false)
@@ -98,11 +98,13 @@ export default function ComposicaoOrcamentoPage(){
   const wv=fluxo?.origem==='wvetro_api'
   const numeroOrcamento=wv?(fluxo?.numero||orc.numero):orc.numero
   const pdf=wv?acharPdf(fluxo?.payload_bruto):null
-  const totalCusto=(dados.politicas||[]).reduce((s,p)=>s+Number(p.custo_total||0),0)+(dados.componentes||[]).filter(c=>!c.item_ref).reduce((s,c)=>s+Number(c.custo_total||0),0)
+  const totalCusto=(dados.politicas||[]).reduce((s,p)=>s+numero(p.custo_produtivo)+numero(p.custo_extras),0)+(dados.componentes||[]).filter(c=>!c.item_ref).reduce((s,c)=>s+numero(c.custo_total),0)
+  const totalVendaOriginalItens=itens.reduce((s:any,item:any)=>s+numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total),0)
+  const totalVendaOriginal=wv?(numero(fluxo?.payload_bruto?.Total)||totalVendaOriginalItens):totalVendaOriginalItens
   const totalVendaBanco=numero(orc.valor_estimado)
-  const totalVendaItens=itens.reduce((s:any,item:any)=>s+numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total),0)
-  const totalVenda=totalVendaBanco>0?totalVendaBanco:totalVendaItens
-  const margem=totalVenda-totalCusto
+  const totalVenda=totalVendaBanco>0?totalVendaBanco:totalVendaOriginal
+  const sobraCobradaTotal=(dados.politicas||[]).reduce((s,p)=>{const cobrar=p.sobra_herda_geral===false?Boolean(p.cobrar_sobra):Boolean(orc.cobrar_sobra_padrao);return s+(cobrar?numero(p.custo_sobra):0)},0)
+  const margem=totalVenda-totalCusto-sobraCobradaTotal
   const margemPct=totalVenda>0?(margem/totalVenda)*100:0
   const refsQuery=[...selecionados].join(',')
   const escopoHref=(base:string)=>selecionados.size? `${base}?refs=${encodeURIComponent(refsQuery)}`:base
@@ -125,7 +127,7 @@ export default function ComposicaoOrcamentoPage(){
 
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Tipologias</p><p className="mt-1 text-2xl font-bold">{itens.length}</p></div>
-      <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Valor original</p><p className="mt-1 text-xl font-bold">{money(totalVenda)}</p></div>
+      <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Valor original</p><p className="mt-1 text-xl font-bold">{money(totalVendaOriginal)}</p></div>
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Descontos</p><p className="mt-1 text-xl font-bold">{money(0)}</p></div>
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Valor final</p><p className="mt-1 text-xl font-bold text-emerald-700">{money(totalVenda)}</p></div>
       <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-400">Custo total</p><p className="mt-1 text-xl font-bold">{money(totalCusto)}</p></div>
@@ -156,8 +158,8 @@ export default function ComposicaoOrcamentoPage(){
           const custo=numero(pol?.custo_produtivo)+numero(pol?.custo_extras), sobra=numero(pol?.custo_sobra)
           const vendaPrecificada=numero(pol?.preco_venda)
           const vendaOriginal=numero(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
-          const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal, marg=venda-(custo+sobra), margPct=venda>0?(marg/venda)*100:0
           const cobrar=pol?.sobra_herda_geral===false?Boolean(pol?.cobrar_sobra):Boolean(orc.cobrar_sobra_padrao)
+          const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal, marg=venda-(custo+(cobrar?sobra:0)), margPct=venda>0?(marg/venda)*100:0
           return <tr key={ref} className="hover:bg-slate-50/70">
             <td className="px-4 py-3"><button onClick={()=>alternar(ref)}>{selecionados.has(ref)?<CheckSquare size={17} className="text-blue-600"/>:<Square size={17} className="text-slate-400"/>}</button></td>
             <td className="px-3 py-3">{index+1}</td>
