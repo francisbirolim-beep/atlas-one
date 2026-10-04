@@ -587,3 +587,16 @@ Branch: `feat/cliente360-wvetro-orcamentos-20261004`
 - O histórico W.Vetro antigo continua separado para consulta e não é confundido com os novos orçamentos operacionais sincronizados.
 
 [executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
+## 2026-10-04 — Orçamento Atlas V2 sobre sincronização W.Vetro
+
+Branch: `feat/orcamento-atlas-v2-20261004`
+
+- A rota `/orcamento/[id]/composicao` foi transformada na visão geral comercial/técnica do Orçamento Atlas, preservando a origem W.Vetro sem usar o visual do W.Vetro como tela principal.
+- O orçamento agora abre em lista compacta por tipologia, com custo, sobra, custo com sobra, venda, margem e flag individual de cobrança de sobra.
+- É possível selecionar uma, várias ou todas as tipologias para gerar relatórios parciais; listas de Perfis, Acessórios, Vidros, Lista de corte e Plano de corte respeitam o conjunto selecionado.
+- Nova rota `/orcamento/[id]/tipologia/[itemRef]` concentra resumo, componentes, variáveis, lista/plano de corte e atalhos para editar perfis, acessórios, vidros e serviços/despesas da tipologia.
+- Nova rota `/orcamento/[id]/plano-corte` apresenta barras, cortes, aproveitamento e sobra, podendo receber `refs` para impressão parcial.
+- `/orcamento/[id]/materiais` passou a aceitar `refs` e `filtro` para impressão parcial por tipologia e grupo de material.
+- A conferência de custos aceita `itemRef` e filtra os componentes para editar somente a tipologia escolhida.
+- Regra automática de sobra introduzida via `configuracoes_gerais`: preto e branco não cobram sobra por padrão; demais cores cobram. A decisão manual por item prevalece.
+- O botão de PDF original W.Vetro só é habilitado quando a sincronização tiver recebido uma URL real de PDF no payload; o sistema não inventa um PDF W.Vetro.
