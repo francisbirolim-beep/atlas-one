@@ -1,111 +1,75 @@
 'use client'
 
 import { useEffect } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
-const TIPOS_PRESERVAR = new Set([
-  'email',
+const TIPOS_SEM_ASSISTENCIA = new Set([
+  'hidden',
   'password',
-  'search',
-  'tel',
-  'url',
+  'file',
+  'checkbox',
+  'radio',
   'number',
+  'range',
+  'color',
   'date',
   'datetime-local',
   'time',
   'month',
   'week',
-  'color',
-  'file',
-  'checkbox',
-  'radio',
-  'range',
-  'hidden',
+  'tel',
+  'email',
+  'url',
 ])
 
-const TERMOS_PRESERVAR = [
-  'email',
-  'e-mail',
-  'senha',
-  'password',
-  'url',
-  'link',
-  'token',
-  'secret',
-  'api_key',
-  'apikey',
-  'chave',
-  'busca',
-  'buscar',
-  'pesquisa',
-  'pesquisar',
-  'search',
-]
-
-function devePreservar(elemento: HTMLInputElement | HTMLTextAreaElement) {
-  if (elemento.dataset.preserveCase === 'true') return true
-
-  if (elemento instanceof HTMLInputElement) {
-    const tipo = (elemento.type || 'text').toLowerCase()
-    if (TIPOS_PRESERVAR.has(tipo)) return true
+function prepararCampo(elemento: HTMLInputElement | HTMLTextAreaElement | HTMLElement) {
+  if (elemento instanceof HTMLInputElement && TIPOS_SEM_ASSISTENCIA.has((elemento.type || 'text').toLowerCase())) {
+    return
   }
 
-  const identidade = [
-    elemento.name,
-    elemento.id,
-    elemento.getAttribute('aria-label'),
-    elemento.getAttribute('placeholder'),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
+  if (!elemento.hasAttribute('lang')) elemento.setAttribute('lang', 'pt-BR')
+  if (!elemento.hasAttribute('spellcheck')) elemento.setAttribute('spellcheck', 'true')
+  if (!elemento.hasAttribute('autocorrect')) elemento.setAttribute('autocorrect', 'on')
 
-  return TERMOS_PRESERVAR.some(termo => identidade.includes(termo))
+  if (elemento instanceof HTMLInputElement) {
+    if (!elemento.hasAttribute('autocomplete')) elemento.setAttribute('autocomplete', 'on')
+    if (
+      !elemento.hasAttribute('autocapitalize') &&
+      (elemento.type || 'text').toLowerCase() !== 'search'
+    ) {
+      elemento.setAttribute('autocapitalize', 'sentences')
+    }
+    return
+  }
+
+  if (!elemento.hasAttribute('autocapitalize')) elemento.setAttribute('autocapitalize', 'sentences')
 }
 
 export default function UppercaseInputProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const aplicar = (raiz: ParentNode) => {
-      raiz.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach(el => {
-        if (el.type === 'hidden' || el.type === 'password' || el.type === 'file' || el.type === 'checkbox' || el.type === 'radio') return
-        if (!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'on')
-        if (!el.hasAttribute('autocapitalize') && el.type !== 'email' && el.type !== 'url') el.setAttribute('autocapitalize', 'sentences')
-        if (!el.hasAttribute('spellcheck') && el.type !== 'number' && el.type !== 'tel') el.setAttribute('spellcheck', 'true')
-      })
+      raiz
+        .querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLElement>(
+          'input, textarea, [contenteditable="true"]',
+        )
+        .forEach(prepararCampo)
     }
+
     aplicar(document)
-    const observer = new MutationObserver(registros => registros.forEach(r => r.addedNodes.forEach(n => { if (n instanceof HTMLElement) aplicar(n) })))
-    observer.observe(document.body,{childList:true,subtree:true})
+
+    const observer = new MutationObserver(registros => {
+      registros.forEach(registro => {
+        registro.addedNodes.forEach(node => {
+          if (!(node instanceof HTMLElement)) return
+          prepararCampo(node)
+          aplicar(node)
+        })
+      })
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true })
     return () => observer.disconnect()
   }, [])
 
-  function padronizar(evento: FormEvent<HTMLDivElement>) {
-    const alvo = evento.target
-    if (!(alvo instanceof HTMLInputElement) && !(alvo instanceof HTMLTextAreaElement)) return
-    if (devePreservar(alvo)) return
-
-    const atual = alvo.value
-    const maiusculo = atual.toLocaleUpperCase('pt-BR')
-    if (atual === maiusculo) return
-
-    const inicio = alvo.selectionStart
-    const fim = alvo.selectionEnd
-    // Não usar `alvo.value = maiusculo`: essa atribuição atualiza o rastreador
-    // interno do React e ele deixa de disparar o onChange. O campo mostrava o
-    // texto, mas o estado da tela ficava vazio (busca de cliente sem resultado,
-    // cadastro salvando campo em branco). O setter nativo do protótipo troca o
-    // valor sem enganar o React, e o onChange recebe o texto já em maiúsculas.
-    const prototipo = alvo instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-    const setterNativo = Object.getOwnPropertyDescriptor(prototipo, 'value')?.set
-    if (setterNativo) setterNativo.call(alvo, maiusculo)
-    else alvo.value = maiusculo
-
-    if (inicio != null && fim != null) {
-      try {
-        alvo.setSelectionRange(inicio, fim)
-      } catch {}
-    }
-  }
-
-  return <div className="contents" onInputCapture={padronizar}>{children}</div>
+  return <>{children}</>
 }
