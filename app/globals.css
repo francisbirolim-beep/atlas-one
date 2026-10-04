@@ -319,3 +319,14 @@ input[type="number"] {
     white-space: nowrap;
   }
 }
+
+/*
+ * Escrita natural no Atlas:
+ * nenhum campo editável força maiúsculas por apresentação.
+ * Campos técnicos que realmente precisarem disso podem optar por data-uppercase="true".
+ */
+input:not([data-uppercase="true"]),
+textarea:not([data-uppercase="true"]),
+[contenteditable="true"]:not([data-uppercase="true"]) {
+  text-transform: none !important;
+}
