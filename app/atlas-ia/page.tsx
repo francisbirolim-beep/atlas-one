@@ -153,19 +153,73 @@ export default function AtlasIAPage() {
     void registrarRelato({ texto, anexo }, true)
   }
 
-  async function criarNovaConversaLivre() {
-    const token = await tokenAtual()
-    const r = await fetch('/api/agente/conversas', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token || ''}` },
-    })
-    const j = await r.json()
-    if (!r.ok || !j.conversaId) throw new Error(j.error || 'Não foi possível iniciar uma nova conversa.')
-    return String(j.conversaId)
+  async function carregarConversas() {
+    if (carregandoConversas) return
+    setCarregandoConversas(true)
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/agente/conversas', {
+        headers: { Authorization: 'Bearer ' + (token || '') },
+        cache: 'no-store',
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não foi possível carregar as conversas.')
+      setConversas(Array.isArray(j.conversas) ? j.conversas : [])
+    } catch {
+      // O histórico não pode impedir o usuário de conversar.
+    } finally {
+      setCarregandoConversas(false)
+    }
+  }
+
+  async function carregarConversa(id: string) {
+    if (!id || carregando || carregandoConversa) return
+    setCarregandoConversa(true)
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/agente/conversas?id=' + encodeURIComponent(id), {
+        headers: { Authorization: 'Bearer ' + (token || '') },
+        cache: 'no-store',
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não foi possível abrir a conversa.')
+      const mensagens = Array.isArray(j.mensagens) ? j.mensagens : []
+      setModo('livre')
+      setConversaLivreId(String(j.conversaId || id))
+      setNovaConversaPendente(false)
+      setBolhas(mensagens
+        .filter((m: any) => m.papel === 'user' || m.papel === 'assistant')
+        .map((m: any) => ({
+          papel: m.papel as 'user' | 'assistant',
+          texto: String(m.conteudo || ''),
+          modo: 'Conversa livre',
+        })))
+      setHistorico(mensagens
+        .filter((m: any) => m.papel === 'user' || m.papel === 'assistant')
+        .map((m: any) => ({
+          role: m.papel === 'assistant' ? 'assistant' : 'user',
+          content: String(m.conteudo || ''),
+        })))
+      setImagemPendente(null)
+      setRelatoSugerido(null)
+      setMensagemMelhoria('')
+      setEntrada('')
+      setAnexo(null)
+      window.setTimeout(() => entradaRef.current?.focus(), 50)
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível abrir a conversa.')
+    } finally {
+      setCarregandoConversa(false)
+    }
   }
 
   async function novaConversa() {
-    if (criandoConversa) return
+    if (criandoConversa || carregando) return
+    setCriandoConversa(true)
+    setModo('livre')
+    setConversaLivreId(null)
+    setNovaConversaPendente(true)
     setBolhas([])
     setHistorico([])
     setImagemPendente(null)
@@ -174,30 +228,10 @@ export default function AtlasIAPage() {
     setRelatoSugerido(null)
     setMensagemMelhoria('')
     setErro('')
-
-    if (modo === 'livre') {
-      setConversaLivreId(null)
-      setNovaConversaPendente(true)
-      setCriandoConversa(true)
-      try {
-        const id = await criarNovaConversaLivre()
-        setConversaLivreId(id)
-        setNovaConversaPendente(false)
-      } catch (e: any) {
-        setErro(e?.message || 'Não foi possível iniciar uma nova conversa.')
-      } finally {
-        setCriandoConversa(false)
-      }
-      return
-    }
-
-    setSessoesEspecialistas(prev => {
-      const proximo = { ...prev }
-      delete proximo[modo]
-      return proximo
-    })
+    setSessoesEspecialistas({})
+    window.setTimeout(() => entradaRef.current?.focus(), 50)
+    setCriandoConversa(false)
   }
-
   function trocarModo(novo: ModoChat) {
     if (novo === modo) return
     setModo(novo)
