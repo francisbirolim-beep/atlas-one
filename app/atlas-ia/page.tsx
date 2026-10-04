@@ -358,9 +358,13 @@ export default function AtlasIAPage() {
             <Brain size={17} className="mb-2"/><b>Especialistas Atlas</b>
             <p className="mt-1 text-xs text-white/50">Veja os especialistas e suas funções.</p>
           </Link>
+          <Link href="/atlas-ia/aprendizado" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
+            <Sparkles size={17} className="mb-2"/><b>Central de Aprendizado</b>
+            <p className="mt-1 text-xs text-white/50">Mandar catálogos, cursos, tabelas, regras e revisar validações.</p>
+          </Link>
           <Link href="/atlas-ia/conhecimento" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <FileText size={17} className="mb-2"/><b>Conhecimento por setor</b>
-            <p className="mt-1 text-xs text-white/50">Enviar catálogos, ensinar especialistas e validar o que vira regra oficial.</p>
+            <p className="mt-1 text-xs text-white/50">Conhecimento já organizado por especialista e setor.</p>
           </Link>
           <Link href="/atlas-ia/pessoas" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <HeartHandshake size={17} className="mb-2"/><b>Atlas Pessoas</b>
@@ -383,6 +387,13 @@ export default function AtlasIAPage() {
             <div><h1 className="font-semibold">Atlas IA</h1><p className="text-xs text-slate-500">{nomeModo()}</p></div>
           </div>
           <div className="flex items-center gap-2">
+            {modo === 'livre' && <Link
+              href="/atlas-ia/aprendizado"
+              className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              title="Central de Aprendizado: enviar materiais e validar"
+            >
+              <Sparkles size={15}/><span className="hidden sm:inline">Aprender / validar</span>
+            </Link>}
             {modo !== 'livre' && <Link
               href={'/atlas-ia/conhecimento?modulo=' + modo}
               className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
