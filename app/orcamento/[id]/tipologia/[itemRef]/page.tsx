@@ -17,8 +17,20 @@ const ABAS:Array<{id:Aba;label:string}>=[
   {id:'vidros',label:'Vidros'},{id:'variaveis',label:'Variáveis'},{id:'corte',label:'Lista de corte'},
   {id:'plano',label:'Plano de corte'},{id:'servicos',label:'Serviços / Despesas'},
 ]
-function money(v:unknown){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function pct(v:unknown){return Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:2})}
+function numero(v: unknown) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  let s = String(v ?? '').trim().replace(/[^0-9,.-]/g, '')
+  if (!s) return 0
+  if (s.includes(',') && s.includes('.')) {
+    s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '')
+  } else if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  }
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
+function money(v:unknown){return numero(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function pct(v:unknown){return numero(v).toLocaleString('pt-BR',{maximumFractionDigits:2})}
 function itemRef(item:any,index:number){return String(item?.id||`item-${index+1}`)}
 function nome(item:any,index:number){const r=item?.wvetro_item||{};return r?.Modelo||item?.configuracao_nome||item?.tipo_outro_texto||item?.tipo_esquadria||`Item ${index+1}`}
 function medida(item:any){const r=item?.wvetro_item||{};const l=item?.largura_mm||r?.Largura,a=item?.altura_mm||r?.Altura;return l&&a?`${l} × ${a} mm`:'—'}
@@ -46,9 +58,11 @@ export default function TipologiaOrcamentoPage(){
   const politica=(dados?.politicas||[]).find(p=>String(p.item_ref)===ref)
   const componentes=(dados?.componentes||[]).filter(c=>String(c.item_ref||'')===ref)
   const compsAba=useMemo(()=>{const cats=categoriaAba(aba);return cats.length?componentes.filter(c=>cats.includes(c.categoria)):componentes},[componentes,aba])
-  const custo=Number(politica?.custo_produtivo||0)+Number(politica?.custo_extras||0)
-  const sobra=Number(politica?.custo_sobra||0)
-  const venda=Number(politica?.preco_venda||item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||0)
+  const custo=numero(politica?.custo_produtivo)+numero(politica?.custo_extras)
+  const sobra=numero(politica?.custo_sobra)
+  const vendaPrecificada=numero(politica?.preco_venda)
+  const vendaOriginal=numero(item?.preco_total||item?.wvetro_item?.ValorTotalAlterado||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total)
+  const venda=vendaPrecificada>0?vendaPrecificada:vendaOriginal
   const margem=venda-(custo+sobra), margemPct=venda>0?margem/venda*100:0
   const cobrar=politica?.sobra_herda_geral===false?Boolean(politica?.cobrar_sobra):Boolean(dados?.orcamento?.cobrar_sobra_padrao)
 
