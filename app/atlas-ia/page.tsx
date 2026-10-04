@@ -55,6 +55,7 @@ export default function AtlasIAPage() {
   const entradaRef = useRef<HTMLTextAreaElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
   const modoInicialAplicadoRef = useRef(false)
+  const conversaVersaoRef = useRef(0)
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -185,6 +186,7 @@ export default function AtlasIAPage() {
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || 'Não foi possível abrir a conversa.')
       const mensagens = Array.isArray(j.mensagens) ? j.mensagens : []
+      conversaVersaoRef.current += 1
       setModo('livre')
       setConversaLivreId(String(j.conversaId || id))
       setNovaConversaPendente(false)
@@ -229,6 +231,7 @@ export default function AtlasIAPage() {
       const j = await r.json()
       if (!r.ok || !j.conversaId) throw new Error(j.error || 'Não foi possível iniciar uma nova conversa.')
 
+      conversaVersaoRef.current += 1
       setModo('livre')
       setConversaLivreId(String(j.conversaId))
       setNovaConversaPendente(false)
@@ -250,6 +253,7 @@ export default function AtlasIAPage() {
   }
   function trocarModo(novo: ModoChat) {
     if (novo === modo) return
+    conversaVersaoRef.current += 1
     setModo(novo)
     setBolhas([])
     setHistorico([])
@@ -342,6 +346,7 @@ export default function AtlasIAPage() {
   }
 
   async function enviarMensagem(textoDireto?: string, audio?: AudioChatEnviado) {
+    const versaoConversa = conversaVersaoRef.current
     const texto = String(textoDireto ?? entrada).trim()
     const atual = textoDireto === undefined ? anexo : null
     if ((!texto && !atual) || carregando || criandoConversa) return
@@ -397,6 +402,7 @@ export default function AtlasIAPage() {
         })
         const j = await r.json()
         if (!r.ok) throw new Error(j.error || 'Erro ao falar com o Atlas IA')
+        if (conversaVersaoRef.current !== versaoConversa) return
         if (j.conversaId) {
           setConversaLivreId(String(j.conversaId))
           setNovaConversaPendente(false)
@@ -421,6 +427,7 @@ export default function AtlasIAPage() {
         })
         const j = await r.json()
         if (!r.ok) throw new Error(j.error || 'Erro ao falar com o especialista')
+        if (conversaVersaoRef.current !== versaoConversa) return
         if (j.sessionId) {
           setSessoesEspecialistas(prev => ({ ...prev, [modo]: j.sessionId }))
         }
@@ -431,8 +438,10 @@ export default function AtlasIAPage() {
         }])
       }
     } catch (e: any) {
-      setErro(e.message || 'Erro ao falar com o Atlas IA')
-      if (atual) setAnexo(atual)
+      if (conversaVersaoRef.current === versaoConversa) {
+        setErro(e.message || 'Erro ao falar com o Atlas IA')
+        if (atual) setAnexo(atual)
+      }
     } finally {
       setCarregando(false)
     }
