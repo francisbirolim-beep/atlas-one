@@ -121,13 +121,15 @@ export default function CentralAprendizadoPage(){
   useEffect(()=>{void carregar()},[])
 
   async function uploadDireto(file:File){
+    const {data:{session}}=await supabase.auth.getSession()
+    const uid=session?.user?.id
+    if(!uid)throw new Error('Sessão expirada.')
     const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'')||'bin'
     const id=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():String(Date.now())
-    const path='central-aprendizado/'+id+'.'+ext
-    const {error}=await supabase.storage.from('fotos').upload(path,file,{contentType:file.type||undefined,cacheControl:'3600',upsert:false})
+    const path='ingest/'+uid+'/'+id+'.'+ext
+    const {error}=await supabase.storage.from('atlas-aprendizado').upload(path,file,{contentType:file.type||undefined,cacheControl:'3600',upsert:false})
     if(error)throw new Error('Falha ao enviar arquivo: '+error.message)
-    const {data}=supabase.storage.from('fotos').getPublicUrl(path)
-    return {url:data.publicUrl,nome:file.name,mediaType:file.type||'application/octet-stream',tamanho:file.size}
+    return {path,nome:file.name,mediaType:file.type||'application/octet-stream',tamanho:file.size}
   }
   async function enviar(){
     if(enviando)return
