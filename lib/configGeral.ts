@@ -157,3 +157,50 @@ export async function salvarConfiguracaoOrcamento(config: ConfiguracaoOrcamento)
     })
   return !error
 }
+
+
+export type RegraSobraOrcamento = {
+  coresSemCobranca: string[]
+  cobrarDemaisCores: boolean
+}
+
+export const REGRA_SOBRA_ORCAMENTO_PADRAO: RegraSobraOrcamento = {
+  coresSemCobranca: ['PRETO', 'BRANCO'],
+  cobrarDemaisCores: true,
+}
+
+const CHAVE_REGRA_SOBRA_ORCAMENTO = 'regra_sobra_orcamento'
+
+export async function lerRegraSobraOrcamento(): Promise<RegraSobraOrcamento> {
+  const { data } = await supabase
+    .from('configuracoes_gerais')
+    .select('valor')
+    .eq('chave', CHAVE_REGRA_SOBRA_ORCAMENTO)
+    .maybeSingle()
+
+  if (!data?.valor) return REGRA_SOBRA_ORCAMENTO_PADRAO
+  try {
+    const salvo = JSON.parse(data.valor) as Partial<RegraSobraOrcamento>
+    return {
+      coresSemCobranca: Array.isArray(salvo.coresSemCobranca)
+        ? salvo.coresSemCobranca.map(v => String(v).trim().toUpperCase()).filter(Boolean)
+        : REGRA_SOBRA_ORCAMENTO_PADRAO.coresSemCobranca,
+      cobrarDemaisCores: salvo.cobrarDemaisCores !== false,
+    }
+  } catch {
+    return REGRA_SOBRA_ORCAMENTO_PADRAO
+  }
+}
+
+export async function salvarRegraSobraOrcamento(config: RegraSobraOrcamento): Promise<boolean> {
+  const normalizada: RegraSobraOrcamento = {
+    coresSemCobranca: (config.coresSemCobranca || []).map(v => String(v).trim().toUpperCase()).filter(Boolean),
+    cobrarDemaisCores: Boolean(config.cobrarDemaisCores),
+  }
+  const { error } = await supabase.from('configuracoes_gerais').upsert({
+    chave: CHAVE_REGRA_SOBRA_ORCAMENTO,
+    valor: JSON.stringify(normalizada),
+    updated_at: new Date().toISOString(),
+  })
+  return !error
+}

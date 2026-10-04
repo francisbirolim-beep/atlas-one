@@ -399,3 +399,12 @@ Nenhum merge para `main`.
 - O clique abre a composição técnica atual; a nova apresentação comercial Atlas fica para a etapa seguinte.
 
 [executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
+## 2026-10-04 — Orçamento Atlas V2 / W.Vetro
+
+- visão geral do orçamento em lista, conforme protótipos aprovados;
+- detalhe por tipologia com resumo, variáveis e componentes;
+- impressão total ou parcial por seleção de tipologias;
+- plano de corte filtrável por tipologia;
+- lista de materiais filtrável por tipo e seleção;
+- regra automática de cobrança de sobra por cor com override manual;
+- edição técnica reutiliza o motor já existente de overrides e histórico, sem duplicar regras.

@@ -19,7 +19,25 @@ function txt(...vs: unknown[]) {
 function num(...vs: unknown[]) {
   for (const v of vs) {
     if (v === null || v === undefined || v === '') continue
-    const n = Number(String(v).replace(',', '.').replace(/[^0-9.-]/g, ''))
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    let s = String(v).trim().replace(/[^0-9,.-]/g, '')
+    if (!s) continue
+    const temVirgula = s.includes(',')
+    const temPonto = s.includes('.')
+    if (temVirgula && temPonto) {
+      // W.Vetro pode devolver número em pt-BR: 1.234,56.
+      // O último separador define a casa decimal; os demais são milhares.
+      const ultimaVirgula = s.lastIndexOf(',')
+      const ultimoPonto = s.lastIndexOf('.')
+      if (ultimaVirgula > ultimoPonto) s = s.replace(/\./g, '').replace(',', '.')
+      else s = s.replace(/,/g, '')
+    } else if (temVirgula) {
+      s = s.replace(/\./g, '').replace(',', '.')
+    } else if (temPonto) {
+      const partes = s.split('.')
+      if (partes.length > 2) s = partes.join('')
+    }
+    const n = Number(s)
     if (Number.isFinite(n)) return n
   }
   return 0

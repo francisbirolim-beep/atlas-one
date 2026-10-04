@@ -8,6 +8,7 @@ import {
   type PacoteTecnico,
 } from './materialPlanejamento'
 import { registrarOverrideOrcamento, substituirComponenteDefinitivo } from './historicoTipologias'
+import { lerRegraSobraOrcamento } from './configGeral'
 
 export type CategoriaPrecificacao = 'perfil' | 'acessorio' | 'vidro' | 'mao_obra' | 'instalacao' | 'deslocamento' | 'frete' | 'pintura' | 'terceiro' | 'consumivel' | 'outro'
 
@@ -406,22 +407,53 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
   if (linhas.length) await supabase.from('orcamento_precificacao_componentes').insert(linhas)
 }
 
+function normalizarCorSobra(valor: unknown) {
+  return String(valor || '').trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+function corItemOrcamento(item: any, orcamento: any) {
+  const raw = item?.wvetro_item || {}
+  return item?.cor || item?.acabamento || item?.cor_nome || raw?.Cor || raw?.Acabamento || orcamento?.acabamento || ''
+}
+
 async function garantirPoliticas(orcamento: any) {
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const { data: existentes } = await supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamento.id)
-  const refs = new Set<string>(((existentes || []) as any[]).map((x: any) => String(x.item_ref)))
+  const existentesLista = ((existentes || []) as any[])
+  const refs = new Set<string>(existentesLista.map((x: any) => String(x.item_ref)))
+  const regra = await lerRegraSobraOrcamento()
+  const semCobranca = new Set(regra.coresSemCobranca.map(normalizarCorSobra))
   const novos = itens
-    .map((item: any, idx: number): string => itemRef(item, idx))
-    .filter((ref: string) => !refs.has(ref))
-    .map((ref: string) => ({
-      orcamento_id: orcamento.id,
-      item_ref: ref,
-      margem_herda_geral: true,
-      margem_pct: null,
-      sobra_herda_geral: true,
-      cobrar_sobra: null,
-    }))
+    .map((item: any, idx: number) => ({ item, ref: itemRef(item, idx) }))
+    .filter(({ ref }) => !refs.has(ref))
+    .map(({ item, ref }) => {
+      const cor = normalizarCorSobra(corItemOrcamento(item, orcamento))
+      const cobrar = cor ? (!semCobranca.has(cor) && regra.cobrarDemaisCores) : Boolean(orcamento.cobrar_sobra_padrao)
+      return {
+        orcamento_id: orcamento.id,
+        item_ref: ref,
+        margem_herda_geral: true,
+        margem_pct: null,
+        sobra_herda_geral: false,
+        cobrar_sobra: cobrar,
+      }
+    })
   if (novos.length) await supabase.from('orcamento_item_precificacao').insert(novos)
+
+  // Políticas antigas ainda neutras recebem a regra automática por cor uma única vez.
+  for (const p of existentesLista) {
+    if (p.sobra_herda_geral !== true || p.cobrar_sobra != null) continue
+    const idx = itens.findIndex((item: any, index: number) => itemRef(item, index) === String(p.item_ref))
+    if (idx < 0) continue
+    const cor = normalizarCorSobra(corItemOrcamento(itens[idx], orcamento))
+    if (!cor) continue
+    const cobrar = !semCobranca.has(cor) && regra.cobrarDemaisCores
+    await supabase.from('orcamento_item_precificacao').update({
+      sobra_herda_geral: false,
+      cobrar_sobra: cobrar,
+    }).eq('id', p.id)
+  }
 }
 
 export async function gerarBasePrecificacao(orcamentoId: string, opcoes: { perdaCorteMm?: number; minimoSobraReaproveitavelMm?: number } = {}) {

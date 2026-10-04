@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Boxes, FileText, Loader2, Printer, TriangleAlert } from 'lucide-react'
 import {
   carregarListaMateriaisOrcamento,
@@ -89,11 +89,14 @@ function TabelaMateriais({ linhas, consolidada }: { linhas: LinhaMaterialOrcamen
 
 export default function ListaMateriaisOrcamentoPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const orcamentoId = String(params?.id || '')
   const [dados, setDados] = useState<ListaMateriaisOrcamento | null>(null)
   const [carregando, setCarregando] = useState(true)
+  const filtroInicial = (searchParams.get('filtro') || 'todos') as Filtro
   const [modo, setModo] = useState<Modo>('individual')
-  const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [filtro, setFiltro] = useState<Filtro>(FILTROS.some(f => f.id === filtroInicial) ? filtroInicial : 'todos')
+  const refsSelecionados = useMemo(() => new Set((searchParams.get('refs') || '').split(',').filter(Boolean)), [searchParams])
 
   useEffect(() => {
     if (!orcamentoId) return
@@ -104,9 +107,10 @@ export default function ListaMateriaisOrcamentoPage() {
   }, [orcamentoId])
 
   const linhas = useMemo(() => {
-    const base = modo === 'individual' ? dados?.individual || [] : dados?.consolidada || []
+    let base = modo === 'individual' ? dados?.individual || [] : dados?.consolidada || []
+    if (refsSelecionados.size) base = base.filter(linha => linha.origens.some(origem => refsSelecionados.has(origem.item_ref)))
     return filtro === 'todos' ? base : base.filter(linha => linha.grupo === filtro)
-  }, [dados, filtro, modo])
+  }, [dados, filtro, modo, refsSelecionados])
 
   const gruposIndividuais = useMemo(() => {
     const mapa = new Map<string, LinhaMaterialOrcamento[]>()
@@ -169,7 +173,7 @@ export default function ListaMateriaisOrcamentoPage() {
           <div className="flex flex-wrap gap-1">{FILTROS.map(item => <button key={item.id} onClick={() => setFiltro(item.id)} className={`rounded-lg px-3 py-1.5 text-sm ${filtro === item.id ? 'bg-slate-900 font-semibold text-white' : 'border bg-white text-slate-600'}`}>{item.label}</button>)}</div>
         </section>
 
-        <div className="hidden text-sm print:block"><b>Visualização:</b> {modo === 'individual' ? 'por tipologia' : 'consolidada'} · <b>Filtro:</b> {filtroLabel}</div>
+        <div className="hidden text-sm print:block"><b>Visualização:</b> {modo === 'individual' ? 'por tipologia' : 'consolidada'} · <b>Filtro:</b> {filtroLabel}{refsSelecionados.size ? ` · ${refsSelecionados.size} tipologia(s) selecionada(s)` : ''}</div>
 
         {modo === 'consolidada' ? <section className="space-y-3"><div className="flex items-center gap-2"><FileText size={18} /><h2 className="text-lg font-bold">Materiais consolidados</h2></div><TabelaMateriais linhas={linhas} consolidada /></section> : <div className="space-y-6">{Array.from(gruposIndividuais.entries()).map(([ref, lista], indice) => <section key={ref} className="space-y-3 print:break-before-auto"><div><p className="text-xs font-semibold uppercase text-slate-400">Tipologia {indice + 1}</p><h2 className="text-lg font-bold">{dados.itemLabels[ref] || lista[0]?.origens[0]?.label || ref}</h2></div><TabelaMateriais linhas={lista} consolidada={false} /></section>)}</div>}
       </>}

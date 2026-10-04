@@ -439,3 +439,13 @@ Depois de validar a sincronização por Cliente 360:
 5. permitir visão consolidada do orçamento inteiro e visão individual por tipologia, reaproveitando os motores técnicos existentes em vez de duplicar cálculo.
 
 [executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
+## PRÓXIMO PASSO — validar Orçamento Atlas V2 em Preview
+
+1. abrir o orçamento W.Vetro #1165 da Giselle Gomes no Cliente 360;
+2. conferir lista compacta e valores por tipologia;
+3. testar flag de sobra em item preto/branco e em cor especial;
+4. selecionar uma, duas e todas as tipologias e gerar Perfis/Acessórios/Vidros/Lista de corte/Plano de corte;
+5. abrir uma tipologia e validar Resumo, Perfis, Acessórios, Vidros e Variáveis;
+6. testar incluir/trocar/excluir componente pela Conferência de Custos filtrada por `itemRef`;
+7. confirmar que o original W.Vetro continua preservado e que o PDF Atlas permanece separado;
+8. após aprovação visual/funcional, fazer o merge e um único deploy de produção.

@@ -60,6 +60,7 @@ export default function PrecificacaoOrcamentoPage(){
   const params=useParams(); const orcamentoId=String(params?.id||'')
   const router=useRouter(); const searchParams=useSearchParams()
   const etapaDaUrl=searchParams.get('etapa')||'perfis'
+  const itemRefFiltro=searchParams.get('itemRef')||''
   const [dados,setDados]=useState<PrecificacaoOrcamento|null>(null)
   const [aba,setAba]=useState(ABA_IDS.has(etapaDaUrl)?etapaDaUrl:'perfis'),[carregando,setCarregando]=useState(true),[ocupado,setOcupado]=useState(false)
   const [erro,setErro]=useState(''),[mensagem,setMensagem]=useState('')
@@ -85,7 +86,7 @@ export default function PrecificacaoOrcamentoPage(){
 
   const itens=Array.isArray(dados?.orcamento?.itens)?dados!.orcamento.itens:[]
   const politicas=useMemo(()=>new Map((dados?.politicas||[]).map(p=>[p.item_ref,p])),[dados?.politicas])
-  const componentesAba=useMemo(()=>{const cfg=ABAS.find(a=>a.id===aba);return (dados?.componentes||[]).filter(c=>cfg?.cats.includes(c.categoria))},[dados?.componentes,aba])
+  const componentesAba=useMemo(()=>{const cfg=ABAS.find(a=>a.id===aba);return (dados?.componentes||[]).filter(c=>cfg?.cats.includes(c.categoria)).filter(c=>!itemRefFiltro||String(c.item_ref||'')===itemRefFiltro)},[dados?.componentes,aba,itemRefFiltro])
   const extrasPermitidos=useMemo(()=>EXTRA_CATS.filter(x=>aba==='servicos'?['mao_obra','instalacao','pintura','terceiro'].includes(x.value):aba==='despesas'?['deslocamento','frete','consumivel','outro'].includes(x.value):false),[aba])
   const produtosTroca=useMemo(()=>{if(!troca||!dados)return[];const cat=troca.componente.categoria==='perfil'?'perfil':'acessorio';return dados.produtos.filter(p=>p.categoria===cat)},[troca,dados])
   const totalCusto=(dados?.politicas||[]).reduce((s,p)=>s+Number(p.custo_total||0),0)+(dados?.componentes||[]).filter(c=>!c.item_ref).reduce((s,c)=>s+Number(c.custo_total||0),0)
@@ -96,7 +97,7 @@ export default function PrecificacaoOrcamentoPage(){
   const proximaAba=ABAS[abaIndex+1]
   const temPendencias=Boolean(dados?.pendencias?.length)
   useEffect(()=>{if((aba==='servicos'||aba==='despesas')&&extrasPermitidos.length&&!extrasPermitidos.some(x=>x.value===extra.categoria))setExtra(prev=>({...prev,categoria:extrasPermitidos[0].value}))},[aba,extrasPermitidos,extra.categoria])
-  function trocarAba(id:string){if(!ABA_IDS.has(id))return;setAba(id);router.push(`/orcamento/${orcamentoId}/precificacao?etapa=${id}`,{scroll:false});window.setTimeout(()=>document.getElementById('fluxo-precificacao')?.scrollIntoView({behavior:'smooth',block:'start'}),0)}
+  function trocarAba(id:string){if(!ABA_IDS.has(id))return;setAba(id);const filtro=itemRefFiltro?`&itemRef=${encodeURIComponent(itemRefFiltro)}`:'';router.push(`/orcamento/${orcamentoId}/precificacao?etapa=${id}${filtro}`,{scroll:false});window.setTimeout(()=>document.getElementById('fluxo-precificacao')?.scrollIntoView({behavior:'smooth',block:'start'}),0)}
   function quantidadeDaAba(id:string){const cfg=ABAS.find(a=>a.id===id);if(!cfg||id==='resumo')return null;return (dados?.componentes||[]).filter(c=>cfg.cats.includes(c.categoria)).length}
   function custoDaAba(id:string){const cfg=ABAS.find(a=>a.id===id);if(!cfg||id==='resumo')return 0;return (dados?.componentes||[]).filter(c=>cfg.cats.includes(c.categoria)).reduce((s,c)=>s+Number(c.custo_total||0),0)}
 
@@ -118,7 +119,7 @@ export default function PrecificacaoOrcamentoPage(){
 
   return <main className="min-h-screen bg-slate-50 p-4 md:p-7"><div className="mx-auto max-w-7xl space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><Link href={`/orcamento/${orcamentoId}/composicao`} className="mb-2 inline-flex items-center gap-2 text-sm text-slate-500"><ArrowLeft size={16}/> Voltar à composição</Link><div className="flex items-center gap-3"><Calculator className="text-emerald-600"/><div><h1 className="text-2xl font-bold text-slate-900">Conferência de Custos</h1><p className="text-sm text-slate-500">Orçamento #{dados.orcamento.numero||'—'} · {dados.orcamento.clientes?.nome||dados.orcamento.cliente_nome||'Cliente'} · valide todos os custos reais antes de margem e sobra.</p></div></div></div><div className="flex flex-wrap gap-2"><Link href={`/orcamento/${orcamentoId}/materiais`} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold"><FileText size={15}/> Lista de materiais</Link><Link href="/engenharia/historico-tipologias" className="rounded-xl border bg-white px-3 py-2 text-sm font-semibold">Histórico técnico</Link><button disabled={ocupado} onClick={()=>void recalcular()} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{ocupado?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>} Recalcular composição</button></div></header>
-    {erro&&<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}{mensagem&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{mensagem}</div>}
+    {erro&&<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}{mensagem&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{mensagem}</div>}{itemRefFiltro&&<div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"><span><b>Filtro ativo:</b> mostrando somente a tipologia selecionada.</span><Link href={`/orcamento/${orcamentoId}/precificacao?etapa=${aba}`} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold">Ver orçamento inteiro</Link></div>}
     <FluxoPrecificacaoEtapas orcamentoId={orcamentoId} atual="custos" bloqueado={temPendencias}/>
 
 
