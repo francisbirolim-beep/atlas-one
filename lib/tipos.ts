@@ -40,6 +40,9 @@ export interface Usuario {
       email: string
       role: RoleUsuario
       whatsapp?: string | null
+      cargo?: string | null
+      setor_principal_id?: string | null
+      observacoes_perfil?: string | null
       created_at?: string
 }
 

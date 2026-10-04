@@ -30,12 +30,19 @@ export async function POST(req: NextRequest) {
     const senha = (body.senha || '').trim()
     const role = body.role === 'master' ? 'master' : 'funcionario'
     const whatsapp = (body.whatsapp || '').trim() || null
+    const cargo = (body.cargo || '').trim() || null
+    const setorPrincipalId = (body.setor_principal_id || '').trim() || null
+    const observacoesPerfil = (body.observacoes_perfil || '').trim() || null
 
     if (!nome || !senha) {
       return NextResponse.json({ error: 'Preencha nome e senha' }, { status: 400 })
     }
     if (senha.length < 6) {
       return NextResponse.json({ error: 'A senha precisa ter pelo menos 6 caracteres' }, { status: 400 })
+    }
+    if (setorPrincipalId) {
+      const { data: setor } = await supabaseAdmin.from('setores').select('id').eq('id', setorPrincipalId).maybeSingle()
+      if (!setor) return NextResponse.json({ error: 'Setor principal inválido.' }, { status: 400 })
     }
 
     const gerarEmailAuto = (nomeBase: string): string => {
@@ -93,6 +100,9 @@ export async function POST(req: NextRequest) {
       email: emailFinal,
       role,
       whatsapp,
+      cargo,
+      setor_principal_id: setorPrincipalId,
+      observacoes_perfil: observacoesPerfil,
       empresa_id: perfil.empresa_id,
     })
 

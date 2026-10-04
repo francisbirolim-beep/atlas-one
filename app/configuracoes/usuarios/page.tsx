@@ -12,6 +12,8 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Building2,
+  Briefcase,
   UserPlus,
   Users,
   X,
@@ -28,7 +30,8 @@ import {
   type HomeModuloId,
   type HomeUsuarioConfig,
 } from '@/lib/homeUsuario'
-import type { Usuario } from '@/lib/tipos'
+import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
+import { agruparSetores, listarGruposComItens, listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
 import {
   CADASTROS_360,
   cadastrosConfigPadrao,
@@ -61,6 +64,17 @@ export default function UsuariosSenhasPage() {
   const [msgHome, setMsgHome] = useState('')
   const [cadastrosConfig, setCadastrosConfig] = useState<CadastrosUsuarioConfig | null>(null)
   const [msgCadastros, setMsgCadastros] = useState('')
+  const [setores, setSetores] = useState<Setor[]>([])
+  const [permissoesSetores, setPermissoesSetores] = useState<Record<string, NivelPermissao>>({})
+  const [carregandoPermissoes, setCarregandoPermissoes] = useState(false)
+  const [salvandoPermissoes, setSalvandoPermissoes] = useState(false)
+  const [msgPermissoes, setMsgPermissoes] = useState('')
+  const [perfilEdit, setPerfilEdit] = useState({
+    nome: '', email: '', whatsapp: '', cargo: '', setor_principal_id: '',
+    role: 'funcionario' as Usuario['role'], observacoes_perfil: '',
+  })
+  const [salvandoPerfil, setSalvandoPerfil] = useState(false)
+  const [msgPerfil, setMsgPerfil] = useState('')
 
   const [novoAberto, setNovoAberto] = useState(false)
   const [novoNome, setNovoNome] = useState('')
@@ -82,11 +96,12 @@ export default function UsuariosSenhasPage() {
     setMaster(souMaster)
 
     if (souMaster) {
-      const { data } = await supabase
-        .from('usuarios')
-        .select('*')
-        .order('nome', { ascending: true })
+      const [{ data }, setoresLista] = await Promise.all([
+        supabase.from('usuarios').select('*').order('nome', { ascending: true }),
+        listarSetores(),
+      ])
       setUsuarios((data as Usuario[]) || [])
+      setSetores(setoresLista)
     }
 
     setCarregando(false)
@@ -98,8 +113,14 @@ export default function UsuariosSenhasPage() {
   const usuariosFiltrados = useMemo(() => {
     const q = normalizar(busca)
     if (!q) return usuarios
-    return usuarios.filter(u => normalizar(`${u.nome || ''} ${u.email || ''} ${u.role || ''}`).includes(q))
-  }, [busca, usuarios])
+    return usuarios.filter(u => {
+      const setor = setores.find(s => s.id === u.setor_principal_id)?.nome || ''
+      return normalizar(`${u.nome || ''} ${u.email || ''} ${u.role || ''} ${u.cargo || ''} ${setor}`).includes(q)
+    })
+  }, [busca, usuarios, setores])
+
+  const setoresPorGrupo = useMemo(() => agruparSetores(setores), [setores])
+  const gruposSetores = useMemo(() => listarGruposComItens(setores), [setores])
 
   async function selecionarUsuario(id: string) {
     setUsuarioId(id)
@@ -109,16 +130,31 @@ export default function UsuariosSenhasPage() {
     setSucesso('')
     setMsgHome('')
     setMsgCadastros('')
+    setMsgPermissoes('')
+    setMsgPerfil('')
     const usuario = usuarios.find(u => u.id === id)
     if (!usuario) return
+    setPerfilEdit({
+      nome: usuario.nome || '',
+      email: usuario.email || '',
+      whatsapp: usuario.whatsapp || '',
+      cargo: usuario.cargo || '',
+      setor_principal_id: usuario.setor_principal_id || '',
+      role: usuario.role,
+      observacoes_perfil: usuario.observacoes_perfil || '',
+    })
     setCarregandoHome(true)
-    const [home, cadastros] = await Promise.all([
+    setCarregandoPermissoes(true)
+    const [home, cadastros, permissoes] = await Promise.all([
       lerHomeUsuarioConfig(usuario),
       lerCadastrosUsuarioConfig(usuario),
+      listarPermissoesUsuario(usuario.id),
     ])
     setHomeConfig(home)
     setCadastrosConfig(cadastros)
+    setPermissoesSetores(Object.fromEntries(setores.map(s => [s.id, permissoes[s.id] || 'oculto'])) as Record<string, NivelPermissao>)
     setCarregandoHome(false)
+    setCarregandoPermissoes(false)
   }
 
   function alternarModulo(config: HomeUsuarioConfig, setConfig: (valor: HomeUsuarioConfig) => void, modulo: HomeModuloId) {
@@ -168,6 +204,50 @@ export default function UsuariosSenhasPage() {
       : await salvarCadastrosUsuarioConfig(usuarioSelecionado.id, cadastrosConfig)
     setSalvandoHome(false)
     setMsgCadastros(ok ? 'Cadastros 360 salvos. O usuário verá apenas as opções marcadas.' : 'Não foi possível salvar os Cadastros 360.')
+  }
+
+  async function salvarPerfilUsuario() {
+    if (!usuarioSelecionado) return
+    if (!perfilEdit.nome.trim() || !perfilEdit.email.trim()) {
+      setMsgPerfil('Nome e e-mail são obrigatórios.')
+      return
+    }
+    setSalvandoPerfil(true)
+    setMsgPerfil('')
+    const token = await tokenAtual()
+    if (!token) {
+      setSalvandoPerfil(false)
+      setMsgPerfil('Sua sessão expirou. Entre novamente no Atlas.')
+      return
+    }
+    const resp = await fetch('/api/atualizar-usuario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id: usuarioSelecionado.id, ...perfilEdit }),
+    })
+    const json = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      setSalvandoPerfil(false)
+      setMsgPerfil(json.error || 'Não foi possível salvar o perfil.')
+      return
+    }
+    const { data } = await supabase.from('usuarios').select('*').order('nome', { ascending: true })
+    setUsuarios((data as Usuario[]) || [])
+    setSalvandoPerfil(false)
+    setMsgPerfil('Perfil funcional salvo com sucesso.')
+  }
+
+  function mudarPermissaoSetor(setorId: string, nivel: NivelPermissao) {
+    setPermissoesSetores(prev => ({ ...prev, [setorId]: nivel }))
+  }
+
+  async function salvarAcessosSetores() {
+    if (!usuarioSelecionado) return
+    setSalvandoPermissoes(true)
+    setMsgPermissoes('')
+    const resultado = await salvarPermissoesUsuario(usuarioSelecionado.id, permissoesSetores)
+    setSalvandoPermissoes(false)
+    setMsgPermissoes(resultado.error ? 'Não foi possível salvar as permissões.' : 'Permissões por setor salvas.')
   }
 
   async function salvarSenha(e: React.FormEvent) {
@@ -333,7 +413,7 @@ export default function UsuariosSenhasPage() {
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy text-white"><Users size={20} /></div>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-slate-800">Usuários e acesso</h1>
-            <p className="text-sm text-slate-500">Crie usuários, defina senhas e monte a tela inicial de cada pessoa.</p>
+            <p className="text-sm text-slate-500">Cadastre o perfil funcional e defina exatamente o que cada pessoa pode ver e editar.</p>
           </div>
           <button type="button" onClick={() => { setNovoAberto(true); setSucessoNovo(''); setErroNovo('') }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"><UserPlus size={16}/> Novo usuário</button>
         </div>
@@ -405,9 +485,35 @@ export default function UsuariosSenhasPage() {
 
           <aside className="space-y-5 lg:sticky lg:top-24 lg:h-fit">
             {!usuarioSelecionado ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 py-10 text-center"><KeyRound className="mx-auto mb-3 text-slate-300" size={38} /><p className="font-medium text-slate-700">Selecione um usuário</p><p className="mt-1 text-xs leading-relaxed text-slate-500">Depois você poderá alterar a senha e montar a tela inicial.</p></div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 py-10 text-center"><KeyRound className="mx-auto mb-3 text-slate-300" size={38} /><p className="font-medium text-slate-700">Selecione um usuário</p><p className="mt-1 text-xs leading-relaxed text-slate-500">Depois você poderá editar dados, setor, função, permissões, senha e tela inicial.</p></div>
             ) : (
               <>
+                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-start gap-2"><Briefcase size={18} className="mt-0.5 text-brand-navy"/><div><h2 className="font-semibold text-slate-900">Perfil de {usuarioSelecionado.nome.split(' ')[0]}</h2><p className="text-xs text-slate-500">Quem é esta pessoa dentro da empresa.</p></div></div>
+                  <div className="space-y-3">
+                    <label className="block text-xs font-medium text-slate-600">Nome completo<input value={perfilEdit.nome} onChange={e=>setPerfilEdit({...perfilEdit,nome:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
+                    <label className="block text-xs font-medium text-slate-600">E-mail / login<input type="email" value={perfilEdit.email} onChange={e=>setPerfilEdit({...perfilEdit,email:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
+                    <label className="block text-xs font-medium text-slate-600">WhatsApp<input value={perfilEdit.whatsapp} onChange={e=>setPerfilEdit({...perfilEdit,whatsapp:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block text-xs font-medium text-slate-600">Cargo / função<input value={perfilEdit.cargo} onChange={e=>setPerfilEdit({...perfilEdit,cargo:e.target.value})} placeholder="Ex.: Financeiro, RH, Vendas" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
+                      <label className="block text-xs font-medium text-slate-600">Setor principal<select value={perfilEdit.setor_principal_id} onChange={e=>setPerfilEdit({...perfilEdit,setor_principal_id:e.target.value})} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"><option value="">Não definido</option>{setores.filter(s=>s.ativo).map(s=><option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+                    </div>
+                    <label className="block text-xs font-medium text-slate-600">Tipo de acesso<select value={perfilEdit.role} onChange={e=>setPerfilEdit({...perfilEdit,role:e.target.value as Usuario['role']})} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"><option value="funcionario">Funcionário — acessos definidos abaixo</option><option value="master">Master — acesso total</option></select></label>
+                    <label className="block text-xs font-medium text-slate-600">Observações do perfil<textarea value={perfilEdit.observacoes_perfil} onChange={e=>setPerfilEdit({...perfilEdit,observacoes_perfil:e.target.value})} rows={2} placeholder="Responsabilidades, observações internas..." className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label>
+                    {msgPerfil && <p className="text-xs text-slate-600">{msgPerfil}</p>}
+                    <button type="button" onClick={()=>void salvarPerfilUsuario()} disabled={salvandoPerfil} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy py-3 text-sm font-semibold text-white disabled:opacity-50">{salvandoPerfil?<Loader2 size={17} className="animate-spin"/>:<Save size={17}/>}Salvar perfil</button>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-start gap-2"><Building2 size={18} className="mt-0.5 text-blue-600"/><div><h2 className="font-semibold text-slate-900">Permissões por setor</h2><p className="text-xs text-slate-500">Defina o que {usuarioSelecionado.nome.split(' ')[0]} pode consultar ou editar.</p></div></div>
+                  {perfilEdit.role === 'master' ? <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-700">Usuário Master tem acesso total a todos os setores.</div> : carregandoPermissoes ? <div className="grid place-items-center py-8 text-slate-400"><Loader2 className="animate-spin" size={20}/></div> : <div className="space-y-4">
+                    {gruposSetores.map(grupo=><div key={grupo}><p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{grupo}</p><div className="space-y-1.5">{(setoresPorGrupo[grupo]||[]).filter(s=>s.ativo).map(setor=><div key={setor.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-2.5"><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-700">{setor.nome}</p></div><select value={permissoesSetores[setor.id]||'oculto'} onChange={e=>mudarPermissaoSetor(setor.id,e.target.value as NivelPermissao)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"><option value="oculto">Oculto</option><option value="consulta">Consultar</option><option value="edicao">Editar</option></select></div>)}</div></div>)}
+                    {msgPermissoes && <p className="text-xs text-slate-600">{msgPermissoes}</p>}
+                    <button type="button" onClick={()=>void salvarAcessosSetores()} disabled={salvandoPermissoes} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">{salvandoPermissoes?<Loader2 size={17} className="animate-spin"/>:<ShieldCheck size={17}/>}Salvar permissões por setor</button>
+                  </div>}
+                </section>
+
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
                   <form onSubmit={salvarSenha} className="space-y-4">
                     <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alterar senha de</p><p className="mt-1 font-semibold text-slate-800">{usuarioSelecionado.nome}</p><p className="text-xs text-slate-500">{usuarioSelecionado.email}</p></div>

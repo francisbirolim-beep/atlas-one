@@ -48,6 +48,9 @@ export async function POST(req: NextRequest) {
     const nomeInformado = typeof body.nome === 'string' ? body.nome.trim() : undefined
     const emailInformado = typeof body.email === 'string' ? body.email.trim().toLowerCase() : undefined
     const whatsappInformado = typeof body.whatsapp === 'string' ? (body.whatsapp.trim() || null) : undefined
+    const cargoInformado = typeof body.cargo === 'string' ? (body.cargo.trim() || null) : undefined
+    const setorPrincipalInformado = typeof body.setor_principal_id === 'string' ? (body.setor_principal_id.trim() || null) : undefined
+    const observacoesPerfilInformado = typeof body.observacoes_perfil === 'string' ? (body.observacoes_perfil.trim() || null) : undefined
     const roleInformado = body.role === 'master' || body.role === 'funcionario' ? body.role : undefined
     const novaSenha = typeof body.novaSenha === 'string' ? body.novaSenha.trim() : ''
 
@@ -59,6 +62,13 @@ export async function POST(req: NextRequest) {
     }
     if (novaSenha && novaSenha.length < 6) {
       return NextResponse.json({ error: 'A nova senha precisa ter pelo menos 6 caracteres' }, { status: 400 })
+    }
+    if (roleInformado === 'funcionario' && alvo.id === userData.user.id) {
+      return NextResponse.json({ error: 'O usuário Master não pode retirar o próprio acesso Master.' }, { status: 400 })
+    }
+    if (setorPrincipalInformado) {
+      const { data: setor } = await supabaseAdmin.from('setores').select('id').eq('id', setorPrincipalInformado).maybeSingle()
+      if (!setor) return NextResponse.json({ error: 'Setor principal inválido.' }, { status: 400 })
     }
 
     if (novaSenha || emailInformado) {
@@ -73,6 +83,9 @@ export async function POST(req: NextRequest) {
 
     const camposPerfil: Record<string, any> = {}
     if (whatsappInformado !== undefined) camposPerfil.whatsapp = whatsappInformado
+    if (cargoInformado !== undefined) camposPerfil.cargo = cargoInformado
+    if (setorPrincipalInformado !== undefined) camposPerfil.setor_principal_id = setorPrincipalInformado
+    if (observacoesPerfilInformado !== undefined) camposPerfil.observacoes_perfil = observacoesPerfilInformado
     if (nomeInformado !== undefined) camposPerfil.nome = nomeInformado
     if (emailInformado !== undefined) camposPerfil.email = emailInformado
     if (roleInformado !== undefined) camposPerfil.role = roleInformado
