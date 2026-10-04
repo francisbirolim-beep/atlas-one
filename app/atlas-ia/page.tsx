@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, History, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -24,6 +24,7 @@ type Bolha = {
 type Anexo = { nome: string; mediaType: string; tipo: 'imagem' | 'pdf' | 'texto'; dados: string }
 type ImagemPendente = { prompt: string; usd: number; model: string; quality: string; size: string }
 type RelatoSugerido = { texto: string; anexo: Anexo | null; audioStoragePath?: string | null }
+type ConversaResumo = { id: string; titulo: string; preview: string; createdAt: string; updatedAt: string; mensagens: number }
 
 const MAX = 8 * 1024 * 1024
 const PEDIDO_IMAGEM = /\b(gere|gerar|crie|criar|faça|faca|produza|desenhe|imagem|foto)\b.*\b(imagem|foto|porta|janela|esquadria|desenho|render)\b/i
@@ -47,7 +48,11 @@ export default function AtlasIAPage() {
   const [conversaLivreId, setConversaLivreId] = useState<string | null>(null)
   const [criandoConversa, setCriandoConversa] = useState(false)
   const [novaConversaPendente, setNovaConversaPendente] = useState(false)
+  const [conversas, setConversas] = useState<ConversaResumo[]>([])
+  const [carregandoConversas, setCarregandoConversas] = useState(false)
+  const [carregandoConversa, setCarregandoConversa] = useState(false)
   const arquivoRef = useRef<HTMLInputElement>(null)
+  const entradaRef = useRef<HTMLTextAreaElement>(null)
   const fimRef = useRef<HTMLDivElement>(null)
   const modoInicialAplicadoRef = useRef(false)
   const searchParams = useSearchParams()
@@ -66,6 +71,11 @@ export default function AtlasIAPage() {
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [bolhas, carregando, imagemPendente])
+
+  useEffect(() => {
+    if (!usuario?.id) return
+    void carregarConversas()
+  }, [usuario?.id])
 
   const especialistas = useMemo(() => {
     if (!usuario) return []
