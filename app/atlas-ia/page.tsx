@@ -215,22 +215,38 @@ export default function AtlasIAPage() {
   }
 
   async function novaConversa() {
-    if (criandoConversa || carregando) return
+    if (criandoConversa) return
     setCriandoConversa(true)
-    setModo('livre')
-    setConversaLivreId(null)
-    setNovaConversaPendente(true)
-    setBolhas([])
-    setHistorico([])
-    setImagemPendente(null)
-    setEntrada('')
-    setAnexo(null)
-    setRelatoSugerido(null)
-    setMensagemMelhoria('')
     setErro('')
-    setSessoesEspecialistas({})
-    window.setTimeout(() => entradaRef.current?.focus(), 50)
-    setCriandoConversa(false)
+    try {
+      const token = await tokenAtual()
+      if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const r = await fetch('/api/agente/conversas', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        cache: 'no-store',
+      })
+      const j = await r.json()
+      if (!r.ok || !j.conversaId) throw new Error(j.error || 'Não foi possível iniciar uma nova conversa.')
+
+      setModo('livre')
+      setConversaLivreId(String(j.conversaId))
+      setNovaConversaPendente(false)
+      setBolhas([])
+      setHistorico([])
+      setImagemPendente(null)
+      setEntrada('')
+      setAnexo(null)
+      setRelatoSugerido(null)
+      setMensagemMelhoria('')
+      setSessoesEspecialistas({})
+      window.setTimeout(() => entradaRef.current?.focus(), 50)
+      void carregarConversas()
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível iniciar uma nova conversa.')
+    } finally {
+      setCriandoConversa(false)
+    }
   }
   function trocarModo(novo: ModoChat) {
     if (novo === modo) return
@@ -435,7 +451,7 @@ export default function AtlasIAPage() {
         </div>
         <button
           onClick={() => void novaConversa()}
-          disabled={criandoConversa || carregando}
+          disabled={criandoConversa}
           className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#182444] disabled:opacity-60"
         >
           <MessageSquarePlus size={17}/> Nova conversa
@@ -500,7 +516,7 @@ export default function AtlasIAPage() {
             <button
               type="button"
               onClick={() => void novaConversa()}
-              disabled={carregando || criandoConversa}
+              disabled={criandoConversa}
               className="inline-flex items-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 md:hidden"
               title="Nova conversa"
             >
