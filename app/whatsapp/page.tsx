@@ -151,6 +151,9 @@ export default function WhatsAppAtendimentoPage() {
   const [buscaDiretorio, setBuscaDiretorio] = useState('')
   const [canalDiretorio, setCanalDiretorio] = useState('')
   const [carregandoDiretorio, setCarregandoDiretorio] = useState(false)
+  const [novoTelefone, setNovoTelefone] = useState('')
+  const [novoNome, setNovoNome] = useState('')
+  const [iniciandoNumero, setIniciandoNumero] = useState(false)
   const [contatosBusca, setContatosBusca] = useState<DiretorioWhatsApp[]>([])
   const [buscandoContatos, setBuscandoContatos] = useState(false)
   const [novaRapidaTitulo, setNovaRapidaTitulo] = useState('')
@@ -226,6 +229,8 @@ export default function WhatsAppAtendimentoPage() {
     setCanalDiretorio(canalPreferido)
     setBuscaDiretorio('')
     setDiretorio([])
+    setNovoTelefone('')
+    setNovoNome('')
     setDiretorioAberto(true)
   }
 
@@ -273,6 +278,36 @@ export default function WhatsAppAtendimentoPage() {
       await carregarConversas(false)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao abrir conversa.')
+    }
+  }
+
+  async function iniciarPorNumero() {
+    if (iniciandoNumero) return
+    setErro('')
+    const digitos = novoTelefone.replace(/\D/g, '')
+    let telefone = digitos
+    if (digitos.length === 10 || digitos.length === 11) telefone = `55${digitos}`
+    if (!/^55\d{10,11}$/.test(telefone)) {
+      setErro('Informe o DDD e o número do WhatsApp. Ex.: 17 99176-4080.')
+      return
+    }
+    if (!canalDiretorio) {
+      setErro('Canal WhatsApp não identificado.')
+      return
+    }
+
+    setIniciandoNumero(true)
+    try {
+      await iniciarDoDiretorio({
+        id: `novo-${telefone}`,
+        tipo: 'contato',
+        jid: `${telefone}@s.whatsapp.net`,
+        telefone,
+        nome: novoNome.trim() || telefoneFormatado(telefone),
+        canalId: canalDiretorio,
+      })
+    } finally {
+      setIniciandoNumero(false)
     }
   }
 
@@ -1471,6 +1506,92 @@ export default function WhatsAppAtendimentoPage() {
           </aside>
         </div>
       </div>
+
+        {diretorioAberto && (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+            onMouseDown={e=>{if(e.currentTarget===e.target)setDiretorioAberto(false)}}>
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl border bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-5 py-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Nova conversa no WhatsApp</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">Digite o DDD e o número ou escolha um contato já sincronizado.</p>
+                </div>
+                <button onClick={()=>setDiretorioAberto(false)}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Fechar">×</button>
+              </div>
+
+              <div className="space-y-4 p-5">
+                {canais.length > 1 && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">Número da empresa</label>
+                    <select value={canalDiretorio} onChange={e=>setCanalDiretorio(e.target.value)}
+                      className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm">
+                      {canais.map(c=><option key={c.id} value={c.id}>{c.nome} · {telefoneFormatado(c.numero_conectado || c.numero_declarado || '')}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+                  <div className="mb-3">
+                    <b className="text-sm text-slate-900">Conversar com um número novo</b>
+                    <p className="text-xs text-slate-500">Não precisa cadastrar o cliente antes. A conversa abre direto no Atlas.</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <input value={novoTelefone} onChange={e=>setNovoTelefone(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
+                      inputMode="tel" autoFocus placeholder="DDD + número"
+                      className="rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                    <input value={novoNome} onChange={e=>setNovoNome(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
+                      placeholder="Nome (opcional)"
+                      className="rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                    <button onClick={()=>void iniciarPorNumero()} disabled={iniciandoNumero || novoTelefone.replace(/\D/g,'').length < 10}
+                      className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-40">
+                      {iniciandoNumero ? 'Abrindo...' : 'Conversar'}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500">Exemplo: 17 99176-4080. O Atlas acrescenta +55 automaticamente.</p>
+                </section>
+
+                <section>
+                  <div className="mb-2 flex items-center justify-between">
+                    <b className="text-xs uppercase tracking-wide text-slate-500">Contatos e grupos sincronizados</b>
+                    {carregandoDiretorio && <span className="text-[10px] text-slate-400">Buscando...</span>}
+                  </div>
+                  <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
+                    <Search size={16} className="text-slate-400"/>
+                    <input value={buscaDiretorio} onChange={e=>setBuscaDiretorio(e.target.value)}
+                      placeholder="Buscar por nome ou telefone..."
+                      className="w-full bg-transparent py-2.5 text-sm outline-none"/>
+                  </div>
+                  <div className="mt-2 max-h-64 overflow-y-auto rounded-xl border">
+                    {!carregandoDiretorio && diretorio.length === 0 ? (
+                      <div className="p-5 text-center text-xs text-slate-400">
+                        {buscaDiretorio.trim() ? 'Nenhum contato encontrado.' : 'Digite acima para localizar um contato salvo.'}
+                      </div>
+                    ) : diretorio.slice(0,80).map(item=>(
+                      <button key={item.id} onClick={()=>void iniciarDoDiretorio(item)}
+                        className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0 hover:bg-emerald-50">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
+                          {item.tipo==='grupo'?<Users size={16}/>:item.nome.slice(0,1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <b className="block truncate text-sm text-slate-800">{item.nome}</b>
+                          <span className="block truncate text-[11px] text-slate-400">
+                            {item.tipo==='grupo' ? `Grupo · ${item.participantes || 0} participantes` : (item.telefone ? telefoneFormatado(item.telefone) : 'Contato do WhatsApp')}
+                          </span>
+                        </span>
+                        <span className="text-[11px] font-semibold text-emerald-700">Abrir</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        )}
+
     </main>
   )
 }
