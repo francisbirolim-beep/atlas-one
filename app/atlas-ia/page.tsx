@@ -187,6 +187,7 @@ export default function AtlasIAPage() {
       if (!r.ok) throw new Error(j.error || 'Não foi possível abrir a conversa.')
       const mensagens = Array.isArray(j.mensagens) ? j.mensagens : []
       conversaVersaoRef.current += 1
+      setCarregando(false)
       setModo('livre')
       setConversaLivreId(String(j.conversaId || id))
       setNovaConversaPendente(false)
@@ -443,7 +444,7 @@ export default function AtlasIAPage() {
         if (atual) setAnexo(atual)
       }
     } finally {
-      setCarregando(false)
+      if (conversaVersaoRef.current === versaoConversa) setCarregando(false)
     }
   }
 
