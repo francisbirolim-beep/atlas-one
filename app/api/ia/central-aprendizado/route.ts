@@ -197,9 +197,12 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any){
       const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||'UN',preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single();if(error)throw new Error(error.message);produtoId=data.id
     }
     const fornecedorId=await resolverFornecedor(usuario,entrada,null)
+    const temFornecedorNoMaterial=Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
+    if(temFornecedorNoMaterial&&!fornecedorId)throw new Error('Valide o fornecedor deste material antes de aprovar os produtos.')
     if(fornecedorId){
       const docId=await copiarFonte(usuario,entrada,fornecedorId)
-      const codigo=txt(d.codigo,120)||`ATLAS-${String(produtoId).slice(0,8)}`
+      const codigo=txt(d.codigo,120)
+      if(!codigo)throw new Error('Informe o código do fornecedor antes de aprovar este item.')
       const {data:v,error}=await supabaseAdmin.from('produto_fornecedores').upsert({empresa_id:usuario.empresa_id,produto_id:produtoId,fornecedor_id:fornecedorId,codigo_fornecedor:codigo,descricao_fornecedor:txt(d.descricao,400)||c.titulo,unidade_compra:txt(d.unidade,30)||null,preco_atual:num(d.preco_fornecedor),documento_origem_id:docId,preco_atualizado_em:num(d.preco_fornecedor)!==null?new Date().toISOString():null,preferencial:false,ativo:true,criado_por_id:usuario.id,criado_por_nome:usuario.nome,updated_at:new Date().toISOString()},{onConflict:'fornecedor_id,codigo_fornecedor'}).select('id').single();if(error)throw new Error(error.message)
       const preco=num(d.preco_fornecedor)
       if(preco!==null&&v?.id)await supabaseAdmin.from('produto_fornecedor_precos_historico').insert({empresa_id:usuario.empresa_id,produto_fornecedor_id:v.id,fornecedor_id:fornecedorId,produto_id:produtoId,preco,unidade_compra:txt(d.unidade,30)||null,documento_origem_id:docId,criado_por_id:usuario.id,criado_por_nome:usuario.nome})
