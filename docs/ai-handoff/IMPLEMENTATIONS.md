@@ -1,3 +1,18 @@
+## 2026-10-04 — Assistente IA supervisionado no WhatsApp
+
+- Criado controle de autonomia do WhatsApp com três modos: Observando, Sugerindo e Automático.
+- Configuração é feita pelo Master e pode variar por número conectado.
+- Multicanal existente foi preservado: visualização continua separada por número; somente conhecimento empresarial validável é compartilhado.
+- Canal pessoal usa classificação Empresa/Pessoal/Dúvida; conteúdo pessoal é excluído do aprendizado empresarial.
+- Aprendizados detectados em conversas entram em `ai_aprendizado_entradas` / `ai_aprendizado_candidatos` e exigem validação antes de virar memória oficial.
+- Sugestões aparecem na própria conversa e podem ser usadas/editadas ou rejeitadas; decisões alimentam métricas de qualidade.
+- Atendimento automático exige autorização explícita por canal, confiança alta e classificação de resposta segura.
+- Criadas tabelas internas `atendimento_whatsapp_ia_config`, `atendimento_whatsapp_ia_canais`, `atendimento_whatsapp_ia_observacoes` e `atendimento_whatsapp_ia_sugestoes`, protegidas por RLS e sem acesso direto do cliente.
+- Nova tela `/administracao/ia/whatsapp` e API `/api/integracoes/whatsapp/ia`.
+- Gateway QR atualizado e publicado como Edge Function versão 18.
+- Estado inicial mantido em Observando; nenhum canal liberado para resposta automática.
+- TypeScript e build completo aprovados (131 rotas/páginas).
+
 [Reading 397 lines from start (total: 397 lines, 0 remaining)]
 
 ## 2026-09-30 — Maiúsculas globais sem perder o onChange (PR #490)
