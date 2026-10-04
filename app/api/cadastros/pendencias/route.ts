@@ -122,10 +122,11 @@ export async function GET(req: NextRequest) {
     if (error) throw error
     if (erroResumo) throw erroResumo
 
-    const ids = Array.from(new Set(
+    const ids = Array.from(new Set<string>(
       (pendencias || [])
         .flatMap((item: any) => [item.cliente_id, item.cliente_candidato_id])
-        .filter(Boolean),
+        .filter(Boolean)
+        .map((id: unknown) => String(id)),
     ))
 
     const clientes = new Map<string, any>()
@@ -245,13 +246,27 @@ export async function POST(req: NextRequest) {
 
       const dados = pendencia.dados && typeof pendencia.dados === 'object' ? pendencia.dados as Record<string, any> : {}
       const numeroWvetro = String(dados.numero_wvetro || '').trim()
-      if (!numeroWvetro) return NextResponse.json({ error: 'A pendência não possui o número do orçamento W.Vetro.' }, { status: 409 })
+      const codigoWvetro = String(dados.cliente_codigo_wvetro || '').trim()
+      const nomeWvetro = String(dados.nome || dados.cliente_nome || '').trim()
+      if (!numeroWvetro && !codigoWvetro && !nomeWvetro) {
+        return NextResponse.json({ error: 'A pendência não possui identificador suficiente do W.Vetro.' }, { status: 409 })
+      }
 
-      const { data: orcamentos, error: erroOrcamentos } = await supabaseAdmin
+      let orcamentosQuery = supabaseAdmin
         .from('orcamentos')
-        .select('id,wvetro_fluxo')
+        .select('id,wvetro_fluxo,cliente_nome')
         .eq('empresa_id', usuario.empresa_id)
-        .contains('wvetro_fluxo', { numero: numeroWvetro })
+        .contains('wvetro_fluxo', { origem: 'wvetro_api' })
+
+      if (codigoWvetro) {
+        orcamentosQuery = orcamentosQuery.contains('wvetro_fluxo', { cliente_codigo_wvetro: codigoWvetro })
+      } else if (nomeWvetro) {
+        orcamentosQuery = orcamentosQuery.eq('cliente_nome', nomeWvetro)
+      } else {
+        orcamentosQuery = orcamentosQuery.contains('wvetro_fluxo', { numero: numeroWvetro })
+      }
+
+      const { data: orcamentos, error: erroOrcamentos } = await orcamentosQuery
       if (erroOrcamentos) throw erroOrcamentos
       if (!orcamentos?.length) return NextResponse.json({ error: 'Nenhum orçamento W.Vetro correspondente foi encontrado.' }, { status: 404 })
 
@@ -267,7 +282,25 @@ export async function POST(req: NextRequest) {
         .in('id', orcamentos.map((item: any) => item.id))
       if (erroVinculo) throw erroVinculo
 
-      await resolverPendencia(pendencia.id, usuario.empresa_id, usuario, 'resolvida')
+      const resolucao = {
+        status: 'resolvida',
+        atualizado_em: new Date().toISOString(),
+        resolvido_em: new Date().toISOString(),
+        resolvido_por_id: usuario.id,
+        resolvido_por_nome: usuario.nome,
+      }
+      if (codigoWvetro) {
+        await supabaseAdmin
+          .from('cadastro_pendencias')
+          .update(resolucao)
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('tipo', 'vinculo_wvetro')
+          .in('status', ['pendente', 'em_analise'])
+          .contains('dados', { cliente_codigo_wvetro: codigoWvetro })
+      } else {
+        await resolverPendencia(pendencia.id, usuario.empresa_id, usuario, 'resolvida')
+      }
+
       return NextResponse.json({ ok: true, vinculados: orcamentos.length, clienteDestino: destino })
     }
 
