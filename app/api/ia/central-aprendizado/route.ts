@@ -36,24 +36,20 @@ function anexo(v:any){
   if(!v||typeof v!=='object'||!v.dados)return null
   return {nome:txt(v.nome,180)||'arquivo',mediaType:txt(v.mediaType,120).toLowerCase().split(';')[0],dados:String(v.dados)}
 }
-async function anexoRemoto(v:any){
-  if(!v||typeof v!=='object'||!v.url)return null
+async function anexoRemoto(v:any, usuario:UsuarioTenant){
+  if(!v||typeof v!=='object'||!v.path)return null
   const nome=txt(v.nome,180)||'arquivo'
   const mediaType=txt(v.mediaType,120).toLowerCase().split(';')[0]||'application/octet-stream'
   const tamanho=Number(v.tamanho||0)
   if(tamanho>MAX)throw new Error('Arquivo maior que 50 MB.')
-  const base=String(process.env.NEXT_PUBLIC_SUPABASE_URL||process.env.SUPABASE_URL||'').trim()
-  if(!base)throw new Error('Supabase não configurado.')
-  const u=new URL(String(v.url)), b=new URL(base)
-  const prefixo='/storage/v1/object/public/fotos/central-aprendizado/'
-  if(u.protocol!=='https:'||u.origin!==b.origin||!u.pathname.startsWith(prefixo))throw new Error('URL de arquivo não autorizada.')
-  const resp=await fetch(u.toString(),{redirect:'error',cache:'no-store'})
-  if(!resp.ok)throw new Error('Não foi possível baixar o arquivo enviado.')
-  const len=Number(resp.headers.get('content-length')||0)
-  if(len>MAX)throw new Error('Arquivo maior que 50 MB.')
-  const ab=await resp.arrayBuffer()
+  const path=txt(v.path,500)
+  const prefixo=`ingest/${usuario.id}/`
+  if(!path.startsWith(prefixo))throw new Error('Caminho de arquivo não autorizado.')
+  const {data,error}=await supabaseAdmin.storage.from('atlas-aprendizado').download(path)
+  if(error||!data)throw new Error('Não foi possível abrir o arquivo enviado.')
+  const ab=await data.arrayBuffer()
   if(ab.byteLength>MAX)throw new Error('Arquivo maior que 50 MB.')
-  return {nome,mediaType,dados:Buffer.from(ab).toString('base64')}
+  return {nome,mediaType,dados:Buffer.from(ab).toString('base64'),ingestPath:path}
 }
 function ext(nome:string,mime:string){
   const e=(nome.split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'')
@@ -241,11 +237,12 @@ export async function POST(req:NextRequest){
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const token=(req.headers.get('authorization')||'').replace(/^Bearer\s+/i,'').trim(), body=await req.json()
     const tipo=TIPOS.has(txt(body?.tipo,40))?txt(body.tipo,40):'outro', descricao=txt(body?.descricao,12000), titulo=txt(body?.titulo,180)
-    const a=anexo(body?.anexo) || await anexoRemoto(body?.arquivo)
+    const a=anexo(body?.anexo) || await anexoRemoto(body?.arquivo,u)
     if(!descricao&&!a)return NextResponse.json({error:'Envie um arquivo ou escreva o que deseja ensinar.'},{status:400})
     const {data:entrada,error}=await supabaseAdmin.from('ai_aprendizado_entradas').insert({empresa_id:u.empresa_id,tipo,titulo:titulo||a?.nome||descricao.slice(0,120)||'Material',descricao:descricao||null,status:'analisando',fonte_nome:a?.nome||null,mime_type:a?.mediaType||null,criado_por_id:u.id,criado_por_nome:u.nome,metadados:{origem:'central_aprendizado_geral'}}).select('*').single();if(error)throw error;const entradaId=String(entrada.id);id=entradaId
     await log(u,'entrada_recebida',entradaId,null,{tipo})
     const fonte=await preparar(u,entradaId,a);await supabaseAdmin.from('ai_aprendizado_entradas').update({storage_path:fonte.path,tamanho_bytes:fonte.size||null,texto_extraido:fonte.texto||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
+    if((a as any)?.ingestPath)await supabaseAdmin.storage.from('atlas-aprendizado').remove([(a as any).ingestPath])
     const x=await analisar(token,tipo,descricao,a?.nome||null,fonte.texto,fonte.imagens), fd=x?.documento?.fornecedor||null, f=await fornecedorExistente(u.empresa_id,fd)
     const total=await criarCandidatos(u,entradaId,x,f), tipoDetectado=TIPOS.has(txt(x?.documento?.tipo,40))?txt(x.documento.tipo,40):tipo, setores=Array.isArray(x?.documento?.setores)?x.documento.setores.filter((s:any)=>MODULOS.has(String(s))).slice(0,15):[]
     const {data:at,error:ue}=await supabaseAdmin.from('ai_aprendizado_entradas').update({tipo:tipoDetectado,titulo:txt(x?.documento?.titulo,180)||entrada.titulo,resumo_ia:txt(x?.documento?.resumo,8000)||null,setores_sugeridos:setores,fornecedor_id_sugerido:f?.id||null,fornecedor_nome_sugerido:txt(fd?.nome,220)||null,fornecedor_cnpj_sugerido:dig(fd?.cnpj)||null,status:'aguardando_validacao',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId).select('*').single();if(ue)throw ue
