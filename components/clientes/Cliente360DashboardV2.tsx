@@ -12,6 +12,7 @@ import type { Cliente } from '@/lib/tipos'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente } from '@/lib/medicaoFinal'
 import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { gerarBasePrecificacao } from '@/lib/orcamentoPrecificacao'
 import type { Usuario } from '@/lib/tipos'
 import {
   adicionarDocumentoCliente,
@@ -207,13 +208,30 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       const resp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar',{
         method:'POST',
         headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({inicio:dataInputLocal(inicio),fim:dataInputLocal(fim)}),
+        body:JSON.stringify({inicio:dataInputLocal(inicio),fim:dataInputLocal(fim),forcar:true,modo:'corrigir_tudo'}),
       })
       const json=await resp.json().catch(()=>({}))
       if(!resp.ok)throw new Error(json?.error||`Falha ao sincronizar W.Vetro (${resp.status}).`)
+
+      const listaResp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar',{
+        method:'GET',
+        cache:'no-store',
+        headers:{Authorization:`Bearer ${token}`},
+      })
+      const listaJson=await listaResp.json().catch(()=>({}))
+      if(!listaResp.ok)throw new Error(listaJson?.error||'Falha ao listar orçamentos W.Vetro para correção.')
+      const alvos=Array.isArray(listaJson.orcamentos)?listaJson.orcamentos:[]
+      let corrigidos=0, falhas=0
+      for(let i=0;i<alvos.length;i+=1){
+        setMensagemSyncWVetro(`Corrigindo orçamentos W.Vetro: ${i+1}/${alvos.length}...`)
+        const resultado=await gerarBasePrecificacao(String(alvos[i].id),{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
+        if(resultado.ok)corrigidos+=1
+        else falhas+=1
+      }
+
       const { count: vinculadosCliente }=await supabase.from('orcamentos').select('id',{count:'exact',head:true}).eq('cliente_id',clienteId).contains('wvetro_fluxo',{origem:'wvetro_api'})
       await carregar()
-      setMensagemSyncWVetro(`Conferência concluída: ${Number(json.lidos||0)} lido(s) no período, ${Number(json.criados||0)} novo(s), ${Number(json.atualizados||0)} atualizado(s). Este cliente tem ${Number(vinculadosCliente||0)} orçamento(s) W.Vetro vinculado(s).`)
+      setMensagemSyncWVetro(`Conferência concluída: ${Number(json.lidos||0)} lido(s), ${Number(json.criados||0)} novo(s), ${Number(json.atualizados||0)} atualizado(s) · ${corrigidos} orçamento(s) W.Vetro recalculado(s), ${falhas} com pendência. Este cliente tem ${Number(vinculadosCliente||0)} W.Vetro vinculado(s).`)
     }catch(e){setErro(e instanceof Error?e.message:'Não foi possível sincronizar o W.Vetro.')}
     finally{setSincronizandoWVetro(false)}
   }
@@ -289,7 +307,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
           <div className="grid gap-5 xl:grid-cols-2"><Box titulo="Financeiro do cliente" acao={<button onClick={()=>setModalRecebimento(true)} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}><div className="mb-3 flex justify-between text-sm"><span>Recebido {moeda(totalRecebido)}</span><span>A receber {moeda(aReceber)}</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{width:`${pct}%`}}/></div><button onClick={()=>setAba('financeiro')} className="mt-4 text-sm font-bold text-brand-navy">Ver parcelas</button></Box><Box titulo="Últimos orçamentos"><div className="space-y-2">{versoesAtuais.slice(0,5).map(o=><Link href={`/orcamento/${o.id}/composicao`} key={o.id} className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy"><div className="min-w-0"><div className="flex items-center gap-2"><b>Orçamento #{numeroOrcamento(o)}</b>{ehWVetro(o)&&<span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-700">W.VETRO</span>}</div><p className="truncate text-xs text-slate-500">{descricaoOrcamento(o)||`${dataBR(o.created_at)} · ${status(o.status)}`}</p></div><b className="whitespace-nowrap">{moeda(valorOrcamento(o))}</b></Link>)}{!versoesAtuais.length&&<p className="text-sm text-slate-400">Nenhum orçamento.</p>}</div></Box></div></>}
 
         {aba==='orcamentos'&&<div className="space-y-5">
-          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{usuario?.role==='master'&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando...':'Sincronizar W.Vetro agora'}</button>}<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link></div>}>
+          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{usuario?.role==='master'&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando e corrigindo...':'Sincronizar e corrigir W.Vetro'}</button>}<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link></div>}>
             <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-800"><b>Sincronização automática ativa.</b> Orçamentos novos ou alterados no W.Vetro entram no Atlas e são vinculados a este Cliente 360 quando a identificação é segura. O botão acima apenas força uma conferência imediata dos últimos 7 dias.</div>
             {mensagemSyncWVetro&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{mensagemSyncWVetro}</div>}
             <div className="space-y-2">{orcamentos.map(o=>{const w=ehWVetro(o);const descricao=descricaoOrcamento(o);const itens=Array.isArray(o.itens)?o.itens.length:0;return <Link href={`/orcamento/${o.id}/composicao`} key={o.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 transition hover:border-brand-navy hover:shadow-sm ${o.revisao_atual===false?'bg-slate-50 opacity-70':'bg-white'}`}><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">Orçamento #{numeroOrcamento(o)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${w?'bg-violet-100 text-violet-700':'bg-blue-100 text-blue-700'}`}>{w?'W.VETRO':'ATLAS'}</span>{!w&&o.revisao_atual!==false&&<span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">ATUAL</span>}</div>{descricao&&<p className="mt-1 truncate text-sm text-slate-600">{descricao}</p>}<p className="mt-1 text-xs text-slate-400">{dataBR(o.created_at)} · {w?(o.wvetro_fluxo?.situacao?status(o.wvetro_fluxo.situacao):status(o.status)):(o.revisao_tipo?status(o.revisao_tipo):status(o.status))}{itens? ` · ${itens} item(ns)`:''}{w&&o.wvetro_fluxo?.vendedor?` · ${o.wvetro_fluxo.vendedor}`:''}</p></div><div className="flex items-center gap-3"><b className="whitespace-nowrap text-slate-900">{moeda(valorOrcamento(o))}</b><ExternalLink size={15} className="text-slate-400"/></div></Link>})}{!orcamentos.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum orçamento vinculado a este cliente.</p>}</div>
