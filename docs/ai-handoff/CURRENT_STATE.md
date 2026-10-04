@@ -1,3 +1,35 @@
+## 2026-10-04 — WhatsApp IA supervisionada — candidata a teste
+
+Branch: `feat/whatsapp-ia-aprendizado-v1`
+
+### Implementado
+
+- Controle Master do Assistente IA do WhatsApp em três estágios: **Observando**, **Sugerindo** e **Atendendo**.
+- Estado inicial seguro em **Observando**; nenhuma resposta automática é liberada por padrão.
+- Reaproveitado o multicanal existente do WhatsApp: Empresa, Francis particular e futuros números continuam separados na tela, enquanto o aprendizado empresarial pode ser compartilhado.
+- Cada canal pode ser habilitado/desabilitado como fonte de aprendizado, ter classificação automática/forçada e setor padrão.
+- Em canal pessoal, a IA classifica contexto como **empresa**, **pessoal** ou **dúvida**. Conteúdo classificado como pessoal não vira conhecimento, sugestão nem memória empresarial.
+- Conteúdo empresarial reutilizável entra primeiro como **candidato** na Central de Aprendizado; só vira memória oficial após validação.
+- Em modo Sugerindo, o WhatsApp mostra **Sugestão da IA**, confiança e setor, com ações **Usar e editar** ou **Descartar**. O feedback fica auditável.
+- Em modo Automático, a resposta só pode sair quando: o Master liberou aquele canal, a confiança atingiu o mínimo, a IA marcou o caso como seguro e o assunto não envolve preço/desconto, reclamação, cobrança sensível, promessa de prazo ou decisão técnica de risco.
+- O atendente continua podendo assumir a conversa.
+- Nova tela Master: `/administracao/ia/whatsapp`.
+- Nova API autenticada: `/api/integracoes/whatsapp/ia`.
+
+### Banco e runtime
+
+- Migration `20261004224708_whatsapp_ia_aprendizado_v1.sql` aplicada no Supabase.
+- Tabelas novas são backend-only, com RLS habilitado e acesso direto de `anon`/`authenticated` revogado.
+- `whatsapp-gateway` publicado no Supabase Edge Functions como versão **18**, status **ACTIVE**.
+- Configuração inicial confirmada: **1 canal aprendendo**, **0 canais automáticos**, modo **Observando**.
+
+### Validação técnica
+
+- `npm run typecheck`: aprovado.
+- `npm run validate`: aprovado; Next.js compilou e gerou **131 rotas/páginas**.
+- Bundle do Edge Function aceito pelo Supabase.
+- Próximo passo é validação funcional controlada com Francis antes de qualquer liberação automática.
+
 [Reading 585 lines from start (total: 585 lines, 0 remaining)]
 
 ## 2026-09-30 — INFRA LOCAL-FIRST / BAIXO CONSUMO VERCEL
