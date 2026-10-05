@@ -90,7 +90,9 @@ export const ATALHOS_PESQUISA_ATLAS: AtalhoPesquisaAtlas[] = [
   { href:'/estoque', label:'Estoque', grupo:'Operações', descricao:'Consulta e gestão de estoque', palavras:'estoque material produto saldo almoxarifado' },
   { href:'/estoque/enderecar', label:'Endereçamento de estoque', grupo:'Operações', descricao:'Endereçar materiais no estoque', palavras:'estoque endereço enderecar posição material' },
   { href:'/estoque/transferencias', label:'Transferências de estoque', grupo:'Operações', descricao:'Transferir materiais entre locais', palavras:'estoque transferencia transferência material local' },
+  { href:'/balcao/caixa', label:'Caixa', grupo:'Financeiro', descricao:'Caixa operacional e movimentações', palavras:'financeiro caixa dinheiro suprimento sangria fechamento' },
   { href:'/financeiro/contas-pagar', label:'Contas a pagar', grupo:'Financeiro', descricao:'Contas e compromissos a pagar', palavras:'financeiro conta pagar boleto fornecedor despesa vencimento' },
+  { href:'/financeiro/contas-receber', label:'Contas a receber', grupo:'Financeiro', descricao:'Parcelas e recebimentos de clientes e obras', palavras:'financeiro conta receber cliente parcela vencimento recebimento' },
 
   { href:'/balcao/consulta-preco', label:'Consulta de preço balcão', grupo:'Balcão', descricao:'Consultar preço de produtos no balcão', palavras:'balcao balcão preço produto consulta venda' },
   { href:'/balcao/orcamentos', label:'Orçamentos de balcão', grupo:'Balcão', descricao:'Orçamentos rápidos de balcão', palavras:'balcao balcão orçamento orcamento venda produto' },
