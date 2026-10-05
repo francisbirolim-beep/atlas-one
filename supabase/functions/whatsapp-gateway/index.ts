@@ -846,13 +846,13 @@ async function prepararMidiasIntake(anexos: any[], gatewayToken: string) {
         continue
       }
 
-      const form = new FormData()
       const nome = String(anexo?.nome || "audio-whatsapp").slice(0, 180)
-      form.append("audio", new File([blob], nome, { type: mime }))
-      const resp = await fetch(appUrl + "/api/agente/transcrever", {
+      const { data: signed, error: signedError } = await db.storage.from(MEDIA_BUCKET).createSignedUrl(path, 5 * 60)
+      if (signedError || !signed?.signedUrl) throw signedError || new Error("Falha ao assinar áudio")
+      const resp = await fetch(appUrl + "/api/integracoes/whatsapp/transcrever", {
         method: "POST",
-        headers: { "x-atlas-automation-token": gatewayToken },
-        body: form,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: signed.signedUrl, nome, mimeType: mime }),
       })
       const json = await resp.json().catch(() => ({}))
       const transcricao = resp.ok ? String(json?.text || "").trim() : ""
