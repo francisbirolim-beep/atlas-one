@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verificarUsuario, rodarLoop, obterOuCriarConversaHoje, criarConversaAgente, validarConversaAgente, salvarMensagem } from '@/lib/agente'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const TAMANHO_MAX_BASE64 = 12_000_000
 
+function tarefaResumida(texto: string) {
+  const t = String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  if (/orcamento|orcamentos|venda|vendas/.test(t)) return 'Consultando dados de orçamento e vendas'
+  if (/cliente|clientes/.test(t)) return 'Consultando dados de clientes'
+  if (/financeir|caixa|receber|pagar|custo/.test(t)) return 'Consultando dados financeiros'
+  if (/estoque|produto|catalogo|perfil|acessorio/.test(t)) return 'Consultando produtos, catálogo e estoque'
+  if (/producao|instalacao|obra|medicao/.test(t)) return 'Consultando operação e andamento das obras'
+  return 'Analisando uma pergunta na IA geral'
+}
+
 export async function POST(req: NextRequest) {
+  let atividadeId: string | null = null
   try {
     const authHeader = req.headers.get('authorization') || ''
     const usuario = await verificarUsuario(authHeader)
@@ -26,6 +38,20 @@ export async function POST(req: NextRequest) {
     if (anexo && typeof anexo.dados === 'string' && anexo.dados.length > TAMANHO_MAX_BASE64) {
       return NextResponse.json({ error: 'Arquivo anexado muito grande' }, { status: 400 })
     }
+
+    const { data: atividade } = await supabaseAdmin.from('ia_agente_atividade').insert({
+      empresa_id: usuario.empresa_id,
+      usuario_id: usuario.id,
+      usuario_nome: usuario.nome || null,
+      agente_id: 'supervisor',
+      agente_nome: 'Supervisor IA',
+      contexto: 'atlas_ia_geral',
+      tarefa: tarefaResumida(mensagemTexto),
+      status: 'processando',
+      atualizou_em: new Date().toISOString(),
+      detalhe: { possui_anexo: Boolean(anexo) },
+    }).select('id').single()
+    atividadeId = atividade?.id || null
 
     let content: any = mensagemTexto
     let textoParaSalvar = mensagemTexto
@@ -63,6 +89,14 @@ export async function POST(req: NextRequest) {
       await salvarMensagem(conversaId, 'assistant', resultado.text)
     }
 
+    if (atividadeId) {
+      await supabaseAdmin.from('ia_agente_atividade').update({
+        status: 'concluido',
+        atualizou_em: new Date().toISOString(),
+        finalizou_em: new Date().toISOString(),
+      }).eq('id', atividadeId)
+    }
+
     return NextResponse.json({
       text: resultado.text || '',
       done: resultado.done,
@@ -71,6 +105,14 @@ export async function POST(req: NextRequest) {
       conversaId,
     })
   } catch (e: any) {
+    if (atividadeId) {
+      await supabaseAdmin.from('ia_agente_atividade').update({
+        status: 'erro',
+        atualizou_em: new Date().toISOString(),
+        finalizou_em: new Date().toISOString(),
+        detalhe: { erro: String(e && e.message ? e.message : e).slice(0, 500) },
+      }).eq('id', atividadeId)
+    }
     return NextResponse.json({ error: 'Erro inesperado no agente: ' + String(e && e.message ? e.message : e) }, { status: 500 })
   }
 }
