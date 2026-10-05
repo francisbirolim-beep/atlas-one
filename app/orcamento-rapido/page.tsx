@@ -157,10 +157,12 @@ export default function OrcamentoRapido() {
   const [salvo, setSalvo] = useState(false)
   const [pedidoEnviadoId, setPedidoEnviadoId] = useState<string | null>(null)
   const [salvoOffline, setSalvoOffline] = useState(false)
+  const [motivoPendente, setMotivoPendente] = useState('')
   const [erro, setErro] = useState('')
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
+  const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
   const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
   const [fluxoSobMedida, setFluxoSobMedida] = useState(false)
 
@@ -176,14 +178,6 @@ export default function OrcamentoRapido() {
     let ativo = true
     const params = new URLSearchParams(window.location.search)
     const inicioNovoSobMedida = params.get('modo') === 'sob-medida' && params.get('novo') === '1'
-    if (inicioNovoSobMedida) {
-      void removerRascunho(RASCUNHO_ID).catch(() => {})
-      params.delete('novo')
-      const busca = params.toString()
-      window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
-      setRascunhoCarregado(true)
-      return () => { ativo = false }
-    }
     obterRascunho<RascunhoOrcamentoRapido>(RASCUNHO_ID).then(rascunho => {
       if (!ativo) return
       if (rascunho?.dados) {
@@ -207,6 +201,20 @@ export default function OrcamentoRapido() {
         setArquitetoContato(d.arquitetoContato || '')
         if (Array.isArray(d.arquivos)) setArquivos(d.arquivos.map(arquivoDoRascunho))
         setRascunhoSalvoEm(rascunho.atualizadoEm)
+        setRascunhoRestaurado(true)
+
+        // Um rascunho existente sempre vence o contexto de uma nova navegação.
+        // Assim, abrir outro cliente/obra nunca reaproveita nem apaga o trabalho pendente.
+        params.delete('novo')
+        params.delete('cliente')
+        params.delete('obra')
+        params.delete('adicionarAo')
+        const busca = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+      } else if (inicioNovoSobMedida) {
+        params.delete('novo')
+        const busca = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
       }
       setRascunhoCarregado(true)
     }).catch(() => setRascunhoCarregado(true))
@@ -240,6 +248,7 @@ export default function OrcamentoRapido() {
   }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
+    if (!rascunhoCarregado || rascunhoRestaurado) return
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
     if (!clienteId || !navigator.onLine) return
 
@@ -257,7 +266,7 @@ export default function OrcamentoRapido() {
         // A consulta é apenas conveniência; falha de rede não bloqueia o formulário.
       }
     })()
-  }, [])
+  }, [rascunhoCarregado, rascunhoRestaurado])
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
     setItens(prev => prev.map(it => it.id === id ? { ...it, [campo]: valor } : it))
@@ -322,12 +331,19 @@ export default function OrcamentoRapido() {
     if (files) setArquivos(prev => [...prev, ...Array.from(files)])
   }
 
-  async function salvarComoPendente(dadosForm: DadosOrcamentoForm) {
-    await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
-    await removerRascunho(RASCUNHO_ID).catch(() => {})
-    setRascunhoSalvoEm(null)
-    setSalvando(false)
-    setSalvoOffline(true)
+  async function salvarComoPendente(dadosForm: DadosOrcamentoForm, motivo = '') {
+    try {
+      await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
+      await removerRascunho(RASCUNHO_ID).catch(() => {})
+      setRascunhoSalvoEm(null)
+      setMotivoPendente(motivo)
+      setSalvando(false)
+      setSalvoOffline(true)
+    } catch (e) {
+      setSalvando(false)
+      const detalhe = e instanceof Error ? e.message : ''
+      setErro(`O envio não foi concluído agora. O rascunho automático continua salvo neste aparelho${detalhe ? ` (${detalhe})` : ''}.`)
+    }
   }
 
   async function confirmarEnvio() {
@@ -341,11 +357,14 @@ export default function OrcamentoRapido() {
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return salvarComoPendente(dadosForm)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await salvarComoPendente(dadosForm, 'Sem conexão com a internet')
+      return
+    }
     try {
       const resultado = await criarOrcamentoNoServidor(dadosForm)
-      setSalvando(false)
       if (resultado.ok) {
+        setSalvando(false)
         await removerRascunho(RASCUNHO_ID).catch(() => {})
         setRascunhoSalvoEm(null)
         if (fluxoSobMedida && resultado.id) {
@@ -354,10 +373,18 @@ export default function OrcamentoRapido() {
         }
         setPedidoEnviadoId(resultado.id || null)
         setSalvo(true)
+        return
       }
-      else setErro('Erro ao salvar: ' + resultado.error)
-    } catch {
-      await salvarComoPendente(dadosForm)
+
+      await salvarComoPendente(
+        dadosForm,
+        resultado.error ? `Servidor: ${resultado.error}` : 'Servidor não confirmou o salvamento',
+      )
+    } catch (e) {
+      await salvarComoPendente(
+        dadosForm,
+        e instanceof Error ? e.message : 'Falha de conexão ou envio',
+      )
     }
   }
 
@@ -407,7 +434,7 @@ export default function OrcamentoRapido() {
   function resetar() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
-    setSalvo(false); setPedidoEnviadoId(null); setSalvoOffline(false); setErro(''); setConferenciaAberta(false)
+    setSalvo(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
@@ -417,7 +444,7 @@ export default function OrcamentoRapido() {
   // que uma hidratação atrasada sobrescrevesse texto que o usuário já havia começado a digitar.
   if (!rascunhoCarregado) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-6 text-sm text-slate-600">Carregando rascunho salvo neste aparelho...</div></div>
 
-  if (salvoOffline) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center"><WifiOff size={48} className="text-amber-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Salvo neste aparelho!</h2><p className="text-slate-500 mb-6">Sem internet agora. O pedido de {clienteNome} foi guardado e será enviado quando a internet voltar.</p><button onClick={resetar} className="px-4 py-2 bg-brand-navy text-white rounded-lg">Novo pedido</button></div></div>
+  if (salvoOffline) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center"><WifiOff size={48} className="text-amber-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Orçamento protegido!</h2><p className="text-slate-500">O envio de {clienteNome} não foi concluído agora, mas o orçamento foi guardado neste aparelho e entrou na fila de sincronização automática.</p>{motivoPendente && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Motivo: {motivoPendente}</p>}<p className="mt-3 text-xs font-medium text-emerald-700">Você não precisa refazer o orçamento.</p><button onClick={resetar} className="mt-6 px-4 py-2 bg-brand-navy text-white rounded-lg">Novo pedido</button></div></div>
 
   if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">{fluxoSobMedida ? 'Orçamento sob medida salvo!' : 'Pedido enviado!'}</h2><p className="text-slate-500 mb-6">{fluxoSobMedida ? `A configuração de ${clienteNome} foi salva. Agora você pode calcular materiais, custo, sobra, margem e preço.` : `${clienteNome} entrou no painel de orçamentos.`}</p><div className="grid gap-3">{pedidoEnviadoId && fluxoSobMedida && <Link href={`/orcamento/${pedidoEnviadoId}/composicao`} className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold"><Calculator size={17} /> Calcular o orçamento</Link>}{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 border border-brand-teal text-brand-teal rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> Editar este orçamento</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo orçamento</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
 
