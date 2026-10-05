@@ -90,22 +90,38 @@ async function podeValidar(usuario:UsuarioTenant,c:any){
   return ['compras','engenharia'].some(m=>especialistaDoModulo(m as AIModulo)?.setorIds.some(id=>ed.has(id)))
 }
 async function preparar(usuario:UsuarioTenant,id:string,a:any){
-  if(!a)return {path:null as string|null,texto:'',imagens:[] as OpenCodeAnexo[],size:0}
+  if(!a)return {path:null as string|null,texto:'',imagens:[] as OpenCodeAnexo[],paginas:[] as Array<{pagina:number;texto:string}>,size:0}
   const mime=a.mediaType||'application/octet-stream'
   const ehTexto=mime.startsWith('text/')||mime==='application/json'
   let b:Buffer,texto=''
   const imagens:OpenCodeAnexo[]=[]
+  const paginas:Array<{pagina:number;texto:string}>=[]
   if(ehTexto){ texto=String(a.dados).slice(0,250000); b=Buffer.from(a.dados,'utf8') }
   else {
     b=Buffer.from(a.dados,'base64')
     if(b.length>MAX)throw new Error('Arquivo maior que 50 MB.')
-    if(mime==='application/pdf'){ const p=await pdfParse(b); texto=String(p.text||'').replace(/\r/g,'').trim().slice(0,250000) }
+    if(mime==='application/pdf'){
+      const p=await pdfParse(b,{pagerender:async(pageData:any)=>{
+        const tc=await pageData.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false})
+        let lastY:number|undefined,textoPagina=''
+        for(const item of (tc?.items||[])){
+          const y=Number(item?.transform?.[5])
+          const str=String(item?.str||'')
+          if(lastY===undefined||y===lastY)textoPagina+=str
+          else textoPagina+='\n'+str
+          lastY=y
+        }
+        paginas.push({pagina:paginas.length+1,texto:textoPagina})
+        return textoPagina
+      }})
+      texto=String(p.text||'').replace(/\r/g,'').trim().slice(0,250000)
+    }
     else if(mime.startsWith('image/')) imagens.push({nome:a.nome,mediaType:mime,dados:a.dados})
   }
-  const path=`${usuario.empresa_id}/${id}/${randomUUID()}.${ext(a.nome,mime)}`
+  const path=usuario.empresa_id+'/'+id+'/'+randomUUID()+'.'+ext(a.nome,mime)
   const {error}=await supabaseAdmin.storage.from('atlas-aprendizado').upload(path,b,{contentType:mime,upsert:false})
   if(error)throw new Error(error.message)
-  return {path,texto,imagens,size:b.length}
+  return {path,texto,imagens,paginas,size:b.length}
 }
 
 function limparLinhaCatalogo(v: unknown){
@@ -173,7 +189,7 @@ function categoriaCatalogo(descricao:string,peso:number|null){
   if(/PERFIL|TUBO|CANTONEIRA|BARRA|MONTANTE|TRAVESSA|MARCO|CONTRAMARCO|BAGUETE|TRILHO|COLUNA|CAPA|CADEIRINHA/.test(x))return 'perfil'
   return 'outro'
 }
-function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null){
+function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,paginas:Array<{pagina:number;texto:string}>=[]){
   const linhas=texto.split(/\r?\n/).map(limparLinhaCatalogo)
   const linhaPorIndice:string[]=[]
   let linhaAtual=''
@@ -188,6 +204,14 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null){
       if(partes.length)linhaAtual=partes.join(' ').slice(0,120)
     }
     linhaPorIndice[i]=linhaAtual
+  }
+
+  const paginaPorCodigo=new Map<string,number>()
+  for(const pg of paginas){
+    for(const l of String(pg.texto||'').split(/\r?\n/)){
+      const codigo=ehCodigoCatalogo(l)
+      if(codigo&&!paginaPorCodigo.has(codigo))paginaPorCodigo.set(codigo,pg.pagina)
+    }
   }
 
   const itens:any[]=[]
@@ -229,15 +253,15 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null){
       tipo:'produto',titulo:codigo+' — '+descricao,modulo:'engenharia',
       codigo,descricao,categoria:categoriaCatalogo(descricao,peso),unidade:null,
       preco:null,peso_kg_m:peso,tamanho_barra_mm:null,linha:linhaPorIndice[i]||null,
-      aplicacao:null,conteudo:null,confianca:peso!==null?.97:.65,
+      aplicacao:null,conteudo:null,pagina_catalogo:paginaPorCodigo.get(codigo)||null,confianca:peso!==null?.97:.65,
     })
     if(itens.length>=1200)break
   }
   return itens
 }
-function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,texto:string){
+function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,texto:string,paginas:Array<{pagina:number;texto:string}>=[]){
   const fornecedorNome=nomeFornecedorCatalogo(texto)
-  const itens=extrairProdutosCatalogoLocal(texto,fornecedorNome)
+  const itens=extrairProdutosCatalogoLocal(texto,fornecedorNome,paginas)
   const tipoDetectado=tipo==='tabela_preco'?'tabela_preco':'catalogo'
   return {
     documento:{
@@ -252,9 +276,9 @@ function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,tex
   }
 }
 
-async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[]){
+async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[],paginas:Array<{pagina:number;texto:string}>=[]){
   if(catalogoProvavel(tipo,nome,texto)){
-    const local=analisarCatalogoLocal(tipo,descricao,nome,texto)
+    const local=analisarCatalogoLocal(tipo,descricao,nome,texto,paginas)
     if(local.itens.length>0)return local
   }
   const st=await statusOpenCode()
@@ -321,6 +345,15 @@ async function produtoPorCodigoBanco(empresaId:string,codigo:string){
   if(error)throw new Error(error.message)
   return (data||[])[0]||null
 }
+async function esperarProdutoPorCodigoBanco(empresaId:string,codigo:string,tentativas=8){
+  for(let i=0;i<tentativas;i++){
+    const existente=await produtoPorCodigoBanco(empresaId,codigo)
+    if(existente)return existente
+    if(i<tentativas-1)await new Promise(resolve=>setTimeout(resolve,60*(i+1)))
+  }
+  return null
+}
+
 async function reconciliarProdutoCatalogoNoBanco(usuario:UsuarioTenant,c:any){
   if(c?.tipo!=='produto')return c
   const codigo=txt(c?.dados?.codigo,120)
@@ -406,7 +439,7 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
         entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'produto',
         modulo:MODULOS.has(txt(item.modulo,50))?txt(item.modulo,50):'engenharia',
         titulo:codigo?`${codigo} — ${descricao||'Produto'}`:descricao,
-        dados:{codigo:codigo||null,descricao:descricao||null,categoria:cat,unidade:txt(item.unidade,30)||null,preco_fornecedor:num(item.preco),peso_kg_m:num(item.peso_kg_m),tamanho_barra_mm:num(item.tamanho_barra_mm),linha:txt(item.linha,120)||null,aplicacao:txt(item.aplicacao,1000)||null,fornecedor_nome:txt(f?.nome,220)||null,fornecedor_cnpj:dig(f?.cnpj)||null},
+        dados:{codigo:codigo||null,descricao:descricao||null,categoria:cat,unidade:txt(item.unidade,30)||null,preco_fornecedor:num(item.preco),peso_kg_m:num(item.peso_kg_m),tamanho_barra_mm:num(item.tamanho_barra_mm),linha:txt(item.linha,120)||null,aplicacao:txt(item.aplicacao,1000)||null,pagina_catalogo:num(item.pagina_catalogo),fornecedor_nome:txt(f?.nome,220)||null,fornecedor_cnpj:dig(f?.cnpj)||null},
         deduplicacao:{metodo:p.metodo,produto_existente:p.produto||null,ambiguos:(p as any).ambiguos||[]},
         acao_sugerida:p.produto?'vincular_existente':p.metodo==='ambiguo'?'revisar_ambiguidade':'cadastrar_novo',
         confianca:Math.min(num(item.confianca)??p.confianca,p.produto?1:.95),
@@ -465,9 +498,9 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
         const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||(categoria==='perfil'?'BR':'UN'),preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single()
         if(error){
           if((error as any)?.code==='23505'&&codigo){
-            const existente=await produtoPorCodigoBanco(usuario.empresa_id,codigo)
+            const existente=await esperarProdutoPorCodigoBanco(usuario.empresa_id,codigo)
             if(existente)produtoId=existente.id
-            else throw new Error(error.message)
+            else throw new Error('O código '+codigo+' já existe, mas ainda não foi possível reconciliá-lo. Tente novamente em alguns segundos.')
           }else throw new Error(error.message)
         }else produtoId=data.id
       }
@@ -635,7 +668,7 @@ export async function POST(req:NextRequest){
     await log(u,'entrada_recebida',entradaId,null,{tipo})
     const fonte=await preparar(u,entradaId,a);await supabaseAdmin.from('ai_aprendizado_entradas').update({storage_path:fonte.path,tamanho_bytes:fonte.size||null,texto_extraido:fonte.texto||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
     if((a as any)?.ingestPath)await supabaseAdmin.storage.from('atlas-aprendizado').remove([(a as any).ingestPath])
-    const x=await analisar(token,tipo,descricao,a?.nome||null,fonte.texto,fonte.imagens), fd=x?.documento?.fornecedor||null, f=await fornecedorExistente(u.empresa_id,fd)
+    const x=await analisar(token,tipo,descricao,a?.nome||null,fonte.texto,fonte.imagens,fonte.paginas), fd=x?.documento?.fornecedor||null, f=await fornecedorExistente(u.empresa_id,fd)
     const total=await criarCandidatos(u,entradaId,x,f), tipoDetectado=TIPOS.has(txt(x?.documento?.tipo,40))?txt(x.documento.tipo,40):tipo, setores=Array.isArray(x?.documento?.setores)?x.documento.setores.filter((s:any)=>MODULOS.has(String(s))).slice(0,15):[]
     const catalogoAutomatico=tipoDetectado==='catalogo'||tipoDetectado==='tabela_preco'
     const {data:at,error:ue}=await supabaseAdmin.from('ai_aprendizado_entradas').update({
@@ -663,7 +696,23 @@ export async function POST(req:NextRequest){
 export async function PATCH(req:NextRequest){
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
-    const b=await req.json(),id=txt(b?.id,80),acao=txt(b?.acao,40);if(!id)return NextResponse.json({error:'Candidato não informado.'},{status:400})
+    const b=await req.json(),acao=txt(b?.acao,40)
+    if(acao==='reprocessar_entrada'){
+      const entradaId=txt(b?.entrada_id,80)
+      if(!entradaId)return NextResponse.json({error:'Catálogo não informado.'},{status:400})
+      const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
+      if(!entrada)return NextResponse.json({error:'Catálogo não encontrado.'},{status:404})
+      if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela de preço pode ser reprocessado por esta ação.'},{status:400})
+      await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'analisando',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
+      const auto=await processarCatalogoAutomatico(u,entradaId)
+      return NextResponse.json({
+        mensagem:auto.pendentes
+          ?'Catálogo reprocessado: '+auto.aplicados+' item(ns) aplicados e '+auto.pendentes+' pendência(s) para validar.'
+          :'Catálogo reprocessado: '+auto.aplicados+' item(ns) aplicados, sem pendências.',
+        ...auto,
+      })
+    }
+    const id=txt(b?.id,80);if(!id)return NextResponse.json({error:'Candidato não informado.'},{status:400})
     const {data:c}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle();if(!c)return NextResponse.json({error:'Candidato não encontrado.'},{status:404});if(!(await podeValidar(u,c)))return NextResponse.json({error:'Sem permissão para validar.'},{status:403})
     const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle();if(!entrada)return NextResponse.json({error:'Entrada não encontrada.'},{status:404})
     if(acao==='corrigir'){
