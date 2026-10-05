@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, BookOpenCheck, CheckCircle2, ChevronDown, ChevronUp, FileText,
   Loader2, PackageSearch, RefreshCcw, ShieldCheck, Upload, XCircle, Sparkles,
-  Building2, Boxes, GraduationCap, History, Save, ExternalLink,
+  Building2, Boxes, GraduationCap, History, Save, ExternalLink, Search, Eye,
 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
@@ -24,6 +24,8 @@ type Entrada = {
   fornecedor_nome_sugerido?: string | null
   criado_por_nome?: string | null
   created_at: string
+  erro?: string | null
+  mime_type?: string | null
 }
 type Candidato = {
   id: string
@@ -103,6 +105,10 @@ export default function CentralAprendizadoPage(){
   const [erro,setErro]=useState('')
   const [mensagem,setMensagem]=useState('')
   const [aberto,setAberto]=useState<string|null>(null)
+  const [catalogoAberto,setCatalogoAberto]=useState<string|null>(null)
+  const [itemCatalogoAberto,setItemCatalogoAberto]=useState<string|null>(null)
+  const [buscaCatalogo,setBuscaCatalogo]=useState('')
+  const [reprocessando,setReprocessando]=useState<string|null>(null)
   const [salvando,setSalvando]=useState<string|null>(null)
   const [edicoes,setEdicoes]=useState<Record<string,{titulo:string;modulo:string;dados:Record<string,any>;observacao:string}>>({})
   const fileRef=useRef<HTMLInputElement>(null)
@@ -172,6 +178,17 @@ export default function CentralAprendizadoPage(){
   function meta(id:string,chave:'titulo'|'modulo'|'observacao',valor:string){
     setEdicoes(prev=>({...prev,[id]:{...(prev[id]||{titulo:'',modulo:'',dados:{},observacao:''}),[chave]:valor}}))
   }
+  async function reprocessarEntrada(e:Entrada){
+    if(reprocessando)return
+    setReprocessando(e.id);setErro('');setMensagem('')
+    try{
+      const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({acao:'reprocessar_entrada',entrada_id:e.id})})
+      setMensagem(j.mensagem||'Catálogo reprocessado.')
+      await carregar()
+    }catch(err:any){setErro(err?.message||'Erro ao reprocessar catálogo.')}
+    finally{setReprocessando(null)}
+  }
+
   async function acao(c:Candidato,acao:'corrigir'|'aprovar'|'rejeitar'){
     if(salvando)return
     setSalvando(c.id);setErro('');setMensagem('')
@@ -258,10 +275,24 @@ export default function CentralAprendizadoPage(){
                 <h3 className="font-semibold">{e.titulo}</h3>
                 {e.resumo_ia&&<p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{e.resumo_ia}</p>}
                 {e.fornecedor_nome_sugerido&&<div className="mt-2 flex items-center gap-1 text-xs font-semibold text-slate-600"><Building2 size={13}/>{e.fornecedor_nome_sugerido}</div>}
-                {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
+                  {['catalogo','tabela_preco'].includes(e.tipo)&&<button onClick={()=>{setCatalogoAberto(v=>v===e.id?null:e.id);setItemCatalogoAberto(null);setBuscaCatalogo('')}} className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"><PackageSearch size={13}/>Ver itens ({dados.candidatos.filter(c=>c.entrada_id===e.id&&c.tipo==='produto').length})</button>}
+                  {e.status==='erro'&&['catalogo','tabela_preco'].includes(e.tipo)&&dados.candidatos.some(c=>c.entrada_id===e.id)&&<button disabled={reprocessando===e.id} onClick={()=>void reprocessarEntrada(e)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-50"><RefreshCcw size={13} className={reprocessando===e.id?'animate-spin':''}/>{reprocessando===e.id?'Reprocessando...':'Reprocessar catálogo'}</button>}
+                </div>
+                {e.erro&&<div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-2 text-xs text-red-700">{String(e.erro).includes('uq_produtos_codigo_upper')?'Uma tentativa anterior encontrou um código já existente. O catálogo foi lido; agora o Atlas reconcilia o código existente em vez de criar duplicado.':e.erro}</div>}
               </div>
               <div className="shrink-0 text-right text-[11px] text-slate-400"><div>{e.criado_por_nome||'Usuário'}</div><div>{dataBr(e.created_at)}</div></div>
             </div>
+            {catalogoAberto===e.id&&<CatalogoDetalhes
+              entrada={e}
+              candidatos={dados.candidatos.filter(c=>c.entrada_id===e.id)}
+              busca={buscaCatalogo}
+              onBusca={setBuscaCatalogo}
+              itemAberto={itemCatalogoAberto}
+              onItemAberto={setItemCatalogoAberto}
+              onAbrirValidacao={c=>{setAba('validacoes');editarInicial(c)}}
+            />}
           </article>)}</div>}
         </div>
       </div> : <div>
@@ -342,6 +373,97 @@ export default function CentralAprendizadoPage(){
       </div>}
     </section>
   </main>
+}
+
+
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao}:{
+  entrada:Entrada
+  candidatos:Candidato[]
+  busca:string
+  onBusca:(v:string)=>void
+  itemAberto:string|null
+  onItemAberto:(v:string|null)=>void
+  onAbrirValidacao:(c:Candidato)=>void
+}){
+  const produtos=candidatos.filter(c=>c.tipo==='produto')
+  const q=busca.trim().toLocaleLowerCase('pt-BR')
+  const filtrados=produtos.filter(c=>!q||[c.dados?.codigo,c.dados?.descricao,c.titulo,c.dados?.linha].join(' ').toLocaleLowerCase('pt-BR').includes(q))
+  const aplicados=produtos.filter(c=>c.status==='aplicado').length
+  const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length
+  const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
+
+  function baixarSemPreco(){
+    const esc=(v:any)=>'"'+String(v??'').replaceAll('"','""')+'"'
+    const linhas=[['codigo','descricao','categoria','unidade','linha','preco_fornecedor'],...semPreco.map(c=>[c.dados?.codigo||'',c.dados?.descricao||c.titulo,c.dados?.categoria||'',c.dados?.unidade||'',c.dados?.linha||'',''])]
+    const csv='\ufeff'+linhas.map(l=>l.map(esc).join(';')).join('\n')
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
+    const a=document.createElement('a');a.href=url;a.download='itens-sem-preco-'+entrada.titulo.replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.csv';a.click();URL.revokeObjectURL(url)
+  }
+
+  return <div className="mt-4 border-t pt-4">
+    <div className="grid gap-2 sm:grid-cols-4">
+      <div className="rounded-xl bg-slate-50 p-3"><div className="text-lg font-bold">{produtos.length}</div><div className="text-[11px] text-slate-500">Itens lidos</div></div>
+      <div className="rounded-xl bg-emerald-50 p-3"><div className="text-lg font-bold text-emerald-700">{aplicados}</div><div className="text-[11px] text-emerald-700">Aplicados/vinculados</div></div>
+      <div className="rounded-xl bg-amber-50 p-3"><div className="text-lg font-bold text-amber-700">{pendentes}</div><div className="text-[11px] text-amber-700">Em validação</div></div>
+      <div className="rounded-xl bg-blue-50 p-3"><div className="text-lg font-bold text-blue-700">{semPreco.length}</div><div className="text-[11px] text-blue-700">Sem preço</div></div>
+    </div>
+
+    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+      <label className="relative flex-1">
+        <Search size={15} className="absolute left-3 top-3 text-slate-400"/>
+        <input value={busca} onChange={e=>onBusca(e.target.value)} placeholder="Buscar por código, descrição ou linha..." className="w-full rounded-xl border bg-white py-2.5 pl-9 pr-3 text-sm"/>
+      </label>
+      {semPreco.length>0&&<button onClick={baixarSemPreco} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-800">Baixar lista sem preço ({semPreco.length})</button>}
+    </div>
+    {semPreco.length>0&&<p className="mt-2 text-[11px] text-slate-500">A lista pode ser enviada ao fornecedor. Depois, a tabela preenchida pode voltar pela Central como “Tabela de preço”; o Atlas reconcilia pelos códigos.</p>}
+
+    <div className="mt-4 space-y-2">
+      {filtrados.length===0?<div className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-400">Nenhum item encontrado.</div>:filtrados.map(c=>{
+        const aberto=itemAberto===c.id
+        const pagina=Number(c.dados?.pagina_catalogo||0)
+        const fonte=entrada.fonte_url?(entrada.fonte_url+(pagina?'#page='+pagina+'&zoom=page-width':'')):null
+        const precisaValidar=['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'
+        return <div key={c.id} className="overflow-hidden rounded-xl border bg-white">
+          <button onClick={()=>onItemAberto(aberto?null:c.id)} className="flex w-full items-start justify-between gap-3 p-3 text-left hover:bg-slate-50">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold "+statusClasse(c.status)}>{c.status}</span>
+                {c.dados?.categoria&&<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{c.dados.categoria}</span>}
+                {pagina>0&&<span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">pág. {pagina}</span>}
+                <span className="text-[10px] text-slate-400">confiança {pct(c.confianca)}</span>
+              </div>
+              <div className="mt-1 font-semibold">{c.dados?.codigo||'Sem código'} <span className="font-normal text-slate-500">— {c.dados?.descricao||c.titulo}</span></div>
+              <div className="mt-1 text-xs text-slate-400">{c.deduplicacao?.produto_existente?'Vinculado ao produto já existente no Atlas':labelAcao(c.acao_sugerida)}{c.dados?.preco_fornecedor!=null?' · preço '+String(c.dados.preco_fornecedor):' · sem preço'}</div>
+            </div>
+            {aberto?<ChevronUp size={17}/>:<ChevronDown size={17}/>}
+          </button>
+          {aberto&&<div className="grid gap-4 border-t bg-slate-50 p-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.2fr)]">
+            <div>
+              <div className="grid gap-2 text-sm">
+                <InfoItem rotulo="Código" valor={c.dados?.codigo}/>
+                <InfoItem rotulo="Descrição" valor={c.dados?.descricao}/>
+                <InfoItem rotulo="Categoria" valor={c.dados?.categoria}/>
+                <InfoItem rotulo="Linha" valor={c.dados?.linha}/>
+                <InfoItem rotulo="Peso kg/m" valor={c.dados?.peso_kg_m}/>
+                <InfoItem rotulo="Barra (mm)" valor={c.dados?.tamanho_barra_mm}/>
+                <InfoItem rotulo="Preço fornecedor" valor={c.dados?.preco_fornecedor}/>
+              </div>
+              {c.deduplicacao?.produto_existente&&<div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"><b>Produto existente:</b> {c.deduplicacao.produto_existente.codigo||''} {c.deduplicacao.produto_existente.nome}</div>}
+              {precisaValidar&&<button onClick={()=>onAbrirValidacao(c)} className="mt-3 w-full rounded-xl bg-amber-600 px-3 py-2.5 text-xs font-semibold text-white">Abrir este item na validação</button>}
+            </div>
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><Eye size={14}/>Fonte visual do catálogo{pagina>0?' · página '+pagina:''}</div>{entrada.fonte_url&&<a href={entrada.fonte_url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Abrir PDF inteiro</a>}</div>
+              {fonte?<iframe title={'Catálogo '+(c.dados?.codigo||c.id)} src={fonte} className="h-[520px] w-full rounded-xl border bg-white"/>:<div className="grid h-56 place-items-center rounded-xl border border-dashed bg-white text-sm text-slate-400">Fonte visual indisponível para este material.</div>}
+            </div>
+          </div>}
+        </div>
+      })}
+    </div>
+  </div>
+}
+
+function InfoItem({rotulo,valor}:{rotulo:string;valor:any}){
+  return <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-slate-100 pb-1.5"><span className="text-xs text-slate-400">{rotulo}</span><span className="break-words text-xs font-medium text-slate-700">{valor==null||valor===''?'—':String(valor)}</span></div>
 }
 
 function Campo({label,value,onChange}:{label:string;value:any;onChange:(v:string)=>void}){
