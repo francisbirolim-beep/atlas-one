@@ -795,7 +795,7 @@ function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): strin
 const partes: string[] = []
 const campo = (label: string, antes: unknown, depois: unknown) => {
 if (JSON.stringify(antes ?? null) !== JSON.stringify(depois ?? null)) {
-partes.push(\`\${label}: \${valorHistorico(antes)} → \${valorHistorico(depois)}\`)
+partes.push(`${label}: ${valorHistorico(antes)} → ${valorHistorico(depois)}`)
 }
 }
 
@@ -814,31 +814,31 @@ campo('Valor estimado', original.valor_estimado, novo.valor_estimado)
 if (original.coluna_id !== novo.coluna_id) {
 const antes = colunas.find(c => c.id === original.coluna_id)?.nome || '—'
 const depois = colunas.find(c => c.id === novo.coluna_id)?.nome || '—'
-partes.push(\`Coluna: \${antes} → \${depois}\`)
+partes.push(`Coluna: ${antes} → ${depois}`)
 }
 
 const itensAntes = original.itens || []
 const itensDepois = novo.itens || []
 if (itensAntes.length !== itensDepois.length) {
-partes.push(\`Tipologias/itens: \${itensAntes.length} → \${itensDepois.length}\`)
+partes.push(`Tipologias/itens: ${itensAntes.length} → ${itensDepois.length}`)
 }
 const maxItens = Math.max(itensAntes.length, itensDepois.length)
 for (let i = 0; i < maxItens; i++) {
 const a = itensAntes[i]
 const b = itensDepois[i]
 if (!a && b) {
-partes.push(\`Item \${i + 1} adicionado: \${b.ambiente || 'sem ambiente'} · \${tipoLabels[b.tipo_esquadria] || b.tipo_esquadria || 'tipologia'} · \${b.largura_mm || 0}×\${b.altura_mm || 0} mm · qtd \${b.quantidade || 1}\`)
+partes.push(`Item ${i + 1} adicionado: ${b.ambiente || 'sem ambiente'} · ${tipoLabels[b.tipo_esquadria] || b.tipo_esquadria || 'tipologia'} · ${b.largura_mm || 0}×${b.altura_mm || 0} mm · qtd ${b.quantidade || 1}`)
 continue
 }
 if (a && !b) {
-partes.push(\`Item \${i + 1} removido: \${a.ambiente || 'sem ambiente'} · \${tipoLabels[a.tipo_esquadria] || a.tipo_esquadria || 'tipologia'}\`)
+partes.push(`Item ${i + 1} removido: ${a.ambiente || 'sem ambiente'} · ${tipoLabels[a.tipo_esquadria] || a.tipo_esquadria || 'tipologia'}`)
 continue
 }
 if (!a || !b) continue
 const mudancasItem: string[] = []
 const itemCampo = (label: string, antes: unknown, depois: unknown) => {
 if (JSON.stringify(antes ?? null) !== JSON.stringify(depois ?? null)) {
-mudancasItem.push(\`\${label} \${valorHistorico(antes)} → \${valorHistorico(depois)}\`)
+mudancasItem.push(`${label} ${valorHistorico(antes)} → ${valorHistorico(depois)}`)
 }
 }
 itemCampo('ambiente', a.ambiente, b.ambiente)
@@ -851,7 +851,7 @@ itemCampo('cor', a.cor, b.cor)
 itemCampo('contramarco', a.contramarco, b.contramarco)
 itemCampo('descrição', a.descricao, b.descricao)
 itemCampo('observação produção', a.observacao_producao, b.observacao_producao)
-if (mudancasItem.length) partes.push(\`Item \${i + 1}: \${mudancasItem.join(', ')}\`)
+if (mudancasItem.length) partes.push(`Item ${i + 1}: ${mudancasItem.join(', ')}`)
 }
 
 return partes.length > 0 ? partes.join('; ') : 'Salvou sem mudanças'
@@ -997,8 +997,7 @@ onClick={() => {
 setBusca('')
 setTipoFiltroData('entrada')
 setFiltroDataDe('')
-setFiltroDataAte('')
-setFiltroTemperatura('')
+setFiltroDataAte('')setFiltroTemperatura('')
 }}
 className="text-xs text-slate-400 hover:text-slate-600 px-2"
 >
