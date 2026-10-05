@@ -89,6 +89,24 @@ async function podeValidar(usuario:UsuarioTenant,c:any){
   }
   return ['compras','engenharia'].some(m=>especialistaDoModulo(m as AIModulo)?.setorIds.some(id=>ed.has(id)))
 }
+async function lerPdfCatalogo(b:Buffer){
+  const paginas:Array<{pagina:number;texto:string}>=[]
+  const p=await pdfParse(b,{pagerender:async(pageData:any)=>{
+    const tc=await pageData.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false})
+    let lastY:number|undefined,textoPagina=''
+    for(const item of (tc?.items||[])){
+      const y=Number(item?.transform?.[5])
+      const str=String(item?.str||'')
+      if(lastY===undefined||y===lastY)textoPagina+=str
+      else textoPagina+='\n'+str
+      lastY=y
+    }
+    paginas.push({pagina:paginas.length+1,texto:textoPagina})
+    return textoPagina
+  }})
+  return {texto:String(p.text||'').replace(/\r/g,'').trim().slice(0,250000),paginas}
+}
+
 async function preparar(usuario:UsuarioTenant,id:string,a:any){
   if(!a)return {path:null as string|null,texto:'',imagens:[] as OpenCodeAnexo[],paginas:[] as Array<{pagina:number;texto:string}>,size:0}
   const mime=a.mediaType||'application/octet-stream'
@@ -101,20 +119,9 @@ async function preparar(usuario:UsuarioTenant,id:string,a:any){
     b=Buffer.from(a.dados,'base64')
     if(b.length>MAX)throw new Error('Arquivo maior que 50 MB.')
     if(mime==='application/pdf'){
-      const p=await pdfParse(b,{pagerender:async(pageData:any)=>{
-        const tc=await pageData.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false})
-        let lastY:number|undefined,textoPagina=''
-        for(const item of (tc?.items||[])){
-          const y=Number(item?.transform?.[5])
-          const str=String(item?.str||'')
-          if(lastY===undefined||y===lastY)textoPagina+=str
-          else textoPagina+='\n'+str
-          lastY=y
-        }
-        paginas.push({pagina:paginas.length+1,texto:textoPagina})
-        return textoPagina
-      }})
-      texto=String(p.text||'').replace(/\r/g,'').trim().slice(0,250000)
+      const lido=await lerPdfCatalogo(b)
+      texto=lido.texto
+      paginas.push(...lido.paginas)
     }
     else if(mime.startsWith('image/')) imagens.push({nome:a.nome,mediaType:mime,dados:a.dados})
   }
@@ -151,7 +158,7 @@ function ruidoCatalogo(v: unknown,fornecedorNome?:string|null){
   const x=norm(limparLinhaCatalogo(v))
   if(!x)return true
   if(x==='LINHA'||/^A L U M I N I O S$/.test(x)||x==='ALUMINIOS')return true
-  if(/^AS INFORMACOES CONTIDAS NESTE CAT/.test(x)||/ESTAO SUJEITAS A ALTERACOES/.test(x))return true
+  if(/^AS INFORMACOES CONTID/.test(x)||/ESTAO SUJEITAS A ALTERACOES/.test(x))return true
   if(/^PAGINA\b/.test(x))return true
   if(fornecedorNome){
     const fn=norm(fornecedorNome), partes=fn.split(' ').filter(Boolean)
@@ -274,6 +281,47 @@ function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,tex
     },
     itens,
   }
+}
+
+async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
+  if(!entrada?.storage_path||entrada?.mime_type!=='application/pdf')return {mapeados:0,total:0}
+  const {data:file,error}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
+  if(error||!file)throw new Error('Não foi possível reabrir o PDF do catálogo para preparar as imagens.')
+  const buffer=Buffer.from(await file.arrayBuffer())
+  const lido=await lerPdfCatalogo(buffer)
+  const fornecedorNome=nomeFornecedorCatalogo(lido.texto)
+  const extraidos=extrairProdutosCatalogoLocal(lido.texto,fornecedorNome,lido.paginas)
+  const porCodigo=new Map(extraidos.map((i:any)=>[cod(i.codigo),i]))
+  const {data:candidatos,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+    .select('id,dados').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').limit(2000)
+  if(ce)throw ce
+  let mapeados=0
+  const lista=candidatos||[]
+  for(let i=0;i<lista.length;i+=20){
+    const lote=lista.slice(i,i+20)
+    await Promise.all(lote.map(async(c:any)=>{
+      const codigo=cod(c?.dados?.codigo)
+      const item=porCodigo.get(codigo) as any
+      if(!item)return
+      const pagina=num(item.pagina_catalogo)
+      const linhaNova=txt(item.linha,120)||null
+      const dados={
+        ...(c.dados||{}),
+        pagina_catalogo:pagina,
+        linha:linhaNova||c?.dados?.linha||null,
+      }
+      if(pagina)mapeados++
+      const {error:ue}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
+        .eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+      if(ue)throw ue
+    }))
+  }
+  await supabaseAdmin.from('ai_aprendizado_entradas').update({
+    metadados:{...(entrada.metadados||{}),paginas_mapeadas_em:new Date().toISOString(),itens_com_pagina:mapeados},
+    updated_at:new Date().toISOString()
+  }).eq('empresa_id',usuario.empresa_id).eq('id',entrada.id)
+  await log(usuario,'catalogo_paginas_mapeadas',entrada.id,null,{mapeados,total:lista.length})
+  return {mapeados,total:lista.length}
 }
 
 async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[],paginas:Array<{pagina:number;texto:string}>=[]){
@@ -697,6 +745,15 @@ export async function PATCH(req:NextRequest){
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const b=await req.json(),acao=txt(b?.acao,40)
+    if(acao==='mapear_catalogo'){
+      const entradaId=txt(b?.entrada_id,80)
+      if(!entradaId)return NextResponse.json({error:'Catálogo não informado.'},{status:400})
+      const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
+      if(!entrada)return NextResponse.json({error:'Catálogo não encontrado.'},{status:404})
+      if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela pode ter imagens preparadas.'},{status:400})
+      const mapa=await remapearCatalogoExistente(u,entrada)
+      return NextResponse.json({mensagem:'Catálogo preparado: '+mapa.mapeados+' de '+mapa.total+' item(ns) foram ligados à página correta para gerar o recorte visual.',...mapa})
+    }
     if(acao==='reprocessar_entrada'){
       const entradaId=txt(b?.entrada_id,80)
       if(!entradaId)return NextResponse.json({error:'Catálogo não informado.'},{status:400})
@@ -704,6 +761,7 @@ export async function PATCH(req:NextRequest){
       if(!entrada)return NextResponse.json({error:'Catálogo não encontrado.'},{status:404})
       if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela de preço pode ser reprocessado por esta ação.'},{status:400})
       await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'analisando',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
+      await remapearCatalogoExistente(u,entrada)
       const auto=await processarCatalogoAutomatico(u,entradaId)
       return NextResponse.json({
         mensagem:auto.pendentes
@@ -715,6 +773,32 @@ export async function PATCH(req:NextRequest){
     const id=txt(b?.id,80);if(!id)return NextResponse.json({error:'Candidato não informado.'},{status:400})
     const {data:c}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle();if(!c)return NextResponse.json({error:'Candidato não encontrado.'},{status:404});if(!(await podeValidar(u,c)))return NextResponse.json({error:'Sem permissão para validar.'},{status:403})
     const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle();if(!entrada)return NextResponse.json({error:'Entrada não encontrada.'},{status:404})
+    if(acao==='salvar_imagem_catalogo'){
+      if(c.tipo!=='produto')return NextResponse.json({error:'Imagem só pode ser vinculada a produto.'},{status:400})
+      const dataUrl=String(b?.imagem||'')
+      const m=dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/i)
+      if(!m)return NextResponse.json({error:'Imagem inválida.'},{status:400})
+      const formato=String(m[1]).toLowerCase()==='jpg'?'jpeg':String(m[1]).toLowerCase()
+      const buffer=Buffer.from(m[2],'base64')
+      if(!buffer.length||buffer.length>4*1024*1024)return NextResponse.json({error:'Recorte de imagem inválido ou maior que 4 MB.'},{status:400})
+      const extensao=formato==='jpeg'?'jpg':formato
+      const path='catalogo-itens/'+u.empresa_id+'/'+entrada.id+'/'+c.id+'.'+extensao
+      const {error:up}=await supabaseAdmin.storage.from('fotos').upload(path,buffer,{contentType:'image/'+formato,upsert:true})
+      if(up)throw new Error(up.message)
+      const {data:pub}=supabaseAdmin.storage.from('fotos').getPublicUrl(path)
+      const url=pub.publicUrl
+      const dados={...(c.dados||{}),imagem_item_url:url,imagem_catalogo_pagina:num(c?.dados?.pagina_catalogo)}
+      const {data:atualizado,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
+        .eq('empresa_id',u.empresa_id).eq('id',id).select('*').single()
+      if(ce)throw ce
+      if(c.destino_id){
+        const {error:pe}=await supabaseAdmin.from('produtos').update({foto_url:url,updated_at:new Date().toISOString()})
+          .eq('empresa_id',u.empresa_id).eq('id',c.destino_id)
+        if(pe)throw pe
+      }
+      await log(u,'catalogo_imagem_item_salva',entrada.id,id,{destino_id:c.destino_id||null,pagina:num(c?.dados?.pagina_catalogo)})
+      return NextResponse.json({candidato:{...atualizado,pode_validar:true},imagem_url:url})
+    }
     if(acao==='editar_item_catalogo'){
       if(c.tipo!=='produto')return NextResponse.json({error:'Esta edição é exclusiva para itens de catálogo.'},{status:400})
       const recebido=b?.dados&&typeof b.dados==='object'?b.dados:{}
