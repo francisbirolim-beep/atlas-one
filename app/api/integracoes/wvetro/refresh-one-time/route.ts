@@ -16,7 +16,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-const ONE_TIME_TOKEN_SHA256 = '9d2ac42f140927ab1ca929068e99239c3d4f6536b07b2f53e3feed536b92fe92'
+const ONE_TIME_TOKEN_SHA256 = '1adebfd7977af014b17656477daeedf4ba554bcdae8bc830fe79114c709d72ef'
 
 function autorizado(req: NextRequest) {
   const token = String(req.nextUrl.searchParams.get('token') || '')
