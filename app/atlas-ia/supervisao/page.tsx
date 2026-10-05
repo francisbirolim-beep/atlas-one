@@ -58,9 +58,20 @@ export default function SupervisaoIAPage(){
     if(r.id==='catalogo'&&(apr?.totais.pendentes||0)>0&&!operacional?.trabalhando){atividade='Acompanhando '+(apr?.totais.pendentes||0)+' validação(ões) pendente(s)';if(estado==='disponível')estado='observando'}
     return {...r,estado,atividade,ultima,exec:Number(base?.execucoes30d||0),custo:Number(base?.custo30d||0),provider:base?.provider||'—',modelo:base?.modelo||'—'}
   }),[dados,apr])
-  const ativos=agentes.filter(a=>a.id!=='supervisor'&&a.estado==='trabalhando').length
+  const ativosEspecialistas=agentes.filter(a=>a.id!=='supervisor'&&a.estado==='trabalhando').length
   const supervisor=agentes.find(a=>a.id==='supervisor')
-  if(supervisor){supervisor.estado=ativos?'trabalhando':'observando';supervisor.atividade=ativos?'Supervisionando '+ativos+' agente(s) em atividade':'Monitorando a operação da IA'}
+  const supervisorOperacao=dados?.operacaoAgora?.supervisor
+  if(supervisor){
+    if(supervisorOperacao?.trabalhando){
+      supervisor.estado='trabalhando'
+      supervisor.atividade=supervisorOperacao.atividade||'Atendendo uma solicitação na IA geral'
+      supervisor.ultima=supervisorOperacao.ultimaAtividadeEm||supervisor.ultima
+    }else{
+      supervisor.estado=ativosEspecialistas?'trabalhando':'observando'
+      supervisor.atividade=ativosEspecialistas?'Supervisionando '+ativosEspecialistas+' agente(s) em atividade':'Monitorando a operação da IA'
+    }
+  }
+  const ativos=ativosEspecialistas+(supervisor?.estado==='trabalhando'?1:0)
   const escolhido=agentes.find(a=>a.id===sel)||agentes[0]
 
   if(loading)return <main className="min-h-screen grid place-items-center bg-slate-50"><div className="flex items-center gap-2 text-slate-600"><Loader2 className="animate-spin"/>Carregando Central de IA...</div></main>
@@ -96,7 +107,9 @@ export default function SupervisaoIAPage(){
             </div>
           })}
           {agentes.map((a,i)=>{
-            const movimento=a.id==='supervisor'?'patrolling':a.estado==='trabalhando'?'working':a.estado==='observando'?'watching':'idle'
+            const movimento=a.id==='supervisor'
+              ? (a.estado==='trabalhando'?'patrolling supervisor-working':'watching')
+              : a.estado==='trabalhando'?'working':a.estado==='observando'?'watching':'idle'
             return <button key={a.id} onClick={()=>setSel(a.id)} className={'agent agent-'+(i+1)+' '+movimento+' '+(sel===a.id?'selected':'')}>
               <span className="bubble"><i className={'dot '+a.estado}/>{a.atividade}</span>
               <span className="person"><i style={{background:a.cor}}/><b>{a.emoji}</b></span>
@@ -122,7 +135,7 @@ export default function SupervisaoIAPage(){
       .station{position:absolute;width:170px;height:72px;border:1px solid #dbe3ee;border-radius:16px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 22px #0f17240d;transition:.3s}.station b{font-size:11px}.station small{font-size:9px;color:#94a3b8}.station-state{position:absolute;right:8px;top:6px;font-size:8px;font-weight:900;color:#94a3b8}.station-active{border-color:#86efac;box-shadow:0 0 0 3px #dcfce7,0 12px 30px #16a34a26}.station-active .station-state{color:#16a34a}.station-watch{border-color:#bfdbfe}.station-watch .station-state{color:#2563eb}.station-1{left:4%;top:8%}.station-2{left:39%;top:6%}.station-3{right:4%;top:8%}.station-4{left:5%;bottom:8%}.station-5{left:40%;bottom:6%}.station-6{right:4%;bottom:8%}
       .agent{--wx:0px;--wy:0px;position:absolute;width:150px;height:112px;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;z-index:5;will-change:transform}.agent-1{left:20%;top:28%;--wx:-125px;--wy:-105px}.agent-2{left:43%;top:25%;--wx:-22px;--wy:-100px}.agent-3{right:18%;top:28%;--wx:125px;--wy:-105px}.agent-4{left:20%;bottom:26%;--wx:-120px;--wy:100px}.agent-5{left:44%;bottom:23%;--wx:-25px;--wy:105px}.agent-6{right:18%;bottom:26%}.selected{filter:drop-shadow(0 7px 12px #2563eb33)}
       .bubble{position:absolute;bottom:82px;max-width:185px;border-radius:10px;background:#0f172a;color:white;padding:6px 8px;font-size:9px;font-weight:700;line-height:1.2;opacity:.9;box-shadow:0 5px 14px #0f172426}.bubble .dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;background:#94a3b8}.bubble .dot.trabalhando{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}.bubble .dot.observando{background:#3b82f6}.person{position:relative;width:48px;height:58px;display:grid;place-items:center}.person i{position:absolute;bottom:0;width:42px;height:34px;border-radius:16px 16px 8px 8px}.person b{z-index:2;display:grid;width:34px;height:34px;place-items:center;border:2px solid #cbd5e1;border-radius:50%;background:white}.tag{margin-top:3px;border:1px solid #e2e8f0;border-radius:999px;background:white;padding:3px 7px;font-size:10px;font-weight:900;white-space:nowrap}
-      .working{animation:walkToDesk 6s ease-in-out infinite}.working .person{animation:hop 650ms ease-in-out infinite}.working .bubble{animation:pulse 1.2s ease-in-out infinite}.watching{animation:inspect 7s ease-in-out infinite}.watching .person b{animation:look 2.4s ease-in-out infinite}.idle .person{animation:breathe 3.5s ease-in-out infinite}.patrolling{animation:patrol 12s ease-in-out infinite}.patrolling .person{animation:hop 1.1s ease-in-out infinite}
+      .working{animation:walkToDesk 6s ease-in-out infinite}.working .person{animation:hop 650ms ease-in-out infinite}.working .bubble{animation:pulse 1.2s ease-in-out infinite}.watching{animation:inspect 7s ease-in-out infinite}.watching .person b{animation:look 2.4s ease-in-out infinite}.idle .person{animation:breathe 3.5s ease-in-out infinite}.patrolling{animation:patrol 8s ease-in-out infinite}.patrolling .person{animation:hop .75s ease-in-out infinite}.supervisor-working .bubble{background:#4c1d95;box-shadow:0 0 0 4px #8b5cf633,0 8px 24px #4c1d9540}
       @keyframes walkToDesk{0%,12%,100%{transform:translate(0,0)}42%,68%{transform:translate(var(--wx),var(--wy))}82%{transform:translate(calc(var(--wx)*.35),calc(var(--wy)*.35))}}
       @keyframes inspect{0%,100%{transform:translate(0,0)}25%{transform:translate(12px,-5px)}50%{transform:translate(-8px,4px)}75%{transform:translate(8px,8px)}}
       @keyframes patrol{0%,100%{transform:translate(0,0)}22%{transform:translate(-90px,-60px)}48%{transform:translate(-220px,-12px)}72%{transform:translate(-100px,72px)}}
