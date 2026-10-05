@@ -8,6 +8,7 @@ import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoE
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
+import { usuarioAtual } from '@/lib/auth'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
 const RASCUNHO_ID = 'orcamento-rapido-layout-restaurado-v1'
@@ -97,25 +98,126 @@ function resumoMedidas(item: ItemForm) {
 
 type ProdutoAtlasBusca = { id:string; codigo?:string|null; nome:string; categoria?:string|null; unidade?:string|null; preco?:number|null; custo?:number|null; descricao?:string|null }
 
+function nomeNormalizado(valor: string) {
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+}
+
 function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partial<ItemForm>)=>void}) {
   const [busca,setBusca]=useState('')
   const [resultados,setResultados]=useState<ProdutoAtlasBusca[]>([])
   const [carregando,setCarregando]=useState(false)
+  const [podeCadastrarProdutoPronto,setPodeCadastrarProdutoPronto]=useState(false)
+  const [cadastrandoProdutoPronto,setCadastrandoProdutoPronto]=useState(false)
+  const [erroCadastro,setErroCadastro]=useState('')
+
   useEffect(()=>{
-    if(busca.trim().length<2){setResultados([]);return}
+    let ativo=true
+    void usuarioAtual().then(me=>{
+      if(!ativo)return
+      const nome=nomeNormalizado(me?.nome||'')
+      setPodeCadastrarProdutoPronto(me?.role==='master'||nome==='julio'||nome.startsWith('julio '))
+    }).catch(()=>{if(ativo)setPodeCadastrarProdutoPronto(false)})
+    return()=>{ativo=false}
+  },[])
+
+  useEffect(()=>{
+    setErroCadastro('')
+    if(busca.trim().length<2){setResultados([]);setCarregando(false);return}
     const timer=window.setTimeout(async()=>{
       setCarregando(true)
-      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao').eq('ativo',true).or(`codigo.ilike.%${busca.trim()}%,nome.ilike.%${busca.trim()}%,descricao.ilike.%${busca.trim()}%`).limit(20)
-      if(item.itemTipo==='material_avulso'&&item.materialCategoria){ q=q.ilike('categoria',`%${item.materialCategoria}%`) }
-      const {data}=await q
-      setResultados((data||[]) as ProdutoAtlasBusca[]);setCarregando(false)
+      const termo=busca.trim().replace(/[,%()]/g,' ')
+      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao').eq('ativo',true).or(`codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%`)
+      if(item.itemTipo==='medida_padrao') q=q.eq('categoria','porta_janela_padrao')
+      else if(item.itemTipo==='kit_porta_pronta') q=q.eq('categoria','kit')
+      else if(item.itemTipo==='material_avulso'&&item.materialCategoria){
+        if(item.materialCategoria==='outros') q=q.not('categoria','in','(porta_janela_padrao,kit,perfil,acessorio,vidro)')
+        else q=q.eq('categoria',item.materialCategoria)
+      }
+      const {data}=await q.limit(20)
+      setResultados((data||[]) as ProdutoAtlasBusca[])
+      setCarregando(false)
     },250)
     return()=>window.clearTimeout(timer)
   },[busca,item.itemTipo,item.materialCategoria])
+
+  async function cadastrarProdutoPronto(){
+    const nome=busca.trim()
+    if(nome.length<2||cadastrandoProdutoPronto)return
+    setCadastrandoProdutoPronto(true)
+    setErroCadastro('')
+    try{
+      const me=await usuarioAtual()
+      const nomeUsuario=nomeNormalizado(me?.nome||'')
+      const permitido=me?.role==='master'||nomeUsuario==='julio'||nomeUsuario.startsWith('julio ')
+      if(!permitido){
+        setPodeCadastrarProdutoPronto(false)
+        setErroCadastro('Somente o usuário Master ou Júlio pode cadastrar um produto pronto por aqui.')
+        return
+      }
+
+      const {data:existente}=await supabase
+        .from('produtos')
+        .select('id,codigo,nome,categoria,unidade,preco,custo,descricao')
+        .eq('ativo',true)
+        .eq('categoria','porta_janela_padrao')
+        .ilike('nome',nome)
+        .limit(1)
+        .maybeSingle()
+
+      let produto=(existente||null) as ProdutoAtlasBusca|null
+      if(!produto){
+        const {data,error}=await supabase
+          .from('produtos')
+          .insert({
+            nome,
+            categoria:'porta_janela_padrao',
+            preco:0,
+            custo:null,
+            unidade:'unidade',
+            descricao:'Cadastro rápido criado durante o orçamento. Custo e preço de venda pendentes de conferência.',
+            criado_por_id:me?.id||null,
+            criado_por_nome:me?.nome||null,
+            ativo:true,
+          })
+          .select('id,codigo,nome,categoria,unidade,preco,custo,descricao')
+          .single()
+        if(error||!data)throw new Error(error?.message||'Não foi possível cadastrar o produto.')
+        produto=data as ProdutoAtlasBusca
+      }
+
+      onChange({
+        produtoId:produto.id,
+        produtoNome:produto.nome,
+        materialUnidade:produto.unidade||'unidade',
+        precoUnit:produto.preco==null?null:Number(produto.preco),
+        tipo:'outro',
+        tipoOutroTexto:produto.nome,
+        modoOrigem:'produto',
+      })
+      setBusca(produto.codigo?`${produto.codigo} · ${produto.nome}`:produto.nome)
+      setResultados([])
+    }catch(e){
+      setErroCadastro(e instanceof Error?e.message:'Não foi possível cadastrar o produto.')
+    }finally{
+      setCadastrandoProdutoPronto(false)
+    }
+  }
+
+  const rotulo=item.itemTipo==='medida_padrao'
+    ?'Produto pronto cadastrado'
+    :item.itemTipo==='kit_porta_pronta'
+      ?'Kit porta pronta cadastrado'
+      :item.itemTipo==='material_avulso'
+        ?'Produto / material'
+        :'Produto cadastrado'
+  const podeOferecerCadastro=item.itemTipo==='medida_padrao'&&busca.trim().length>=2&&!carregando&&!resultados.length&&!item.produtoId
+
   return <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-    {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>onChange({materialCategoria:v,produtoId:null,produtoNome:null})} className={`rounded-lg border px-2 py-2 text-xs ${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>{l}</button>)}</div></div>}
-    <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='material_avulso'?'Produto / material':'Produto cadastrado'}</label><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Digite código ou nome..." className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
-    {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
+    {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>{setBusca('');setResultados([]);onChange({materialCategoria:v,produtoId:null,produtoNome:null})}} className={`rounded-lg border px-2 py-2 text-xs ${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>{l}</button>)}</div></div>}
+    <div><label className="mb-1 block text-xs text-slate-500">{rotulo}</label><input value={busca} onChange={e=>{setBusca(e.target.value);if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
+    {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
+    {podeOferecerCadastro&&(podeCadastrarProdutoPronto?<div className="rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="text-xs font-semibold text-blue-900">Produto pronto “{busca.trim()}” não encontrado.</p><p className="mt-1 text-[11px] text-blue-700">Deseja cadastrá-lo agora? Custo e preço de venda podem ser completados depois no cadastro de produtos.</p><button type="button" onClick={()=>void cadastrarProdutoPronto()} disabled={cadastrandoProdutoPronto} className="mt-2 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{cadastrandoProdutoPronto?'Cadastrando...':'Cadastrar este produto'}</button></div>:<p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Produto pronto não encontrado. Peça ao Master ou ao Júlio para cadastrá-lo.</p>)}
+    {erroCadastro&&<p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erroCadastro}</p>}
     {item.produtoId&&<div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Selecionado: {item.produtoNome}</div>}
   </div>
 }
