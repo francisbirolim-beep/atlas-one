@@ -292,6 +292,13 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
   const fornecedorNome=nomeFornecedorCatalogo(lido.texto)
   const extraidos=extrairProdutosCatalogoLocal(lido.texto,fornecedorNome,lido.paginas)
   const porCodigo=new Map(extraidos.map((i:any)=>[cod(i.codigo),i]))
+  const paginaPorCodigo=new Map<string,number>()
+  for(const pg of lido.paginas){
+    for(const linha of String(pg.texto||'').split(/\\r?\\n/)){
+      const codigo=ehCodigoCatalogo(linha)
+      if(codigo&&!paginaPorCodigo.has(cod(codigo)))paginaPorCodigo.set(cod(codigo),pg.pagina)
+    }
+  }
   const {data:candidatos,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
     .select('id,dados').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').limit(2000)
   if(ce)throw ce
@@ -302,13 +309,15 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
     await Promise.all(lote.map(async(c:any)=>{
       const codigo=cod(c?.dados?.codigo)
       const item=porCodigo.get(codigo) as any
-      if(!item)return
-      const pagina=num(item.pagina_catalogo)
-      const linhaNova=txt(item.linha,120)||null
+      const pagina=paginaPorCodigo.get(codigo)||num(item?.pagina_catalogo)
+      if(!pagina&&!item)return
+      const linhaNova=txt(item?.linha,120)||null
+      const linhaAtual=txt(c?.dados?.linha,120)||null
+      const linhaAtualValida=linhaAtual&&!ruidoCatalogo(linhaAtual,fornecedorNome)?linhaAtual:null
       const dados={
         ...(c.dados||{}),
         pagina_catalogo:pagina,
-        linha:linhaNova||c?.dados?.linha||null,
+        linha:linhaNova||linhaAtualValida,
       }
       if(pagina)mapeados++
       const {error:ue}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
