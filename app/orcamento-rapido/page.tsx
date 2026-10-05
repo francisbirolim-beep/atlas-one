@@ -155,6 +155,7 @@ export default function OrcamentoRapido() {
   const [arquivos, setArquivos] = useState<File[]>([])
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  const [salvoComPendenciasTecnicas, setSalvoComPendenciasTecnicas] = useState(false)
   const [pedidoEnviadoId, setPedidoEnviadoId] = useState<string | null>(null)
   const [salvoOffline, setSalvoOffline] = useState(false)
   const [motivoPendente, setMotivoPendente] = useState('')
@@ -364,14 +365,16 @@ export default function OrcamentoRapido() {
     try {
       const resultado = await criarOrcamentoNoServidor(dadosForm)
       if (resultado.ok) {
+        const temPendenciasTecnicas = itens.some(item => item.itemTipo === 'sob_medida' && (!item.tipologiaId || item.configuracaoStatus === 'pendente'))
         setSalvando(false)
         await removerRascunho(RASCUNHO_ID).catch(() => {})
         setRascunhoSalvoEm(null)
-        if (fluxoSobMedida && resultado.id) {
+        setPedidoEnviadoId(resultado.id || null)
+        setSalvoComPendenciasTecnicas(temPendenciasTecnicas)
+        if (fluxoSobMedida && resultado.id && !temPendenciasTecnicas) {
           window.location.assign(`/orcamento/${resultado.id}/composicao`)
           return
         }
-        setPedidoEnviadoId(resultado.id || null)
         setSalvo(true)
         return
       }
@@ -403,10 +406,10 @@ export default function OrcamentoRapido() {
       if (it.itemTipo === 'material_avulso') { if (!it.materialCategoria) return setErro(`Selecione a categoria de ${referencia}`); continue }
       if (it.itemTipo !== 'sob_medida') continue
       if (it.modoOrigem === 'produto' && !it.produtoId) return setErro(`Selecione um produto cadastrado em ${referencia}, ou troque para digitar manualmente`)
-      if (fluxoSobMedida && !it.tipologiaId) return setErro(`Escolha uma tipologia cadastrada para ${referencia}`)
-      if (!it.tipo) return setErro(`Selecione o tipo de ${referencia}`)
+      // Tipologia e variáveis técnicas podem ficar pendentes no rascunho.
+      // O orçamento precisa ser salvo primeiro; a composição só é liberada quando estiver completo.
+      if (!it.tipo && !it.tipoOutroTexto.trim()) return setErro(`Descreva o que precisa em ${referencia}`)
       if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) return setErro(`Escreva qual é o tipo de ${referencia}`)
-      if (it.tipologiaId && it.configuracaoStatus === 'pendente') return setErro(`Informe e confirme as variáveis técnicas de ${referencia}`)
 
       if (it.tipoMedida === 'final') {
         if (it.modoLargura === 'foto') {
@@ -434,7 +437,7 @@ export default function OrcamentoRapido() {
   function resetar() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
-    setSalvo(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setConferenciaAberta(false)
+    setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
@@ -446,7 +449,7 @@ export default function OrcamentoRapido() {
 
   if (salvoOffline) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center"><WifiOff size={48} className="text-amber-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Orçamento protegido!</h2><p className="text-slate-500">O envio de {clienteNome} não foi concluído agora, mas o orçamento foi guardado neste aparelho e entrou na fila de sincronização automática.</p>{motivoPendente && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Motivo: {motivoPendente}</p>}<p className="mt-3 text-xs font-medium text-emerald-700">Você não precisa refazer o orçamento.</p><button onClick={resetar} className="mt-6 px-4 py-2 bg-brand-navy text-white rounded-lg">Novo pedido</button></div></div>
 
-  if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">{fluxoSobMedida ? 'Orçamento sob medida salvo!' : 'Pedido enviado!'}</h2><p className="text-slate-500 mb-6">{fluxoSobMedida ? `A configuração de ${clienteNome} foi salva. Agora você pode calcular materiais, custo, sobra, margem e preço.` : `${clienteNome} entrou no painel de orçamentos.`}</p><div className="grid gap-3">{pedidoEnviadoId && fluxoSobMedida && <Link href={`/orcamento/${pedidoEnviadoId}/composicao`} className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold"><Calculator size={17} /> Calcular o orçamento</Link>}{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 border border-brand-teal text-brand-teal rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> Editar este orçamento</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo orçamento</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
+  if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">{fluxoSobMedida ? 'Orçamento sob medida salvo!' : 'Pedido enviado!'}</h2><p className="text-slate-500 mb-6">{fluxoSobMedida ? (salvoComPendenciasTecnicas ? `O orçamento de ${clienteNome} foi salvo com segurança. Há tipologias ou variáveis técnicas pendentes, que podem ser completadas depois sem refazer o orçamento.` : `A configuração de ${clienteNome} foi salva. Agora você pode calcular materiais, custo, sobra, margem e preço.`) : `${clienteNome} entrou no painel de orçamentos.`}</p><div className="grid gap-3">{pedidoEnviadoId && fluxoSobMedida && !salvoComPendenciasTecnicas && <Link href={`/orcamento/${pedidoEnviadoId}/composicao`} className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold"><Calculator size={17} /> Calcular o orçamento</Link>}{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 border border-brand-teal text-brand-teal rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> {salvoComPendenciasTecnicas ? 'Completar pendências técnicas' : 'Editar este orçamento'}</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo orçamento</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
 
   const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
 
