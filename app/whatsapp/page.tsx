@@ -182,7 +182,7 @@ export default function WhatsAppAtendimentoPage() {
   useEffect(() => {
     try {
       const salvo = localStorage.getItem('atlas-whatsapp-painel-direito-recolhido')
-      setPainelDireitoRecolhido(salvo === null ? true : salvo === '1')
+      setPainelDireitoRecolhido(salvo === null ? false : salvo === '1')
     } catch {}
   }, [])
 
@@ -870,7 +870,7 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[280px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[280px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[280px_minmax(0,1fr)_260px]'}`}>
+        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
           <aside className={`${ativa ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -921,8 +921,8 @@ export default function WhatsAppAtendimentoPage() {
                   placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
               <div className="mt-3 flex items-center justify-between px-0.5">
-                <span className="text-xs font-bold text-slate-700">Abertas {totais.abertas}</span>
-                <span className="text-[10px] text-slate-400">Filtros do atendimento</span>
+                <span className="text-xs font-extrabold text-slate-800">Abertas <span className="text-slate-500">{totais.abertas}</span></span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600"><Tag size={12}/>Filtros</span>
               </div>
               <div className="mt-2 min-w-0 max-w-full">
                 <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
@@ -1020,34 +1020,28 @@ export default function WhatsAppAtendimentoPage() {
                       )}
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
-                    {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && !c.responsavel_id && (
-                      <div className="mt-2 flex">
-                        <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
-                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700">
-                          Atender
-                        </button>
-                      </div>
-                    )}
                     {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && (
-                      <div className="mt-2 hidden flex-wrap gap-1.5 group-hover:flex group-focus-within:flex">
+                      <div className={`mt-2 flex flex-wrap gap-1.5 ${!c.responsavel_id ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
                         <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
-                          className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${c.acompanhando?'border-cyan-200 bg-cyan-50 text-cyan-700':'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                          {c.acompanhando?'Parar acompanhamento':'Acompanhar'}
+                          className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${c.acompanhando?'border-amber-300 bg-amber-50 text-amber-800':'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'}`}>
+                          {c.acompanhando?'Acompanhando':'Acompanhar'}
                         </button>
                         {podeTransferirConversa(c) && (
                           <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setTransferenciaAberta(true)}}
-                            className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                            className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50">
                             Transferir
                           </button>
                         )}
                         <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setApoioAberto('etiquetas')}}
-                          className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                          className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50">
                           Etiquetas
                         </button>
-                        <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c)}}
-                          className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
-                          Ver tudo
-                        </button>
+                        {!c.responsavel_id && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100">
+                            Atender
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1087,7 +1081,7 @@ export default function WhatsAppAtendimentoPage() {
           <section className={`${ativa ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
             {!ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
-                <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione uma conversa.</p></div>
+                <div><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border-2 border-blue-200 bg-blue-50 text-blue-500"><MessageCircle size={30}/></div><p className="font-semibold text-slate-600">Selecione uma conversa para começar</p></div>
               </div>
             ) : <>
               <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-white px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
@@ -1452,18 +1446,18 @@ export default function WhatsAppAtendimentoPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 border-b p-2 text-xs font-bold">
+            <div className="grid grid-cols-3 gap-1 border-b bg-slate-50 p-2 text-xs font-bold">
               <button onClick={()=>setPainelDireito('cliente')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
-                Cadastro 360
+                className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Cliente 360
               </button>
               <button onClick={()=>setPainelDireito('agenda')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
                 Agenda
               </button>
               <button onClick={()=>setPainelDireito('notas')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='notas'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
-                Notas
+                className={`rounded-lg px-2 py-2 ${painelDireito==='notas'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Minhas notas
               </button>
             </div>
 
