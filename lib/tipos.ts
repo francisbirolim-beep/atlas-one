@@ -191,7 +191,7 @@ export interface OrcamentoRapido {
       eh_assistencia?: boolean
       assistencia_id?: string | null
       numero?: number | null
-      modo_entrada?: 'formulario' | 'texto_livre' | 'balcao' | null
+      modo_entrada?: 'formulario' | 'texto_livre' | 'balcao' | 'whatsapp' | null
       itens_balcao?: ItemBalcao[] | null
       condicoes?: string | null
       ia_criado?: boolean
