@@ -160,6 +160,7 @@ export default function OrcamentoRapido() {
   const [salvoOffline, setSalvoOffline] = useState(false)
   const [motivoPendente, setMotivoPendente] = useState('')
   const [erro, setErro] = useState('')
+  const [erroEhValidacao, setErroEhValidacao] = useState(false)
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
@@ -269,11 +270,19 @@ export default function OrcamentoRapido() {
     })()
   }, [rascunhoCarregado, rascunhoRestaurado])
 
+  function limparErroValidacaoAoEditar() {
+    if (!erroEhValidacao) return
+    setErro('')
+    setErroEhValidacao(false)
+  }
+
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
+    limparErroValidacaoAoEditar()
     setItens(prev => prev.map(it => it.id === id ? { ...it, [campo]: valor } : it))
   }
 
   function atualizarItemCampos(id: string, patch: Partial<ItemForm>) {
+    limparErroValidacaoAoEditar()
     setItens(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it))
   }
 
@@ -392,52 +401,68 @@ export default function OrcamentoRapido() {
   }
 
   async function salvar() {
-    if (!clienteNome.trim()) return setErro('Informe o nome do cliente')
-    if (!cidade.trim()) return setErro('Informe a cidade da obra')
-    if (!temperatura) return setErro('Selecione a temperatura do orçamento (quente, morno ou frio)')
-    if (!acabamento) return setErro('Selecione a cor/acabamento')
-    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) return setErro('Escreva qual é a cor')
-    if (!contramarco) return setErro('Selecione com ou sem contramarco')
+    // Cada toque em salvar começa uma validação nova. Erro anterior nunca pode
+    // manter o fluxo travado depois que o usuário corrigiu o preenchimento.
+    setSalvando(false)
+    setConferenciaAberta(false)
+    setErro('')
+    setErroEhValidacao(false)
+
+    const falharValidacao = (mensagem: string) => {
+      setSalvando(false)
+      setConferenciaAberta(false)
+      setErroEhValidacao(true)
+      setErro(mensagem)
+      return false
+    }
+
+    if (!clienteNome.trim()) return falharValidacao('Informe o nome do cliente')
+    if (!cidade.trim()) return falharValidacao('Informe a cidade da obra')
+    if (!temperatura) return falharValidacao('Selecione a temperatura do orçamento (quente, morno ou frio)')
+    if (!acabamento) return falharValidacao('Selecione a cor/acabamento')
+    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) return falharValidacao('Escreva qual é a cor')
+    if (!contramarco) return falharValidacao('Selecione com ou sem contramarco')
 
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i]
       const referencia = it.ambiente.trim() || `Esquadria ${i + 1}`
-      if (it.itemTipo !== 'sob_medida' && !it.produtoId) return setErro(`Selecione um produto cadastrado em ${referencia}`)
-      if (it.itemTipo === 'material_avulso') { if (!it.materialCategoria) return setErro(`Selecione a categoria de ${referencia}`); continue }
+      if (it.itemTipo !== 'sob_medida' && !it.produtoId) return falharValidacao(`Selecione um produto cadastrado em ${referencia}`)
+      if (it.itemTipo === 'material_avulso') { if (!it.materialCategoria) return falharValidacao(`Selecione a categoria de ${referencia}`); continue }
       if (it.itemTipo !== 'sob_medida') continue
-      if (it.modoOrigem === 'produto' && !it.produtoId) return setErro(`Selecione um produto cadastrado em ${referencia}, ou troque para digitar manualmente`)
+      if (it.modoOrigem === 'produto' && !it.produtoId) return falharValidacao(`Selecione um produto cadastrado em ${referencia}, ou troque para digitar manualmente`)
       // Tipologia e variáveis técnicas podem ficar pendentes no rascunho.
       // O orçamento precisa ser salvo primeiro; a composição só é liberada quando estiver completo.
-      if (!it.tipo && !it.tipoOutroTexto.trim()) return setErro(`Descreva o que precisa em ${referencia}`)
-      if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) return setErro(`Escreva qual é o tipo de ${referencia}`)
+      if (!it.tipo && !it.tipoOutroTexto.trim()) return falharValidacao(`Em ${referencia}, preencha o campo “O que você precisa?” da tipologia`)
+      if (it.tipo === 'outro' && !it.tipoOutroTexto.trim()) return falharValidacao(`Em ${referencia}, preencha o campo “O que você precisa?” da tipologia`)
 
       if (it.tipoMedida === 'final') {
         if (it.modoLargura === 'foto') {
-          if (!it.fotoLargura) return setErro(`Anexe a foto das larguras de ${referencia}, ou troque para digitar`)
+          if (!it.fotoLargura) return falharValidacao(`Anexe a foto das larguras de ${referencia}, ou troque para digitar`)
         } else {
           const medidas = [it.larguraBaixo, it.larguraMeio, it.larguraCima]
-          if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) return setErro(`Preencha as 3 larguras de ${referencia} (mínimo 100mm)`)
+          if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) return falharValidacao(`Preencha as 3 larguras de ${referencia} (mínimo 100mm)`)
         }
         if (it.modoAltura === 'foto') {
-          if (!it.fotoAltura) return setErro(`Anexe a foto das alturas de ${referencia}, ou troque para digitar`)
+          if (!it.fotoAltura) return falharValidacao(`Anexe a foto das alturas de ${referencia}, ou troque para digitar`)
         } else {
           const medidas = [it.alturaDireita, it.alturaMeio, it.alturaEsquerda]
-          if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) return setErro(`Preencha as 3 alturas de ${referencia} (mínimo 100mm)`)
+          if (medidas.some(m => !parseFloat(m.replace(',', '.')) || parseFloat(m.replace(',', '.')) < 100)) return falharValidacao(`Preencha as 3 alturas de ${referencia} (mínimo 100mm)`)
         }
       } else {
         const l = parseFloat(it.largura.replace(',', '.'))
         const a = parseFloat(it.altura.replace(',', '.'))
-        if (!l || !a || l < 100 || a < 100) return setErro(`Preencha largura e altura de ${referencia} (mínimo 100mm x 100mm)`)
+        if (!l || !a || l < 100 || a < 100) return falharValidacao(`Preencha largura e altura de ${referencia} (mínimo 100mm x 100mm)`)
       }
     }
     setErro('')
+    setErroEhValidacao(false)
     setConferenciaAberta(true)
   }
 
   function resetar() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
-    setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setConferenciaAberta(false)
+    setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
