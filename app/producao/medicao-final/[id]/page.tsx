@@ -71,6 +71,7 @@ export default function DetalheMedicaoFinal() {
   const [processandoConferencia, setProcessandoConferencia] = useState(false)
 
   const master = usuario?.role === 'master'
+  const ehContramarco = medicao?.tipo_medicao === 'contramarco'
 
   // Modal de item (adicionar/editar tipologia da lista) - master
   const [modalItem, setModalItem] = useState(false)
@@ -232,7 +233,7 @@ export default function DetalheMedicaoFinal() {
     setAlturaMeio(item.altura_meio_mm != null ? String(item.altura_meio_mm) : '')
     setAlturaEsquerda(item.altura_esquerda_mm != null ? String(item.altura_esquerda_mm) : '')
     setReferenciaVista(item.referencia_vista || '')
-    setContramarco(item.contramarco || '')
+    setContramarco(ehContramarco ? 'sim' : (item.contramarco || ''))
     setCadeirinha(item.cadeirinha || '')
     setObservacoesMedicao(item.observacoes_medicao || '')
     setFotoLargurasUrl(item.foto_larguras_url || null)
@@ -240,7 +241,7 @@ export default function DetalheMedicaoFinal() {
     setValoresExtras(item.campos_extras || {})
     setStatusLargura('')
     setStatusAltura('')
-    setCamposExtrasItem(await listarCamposExtras(item.tipo_esquadria))
+    setCamposExtrasItem(ehContramarco ? [] : await listarCamposExtras(item.tipo_esquadria))
   }
 
   function fecharModalMedicao() {
@@ -394,7 +395,7 @@ export default function DetalheMedicaoFinal() {
       return
     }
 
-    const faltando = camposExtrasItem.filter(c => c.obrigatorio && (valoresExtras[c.chave] === undefined || valoresExtras[c.chave] === '' || valoresExtras[c.chave] === null))
+    const faltando = ehContramarco ? [] : camposExtrasItem.filter(c => c.obrigatorio && (valoresExtras[c.chave] === undefined || valoresExtras[c.chave] === '' || valoresExtras[c.chave] === null))
     if (faltando.length > 0) {
       alert('Preencha os campos obrigatórios do checklist: ' + faltando.map(c => c.nome).join(', '))
       return
@@ -410,7 +411,7 @@ export default function DetalheMedicaoFinal() {
       altura_meio_mm: parseFloat(alturaMeio) || null,
       altura_esquerda_mm: parseFloat(alturaEsquerda) || null,
       referencia_vista: referenciaVista || null,
-      contramarco: contramarco.trim() || null,
+      contramarco: ehContramarco ? 'sim' : (contramarco.trim() || null),
       cadeirinha: cadeirinha.trim() || null,
       observacoes_medicao: observacoesMedicao.trim() || null,
       foto_larguras_url: fotoLargurasUrl,
@@ -520,6 +521,7 @@ export default function DetalheMedicaoFinal() {
           <Ruler size={20} className="text-brand-navy" />
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-brand-navy truncate">{medicao.cliente_nome}</h1>
+            <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${ehContramarco ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-700'}`}>{ehContramarco ? 'CONTRAMARCO' : 'TIPOLOGIA / FABRICAÇÃO'}</span>
             {endereco && (
               <p className="text-xs text-slate-400 flex items-center gap-1 truncate">
                 <MapPin size={11} /> {endereco}
@@ -541,7 +543,7 @@ export default function DetalheMedicaoFinal() {
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          {master && (
+          {master && !ehContramarco && (
             <button
               onClick={abrirNovoItem}
             className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline mb-1"
@@ -554,7 +556,7 @@ export default function DetalheMedicaoFinal() {
               onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-brand-navy hover:bg-slate-50"
             >
-              <FileText size={16} /> Gerar PDF da Medida Final
+              <FileText size={16} /> {ehContramarco ? 'Gerar PDF dos contramarcos' : 'Gerar PDF da Medida Final'}
             </button>
           )}
         </div>
@@ -655,7 +657,7 @@ export default function DetalheMedicaoFinal() {
                       : 'bg-brand-navy text-white hover:bg-brand-navyDark'
                   }`}
                 >
-                  <Ruler size={14} /> {item.medido ? 'Ver / editar medição' : 'Iniciar medição'}
+                  <Ruler size={14} /> {item.medido ? (ehContramarco ? 'Ver / editar contramarco' : 'Ver / editar medição') : (ehContramarco ? 'Medir contramarco' : 'Iniciar medição')}
                 </button>
                 {item.medido && (
                   <button
@@ -758,7 +760,7 @@ export default function DetalheMedicaoFinal() {
           <div className="bg-white rounded-2xl p-5 w-full max-w-lg space-y-5 max-h-[88vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-slate-700">{labelItemTipo(itemMedindo)}</h3>
+                <h3 className="font-semibold text-slate-700">{ehContramarco ? 'Contramarco · ' : ''}{labelItemTipo(itemMedindo)}</h3>
                 {itemMedindo.descricao && <p className="text-xs text-slate-400">{itemMedindo.descricao}</p>}
               </div>
               <button onClick={fecharModalMedicao} className="text-slate-400 hover:text-slate-600">
@@ -914,21 +916,23 @@ export default function DetalheMedicaoFinal() {
 
             {/* Informações universais da Medida Final */}
             <div className="space-y-3 border-t border-slate-100 pt-3">
-              <label className="text-xs font-medium text-slate-600">Informações gerais</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] text-slate-400 mb-0.5">Contramarco</label>
-                  <input value={contramarco} onChange={e => setContramarco(e.target.value)}
-                    placeholder="Informar quando aplicável"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <label className="text-xs font-medium text-slate-600">{ehContramarco ? 'Observações do contramarco' : 'Informações gerais'}</label>
+              {!ehContramarco && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Contramarco</label>
+                    <input value={contramarco} onChange={e => setContramarco(e.target.value)}
+                      placeholder="Informar quando aplicável"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Cadeirinha</label>
+                    <input value={cadeirinha} onChange={e => setCadeirinha(e.target.value)}
+                      placeholder="Informar quando aplicável"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] text-slate-400 mb-0.5">Cadeirinha</label>
-                  <input value={cadeirinha} onChange={e => setCadeirinha(e.target.value)}
-                    placeholder="Informar quando aplicável"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                </div>
-              </div>
+              )}
               <div>
                 <label className="block text-[10px] text-slate-400 mb-0.5">Observações</label>
                 <textarea value={observacoesMedicao} onChange={e => setObservacoesMedicao(e.target.value)}
@@ -981,7 +985,7 @@ export default function DetalheMedicaoFinal() {
               disabled={salvandoMedida}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-brand-navy text-white rounded-xl text-sm font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
             >
-              <Save size={15} /> {salvandoMedida ? 'Salvando...' : 'Salvar medição do item'}
+              <Save size={15} /> {salvandoMedida ? 'Salvando...' : (ehContramarco ? 'Salvar medida do contramarco' : 'Salvar medição do item')}
             </button>
           </div>
         </div>
