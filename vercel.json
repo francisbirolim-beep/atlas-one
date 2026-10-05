@@ -3,6 +3,10 @@
     {
       "path": "/api/backup",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/integracoes/wvetro/atualizacao-diaria",
+      "schedule": "30 23 * * *"
     }
   ],
   "git": {
