@@ -545,6 +545,7 @@ export interface MedicaoItem {
 export interface MedicaoFinal {
       id: string
       created_at: string
+      tipo_medicao?: 'contramarco' | 'tipologia'
       orcamento_id?: string | null
       cliente_id?: string | null
       cliente_nome: string

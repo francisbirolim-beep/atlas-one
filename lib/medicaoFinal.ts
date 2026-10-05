@@ -11,6 +11,8 @@ const COLUNA_2 = 'Liberado para medir'
 const CHAVE_LIMITE_DIFERENCA = 'medicao_alerta_diferenca_mm'
 const LIMITE_DIFERENCA_PADRAO = 10
 
+export type TipoMedicaoFinal = 'contramarco' | 'tipologia'
+
 // ---------- Colunas do quadro ----------
 
 export async function listarColunasMedicao(): Promise<MedicaoColuna[]> {
@@ -112,7 +114,7 @@ export async function listarMedicoes(): Promise<MedicaoFinal[]> {
 // Orçamentos de apoio criados pelo fluxo W.Vetro são internos e não pertencem
 // ao bloco "OU USAR ORÇAMENTO DO ATLAS"; eles continuam preservados no banco
 // e são tratados exclusivamente pelo importador W.Vetro.
-export async function listarOrcamentosSemMedicao(): Promise<
+export async function listarOrcamentosSemMedicao(tipoMedicao: TipoMedicaoFinal = 'tipologia'): Promise<
 { id: string; cliente_nome: string; cidade: string | null; created_at: string }[]
   > {
     const { data: colunasVendido, error: erroColunas } = await supabase
@@ -134,7 +136,7 @@ export async function listarOrcamentosSemMedicao(): Promise<
                 .select('id, cliente_nome, cidade, created_at, descricao_livre')
                 .in('coluna_id', idsColunasVendido)
                 .order('created_at', { ascending: false }),
-              supabase.from('medicoes_finais').select('orcamento_id'),
+              supabase.from('medicoes_finais').select('orcamento_id').eq('tipo_medicao', tipoMedicao),
             ])
 
   const jaTem = new Set((medicoes || []).map((m: any) => m.orcamento_id).filter(Boolean))
@@ -148,8 +150,24 @@ export async function listarOrcamentosSemMedicao(): Promise<
 // gera a lista de itens (uma linha por tipologia) a partir de orcamentos.itens.
 export async function criarMedicaoDoOrcamento(
     orcamentoId: string,
-    usuario: Usuario | null
+    usuario: Usuario | null,
+    tipoMedicao: TipoMedicaoFinal = 'tipologia'
   ): Promise<MedicaoFinal | null> {
+    const { data: existente, error: erroExistente } = await supabase
+      .from('medicoes_finais')
+      .select('*')
+      .eq('orcamento_id', orcamentoId)
+      .eq('tipo_medicao', tipoMedicao)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (erroExistente) {
+      console.error('Erro ao conferir medicao existente:', erroExistente)
+      return null
+    }
+    if (existente) return existente as MedicaoFinal
+
     const { data: orcamento, error: erroOrcamento } = await supabase
       .from('orcamentos')
       .select('id, cliente_id, cliente_nome, cliente_whatsapp, cidade, itens, anexos')
@@ -184,6 +202,7 @@ export async function criarMedicaoDoOrcamento(
   const { data: medicao, error } = await supabase
       .from('medicoes_finais')
       .insert({
+              tipo_medicao: tipoMedicao,
               orcamento_id: orcamento.id,
               cliente_id: orcamento.cliente_id || null,
               cliente_nome: orcamento.cliente_nome,
@@ -249,6 +268,7 @@ export async function criarMedicaoManualCliente(
     const { data: medicao, error } = await supabase
       .from('medicoes_finais')
       .insert({
+        tipo_medicao: 'tipologia',
         orcamento_id: null,
         cliente_id: cliente.id,
         cliente_nome: cliente.nome,
