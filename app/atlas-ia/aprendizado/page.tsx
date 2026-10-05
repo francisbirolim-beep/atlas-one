@@ -110,6 +110,7 @@ export default function CentralAprendizadoPage(){
   const [buscaCatalogo,setBuscaCatalogo]=useState('')
   const [reprocessando,setReprocessando]=useState<string|null>(null)
   const [salvando,setSalvando]=useState<string|null>(null)
+  const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
   const [edicoes,setEdicoes]=useState<Record<string,{titulo:string;modulo:string;dados:Record<string,any>;observacao:string}>>({})
   const fileRef=useRef<HTMLInputElement>(null)
 
@@ -176,6 +177,22 @@ export default function CentralAprendizadoPage(){
     setEdicoes(prev=>prev[c.id]?prev:{...prev,[c.id]:{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}})
     setAberto(v=>v===c.id?null:c.id)
   }
+  function abrirValidacaoEntrada(entradaId:string){
+    const candidatos=dados.candidatos
+      .filter(c=>c.entrada_id===entradaId&&['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
+    setEntradaValidacaoFiltro(entradaId)
+    setAba('validacoes')
+    if(candidatos[0]){
+      setEdicoes(prev=>prev[candidatos[0].id]?prev:{...prev,[candidatos[0].id]:{
+        titulo:candidatos[0].titulo,
+        modulo:candidatos[0].modulo||'',
+        dados:{...(candidatos[0].dados||{})},
+        observacao:''
+      }})
+      setAberto(candidatos[0].id)
+    }
+    window.setTimeout(()=>window.scrollTo({top:0,behavior:'smooth'}),50)
+  }
   function campo(id:string,chave:string,valor:any){
     setEdicoes(prev=>({...prev,[id]:{...(prev[id]||{titulo:'',modulo:'',dados:{},observacao:''}),dados:{...(prev[id]?.dados||{}),[chave]:valor}}}))
   }
@@ -241,6 +258,11 @@ export default function CentralAprendizadoPage(){
     finally{setSalvando(null)}
   }
 
+  const pendentesVisiveis=entradaValidacaoFiltro
+    ? pendentes.filter(c=>c.entrada_id===entradaValidacaoFiltro)
+    : pendentes
+  const entradaFiltrada=entradaValidacaoFiltro?entradaDo(entradaValidacaoFiltro):null
+
   return <main className="min-h-screen bg-slate-50 text-slate-900">
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4">
@@ -260,14 +282,14 @@ export default function CentralAprendizadoPage(){
 
     <section className="mx-auto max-w-7xl px-4 py-6">
       <div className="mb-5 grid gap-3 md:grid-cols-3">
-        <button onClick={()=>setAba('validacoes')} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
+        <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><CheckCircle2 size={18}/><b>{dados.totais.aplicados}</b></div><p className="mt-1 text-xs text-slate-500">Itens já aprovados e aplicados</p></div>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-slate-700"><History size={18}/><b>{dados.entradas.length}</b></div><p className="mt-1 text-xs text-slate-500">Materiais/conversas no histórico</p></div>
       </div>
 
       <div className="mb-5 flex gap-2 rounded-2xl border bg-white p-2">
         <button onClick={()=>setAba('entrada')} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='entrada'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Entrada geral</button>
-        <button onClick={()=>setAba('validacoes')} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='validacoes'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Validações {dados.totais.pendentes>0?'('+dados.totais.pendentes+')':''}</button>
+        <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='validacoes'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Validações {dados.totais.pendentes>0?'('+dados.totais.pendentes+')':''}</button>
       </div>
 
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
@@ -314,6 +336,7 @@ export default function CentralAprendizadoPage(){
                 {e.fornecedor_nome_sugerido&&<div className="mt-2 flex items-center gap-1 text-xs font-semibold text-slate-600"><Building2 size={13}/>{e.fornecedor_nome_sugerido}</div>}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
+                  {dados.candidatos.some(c=>c.entrada_id===e.id&&['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({dados.candidatos.filter(c=>c.entrada_id===e.id&&['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length})</button>}
                   {['catalogo','tabela_preco'].includes(e.tipo)&&<button onClick={()=>{setCatalogoAberto(v=>v===e.id?null:e.id);setItemCatalogoAberto(null);setBuscaCatalogo('')}} className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"><PackageSearch size={13}/>Ver itens ({dados.candidatos.filter(c=>c.entrada_id===e.id&&c.tipo==='produto').length})</button>}
                   {e.status==='erro'&&['catalogo','tabela_preco'].includes(e.tipo)&&dados.candidatos.some(c=>c.entrada_id===e.id)&&<button disabled={reprocessando===e.id} onClick={()=>void reprocessarEntrada(e)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-50"><RefreshCcw size={13} className={reprocessando===e.id?'animate-spin':''}/>{reprocessando===e.id?'Reprocessando...':'Reprocessar catálogo'}</button>}
                 </div>
@@ -328,7 +351,7 @@ export default function CentralAprendizadoPage(){
               onBusca={setBuscaCatalogo}
               itemAberto={itemCatalogoAberto}
               onItemAberto={setItemCatalogoAberto}
-              onAbrirValidacao={c=>{setAba('validacoes');editarInicial(c)}}
+              onAbrirValidacao={c=>{setEntradaValidacaoFiltro(c.entrada_id);setAba('validacoes');editarInicial(c)}}
               onSalvarItem={salvarItemCatalogo}
               onMapearCatalogo={mapearCatalogo}
               onSalvarImagem={salvarImagemCatalogo}
@@ -341,9 +364,13 @@ export default function CentralAprendizadoPage(){
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <b>Fila de exceções.</b> Aqui aparecem somente conflitos, ambiguidades ou informações insuficientes. Catálogos e tabelas oficiais são processados automaticamente quando os dados batem; fórmulas, planos de corte e regras operacionais continuam vindo para validação antes de virar padrão.
         </div>
+        {entradaFiltrada&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) aguardando sua decisão.</p></div>
+          <button onClick={()=>{setEntradaValidacaoFiltro(null);setAberto(null)}} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Ver todas as validações</button>
+        </div>}
         {carregando?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando...</div>
-        :pendentes.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>Nada aguardando validação.</b><p className="mt-1 text-sm text-slate-500">Somente exceções que realmente precisam de decisão humana aparecerão aqui.</p></div>
-        :<div className="space-y-3">{pendentes.map(c=>{
+        :pendentesVisiveis.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>Nada aguardando validação.</b><p className="mt-1 text-sm text-slate-500">Somente exceções que realmente precisam de decisão humana aparecerão aqui.</p></div>
+        :<div className="space-y-3">{pendentesVisiveis.map(c=>{
           const e=edicoes[c.id]||{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}
           const origem=entradaDo(c.entrada_id)
           const abertoAgora=aberto===c.id
