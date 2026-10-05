@@ -258,7 +258,13 @@ export default function WhatsAppIAPage() {
             ['Empresa',metricas.empresa||0,'mensagens classificadas'],
             ['Pessoal ignorado',metricas.pessoal||0,'não vira conhecimento'],
             ['Dúvidas',metricas.duvida||0,'sem aprendizado automático'],
-          ].map(([a,b,c])=><div key={String(a)} className="rounded-2xl border bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{a}</p><p className="mt-1 text-3xl font-black text-slate-900">{b}</p><p className="text-xs text-slate-500">{c}</p></div>)}
+          ].map(([a,b,c])=>String(a)==='Aprendizados pendentes'
+            ? <Link key={String(a)} href="/atlas-ia/aprendizado?aba=validacoes" className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm transition hover:border-violet-300 hover:shadow">
+                <p className="text-xs font-bold uppercase tracking-wide text-violet-500">{a}</p>
+                <p className="mt-1 text-3xl font-black text-violet-900">{b}</p>
+                <p className="text-xs text-violet-700">{c} · clique para decidir</p>
+              </Link>
+            : <div key={String(a)} className="rounded-2xl border bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{a}</p><p className="mt-1 text-3xl font-black text-slate-900">{b}</p><p className="text-xs text-slate-500">{c}</p></div>)}
           <Link href="/atlas-ia/aprendizado?aba=validacoes" className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm transition hover:border-amber-400 hover:bg-amber-50">
             <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Aprendizados pendentes</p>
             <p className="mt-1 text-3xl font-black text-slate-900">{metricas.conhecimentos_pendentes||0}</p>
@@ -356,7 +362,7 @@ export default function WhatsAppIAPage() {
                 <h2 className="font-extrabold text-slate-900">O que a IA está observando</h2>
                 <p className="text-sm text-slate-500">{totalClassificado} mensagens classificadas nesta base.</p>
               </div>
-              <Link href="/atlas-ia/aprendizado" className="inline-flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700"><Sparkles size={15}/>Validar aprendizados</Link>
+              <Link href="/atlas-ia/aprendizado?aba=validacoes" className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white hover:bg-violet-700"><Sparkles size={15}/>Validar aprendizados</Link>
             </div>
             <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
               {(dados?.observacoes||[]).map(o=>{
