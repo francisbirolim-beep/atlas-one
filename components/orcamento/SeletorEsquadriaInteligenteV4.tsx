@@ -66,6 +66,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   const [buscaLinha, setBuscaLinha] = useState(value.linhaNome || '')
   const [linhaFocada, setLinhaFocada] = useState(false)
   const [tipologiaFocada, setTipologiaFocada] = useState(false)
+  const [catalogoTipologiasAberto, setCatalogoTipologiasAberto] = useState(false)
   const [linhaSelecionadaId, setLinhaSelecionadaId] = useState<string | null>(value.linhaId)
 
   useEffect(() => {
@@ -203,6 +204,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     setLinhaFocada(false)
     setBuscaTipologia(value.tipoOutroTexto || '')
     setTipologiaFocada(Boolean(value.tipoOutroTexto?.trim()))
+    setCatalogoTipologiasAberto(!value.tipoOutroTexto?.trim())
     onChange({
       linhaId: linha.virtualBox ? null : linha.id,
       linhaNome: linha.nome,
@@ -224,6 +226,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     setBuscaLinha('')
     setLinhaFocada(false)
     setBuscaTipologia('')
+    setCatalogoTipologiasAberto(false)
     onChange({
       linhaId: null,
       linhaNome: null,
@@ -251,6 +254,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     }
     setBuscaTipologia(t.label)
     setTipologiaFocada(false)
+    setCatalogoTipologiasAberto(false)
 
     onChange({
       linhaId: linhaReal?.virtualBox ? null : (linhaReal?.id || value.linhaId || null),
@@ -343,7 +347,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
           <input
             data-preserve-case="true"
             value={buscaTipologia}
-            onChange={e => { setBuscaTipologia(e.target.value); setTipologiaFocada(true) }}
+            onChange={e => { setBuscaTipologia(e.target.value); setTipologiaFocada(true); if (e.target.value.trim()) setCatalogoTipologiasAberto(false) }}
             onFocus={() => setTipologiaFocada(true)}
             placeholder={linhaSelecionada ? `Pesquisar somente em ${linhaSelecionada.nome}...` : 'Digite: porta giro, correr 3, box de canto, maxim-ar...'}
             className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-9 text-sm"
@@ -382,42 +386,68 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
         </div>
 
         {linhaSelecionada && !buscaTipologia.trim() && (
-          <div className="mt-4 border-t border-emerald-100 pt-4">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <p className="text-sm font-bold text-slate-800">Escolha o desenho / projeto</p>
-                <p className="text-[11px] text-slate-500">Projetos vinculados à linha {linhaSelecionada.nome}. Clique no desenho para configurar.</p>
+          <div className="mt-3 border-t border-emerald-100 pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-700">
+                  {tipologiaAtual ? `Selecionado: ${tipologiaAtual.label}` : `${tipologiasDaLinha.length} tipologia(s) disponível(is) em ${linhaSelecionada.nome}`}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">A lista fica fechada para não ocupar a tela. Abra somente quando precisar escolher ou alterar.</p>
               </div>
-              <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-emerald-700">{tipologiasDaLinha.length} projeto(s)</span>
+              <button
+                type="button"
+                onClick={() => setCatalogoTipologiasAberto(aberto => !aberto)}
+                className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"
+              >
+                {catalogoTipologiasAberto ? 'Fechar tipologias' : `Ver ${tipologiasDaLinha.length} tipologia(s)`}
+              </button>
             </div>
-            {projetosVisiveis.length ? (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {projetosVisiveis.map(t => {
-                  const imagem = imagemTipologia(t)
-                  const selecionada = value.tipologiaId === t.id
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => selecionarTipologia(t)}
-                      className={`overflow-hidden rounded-xl border bg-white text-left transition ${selecionada ? 'border-emerald-500 ring-2 ring-emerald-100' : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm'}`}
-                    >
-                      <span className="flex aspect-[4/3] w-full items-center justify-center border-b border-slate-100 bg-slate-50 p-2">
-                        {imagem ? <img src={imagem} alt={`Desenho de ${t.label}`} className="h-full w-full object-contain" /> : <span className="flex flex-col items-center gap-1 text-center text-[10px] text-slate-400"><ImageIcon size={26}/><span>Desenho pendente</span></span>}
-                      </span>
-                      <span className="block p-3">
-                        <span className="block text-xs font-bold leading-snug text-slate-800">{t.label}</span>
-                        <span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-400">{(t as any).categoria || 'Projeto'}</span>
-                        {selecionada && <span className="mt-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">SELECIONADO</span>}
-                      </span>
-                    </button>
-                  )
-                })}
+
+            {catalogoTipologiasAberto && (
+              <div className="mt-3">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">Escolha o desenho / projeto</p>
+                    <p className="text-[11px] text-slate-500">Projetos vinculados à linha {linhaSelecionada.nome}. Clique no desenho para configurar.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCatalogoTipologiasAberto(false)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600"
+                  >
+                    Fechar
+                  </button>
+                </div>
+                {projetosVisiveis.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {projetosVisiveis.map(t => {
+                      const imagem = imagemTipologia(t)
+                      const selecionada = value.tipologiaId === t.id
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => selecionarTipologia(t)}
+                          className={`overflow-hidden rounded-xl border bg-white text-left transition ${selecionada ? 'border-emerald-500 ring-2 ring-emerald-100' : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm'}`}
+                        >
+                          <span className="flex aspect-[4/3] w-full items-center justify-center border-b border-slate-100 bg-slate-50 p-2">
+                            {imagem ? <img src={imagem} alt={`Desenho de ${t.label}`} className="h-full w-full object-contain" /> : <span className="flex flex-col items-center gap-1 text-center text-[10px] text-slate-400"><ImageIcon size={26}/><span>Desenho pendente</span></span>}
+                          </span>
+                          <span className="block p-3">
+                            <span className="block text-xs font-bold leading-snug text-slate-800">{t.label}</span>
+                            <span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-400">{(t as any).categoria || 'Projeto'}</span>
+                            {selecionada && <span className="mt-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">SELECIONADO</span>}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-emerald-200 bg-white p-4 text-center text-xs text-slate-500">Nenhum projeto vinculado a esta linha.</div>
+                )}
+                {tipologiasDaLinha.length > projetosVisiveis.length && <p className="mt-2 text-[11px] text-slate-500">Mostrando os primeiros {projetosVisiveis.length}. Use a busca acima para localizar outros projetos.</p>}
               </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-emerald-200 bg-white p-4 text-center text-xs text-slate-500">Nenhum projeto vinculado a esta linha.</div>
             )}
-            {tipologiasDaLinha.length > projetosVisiveis.length && <p className="mt-2 text-[11px] text-slate-500">Mostrando os primeiros {projetosVisiveis.length}. Use a busca acima para localizar outros projetos.</p>}
           </div>
         )}
       </div>
