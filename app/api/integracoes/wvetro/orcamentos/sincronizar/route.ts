@@ -484,9 +484,18 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
         const anterior = obj(existente.wvetro_fluxo)
         const mesmoPayload = txt(anterior?.payload_hash) === registro.payloadHash
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
+        const valorAtual = num(existente.valor_estimado)
+        const valorComEscalaIncorreta =
+          valor > 0 &&
+          valorAtual > 0 &&
+          (
+            Math.abs(valorAtual * 100 - valor) <= 0.01 ||
+            Math.abs(valorAtual * 10 - valor) <= 0.01
+          )
         const precisaReprocessarMapeamento =
           Number(anterior?.mapeamento_versao || 0) < 2 ||
-          num(existente.valor_estimado) <= 0
+          valorAtual <= 0 ||
+          valorComEscalaIncorreta
         if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento && !forcar) {
           semAlteracao += 1
           resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'sem_alteracao', cliente: nome, itens: itens.length })
