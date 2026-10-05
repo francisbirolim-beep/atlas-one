@@ -88,6 +88,7 @@ export default function WhatsAppIAPage() {
   const [carregando,setCarregando]=useState(true)
   const [salvando,setSalvando]=useState(false)
   const [modo,setModo]=useState<ModoIA>('observando')
+  const [ativo,setAtivo]=useState(true)
   const [minSugestao,setMinSugestao]=useState(0.70)
   const [minAuto,setMinAuto]=useState(0.92)
   const [canaisIA,setCanaisIA]=useState<Record<string,CanalIA>>({})
@@ -101,6 +102,7 @@ export default function WhatsAppIAPage() {
       if(!r.ok)throw new Error(j.error||'Não foi possível carregar o Assistente IA.')
       setDados(j)
       setModo(j.configuracao?.modo||'observando')
+      setAtivo(j.configuracao?.ativo !== false)
       setMinSugestao(Number(j.configuracao?.confianca_minima_sugestao??.70))
       setMinAuto(Number(j.configuracao?.confianca_minima_automatico??.92))
       const existentes=new Map((j.canaisIA||[]).map((x:CanalIA)=>[x.canal_id,x]))
@@ -141,7 +143,7 @@ export default function WhatsAppIAPage() {
         body:JSON.stringify({
           modo:novoModo,
           confirmarAutomatico:novoModo==='automatico',
-          ativo:true,
+          ativo,
           aprenderTodosCanais:true,
           classificarCanalPessoal:true,
           confiancaMinimaSugestao:minSugestao,
@@ -188,7 +190,7 @@ export default function WhatsAppIAPage() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <Link href="/administracao/ia" className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600 hover:bg-slate-50"><ArrowLeft size={18}/></Link>
+            <Link href="/atlas-ia" className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600 hover:bg-slate-50"><ArrowLeft size={18}/></Link>
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-100 text-emerald-700"><BrainCircuit size={23}/></div>
             <div>
               <h1 className="text-lg font-extrabold text-slate-900">Assistente IA · WhatsApp</h1>
@@ -207,6 +209,21 @@ export default function WhatsAppIAPage() {
         {erro&&<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{erro}</div>}
 
         <section className="rounded-3xl border bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-slate-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className={`grid h-11 w-11 place-items-center rounded-2xl ${ativo?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-500'}`}><Bot size={21}/></div>
+              <div>
+                <p className="font-extrabold text-slate-900">IA do WhatsApp</p>
+                <p className="text-sm text-slate-500">{ativo?'Ligada e acompanhando os canais habilitados.':'Desativada. Não observa, sugere nem responde até ser ligada novamente.'}</p>
+              </div>
+            </div>
+            <button
+              onClick={()=>setAtivo(v=>!v)}
+              className={`rounded-xl px-4 py-2.5 text-sm font-extrabold transition ${ativo?'bg-emerald-600 text-white hover:bg-emerald-700':'bg-slate-900 text-white hover:bg-slate-800'}`}
+            >
+              {ativo?'ATIVA':'DESATIVADA'}
+            </button>
+          </div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="font-extrabold text-slate-900">Estágio atual da IA</h2>

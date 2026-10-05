@@ -494,6 +494,10 @@ export default function AtlasIAPage() {
             <Brain size={17} className="mb-2"/><b>Especialistas Atlas</b>
             <p className="mt-1 text-xs text-white/50">Veja os especialistas e suas funções.</p>
           </Link>
+          <Link href="/atlas-ia/whatsapp" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
+            <MessageSquarePlus size={17} className="mb-2"/><b>IA do WhatsApp</b>
+            <p className="mt-1 text-xs text-white/50">Ver atividade, aprendizado, canais e controlar a autonomia.</p>
+          </Link>
           <Link href="/atlas-ia/aprendizado" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <Sparkles size={17} className="mb-2"/><b>Central de Aprendizado</b>
             <p className="mt-1 text-xs text-white/50">Mandar catálogos, cursos, tabelas, regras e revisar validações.</p>
