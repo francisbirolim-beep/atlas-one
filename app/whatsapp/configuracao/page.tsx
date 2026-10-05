@@ -92,7 +92,7 @@ export default function ConfiguracaoWhatsAppPage() {
         responsavelId:a?.responsavel_id||'',
         criarRascunho:a?.criar_rascunho!==false,
         criarTarefa:a?.criar_tarefa!==false,
-        janelaAgregacaoMinutos:Number(a?.janela_agregacao_minutos||5),
+        janelaAgregacaoMinutos:Number(a?.janela_agregacao_minutos||1),
       }
     }))
     const c=json.configuracao
@@ -397,9 +397,9 @@ export default function ConfiguracaoWhatsAppPage() {
                 <label className="text-xs font-semibold text-slate-500">
                   Agrupar por
                   <div className="mt-1 flex items-center gap-1">
-                    <input type="number" min={1} max={120} value={auto?.janelaAgregacaoMinutos||5}
+                    <input type="number" min={1} max={120} value={auto?.janelaAgregacaoMinutos||1}
                       disabled={!auto?.ativo}
-                      onChange={e=>alterarGrupo(g.id,'janelaAgregacaoMinutos',Number(e.target.value)||5)}
+                      onChange={e=>alterarGrupo(g.id,'janelaAgregacaoMinutos',Number(e.target.value)||1)}
                       className="w-16 rounded-lg border px-2 py-2 text-sm font-normal disabled:bg-slate-50"/>
                     <span className="text-[11px] text-slate-500">min</span>
                   </div>
@@ -408,7 +408,7 @@ export default function ConfiguracaoWhatsAppPage() {
             })}
           </div>
           <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
-            Ao receber texto, foto, áudio ou documento neste grupo, o Atlas agrupa as mensagens do mesmo remetente, cria um rascunho no Kanban e, se houver responsável, cria também uma tarefa vinculada. Informações ausentes continuam pendentes para validação.
+            O Atlas junta texto, foto, áudio e documento do mesmo pedido e só cria um card em Fazer orçamento depois do período sem novas mensagens. Cada nova mensagem reinicia a contagem; a palavra “pronto” fecha o pacote imediatamente. A IA tenta identificar o cliente e o que precisa ser orçado sem confundir o remetente do grupo com o cliente.
           </p>
         </section>
 
