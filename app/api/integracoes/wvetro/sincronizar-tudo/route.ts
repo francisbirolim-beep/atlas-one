@@ -4,6 +4,7 @@ import { autenticarSchedulerWVetro } from '@/lib/wvetroSchedulerServer'
 import { descobrirEImportarCatalogoWVetro } from '@/lib/wvetroCatalogoCompletoServer'
 import {
   mapearReferenciasComponentesExatas,
+  materializarReferenciasTipologiasWVetroPendentes,
   processarBaseTecnicaWVetroDia,
   resumoBaseTecnicaWVetro,
   sincronizarCatalogoEsquadriasWVetro,
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest) {
     let esquadrias: any = null
     let historico: any[] = []
     let mapeamento: any = null
+    let tipologiasMaterializadas: any = null
     let custos: any = null
     let resumo: any = null
 
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest) {
         descobrirEImportarCatalogoWVetro('A'),
         sincronizarCatalogoEsquadriasWVetro(),
       ])
+      tipologiasMaterializadas = await materializarReferenciasTipologiasWVetroPendentes()
     }
 
     if (etapa === 'tudo' || etapa === 'historico') {
@@ -121,6 +124,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (etapa === 'tudo' || etapa === 'consolidar') {
+      tipologiasMaterializadas = await materializarReferenciasTipologiasWVetroPendentes()
       mapeamento = await mapearReferenciasComponentesExatas()
       custos = await sincronizarCustosProdutosWVetro()
       resumo = await resumoBaseTecnicaWVetro()
@@ -136,8 +140,9 @@ export async function POST(req: NextRequest) {
         : {}),
       ...(etapa === 'tudo' || etapa === 'historico' ? { historico } : {}),
       ...(etapa === 'tudo' || etapa === 'consolidar'
-        ? { mapeamento, custos, resumo }
+        ? { tipologiasMaterializadas, mapeamento, custos, resumo }
         : {}),
+      ...(etapa === 'catalogos' ? { tipologiasMaterializadas } : {}),
       seguranca: {
         fonte: 'W.Vetro',
         regra: 'Importado como evidência até homologação técnica no Atlas.',

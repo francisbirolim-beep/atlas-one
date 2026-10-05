@@ -110,10 +110,102 @@ async function indiceTipologias() {
   return { refsMap, tipMap }
 }
 
+function categoriaTipologiaWVetro(modelo: string) {
+  const m = norm(modelo)
+  if (/GUARDA|CORRIMAO|SACADA/.test(m)) return 'guarda_corpo_corrimao'
+  if (/BOX/.test(m)) return 'box'
+  if (/TELA|MOSQUITEIR/.test(m)) return 'tela_mosquiteira'
+  if (/FACHADA|PELE DE VIDRO/.test(m)) return 'fachada'
+  if (/PAINEL|RIPAD/.test(m)) return 'painel_ripado'
+  if (/COBERTURA|CLARABOIA|DOMUS/.test(m)) return 'cobertura_claraboia'
+  if (/PORTA|PORTINHOLA|ALCAPAO/.test(m)) return 'porta'
+  if (/JANELA|MAXIM|BASCULANTE|VITRO/.test(m)) return 'janela'
+  if (/VIDRO/.test(m)) return 'vidro'
+  return 'outros'
+}
+
+function chaveTipologiaAtlasWVetro(linha: string, modelo: string) {
+  return 'wvetro_' + key(linha, modelo).slice(0, 20)
+}
+
+function linhaEquivaleWVetro(linhaRaw: string, linha: any) {
+  const alvo = norm(linhaRaw)
+  if (!alvo) return false
+  return [linha?.nome, linha?.chave, ...(Array.isArray(linha?.apelidos) ? linha.apelidos : [])]
+    .map(norm)
+    .filter(Boolean)
+    .some(v => v === alvo)
+}
+
+async function vincularTipologiaALinhaWVetro(tipologiaId: string, linhaRaw: string) {
+  const { data: linhas, error } = await supabaseAdmin
+    .from('linhas_tecnicas')
+    .select('id,nome,chave,apelidos')
+    .eq('ativo', true)
+  if (error) throw error
+  const linha = (linhas || []).find((l: any) => linhaEquivaleWVetro(linhaRaw, l))
+  if (!linha?.id) return false
+  const { error: e } = await supabaseAdmin
+    .from('linha_tipologias')
+    .upsert({ linha_id: linha.id, tipologia_id: tipologiaId }, { onConflict: 'linha_id,tipologia_id' })
+  if (e) throw e
+  return true
+}
+
+async function garantirTipologiaAtlasWVetro(
+  linha: string,
+  modelo: string,
+  imagem: string | null,
+  data: string | null,
+  tipMap: Map<string, any>,
+) {
+  const k = key(linha, modelo)
+  const existente = tipMap.get(k)
+  if (existente?.id) {
+    if (imagem && !existente.foto_url) {
+      await supabaseAdmin.from('tipologias').update({ foto_url: imagem }).eq('id', existente.id)
+      existente.foto_url = imagem
+    }
+    await vincularTipologiaALinhaWVetro(existente.id, linha)
+    return existente
+  }
+
+  const chave = chaveTipologiaAtlasWVetro(linha, modelo)
+  const payload: Record<string, unknown> = {
+    chave,
+    label: modelo + ' (' + linha + ')',
+    categoria: categoriaTipologiaWVetro(modelo),
+    ativo: true,
+    origem_referencia: 'wvetro',
+    linha_origem_wvetro: linha,
+    modelo_origem_wvetro: modelo,
+    foto_url: imagem,
+    versao_tecnica: 1,
+  }
+  if (data) {
+    payload.wvetro_primeiro_visto = data
+    payload.wvetro_ultimo_visto = data
+    payload.wvetro_ocorrencias = 0
+  }
+
+  // Materializa somente a identidade da tipologia. Fórmulas, variáveis e receitas
+  // de engenharia continuam separadas e exigem validação técnica no Atlas.
+  const { data: tipologia, error } = await supabaseAdmin
+    .from('tipologias')
+    .upsert(payload, { onConflict: 'chave' })
+    .select('id,label,linha_origem_wvetro,modelo_origem_wvetro,foto_url')
+    .single()
+  if (error) throw error
+
+  tipMap.set(k, tipologia)
+  await vincularTipologiaALinhaWVetro(tipologia.id, linha)
+  return tipologia
+}
+
 async function garantirReferencia(linha: string, modelo: string, imagem: string | null, data: string, refsMap: Map<string, any>, tipMap: Map<string, any>) {
   const k = key(linha, modelo)
   let ref = refsMap.get(k)
-  const tip = tipMap.get(k) || null
+  const tip = await garantirTipologiaAtlasWVetro(linha, modelo, imagem, data, tipMap)
   if (!ref) {
     const { data: criada, error } = await supabaseAdmin.from('wvetro_referencias_tipologias').upsert({
       chave: k,
@@ -131,9 +223,21 @@ async function garantirReferencia(linha: string, modelo: string, imagem: string 
     if (error) throw error
     ref = criada
     refsMap.set(k, ref)
-  } else if (imagem && !ref.imagem_url) {
-    await supabaseAdmin.from('wvetro_referencias_tipologias').update({ imagem_url: imagem, updated_at: new Date().toISOString() }).eq('id', ref.id)
-    ref.imagem_url = imagem
+  } else {
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    let mudou = false
+    if (imagem && !ref.imagem_url) {
+      patch.imagem_url = imagem
+      ref.imagem_url = imagem
+      mudou = true
+    }
+    if (!ref.tipologia_atlas_id && tip?.id) {
+      patch.tipologia_atlas_id = tip.id
+      patch.status_mapeamento = 'mapeada_exata'
+      ref.tipologia_atlas_id = tip.id
+      mudou = true
+    }
+    if (mudou) await supabaseAdmin.from('wvetro_referencias_tipologias').update(patch).eq('id', ref.id)
   }
   return { ref, tip }
 }
@@ -503,6 +607,49 @@ export async function sincronizarCatalogoEsquadriasWVetro() {
     if (error) throw error
   }
   return { suportado: true, encontrados: unicos.size, mapeados, imagens }
+}
+
+export async function materializarReferenciasTipologiasWVetroPendentes() {
+  const [{ data: refs, error: refsErro }, { tipMap }] = await Promise.all([
+    supabaseAdmin
+      .from('wvetro_referencias_tipologias')
+      .select('id,linha_raw,modelo_raw,imagem_url,primeiro_visto,ultimo_visto,tipologia_atlas_id,status_mapeamento')
+      .is('tipologia_atlas_id', null),
+    indiceTipologias(),
+  ])
+  if (refsErro) throw refsErro
+
+  let materializadas = 0
+  let jaExistentes = 0
+  for (const ref of refs || []) {
+    const k = key(ref.linha_raw, ref.modelo_raw)
+    const existia = Boolean(tipMap.get(k)?.id)
+    const tip = await garantirTipologiaAtlasWVetro(
+      txt(ref.linha_raw),
+      txt(ref.modelo_raw),
+      txt(ref.imagem_url) || null,
+      txt(ref.ultimo_visto || ref.primeiro_visto) || null,
+      tipMap,
+    )
+    if (!tip?.id) continue
+    const { error } = await supabaseAdmin
+      .from('wvetro_referencias_tipologias')
+      .update({
+        tipologia_atlas_id: tip.id,
+        status_mapeamento: 'mapeada_exata',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', ref.id)
+    if (error) throw error
+    if (existia) jaExistentes += 1
+    else materializadas += 1
+  }
+
+  return {
+    analisadas: (refs || []).length,
+    materializadas,
+    vinculadasExistentes: jaExistentes,
+  }
 }
 
 export async function resumoBaseTecnicaWVetro() {
