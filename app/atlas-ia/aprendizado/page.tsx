@@ -128,6 +128,10 @@ export default function CentralAprendizadoPage(){
     finally{setCarregando(false)}
   }
   useEffect(()=>{void carregar()},[])
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search)
+    if(params.get('aba')==='validacoes')setAba('validacoes')
+  },[])
 
   async function uploadDireto(file:File){
     const {data:{session}}=await supabase.auth.getSession()
@@ -256,7 +260,7 @@ export default function CentralAprendizadoPage(){
 
     <section className="mx-auto max-w-7xl px-4 py-6">
       <div className="mb-5 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação</p></div>
+        <button onClick={()=>setAba('validacoes')} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><CheckCircle2 size={18}/><b>{dados.totais.aplicados}</b></div><p className="mt-1 text-xs text-slate-500">Itens já aprovados e aplicados</p></div>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-slate-700"><History size={18}/><b>{dados.entradas.length}</b></div><p className="mt-1 text-xs text-slate-500">Materiais/conversas no histórico</p></div>
       </div>
@@ -363,6 +367,13 @@ export default function CentralAprendizadoPage(){
               </div>
             </button>
 
+            {c.pode_validar?<div className="flex flex-wrap items-center gap-2 border-t bg-white px-4 py-3">
+              <span className="mr-1 text-xs font-bold uppercase tracking-wide text-slate-400">Decisão</span>
+              <button disabled={salvando===c.id} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
+              <button disabled={salvando===c.id} onClick={()=>editarInicial(c)} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Eye size={15}/>Revisar / corrigir</button>
+              <button disabled={salvando===c.id} onClick={()=>void acao(c,'rejeitar')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-semibold text-red-700 disabled:opacity-40"><XCircle size={15}/>Não validar</button>
+            </div>:<div className="border-t bg-slate-50 px-4 py-3 text-xs text-slate-600"><ShieldCheck size={15} className="mr-1 inline"/>Somente Master ou responsável com edição no setor pode validar este aprendizado.</div>}
+
             {abertoAgora&&<div className="border-t bg-slate-50/60 p-4">
               {c.tipo==='fornecedor'&&<div className="grid gap-3 sm:grid-cols-2">
                 <Campo label="Fornecedor" value={e.dados.nome||''} onChange={v=>campo(c.id,'nome',v)}/>
@@ -399,11 +410,9 @@ export default function CentralAprendizadoPage(){
                 <textarea value={e.observacao} onChange={x=>meta(c.id,'observacao',x.target.value)} rows={2} placeholder="Ex.: corrigi a aplicação; esse perfil é travessa da porta de correr." className="mt-1 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-normal"/>
               </label>
 
-              {!c.pode_validar?<div className="mt-4 rounded-xl bg-slate-100 p-3 text-xs text-slate-600"><ShieldCheck size={15} className="mb-1"/>Você pode consultar, mas a aprovação precisa ser feita pelo Master ou responsável com edição no setor.</div>
-              :<div className="mt-4 flex flex-wrap gap-2">
-                <button disabled={salvando===c.id} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Sim, validar</button>
+              {c.pode_validar&&<div className="mt-4 flex flex-wrap items-center gap-2">
                 <button disabled={salvando===c.id} onClick={()=>void acao(c,'corrigir')} className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"><Save size={15}/>Salvar correção</button>
-                <button disabled={salvando===c.id} onClick={()=>void acao(c,'rejeitar')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 disabled:opacity-40"><XCircle size={15}/>Não / rejeitar</button>
+                <span className="text-xs text-slate-500">Depois de revisar, use Validar ou Não validar na barra de decisão do item.</span>
               </div>}
             </div>}
           </article>
