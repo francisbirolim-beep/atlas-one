@@ -14,6 +14,14 @@ export interface RespostaChamadaIA extends RespostaProvider {
 export async function chamarProvider(provider: ProviderNome, params: ParametrosChamadaIA): Promise<RespostaChamadaIA> {
   switch (provider) {
     case 'anthropic': {
+      const pagoLiberado = String(process.env.ATLAS_AI_ALLOW_PAID_PROVIDERS || '').toLowerCase() === 'true'
+      if (!pagoLiberado) {
+        return {
+          ok: false,
+          erro: 'Provider pago bloqueado pela política do Atlas. Use o runtime gratuito OpenCode/FreeLLMAPI.',
+          provider: 'anthropic',
+        }
+      }
       const r = await chamarAnthropic(params)
       return { ...r, provider: 'anthropic' }
     }
