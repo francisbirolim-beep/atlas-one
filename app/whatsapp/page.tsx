@@ -161,6 +161,7 @@ export default function WhatsAppAtendimentoPage() {
   const [buscaDiretorio, setBuscaDiretorio] = useState('')
   const [canalDiretorio, setCanalDiretorio] = useState('')
   const [carregandoDiretorio, setCarregandoDiretorio] = useState(false)
+  const [novoDDD, setNovoDDD] = useState('')
   const [novoTelefone, setNovoTelefone] = useState('')
   const [novoNome, setNovoNome] = useState('')
   const [iniciandoNumero, setIniciandoNumero] = useState(false)
@@ -260,6 +261,7 @@ export default function WhatsAppAtendimentoPage() {
     setCanalDiretorio(canalPreferido)
     setBuscaDiretorio('')
     setDiretorio([])
+    setNovoDDD('')
     setNovoTelefone('')
     setNovoNome('')
     setDiretorioAberto(true)
@@ -315,9 +317,19 @@ export default function WhatsAppAtendimentoPage() {
   async function iniciarPorNumero() {
     if (iniciandoNumero) return
     setErro('')
-    const digitos = novoTelefone.replace(/\D/g, '')
+    const ddd = novoDDD.replace(/\D/g, '')
+    const numero = novoTelefone.replace(/\D/g, '')
+    const digitos = ddd ? `${ddd}${numero}` : numero
     let telefone = digitos
     if (digitos.length === 10 || digitos.length === 11) telefone = `55${digitos}`
+    if (ddd && ddd.length !== 2) {
+      setErro('Informe o DDD com 2 dígitos. Ex.: 17.')
+      return
+    }
+    if (ddd && (numero.length < 8 || numero.length > 9)) {
+      setErro('Informe o número do WhatsApp com 8 ou 9 dígitos.')
+      return
+    }
     if (!/^55\d{10,11}$/.test(telefone)) {
       setErro('Informe o DDD e o número do WhatsApp. Ex.: 17 99176-4080.')
       return
@@ -1656,21 +1668,37 @@ export default function WhatsAppAtendimentoPage() {
                     <b className="text-sm text-slate-900">Conversar com um número novo</b>
                     <p className="text-xs text-slate-500">Não precisa cadastrar o cliente antes. A conversa abre direto no Atlas.</p>
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                    <input value={novoTelefone} onChange={e=>setNovoTelefone(e.target.value)}
-                      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
-                      inputMode="tel" autoFocus placeholder="DDD + número"
-                      className="rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
-                    <input value={novoNome} onChange={e=>setNovoNome(e.target.value)}
-                      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
-                      placeholder="Nome (opcional)"
-                      className="rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
-                    <button onClick={()=>void iniciarPorNumero()} disabled={iniciandoNumero || novoTelefone.replace(/\D/g,'').length < 10}
-                      className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-40">
+                  <div className="grid gap-2 sm:grid-cols-[92px_minmax(0,1fr)_auto]">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">DDD</span>
+                      <input value={novoDDD}
+                        onChange={e=>setNovoDDD(e.target.value.replace(/\D/g,'').slice(0,2))}
+                        onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
+                        inputMode="numeric" autoFocus placeholder="17"
+                        className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Número do WhatsApp</span>
+                      <input value={novoTelefone}
+                        onChange={e=>setNovoTelefone(e.target.value.replace(/\D/g,'').slice(0,9))}
+                        onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
+                        inputMode="numeric" placeholder="99176-4080"
+                        className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                    </label>
+                    <button onClick={()=>void iniciarPorNumero()}
+                      disabled={iniciandoNumero || novoDDD.replace(/\D/g,'').length !== 2 || ![8,9].includes(novoTelefone.replace(/\D/g,'').length)}
+                      className="self-end rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
                       {iniciandoNumero ? 'Abrindo...' : 'Conversar'}
                     </button>
                   </div>
-                  <p className="mt-2 text-[11px] text-slate-500">Exemplo: 17 99176-4080. O Atlas acrescenta +55 automaticamente.</p>
+                  <label className="mt-2 block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-600">Nome (opcional)</span>
+                    <input value={novoNome} onChange={e=>setNovoNome(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void iniciarPorNumero()}}}
+                      placeholder="Ex.: João da Silva"
+                      className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-200"/>
+                  </label>
+                  <p className="mt-2 text-[11px] text-slate-500">Digite o DDD e o telefone em campos separados. O Atlas acrescenta +55 automaticamente.</p>
                 </section>
 
                 <section>
