@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomUUID } from 'crypto'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { carregarConfigAgente } from '@/lib/ai/agentManager'
-import { chamarProvider } from '@/lib/ai/providerManager'
+import { consultarOpenCode, statusOpenCode } from '@/lib/ai/opencode'
 
 export const runtime = 'nodejs'
 export const maxDuration = 45
@@ -81,14 +80,6 @@ function analiseFallback(descricao: string, tela: string): AnaliseRelato {
   }
 }
 
-function textoResposta(data: any) {
-  return (data?.content || [])
-    .filter((b: any) => b?.type === 'text')
-    .map((b: any) => String(b.text || ''))
-    .join('\n')
-    .trim()
-}
-
 function extrairJson(texto: string) {
   const inicio = texto.indexOf('{')
   const fim = texto.lastIndexOf('}')
@@ -100,34 +91,28 @@ function extrairJson(texto: string) {
   }
 }
 
-async function analisarComIA(descricao: string, tela: string): Promise<AnaliseRelato> {
+async function analisarComIA(descricao: string, tela: string, accessToken: string): Promise<AnaliseRelato> {
   const fallback = analiseFallback(descricao, tela)
   try {
-    const config = await carregarConfigAgente(null, 'master')
-    const apiKey = config.provider === 'anthropic' ? (process.env.ANTHROPIC_API_KEY || '') : ''
-    if (!apiKey && config.provider !== 'ollama') return fallback
+    const status = await statusOpenCode()
+    if (!status.configurado || !accessToken) return fallback
 
-    const resp = await chamarProvider(config.provider, {
-      apiKey,
-      model: config.modelo,
-      maxTokens: 700,
-      temperatura: 0,
-      tools: [],
+    const resultado = await consultarOpenCode({
+      accessToken,
+      tituloSessao: 'Atlas Melhorias - análise gratuita',
       system: [
-        'Voce classifica relatos de defeitos e melhorias do ERP Atlas One.',
-        'Responda SOMENTE JSON valido, sem markdown.',
-        'Nunca autorize publicacao automatica. Mudanca em producao sempre exige aprovacao humana.',
+        'Você classifica relatos de defeitos e melhorias do ERP Atlas One.',
+        'Responda SOMENTE JSON válido, sem markdown.',
+        'Nunca autorize publicação automática. Mudança em produção sempre exige aprovação humana.',
         'Campos: tipo, titulo, area, resultado_atual, resultado_esperado, impacto, urgencia, risco, justificativa_risco, recomendacao.',
         'tipo: bug|melhoria|ideia. urgencia: baixa|media|alta|critica. risco: baixo|medio|alto|critico.',
-        'Considere risco alto ou critico para financeiro, permissoes, seguranca, LGPD, banco, calculos, producao, estoque ou perda de dados.',
+        'Considere risco alto ou crítico para financeiro, permissões, segurança, LGPD, banco, cálculos, produção, estoque ou perda de dados.',
+        'Este fluxo usa OpenCode + FreeLLMAPI e não pode chamar provedor pago.',
       ].join('\n'),
-      messages: [{
-        role: 'user',
-        content: 'Tela/URL: ' + (tela || 'nao informada') + '\nRelato: ' + descricao,
-      }],
+      prompt: 'Tela/URL: ' + (tela || 'nao informada') + '\nRelato: ' + descricao,
     })
-    if (!resp.ok) return fallback
-    const bruto = extrairJson(textoResposta(resp.data))
+
+    const bruto = extrairJson(resultado.resposta)
     if (!bruto) return fallback
 
     return {
@@ -293,7 +278,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const analise = await analisarComIA(descricao, tela)
+    const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\\s+/i, '').trim()
+    const analise = await analisarComIA(descricao, tela, accessToken)
     const anexo = await uploadAnexo(usuario, body?.anexo)
 
     const { data, error } = await supabaseAdmin
