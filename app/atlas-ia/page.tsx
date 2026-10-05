@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, Bug, FileText, HeartHandshake, History, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, Bug, Eye, FileText, HeartHandshake, History, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -497,6 +497,10 @@ export default function AtlasIAPage() {
           <Link href="/atlas-ia/whatsapp" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <MessageSquarePlus size={17} className="mb-2"/><b>IA do WhatsApp</b>
             <p className="mt-1 text-xs text-white/50">Ver atividade, aprendizado, canais e controlar a autonomia.</p>
+          </Link>
+          <Link href="/atlas-ia/supervisao" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
+            <Eye size={17} className="mb-2"/><b>Supervisão dos agentes</b>
+            <p className="mt-1 text-xs text-white/50">Escritório animado, atividade, custos, erros e validações da IA.</p>
           </Link>
           <Link href="/atlas-ia/aprendizado" className="block rounded-xl p-3 text-white/80 hover:bg-white/10">
             <Sparkles size={17} className="mb-2"/><b>Central de Aprendizado</b>
