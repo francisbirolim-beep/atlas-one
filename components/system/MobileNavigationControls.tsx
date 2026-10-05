@@ -8,9 +8,11 @@ import {
   Home,
   LayoutGrid,
   Menu,
+  Moon,
   Search,
   ShoppingCart,
   Star,
+  Sun,
   X,
 } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
@@ -24,6 +26,8 @@ import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
 import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
 import type { Guia } from '@/lib/guias'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
+
+type TemaAtlas = 'escuro' | 'claro'
 
 function normalizar(texto: string) {
   return texto
@@ -49,6 +53,7 @@ export default function MobileNavigationControls() {
   const [menuAberto, setMenuAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
 
@@ -76,6 +81,15 @@ export default function MobileNavigationControls() {
   }, [])
 
   useEffect(() => {
+    if (!usuario?.id) return
+    const salvo = window.localStorage.getItem(`atlas-theme:${usuario.id}`)
+    const temaInicial: TemaAtlas = salvo === 'claro' ? 'claro' : 'escuro'
+    setTema(temaInicial)
+    document.documentElement.dataset.atlasTheme = temaInicial
+    document.documentElement.style.colorScheme = temaInicial === 'escuro' ? 'dark' : 'light'
+  }, [usuario?.id])
+
+  useEffect(() => {
     if (!menuAberto) return
     const overflowAnterior = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -92,6 +106,14 @@ export default function MobileNavigationControls() {
   function ativo(href: string) {
     if (href === '/') return pathname === '/'
     return pathname === href || pathname.startsWith(`${href}/`)
+  }
+
+  function alternarTema() {
+    const proximo: TemaAtlas = tema === 'escuro' ? 'claro' : 'escuro'
+    setTema(proximo)
+    document.documentElement.dataset.atlasTheme = proximo
+    document.documentElement.style.colorScheme = proximo === 'escuro' ? 'dark' : 'light'
+    if (usuario?.id) window.localStorage.setItem(`atlas-theme:${usuario.id}`, proximo)
   }
 
   function abrirFavoritos() {
@@ -343,8 +365,22 @@ export default function MobileNavigationControls() {
             </div>
 
             <div className="border-t border-slate-200 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-              <p className="truncate text-xs font-semibold text-slate-900">{usuario?.nome || 'Usuário'}</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-500">{usuario?.role === 'master' ? 'Acesso total' : 'Acesso por setor'}</p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-slate-900">{usuario?.nome || 'Usuário'}</p>
+                  <p className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-500">{usuario?.role === 'master' ? 'Acesso total' : 'Acesso por setor'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={alternarTema}
+                  className="atlas-theme-toggle inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition active:bg-slate-100"
+                  title={tema === 'escuro' ? 'Usar tema claro' : 'Usar tema escuro'}
+                  aria-label={tema === 'escuro' ? 'Usar tema claro' : 'Usar tema escuro'}
+                >
+                  {tema === 'escuro' ? <Sun size={16}/> : <Moon size={16}/>}
+                  {tema === 'escuro' ? 'Claro' : 'Escuro'}
+                </button>
+              </div>
             </div>
           </aside>
         </div>
