@@ -5,9 +5,14 @@ const MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization') || ''
-    const usuario = await verificarUsuario(authHeader)
-    if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    const tokenAutomacao = req.headers.get('x-atlas-automation-token') || ''
+    const tokenEsperado = process.env.ATLAS_AUTOMATION_TOKEN || ''
+    const autorizadoAutomacao = Boolean(tokenEsperado && tokenAutomacao === tokenEsperado)
+    if (!autorizadoAutomacao) {
+      const authHeader = req.headers.get('authorization') || ''
+      const usuario = await verificarUsuario(authHeader)
+      if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    }
 
     const apiKey = process.env.OPENAI_API_KEY || ''
     if (!apiKey) {
