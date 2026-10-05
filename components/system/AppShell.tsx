@@ -4,7 +4,6 @@ import type { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { medicaoIdDaRota } from '@/lib/medicaoRota'
 import Sidebar from '@/components/Sidebar'
-import SidebarQuickSearch from '@/components/system/SidebarQuickSearch'
 import AppTopbar from '@/components/system/AppTopbar'
 import HomeDashboard from '@/components/system/HomeDashboard'
 import MobileFavorites from '@/components/system/MobileFavorites'
@@ -35,7 +34,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {!ehWhatsAppAtendimento && (
         <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
           <Sidebar />
-          <SidebarQuickSearch />
         </div>
       )}
       {!ehWhatsAppAtendimento && <MobileNavigationControls />}
