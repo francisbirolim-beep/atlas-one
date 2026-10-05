@@ -808,34 +808,231 @@ async function aiGatewayCall(baseUrl: string, gatewayToken: string, path: string
   }
 }
 
-async function estruturarIntakeComIA(intakeId: string, gatewayToken: string) {
-  await new Promise(resolve => setTimeout(resolve, 12_000))
+function normalizarComandoPacote(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
 
-  const { data: intake, error: intakeError } = await db
+function ehComandoPronto(value: unknown) {
+  const texto = normalizarComandoPacote(value)
+  return [
+    "pronto",
+    "finalizei",
+    "finalizado",
+    "pode criar",
+    "pode gerar",
+    "pode fazer",
+    "pode montar",
+  ].includes(texto)
+}
+
+function ehComandoAguarde(value: unknown) {
+  const texto = normalizarComandoPacote(value)
+  return [
+    "aguarde",
+    "aguarda",
+    "espere",
+    "espera",
+    "espera ai",
+    "so um momento",
+    "vou mandar mais",
+    "tem mais",
+  ].includes(texto)
+}
+
+async function criarCardIntakeOrcamento(intake: any, structured: any, aiErro: string | null) {
+  const { data: automation, error: automationError } = await db
+    .from("atendimento_whatsapp_grupo_automacoes")
+    .select("*")
+    .eq("id", intake.automacao_id)
+    .eq("empresa_id", intake.empresa_id)
+    .maybeSingle()
+  if (automationError) throw automationError
+  if (!automation || automation.criar_rascunho === false) return { quoteId: null, taskId: null }
+
+  const itens = itensEstruturados(structured?.itens)
+  let clienteNome = textoOpcional(structured?.cliente_nome)
+  const clienteWhatsapp = normalizePhone(structured?.cliente_whatsapp || "")
+  let clienteId: string | null = null
+
+  if (clienteWhatsapp) {
+    const cliente = await customerByPhone(intake.empresa_id, clienteWhatsapp)
+    if (cliente?.id) {
+      clienteId = cliente.id
+      clienteNome = clienteNome || cliente.nome || null
+    }
+  }
+
+  const nomeSeguro = clienteNome || "Cliente a identificar"
+  const cidade = textoOpcional(structured?.cidade)
+  const obraNome = textoOpcional(structured?.obra_nome)
+  const obraEndereco = textoOpcional(structured?.obra_endereco)
+  const acabamento = textoOpcional(structured?.acabamento)
+  const contramarco = textoOpcional(structured?.contramarco)
+  const tipoMedida = textoOpcional(structured?.tipo_medida)
+  const resumo = textoOpcional(structured?.resumo)
+  const observacoesIA = textoOpcional(structured?.observacoes)
+  const pendencias = Array.isArray(structured?.pendencias)
+    ? structured.pendencias.map((p: unknown) => String(p || "").trim()).filter(Boolean).slice(0, 30)
+    : []
+
+  if (!clienteNome) pendencias.unshift("Identificar o cliente correto.")
+  if (!itens.length) pendencias.push("Confirmar o que deve ser orçado e as tipologias/itens.")
+
+  const { data: colunas, error: colunasError } = await db.from("kanban_colunas")
+    .select("id,nome,ordem")
+    .eq("empresa_id", intake.empresa_id)
+    .order("ordem", { ascending: true })
+  if (colunasError) throw colunasError
+  const normaliza = (v: unknown) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim()
+  const fazerOrcamento = (colunas || []).find((c: any) => normaliza(c.nome) === "fazer orcamento") || (colunas || [])[0] || null
+
+  const quoteId = intake.orcamento_id || crypto.randomUUID()
+  const quotePayload: Record<string, unknown> = {
+    empresa_id: intake.empresa_id,
+    cliente_id: clienteId,
+    cliente_nome: nomeSeguro,
+    cliente_whatsapp: clienteWhatsapp || null,
+    tipo_esquadria: itens[0]?.tipo_esquadria || "outro",
+    modo_entrada: "whatsapp",
+    descricao_livre: String(intake.conteudo_bruto || ""),
+    observacoes: [
+      "Entrada automática consolidada pelo grupo de orçamento do WhatsApp.",
+      resumo ? `Resumo IA: ${resumo}` : null,
+      observacoesIA ? `Observações: ${observacoesIA}` : null,
+      pendencias.length ? `Pendências: ${[...new Set(pendencias)].join("; ")}` : "Pendências: nenhuma identificada pela IA.",
+      aiErro ? `IA: falhou ao estruturar completamente (${aiErro}). Conteúdo bruto preservado para revisão.` : null,
+      "O remetente do grupo não é assumido como cliente sem evidência explícita.",
+    ].filter(Boolean).join("\n"),
+    valor_estimado: null,
+    status: "rascunho",
+    origem: "whatsapp",
+    itens,
+    fotos_urls: [],
+    anexos: [],
+    coluna_id: fazerOrcamento?.id || null,
+    coluna_atualizada_em: new Date().toISOString(),
+    revisao_grupo_id: quoteId,
+    revisao_versao: 1,
+    revisao_atual: true,
+  }
+  if (cidade) quotePayload.cidade = cidade
+  if (obraNome) quotePayload.obra_nome = obraNome
+  if (obraEndereco) quotePayload.obra_endereco = obraEndereco
+  if (acabamento) quotePayload.acabamento = acabamento
+  if (contramarco) quotePayload.contramarco = contramarco
+  if (tipoMedida) quotePayload.tipo_medida = tipoMedida
+  if (itens.length === 1) {
+    quotePayload.largura_mm = itens[0]?.largura_mm || null
+    quotePayload.altura_mm = itens[0]?.altura_mm || null
+    quotePayload.quantidade = itens[0]?.quantidade || 1
+  }
+
+  if (intake.orcamento_id) {
+    const { error } = await db.from("orcamentos")
+      .update({ ...quotePayload, updated_at: new Date().toISOString() })
+      .eq("id", intake.orcamento_id)
+      .eq("empresa_id", intake.empresa_id)
+      .eq("status", "rascunho")
+    if (error) throw error
+  } else {
+    const { error } = await db.from("orcamentos").insert({ id: quoteId, ...quotePayload })
+    if (error) throw error
+  }
+
+  let taskId: string | null = intake.tarefa_id || null
+  if (!taskId && automation.criar_tarefa !== false && automation.responsavel_id) {
+    const columnId = await ensureTaskColumn(intake.empresa_id, automation.responsavel_id)
+    const { data: task, error: taskError } = await db.from("tarefas").insert({
+      empresa_id: intake.empresa_id,
+      usuario_id: automation.responsavel_id,
+      coluna_id: columnId,
+      titulo: `Orçamento via WhatsApp · ${nomeSeguro}`.slice(0, 180),
+      descricao: [
+        `Grupo: ${intake?.atendimento_whatsapp_grupos?.nome || "WhatsApp"}`,
+        clienteWhatsapp ? `WhatsApp identificado: ${clienteWhatsapp}` : null,
+        resumo ? `Resumo IA: ${resumo}` : null,
+        pendencias.length ? `Pendências: ${[...new Set(pendencias)].join("; ")}` : null,
+        "",
+        String(intake.conteudo_bruto || ""),
+      ].filter(v => v !== null).join("\n"),
+      prioridade: "normal",
+      atribuida_em: new Date().toISOString(),
+      orcamento_id: quoteId,
+    }).select("id").single()
+    if (taskError) throw taskError
+    taskId = task.id
+  }
+
+  if (automation.responsavel_id) {
+    const { error: notificationError } = await db.from("notificacoes").insert({
+      empresa_id: intake.empresa_id,
+      usuario_id: automation.responsavel_id,
+      categoria: "tarefas",
+      tipo: "whatsapp_orcamento",
+      titulo: "Novo orçamento consolidado do WhatsApp",
+      mensagem: resumo || `${nomeSeguro} · revisar pedido recebido no grupo`,
+      href: `/kanban?orcamento=${quoteId}`,
+      origem_tipo: "whatsapp_orcamento_intake",
+      origem_id: intake.id,
+      push_status: "pendente",
+    })
+    if (notificationError && notificationError.code !== "23505") {
+      console.error("Falha ao notificar orçamento consolidado:", notificationError.message)
+    }
+  }
+
+  const { error: intakeUpdateError } = await db.from("atendimento_whatsapp_intakes").update({
+    orcamento_id: quoteId,
+    tarefa_id: taskId,
+    status: "processado",
+    updated_at: new Date().toISOString(),
+  }).eq("id", intake.id).eq("empresa_id", intake.empresa_id)
+  if (intakeUpdateError) throw intakeUpdateError
+
+  return { quoteId, taskId }
+}
+
+async function estruturarIntakeComIA(
+  intakeId: string,
+  gatewayToken: string,
+  gatilho: "silencio" | "pronto",
+  snapshotUltimaMensagem?: string,
+) {
+  let { data: intake, error: intakeError } = await db
     .from("atendimento_whatsapp_intakes")
     .select("*, atendimento_whatsapp_grupos(nome)")
     .eq("id", intakeId)
     .maybeSingle()
-  if (intakeError || !intake) return
+  if (intakeError || !intake) return null
+  if (intake.status !== "aberto" || intake.fechado_em) return null
+  if (snapshotUltimaMensagem && String(intake.ultima_mensagem_em || "") !== snapshotUltimaMensagem) return null
 
-  const ultima = new Date(intake.ultima_mensagem_em).getTime()
-  if (!Number.isFinite(ultima) || Date.now() - ultima < 10_000) return
-
-  if (
-    intake.ai_status === "concluido" &&
-    intake.ai_processado_em &&
-    new Date(intake.ai_processado_em).getTime() >= ultima
-  ) return
-  if (intake.ai_status === "processando") return
-
-  const snapshotUltimaMensagem = String(intake.ultima_mensagem_em)
-  await db.from("atendimento_whatsapp_intakes").update({
+  const fechamentoEm = new Date().toISOString()
+  let lock = db.from("atendimento_whatsapp_intakes").update({
+    fechado_em: fechamentoEm,
+    gatilho_fechamento: gatilho,
+    fechamento_pausado: false,
     ai_status: "processando",
     ai_erro: null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", intake.id)
+    updated_at: fechamentoEm,
+  }).eq("id", intake.id).eq("empresa_id", intake.empresa_id).eq("status", "aberto").is("fechado_em", null)
+  if (snapshotUltimaMensagem) lock = lock.eq("ultima_mensagem_em", snapshotUltimaMensagem)
+  const { data: locked, error: lockError } = await lock.select("id").maybeSingle()
+  if (lockError) throw lockError
+  if (!locked) return null
+
+  let structured: any = null
+  let sessionId: string | null = null
+  let aiErro: string | null = null
 
   try {
+    if (!gatewayToken) throw new Error("Token da automação de IA indisponível.")
     const { data: endpoint, error: endpointError } = await db
       .from("ai_runtime_endpoints")
       .select("base_url")
@@ -844,24 +1041,27 @@ async function estruturarIntakeComIA(intakeId: string, gatewayToken: string) {
       .maybeSingle()
     if (endpointError) throw endpointError
     const baseUrl = String(endpoint?.base_url || "").replace(/\/$/, "")
-    if (!baseUrl) throw new Error("Endpoint privado do OpenCode nao configurado.")
+    if (!baseUrl) throw new Error("Endpoint privado do OpenCode não configurado.")
 
     const sessao = await aiGatewayCall(baseUrl, gatewayToken, "/session", {
-      title: `WhatsApp Orcamento - ${intake.id}`.slice(0, 120),
+      title: `WhatsApp Orçamento - ${intake.id}`.slice(0, 120),
     })
-    const sessionId = String(sessao?.data?.id || sessao?.id || "").trim()
-    if (!sessionId) throw new Error("OpenCode nao retornou sessao.")
+    sessionId = String(sessao?.data?.id || sessao?.id || "").trim()
+    if (!sessionId) throw new Error("OpenCode não retornou sessão.")
 
     const anexos = Array.isArray(intake.anexos) ? intake.anexos : []
     const system = [
-      "Voce estrutura pedidos de orcamento recebidos pelo WhatsApp da Esquadrifacio dentro do Atlas One.",
-      "Responda SOMENTE com JSON valido, sem markdown.",
-      "Extraia apenas informacoes explicitamente presentes no conteudo. Nunca invente medida, preco, cidade, acabamento, quantidade ou tipologia.",
-      "O remetente do grupo pode ser apenas quem encaminhou a mensagem e nao necessariamente o cliente.",
-      "Se um dado nao estiver presente, use null. Se houver duvida, registre em pendencias.",
-      "Medidas devem ser convertidas para milimetros apenas quando a unidade estiver explicita.",
-      "Nao calcule preco nem custo nesta etapa.",
-      "Schema obrigatorio: {cliente_nome:string|null,cliente_whatsapp:string|null,cidade:string|null,obra_nome:string|null,obra_endereco:string|null,acabamento:string|null,contramarco:string|null,tipo_medida:string|null,itens:Array<{ambiente:string|null,tipo_esquadria:string|null,tipo_outro_texto:string|null,largura_mm:number|null,altura_mm:number|null,quantidade:number|null,descricao:string|null}>,resumo:string|null,observacoes:string|null,pendencias:string[]}.",
+      "Você estrutura pedidos de orçamento recebidos pelo WhatsApp da Esquadrifácio dentro do Atlas One.",
+      "Responda SOMENTE com JSON válido, sem markdown.",
+      "O conteúdo pode ter sido enviado em várias mensagens; trate o pacote inteiro como um único pedido.",
+      "Identifique o CLIENTE pelo conteúdo do pedido (nome/telefone explicitamente citados). O remetente do grupo pode ser apenas o colaborador que encaminhou e NÃO deve ser assumido como cliente.",
+      "Identifique também claramente o que precisa ser orçado, separando ambientes, tipologias, medidas e quantidades quando estiverem explícitos.",
+      "Extraia apenas informações explicitamente presentes. Nunca invente medida, preço, cidade, acabamento, quantidade, tipologia ou identidade do cliente.",
+      "Se um dado não estiver presente ou houver dúvida, use null e registre em pendências.",
+      "Medidas devem ser convertidas para milímetros apenas quando a unidade estiver explícita.",
+      "Não calcule preço nem custo nesta etapa.",
+      "No campo resumo, escreva de forma curta quem é o cliente (se identificado) e o que ele está pedindo.",
+      "Schema obrigatório: {cliente_nome:string|null,cliente_whatsapp:string|null,cidade:string|null,obra_nome:string|null,obra_endereco:string|null,acabamento:string|null,contramarco:string|null,tipo_medida:string|null,itens:Array<{ambiente:string|null,tipo_esquadria:string|null,tipo_outro_texto:string|null,largura_mm:number|null,altura_mm:number|null,quantidade:number|null,descricao:string|null}>,resumo:string|null,observacoes:string|null,pendencias:string[]}.",
     ].join("\n")
 
     const prompt = JSON.stringify({
@@ -891,106 +1091,82 @@ async function estruturarIntakeComIA(intakeId: string, gatewayToken: string) {
         parts: [{ type: "text", text: prompt }],
       },
     )
-    const structured = parseJsonObject(openCodeText(resposta))
+    structured = parseJsonObject(openCodeText(resposta))
+  } catch (error) {
+    aiErro = String(error instanceof Error ? error.message : error).slice(0, 1200)
+  }
 
-    const { data: intakeAtual } = await db
+  try {
+    const { data: intakeAtual, error: refreshError } = await db
       .from("atendimento_whatsapp_intakes")
-      .select("ultima_mensagem_em")
+      .select("*, atendimento_whatsapp_grupos(nome)")
       .eq("id", intake.id)
       .maybeSingle()
+    if (refreshError || !intakeAtual) throw refreshError || new Error("Pacote de orçamento não encontrado.")
+    intake = intakeAtual
 
-    if (String(intakeAtual?.ultima_mensagem_em || "") !== snapshotUltimaMensagem) {
-      await db.from("atendimento_whatsapp_intakes").update({
-        ai_status: "pendente",
-        ai_session_id: sessionId,
-        ai_erro: null,
-        updated_at: new Date().toISOString(),
-      }).eq("id", intake.id)
-      return
-    }
-
-    const itens = itensEstruturados(structured?.itens)
-    const clienteNome = textoOpcional(structured?.cliente_nome)
-    const clienteWhatsapp = normalizePhone(structured?.cliente_whatsapp || "")
-    const pendencias = Array.isArray(structured?.pendencias)
-      ? structured.pendencias.map((p: unknown) => String(p || "").trim()).filter(Boolean).slice(0, 30)
-      : []
-
-    if (intake.orcamento_id) {
-      const update: Record<string, unknown> = {
-        descricao_livre: intake.conteudo_bruto || "",
-        updated_at: new Date().toISOString(),
-      }
-      if (clienteNome) update.cliente_nome = clienteNome
-      if (clienteWhatsapp) update.cliente_whatsapp = clienteWhatsapp
-      const cidade = textoOpcional(structured?.cidade)
-      const obraNome = textoOpcional(structured?.obra_nome)
-      const obraEndereco = textoOpcional(structured?.obra_endereco)
-      const acabamento = textoOpcional(structured?.acabamento)
-      const contramarco = textoOpcional(structured?.contramarco)
-      const tipoMedida = textoOpcional(structured?.tipo_medida)
-      if (cidade) update.cidade = cidade
-      if (obraNome) update.obra_nome = obraNome
-      if (obraEndereco) update.obra_endereco = obraEndereco
-      if (acabamento) update.acabamento = acabamento
-      if (contramarco) update.contramarco = contramarco
-      if (tipoMedida) update.tipo_medida = tipoMedida
-      if (itens.length) {
-        update.itens = itens
-        update.tipo_esquadria = itens[0]?.tipo_esquadria || "outro"
-        if (itens.length === 1) {
-          update.largura_mm = itens[0]?.largura_mm || null
-          update.altura_mm = itens[0]?.altura_mm || null
-          update.quantidade = itens[0]?.quantidade || 1
-        }
-      }
-      const resumo = textoOpcional(structured?.resumo)
-      const observacoes = textoOpcional(structured?.observacoes)
-      update.observacoes = [
-        "Entrada automatica pelo WhatsApp.",
-        resumo ? `Resumo IA: ${resumo}` : null,
-        observacoes ? `Observacoes: ${observacoes}` : null,
-        pendencias.length ? `Pendencias: ${pendencias.join("; ")}` : "Pendencias: nenhuma identificada pela IA.",
-        "Valores, custos e configuracoes tecnicas precisam seguir as regras do Atlas/W.Vetro e permanecem sem inferencia quando nao informados.",
-      ].filter(Boolean).join("\n")
-
-      await db.from("orcamentos")
-        .update(update)
-        .eq("id", intake.orcamento_id)
-        .eq("empresa_id", intake.empresa_id)
-        .eq("status", "rascunho")
-    }
-
-    if (intake.tarefa_id) {
-      const nomeTarefa = clienteNome || intake.participante_nome || "Solicitacao WhatsApp"
-      await db.from("tarefas").update({
-        titulo: `Orcamento via WhatsApp - ${nomeTarefa}`.slice(0, 180),
-        descricao: [
-          `Grupo: ${intake?.atendimento_whatsapp_grupos?.nome || "WhatsApp"}`,
-          clienteWhatsapp ? `WhatsApp identificado: ${clienteWhatsapp}` : null,
-          textoOpcional(structured?.resumo) ? `Resumo IA: ${textoOpcional(structured?.resumo)}` : null,
-          pendencias.length ? `Pendencias: ${pendencias.join("; ")}` : null,
-          "",
-          String(intake.conteudo_bruto || ""),
-        ].filter(v => v !== null).join("\n"),
-      }).eq("id", intake.tarefa_id).eq("empresa_id", intake.empresa_id)
-    }
-
+    const card = await criarCardIntakeOrcamento(intake, structured, aiErro)
     await db.from("atendimento_whatsapp_intakes").update({
-      ai_status: "concluido",
+      ai_status: aiErro ? "erro" : "concluido",
       ai_session_id: sessionId,
       ai_resultado: structured,
-      ai_erro: null,
+      ai_erro: aiErro,
       ai_processado_em: new Date().toISOString(),
-      status: intake.orcamento_id ? "processado" : intake.status,
+      status: "processado",
       updated_at: new Date().toISOString(),
-    }).eq("id", intake.id)
+    }).eq("id", intake.id).eq("empresa_id", intake.empresa_id)
+    return card
   } catch (error) {
     await db.from("atendimento_whatsapp_intakes").update({
       ai_status: "erro",
       ai_erro: String(error instanceof Error ? error.message : error).slice(0, 1200),
+      status: "erro",
       updated_at: new Date().toISOString(),
     }).eq("id", intake.id)
+    throw error
+  }
+}
+
+async function agendarFechamentoIntake(
+  intakeId: string,
+  gatewayToken: string,
+  snapshotUltimaMensagem: string,
+  janelaMinutos: number,
+) {
+  await new Promise(resolve => setTimeout(resolve, Math.max(1, janelaMinutos) * 60_000 + 1500))
+  const { data: intake } = await db.from("atendimento_whatsapp_intakes")
+    .select("id,status,fechado_em,ultima_mensagem_em")
+    .eq("id", intakeId)
+    .maybeSingle()
+  if (!intake || intake.status !== "aberto" || intake.fechado_em) return
+  if (String(intake.ultima_mensagem_em || "") !== snapshotUltimaMensagem) return
+  const idade = Date.now() - new Date(intake.ultima_mensagem_em).getTime()
+  if (!Number.isFinite(idade) || idade < Math.max(1, janelaMinutos) * 60_000) return
+  await estruturarIntakeComIA(intake.id, gatewayToken, "silencio", snapshotUltimaMensagem)
+}
+
+async function processarIntakesVencidos(config: any, gatewayToken: string) {
+  if (!gatewayToken) return
+  const { data: intakes, error } = await db.from("atendimento_whatsapp_intakes")
+    .select("id,automacao_id,status,fechado_em,ultima_mensagem_em")
+    .eq("empresa_id", config.empresa_id)
+    .eq("status", "aberto")
+    .is("fechado_em", null)
+    .order("ultima_mensagem_em", { ascending: true })
+    .limit(20)
+  if (error || !intakes?.length) return
+
+  for (const intake of intakes) {
+    const { data: automation } = await db.from("atendimento_whatsapp_grupo_automacoes")
+      .select("janela_agregacao_minutos,ativo")
+      .eq("id", intake.automacao_id)
+      .eq("empresa_id", config.empresa_id)
+      .maybeSingle()
+    if (!automation?.ativo) continue
+    const janela = Math.max(1, Math.min(120, Number(automation.janela_agregacao_minutos || 1)))
+    const ultima = new Date(intake.ultima_mensagem_em).getTime()
+    if (!Number.isFinite(ultima) || Date.now() - ultima < janela * 60_000) continue
+    await estruturarIntakeComIA(intake.id, gatewayToken, "silencio", String(intake.ultima_mensagem_em))
   }
 }
 
@@ -1393,12 +1569,12 @@ async function processGroupBudgetIntake(
   now: string,
   gatewayToken: string,
 ) {
-  if (String(body.chatTipo || "") !== "grupo") return null;
-  const groupJid = String(body.chatJid || "");
-  if (!groupJid.endsWith("@g.us")) return null;
+  if (String(body.chatTipo || "") !== "grupo") return null
+  const groupJid = String(body.chatJid || "")
+  if (!groupJid.endsWith("@g.us")) return null
 
-  const tipoMensagem = atlasMessageType(body.messageType);
-  if (tipoMensagem === "sistema" || tipoMensagem === "reacao") return null;
+  const tipoMensagem = atlasMessageType(body.messageType)
+  if (tipoMensagem === "sistema" || tipoMensagem === "reacao") return null
 
   const { data: group } = await db.from("atendimento_whatsapp_grupos")
     .select("id,nome")
@@ -1406,8 +1582,8 @@ async function processGroupBudgetIntake(
     .eq("whatsapp_canal_id", channel.id)
     .eq("grupo_jid", groupJid)
     .eq("ativo", true)
-    .maybeSingle();
-  if (!group) return null;
+    .maybeSingle()
+  if (!group) return null
 
   const { data: automation } = await db.from("atendimento_whatsapp_grupo_automacoes")
     .select("*")
@@ -1415,13 +1591,16 @@ async function processGroupBudgetIntake(
     .eq("grupo_id", group.id)
     .eq("tipo", "orcamento")
     .eq("ativo", true)
-    .maybeSingle();
-  if (!automation) return null;
+    .maybeSingle()
+  if (!automation) return null
 
-  const participantJid = String(body.participanteJid || body.participanteTelefone || "desconhecido");
-  const participantPhone = normalizePhone(body.participanteTelefone || "");
-  const participantName = String(body.participanteNome || "").trim() || "Contato encaminhado";
-  const rawLine = `[${participantName}] ${String(text || "[Mensagem]").trim()}`;
+  const participantJid = String(body.participanteJid || body.participanteTelefone || "desconhecido")
+  const participantPhone = normalizePhone(body.participanteTelefone || "")
+  const participantName = String(body.participanteNome || "").trim() || "Contato encaminhado"
+  const comandoPronto = tipoMensagem === "texto" && ehComandoPronto(text)
+  const comandoAguarde = tipoMensagem === "texto" && ehComandoAguarde(text)
+  const controle = comandoPronto || comandoAguarde
+  const rawLine = controle ? "" : `[${participantName}] ${String(text || "[Mensagem]").trim()}`
   const attachment = body.mediaPath ? {
     mensagem_id: messageRowId,
     whatsapp_message_id: body.whatsappMessageId || null,
@@ -1430,25 +1609,26 @@ async function processGroupBudgetIntake(
     mime_type: body.mimeType ? mediaMime(body.mimeType) : null,
     media_path: body.mediaPath,
     tamanho: Number(body.mediaSize || 0) || null,
-  } : null;
+  } : null
 
-  const windowMinutes = Math.max(1, Math.min(120, Number(automation.janela_agregacao_minutos || 5)));
-  const cutoff = new Date(new Date(now).getTime() - windowMinutes * 60_000).toISOString();
+  const windowMinutes = Math.max(1, Math.min(120, Number(automation.janela_agregacao_minutos || 1)))
+  const cutoff = new Date(new Date(now).getTime() - windowMinutes * 60_000).toISOString()
   const { data: existingIntake } = await db.from("atendimento_whatsapp_intakes")
     .select("*")
     .eq("empresa_id", config.empresa_id)
     .eq("automacao_id", automation.id)
     .eq("participante_jid", participantJid)
-    .in("status", ["aberto", "rascunho_criado", "processado"])
+    .eq("status", "aberto")
+    .is("fechado_em", null)
     .gte("ultima_mensagem_em", cutoff)
     .order("ultima_mensagem_em", { ascending: false })
     .limit(1)
-    .maybeSingle();
+    .maybeSingle()
 
   if (existingIntake) {
-    const ids = Array.isArray(existingIntake.mensagens_ids) ? existingIntake.mensagens_ids : [];
-    const anexos = Array.isArray(existingIntake.anexos) ? existingIntake.anexos : [];
-    const content = appendRaw(existingIntake.conteudo_bruto, rawLine);
+    const ids = Array.isArray(existingIntake.mensagens_ids) ? existingIntake.mensagens_ids : []
+    const anexos = Array.isArray(existingIntake.anexos) ? existingIntake.anexos : []
+    const content = rawLine ? appendRaw(existingIntake.conteudo_bruto, rawLine) : String(existingIntake.conteudo_bruto || "")
 
     const { error: intakeError } = await db.from("atendimento_whatsapp_intakes").update({
       participante_telefone: participantPhone || existingIntake.participante_telefone || null,
@@ -1456,100 +1636,30 @@ async function processGroupBudgetIntake(
       conteudo_bruto: content,
       mensagens_ids: [...ids, body.whatsappMessageId || messageRowId],
       anexos: attachment ? [...anexos, attachment] : anexos,
-      status: existingIntake.orcamento_id ? "rascunho_criado" : "aberto",
       ai_status: "pendente",
       ai_erro: null,
       ultima_mensagem_em: now,
       updated_at: now,
-    }).eq("id", existingIntake.id);
-    if (intakeError) throw intakeError;
+    }).eq("id", existingIntake.id)
+    if (intakeError) throw intakeError
 
-    if (existingIntake.orcamento_id) {
-      const { data: quote } = await db.from("orcamentos")
-        .select("descricao_livre,status,modo_entrada")
-        .eq("id", existingIntake.orcamento_id)
-        .eq("empresa_id", config.empresa_id)
-        .maybeSingle();
-      if (quote?.status === "rascunho" && quote?.modo_entrada === "whatsapp") {
-        await db.from("orcamentos").update({
-          descricao_livre: content,
-          updated_at: now,
-        }).eq("id", existingIntake.orcamento_id).eq("empresa_id", config.empresa_id);
-      }
+    if (comandoPronto) {
+      if (gatewayToken) executarEmBackground(estruturarIntakeComIA(existingIntake.id, gatewayToken, "pronto", now))
+      return { intakeId: existingIntake.id, appended: true, fechamento: "pronto" }
     }
 
-    if (existingIntake.tarefa_id) {
-      await db.from("tarefas").update({
-        descricao: `Grupo: ${group.nome}\nRemetente: ${participantName}${participantPhone ? ` · ${participantPhone}` : ""}\n\n${content}`,
-      }).eq("id", existingIntake.tarefa_id).eq("empresa_id", config.empresa_id);
+    if (gatewayToken) executarEmBackground(agendarFechamentoIntake(existingIntake.id, gatewayToken, now, windowMinutes))
+    return {
+      intakeId: existingIntake.id,
+      appended: true,
+      aguardandoMais: true,
+      comando: comandoAguarde ? "aguarde" : null,
+      fechaAposSegundosSemMensagem: windowMinutes * 60,
     }
-
-    if (gatewayToken) executarEmBackground(estruturarIntakeComIA(existingIntake.id, gatewayToken));
-    return { intakeId: existingIntake.id, orcamentoId: existingIntake.orcamento_id || null, appended: true };
   }
 
-  let quoteId: string | null = null;
-  if (automation.criar_rascunho !== false) {
-    const { data: firstColumn } = await db.from("kanban_colunas")
-      .select("id")
-      .eq("empresa_id", config.empresa_id)
-      .order("ordem", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    quoteId = crypto.randomUUID();
-    const { error: quoteError } = await db.from("orcamentos").insert({
-      id: quoteId,
-      empresa_id: config.empresa_id,
-      cliente_nome: participantName,
-      cliente_whatsapp: participantPhone || null,
-      tipo_esquadria: "outro",
-      modo_entrada: "whatsapp",
-      descricao_livre: rawLine,
-      observacoes: `Entrada automática pelo WhatsApp · Grupo: ${group.nome}. A IA deve estruturar somente informações explícitas; medidas, preço e configuração técnica ausentes permanecem pendentes.`,
-      valor_estimado: null,
-      status: "rascunho",
-      origem: "whatsapp",
-      itens: [],
-      fotos_urls: [],
-      anexos: [],
-      coluna_id: firstColumn?.id || null,
-      coluna_atualizada_em: now,
-      revisao_grupo_id: quoteId,
-      revisao_versao: 1,
-      revisao_atual: true,
-    });
-    if (quoteError) throw quoteError;
-  }
-
-  let taskId: string | null = null;
-  if (automation.criar_tarefa !== false && automation.responsavel_id) {
-    const columnId = await ensureTaskColumn(config.empresa_id, automation.responsavel_id);
-    const { data: task, error: taskError } = await db.from("tarefas").insert({
-      empresa_id: config.empresa_id,
-      usuario_id: automation.responsavel_id,
-      coluna_id: columnId,
-      titulo: `Orçamento via WhatsApp · ${participantName}`,
-      descricao: `Grupo: ${group.nome}\nRemetente: ${participantName}${participantPhone ? ` · ${participantPhone}` : ""}\n\n${rawLine}`,
-      prioridade: "normal",
-      atribuida_em: now,
-      orcamento_id: quoteId,
-    }).select("id").single();
-    if (taskError) throw taskError;
-    taskId = task.id;
-
-    await db.from("notificacoes").insert({
-      empresa_id: config.empresa_id,
-      usuario_id: automation.responsavel_id,
-      categoria: "tarefas",
-      tipo: "whatsapp_orcamento",
-      titulo: "Novo orçamento via WhatsApp",
-      mensagem: `${participantName} · ${group.nome}`,
-      href: quoteId ? `/kanban?orcamento=${quoteId}` : "/tarefas",
-      origem_tipo: "whatsapp_orcamento",
-      origem_id: body.whatsappMessageId || messageRowId,
-      push_status: "pendente",
-    });
+  if (comandoPronto) {
+    return { ignored: true, reason: "pronto_sem_pacote_aberto" }
   }
 
   const { data: intake, error: intakeError } = await db.from("atendimento_whatsapp_intakes").insert({
@@ -1560,19 +1670,29 @@ async function processGroupBudgetIntake(
     participante_jid: participantJid,
     participante_telefone: participantPhone || null,
     participante_nome: participantName,
-    status: quoteId ? "rascunho_criado" : "aberto",
-    orcamento_id: quoteId,
-    tarefa_id: taskId,
+    status: "aberto",
+    orcamento_id: null,
+    tarefa_id: null,
     conteudo_bruto: rawLine,
     mensagens_ids: [body.whatsappMessageId || messageRowId],
     anexos: attachment ? [attachment] : [],
+    ai_status: "pendente",
+    fechamento_pausado: false,
+    fechado_em: null,
+    gatilho_fechamento: null,
     primeira_mensagem_em: now,
     ultima_mensagem_em: now,
-  }).select("id").single();
-  if (intakeError) throw intakeError;
+  }).select("id").single()
+  if (intakeError) throw intakeError
 
-  if (gatewayToken) executarEmBackground(estruturarIntakeComIA(intake.id, gatewayToken));
-  return { intakeId: intake.id, orcamentoId: quoteId, tarefaId: taskId, appended: false };
+  if (gatewayToken) executarEmBackground(agendarFechamentoIntake(intake.id, gatewayToken, now, windowMinutes))
+  return {
+    intakeId: intake.id,
+    appended: false,
+    aguardandoMais: true,
+    comando: comandoAguarde ? "aguarde" : null,
+    fechaAposSegundosSemMensagem: windowMinutes * 60,
+  }
 }
 
 async function conversationForInbound(
@@ -1667,6 +1787,8 @@ Deno.serve(async (req) => {
     if (!config) return reply({ error: "Gateway nao autorizado." }, 401);
 
     const url = new URL(req.url);
+
+    if (gatewayToken) executarEmBackground(processarIntakesVencidos(config, gatewayToken));
 
     if (req.method === "GET" && url.searchParams.get("mode") === "push-pending") {
       const item = await proximaNotificacaoPush(config);
