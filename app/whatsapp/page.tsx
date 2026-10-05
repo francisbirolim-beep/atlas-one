@@ -924,8 +924,8 @@ export default function WhatsAppAtendimentoPage() {
                 <span className="text-xs font-bold text-slate-700">Abertas {totais.abertas}</span>
                 <span className="text-[10px] text-slate-400">Filtros do atendimento</span>
               </div>
-              <div className="-mx-1 mt-2 min-w-0 max-w-full overflow-x-auto overscroll-x-contain px-1 pb-1">
-                <div className="flex w-max min-w-full gap-1.5 text-xs font-semibold">
+              <div className="mt-2 min-w-0 max-w-full">
+                <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
                 <button onClick={()=>setFiltro('todas')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
                   Todas {totais.todas}
@@ -1020,6 +1020,14 @@ export default function WhatsAppAtendimentoPage() {
                       )}
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
+                    {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && !c.responsavel_id && (
+                      <div className="mt-2 flex">
+                        <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
+                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700">
+                          Atender
+                        </button>
+                      </div>
+                    )}
                     {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && (
                       <div className="mt-2 hidden flex-wrap gap-1.5 group-hover:flex group-focus-within:flex">
                         <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
@@ -1036,12 +1044,6 @@ export default function WhatsAppAtendimentoPage() {
                           className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
                           Etiquetas
                         </button>
-                        {!c.responsavel_id && (
-                          <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
-                            className="rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-700">
-                            Atender
-                          </button>
-                        )}
                         <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c)}}
                           className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
                           Ver tudo
