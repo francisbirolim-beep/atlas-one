@@ -8,7 +8,7 @@ import { Building2, FileText, Settings2, Users, Workflow, SlidersHorizontal } fr
 const LINKS = [
   { href: '/configuracoes', label: 'Visão geral', icon: Settings2, exact: true },
   { href: '/configuracoes/empresa', label: 'Empresa e Identidade', icon: Building2 },
-  { href: '/configuracoes/automacoes-fluxo', label: 'Automações do Fluxo', icon: Workflow, destaque: true },
+  { href: '/configuracoes/automacoes-fluxo', label: 'Central de Automações', icon: Workflow, destaque: true },
   { href: '/configuracoes/usuarios', label: 'Pessoas e Acesso', icon: Users },
   { href: '/configuracoes/orcamento', label: 'Orçamento', icon: FileText },
   { href: '/configuracoes/campos', label: 'Campos', icon: SlidersHorizontal },
