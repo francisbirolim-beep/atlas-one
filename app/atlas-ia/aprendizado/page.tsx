@@ -189,6 +189,26 @@ export default function CentralAprendizadoPage(){
     finally{setReprocessando(null)}
   }
 
+  async function mapearCatalogo(e:Entrada){
+    if(reprocessando)return
+    setReprocessando(e.id);setErro('')
+    try{
+      const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({acao:'mapear_catalogo',entrada_id:e.id})})
+      setMensagem(j.mensagem||'Páginas do catálogo preparadas para gerar as imagens.')
+      await carregar()
+      return j
+    }catch(err:any){setErro(err?.message||'Erro ao preparar imagens do catálogo.');throw err}
+    finally{setReprocessando(null)}
+  }
+
+  async function salvarImagemCatalogo(candidato:Candidato,imagem:string){
+    const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
+      id:candidato.id,acao:'salvar_imagem_catalogo',imagem,
+    })})
+    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id?{...c,dados:{...(c.dados||{}),imagem_item_url:j.imagem_url||imagem}}:c)}))
+    return j
+  }
+
   async function acao(c:Candidato,acao:'corrigir'|'aprovar'|'rejeitar'){
     if(salvando)return
     setSalvando(c.id);setErro('');setMensagem('')
@@ -306,7 +326,10 @@ export default function CentralAprendizadoPage(){
               onItemAberto={setItemCatalogoAberto}
               onAbrirValidacao={c=>{setAba('validacoes');editarInicial(c)}}
               onSalvarItem={salvarItemCatalogo}
+              onMapearCatalogo={mapearCatalogo}
+              onSalvarImagem={salvarImagemCatalogo}
               salvandoId={salvando}
+              mapeando={reprocessando===e.id}
             />}
           </article>)}</div>}
         </div>
@@ -391,7 +414,7 @@ export default function CentralAprendizadoPage(){
 }
 
 
-function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,salvandoId}:{
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,salvandoId,mapeando}:{
   entrada:Entrada
   candidatos:Candidato[]
   busca:string
@@ -400,11 +423,21 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   onItemAberto:(v:string|null)=>void
   onAbrirValidacao:(c:Candidato)=>void
   onSalvarItem:(c:Candidato,dados:Record<string,any>)=>Promise<void>
+  onMapearCatalogo:(e:Entrada)=>Promise<any>
+  onSalvarImagem:(c:Candidato,imagem:string)=>Promise<any>
   salvandoId:string|null
+  mapeando:boolean
 }){
   const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'>('todos')
   const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
+  const [mapeamentoTentado,setMapeamentoTentado]=useState(false)
   const produtos=candidatos.filter(c=>c.tipo==='produto')
+  const semPagina=produtos.filter(c=>!Number(c.dados?.pagina_catalogo||0)).length
+  useEffect(()=>{
+    if(mapeamentoTentado||!entrada.fonte_url||!produtos.length||semPagina===0)return
+    setMapeamentoTentado(true)
+    void onMapearCatalogo(entrada).catch(()=>setMapeamentoTentado(false))
+  },[entrada.id,entrada.fonte_url,produtos.length,semPagina,mapeamentoTentado])
   const aplicados=produtos.filter(c=>c.status==='aplicado')
   const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
@@ -458,6 +491,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
       {semPreco.length>0&&<button onClick={baixarSemPreco} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-800">Baixar lista sem preço ({semPreco.length})</button>}
     </div>
     {semPreco.length>0&&<p className="mt-2 text-[11px] text-slate-500">A lista pode ser enviada ao fornecedor. Depois, a tabela preenchida pode voltar pela Central como “Tabela de preço”; o Atlas reconcilia pelos códigos.</p>}
+    {semPagina>0&&<div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800"><span>{mapeando?'Preparando as páginas do PDF para gerar os desenhos dos perfis...':semPagina+' item(ns) ainda precisam ter a página identificada para gerar a imagem.'}</span><button disabled={mapeando} onClick={()=>void onMapearCatalogo(entrada)} className="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{mapeando?'Preparando...':'Preparar imagens'}</button></div>}
 
     <div className="mt-4 space-y-2">
       {filtrados.length===0?<div className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-400">Nenhum item neste filtro.</div>:filtrados.map(c=>{
@@ -514,13 +548,126 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
             <div>
               <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><Eye size={14}/>Imagem do item</div>{fontePagina&&<a href={fontePagina} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Ver evidência no catálogo</a>}</div>
               {imagemItem?<img src={imagemItem} alt={String(c.dados?.descricao||c.dados?.codigo||'Item do catálogo')} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
-              :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div><Eye className="mx-auto mb-2" size={22}/><b className="text-slate-500">Recorte individual ainda não disponível.</b><p className="mt-1 text-xs">A página inteira não é mais usada como imagem do produto. O PDF continua preservado apenas como evidência da origem.</p></div></div>}
+              :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
+              :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div>{mapeando?<Loader2 className="mx-auto mb-2 animate-spin" size={22}/>:<Eye className="mx-auto mb-2" size={22}/>}<b className="text-slate-500">{mapeando?'Preparando o catálogo...':'Localizando este perfil no PDF...'}</b><p className="mt-1 text-xs">Assim que a página for identificada, o Atlas gera o recorte do desenho e salva como imagem do produto.</p></div></div>}
             </div>
           </div>}
         </div>
       })}
     </div>
   </div>
+}
+
+function normalizarCodigoImagem(v:string){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
+function pareceCodigoImagem(v:string){
+  const x=String(v||'').toUpperCase().replace(/s+/g,'')
+  return /^[A-Z]{1,6}d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x)||/^[A-Z]{2,6}d{2,8}$/.test(x)
+}
+
+function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;onSalvar:(imagem:string)=>Promise<any>}){
+  const [imagem,setImagem]=useState('')
+  const [erroImagem,setErroImagem]=useState('')
+  const [carregandoImagem,setCarregandoImagem]=useState(true)
+  const [salvandoImagem,setSalvandoImagem]=useState(false)
+
+  useEffect(()=>{
+    let cancelado=false
+    async function gerar(){
+      setCarregandoImagem(true);setErroImagem('')
+      try{
+        const pdfModuleUrl='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs'
+        const pdfjs:any=await import(/* webpackIgnore: true */ pdfModuleUrl)
+        if(!pdfjs.GlobalWorkerOptions.workerSrc)pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs'
+        const doc=await pdfjs.getDocument({url:fonteUrl}).promise
+        const page=await doc.getPage(pagina)
+        const base=page.getViewport({scale:1})
+        const scale=Math.max(1.6,Math.min(2.4,1400/Math.max(1,base.width)))
+        const viewport=page.getViewport({scale})
+        const text=await page.getTextContent()
+        const itens=(text.items||[]).filter((i:any)=>i?.str&&i?.transform).map((i:any)=>{
+          const t=pdfjs.Util.transform(viewport.transform,i.transform)
+          return {str:String(i.str),x:Number(t[4]||0),y:Number(t[5]||0),w:Number(i.width||0)*scale,h:Math.max(10,Number(i.height||0)*scale)}
+        })
+        const alvo=normalizarCodigoImagem(codigo)
+        let target=itens.find((i:any)=>normalizarCodigoImagem(i.str)===alvo)
+        if(!target&&alvo){
+          for(let i=0;i<itens.length&&!target;i++){
+            let combinado=''
+            for(let j=i;j<Math.min(itens.length,i+4);j++){
+              combinado+=normalizarCodigoImagem(itens[j].str)
+              if(combinado===alvo){target=itens[i];break}
+              if(combinado.length>alvo.length+4)break
+            }
+          }
+        }
+
+        const canvas=document.createElement('canvas')
+        canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height)
+        const ctx=canvas.getContext('2d')
+        if(!ctx)throw new Error('Canvas indisponível.')
+        await page.render({canvasContext:ctx,viewport}).promise
+
+        let sx=0,sy=0,sw=canvas.width,sh=canvas.height
+        if(target){
+          const codigos=itens.filter((i:any)=>pareceCodigoImagem(i.str))
+          const rowTol=Math.max(24,34*scale)
+          const mesmaLinha=codigos.filter((i:any)=>Math.abs(i.y-target.y)<=rowTol).sort((a:any,b:any)=>a.x-b.x)
+          const pos=mesmaLinha.findIndex((i:any)=>normalizarCodigoImagem(i.str)===alvo)
+          const anterior=pos>0?mesmaLinha[pos-1]:null
+          const proximo=pos>=0&&pos<mesmaLinha.length-1?mesmaLinha[pos+1]:null
+          const larguraPadrao=Math.min(canvas.width*.48,260*scale)
+          const left=anterior?(anterior.x+target.x)/2:target.x-larguraPadrao
+          const right=proximo?(target.x+proximo.x)/2:target.x+larguraPadrao
+
+          const ys:number[]=[]
+          for(const i of codigos.sort((a:any,b:any)=>a.y-b.y)){
+            if(!ys.length||Math.abs(i.y-ys[ys.length-1])>rowTol)ys.push(i.y)
+          }
+          const row=ys.reduce((best:number,y:number)=>Math.abs(y-target.y)<Math.abs(best-target.y)?y:best,ys[0]??target.y)
+          const ri=ys.indexOf(row)
+          const acima=ri>0?ys[ri-1]:null
+          const abaixo=ri>=0&&ri<ys.length-1?ys[ri+1]:null
+          const altoPadrao=Math.min(canvas.height*.32,210*scale)
+          const top=acima!==null?(acima+row)/2:row-altoPadrao
+          const bottom=abaixo!==null?(row+abaixo)/2:row+altoPadrao
+
+          sx=Math.max(0,Math.floor(left-16*scale))
+          sy=Math.max(0,Math.floor(top-16*scale))
+          sw=Math.min(canvas.width-sx,Math.max(220*scale,Math.ceil(right-left+32*scale)))
+          sh=Math.min(canvas.height-sy,Math.max(180*scale,Math.ceil(bottom-top+32*scale)))
+        }else{
+          const maxW=Math.min(canvas.width,720*scale),maxH=Math.min(canvas.height,520*scale)
+          sx=Math.max(0,(canvas.width-maxW)/2);sy=Math.max(0,(canvas.height-maxH)/2);sw=maxW;sh=maxH
+        }
+
+        const limite=900
+        const fator=Math.min(1,limite/sw)
+        const out=document.createElement('canvas')
+        out.width=Math.max(1,Math.round(sw*fator));out.height=Math.max(1,Math.round(sh*fator))
+        const octx=out.getContext('2d')
+        if(!octx)throw new Error('Canvas de recorte indisponível.')
+        octx.fillStyle='#fff';octx.fillRect(0,0,out.width,out.height)
+        octx.drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height)
+        const data=out.toDataURL('image/jpeg',0.9)
+        if(cancelado)return
+        setImagem(data);setCarregandoImagem(false)
+        setSalvandoImagem(true)
+        try{await onSalvar(data)}catch{}
+        if(!cancelado)setSalvandoImagem(false)
+        try{await doc.destroy()}catch{}
+      }catch(e:any){
+        if(cancelado)return
+        setErroImagem(e?.message||'Não foi possível gerar o recorte deste perfil.')
+        setCarregandoImagem(false)
+      }
+    }
+    void gerar()
+    return()=>{cancelado=true}
+  },[fonteUrl,pagina,codigo])
+
+  if(carregandoImagem)return <div className="grid min-h-56 place-items-center rounded-xl border bg-white p-6 text-center text-sm text-slate-500"><div><Loader2 className="mx-auto mb-2 animate-spin" size={24}/><b>Gerando desenho do perfil...</b><p className="mt-1 text-xs text-slate-400">Página {pagina} · código {codigo}</p></div></div>
+  if(erroImagem)return <div className="grid min-h-56 place-items-center rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800"><div><Eye className="mx-auto mb-2" size={22}/><b>Não consegui recortar automaticamente.</b><p className="mt-1 text-xs">{erroImagem}</p><a href={fonteUrl+'#page='+pagina} target="_blank" rel="noreferrer" className="mt-3 inline-block font-semibold text-blue-700">Abrir página {pagina}</a></div></div>
+  return <div className="relative"><img src={imagem} alt={descricao||codigo} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>{salvandoImagem&&<div className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-slate-500 shadow">Salvando imagem...</div>}</div>
 }
 
 function InfoItem({rotulo,valor}:{rotulo:string;valor:any}){
