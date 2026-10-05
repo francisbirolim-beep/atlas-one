@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
+  Eye,
   ChevronDown,
   ChevronRight,
   LogOut,
@@ -107,8 +108,9 @@ export default function Sidebar() {
   const inicioCombina = !termo || correspondePesquisaAtlas(termo, 'Início', 'Geral', '/')
   const balcaoCombina = !termo || correspondePesquisaAtlas(termo, 'Venda Balcão', 'Geral', '/balcao')
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
+  const supervisaoIaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
   const mostrarAdmin = usuario?.role === 'master' && (adminAberto || !!termo)
-  const semResultados = !inicioCombina && !balcaoCombina && !iaCombina
+  const semResultados = !inicioCombina && !balcaoCombina && !iaCombina && !supervisaoIaCombina
     && gruposVisiveis.length === 0
     && atalhosVisiveis.length === 0
     && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
@@ -147,6 +149,12 @@ export default function Sidebar() {
           {iaCombina && (
             <Link href="/atlas-ia" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/atlas-ia') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
               <Bot size={18} className="shrink-0" /><span>IA Atlas</span>
+            </Link>
+          )}
+
+          {supervisaoIaCombina && (
+            <Link href="/atlas-ia/supervisao" className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/atlas-ia/supervisao') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+              <Eye size={17} className="shrink-0" /><span>Supervisão da IA</span>
             </Link>
           )}
 
