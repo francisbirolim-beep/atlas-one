@@ -138,6 +138,20 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   const pesquisaTipologia = useMemo(() => {
     const termos = normalizar(buscaTipologia).split(/\s+/).filter(Boolean)
     if (!termos.length) return []
+
+    // No W.Vetro, uma mesma tipologia estrutural pode receber acabamentos e
+    // preenchimentos diferentes (ex.: porta de giro Suprema com vidro ou lambri).
+    // Esses qualificadores não podem esconder a tipologia-base do resultado.
+    const palavrasLigacao = new Set(['de','da','do','das','dos','e','em','com','sem','para'])
+    const qualificadoresTecnicos = new Set([
+      'vidro','vidros','lambril','lambri','duplo','dupla','horizontal','vertical',
+      'fechadura','convencional','contramarco','veneziana','cega','ripado','ripado',
+      'motor','automatizada','automatizado','automatica','automatico','persiana',
+      'tela','mosquiteiro','mosquiteira','fixo','fixa','movel','moveis',
+    ])
+    const estruturais = termos.filter(termo => !palavrasLigacao.has(termo) && !qualificadoresTecnicos.has(termo))
+    const obrigatorios = estruturais.length ? estruturais : termos.filter(termo => !palavrasLigacao.has(termo))
+
     return tipologiasDaLinha
       .map(t => {
         const texto = normalizar([
@@ -146,11 +160,15 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
           (t as any).categoria || '',
           (t as any).descricao || '',
           (t as any).modelo || '',
+          (t as any).modelo_origem_wvetro || '',
           (t as any).apelidos || '',
         ].join(' '))
-        const corresponde = termos.every(termo => texto.includes(termo))
-        const pontuacao = termos.reduce((total, termo) => total + (texto.startsWith(termo) ? 3 : texto.includes(termo) ? 1 : 0), 0)
-        return { t, corresponde, pontuacao }
+        const corresponde = obrigatorios.length > 0 && obrigatorios.every(termo => texto.includes(termo))
+        const pontuacaoEstrutural = obrigatorios.reduce((total, termo) => total + (texto.startsWith(termo) ? 4 : texto.includes(termo) ? 2 : 0), 0)
+        const bonusQualificadores = termos
+          .filter(termo => qualificadoresTecnicos.has(termo))
+          .reduce((total, termo) => total + (texto.includes(termo) ? 1 : 0), 0)
+        return { t, corresponde, pontuacao: pontuacaoEstrutural + bonusQualificadores }
       })
       .filter(item => item.corresponde)
       .sort((a, b) => b.pontuacao - a.pontuacao || a.t.label.localeCompare(b.t.label, 'pt-BR'))
