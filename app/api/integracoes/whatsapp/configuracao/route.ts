@@ -163,7 +163,7 @@ export async function PUT(req: NextRequest) {
       .filter((item: any) => item?.ativo === true && idsPermitidos.has(String(item?.grupoId || '')))
       .map((item: any) => {
         const responsavelId = item?.responsavelId ? String(item.responsavelId) : null
-        const janela = Number(item?.janelaAgregacaoMinutos || 5)
+        const janela = Number(item?.janelaAgregacaoMinutos || 1)
         return {
           empresa_id: usuario.empresa_id,
           grupo_id: String(item.grupoId),
@@ -172,7 +172,7 @@ export async function PUT(req: NextRequest) {
           ativo: true,
           criar_rascunho: item?.criarRascunho !== false,
           criar_tarefa: item?.criarTarefa !== false && Boolean(responsavelId),
-          janela_agregacao_minutos: Math.max(1, Math.min(120, Number.isFinite(janela) ? janela : 5)),
+          janela_agregacao_minutos: Math.max(1, Math.min(120, Number.isFinite(janela) ? janela : 1)),
           created_by: usuario.id,
           updated_at: new Date().toISOString(),
         }
