@@ -87,6 +87,47 @@ export async function GET(req: NextRequest) {
   const interacoes = interacoesResp.data || []
   const uso = usoResp.data || []
   const auditoria = auditoriaResp.data || []
+  const hojeSP = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const diaSP = (valor: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(valor))
+  const usoHoje = uso.filter((item: any) => item.created_at && diaSP(item.created_at) === hojeSP)
+  const agentesMap = new Map<string, any>()
+  for (const item of uso) {
+    const nome = String(item.agente_nome || item.setor_id || 'Atlas IA')
+    const atual = agentesMap.get(nome) || {
+      nome,
+      execucoes30d: 0,
+      sucessos30d: 0,
+      erros30d: 0,
+      custo30d: 0,
+      tokensEntrada30d: 0,
+      tokensSaida30d: 0,
+      duracaoTotalMs: 0,
+      ultimaAtividadeEm: null,
+      provider: item.provider || null,
+      modelo: item.modelo || null,
+      setor: item.setor_id || null,
+    }
+    atual.execucoes30d += 1
+    if (item.sucesso) atual.sucessos30d += 1
+    else atual.erros30d += 1
+    atual.custo30d += Number(item.custo_estimado || 0)
+    atual.tokensEntrada30d += Number(item.tokens_entrada || 0)
+    atual.tokensSaida30d += Number(item.tokens_saida || 0)
+    atual.duracaoTotalMs += Number(item.duracao_ms || 0)
+    if (!atual.ultimaAtividadeEm || new Date(item.created_at).getTime() > new Date(atual.ultimaAtividadeEm).getTime()) {
+      atual.ultimaAtividadeEm = item.created_at
+      atual.provider = item.provider || atual.provider
+      atual.modelo = item.modelo || atual.modelo
+      atual.setor = item.setor_id || atual.setor
+    }
+    agentesMap.set(nome, atual)
+  }
+  const agentes = Array.from(agentesMap.values())
+    .map((a: any) => ({
+      ...a,
+      duracaoMediaMs: a.execucoes30d ? Math.round(a.duracaoTotalMs / a.execucoes30d) : 0,
+    }))
+    .sort((a: any, b: any) => new Date(b.ultimaAtividadeEm || 0).getTime() - new Date(a.ultimaAtividadeEm || 0).getTime())
 
   const resumoUsuarios = usuarios.map((u: any) => {
     const minhas = interacoes.filter((i: any) => i.usuario_id === u.id)
@@ -159,6 +200,28 @@ export async function GET(req: NextRequest) {
       erros: interacoes.filter((i: any) => i.status !== 'ok').length,
       custoEstimado: uso.reduce((s: number, x: any) => s + Number(x.custo_estimado || 0), 0),
     },
+    resumoHoje: {
+      execucoes: usoHoje.length,
+      sucessos: usoHoje.filter((x: any) => Boolean(x.sucesso)).length,
+      erros: usoHoje.filter((x: any) => !x.sucesso).length,
+      custoEstimado: usoHoje.reduce((s: number, x: any) => s + Number(x.custo_estimado || 0), 0),
+      tokensEntrada: usoHoje.reduce((s: number, x: any) => s + Number(x.tokens_entrada || 0), 0),
+      tokensSaida: usoHoje.reduce((s: number, x: any) => s + Number(x.tokens_saida || 0), 0),
+    },
+    agentes,
+    usoRecentes: uso.slice(0, 120).map((x: any) => ({
+      id: x.id,
+      agente_nome: x.agente_nome,
+      setor_id: x.setor_id,
+      provider: x.provider,
+      modelo: x.modelo,
+      tokens_entrada: x.tokens_entrada,
+      tokens_saida: x.tokens_saida,
+      sucesso: x.sucesso,
+      duracao_ms: x.duracao_ms,
+      custo_estimado: x.custo_estimado,
+      created_at: x.created_at,
+    })),
     usuarios: resumoUsuarios,
     acessos: acessosResp.data || [],
     interacoesRecentes: interacoes.slice(0, 150).map((i: any) => ({

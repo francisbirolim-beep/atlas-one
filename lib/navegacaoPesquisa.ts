@@ -59,6 +59,7 @@ export const ATALHOS_PESQUISA_ATLAS: AtalhoPesquisaAtlas[] = [
 
   { href:'/atlas-ia', label:'Atlas IA', grupo:'Inteligência Artificial', descricao:'Central da inteligência artificial do Atlas', palavras:'ia inteligencia artificial atlas assistente chat pesquisa especialista' },
   { href:'/atlas-ia/whatsapp', label:'IA do WhatsApp', grupo:'Inteligência Artificial', descricao:'Painel da IA do WhatsApp, aprendizado, canais e autonomia', palavras:'ia whatsapp whats aprendizado observando sugerindo atendendo autonomia canal mensagens' },
+  { href:'/atlas-ia/supervisao', label:'Supervisão dos agentes IA', grupo:'Inteligência Artificial', descricao:'Escritório animado, atividade, custos, erros e validações dos agentes', palavras:'ia agentes supervisao supervisão escritorio escritório animado custo custos trabalhando atividade erro validacao validação', masterOnly:true },
   { href:'/atlas-ia/aprendizado', label:'Aprendizado da IA', grupo:'Inteligência Artificial', descricao:'Aprendizado e validação da IA Atlas', palavras:'ia aprendizado aprender validacao validação conhecimento treinamento' },
   { href:'/atlas-ia/conhecimento', label:'Conhecimento da IA', grupo:'Inteligência Artificial', descricao:'Base de conhecimento do Atlas IA', palavras:'ia conhecimento catalogo catálogo documento regra treinamento' },
   { href:'/atlas-ia/especialistas', label:'Especialistas da IA', grupo:'Inteligência Artificial', descricao:'Especialistas e agentes do Atlas', palavras:'ia especialista especialistas agente agentes setor' },
