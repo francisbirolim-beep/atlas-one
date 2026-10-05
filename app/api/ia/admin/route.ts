@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
     whatsappOperacaoResp,
     aprendizadoOperacaoResp,
     orcamentosIaResp,
+    atividadeAgentesResp,
   ] = await Promise.all([
     supabaseAdmin
       .from('usuarios')
@@ -105,6 +106,13 @@ export async function GET(req: NextRequest) {
       .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
       .order('updated_at', { ascending: false })
       .limit(80),
+    supabaseAdmin
+      .from('ia_agente_atividade')
+      .select('id,agente_id,agente_nome,contexto,tarefa,status,iniciou_em,atualizou_em,finalizou_em')
+      .eq('empresa_id', empresaId)
+      .gte('atualizou_em', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+      .order('atualizou_em', { ascending: false })
+      .limit(120),
   ])
 
   const usuarios = usuariosResp.data || []
@@ -224,6 +232,15 @@ export async function GET(req: NextRequest) {
   const whatsappOps = whatsappOperacaoResp.data || []
   const aprendizadoOps = aprendizadoOperacaoResp.data || []
   const orcamentosIa = orcamentosIaResp.data || []
+  const atividadesAgentes = atividadeAgentesResp.data || []
+
+  const atividadeSupervisor = atividadesAgentes.find((x: any) =>
+    String(x.agente_id || '') === 'supervisor' &&
+    (
+      (String(x.status || '') === 'processando' && recente(x.atualizou_em, 3)) ||
+      (String(x.status || '') === 'concluido' && recente(x.finalizou_em || x.atualizou_em, 0.5))
+    )
+  )
 
   const whatsappAtivo = whatsappOps.find((x: any) => ['processando', 'pendente'].includes(String(x.ai_status || '')) && recente(x.updated_at, 8))
   const whatsappUltimo = whatsappOps.find((x: any) => recente(x.updated_at, 12))
@@ -233,6 +250,11 @@ export async function GET(req: NextRequest) {
   const orcamentoUltimo = orcamentosIa.find((x: any) => recente(x.updated_at, 12))
 
   const operacaoAgora = {
+    supervisor: {
+      trabalhando: Boolean(atividadeSupervisor),
+      atividade: atividadeSupervisor?.tarefa || 'Monitorando a operação da IA',
+      ultimaAtividadeEm: atividadeSupervisor?.atualizou_em || atividadeSupervisor?.finalizou_em || null,
+    },
     whatsapp: {
       trabalhando: Boolean(whatsappAtivo),
       atividade: whatsappAtivo
@@ -268,6 +290,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     periodoDias: 30,
     operacaoAgora,
+    atividadesRecentes: atividadesAgentes.slice(0, 40),
     resumo: {
       perguntas: interacoes.length,
       usuariosAtivos: resumoUsuarios.filter((u: any) => u.perguntas30d > 0).length,
