@@ -194,6 +194,14 @@ export interface OrcamentoRapido {
       modo_entrada?: 'formulario' | 'texto_livre' | 'balcao' | null
       itens_balcao?: ItemBalcao[] | null
       condicoes?: string | null
+      ia_criado?: boolean
+      ia_validacao_status?: 'aguardando' | 'validado' | 'corrigido' | null
+      ia_resultado_original?: Record<string, any> | null
+      ia_fontes?: Record<string, any> | null
+      ia_validado_por_id?: string | null
+      ia_validado_por_nome?: string | null
+      ia_validado_em?: string | null
+      ia_correcao?: Record<string, any> | null
 }
 
 export type TipoInteracao = 'ligacao' | 'whatsapp' | 'visita' | 'proposta' | 'negociacao' | 'nota' | 'outro'
