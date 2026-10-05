@@ -771,9 +771,11 @@ function numeroOpcional(value: unknown) {
 function itensEstruturados(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.slice(0, 40).map((item: any) => ({
+    id: String(item?.id || crypto.randomUUID()),
     ambiente: textoOpcional(item?.ambiente),
     tipo_esquadria: textoOpcional(item?.tipo_esquadria) || "outro",
     tipo_outro_texto: textoOpcional(item?.tipo_outro_texto),
+    folhas: textoOpcional(item?.folhas),
     largura_mm: numeroOpcional(item?.largura_mm),
     altura_mm: numeroOpcional(item?.altura_mm),
     quantidade: Math.max(1, Math.round(numeroOpcional(item?.quantidade) || 1)),
@@ -806,6 +808,96 @@ async function aiGatewayCall(baseUrl: string, gatewayToken: string, path: string
   } finally {
     clearTimeout(timeout)
   }
+}
+
+function base64Bytes(bytes: Uint8Array) {
+  let binary = ""
+  const passo = 0x8000
+  for (let i = 0; i < bytes.length; i += passo) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + passo, bytes.length)))
+  }
+  return btoa(binary)
+}
+
+async function prepararMidiasIntake(anexos: any[], gatewayToken: string) {
+  const partes: any[] = []
+  const audios: Array<{ nome: string | null; transcricao: string | null; erro?: string | null }> = []
+  const imagens: Array<{ nome: string | null; mime_type: string | null }> = []
+  const appUrl = String(Deno.env.get("ATLAS_APP_URL") || "https://atlas-one-eight-rho.vercel.app").replace(/\/$/, "")
+
+  for (const anexo of (Array.isArray(anexos) ? anexos : []).slice(0, 10)) {
+    const path = String(anexo?.media_path || "").trim()
+    const mime = String(anexo?.mime_type || "").toLowerCase()
+    if (!path || (!mime.startsWith("image/") && !mime.startsWith("audio/"))) continue
+    try {
+      const { data: blob, error } = await db.storage.from(MEDIA_BUCKET).download(path)
+      if (error || !blob) throw error || new Error("Midia indisponivel")
+      if (blob.size > 20 * 1024 * 1024) throw new Error("Midia maior que 20 MB")
+
+      if (mime.startsWith("image/")) {
+        const bytes = new Uint8Array(await blob.arrayBuffer())
+        partes.push({
+          type: "file",
+          mediaType: mime,
+          filename: String(anexo?.nome || "imagem-whatsapp").slice(0, 180),
+          url: "data:" + mime + ";base64," + base64Bytes(bytes),
+        })
+        imagens.push({ nome: anexo?.nome || null, mime_type: mime })
+        continue
+      }
+
+      const form = new FormData()
+      const nome = String(anexo?.nome || "audio-whatsapp").slice(0, 180)
+      form.append("audio", new File([blob], nome, { type: mime }))
+      const resp = await fetch(appUrl + "/api/agente/transcrever", {
+        method: "POST",
+        headers: { "x-atlas-automation-token": gatewayToken },
+        body: form,
+      })
+      const json = await resp.json().catch(() => ({}))
+      const transcricao = resp.ok ? String(json?.text || "").trim() : ""
+      audios.push({
+        nome: anexo?.nome || null,
+        transcricao: transcricao || null,
+        erro: resp.ok ? null : String(json?.error || "Falha ao transcrever audio").slice(0, 300),
+      })
+    } catch (error) {
+      audios.push({
+        nome: anexo?.nome || null,
+        transcricao: null,
+        erro: String(error instanceof Error ? error.message : error).slice(0, 300),
+      })
+    }
+  }
+  return { partes, audios, imagens }
+}
+
+function normalizarTipologiaEvidente(structured: any, evidencias: string) {
+  if (!structured || typeof structured !== "object") return structured
+  const normaliza = (v: unknown) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  const tipoExplicito = (v: string) => {
+    if (/\bporta\s+de\s+correr\b/.test(v)) return "porta_correr"
+    if (/\bjanela\s+de\s+correr\b/.test(v)) return "janela_correr"
+    if (/\bporta\s+(?:de\s+)?giro\b/.test(v)) return "porta_giro"
+    if (/\bporta\s+pivotante\b/.test(v)) return "porta_pivotante"
+    if (/\bmaxi(?:m)?[- ]?ar\b/.test(v)) return "maxim_ar"
+    if (/\bbasculante\b/.test(v)) return "basculante"
+    if (/\bporta\s+balcao\b/.test(v)) return "porta_balcao"
+    return null
+  }
+  const global = normaliza(evidencias)
+  const itens = Array.isArray(structured.itens) ? structured.itens : []
+  structured.itens = itens.map((item: any) => {
+    const local = normaliza([item?.tipo_esquadria, item?.tipo_outro_texto, item?.descricao].filter(Boolean).join(" "))
+    const tipo = tipoExplicito(local) || (itens.length === 1 ? tipoExplicito(global) : null)
+    const folhasMatch = (local + " " + global).match(/\b(\d{1,2})\s*folhas?\b/)
+    return {
+      ...item,
+      tipo_esquadria: tipo || item?.tipo_esquadria || "outro",
+      folhas: textoOpcional(item?.folhas) || (folhasMatch?.[1] || null),
+    }
+  })
+  return structured
 }
 
 function normalizarComandoPacote(value: unknown) {
@@ -868,6 +960,19 @@ async function criarCardIntakeOrcamento(intake: any, structured: any, aiErro: st
     }
   }
 
+  if (!clienteId && clienteNome && clienteWhatsapp) {
+    const { data: novoCliente, error: clienteError } = await db.from("clientes").insert({
+      empresa_id: intake.empresa_id,
+      nome: clienteNome,
+      whatsapp: clienteWhatsapp,
+      telefone: clienteWhatsapp,
+      cidade: textoOpcional(structured?.cidade),
+      origem: "whatsapp",
+      observacoes: "Cadastro criado automaticamente a partir do grupo de orçamento. Aguardando validação humana do orçamento.",
+    }).select("id,nome").single()
+    if (!clienteError && novoCliente?.id) clienteId = novoCliente.id
+  }
+
   const nomeSeguro = clienteNome || "Cliente a identificar"
   const cidade = textoOpcional(structured?.cidade)
   const obraNome = textoOpcional(structured?.obra_nome)
@@ -920,6 +1025,15 @@ async function criarCardIntakeOrcamento(intake: any, structured: any, aiErro: st
     revisao_grupo_id: quoteId,
     revisao_versao: 1,
     revisao_atual: true,
+    ia_criado: true,
+    ia_validacao_status: "aguardando",
+    ia_resultado_original: structured && typeof structured === "object" ? structured : null,
+    ia_fontes: {
+      intake_id: intake.id,
+      conteudo_bruto: String(intake.conteudo_bruto || ""),
+      anexos: Array.isArray(intake.anexos) ? intake.anexos : [],
+      ai_erro: aiErro || null,
+    },
   }
   if (cidade) quotePayload.cidade = cidade
   if (obraNome) quotePayload.obra_nome = obraNome
@@ -1054,6 +1168,17 @@ async function estruturarIntakeComIA(
     if (!sessionId) throw new Error("OpenCode não retornou sessão.")
 
     const anexos = Array.isArray(intake.anexos) ? intake.anexos : []
+    const midias = await prepararMidiasIntake(anexos, gatewayToken)
+    const { data: feedbacks } = await db.from("ai_orcamento_feedback")
+      .select("diferencas,resultado_original,resultado_final,created_at")
+      .eq("empresa_id", intake.empresa_id)
+      .eq("avaliacao", "corrigido")
+      .order("created_at", { ascending: false })
+      .limit(12)
+    const transcricoesAudio = midias.audios
+      .filter(a => a.transcricao)
+      .map((a, i) => "Áudio " + (i + 1) + ": " + a.transcricao)
+      .join("\n")
     const system = [
       "Você estrutura pedidos de orçamento recebidos pelo WhatsApp da Esquadrifácio dentro do Atlas One.",
       "Responda SOMENTE com JSON válido, sem markdown.",
@@ -1067,7 +1192,12 @@ async function estruturarIntakeComIA(
       "Medidas devem ser convertidas para milímetros apenas quando a unidade estiver explícita.",
       "Não calcule preço nem custo nesta etapa.",
       "No campo resumo, escreva de forma curta quem é o cliente (se identificado) e o que ele está pedindo.",
-      "Schema obrigatório: {cliente_nome:string|null,cliente_whatsapp:string|null,cidade:string|null,obra_nome:string|null,obra_endereco:string|null,acabamento:string|null,contramarco:string|null,tipo_medida:string|null,itens:Array<{ambiente:string|null,tipo_esquadria:string|null,tipo_outro_texto:string|null,largura_mm:number|null,altura_mm:number|null,quantidade:number|null,descricao:string|null}>,resumo:string|null,observacoes:string|null,pendencias:string[]}.",
+      "Leia também TODO texto visível nas imagens anexadas. Cartão/print de contato pode conter nome e telefone do cliente; use esses dados quando forem legíveis.",
+      "Considere as transcrições dos áudios como parte integral do pedido. Se áudio e texto divergirem, registre a divergência em pendências em vez de inventar.",
+      "Prioridade semântica: uma tipologia escrita de forma explícita pelo humano vence inferências visuais. Se estiver escrito 'porta de correr', tipo_esquadria DEVE ser 'porta_correr' e nunca 'janela_correr'. Se estiver escrito 'janela de correr', use 'janela_correr'.",
+      "Quando houver '4 folhas', '3 folhas' etc., preencha folhas com o número explicitamente informado.",
+      "Os exemplos supervisionados de correções humanas são referências de erros anteriores. Use-os para evitar repetir o mesmo erro, sem copiar dados pessoais de um orçamento para outro.",
+      "Schema obrigatório: {cliente_nome:string|null,cliente_whatsapp:string|null,cidade:string|null,obra_nome:string|null,obra_endereco:string|null,acabamento:string|null,contramarco:string|null,tipo_medida:string|null,itens:Array<{ambiente:string|null,tipo_esquadria:string|null,tipo_outro_texto:string|null,folhas:string|null,largura_mm:number|null,altura_mm:number|null,quantidade:number|null,descricao:string|null}>,resumo:string|null,observacoes:string|null,pendencias:string[]}.",
     ].join("\n")
 
     const prompt = JSON.stringify({
@@ -1078,11 +1208,18 @@ async function estruturarIntakeComIA(
         telefone: intake.participante_telefone || null,
       },
       conteudo_bruto: intake.conteudo_bruto || "",
+      audio_transcrito: transcricoesAudio || null,
+      imagens_anexadas: midias.imagens,
       anexos: anexos.map((a: any) => ({
         tipo: a?.tipo || null,
         nome: a?.nome || null,
         mime_type: a?.mime_type || null,
         tamanho: a?.tamanho || null,
+      })),
+      exemplos_supervisionados: (feedbacks || []).map((f: any) => ({
+        diferencas: f.diferencas || {},
+        original: f.resultado_original || null,
+        corrigido: f.resultado_final || null,
       })),
     })
 
@@ -1094,10 +1231,14 @@ async function estruturarIntakeComIA(
         agent: "atlas-comercial",
         model: { providerID: "freellmapi", modelID: "auto" },
         system,
-        parts: [{ type: "text", text: prompt }],
+        parts: [{ type: "text", text: prompt }, ...midias.partes],
       },
     )
     structured = parseJsonObject(openCodeText(resposta))
+    structured = normalizarTipologiaEvidente(
+      structured,
+      [String(intake.conteudo_bruto || ""), transcricoesAudio].filter(Boolean).join("\n"),
+    )
   } catch (error) {
     aiErro = String(error instanceof Error ? error.message : error).slice(0, 1200)
   }
