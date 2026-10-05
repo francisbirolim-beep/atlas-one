@@ -37,6 +37,9 @@ export async function GET(req: NextRequest) {
     auditoriaResp,
     feedbackResp,
     campanhasResp,
+    whatsappOperacaoResp,
+    aprendizadoOperacaoResp,
+    orcamentosIaResp,
   ] = await Promise.all([
     supabaseAdmin
       .from('usuarios')
@@ -80,6 +83,28 @@ export async function GET(req: NextRequest) {
       .eq('empresa_id', empresaId)
       .order('created_at', { ascending: false })
       .limit(30),
+    supabaseAdmin
+      .from('atendimento_whatsapp_intakes')
+      .select('id,ai_status,created_at,updated_at,orcamento_id')
+      .eq('empresa_id', empresaId)
+      .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+      .order('updated_at', { ascending: false })
+      .limit(80),
+    supabaseAdmin
+      .from('ai_aprendizado_entradas')
+      .select('id,status,tipo,titulo,created_at,updated_at')
+      .eq('empresa_id', empresaId)
+      .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+      .order('updated_at', { ascending: false })
+      .limit(80),
+    supabaseAdmin
+      .from('orcamentos')
+      .select('id,ia_validacao_status,created_at,updated_at')
+      .eq('empresa_id', empresaId)
+      .eq('ia_criado', true)
+      .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+      .order('updated_at', { ascending: false })
+      .limit(80),
   ])
 
   const usuarios = usuariosResp.data || []
@@ -191,8 +216,58 @@ export async function GET(req: NextRequest) {
     }))
   }
 
+  const agoraMs = Date.now()
+  const recente = (v: any, minutos: number) => {
+    const t = new Date(String(v || '')).getTime()
+    return Number.isFinite(t) && agoraMs - t <= minutos * 60 * 1000
+  }
+  const whatsappOps = whatsappOperacaoResp.data || []
+  const aprendizadoOps = aprendizadoOperacaoResp.data || []
+  const orcamentosIa = orcamentosIaResp.data || []
+
+  const whatsappAtivo = whatsappOps.find((x: any) => ['processando', 'pendente'].includes(String(x.ai_status || '')) && recente(x.updated_at, 8))
+  const whatsappUltimo = whatsappOps.find((x: any) => recente(x.updated_at, 12))
+  const catalogoAtivo = aprendizadoOps.find((x: any) => String(x.status || '') === 'analisando' && recente(x.updated_at, 12))
+  const catalogoUltimo = aprendizadoOps.find((x: any) => recente(x.updated_at, 20))
+  const orcamentoAguardando = orcamentosIa.filter((x: any) => String(x.ia_validacao_status || '') === 'aguardando').length
+  const orcamentoUltimo = orcamentosIa.find((x: any) => recente(x.updated_at, 12))
+
+  const operacaoAgora = {
+    whatsapp: {
+      trabalhando: Boolean(whatsappAtivo),
+      atividade: whatsappAtivo
+        ? (String(whatsappAtivo.ai_status) === 'pendente' ? 'Recebeu um pacote e está preparando a leitura' : 'Lendo mensagens, imagens e áudios do WhatsApp')
+        : whatsappUltimo
+          ? 'Conferindo atividade recente do WhatsApp'
+          : 'Aguardando novas mensagens',
+      ultimaAtividadeEm: whatsappAtivo?.updated_at || whatsappUltimo?.updated_at || null,
+    },
+    orcamento: {
+      trabalhando: Boolean(whatsappAtivo && !whatsappAtivo.orcamento_id),
+      atividade: whatsappAtivo && !whatsappAtivo.orcamento_id
+        ? 'Interpretando o pedido e montando o orçamento'
+        : orcamentoAguardando > 0
+          ? 'Acompanhando ' + orcamentoAguardando + ' orçamento(s) criado(s) pela IA aguardando validação'
+          : orcamentoUltimo
+            ? 'Conferindo orçamento criado recentemente'
+            : 'Aguardando novo orçamento',
+      ultimaAtividadeEm: orcamentoUltimo?.updated_at || whatsappAtivo?.updated_at || null,
+      aguardandoValidacao: orcamentoAguardando,
+    },
+    catalogo: {
+      trabalhando: Boolean(catalogoAtivo),
+      atividade: catalogoAtivo
+        ? 'Lendo e reconciliando catálogo/tabela'
+        : catalogoUltimo
+          ? 'Acompanhando material analisado recentemente'
+          : 'Aguardando novo material técnico',
+      ultimaAtividadeEm: catalogoAtivo?.updated_at || catalogoUltimo?.updated_at || null,
+    },
+  }
+
   return NextResponse.json({
     periodoDias: 30,
+    operacaoAgora,
     resumo: {
       perguntas: interacoes.length,
       usuariosAtivos: resumoUsuarios.filter((u: any) => u.perguntas30d > 0).length,
