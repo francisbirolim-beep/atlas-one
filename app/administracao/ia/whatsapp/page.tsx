@@ -198,7 +198,7 @@ export default function WhatsAppIAPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/atlas-ia/aprendizado" className="rounded-xl border bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Central de Aprendizado</Link>
+            <Link href="/atlas-ia/aprendizado?aba=validacoes" className="rounded-xl border bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Validar aprendizados</Link>
             <button onClick={()=>void carregar()} className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600"><RefreshCw size={16}/></button>
             <button onClick={()=>void salvar()} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={16}/>{salvando?'Salvando...':'Salvar'}</button>
           </div>
@@ -258,8 +258,12 @@ export default function WhatsAppIAPage() {
             ['Empresa',metricas.empresa||0,'mensagens classificadas'],
             ['Pessoal ignorado',metricas.pessoal||0,'não vira conhecimento'],
             ['Dúvidas',metricas.duvida||0,'sem aprendizado automático'],
-            ['Aprendizados pendentes',metricas.conhecimentos_pendentes||0,'aguardando validação'],
           ].map(([a,b,c])=><div key={String(a)} className="rounded-2xl border bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{a}</p><p className="mt-1 text-3xl font-black text-slate-900">{b}</p><p className="text-xs text-slate-500">{c}</p></div>)}
+          <Link href="/atlas-ia/aprendizado?aba=validacoes" className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm transition hover:border-amber-400 hover:bg-amber-50">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Aprendizados pendentes</p>
+            <p className="mt-1 text-3xl font-black text-slate-900">{metricas.conhecimentos_pendentes||0}</p>
+            <p className="text-xs font-semibold text-amber-800">Clique para validar, corrigir ou rejeitar</p>
+          </Link>
         </section>
 
         <section className="rounded-3xl border bg-white p-5 shadow-sm">
