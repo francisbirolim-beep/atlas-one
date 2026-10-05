@@ -799,10 +799,25 @@ export default function WhatsAppAtendimentoPage() {
     : null
   const podeResponder = Boolean(
     ativa && (
-      eu?.role === 'master' ||
-      ativa.responsavel_id === eu?.id ||
-      (ativa.whatsapp_chat_tipo === 'grupo' && acessoCanalAtivo?.atender)
+      ativa.whatsapp_chat_tipo === 'grupo'
+        ? (eu?.role === 'master' || acessoCanalAtivo?.atender)
+        : ativa.responsavel_id === eu?.id
     ),
+  )
+  const podeAssumirAtiva = Boolean(
+    ativa &&
+    ativa.whatsapp_chat_tipo !== 'grupo' &&
+    ativa.status !== 'finalizado' &&
+    (
+      !ativa.responsavel_id ||
+      (eu?.role === 'master' && ativa.responsavel_id !== eu?.id)
+    )
+  )
+  const atendimentoMeu = Boolean(
+    ativa &&
+    ativa.whatsapp_chat_tipo !== 'grupo' &&
+    ativa.responsavel_id === eu?.id &&
+    ativa.status !== 'finalizado'
   )
   const canalAtivo = ativa?.whatsapp_canal_id
     ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
@@ -1127,11 +1142,17 @@ export default function WhatsAppAtendimentoPage() {
                   {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
                   {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
                 </button>
-                {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id && (
+                {podeAssumirAtiva && (
                   <button onClick={()=>void acaoConversa('assumir')}
-                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
-                    <UserRoundCheck size={15}/> Atender
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                    <UserRoundCheck size={15}/>
+                    {ativa.responsavel_id ? 'Assumir atendimento' : 'Atender'}
                   </button>
+                )}
+                {atendimentoMeu && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+                    <CheckCircle2 size={15}/> Em atendimento por você
+                  </span>
                 )}
                 {ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id && ativa.status !== 'finalizado' &&
                   (eu?.role === 'master' || ativa.responsavel_id === eu?.id) && (
@@ -1275,12 +1296,32 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 )}
                 {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id ? (
-                  <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    <Clock3 size={16}/> Esta conversa esta na fila. Assuma para responder.
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                      <Clock3 size={16}/> Esta conversa está aguardando atendimento.
+                    </div>
+                    <button type="button" onClick={()=>void acaoConversa('assumir')}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                      <UserRoundCheck size={15}/> Atender agora
+                    </button>
+                  </div>
+                ) : ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id !== eu?.id ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+                    <div className="text-xs text-slate-600">
+                      Atendimento de <b>{ativa.responsavel_nome || 'outro atendente'}</b>.
+                    </div>
+                    {eu?.role === 'master' ? (
+                      <button type="button" onClick={()=>void acaoConversa('assumir')}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                        <UserRoundCheck size={15}/> Assumir atendimento
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Você pode acompanhar em tempo real.</span>
+                    )}
                   </div>
                 ) : !podeResponder ? (
                   <div className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-600">
-                    Atendimento de {ativa.responsavel_nome}. O Master pode acompanhar em tempo real.
+                    Você não possui permissão para responder por este canal.
                   </div>
                 ) : (
                   <div>
