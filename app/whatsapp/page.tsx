@@ -829,8 +829,8 @@ export default function WhatsAppAtendimentoPage() {
     : '/cadastro/fornecedores'
 
   return (
-    <main className="h-screen min-h-0 overflow-hidden bg-white p-0">
-      <div className="h-screen w-full overflow-hidden bg-white">
+    <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0">
+      <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white">
         <header className="flex h-16 items-center justify-between border-b bg-white px-4">
           <div className="flex items-center gap-3">
             <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
@@ -870,8 +870,8 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-64px)] min-h-0 md:grid-cols-[280px_1fr] ${painelDireitoRecolhido ? 'xl:grid-cols-[280px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[280px_minmax(0,1fr)_260px]'}`}>
-          <aside className="flex min-h-0 flex-col border-r">
+        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[280px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[280px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[280px_minmax(0,1fr)_260px]'}`}>
+          <aside className={`${ativa ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
                 <div className="mb-3 md:hidden">
@@ -879,7 +879,7 @@ export default function WhatsAppAtendimentoPage() {
                     <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Número em uso</span>
                     <span className="text-[10px] text-slate-400">Toque para trocar</span>
                   </div>
-                  <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                  <div className="-mx-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain px-1 pb-1">
                     <div className="flex w-max min-w-full gap-2">
                       {canais.map(c => {
                         const selecionado = canalFiltro === c.id
@@ -924,7 +924,7 @@ export default function WhatsAppAtendimentoPage() {
                 <span className="text-xs font-bold text-slate-700">Abertas {totais.abertas}</span>
                 <span className="text-[10px] text-slate-400">Filtros do atendimento</span>
               </div>
-              <div className="-mx-1 mt-2 overflow-x-auto px-1 pb-1">
+              <div className="-mx-1 mt-2 min-w-0 max-w-full overflow-x-auto overscroll-x-contain px-1 pb-1">
                 <div className="flex w-max min-w-full gap-1.5 text-xs font-semibold">
                 <button onClick={()=>setFiltro('todas')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
@@ -1082,13 +1082,18 @@ export default function WhatsAppAtendimentoPage() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 min-w-0 flex-col bg-white">
+          <section className={`${ativa ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
             {!ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
                 <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione uma conversa.</p></div>
               </div>
             ) : <>
-              <div className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-white px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+                <button type="button" onClick={()=>setAtiva(null)}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-white text-slate-700 md:hidden"
+                  aria-label="Voltar para conversas" title="Voltar para conversas">
+                  <ArrowLeft size={18}/>
+                </button>
                 <div className="min-w-0 flex-1">
                   <b className="block truncate">
                     {ativa.whatsapp_chat_tipo === 'grupo'
@@ -1164,7 +1169,7 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
               )}
 
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[#fbfcfe] p-4">
+              <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto bg-[#fbfcfe] p-2.5 sm:p-4">
                 {mensagens.map(m => {
                   const saida = m.direcao === 'saida'
                   const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
@@ -1175,8 +1180,8 @@ export default function WhatsAppAtendimentoPage() {
                     (m.tipo === 'video' && texto === '🎥 Vídeo') ||
                     (m.tipo === 'documento' && texto === '📎 Documento')
                   return (
-                    <div key={m.id} className={`flex ${saida?'justify-end':'justify-start'}`}>
-                      <div className={`max-w-[82%] rounded-xl px-3 py-2 shadow-sm ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
+                    <div key={m.id} className={`flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
+                      <div className={`min-w-0 max-w-[88%] overflow-hidden rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
                         {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome} diz</p>}
 
                         {m.tipo === 'audio' && midia && (
@@ -1223,10 +1228,10 @@ export default function WhatsAppAtendimentoPage() {
                         )}
 
                         {!['audio','imagem','video','documento','reacao'].includes(m.tipo) && texto && (
-                          <p className="whitespace-pre-wrap break-words text-sm text-slate-900">{texto}</p>
+                          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-slate-900">{texto}</p>
                         )}
                         {midia && texto && !legendaGenerica && ['imagem','video'].includes(m.tipo) && (
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-900">{texto}</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-slate-900">{texto}</p>
                         )}
                         {!texto && !midia && <p className="text-sm text-slate-500">[{m.tipo}]</p>}
                         <p className="mt-1 text-right text-[10px] text-slate-400">{hora(m.created_at)}</p>
