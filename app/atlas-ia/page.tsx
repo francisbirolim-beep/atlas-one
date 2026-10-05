@@ -531,6 +531,13 @@ export default function AtlasIAPage() {
             <div><h1 className="font-semibold">Atlas IA</h1><p className="text-xs text-slate-500">{nomeModo()}</p></div>
           </div>
           <div className="flex items-center gap-2">
+            {usuario?.role === 'master' && <Link
+              href="/atlas-ia/supervisao"
+              className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100"
+              title="Abrir Supervisão dos agentes IA"
+            >
+              <Eye size={15}/><span className="hidden sm:inline">Supervisão</span>
+            </Link>}
             <button
               type="button"
               onClick={() => void novaConversa()}
