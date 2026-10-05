@@ -204,6 +204,19 @@ export default function CentralAprendizadoPage(){
     finally{setSalvando(null)}
   }
 
+  async function salvarItemCatalogo(candidato:Candidato,dados:Record<string,any>){
+    if(salvando)return
+    setSalvando(candidato.id);setErro('');setMensagem('')
+    try{
+      const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
+        id:candidato.id,acao:'editar_item_catalogo',dados,
+      })})
+      setMensagem(j.mensagem||'Item atualizado.')
+      await carregar()
+    }catch(e:any){setErro(e?.message||'Erro ao atualizar item.');throw e}
+    finally{setSalvando(null)}
+  }
+
   return <main className="min-h-screen bg-slate-50 text-slate-900">
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4">
@@ -292,6 +305,8 @@ export default function CentralAprendizadoPage(){
               itemAberto={itemCatalogoAberto}
               onItemAberto={setItemCatalogoAberto}
               onAbrirValidacao={c=>{setAba('validacoes');editarInicial(c)}}
+              onSalvarItem={salvarItemCatalogo}
+              salvandoId={salvando}
             />}
           </article>)}</div>}
         </div>
@@ -376,7 +391,7 @@ export default function CentralAprendizadoPage(){
 }
 
 
-function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao}:{
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,salvandoId}:{
   entrada:Entrada
   candidatos:Candidato[]
   busca:string
@@ -384,13 +399,39 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   itemAberto:string|null
   onItemAberto:(v:string|null)=>void
   onAbrirValidacao:(c:Candidato)=>void
+  onSalvarItem:(c:Candidato,dados:Record<string,any>)=>Promise<void>
+  salvandoId:string|null
 }){
+  const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'>('todos')
+  const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
   const produtos=candidatos.filter(c=>c.tipo==='produto')
-  const q=busca.trim().toLocaleLowerCase('pt-BR')
-  const filtrados=produtos.filter(c=>!q||[c.dados?.codigo,c.dados?.descricao,c.titulo,c.dados?.linha].join(' ').toLocaleLowerCase('pt-BR').includes(q))
-  const aplicados=produtos.filter(c=>c.status==='aplicado').length
-  const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length
+  const aplicados=produtos.filter(c=>c.status==='aplicado')
+  const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
+  const idsAplicados=new Set(aplicados.map(c=>c.id))
+  const idsPendentes=new Set(pendentes.map(c=>c.id))
+  const idsSemPreco=new Set(semPreco.map(c=>c.id))
+  const q=busca.trim().toLocaleLowerCase('pt-BR')
+  const filtrados=produtos.filter(c=>{
+    const bateBusca=!q||[c.dados?.codigo,c.dados?.descricao,c.titulo,c.dados?.linha].join(' ').toLocaleLowerCase('pt-BR').includes(q)
+    if(!bateBusca)return false
+    if(filtro==='aplicados')return idsAplicados.has(c.id)
+    if(filtro==='validacao')return idsPendentes.has(c.id)
+    if(filtro==='sem_preco')return idsSemPreco.has(c.id)
+    return true
+  })
+
+  function alterarItem(candidato:Candidato,chave:string,valor:any){
+    setEdicoesItem(prev=>({
+      ...prev,
+      [candidato.id]:{...(prev[candidato.id]||candidato.dados||{}),[chave]:valor},
+    }))
+  }
+  async function salvarEdicao(candidato:Candidato){
+    const dados=edicoesItem[candidato.id]||candidato.dados||{}
+    await onSalvarItem(candidato,dados)
+    setEdicoesItem(prev=>{const n={...prev};delete n[candidato.id];return n})
+  }
 
   function baixarSemPreco(){
     const esc=(v:any)=>'"'+String(v??'').replaceAll('"','""')+'"'
@@ -400,12 +441,13 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
     const a=document.createElement('a');a.href=url;a.download='itens-sem-preco-'+entrada.titulo.replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.csv';a.click();URL.revokeObjectURL(url)
   }
 
+  const card=(ativo:boolean)=>'rounded-xl p-3 text-left transition hover:shadow-sm '+(ativo?'ring-2 ring-offset-1':'')
   return <div className="mt-4 border-t pt-4">
     <div className="grid gap-2 sm:grid-cols-4">
-      <div className="rounded-xl bg-slate-50 p-3"><div className="text-lg font-bold">{produtos.length}</div><div className="text-[11px] text-slate-500">Itens lidos</div></div>
-      <div className="rounded-xl bg-emerald-50 p-3"><div className="text-lg font-bold text-emerald-700">{aplicados}</div><div className="text-[11px] text-emerald-700">Aplicados/vinculados</div></div>
-      <div className="rounded-xl bg-amber-50 p-3"><div className="text-lg font-bold text-amber-700">{pendentes}</div><div className="text-[11px] text-amber-700">Em validação</div></div>
-      <div className="rounded-xl bg-blue-50 p-3"><div className="text-lg font-bold text-blue-700">{semPreco.length}</div><div className="text-[11px] text-blue-700">Sem preço</div></div>
+      <button type="button" onClick={()=>setFiltro('todos')} className={card(filtro==='todos')+' bg-slate-50 ring-slate-400'}><div className="text-lg font-bold">{produtos.length}</div><div className="text-[11px] text-slate-500">Itens lidos</div></button>
+      <button type="button" onClick={()=>setFiltro('aplicados')} className={card(filtro==='aplicados')+' bg-emerald-50 ring-emerald-400'}><div className="text-lg font-bold text-emerald-700">{aplicados.length}</div><div className="text-[11px] text-emerald-700">Aplicados/vinculados</div></button>
+      <button type="button" onClick={()=>setFiltro('validacao')} className={card(filtro==='validacao')+' bg-amber-50 ring-amber-400'}><div className="text-lg font-bold text-amber-700">{pendentes.length}</div><div className="text-[11px] text-amber-700">Em validação</div></button>
+      <button type="button" onClick={()=>setFiltro('sem_preco')} className={card(filtro==='sem_preco')+' bg-blue-50 ring-blue-400'}><div className="text-lg font-bold text-blue-700">{semPreco.length}</div><div className="text-[11px] text-blue-700">Sem preço</div></button>
     </div>
 
     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -418,11 +460,14 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
     {semPreco.length>0&&<p className="mt-2 text-[11px] text-slate-500">A lista pode ser enviada ao fornecedor. Depois, a tabela preenchida pode voltar pela Central como “Tabela de preço”; o Atlas reconcilia pelos códigos.</p>}
 
     <div className="mt-4 space-y-2">
-      {filtrados.length===0?<div className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-400">Nenhum item encontrado.</div>:filtrados.map(c=>{
+      {filtrados.length===0?<div className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-400">Nenhum item neste filtro.</div>:filtrados.map(c=>{
         const aberto=itemAberto===c.id
         const pagina=Number(c.dados?.pagina_catalogo||0)
-        const fonte=entrada.fonte_url?(entrada.fonte_url+(pagina?'#page='+pagina+'&zoom=page-width':'')):null
+        const fontePagina=entrada.fonte_url?(entrada.fonte_url+(pagina?'#page='+pagina+'&zoom=page-width':'')):null
+        const imagemItem=String(c.dados?.imagem_item_url||c.dados?.imagem_url||'').trim()
         const precisaValidar=['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'
+        const edit=edicoesItem[c.id]||c.dados||{}
+        const podeEditar=Boolean(c.pode_validar)
         return <div key={c.id} className="overflow-hidden rounded-xl border bg-white">
           <button onClick={()=>onItemAberto(aberto?null:c.id)} className="flex w-full items-start justify-between gap-3 p-3 text-left hover:bg-slate-50">
             <div className="min-w-0">
@@ -437,23 +482,39 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
             </div>
             {aberto?<ChevronUp size={17}/>:<ChevronDown size={17}/>}
           </button>
-          {aberto&&<div className="grid gap-4 border-t bg-slate-50 p-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.2fr)]">
+          {aberto&&<div className="grid gap-4 border-t bg-slate-50 p-4 lg:grid-cols-[minmax(360px,1fr)_minmax(320px,0.8fr)]">
             <div>
-              <div className="grid gap-2 text-sm">
+              {podeEditar?<div className="grid gap-3 sm:grid-cols-2">
+                <Campo label="Código" value={edit.codigo||''} onChange={v=>alterarItem(c,'codigo',v)}/>
+                <Campo label="Descrição" value={edit.descricao||''} onChange={v=>alterarItem(c,'descricao',v)}/>
+                <Campo label="Categoria" value={edit.categoria||''} onChange={v=>alterarItem(c,'categoria',v)}/>
+                <Campo label="Unidade" value={edit.unidade||''} onChange={v=>alterarItem(c,'unidade',v)}/>
+                <Campo label="Linha" value={edit.linha||''} onChange={v=>alterarItem(c,'linha',v)}/>
+                <Campo label="Peso kg/m" value={edit.peso_kg_m??''} onChange={v=>alterarItem(c,'peso_kg_m',v)}/>
+                <Campo label="Barra (mm)" value={edit.tamanho_barra_mm??''} onChange={v=>alterarItem(c,'tamanho_barra_mm',v)}/>
+                <Campo label="Preço fornecedor" value={edit.preco_fornecedor??''} onChange={v=>alterarItem(c,'preco_fornecedor',v)}/>
+                <div className="sm:col-span-2"><Campo label="Aplicação / onde é usado" value={edit.aplicacao||''} onChange={v=>alterarItem(c,'aplicacao',v)}/></div>
+                <div className="sm:col-span-2 flex flex-wrap gap-2">
+                  <button disabled={salvandoId===c.id} onClick={()=>void salvarEdicao(c)} className="inline-flex items-center gap-2 rounded-xl bg-[#182444] px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-40">{salvandoId===c.id?<Loader2 size={14} className="animate-spin"/>:<Save size={14}/>}Salvar alterações</button>
+                  {precisaValidar&&<button onClick={()=>onAbrirValidacao(c)} className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800">Abrir validação completa</button>}
+                </div>
+              </div>:<div className="grid gap-2 text-sm">
                 <InfoItem rotulo="Código" valor={c.dados?.codigo}/>
                 <InfoItem rotulo="Descrição" valor={c.dados?.descricao}/>
                 <InfoItem rotulo="Categoria" valor={c.dados?.categoria}/>
+                <InfoItem rotulo="Unidade" valor={c.dados?.unidade}/>
                 <InfoItem rotulo="Linha" valor={c.dados?.linha}/>
                 <InfoItem rotulo="Peso kg/m" valor={c.dados?.peso_kg_m}/>
                 <InfoItem rotulo="Barra (mm)" valor={c.dados?.tamanho_barra_mm}/>
                 <InfoItem rotulo="Preço fornecedor" valor={c.dados?.preco_fornecedor}/>
-              </div>
+              </div>}
               {c.deduplicacao?.produto_existente&&<div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"><b>Produto existente:</b> {c.deduplicacao.produto_existente.codigo||''} {c.deduplicacao.produto_existente.nome}</div>}
-              {precisaValidar&&<button onClick={()=>onAbrirValidacao(c)} className="mt-3 w-full rounded-xl bg-amber-600 px-3 py-2.5 text-xs font-semibold text-white">Abrir este item na validação</button>}
+              {!podeEditar&&<div className="mt-3 rounded-lg border bg-white p-3 text-xs text-slate-500">Somente o Master ou responsável com edição no setor pode alterar este item.</div>}
             </div>
             <div>
-              <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><Eye size={14}/>Fonte visual do catálogo{pagina>0?' · página '+pagina:''}</div>{entrada.fonte_url&&<a href={entrada.fonte_url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Abrir PDF inteiro</a>}</div>
-              {fonte?<iframe title={'Catálogo '+(c.dados?.codigo||c.id)} src={fonte} className="h-[520px] w-full rounded-xl border bg-white"/>:<div className="grid h-56 place-items-center rounded-xl border border-dashed bg-white text-sm text-slate-400">Fonte visual indisponível para este material.</div>}
+              <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><Eye size={14}/>Imagem do item</div>{fontePagina&&<a href={fontePagina} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Ver evidência no catálogo</a>}</div>
+              {imagemItem?<img src={imagemItem} alt={String(c.dados?.descricao||c.dados?.codigo||'Item do catálogo')} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
+              :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div><Eye className="mx-auto mb-2" size={22}/><b className="text-slate-500">Recorte individual ainda não disponível.</b><p className="mt-1 text-xs">A página inteira não é mais usada como imagem do produto. O PDF continua preservado apenas como evidência da origem.</p></div></div>}
             </div>
           </div>}
         </div>

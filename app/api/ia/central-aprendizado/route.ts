@@ -715,6 +715,84 @@ export async function PATCH(req:NextRequest){
     const id=txt(b?.id,80);if(!id)return NextResponse.json({error:'Candidato não informado.'},{status:400})
     const {data:c}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle();if(!c)return NextResponse.json({error:'Candidato não encontrado.'},{status:404});if(!(await podeValidar(u,c)))return NextResponse.json({error:'Sem permissão para validar.'},{status:403})
     const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle();if(!entrada)return NextResponse.json({error:'Entrada não encontrada.'},{status:404})
+    if(acao==='editar_item_catalogo'){
+      if(c.tipo!=='produto')return NextResponse.json({error:'Esta edição é exclusiva para itens de catálogo.'},{status:400})
+      const recebido=b?.dados&&typeof b.dados==='object'?b.dados:{}
+      const anterior=c.dados&&typeof c.dados==='object'?c.dados:{}
+      const categoriaInformada=txt(recebido.categoria??anterior.categoria,80).toLowerCase()
+      const categoria=CATEGORIAS.has(categoriaInformada)?categoriaInformada:'outro'
+      const codigo=txt(recebido.codigo??anterior.codigo,120).toUpperCase()||null
+      const descricao=txt(recebido.descricao??anterior.descricao??c.titulo,400)
+      if(!descricao)return NextResponse.json({error:'Informe a descrição do item.'},{status:400})
+      const dados={
+        ...anterior,
+        codigo,
+        descricao,
+        categoria,
+        unidade:txt(recebido.unidade??anterior.unidade,30)||null,
+        preco_fornecedor:num(recebido.preco_fornecedor??anterior.preco_fornecedor),
+        peso_kg_m:num(recebido.peso_kg_m??anterior.peso_kg_m),
+        tamanho_barra_mm:num(recebido.tamanho_barra_mm??anterior.tamanho_barra_mm),
+        linha:txt(recebido.linha??anterior.linha,120)||null,
+        aplicacao:txt(recebido.aplicacao??anterior.aplicacao,1000)||null,
+        imagem_item_url:txt(recebido.imagem_item_url??anterior.imagem_item_url,2000)||null,
+      }
+      const titulo=codigo?`${codigo} — ${descricao}`:descricao
+
+      if(c.status==='aplicado'&&c.destino_id){
+        const {data:produtoAtual,error:produtoBuscaErro}=await supabaseAdmin.from('produtos')
+          .select('id,dados_origem').eq('empresa_id',u.empresa_id).eq('id',c.destino_id).maybeSingle()
+        if(produtoBuscaErro)throw produtoBuscaErro
+        if(!produtoAtual)return NextResponse.json({error:'O produto vinculado não foi encontrado no Atlas.'},{status:404})
+        const {error:produtoErro}=await supabaseAdmin.from('produtos').update({
+          nome:descricao.toUpperCase(),
+          descricao,
+          codigo,
+          codigo_origem:codigo,
+          categoria,
+          unidade:dados.unidade||(categoria==='perfil'?'BR':'UN'),
+          peso_kg_m:dados.peso_kg_m,
+          tamanho_barra_mm:dados.tamanho_barra_mm,
+          dados_origem:{...(produtoAtual.dados_origem||{}),entrada_id:entrada.id,linha:dados.linha,aplicacao:dados.aplicacao},
+          status_validacao:'revisado',
+          validado_em:new Date().toISOString(),
+          validado_por_id:u.id,
+          validado_por_nome:u.nome,
+        }).eq('empresa_id',u.empresa_id).eq('id',c.destino_id)
+        if(produtoErro)throw new Error(produtoErro.message)
+
+        const fornecedorId=await resolverFornecedor(u,entrada,null)
+        if(fornecedorId){
+          const {error:vinculoErro}=await supabaseAdmin.from('produto_fornecedores').update({
+            codigo_fornecedor:codigo,
+            descricao_fornecedor:descricao,
+            unidade_compra:dados.unidade,
+            preco_atual:dados.preco_fornecedor,
+            preco_atualizado_em:dados.preco_fornecedor!==null?new Date().toISOString():null,
+            updated_at:new Date().toISOString(),
+          }).eq('empresa_id',u.empresa_id).eq('produto_id',c.destino_id).eq('fornecedor_id',fornecedorId)
+          if(vinculoErro)throw new Error(vinculoErro.message)
+        }
+      }
+
+      const statusNovo=c.status==='pendente'?'corrigido':c.status
+      const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+        titulo,dados,status:statusNovo,
+        observacao_validacao:'Item revisado diretamente na visualização do catálogo.',
+        validado_por_id:c.status==='aplicado'?u.id:c.validado_por_id,
+        validado_por_nome:c.status==='aplicado'?u.nome:c.validado_por_nome,
+        validado_em:c.status==='aplicado'?new Date().toISOString():c.validado_em,
+        updated_at:new Date().toISOString(),
+      }).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single()
+      if(error)throw error
+      await log(u,'item_catalogo_editado',entrada.id,id,{destino_id:c.destino_id||null,aplicado:c.status==='aplicado'})
+      return NextResponse.json({
+        candidato:{...data,pode_validar:true},
+        mensagem:c.status==='aplicado'
+          ?'Item atualizado no catálogo, no produto Atlas e no vínculo do fornecedor.'
+          :'Correção salva. O item continua aguardando validação antes de ser aplicado.',
+      })
+    }
     if(acao==='corrigir'){
       const modulo=txt(b?.modulo,50);if(modulo&&!MODULOS.has(modulo))return NextResponse.json({error:'Setor inválido.'},{status:400})
       const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({titulo:txt(b?.titulo,180)||c.titulo,modulo:modulo||c.modulo,dados:b?.dados&&typeof b.dados==='object'?b.dados:c.dados,status:'corrigido',observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error;await log(u,'candidato_corrigido',entrada.id,id);return NextResponse.json({candidato:{...data,pode_validar:true}})
