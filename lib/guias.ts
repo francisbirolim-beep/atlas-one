@@ -1,4 +1,21 @@
-import { Home, Users, FileText, Columns3, Ruler, Factory, Wrench, ShoppingCart, Store, Building2, MapPinned, MessageCircle, Share2 } from 'lucide-react'
+import {
+  Building2,
+  Columns3,
+  Factory,
+  FileText,
+  Home,
+  Landmark,
+  MapPinned,
+  PackageSearch,
+  ReceiptText,
+  Ruler,
+  Settings,
+  ShoppingCart,
+  Store,
+  Users,
+  WalletCards,
+  Wrench,
+} from 'lucide-react'
 
 export type Guia = {
   href: string
@@ -8,27 +25,49 @@ export type Guia = {
   grupo: string
 }
 
-// Navegacao operacional do dia a dia.
-// Paginas administrativas e legadas continuam existindo, mas nao poluem mais
-// o menu/favoritos. Administracao fica concentrada no menu do usuario.
+// Navegação principal do dia a dia. "Geral" concentra acessos rápidos;
+// os demais grupos representam setores e ficam recolhíveis no menu lateral.
 export const GUIAS: Guia[] = [
   { href: '/', label: 'Início', icon: Home, grupo: 'Geral' },
-  { href: '/chat', label: 'Chat interno', icon: MessageCircle, grupo: 'Comercial' },
-  { href: '/compartilhar', label: 'Enviar para o Atlas', icon: Share2, grupo: 'Comercial' },
+  { href: '/balcao', label: 'Venda Balcão', icon: Store, grupo: 'Geral' },
+
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
   { href: '/prospeccao', label: 'Prospecção', icon: MapPinned, grupo: 'Comercial' },
   { href: '/orcamento/pesquisar', label: 'Orçamentos', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Kanban', icon: Columns3, grupo: 'Comercial' },
-  { href: '/balcao', label: 'Venda Balcão', icon: Store, grupo: 'Comercial' },
-  { href: '/producao/medicao-final', label: 'Medição Final', icon: Ruler, grupo: 'Operações' },
-  { href: '/compras', label: 'Compras / NF', icon: ShoppingCart, grupo: 'Operações' },
-  { href: '/producao', label: 'Produção', icon: Factory, grupo: 'Operações' },
-  { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Operações' },
-  { href: '/engenharia', label: 'Engenharia', icon: Wrench, grupo: 'Operações' },
+  { href: '/whatsapp/configuracao', label: 'Configuração WhatsApp', icon: Settings, grupo: 'Comercial', masterOnly: true },
+
+  { href: '/producao/medicao-final', label: 'Medição Final', icon: Ruler, grupo: 'Produção' },
+  { href: '/producao', label: 'Produção', icon: Factory, grupo: 'Produção' },
+
+  { href: '/engenharia', label: 'Engenharia', icon: Landmark, grupo: 'Engenharia' },
+
+  { href: '/compras', label: 'Pedido de compra', icon: ShoppingCart, grupo: 'Compras' },
+  { href: '/compras/notas', label: 'Notas fiscais', icon: ReceiptText, grupo: 'Compras' },
+  { href: '/compras/entrada', label: 'Entrada de NF', icon: FileText, grupo: 'Compras' },
+  { href: '/estoque', label: 'Estoque', icon: PackageSearch, grupo: 'Compras' },
+  { href: '/cadastro/fornecedores', label: 'Fornecedores', icon: Building2, grupo: 'Compras' },
+
+  { href: '/balcao/caixa', label: 'Caixa', icon: WalletCards, grupo: 'Financeiro' },
+  { href: '/financeiro/contas-pagar', label: 'Contas a pagar', icon: WalletCards, grupo: 'Financeiro' },
+  { href: '/financeiro/contas-receber', label: 'Contas a receber', icon: WalletCards, grupo: 'Financeiro' },
+
+  { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Assistência' },
+
+  { href: '/cadastro', label: 'Cadastros', icon: PackageSearch, grupo: 'Cadastros' },
 ]
 
-export const GRUPOS_ORDEM_GUIAS = ['Geral', 'Comercial', 'Operações']
+export const GRUPOS_ORDEM_GUIAS = [
+  'Geral',
+  'Comercial',
+  'Produção',
+  'Engenharia',
+  'Compras',
+  'Financeiro',
+  'Assistência',
+  'Cadastros',
+]
 
 export const CHAVE_OCULTOS = 'atlas_guias_ocultos'
 export const EVENTO_OCULTOS_MUDOU = 'guias-ocultos-changed'

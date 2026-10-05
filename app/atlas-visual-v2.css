@@ -152,3 +152,278 @@
     max-width: 100%;
   }
 }
+
+
+/* ============================================================
+   TEMA GLOBAL DO ATLAS
+   O tema escolhido pelo usuário afeta toda a aplicação, não só
+   a sidebar. As cores semânticas (verde, azul, vermelho, âmbar)
+   continuam preservadas para status, alertas e ações.
+   ============================================================ */
+
+html[data-atlas-theme="claro"] {
+  color-scheme: light;
+  background: #f8fafc;
+}
+
+html[data-atlas-theme="claro"] body,
+html[data-atlas-theme="claro"] .atlas-app-shell,
+html[data-atlas-theme="claro"] .atlas-app-content,
+html[data-atlas-theme="claro"] .atlas-main-surface,
+html[data-atlas-theme="claro"] .atlas-home-v2 {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html[data-atlas-theme="claro"] .atlas-app-main {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+}
+
+html[data-atlas-theme="claro"] header.sticky {
+  border-color: #e2e8f0 !important;
+  background: rgb(255 255 255 / 0.96) !important;
+  color: #0f172a !important;
+}
+
+html[data-atlas-theme="claro"] .bg-white {
+  background-color: #ffffff !important;
+}
+
+html[data-atlas-theme="claro"] .bg-slate-50,
+html[data-atlas-theme="claro"] .bg-slate-100 {
+  background-color: #f8fafc !important;
+}
+
+html[data-atlas-theme="claro"] .text-slate-950,
+html[data-atlas-theme="claro"] .text-slate-900,
+html[data-atlas-theme="claro"] .text-slate-800 {
+  color: #0f172a !important;
+}
+
+html[data-atlas-theme="claro"] .text-slate-700,
+html[data-atlas-theme="claro"] .text-slate-600 {
+  color: #475569 !important;
+}
+
+html[data-atlas-theme="claro"] .text-slate-500,
+html[data-atlas-theme="claro"] .text-slate-400 {
+  color: #64748b !important;
+}
+
+html[data-atlas-theme="claro"] .border-slate-100,
+html[data-atlas-theme="claro"] .border-slate-200,
+html[data-atlas-theme="claro"] .border-slate-300 {
+  border-color: #e2e8f0 !important;
+}
+
+html[data-atlas-theme="claro"] input,
+html[data-atlas-theme="claro"] select,
+html[data-atlas-theme="claro"] textarea {
+  color-scheme: light;
+}
+
+html[data-atlas-theme="escuro"] {
+  color-scheme: dark;
+  background: #08111f;
+}
+
+html[data-atlas-theme="escuro"] body,
+html[data-atlas-theme="escuro"] .atlas-app-shell,
+html[data-atlas-theme="escuro"] .atlas-app-content,
+html[data-atlas-theme="escuro"] .atlas-main-surface,
+html[data-atlas-theme="escuro"] .atlas-home-v2 {
+  background: #08111f !important;
+  color: #e5e7eb !important;
+}
+
+html[data-atlas-theme="escuro"] .atlas-app-main {
+  background: linear-gradient(180deg, #0b1220 0%, #08111f 100%) !important;
+}
+
+html[data-atlas-theme="escuro"] header.sticky {
+  border-color: #223047 !important;
+  background: rgb(11 18 32 / 0.96) !important;
+  color: #f8fafc !important;
+}
+
+html[data-atlas-theme="escuro"] .bg-white {
+  background-color: #111c2d !important;
+}
+
+html[data-atlas-theme="escuro"] .bg-slate-50 {
+  background-color: #0f1a2b !important;
+}
+
+html[data-atlas-theme="escuro"] .bg-slate-100 {
+  background-color: #172235 !important;
+}
+
+html[data-atlas-theme="escuro"] .bg-slate-200 {
+  background-color: #243147 !important;
+}
+
+html[data-atlas-theme="escuro"] .bg-slate-950 {
+  background-color: #0b1220 !important;
+}
+
+html[data-atlas-theme="escuro"] .text-slate-950,
+html[data-atlas-theme="escuro"] .text-slate-900,
+html[data-atlas-theme="escuro"] .text-slate-800,
+html[data-atlas-theme="escuro"] .text-slate-700 {
+  color: #f1f5f9 !important;
+}
+
+html[data-atlas-theme="escuro"] .text-slate-600,
+html[data-atlas-theme="escuro"] .text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+html[data-atlas-theme="escuro"] .text-slate-400,
+html[data-atlas-theme="escuro"] .text-slate-300 {
+  color: #94a3b8 !important;
+}
+
+html[data-atlas-theme="escuro"] .border-slate-100,
+html[data-atlas-theme="escuro"] .border-slate-200,
+html[data-atlas-theme="escuro"] .border-slate-300,
+html[data-atlas-theme="escuro"] .border-gray-100,
+html[data-atlas-theme="escuro"] .border-gray-200 {
+  border-color: #26364e !important;
+}
+
+html[data-atlas-theme="escuro"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html[data-atlas-theme="escuro"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #26364e !important;
+}
+
+html[data-atlas-theme="escuro"] input,
+html[data-atlas-theme="escuro"] select,
+html[data-atlas-theme="escuro"] textarea {
+  border-color: #33445f !important;
+  background-color: #0f1a2b !important;
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+
+html[data-atlas-theme="escuro"] input::placeholder,
+html[data-atlas-theme="escuro"] textarea::placeholder {
+  color: #64748b !important;
+}
+
+html[data-atlas-theme="escuro"] table thead[class*="bg-slate"],
+html[data-atlas-theme="escuro"] thead.bg-slate-50 {
+  background-color: #111c2d !important;
+}
+
+html[data-atlas-theme="escuro"] tr[class*="border-"],
+html[data-atlas-theme="escuro"] td[class*="border-"],
+html[data-atlas-theme="escuro"] th[class*="border-"] {
+  border-color: #26364e !important;
+}
+
+html[data-atlas-theme="escuro"] .shadow-sm,
+html[data-atlas-theme="escuro"] .shadow,
+html[data-atlas-theme="escuro"] .shadow-md,
+html[data-atlas-theme="escuro"] .shadow-lg,
+html[data-atlas-theme="escuro"] .shadow-xl,
+html[data-atlas-theme="escuro"] .shadow-2xl {
+  --tw-shadow-color: rgb(0 0 0 / 0.28);
+}
+
+/* Modais e menus flutuantes neutros seguem o tema. */
+html[data-atlas-theme="escuro"] [role="dialog"] > div,
+html[data-atlas-theme="escuro"] .fixed[class*="inset-0"] > .bg-white {
+  background-color: #111c2d !important;
+  color: #f8fafc !important;
+}
+
+/* Sidebar completa em ambos os temas. */
+@media (min-width: 768px) {
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell,
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav,
+  html[data-atlas-theme="claro"] .atlas-sidebar-nav {
+    background: #ffffff !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell > nav,
+  html[data-atlas-theme="claro"] .atlas-sidebar-nav {
+    border-right-color: #e2e8f0 !important;
+    box-shadow: 8px 0 28px rgb(15 23 42 / 0.035) !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-brand strong {
+    color: #0f172a !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav button[aria-expanded] {
+    color: #475569 !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav button[aria-expanded]:hover,
+  html[data-atlas-theme="claro"] .atlas-sidebar-shell nav a:not([class*="bg-brand-navy"]):hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell,
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell > nav,
+  html[data-atlas-theme="escuro"] .atlas-sidebar-nav {
+    background: #101a28 !important;
+  }
+
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell > nav,
+  html[data-atlas-theme="escuro"] .atlas-sidebar-nav {
+    border-right-color: rgb(255 255 255 / 0.07) !important;
+    box-shadow: none !important;
+  }
+
+  html[data-atlas-theme="escuro"] .atlas-sidebar-brand strong {
+    color: #ffffff !important;
+  }
+
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell nav a:not([class*="bg-brand-navy"]),
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell nav button:not([class*="bg-brand-navy"]) {
+    color: #94a3b8 !important;
+  }
+
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell nav button[aria-expanded]:hover,
+  html[data-atlas-theme="escuro"] .atlas-sidebar-shell nav a:not([class*="bg-brand-navy"]):hover {
+    background: rgb(255 255 255 / 0.055) !important;
+    color: #f8fafc !important;
+  }
+}
+
+/* As telas profissionais tinham superfícies claras fixas; o tema escuro
+   precisa prevalecer nelas também. */
+html[data-atlas-theme="escuro"] .atlas-home-v2 .bg-slate-950,
+html[data-atlas-theme="escuro"] .atlas-kanban-commercial > div > main > div:first-child,
+html[data-atlas-theme="escuro"] .atlas-orcamentos-professional > div > main > div:first-child,
+html[data-atlas-theme="escuro"] .atlas-kanban-commercial [class*="bg-white"],
+html[data-atlas-theme="escuro"] .atlas-orcamentos-professional [class*="bg-white"] {
+  background: #111c2d !important;
+  border-color: #26364e !important;
+  color: #f8fafc !important;
+}
+
+html[data-atlas-theme="escuro"] .atlas-kanban-commercial > div > main > div:nth-child(2) > div {
+  background: #0f1a2b !important;
+  border-color: #26364e !important;
+}
+
+html[data-atlas-theme="escuro"] .atlas-home-v2 .bg-slate-950 .text-white,
+html[data-atlas-theme="escuro"] .atlas-home-v2 .bg-slate-950 .text-slate-100,
+html[data-atlas-theme="escuro"] .atlas-home-v2 .bg-slate-950 .text-slate-200 {
+  color: #f8fafc !important;
+}
+
+@media (max-width: 767px) {
+  html[data-atlas-theme="escuro"] .atlas-main-surface,
+  html[data-atlas-theme="escuro"] .atlas-home-v2 {
+    background: #08111f !important;
+  }
+
+  html[data-atlas-theme="claro"] .atlas-main-surface,
+  html[data-atlas-theme="claro"] .atlas-home-v2 {
+    background: #f8fafc !important;
+  }
+}
