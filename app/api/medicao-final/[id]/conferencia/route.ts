@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const { data: medicao } = await supabaseAdmin
       .from('medicoes_finais')
-      .select('id,empresa_id,status_operacional')
+      .select('id,empresa_id,status_operacional,tipo_medicao')
       .eq('id', id)
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         await supabaseAdmin
           .from('medicoes_finais')
           .update({
-            status_operacional: 'aprovado',
+            status_operacional: medicao.tipo_medicao === 'contramarco' ? 'contramarco_aprovado' : 'aprovado',
             aprovado_em: new Date().toISOString(),
             aprovado_por_id: usuario.id,
             aprovado_por_nome: usuario.nome,
