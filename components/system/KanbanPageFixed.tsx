@@ -224,6 +224,7 @@ const [cardSelecionado, setCardSelecionado] = useState<OrcamentoRapido | null>(n
 const [editando, setEditando] = useState<OrcamentoRapido | null>(null)
 const [historico, setHistorico] = useState<HistoricoItem[]>([])
 const [salvando, setSalvando] = useState(false)
+const [validandoIA, setValidandoIA] = useState(false)
 const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
 const [usuario, setUsuario] = useState<Usuario | null>(null)
 const [agora, setAgora] = useState(Date.now())
@@ -856,6 +857,90 @@ if (mudancasItem.length) partes.push(`Item ${i + 1}: ${mudancasItem.join(', ')}`
 
 return partes.length > 0 ? partes.join('; ') : 'Salvou sem mudanças'
 }
+async function validarOuCorrigirIA(acao: 'validar' | 'corrigir') {
+if (!cardSelecionado || !editando || !cardSelecionado.ia_criado) return
+const resumo = resumoMudancas(cardSelecionado, editando)
+const mudou = resumo !== 'Salvou sem mudanças'
+if (acao === 'validar' && mudou) {
+alert('Há alterações nesta ficha. Para a IA aprender essas mudanças, use “Corrigir e ensinar”.')
+return
+}
+if (acao === 'corrigir' && !mudou) {
+alert('Faça a correção na ficha antes de clicar em “Corrigir e ensinar”.')
+return
+}
+
+setValidandoIA(true)
+try {
+let editadoFinal = editando
+if (acao === 'corrigir') {
+const primeiro = editando.itens?.[0]
+const sincronizado: OrcamentoRapido = {
+...editando,
+tipo_esquadria: primeiro?.tipo_esquadria || editando.tipo_esquadria,
+largura_mm: primeiro?.largura_mm ?? editando.largura_mm,
+altura_mm: primeiro?.altura_mm ?? editando.altura_mm,
+quantidade: primeiro?.quantidade ?? editando.quantidade,
+}
+const { error: salvarErro } = await supabase.from('orcamentos').update({
+cliente_nome: sincronizado.cliente_nome,
+cliente_whatsapp: sincronizado.cliente_whatsapp,
+cidade: sincronizado.cidade,
+acabamento: sincronizado.acabamento,
+acabamento_outro_texto: sincronizado.acabamento === 'outro' ? sincronizado.acabamento_outro_texto : null,
+contramarco: sincronizado.contramarco,
+tipo_medida: sincronizado.tipo_medida,
+temperatura: sincronizado.temperatura,
+arquiteto_nome: sincronizado.arquiteto_nome,
+arquiteto_contato: sincronizado.arquiteto_contato,
+tipo_esquadria: sincronizado.tipo_esquadria,
+largura_mm: sincronizado.largura_mm,
+altura_mm: sincronizado.altura_mm,
+quantidade: sincronizado.quantidade,
+itens: sincronizado.itens,
+valor_estimado: sincronizado.valor_estimado,
+}).eq('id', cardSelecionado.id)
+if (salvarErro) throw salvarErro
+editadoFinal = sincronizado
+}
+
+const { data: sessao } = await supabase.auth.getSession()
+const token = sessao.session?.access_token
+if (!token) throw new Error('Sessão expirada.')
+const resposta = await fetch('/api/ia/orcamento-validacao', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+body: JSON.stringify({ orcamentoId: cardSelecionado.id, acao }),
+})
+const json = await resposta.json().catch(() => ({}))
+if (!resposta.ok) throw new Error(json.error || 'Não foi possível registrar a validação da IA.')
+
+const status = acao === 'corrigir' ? 'corrigido' : 'validado'
+const atualizado: OrcamentoRapido = {
+...editadoFinal,
+ia_validacao_status: status,
+ia_validado_por_id: usuario?.id || null,
+ia_validado_por_nome: usuario?.nome || null,
+ia_validado_em: new Date().toISOString(),
+}
+setEditando(atualizado)
+setCardSelecionado(atualizado)
+setCards(prev => prev.map(c => c.id === atualizado.id ? atualizado : c))
+await registrarHistorico(
+atualizado.id,
+usuario,
+acao === 'corrigir' ? 'Corrigiu dados criados pela IA e ensinou o Atlas' : 'Conferiu e validou os dados criados pela IA',
+acao === 'corrigir' ? resumo : 'Dados conferidos sem alteração'
+)
+setHistorico(await listarHistorico(atualizado.id))
+alert(json.mensagem || (acao === 'corrigir' ? 'Correção aprendida pelo Atlas.' : 'Dados validados.'))
+} catch (e: any) {
+alert(e?.message || 'Não foi possível validar os dados da IA.')
+} finally {
+setValidandoIA(false)
+}
+}
+
 async function salvarCard() {
 if (!editando || !cardSelecionado) return
 setSalvando(true)
@@ -878,6 +963,10 @@ arquiteto_nome: editando.arquiteto_nome,
 arquiteto_contato: editando.arquiteto_contato,
 itens: editando.itens,
 valor_estimado: editando.valor_estimado,
+tipo_esquadria: editando.itens?.[0]?.tipo_esquadria || editando.tipo_esquadria,
+largura_mm: editando.itens?.[0]?.largura_mm ?? editando.largura_mm,
+altura_mm: editando.itens?.[0]?.altura_mm ?? editando.altura_mm,
+quantidade: editando.itens?.[0]?.quantidade ?? editando.quantidade,
 coluna_id: editando.coluna_id,
 coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
 })
@@ -1071,6 +1160,14 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </span>
 )}
 </div>
+{card.ia_criado && card.ia_validacao_status === 'aguardando' && !card.eh_assistencia && (
+<span
+className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-semibold mb-1 bg-violet-100 text-violet-700"
+title="Orçamento montado pela IA e ainda não conferido"
+>
+IA · validar
+</span>
+)}
 {card.eh_assistencia ? (
 <>
 <span
@@ -1205,6 +1302,56 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 </div>
 )}
 </div>
+{cardSelecionado.ia_criado && (
+<div className={`rounded-xl border p-3 ${
+cardSelecionado.ia_validacao_status === 'aguardando'
+? 'border-violet-200 bg-violet-50'
+: cardSelecionado.ia_validacao_status === 'corrigido'
+? 'border-blue-200 bg-blue-50'
+: 'border-emerald-200 bg-emerald-50'
+}`}>
+<div className="flex items-start gap-2">
+<div className="mt-0.5 rounded-lg bg-white p-1.5 shadow-sm"><CheckCircle2 size={16} className={
+cardSelecionado.ia_validacao_status === 'aguardando' ? 'text-violet-600' :
+cardSelecionado.ia_validacao_status === 'corrigido' ? 'text-blue-600' : 'text-emerald-600'
+}/></div>
+<div className="min-w-0 flex-1">
+<p className="text-xs font-bold text-slate-800">
+{cardSelecionado.ia_validacao_status === 'aguardando'
+? 'Criado pela IA · aguardando sua conferência'
+: cardSelecionado.ia_validacao_status === 'corrigido'
+? 'IA corrigida e aprendizado registrado'
+: 'Dados da IA conferidos'}
+</p>
+<p className="mt-1 text-[11px] leading-4 text-slate-600">
+{cardSelecionado.ia_validacao_status === 'aguardando'
+? 'Confira nome, telefone, cidade, tipologia, folhas, medidas, cor e observações. Se mudar qualquer informação, use “Corrigir e ensinar”.'
+: `Validado por ${cardSelecionado.ia_validado_por_nome || 'usuário'}${cardSelecionado.ia_validado_em ? ' em ' + new Date(cardSelecionado.ia_validado_em).toLocaleString('pt-BR') : ''}.`}
+</p>
+</div>
+</div>
+{cardSelecionado.ia_validacao_status === 'aguardando' && (
+<div className="mt-3 grid grid-cols-2 gap-2">
+<button
+type="button"
+disabled={validandoIA}
+onClick={() => void validarOuCorrigirIA('validar')}
+className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+>
+{validandoIA ? 'Registrando...' : '✓ Está correto'}
+</button>
+<button
+type="button"
+disabled={validandoIA}
+onClick={() => void validarOuCorrigirIA('corrigir')}
+className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+>
+{validandoIA ? 'Registrando...' : 'Corrigir e ensinar'}
+</button>
+</div>
+)}
+</div>
+)}
 {cardSelecionado.cliente_id && (
 <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="text-xs text-brand-navy hover:underline">
 Ver histórico e negociação no CRM
