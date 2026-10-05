@@ -406,8 +406,23 @@ setCards(prev => prev.map(c => (c.coluna_id === col.id ? { ...c, coluna_id: dest
 }
 }
 
-function abrirCard(card: OrcamentoRapido) {
-const itensComFoto = card.itens ? card.itens.map(it => {
+async function abrirCard(card: OrcamentoRapido) {
+const agoraIso = new Date().toISOString()
+let cardAberto = card
+
+if (!card.orcamento_finalizado_em && !card.orcamento_iniciado_em) {
+const { error } = await supabase
+.from('orcamentos')
+.update({ orcamento_iniciado_em: agoraIso })
+.eq('id', card.id)
+
+if (!error) {
+cardAberto = { ...card, orcamento_iniciado_em: agoraIso }
+setCards(prev => prev.map(c => (c.id === card.id ? cardAberto : c)))
+}
+}
+
+const itensComFoto = cardAberto.itens ? cardAberto.itens.map(it => {
 const fotosExistentes = [
 ...(it.foto_urls || []),
 it.foto_url,
@@ -421,19 +436,29 @@ foto_url: it.foto_url || fotosUnicas[0] || null,
 foto_urls: fotosUnicas,
 }
 }) : []
-setCardSelecionado(card)
-setEditando({ ...card, itens: itensComFoto, anexos: normalizarVersoesLegadas(card.anexos) })
+const usuarioSessao = usuario || await usuarioAtual()
+if (!usuario && usuarioSessao) setUsuario(usuarioSessao)
+
+setCardSelecionado(cardAberto)
+setEditando({ ...cardAberto, itens: itensComFoto, anexos: normalizarVersoesLegadas(cardAberto.anexos) })
 setNovoAnexoTitulo('')
-setSessaoAtiva(false)
+setSessaoAtiva(!cardAberto.orcamento_finalizado_em)
 setVendedorInfo(null)
 setWhatsappVendedor('')
-setMensagemVendedor(mensagemPadraoVendedor(card))
-listarHistorico(card.id).then(setHistorico)
-if (card.criado_por_id) {
+setMensagemVendedor(mensagemPadraoVendedor(cardAberto))
+
+await registrarHistorico(
+cardAberto.id,
+usuarioSessao,
+cardAberto.orcamento_finalizado_em ? 'Abriu o orçamento finalizado' : 'Abriu o orçamento'
+)
+setHistorico(await listarHistorico(cardAberto.id))
+
+if (cardAberto.criado_por_id) {
 supabase
 .from('usuarios')
 .select('*')
-.eq('id', card.criado_por_id)
+.eq('id', cardAberto.criado_por_id)
 .maybeSingle()
 .then(({ data }) => {
 if (data) {
@@ -739,7 +764,7 @@ setEditando(null)
 }
 }
 
-function tentarFechar() {
+async function tentarFechar() {
 if (editando?.orcamento_iniciado_em && !editando?.orcamento_finalizado_em && sessaoAtiva) {
 const motivo = window.prompt(
 'Você iniciou esse orçamento e ainda não finalizou. Por que está saindo agora? (fica registrado no histórico)'
@@ -750,7 +775,7 @@ return
 }
 const duracao = formatarDuracao(editando.orcamento_iniciado_em || '', new Date().toISOString())
 if (cardSelecionado) {
-registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', `${motivo.trim()} — ficou aberto ${duracao}`)
+await registrarHistorico(cardSelecionado.id, usuario, 'Saiu sem finalizar o orçamento', `${motivo.trim()} — ficou aberto ${duracao}`)
 }
 }
 setCardSelecionado(null)
@@ -761,22 +786,76 @@ setWhatsappVendedor('')
 setMensagemVendedor('')
 }
 
-function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): string {
-const partes: string[] = []
-if (original.cliente_nome !== novo.cliente_nome) partes.push('nome')
-if (original.cidade !== novo.cidade) partes.push('cidade')
-if (original.acabamento !== novo.acabamento) partes.push('cor')
-if (original.contramarco !== novo.contramarco) partes.push('contramarco')
-if (original.tipo_medida !== novo.tipo_medida) partes.push('tipo de medida')
-if (original.temperatura !== novo.temperatura) partes.push('temperatura')
-if (original.arquiteto_nome !== novo.arquiteto_nome) partes.push('arquiteto/engenheiro')
-if (original.valor_estimado !== novo.valor_estimado) partes.push('valor')
-if (original.coluna_id !== novo.coluna_id) partes.push('coluna')
-if ((original.itens?.length || 0) !== (novo.itens?.length || 0)) partes.push('esquadrias (quantidade)')
-else if (JSON.stringify(original.itens) !== JSON.stringify(novo.itens)) partes.push('esquadrias (dados)')
-return partes.length > 0 ? `Alterou: ${partes.join(', ')}` : 'Salvou sem mudanças'
+function valorHistorico(v: unknown): string {
+if (v === null || v === undefined || v === '') return '—'
+return String(v)
 }
 
+function resumoMudancas(original: OrcamentoRapido, novo: OrcamentoRapido): string {
+const partes: string[] = []
+const campo = (label: string, antes: unknown, depois: unknown) => {
+if (JSON.stringify(antes ?? null) !== JSON.stringify(depois ?? null)) {
+partes.push(\`\${label}: \${valorHistorico(antes)} → \${valorHistorico(depois)}\`)
+}
+}
+
+campo('Cliente', original.cliente_nome, novo.cliente_nome)
+campo('WhatsApp', original.cliente_whatsapp, novo.cliente_whatsapp)
+campo('Cidade', original.cidade, novo.cidade)
+campo('Cor/acabamento', original.acabamento, novo.acabamento)
+campo('Outra cor', original.acabamento_outro_texto, novo.acabamento_outro_texto)
+campo('Contramarco', original.contramarco, novo.contramarco)
+campo('Tipo de medida', original.tipo_medida, novo.tipo_medida)
+campo('Temperatura', original.temperatura, novo.temperatura)
+campo('Arquiteto/engenheiro', original.arquiteto_nome, novo.arquiteto_nome)
+campo('Contato arquiteto/engenheiro', original.arquiteto_contato, novo.arquiteto_contato)
+campo('Valor estimado', original.valor_estimado, novo.valor_estimado)
+
+if (original.coluna_id !== novo.coluna_id) {
+const antes = colunas.find(c => c.id === original.coluna_id)?.nome || '—'
+const depois = colunas.find(c => c.id === novo.coluna_id)?.nome || '—'
+partes.push(\`Coluna: \${antes} → \${depois}\`)
+}
+
+const itensAntes = original.itens || []
+const itensDepois = novo.itens || []
+if (itensAntes.length !== itensDepois.length) {
+partes.push(\`Tipologias/itens: \${itensAntes.length} → \${itensDepois.length}\`)
+}
+const maxItens = Math.max(itensAntes.length, itensDepois.length)
+for (let i = 0; i < maxItens; i++) {
+const a = itensAntes[i]
+const b = itensDepois[i]
+if (!a && b) {
+partes.push(\`Item \${i + 1} adicionado: \${b.ambiente || 'sem ambiente'} · \${tipoLabels[b.tipo_esquadria] || b.tipo_esquadria || 'tipologia'} · \${b.largura_mm || 0}×\${b.altura_mm || 0} mm · qtd \${b.quantidade || 1}\`)
+continue
+}
+if (a && !b) {
+partes.push(\`Item \${i + 1} removido: \${a.ambiente || 'sem ambiente'} · \${tipoLabels[a.tipo_esquadria] || a.tipo_esquadria || 'tipologia'}\`)
+continue
+}
+if (!a || !b) continue
+const mudancasItem: string[] = []
+const itemCampo = (label: string, antes: unknown, depois: unknown) => {
+if (JSON.stringify(antes ?? null) !== JSON.stringify(depois ?? null)) {
+mudancasItem.push(\`\${label} \${valorHistorico(antes)} → \${valorHistorico(depois)}\`)
+}
+}
+itemCampo('ambiente', a.ambiente, b.ambiente)
+itemCampo('tipologia', tipoLabels[a.tipo_esquadria] || a.tipo_esquadria, tipoLabels[b.tipo_esquadria] || b.tipo_esquadria)
+itemCampo('folhas', a.folhas, b.folhas)
+itemCampo('largura', a.largura_mm, b.largura_mm)
+itemCampo('altura', a.altura_mm, b.altura_mm)
+itemCampo('quantidade', a.quantidade, b.quantidade)
+itemCampo('cor', a.cor, b.cor)
+itemCampo('contramarco', a.contramarco, b.contramarco)
+itemCampo('descrição', a.descricao, b.descricao)
+itemCampo('observação produção', a.observacao_producao, b.observacao_producao)
+if (mudancasItem.length) partes.push(\`Item \${i + 1}: \${mudancasItem.join(', ')}\`)
+}
+
+return partes.length > 0 ? partes.join('; ') : 'Salvou sem mudanças'
+}
 async function salvarCard() {
 if (!editando || !cardSelecionado) return
 setSalvando(true)
@@ -828,10 +907,10 @@ if (carregando) {
 return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
 }
 
-// Na primeira coluna, todo pedido precisa passar por "Iniciar orçamento" antes
-// de liberar os detalhes para edição, inclusive quando quem abriu foi o criador.
+// Ao abrir o card, a ficha completa já fica disponível. A própria abertura
+// inicia/retoma a sessão e fica registrada no histórico com usuário e horário.
 const naPrimeiraColuna = !!editando && (editando.coluna_id || colunas[0]?.id) === colunas[0]?.id
-const podeEditarSemIniciar = false
+const podeEditarSemIniciar = true
 
 return (
 <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -1069,7 +1148,10 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
 <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
 <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
-<h3 className="font-bold text-slate-800">Editar orçamento</h3>
+<div>
+<h3 className="font-bold text-slate-800">Orçamento · detalhes e histórico</h3>
+<p className="text-[11px] text-slate-400">Abertura, alterações e saídas ficam registradas.</p>
+</div>
 <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
 <X size={18} />
 </button>
@@ -1113,11 +1195,16 @@ className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 tex
 </div>
 ) : (
 <>
+<div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+<div className="font-medium text-slate-700">
+Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionado.created_at).toLocaleString('pt-BR')}
+</div>
 {cardSelecionado.criado_por_nome && (
-<p className="text-xs text-slate-400 flex items-center gap-1.5">
+<div className="mt-1 flex items-center gap-1.5">
 <User size={13} /> Solicitado por {cardSelecionado.criado_por_nome}
-</p>
+</div>
 )}
+</div>
 {cardSelecionado.cliente_id && (
 <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="text-xs text-brand-navy hover:underline">
 Ver histórico e negociação no CRM
