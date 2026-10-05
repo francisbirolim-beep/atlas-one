@@ -997,7 +997,8 @@ onClick={() => {
 setBusca('')
 setTipoFiltroData('entrada')
 setFiltroDataDe('')
-setFiltroDataAte('')setFiltroTemperatura('')
+setFiltroDataAte('')
+setFiltroTemperatura('')
 }}
 className="text-xs text-slate-400 hover:text-slate-600 px-2"
 >
