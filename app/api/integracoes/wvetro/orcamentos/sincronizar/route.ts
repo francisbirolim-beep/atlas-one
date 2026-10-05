@@ -162,7 +162,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('wvetro_referencias_tipologias').select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url'),
     supabaseAdmin.from('wvetro_referencias_linhas').select('linha_raw,linha_tecnica_id'),
     supabaseAdmin.from('tipologias').select('id,chave,label'),
-    supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,cidade').eq('empresa_id', empresaId),
+    supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
     supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id').eq('empresa_id', empresaId),
   ])
@@ -197,14 +197,75 @@ async function carregarContexto(empresaId: string) {
   return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, existentes }
 }
 
+function origemWVetro(v: unknown) {
+  return norm(v).replace(/[^A-Z0-9]/g, '') === 'WVETRO'
+}
+
+function enderecoClienteWVetro(p: Record<string, any>) {
+  const e = obj(p.Endereco) || obj(p.endereco) || {}
+  const rua = txt(p.PessoaEndereco, p.ClienteEndereco, e.Rua, e.Logradouro)
+  const numero = txt(p.PessoaNumero, p.ClienteNumero, e.Nro, e.Numero)
+  const complemento = txt(p.PessoaComplemento, p.ClienteComplemento, e.Complemento)
+  const endereco = [rua, rua && numero ? numero : '', complemento].filter(Boolean).join(', ')
+  return {
+    cidade: txt(p.PessoaCidade, p.ClienteCidade, p.Cidade, e.Cidade) || null,
+    endereco: endereco || null,
+    bairro: txt(p.PessoaBairro, p.ClienteBairro, p.Bairro, e.Bairro) || null,
+    cep: txt(p.PessoaCEP, p.ClienteCEP, p.CEP, p.Cep, e.CEP, e.Cep) || null,
+  }
+}
+
 function acharCliente(p: Record<string, any>, ctx: Awaited<ReturnType<typeof carregarContexto>>) {
   const d = digitos(documentoCliente(p))
   if (d && ctx.porDoc.get(d)?.length === 1) return ctx.porDoc.get(d)![0]
   const f = digitos(telefoneCliente(p)).slice(-11)
   if (f && ctx.porFone.get(f)?.length === 1) return ctx.porFone.get(f)![0]
 
-  // Nome, sozinho, nunca gera vínculo automático.
+  // Autorreparo seguro: se o próprio W.Vetro criou um único cadastro com exatamente
+  // o mesmo nome, a sincronização pode religar o orçamento a esse cadastro.
+  // Cadastros Atlas/manuais e nomes parecidos continuam exigindo validação humana.
+  const n = norm(nomeCliente(p))
+  const exatos = n ? (ctx.porNome.get(n) || []) : []
+  if (exatos.length === 1 && origemWVetro(exatos[0]?.origem)) return exatos[0]
+
   return null
+}
+
+async function hidratarClienteWVetro(cliente: any, p: Record<string, any>, empresaId: string) {
+  if (!cliente?.id) return cliente
+  const endereco = enderecoClienteWVetro(p)
+  const telefone = telefoneCliente(p)
+  const patch: Record<string, any> = {}
+  if (!txt(cliente.whatsapp) && telefone) patch.whatsapp = telefone
+  if (!txt(cliente.telefone) && txt(p.PessoaTelefone, p.ClienteTelefone, p.Telefone)) patch.telefone = txt(p.PessoaTelefone, p.ClienteTelefone, p.Telefone)
+  if (!txt(cliente.email) && txt(p.PessoaEmail, p.ClienteEmail, p.Email)) patch.email = txt(p.PessoaEmail, p.ClienteEmail, p.Email).toLowerCase()
+  if (!txt(cliente.cidade) && endereco.cidade) patch.cidade = endereco.cidade
+  if ((!txt(cliente.endereco) || txt(cliente.endereco) === '[object Object]') && endereco.endereco) patch.endereco = endereco.endereco
+  else if (txt(cliente.endereco) === '[object Object]' && !endereco.endereco) patch.endereco = null
+  if (!txt(cliente.bairro) && endereco.bairro) patch.bairro = endereco.bairro
+  if (!txt(cliente.cep) && endereco.cep) patch.cep = endereco.cep
+  if (!Object.keys(patch).length) return cliente
+  patch.updated_at = new Date().toISOString()
+  const { data, error } = await supabaseAdmin.from('clientes').update(patch).eq('id', cliente.id).eq('empresa_id', empresaId).select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').single()
+  if (error) throw error
+  return { ...cliente, ...data }
+}
+
+async function resolverPendenciaWVetroNome(empresaId: string, nome: string, clienteId: string) {
+  await supabaseAdmin
+    .from('cadastro_pendencias')
+    .update({
+      status: 'resolvida',
+      cliente_id: clienteId,
+      cliente_candidato_id: clienteId,
+      resolvido_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('empresa_id', empresaId)
+    .eq('origem', 'wvetro')
+    .eq('tipo', 'vinculo_wvetro')
+    .eq('status', 'pendente')
+    .contains('dados', { nome })
 }
 
 function adicionarClienteAoContexto(cliente: any, ctx: Awaited<ReturnType<typeof carregarContexto>>) {
@@ -222,8 +283,25 @@ async function garantirCliente(
   empresaId: string,
   numeroWvetro: string,
 ) {
-  const existente = acharCliente(p, ctx)
-  if (existente) return { cliente: existente, criado: false, pendencia: false }
+  const encontrado = acharCliente(p, ctx)
+  if (encontrado) {
+    const cliente = await hidratarClienteWVetro(encontrado, p, empresaId)
+    await resolverPendenciaWVetroNome(empresaId, nomeCliente(p), cliente.id)
+    const incompleto = nomeCadastroIncompleto(cliente.nome)
+    if (incompleto) {
+      await registrarPendenciaCadastro({
+        empresaId,
+        tipo: 'cadastro_incompleto',
+        chaveUnica: `cliente:${cliente.id}:nome_incompleto`,
+        titulo: `Completar cadastro de ${cliente.nome}`,
+        descricao: 'O W.Vetro enviou apenas um nome. Complete nome e sobrenome ou valide se este cadastro deve ser vinculado a um cliente já existente.',
+        origem: 'wvetro',
+        clienteId: cliente.id,
+        dados: { numero_wvetro: numeroWvetro, nome: cliente.nome },
+      })
+    }
+    return { cliente, criado: false, pendencia: incompleto }
+  }
 
   const nome = nomeCliente(p)
   if (!nome || norm(nome) === 'CLIENTE W.VETRO') return { cliente: null, criado: false, pendencia: false }
@@ -247,7 +325,7 @@ async function garantirCliente(
       await registrarPendenciaCadastro({
         empresaId,
         tipo: 'vinculo_wvetro',
-        chaveUnica: `wvetro:cliente:${codigoWvetro || nomeNorm}`,
+        chaveUnica: `wvetro:cliente:nome:${nomeNorm}`,
         titulo: `Vincular cliente W.Vetro: ${nome}`,
         descricao: 'O W.Vetro enviou o cliente sem CPF/CNPJ ou telefone confiável e há cadastro compatível no Atlas. Confirme o vínculo antes de unir os históricos.',
         origem: 'wvetro',
@@ -271,16 +349,17 @@ async function garantirCliente(
     }
   }
 
+  const endereco = enderecoClienteWVetro(p)
   const payload = {
     empresa_id: empresaId,
     nome,
     whatsapp: telefone || null,
     telefone: txt(p.PessoaTelefone, p.ClienteTelefone, p.Telefone) || null,
     cpf_cnpj: documento || null,
-    cidade: txt(p.PessoaCidade, p.ClienteCidade, p.Cidade) || null,
-    endereco: txt(p.PessoaEndereco, p.ClienteEndereco, p.Endereco) || null,
-    bairro: txt(p.PessoaBairro, p.ClienteBairro, p.Bairro) || null,
-    cep: txt(p.PessoaCEP, p.ClienteCEP, p.CEP, p.Cep) || null,
+    cidade: endereco.cidade,
+    endereco: endereco.endereco,
+    bairro: endereco.bairro,
+    cep: endereco.cep,
     email: txt(p.PessoaEmail, p.ClienteEmail, p.Email).toLowerCase() || null,
     origem: 'W.Vetro',
     observacoes: 'Cadastro criado automaticamente pela integração W.Vetro.',
@@ -289,7 +368,7 @@ async function garantirCliente(
   const { data, error } = await supabaseAdmin
     .from('clientes')
     .insert(payload)
-    .select('id,nome,cpf_cnpj,whatsapp,telefone,cidade')
+    .select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem')
     .single()
   if (error) throw error
 
@@ -377,7 +456,7 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
       if (clienteResolvido.criado) clientesCriados += 1
       if (clienteResolvido.pendencia) pendenciasCadastro += 1
       const nome = nomeCliente(p)
-      const cidadeOrcamento = txt(p.Cidade, p.PessoaCidade, p.ClienteCidade, cliente?.cidade)
+      const cidadeOrcamento = txt(p.Cidade, p.PessoaCidade, p.ClienteCidade, obj(p.Endereco)?.Cidade, cliente?.cidade)
       const chaveCidade = normalizarCidadeMargem(cidadeOrcamento)
       let regraMargem = margensCidade.get(chaveCidade)
       if (!regraMargem) {
