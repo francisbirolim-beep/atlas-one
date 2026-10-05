@@ -176,6 +176,7 @@ export default function WhatsAppAtendimentoPage() {
   const gravadorRef = useRef<MediaRecorder | null>(null)
   const partesAudioRef = useRef<Blob[]>([])
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const canalFiltroInicializadoRef = useRef(false)
 
   useEffect(() => {
     try {
@@ -209,8 +210,18 @@ export default function WhatsAppAtendimentoPage() {
       setAcessos(json.acessos || [])
       setCanaisConectados(Number(json.canaisConectados || 0))
       setCanaisTotal(Number(json.canaisTotal || 0))
-      if (canalFiltro !== 'todos' && !canaisRecebidos.some(c => c.id === canalFiltro)) {
-        setCanalFiltro('todos')
+      if (!canalFiltroInicializadoRef.current && canaisRecebidos.length > 0) {
+        let salvo = ''
+        try { salvo = localStorage.getItem('atlas-whatsapp-canal-filtro') || '' } catch {}
+        const inicial = canaisRecebidos.some(c => c.id === salvo)
+          ? salvo
+          : (canaisRecebidos.find(c => c.principal)?.id || canaisRecebidos[0]?.id || 'todos')
+        setCanalFiltro(inicial)
+        canalFiltroInicializadoRef.current = true
+      } else if (canalFiltro !== 'todos' && !canaisRecebidos.some(c => c.id === canalFiltro)) {
+        const fallback = canaisRecebidos.find(c => c.principal)?.id || canaisRecebidos[0]?.id || 'todos'
+        setCanalFiltro(fallback)
+        try { localStorage.setItem('atlas-whatsapp-canal-filtro', fallback) } catch {}
       }
       if (selecionar && !ativa) {
         const conversaId = typeof window !== 'undefined'
@@ -230,6 +241,16 @@ export default function WhatsAppAtendimentoPage() {
     } finally {
       setCarregando(false)
     }
+  }
+
+  function selecionarCanal(canalId: string) {
+    setCanalFiltro(canalId)
+    setBusca('')
+    try { localStorage.setItem('atlas-whatsapp-canal-filtro', canalId) } catch {}
+    setAtiva(atual => {
+      if (!atual || canalId === 'todos' || atual.whatsapp_canal_id === canalId) return atual
+      return null
+    })
   }
 
   function abrirDiretorio() {
@@ -774,6 +795,9 @@ export default function WhatsAppAtendimentoPage() {
   const canalAtivo = ativa?.whatsapp_canal_id
     ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
     : null
+  const canalSelecionado = canalFiltro !== 'todos'
+    ? canais.find(c => c.id === canalFiltro) || null
+    : null
   const canalPronto = canalAtivo?.gateway_status === 'connected'
   const podeTransferirAtiva = Boolean(
     ativa && (eu?.role === 'master' || acessoCanalAtivo?.transferir),
@@ -804,9 +828,11 @@ export default function WhatsAppAtendimentoPage() {
                 <h1 className="font-bold text-slate-900">WhatsApp Atlas</h1>
               </div>
               <p className="text-xs text-slate-500">
-                {canais.length === 1
-                  ? `${canais[0].nome} · ${telefoneFormatado(canais[0].numero_conectado || canais[0].numero_declarado || '')}`
-                  : `${canais.length} canais conectados`}
+                {canalSelecionado
+                  ? `${canalSelecionado.nome} · ${canalSelecionado.principal ? 'Empresa' : 'Pessoal'}`
+                  : canais.length === 1
+                    ? `${canais[0].nome} · ${telefoneFormatado(canais[0].numero_conectado || canais[0].numero_declarado || '')}`
+                    : `${canais.length} canais conectados`}
               </p>
             </div>
           </div>
@@ -835,6 +861,28 @@ export default function WhatsAppAtendimentoPage() {
         <div className={`grid h-[calc(100dvh-64px)] min-h-0 md:grid-cols-[280px_1fr] ${painelDireitoRecolhido ? 'xl:grid-cols-[280px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[280px_minmax(0,1fr)_260px]'}`}>
           <aside className="flex min-h-0 flex-col border-r">
             <div className="border-b p-3">
+              {canais.length > 1 && (
+                <div className="mb-3 md:hidden">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Número em uso</span>
+                    <span className="text-[10px] text-slate-400">Toque para trocar</span>
+                  </div>
+                  <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                    <div className="flex w-max min-w-full gap-2">
+                      {canais.map(c => {
+                        const selecionado = canalFiltro === c.id
+                        return (
+                          <button key={c.id} type="button" onClick={() => selecionarCanal(c.id)}
+                            className={`shrink-0 rounded-xl border px-3 py-2 text-left transition ${selecionado ? 'border-emerald-500 bg-emerald-50 text-emerald-900 shadow-sm' : 'border-slate-200 bg-white text-slate-600'}`}>
+                            <span className="block text-xs font-extrabold">{c.nome}</span>
+                            <span className="mt-0.5 block text-[10px] font-medium opacity-70">{c.principal ? 'Empresa' : (c.usuario_nome || 'Pessoal')}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-bold text-slate-900">Conversas</p>
@@ -842,10 +890,10 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   {canais.length > 1 && (
-                    <select value={canalFiltro} onChange={e=>setCanalFiltro(e.target.value)}
-                      className="max-w-[145px] rounded-lg border bg-white px-2 py-1.5 text-xs font-semibold text-slate-700">
-                      <option value="todos">Todos conectados</option>
-                      {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Principal':''}</option>)}
+                    <select value={canalFiltro === 'todos' ? (canais.find(c => c.principal)?.id || canais[0]?.id || '') : canalFiltro}
+                      onChange={e=>selecionarCanal(e.target.value)}
+                      className="hidden max-w-[145px] rounded-lg border bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 md:block">
+                      {canais.map(c=><option key={c.id} value={c.id}>{c.nome}{c.principal?' · Empresa':' · Pessoal'}</option>)}
                     </select>
                   )}
                   <button onClick={abrirDiretorio} disabled={canais.length===0}
@@ -864,43 +912,45 @@ export default function WhatsAppAtendimentoPage() {
                 <span className="text-xs font-bold text-slate-700">Abertas {totais.abertas}</span>
                 <span className="text-[10px] text-slate-400">Filtros do atendimento</span>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-semibold">
+              <div className="-mx-1 mt-2 overflow-x-auto px-1 pb-1">
+                <div className="flex w-max min-w-full gap-1.5 text-xs font-semibold">
                 <button onClick={()=>setFiltro('todas')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
                   Todas {totais.todas}
                 </button>
                 <button onClick={()=>setFiltro('aguardando')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='aguardando'?'border-amber-500 bg-amber-50 text-amber-800':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='aguardando'?'border-amber-500 bg-amber-50 text-amber-800':'bg-white text-slate-600'}`}>
                   Aguardando {totais.aguardando}
                 </button>
                 <button onClick={()=>setFiltro('com_atendente')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='com_atendente'?'border-emerald-500 bg-emerald-50 text-emerald-800':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='com_atendente'?'border-emerald-500 bg-emerald-50 text-emerald-800':'bg-white text-slate-600'}`}>
                   Com atendente {totais.comAtendente}
                 </button>
                 <button onClick={()=>setFiltro('nao_lidas')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='nao_lidas'?'border-red-400 bg-red-50 text-red-700':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='nao_lidas'?'border-red-400 bg-red-50 text-red-700':'bg-white text-slate-600'}`}>
                   Não lidas {totais.naoLidas}
                 </button>
                 <button onClick={()=>setFiltro('minhas')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='minhas'?'border-blue-400 bg-blue-50 text-blue-700':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='minhas'?'border-blue-400 bg-blue-50 text-blue-700':'bg-white text-slate-600'}`}>
                   Minhas {totais.minhas}
                 </button>
                 <button onClick={()=>setFiltro('acompanhando')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='acompanhando'?'border-cyan-400 bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='acompanhando'?'border-cyan-400 bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
                   Acompanhando {totais.acompanhando}
                 </button>
                 <button onClick={()=>setFiltro('transferidas')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='transferidas'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='transferidas'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
                   Transferidas {totais.transferidas}
                 </button>
                 <button onClick={()=>setFiltro('finalizadas')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='finalizadas'?'border-slate-400 bg-slate-100 text-slate-700':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='finalizadas'?'border-slate-400 bg-slate-100 text-slate-700':'bg-white text-slate-600'}`}>
                   Finalizadas {totais.finalizadas}
                 </button>
                 <button onClick={()=>setFiltro('grupos')}
-                  className={`rounded-full border px-3 py-1.5 ${filtro==='grupos'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='grupos'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
                   Grupos {totais.grupos}
                 </button>
+                </div>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
