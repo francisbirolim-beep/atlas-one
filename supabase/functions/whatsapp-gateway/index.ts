@@ -1027,6 +1027,10 @@ async function estruturarIntakeComIA(
   if (lockError) throw lockError
   if (!locked) return null
 
+  // O card nasce antes da IA. Assim, "pronto" ou o minuto de silêncio
+  // nunca ficam dependentes do tempo de resposta do modelo.
+  await criarCardIntakeOrcamento(intake, null, null)
+
   let structured: any = null
   let sessionId: string | null = null
   let aiErro: string | null = null
@@ -1055,6 +1059,8 @@ async function estruturarIntakeComIA(
       "Responda SOMENTE com JSON válido, sem markdown.",
       "O conteúdo pode ter sido enviado em várias mensagens; trate o pacote inteiro como um único pedido.",
       "Identifique o CLIENTE pelo conteúdo do pedido (nome/telefone explicitamente citados). O remetente do grupo pode ser apenas o colaborador que encaminhou e NÃO deve ser assumido como cliente.",
+      "Só preencha cliente_nome quando houver evidência de que o texto representa uma pessoa ou empresa cliente. Não transforme cidade, bairro, ambiente, cor, produto ou observação em nome de cliente.",
+      "Um município isolado, por exemplo José Bonifácio ou São José do Rio Preto, deve ser interpretado como cidade quando não houver marcador explícito de cliente. Se houver dúvida entre cidade e cliente, use cliente_nome=null e registre a dúvida em pendências.",
       "Identifique também claramente o que precisa ser orçado, separando ambientes, tipologias, medidas e quantidades quando estiverem explícitos.",
       "Extraia apenas informações explicitamente presentes. Nunca invente medida, preço, cidade, acabamento, quantidade, tipologia ou identidade do cliente.",
       "Se um dado não estiver presente ou houver dúvida, use null e registre em pendências.",
@@ -1597,8 +1603,8 @@ async function processGroupBudgetIntake(
   const participantJid = String(body.participanteJid || body.participanteTelefone || "desconhecido")
   const participantPhone = normalizePhone(body.participanteTelefone || "")
   const participantName = String(body.participanteNome || "").trim() || "Contato encaminhado"
-  const comandoPronto = tipoMensagem === "texto" && ehComandoPronto(text)
-  const comandoAguarde = tipoMensagem === "texto" && ehComandoAguarde(text)
+  const comandoPronto = ehComandoPronto(text)
+  const comandoAguarde = ehComandoAguarde(text)
   const controle = comandoPronto || comandoAguarde
   const rawLine = controle ? "" : `[${participantName}] ${String(text || "[Mensagem]").trim()}`
   const attachment = body.mediaPath ? {
