@@ -181,7 +181,6 @@ export async function POST(req: NextRequest) {
       if (!mensagem) return NextResponse.json({ error: 'Digite uma mensagem.' }, { status: 400 })
 
       const status = await statusOpenCode()
-      if (!status.configurado) return NextResponse.json({ error: 'A IA privada está indisponível.' }, { status: 503 })
 
       const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
       const sessionId = await validarSessao(usuario, txt(body?.sessionId, 200) || null)
@@ -197,13 +196,27 @@ export async function POST(req: NextRequest) {
         'Responda em português do Brasil.',
       ].join('\n')
 
-      const resultado = await consultarOpenCode({
-        accessToken: token,
-        sessionId,
-        tituloSessao: `Atlas Pessoas - ${usuario.nome || usuario.id}`,
-        system,
-        prompt: mensagem,
-      })
+      let resultado: any
+      try {
+        resultado = await consultarOpenCode({
+          accessToken: token,
+          sessionId,
+          tituloSessao: `Atlas Pessoas - ${usuario.nome || usuario.id}`,
+          system,
+          prompt: mensagem,
+        })
+      } catch (e: any) {
+        const t = mensagem.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+        const respostaLocal = /^(oi|ola|bom dia|boa tarde|boa noite)/.test(t)
+          ? 'Olá! Seu diário privado está disponível. Pode escrever o que quiser registrar ou organizar.'
+          : 'Registrei sua mensagem no diário privado. O modo conversacional gratuito está sem resposta agora, mas sua anotação foi preservada e você pode continuar escrevendo normalmente.'
+        resultado = {
+          sessionId: sessionId || ('local-pessoas-' + Date.now()),
+          resposta: respostaLocal,
+          providerId: 'atlas-interno',
+          modelId: 'fallback-pessoas',
+        }
+      }
 
       const agora = new Date().toISOString()
       const { error } = await supabaseAdmin.from('ia_diario_privado').insert([
