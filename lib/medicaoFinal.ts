@@ -250,7 +250,8 @@ export async function criarMedicaoDoOrcamento(
 export async function criarMedicaoManualCliente(
     clienteId: string,
     obraId: string | null,
-    usuario: Usuario | null
+    usuario: Usuario | null,
+    tipoMedicao: TipoMedicaoFinal = 'tipologia'
   ): Promise<MedicaoFinal | null> {
     const { data: cliente, error: erroCliente } = await supabase
       .from('clientes')
@@ -268,7 +269,7 @@ export async function criarMedicaoManualCliente(
     const { data: medicao, error } = await supabase
       .from('medicoes_finais')
       .insert({
-        tipo_medicao: 'tipologia',
+        tipo_medicao: tipoMedicao,
         orcamento_id: null,
         cliente_id: cliente.id,
         cliente_nome: cliente.nome,
@@ -404,6 +405,12 @@ export interface DadosMedidaItem {
     altura_direita_mm: number | null
     altura_meio_mm: number | null
     altura_esquerda_mm: number | null
+    vao_largura_mm?: number | null
+    vao_altura_mm?: number | null
+    folga_largura_mm?: number | null
+    folga_altura_mm?: number | null
+    producao_largura_mm?: number | null
+    producao_altura_mm?: number | null
     referencia_vista: 'interna' | 'externa' | null
     contramarco: string | null
     cadeirinha: string | null
@@ -418,10 +425,29 @@ export async function salvarMedidaItem(
     dados: DadosMedidaItem,
     usuario: Usuario | null
   ): Promise<boolean> {
-    const medidas = [dados.largura_baixo_mm, dados.largura_meio_mm, dados.largura_cima_mm, dados.altura_direita_mm, dados.altura_meio_mm, dados.altura_esquerda_mm]
-    if (medidas.some(valor => valor == null || !Number.isFinite(valor) || valor <= 0) || !dados.referencia_vista) {
-      console.error('Medida Final incompleta: informe as 3 larguras, 3 alturas e a referencia de vista.')
-      return false
+    const ehContramarco = dados.vao_largura_mm != null || dados.vao_altura_mm != null
+    if (ehContramarco) {
+      const vaoLargura = Number(dados.vao_largura_mm)
+      const vaoAltura = Number(dados.vao_altura_mm)
+      const folgaLargura = Number(dados.folga_largura_mm ?? 0)
+      const folgaAltura = Number(dados.folga_altura_mm ?? 0)
+      const producaoLargura = Number(dados.producao_largura_mm)
+      const producaoAltura = Number(dados.producao_altura_mm)
+      const invalidos = [vaoLargura, vaoAltura, producaoLargura, producaoAltura].some(v => !Number.isFinite(v) || v <= 0)
+        || !Number.isFinite(folgaLargura) || folgaLargura < 0
+        || !Number.isFinite(folgaAltura) || folgaAltura < 0
+        || producaoLargura !== vaoLargura - folgaLargura
+        || producaoAltura !== vaoAltura - folgaAltura
+      if (invalidos) {
+        console.error('Contramarco incompleto: informe vão e folga válidos para largura e altura.')
+        return false
+      }
+    } else {
+      const medidas = [dados.largura_baixo_mm, dados.largura_meio_mm, dados.largura_cima_mm, dados.altura_direita_mm, dados.altura_meio_mm, dados.altura_esquerda_mm]
+      if (medidas.some(valor => valor == null || !Number.isFinite(valor) || valor <= 0) || !dados.referencia_vista) {
+        console.error('Medida Final incompleta: informe as 3 larguras, 3 alturas e a referencia de vista.')
+        return false
+      }
     }
 
     const { error } = await supabase

@@ -535,6 +535,12 @@ export interface MedicaoItem {
       altura_direita_mm?: number | null
       altura_meio_mm?: number | null
       altura_esquerda_mm?: number | null
+      vao_largura_mm?: number | null
+      vao_altura_mm?: number | null
+      folga_largura_mm?: number | null
+      folga_altura_mm?: number | null
+      producao_largura_mm?: number | null
+      producao_altura_mm?: number | null
       referencia_vista?: 'interna' | 'externa' | null
       contramarco?: string | null
       cadeirinha?: string | null

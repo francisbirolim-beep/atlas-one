@@ -3,13 +3,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, CloudDownload, FileText, Loader2, RefreshCw, Ruler, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, CloudDownload, FileText, Loader2, Plus, RefreshCw, Ruler, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { criarMedicaoDoOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
+import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
 type ClienteResumo = { id: string; nome: string; cidade?: string | null }
+type OrcamentoItemResumo = {
+  id?: string
+  tipo_esquadria?: string | null
+  tipo_outro_texto?: string | null
+  descricao?: string | null
+  configuracao_nome?: string | null
+  ambiente?: string | null
+  largura_mm?: number | null
+  altura_mm?: number | null
+  quantidade?: number | null
+}
+
 type OrcamentoResumo = {
   id: string
   numero?: number | null
@@ -84,6 +96,7 @@ export default function AbrirMedidaFinalCliente() {
   const [mensagemSync, setMensagemSync] = useState('')
   const [tipo, setTipo] = useState<TipoMedicaoFinal | null>(null)
   const [orcamentoId, setOrcamentoId] = useState('')
+  const [orcamentoAbertoId, setOrcamentoAbertoId] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [criando, setCriando] = useState(false)
   const [erro, setErro] = useState('')
@@ -163,6 +176,15 @@ export default function AbrirMedidaFinalCliente() {
   function selecionarTipo(novoTipo: TipoMedicaoFinal) {
     setTipo(novoTipo)
     setOrcamentoId('')
+    setOrcamentoAbertoId('')
+  }
+
+  function itensDoOrcamento(o: OrcamentoResumo) {
+    return (Array.isArray(o.itens) ? o.itens : []) as OrcamentoItemResumo[]
+  }
+
+  function nomeItemOrcamento(item: OrcamentoItemResumo) {
+    return item.configuracao_nome || item.descricao || item.tipo_outro_texto || item.tipo_esquadria || 'Tipologia'
   }
 
   function medicaoExistente(orcId: string, t: TipoMedicaoFinal) {
@@ -244,6 +266,27 @@ export default function AbrirMedidaFinalCliente() {
     } finally {
       setCandidatoOcupado('')
     }
+  }
+
+  async function iniciarSemOrcamento() {
+    if (!tipo || criando) return
+    const existente = medicoes.find(m => !m.orcamento_id && (m.tipo_medicao || 'tipologia') === tipo)
+    if (existente) {
+      try { localStorage.setItem(`atlas-medicao-cliente-${clienteId}`, existente.id) } catch {}
+      router.push(`/producao/medicao-final/${existente.id}`)
+      return
+    }
+
+    setCriando(true)
+    setErro('')
+    const medicao = await criarMedicaoManualCliente(clienteId, null, usuario, tipo)
+    setCriando(false)
+    if (!medicao) {
+      setErro('Não foi possível iniciar a medição sem orçamento.')
+      return
+    }
+    try { localStorage.setItem(`atlas-medicao-cliente-${clienteId}`, medicao.id) } catch {}
+    router.push(`/producao/medicao-final/${medicao.id}`)
   }
 
   async function continuarOuCriar() {
@@ -422,25 +465,71 @@ export default function AbrirMedidaFinalCliente() {
               {orcamentosAtuais.map(o => {
                 const existente = medicaoExistente(o.id, tipo)
                 const selecionado = orcamentoId === o.id
-                const qtdItens = Array.isArray(o.itens) ? o.itens.length : 0
+                const aberto = orcamentoAbertoId === o.id
+                const itens = itensDoOrcamento(o)
+                const qtdItens = itens.length
                 const exibicao = numeroExibicao(o)
                 const ehWVetro = exibicao.origem === 'W.Vetro'
                 return (
-                  <button key={o.id} onClick={() => setOrcamentoId(o.id)} className={`w-full rounded-xl border p-4 text-left transition ${selecionado ? 'border-brand-navy bg-blue-50 ring-1 ring-brand-navy' : 'hover:border-slate-400'}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold text-slate-900">{exibicao.origem} #{exibicao.numero}{ehWVetro && o.numero ? ` · Atlas #${o.numero}` : ''}</p>
-                          {ehWVetro && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">W.VETRO</span>}
-                          {existente && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> Já iniciado</span>}
+                  <div key={o.id} className={`rounded-xl border transition ${selecionado ? 'border-brand-navy bg-blue-50 ring-1 ring-brand-navy' : 'bg-white hover:border-slate-400'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setOrcamentoId(o.id)}
+                      className="w-full p-4 text-left"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-900">{exibicao.origem} #{exibicao.numero}{ehWVetro && o.numero ? ` · Atlas #${o.numero}` : ''}</p>
+                            {ehWVetro && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">W.VETRO</span>}
+                            {existente && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> Já iniciado</span>}
+                          </div>
+                          <p className="mt-1 text-sm font-semibold text-slate-700">{o.wvetro_fluxo?.cliente_nome_wvetro || o.cliente_nome || cliente?.nome || 'Cliente'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{dataBR(o.created_at)} · {statusLabel(o.status)}{qtdItens ? ` · ${qtdItens} tipologia(s)` : ''}</p>
+                          {o.descricao_livre && <p className="mt-1 text-xs text-slate-400">{o.descricao_livre}</p>}
                         </div>
-                        <p className="mt-1 text-sm font-semibold text-slate-700">{o.wvetro_fluxo?.cliente_nome_wvetro || o.cliente_nome || cliente?.nome || 'Cliente'}</p>
-                        <p className="mt-1 text-xs text-slate-500">{dataBR(o.created_at)} · {statusLabel(o.status)}{qtdItens ? ` · ${qtdItens} tipologia(s)` : ''}</p>
-                        {o.descricao_livre && <p className="mt-1 text-xs text-slate-400">{o.descricao_livre}</p>}
+                        {selecionado && <CheckCircle2 size={19} className="text-brand-navy" />}
                       </div>
-                      {selecionado && <CheckCircle2 size={19} className="text-brand-navy" />}
+                    </button>
+
+                    <div className="border-t border-slate-100 px-4 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setOrcamentoAbertoId(aberto ? '' : o.id)}
+                        className="flex w-full items-center justify-between text-xs font-bold text-brand-navy"
+                      >
+                        <span>{aberto ? 'Fechar itens do orçamento' : 'Abrir orçamento e conferir tipologias'}</span>
+                        {aberto ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
                     </div>
-                  </button>
+
+                    {aberto && (
+                      <div className="border-t border-slate-100 bg-slate-50 p-3">
+                        {itens.length > 0 ? (
+                          <div className="space-y-2">
+                            {itens.map((item, index) => (
+                              <div key={item.id || index} className="rounded-lg border bg-white px-3 py-2">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-bold text-slate-800">{index + 1}. {nomeItemOrcamento(item)}</p>
+                                    {item.ambiente && <p className="mt-0.5 text-[11px] text-slate-500">Ambiente: {item.ambiente}</p>}
+                                  </div>
+                                  <span className="shrink-0 text-[11px] font-semibold text-slate-500">{item.quantidade || 1} un.</span>
+                                </div>
+                                {(item.largura_mm || item.altura_mm) && (
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    Medida do orçamento: {item.largura_mm || '—'} × {item.altura_mm || '—'} mm
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="rounded-lg bg-white p-3 text-xs text-slate-500">Este orçamento ainda não possui tipologias detalhadas. Você pode selecioná-lo e adicionar as tipologias durante a medição.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
               {orcamentosAtuais.length === 0 && (
@@ -453,24 +542,32 @@ export default function AbrirMedidaFinalCliente() {
                   <p className="mt-1 text-xs text-slate-500">
                     {historicosWVetro.length > 0
                       ? 'Sincronize o W.Vetro acima e a lista será atualizada automaticamente.'
-                      : 'Se realmente não existir orçamento, crie um novo orçamento e depois volte para a Medida Final.'}
+                      : 'Você pode iniciar a medição agora e adicionar as tipologias diretamente no local.'}
                   </p>
                   {historicosWVetro.length === 0 && (
-                    <Link
-                      href={`/orcamento-rapido?cliente=${clienteId}&modo=sob-medida&novo=1&origem=medida-final`}
-                      className="mt-3 inline-flex items-center justify-center rounded-lg border border-brand-navy px-3 py-2 text-xs font-bold text-brand-navy"
-                    >
-                      Criar orçamento para Medida Final
-                    </Link>
+                    <p className="mt-3 text-xs text-slate-500">Se preferir, também é possível criar o orçamento antes e retornar depois.</p>
                   )}
                 </div>
               )}
             </div>
 
-            <button onClick={continuarOuCriar} disabled={!orcamentoId || criando} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 py-3 text-sm font-bold text-white disabled:opacity-40">
-              {criando && <Loader2 size={16} className="animate-spin" />}
-              {orcamentoId && medicaoExistente(orcamentoId, tipo) ? 'Continuar medição existente' : tipo === 'contramarco' ? 'Iniciar medição dos contramarcos' : 'Iniciar Medida Final das tipologias'}
-            </button>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <button
+                onClick={iniciarSemOrcamento}
+                disabled={criando}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-brand-navy bg-white px-4 py-3 text-sm font-bold text-brand-navy disabled:opacity-40"
+              >
+                {criando ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {tipo === 'contramarco' ? 'Iniciar contramarco sem orçamento' : 'Iniciar Medida Final sem orçamento'}
+              </button>
+              <button onClick={continuarOuCriar} disabled={!orcamentoId || criando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 py-3 text-sm font-bold text-white disabled:opacity-40">
+                {criando && <Loader2 size={16} className="animate-spin" />}
+                {orcamentoId && medicaoExistente(orcamentoId, tipo) ? 'Continuar medição existente' : tipo === 'contramarco' ? 'Usar orçamento e medir contramarcos' : 'Usar orçamento e iniciar Medida Final'}
+              </button>
+            </div>
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              Com orçamento: confira as tipologias antes de selecionar. Sem orçamento: você adiciona as tipologias diretamente na próxima tela.
+            </p>
           </section>
         )}
       </main>
