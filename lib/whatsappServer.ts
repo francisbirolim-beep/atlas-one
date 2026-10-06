@@ -1250,9 +1250,9 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     }
 
     if (usuario.role === 'master') return { conversa, permitido: true, grupo: null }
-    if (acesso.dono || acesso.supervisionar) return { conversa, permitido: true, grupo: null }
+    if (acesso?.dono || acesso?.supervisionar) return { conversa, permitido: true, grupo: null }
     if (conversa.responsavel_id === usuario.id) return { conversa, permitido: true, grupo: null }
-    return { conversa, permitido: !conversa.responsavel_id && acesso.atender, grupo: null }
+    return { conversa, permitido: !conversa.responsavel_id && Boolean(acesso?.atender), grupo: null }
   }))
   const permitidasComGrupo = avaliadas.filter(item => item.permitido)
   const permitidas = permitidasComGrupo.map(item => item.conversa)

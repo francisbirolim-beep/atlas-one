@@ -328,7 +328,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
     [obrigatoriasTotal, value.variaveis],
   )
 
-  const temVariaveisTecnicas = variaveisVisiveis.length > 0 || variaveisFormulaVisiveis.length > 0
+  const temVariaveisTecnicas = variaveisVisiveis.length > 0 || variaveisFormulaVisiveis.length > 0 || variaveisOperacionais.length > 0
   const semVariaveisTecnicas = !carregando && !temVariaveisTecnicas
   const completa = temVariaveisTecnicas && obrigatoriasTotal.length > 0 && preenchidas === obrigatoriasTotal.length
 
