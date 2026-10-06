@@ -178,15 +178,23 @@ export default function AbrirMedidaFinalCliente() {
       const token = await tokenAtual()
       if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
 
-      const resposta = await fetch('/api/integracoes/wvetro/orcamentos/candidatos-cliente', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ clienteId, acao: 'buscar' }),
-      })
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 12000)
+      let resposta: Response
+      try {
+        resposta = await fetch('/api/integracoes/wvetro/orcamentos/candidatos-cliente', {
+          method: 'POST',
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ clienteId, acao: 'buscar' }),
+        })
+      } finally {
+        window.clearTimeout(timeout)
+      }
       const json = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(json?.error || 'Não foi possível consultar os orçamentos do W.Vetro.')
 
@@ -201,7 +209,10 @@ export default function AbrirMedidaFinalCliente() {
           : 'Nenhum orçamento W.Vetro com o mesmo primeiro nome foi encontrado.'
       )
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Não foi possível consultar os orçamentos do W.Vetro.')
+      const mensagem = e instanceof DOMException && e.name === 'AbortError'
+        ? 'A consulta demorou demais e foi cancelada. A tela foi liberada; tente novamente.'
+        : e instanceof Error ? e.message : 'Não foi possível consultar os orçamentos do W.Vetro.'
+      setErro(mensagem)
     } finally {
       setSincronizandoWVetro(false)
     }
