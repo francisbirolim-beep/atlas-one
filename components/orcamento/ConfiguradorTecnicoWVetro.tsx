@@ -279,15 +279,36 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
       ...variaveisFormulaVisiveis.map(v => v.chave),
       'folhas',
     ])
+    // Quando o W.Vetro observou "contramarco" ou "vidro" como parte da
+    // configuração, eles podem coexistir com os campos gerais acima. As demais
+    // variáveis continuam protegidas contra duplicidade.
+    ocupadas.delete('vidro')
     const lista = variaveisOperacionaisDaTipologia(tipologia).filter(item => !ocupadas.has(item.chave))
+    const agrupadas = new Map<string, ReferenciaVariavelWVetro[]>()
     for (const ref of referenciaWVetro?.variaveis || []) {
-      if (!ref.chave || !valorCompleto(ref.valor) || ocupadas.has(ref.chave)) continue
-      ocupadas.add(ref.chave)
+      if (!ref.chave || !valorCompleto(ref.valor) || ref.chave === 'folhas') continue
+      const grupo = agrupadas.get(ref.chave) || []
+      grupo.push(ref)
+      agrupadas.set(ref.chave, grupo)
+    }
+    for (const [chave, refs] of agrupadas) {
+      if (ocupadas.has(chave)) continue
+      ocupadas.add(chave)
+      const opcoes = new Map<string, string>()
+      for (const ref of refs) {
+        if (!valorCompleto(ref.valor)) continue
+        const label = String(ref.valorRaw || ref.valor).trim().replaceAll('_', ' ')
+        if (!opcoes.has(ref.valor)) opcoes.set(ref.valor, label)
+      }
+      const enumerada = ['preenchimento','contramarco','fechadura','lambri_tipo','lambri_orientacao','veneziana_tipo','vidro_posicao','vidro_especificacao'].includes(chave)
       lista.push({
-        chave: ref.chave,
-        label: ref.label || ref.chave.replaceAll('_', ' '),
-        tipo: 'text',
-        obrigatorio: false,
+        chave,
+        label: refs[0]?.label || chave.replaceAll('_', ' '),
+        tipo: (enumerada || opcoes.size > 1) ? 'select' : 'text',
+        obrigatorio: chave === 'preenchimento',
+        opcoes: (enumerada || opcoes.size > 1)
+          ? [...opcoes.entries()].map(([valor, label]) => ({ chave: valor, label }))
+          : undefined,
         origem: 'referencia_wvetro',
       })
     }
@@ -296,11 +317,20 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
 
   const defaults = useMemo(() => {
     const base = defaultsParaTipologia(tipologia)
-    const historico = Object.fromEntries(
-      (referenciaWVetro?.variaveis || [])
-        .filter(v => v.chave && v.valor)
-        .map(v => [v.chave, v.valor]),
-    )
+    const porChave = new Map<string, Set<string>>()
+    for (const ref of referenciaWVetro?.variaveis || []) {
+      if (!ref.chave || !ref.valor) continue
+      const valores = porChave.get(ref.chave) || new Set<string>()
+      valores.add(ref.valor)
+      porChave.set(ref.chave, valores)
+    }
+    const historico: Record<string, string> = {}
+    // Só preenche automaticamente o que tem uma única resposta observada.
+    // Quando o W.Vetro já mostrou mais de uma configuração, o usuário escolhe.
+    for (const [chave, valores] of porChave) {
+      if (valores.size === 1) historico[chave] = [...valores][0]
+    }
+    if (porChave.has('preenchimento')) delete base.vidro
     if (folhasDefinidas) historico.folhas = folhasDefinidas
     return { ...base, ...historico }
   }, [tipologia, referenciaWVetro, folhasDefinidas])
@@ -505,7 +535,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                       <p className="text-[11px] text-slate-500">Campos equivalentes aos que aparecem antes das variáveis no W.Vetro.</p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {CAMPOS_WVETRO.map(campo => (
+                      {CAMPOS_WVETRO.filter(campo => !(campo.chave === 'vidro' && (referenciaWVetro?.variaveis || []).some(v => v.chave === 'preenchimento'))).map(campo => (
                         <label key={campo.chave} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                           <span className="mb-1.5 block text-xs font-semibold text-slate-700">{campo.label}</span>
                           {campo.tipo === 'select' ? (
@@ -626,7 +656,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
                           <p className="text-xs font-bold text-blue-900">Variáveis operacionais do projeto</p>
                           <p className="mt-0.5 text-[11px] text-blue-800">Esses campos já são usados no fluxo do Atlas para registrar a configuração da esquadria. Quando a receita técnica correspondente for homologada, os mesmos valores poderão alimentar o cálculo automático.</p>
                         </div>
-                        {variaveisOperacionais.map(item => {
+                        {variaveisOperacionais.filter(item => item.chave !== 'vidro_especificacao' || ['vidro','vidro_veneziana'].includes(rascunho.preenchimento || value.variaveis?.preenchimento || '')).map(item => {
                           const atual = rascunho[item.chave] || ''
                           return (
                             <div key={`operacional-${item.chave}`} className="grid gap-2 rounded-xl border border-blue-100 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,340px)] sm:items-center">
