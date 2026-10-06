@@ -44,6 +44,7 @@ import {
   type Cadastro360Id,
   type CadastrosUsuarioConfig,
 } from '@/lib/cadastrosUsuario'
+import WhatsAppUsuarioPermissoes from '@/components/WhatsAppUsuarioPermissoes'
 
 function normalizar(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -569,12 +570,18 @@ export default function UsuariosSenhasPage() {
                   </div>
                 </section>
 
+                <WhatsAppUsuarioPermissoes
+                  usuarioId={usuarioSelecionado.id}
+                  usuarioNome={usuarioSelecionado.nome}
+                  usuarioRole={usuarioSelecionado.role}
+                />
+
                 <section className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="mb-4 flex items-start gap-2">
                     <Building2 size={18} className="mt-0.5 text-blue-600"/>
                     <div>
-                      <h2 className="font-semibold text-slate-900">Acessos por bloco</h2>
-                      <p className="text-xs text-slate-500">Escolha o que {usuarioSelecionado.nome.split(' ')[0]} pode ver ou alterar dentro de cada área do Atlas.</p>
+                      <h2 className="font-semibold text-slate-900">Acessos do Atlas por bloco</h2>
+                      <p className="text-xs text-slate-500">Estas permissões são somente dos módulos do Atlas. O acesso ao WhatsApp é configurado separadamente acima.</p>
                     </div>
                   </div>
 
