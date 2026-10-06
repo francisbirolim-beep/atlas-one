@@ -255,10 +255,41 @@ async function syncGroups(channel, sock) {
         await new Promise((resolve) => setTimeout(resolve, 220))
       }
       const nome = String(meta?.subject || meta?.name || '').trim() || 'Grupo WhatsApp'
-      const participantes = Array.isArray(meta?.participants)
-        ? meta.participants.length
+      const participantesRaw = Array.isArray(meta?.participants) ? meta.participants : []
+      const membros = participantesRaw
+        .map((participante) => {
+          const participanteJid = String(
+            participante?.phoneNumber ||
+            participante?.id ||
+            participante?.lid ||
+            ''
+          ).trim()
+          const telefone =
+            phoneFromJid(participante?.phoneNumber) ||
+            phoneFromJid(participante?.id) ||
+            phoneFromJid(participante?.lid) ||
+            null
+          if (!participanteJid && !telefone) return null
+          return {
+            jid: participanteJid || (telefone ? `${telefone}@s.whatsapp.net` : null),
+            telefone,
+            admin: participante?.admin || null,
+          }
+        })
+        .filter(Boolean)
+      const participantes = participantesRaw.length
+        ? participantesRaw.length
         : Math.max(0, Number(meta?.size || 0))
-      groups.push({ jid, id: jid, nome, subject: nome, name: nome, participantes, size: participantes })
+      groups.push({
+        jid,
+        id: jid,
+        nome,
+        subject: nome,
+        name: nome,
+        participantes,
+        size: participantes,
+        membros,
+      })
     }
 
     await atlas('', {
