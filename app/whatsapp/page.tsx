@@ -209,6 +209,9 @@ export default function WhatsAppAtendimentoPage() {
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canalFiltroInicializadoRef = useRef(false)
   const conversaAtivaIdRef = useRef<string | null>(null)
+  const carregandoConversasRef = useRef(false)
+  const recarregarConversasPendenteRef = useRef(false)
+  const refreshConversasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     try {
@@ -228,6 +231,11 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   async function carregarConversas(selecionar = true) {
+    if (carregandoConversasRef.current) {
+      recarregarConversasPendenteRef.current = true
+      return
+    }
+    carregandoConversasRef.current = true
     try {
       const headers = await headersJson()
       const resp = await fetch('/api/integracoes/whatsapp/conversas', { headers })
@@ -271,7 +279,20 @@ export default function WhatsAppAtendimentoPage() {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar atendimento.')
     } finally {
       setCarregando(false)
+      carregandoConversasRef.current = false
+      if (recarregarConversasPendenteRef.current) {
+        recarregarConversasPendenteRef.current = false
+        queueMicrotask(() => { void carregarConversas(false) })
+      }
     }
+  }
+
+  function agendarRefreshConversas(delay = 250) {
+    if (refreshConversasTimerRef.current) clearTimeout(refreshConversasTimerRef.current)
+    refreshConversasTimerRef.current = setTimeout(() => {
+      refreshConversasTimerRef.current = null
+      void carregarConversas(false)
+    }, delay)
   }
 
   function selecionarConversa(conversa: Conversa) {
@@ -351,7 +372,7 @@ export default function WhatsAppAtendimentoPage() {
       if (!resp.ok) throw new Error(json.error || 'Falha ao abrir conversa.')
       setDiretorioAberto(false)
       setAtiva(json.conversa as Conversa)
-      await carregarConversas(false)
+      agendarRefreshConversas()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao abrir conversa.')
     }
@@ -562,9 +583,18 @@ export default function WhatsAppAtendimentoPage() {
       return
     }
     const conversaId = ativa.id
-    void carregarSugestaoIA(conversaId)
-    const timer = setInterval(() => { void carregarSugestaoIA(conversaId) }, 4000)
-    return () => clearInterval(timer)
+    const atualizar = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void carregarSugestaoIA(conversaId)
+      }
+    }
+    atualizar()
+    const timer = setInterval(atualizar, 15000)
+    document.addEventListener('visibilitychange', atualizar)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizar)
+    }
   }, [ativa?.id])
 
   useEffect(() => {
@@ -603,12 +633,12 @@ export default function WhatsAppAtendimentoPage() {
     const canal = supabase
       .channel(`atendimento-whatsapp-${eu.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_conversas' }, () => {
-        void carregarConversas(false)
+        agendarRefreshConversas()
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'atendimento_mensagens' }, p => {
         const mensagem = p.new as Mensagem
         if (mensagem.conversa_id === ativa?.id) void carregarMensagens(ativa.id)
-        void carregarConversas(false)
+        agendarRefreshConversas()
       })
       .subscribe()
     return () => { void supabase.removeChannel(canal) }
@@ -748,8 +778,8 @@ export default function WhatsAppAtendimentoPage() {
       setDestinoDelegacaoId('')
       setDiasDelegacao(1)
       setMotivoDelegacao('')
-      await carregarConversas(false)
-      await carregarApoio(ativa.id)
+      agendarRefreshConversas()
+      void carregarApoio(ativa.id)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Nao foi possivel delegar a responsabilidade.')
     } finally {
@@ -770,7 +800,7 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Nao foi possivel encerrar a delegacao.')
       setDelegacaoAberta(false)
-      await carregarConversas(false)
+      agendarRefreshConversas()
       await carregarApoio(ativa.id)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Nao foi possivel encerrar a delegacao.')
@@ -862,7 +892,7 @@ export default function WhatsAppAtendimentoPage() {
       if (!registrar.ok) throw new Error(envio.error || 'Não foi possível enfileirar a mídia.')
 
       await carregarMensagens(ativa.id)
-      await carregarConversas(false)
+      agendarRefreshConversas()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.')
     } finally {
@@ -939,7 +969,7 @@ export default function WhatsAppAtendimentoPage() {
       if (!resp.ok) throw new Error(json.error || 'Nao foi possivel enviar.')
       setMensagemRespondendo(null)
       await carregarMensagens(ativa.id)
-      await carregarConversas(false)
+      agendarRefreshConversas()
     } catch (e) {
       setTexto(corpo)
       setErro(e instanceof Error ? e.message : 'Nao foi possivel enviar.')
