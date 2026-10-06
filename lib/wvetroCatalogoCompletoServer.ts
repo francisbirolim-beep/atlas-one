@@ -6,7 +6,7 @@ function norm(v: unknown) { return txt(v).normalize('NFD').replace(/[\u0300-\u03
 function foto(o: Record<string, unknown>) {
   for (const v of [o.URL, o.Url, o.url, o.Imagem, o.ImagemUrl, o.Foto, o.FotoUrl]) {
     const s = txt(v)
-    if (/^https?:\/\//i.test(s)) return s
+    if (/^https?:\/\//i.test(s) && !/\/wvetro\/?$/i.test(s)) return s
   }
   return null
 }
