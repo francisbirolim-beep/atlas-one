@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { consultarOpenCode, statusOpenCode } from '@/lib/ai/opencode'
+import { respostaFallbackContexto } from '@/lib/ai/fallbackInterno'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -102,19 +103,6 @@ export async function POST(req: NextRequest) {
     if (pergunta.length > 4000) return NextResponse.json({ error: 'Pergunta muito longa' }, { status: 400 })
 
     const openCodeStatus = await statusOpenCode()
-    if (!openCodeStatus.configurado) {
-      return NextResponse.json(
-        {
-          error: 'IA ainda não ativada: o gateway seguro do OpenCode não está disponível.',
-          codigo: 'OPENCODE_CONFIG_MISSING',
-          detalhe: {
-            baseUrl: openCodeStatus.baseUrlConfigurada,
-            autenticacao: openCodeStatus.modoAutenticacao,
-          },
-        },
-        { status: 503 },
-      )
-    }
 
     const sessionId = await validarSessaoOpenCode(
       usuario,
@@ -219,8 +207,22 @@ export async function POST(req: NextRequest) {
         prompt: `CONTEXTO ATLAS:\n${JSON.stringify(contexto)}\n\nPERGUNTA DO USUÁRIO:\n${pergunta}`,
       })
     } catch (e: any) {
-      const detalhe = String(e?.message || 'Falha ao consultar o OpenCode').slice(0, 800)
-      const modeloConfigurado = `${openCodeStatus.providerId}/${openCodeStatus.modelId}`
+      const detalhe = String(e?.message || 'Falha no motor gratuito').slice(0, 800)
+      const respostaLocal = respostaFallbackContexto({
+        pergunta,
+        area: 'Comercial',
+        contexto,
+      })
+
+      resultadoIA = {
+        sessionId: sessionId || ('local-comercial-' + Date.now()),
+        resposta: respostaLocal,
+        providerId: 'atlas-interno',
+        modelId: 'fallback-comercial',
+        rota: 'freellmapi',
+        custoEstimado: 0,
+        tentativas: [{ rota: 'gratuito-externo', ok: false, detalhe }],
+      } as any
 
       await supabaseAdmin.from('ai_interacoes').insert({
         empresa_id: usuario.empresa_id,
@@ -228,20 +230,14 @@ export async function POST(req: NextRequest) {
         usuario_id: usuario.id,
         usuario_nome: usuario.nome || null,
         pergunta,
-        resposta: detalhe,
-        modelo: modeloConfigurado,
+        resposta: respostaLocal,
+        modelo: 'atlas-interno/fallback-comercial',
         contexto_json: {
-          erro_opencode: true,
-          orquestrador: 'opencode',
-          motor: 'freellmapi',
+          fallback_interno: true,
+          erro_motor_gratuito: detalhe,
         },
-        status: 'erro',
+        status: 'ok',
       })
-
-      return NextResponse.json(
-        { error: detalhe, codigo: 'OPENCODE_REQUEST_FAILED' },
-        { status: 502 },
-      )
     }
 
     const resposta = resultadoIA.resposta
