@@ -423,7 +423,7 @@ async function direcionarConversaPorMencao(params: {
     .update({
       responsavel_id: destino.id,
       responsavel_nome: destino.nome,
-      status: 'em_atendimento',
+      status: 'aguardando',
       updated_at: agora,
     })
     .eq('id', params.conversa.id)
@@ -437,8 +437,8 @@ async function direcionarConversaPorMencao(params: {
       .update({
         responsavel_id: destino.id,
         responsavel_nome: destino.nome,
-        status: 'em_atendimento',
-        assigned_at: agora,
+        status: 'aguardando',
+        assigned_at: null,
       })
       .eq('id', params.sessaoId)
     if (sessaoError) throw sessaoError
@@ -465,14 +465,15 @@ async function garantirSessao(conversa: AtendimentoConversa) {
     .maybeSingle()
   if (aberta) return aberta
 
+  const emAtendimento = conversa.status === 'em_atendimento'
   const { data } = await supabaseAdmin.from('atendimento_sessoes').insert({
     empresa_id: conversa.empresa_id,
     conversa_id: conversa.id,
-    status: conversa.responsavel_id ? 'em_atendimento' : 'aguardando',
+    status: emAtendimento ? 'em_atendimento' : 'aguardando',
     responsavel_id: conversa.responsavel_id || null,
     responsavel_nome: conversa.responsavel_nome || null,
     setor: conversa.setor || null,
-    assigned_at: conversa.responsavel_id ? new Date().toISOString() : null,
+    assigned_at: emAtendimento ? new Date().toISOString() : null,
   }).select('*').single()
   return data
 }
@@ -527,7 +528,7 @@ async function criarOuAtualizarConversa(params: {
       responsavel_id: responsavelId,
       responsavel_nome: responsavelNome,
       setor: regra?.setor || params.config.setor_padrao || atual.setor || null,
-      status: responsavelId ? 'em_atendimento' : 'aguardando',
+      status: 'aguardando',
       updated_at: new Date().toISOString(),
     }).eq('id', atual.id).select('*').single()
     return data as AtendimentoConversa
@@ -542,7 +543,7 @@ async function criarOuAtualizarConversa(params: {
     telefone,
     contato_nome: params.contatoNome || (cliente as any)?.nome || null,
     cliente_id: (cliente as any)?.id || null,
-    status: responsavelId ? 'em_atendimento' : 'aguardando',
+    status: 'aguardando',
     responsavel_id: responsavelId,
     responsavel_nome: responsavelNome,
     setor: regra?.setor || params.config.setor_padrao || null,
@@ -598,7 +599,7 @@ export async function processarWebhookMeta(payload: any) {
         if (error) throw error
         recebidas += 1
         await supabaseAdmin.from('atendimento_conversas').update({
-          status: conversaRoteada.responsavel_id ? 'em_atendimento' : 'aguardando',
+          status: 'aguardando',
           ultimo_preview: texto,
           nao_lidas: (conversaRoteada.nao_lidas || 0) + 1,
           ultima_mensagem_em: dataMeta || new Date().toISOString(),
@@ -794,7 +795,7 @@ export async function registrarEntradaGateway(
     nao_lidas: (conversaRoteada.nao_lidas || 0) + 1,
     ultima_mensagem_em: agora,
     ultima_entrada_em: agora,
-    status: conversaRoteada.responsavel_id ? 'em_atendimento' : 'aguardando',
+    status: 'aguardando',
     updated_at: new Date().toISOString(),
   }).eq('id', conversa.id)
 
@@ -1543,6 +1544,26 @@ export async function marcarConversaComoLida(conversaId: string, usuario: Usuari
     .eq('id', conversaId)
     .eq('empresa_id', usuario.empresa_id)
   if (error) throw error
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: 'conversa_baixada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: { nao_lidas_antes: Number(conversa.nao_lidas || 0) },
+  })
+}
+
+export async function registrarVisualizacaoConversa(conversaId: string, usuario: UsuarioTenant) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: 'conversa_visualizada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+  })
 }
 
 export async function definirAcompanhamentoConversa(
