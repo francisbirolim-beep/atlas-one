@@ -515,6 +515,16 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       }
       const existente = ctx.existentes.get(numeroW)
       if (existente) {
+        if (clienteAlvo?.id && existente.cliente_id && existente.cliente_id !== clienteAlvo.id) {
+          resultados.push({
+            id: existente.id,
+            numeroWvetro: numeroW,
+            acao: 'bloqueado_outro_cliente',
+            clienteWvetro: nome,
+            clienteAlvo: clienteAlvo.nome,
+          })
+          continue
+        }
         const anterior = obj(existente.wvetro_fluxo)
         const mesmoPayload = txt(anterior?.payload_hash) === registro.payloadHash
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
