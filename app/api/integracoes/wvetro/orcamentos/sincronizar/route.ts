@@ -398,7 +398,7 @@ async function garantirCliente(
   return { cliente, criado: true, pendencia: incompleto }
 }
 
-async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, diasPadrao = 7) {
+export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, diasPadrao = 7) {
   const usuario = usuarioForcado || await autenticarMasterWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 401 })
   const body = await req.json().catch(() => ({})) as Record<string, any>
@@ -501,6 +501,9 @@ async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, dia
           resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'sem_alteracao', cliente: nome, itens: itens.length })
           continue
         }
+        // REGRA DE PRESERVAÇÃO: a sincronização W.Vetro atualiza somente os campos
+        // que pertencem ao orçamento técnico/comercial importado. Anexos, fotos,
+        // observações, histórico e demais dados manuais do card NÃO entram neste patch.
         const patch: any = {
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
@@ -600,6 +603,7 @@ export async function GET(req: NextRequest) {
     .select('id,numero,cliente_id,cliente_nome,valor_estimado,updated_at,wvetro_fluxo,itens')
     .eq('empresa_id', usuario.empresa_id)
     .contains('wvetro_fluxo', { origem: 'wvetro_api' })
+    .neq('modo_entrada', 'wvetro_api_vinculado')
     .order('updated_at', { ascending: false })
     .limit(500)
   if (clienteId) query = query.eq('cliente_id', clienteId)
