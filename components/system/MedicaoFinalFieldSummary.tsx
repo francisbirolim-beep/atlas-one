@@ -118,7 +118,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     if (!resultado.ok) setErro(resultado.mensagem || 'Não foi possível concluir a ação.')
     else {
       setMensagem(sucesso)
-      await carregar()
+      void carregar()
     }
   }
 
@@ -132,7 +132,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     if (!ok) setErro('Não foi possível alterar o responsável.')
     else {
       setMensagem(responsavel ? `Responsável definido: ${responsavel.nome}.` : 'Responsável removido.')
-      await carregar()
+      void carregar()
     }
   }
 
@@ -151,7 +151,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
 
     if (!resultado.ok) {
       setErro('Não foi possível separar todas as unidades. Confira a conexão e tente novamente.')
-      await carregar()
+      void carregar()
       return
     }
 
@@ -159,8 +159,8 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     if (resultado.separadas > 0) partes.push(`${resultado.separadas} peças preparadas individualmente`)
     if (resultado.bloqueadas > 0) partes.push(`${resultado.bloqueadas} item(ns) já medido(s) mantido(s) para revisão`)
     setMensagem(partes.length > 0 ? partes.join(' · ') : 'Nenhum item precisava ser separado.')
-    await carregar()
-    window.location.reload()
+    void carregar()
+    window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
   }
 
   async function adicionarPendencia() {
@@ -189,7 +189,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     if (!ok) setErro('Não foi possível resolver a pendência.')
     else {
       setMensagem('Pendência resolvida.')
-      await carregar()
+      void carregar()
     }
   }
 
