@@ -21,6 +21,7 @@ type SnapshotImagem = {
   url_origem: string | null
   imagem_atlas_url: string | null
   imagem_status: string | null
+  imagem_erro: string | null
 }
 
 type ResultadoImagem = {
@@ -60,7 +61,7 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
 
   if (snap.imagem_status === 'preservada_atlas') return { ...vazio, preservada: 1 }
   if (snap.imagem_status === 'sem_imagem') {
-    const motivo = String((snap as any).imagem_erro || '')
+    const motivo = String(snap.imagem_erro || '')
     if (motivo.startsWith('indisponivel_origem:')) return { ...vazio, indisponivel: 1 }
     if (motivo.startsWith('url_invalida_origem:')) return { ...vazio, invalida: 1 }
     return { ...vazio, semImagem: 1 }
@@ -156,7 +157,7 @@ export async function processarPendenciasImagensWVetro(limite = 15) {
 
   const { data, error } = await supabaseAdmin
     .from('wvetro_produtos_snapshot')
-    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status')
+    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status,imagem_erro')
     .eq('imagem_status', 'pendente')
     .not('produto_atlas_id', 'is', null)
     .not('url_origem', 'is', null)
@@ -201,7 +202,7 @@ export async function processarLoteImagensWVetro(offset: number, limite = 10) {
 
   const { data, error } = await supabaseAdmin
     .from('wvetro_produtos_snapshot')
-    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status')
+    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status,imagem_erro')
     .not('produto_atlas_id', 'is', null)
     .not('url_origem', 'is', null)
     .order('tipo')
