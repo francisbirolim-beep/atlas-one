@@ -128,11 +128,129 @@ async function desenharFotos(doc: jsPDF, urls: { url: string; legenda: string }[
   return y
 }
 
+
+async function gerarPdfContramarcos(
+  medicao: MedicaoFinal,
+  itens: MedicaoItem[],
+  identificacao: IdentificacaoPdf,
+  salvar: boolean,
+) {
+  const concluidos = itens.filter(item =>
+    item.medido &&
+    Number(item.producao_largura_mm) > 0 &&
+    Number(item.producao_altura_mm) > 0
+  )
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  let y = 14
+
+  const cabecalho = () => {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.text('ATLAS ONE — MEDIÇÃO DE CONTRAMARCO', 15, y)
+    y += 7
+    doc.setFontSize(8.5)
+    doc.text(`Cliente: ${texto(identificacao.cliente_nome || medicao.cliente_nome)}`, 15, y)
+    doc.text(`Obra: ${texto(identificacao.nome_obra)}`, 78, y)
+    doc.text(`Orçamento: ${identificacao.numero_orcamento ? 'Nº ' + identificacao.numero_orcamento : '-'}`, 150, y)
+    y += 7
+    doc.setDrawColor(220, 224, 228)
+    doc.line(15, y, 195, y)
+    y += 6
+  }
+
+  cabecalho()
+
+  for (let index = 0; index < concluidos.length; index++) {
+    const item = concluidos[index]
+    if (y > 245) {
+      doc.addPage()
+      y = 14
+      cabecalho()
+    }
+
+    const vaoL = Number(item.vao_largura_mm || 0)
+    const vaoA = Number(item.vao_altura_mm || 0)
+    const folgaL = Number(item.folga_largura_mm || 0)
+    const folgaA = Number(item.folga_altura_mm || 0)
+    const prodL = Number(item.producao_largura_mm || 0)
+    const prodA = Number(item.producao_altura_mm || 0)
+
+    doc.setDrawColor(205, 213, 221)
+    doc.roundedRect(15, y, 180, 49, 2, 2)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.5)
+    const titulo = `${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}${item.quantidade > 1 ? ` · ${item.quantidade} un.` : ''}`
+    doc.text(doc.splitTextToSize(titulo, 172), 19, y + 6)
+
+    doc.setFillColor(248, 250, 252)
+    doc.rect(19, y + 12, 78, 24, 'F')
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.text('MEDIDA DO VÃO', 22, y + 17)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Largura: ${texto(vaoL)} mm`, 22, y + 23)
+    doc.text(`Folga largura: ${texto(folgaL)} mm`, 22, y + 28)
+    doc.text(`Altura: ${texto(vaoA)} mm`, 22, y + 33)
+
+    doc.setFillColor(234, 247, 240)
+    doc.rect(101, y + 12, 90, 24, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.text('MEDIDA PARA PRODUÇÃO', 104, y + 17)
+    doc.setFontSize(13)
+    doc.text(`${prodL} × ${prodA} mm`, 104, y + 26)
+    doc.setFontSize(6.5)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Folga altura: ${texto(folgaA)} mm`, 104, y + 33)
+
+    doc.setFontSize(6.5)
+    doc.setTextColor(70, 78, 88)
+    const formula = `L: ${vaoL} - ${folgaL} = ${prodL} mm   |   A: ${vaoA} - ${folgaA} = ${prodA} mm`
+    doc.text(formula, 19, y + 41)
+    if (item.observacoes_medicao) {
+      const obs = doc.splitTextToSize(`Obs.: ${item.observacoes_medicao}`, 170)
+      doc.text(obs.slice(0, 2), 19, y + 46)
+    }
+    doc.setTextColor(0, 0, 0)
+
+    y += 55
+  }
+
+  if (!concluidos.length) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text('Nenhum contramarco concluído para emissão.', 15, y)
+    y += 9
+  }
+
+  if (y > 265) {
+    doc.addPage()
+    y = 18
+  }
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.text('RESUMO PARA PRODUÇÃO', 15, y)
+  y += 5
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  doc.text(`${concluidos.length} posição(ões) de contramarco pronta(s) para produção.`, 15, y)
+  y += 5
+  doc.setFontSize(6)
+  doc.text(`Gerado pelo Atlas One em ${new Date().toLocaleString('pt-BR')}`, 15, y)
+
+  if (salvar) {
+    doc.save(`contramarcos-${medicao.cliente_nome.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || medicao.id}.pdf`)
+  }
+  return doc
+}
+
 export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[], salvar = true) {
-  const [identificacao, dados] = await Promise.all([
-    identificacaoPdf(medicao),
-    carregarChecklistMedicaoV2(medicao.id).catch(() => ({ itens: [], campos: [], respostas: [], fotos: [] })),
-  ])
+  const identificacao = await identificacaoPdf(medicao)
+  if (medicao.tipo_medicao === 'contramarco') {
+    return gerarPdfContramarcos(medicao, itens, identificacao, salvar)
+  }
+  const dados = await carregarChecklistMedicaoV2(medicao.id)
+    .catch(() => ({ itens: [], campos: [], respostas: [], fotos: [] }))
   const itensConcluidos = itens.filter(item => statusItemChecklistV2(item, dados.campos, dados.respostas) === 'concluida')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   let y = 14
