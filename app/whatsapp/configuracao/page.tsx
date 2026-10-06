@@ -38,6 +38,13 @@ type GrupoAutomacao = {
   criarTarefa: boolean
   janelaAgregacaoMinutos: number
 }
+type PermissaoGrupo = {
+  id?: string
+  grupo_id: string
+  usuario_id: string
+  nivel: 'sem_acesso' | 'acompanhar' | 'atender' | 'gerenciar'
+  responsavel_principal: boolean
+}
 type Regra = {
   nome: string
   prioridade: number
@@ -61,6 +68,7 @@ export default function ConfiguracaoWhatsAppPage() {
   const [permissoes,setPermissoes]=useState<PermissaoCanal[]>([])
   const [grupos,setGrupos]=useState<GrupoWhatsApp[]>([])
   const [gruposAutomacao,setGruposAutomacao]=useState<GrupoAutomacao[]>([])
+  const [gruposPermissoes,setGruposPermissoes]=useState<PermissaoGrupo[]>([])
   const [numero,setNumero]=useState('5517996355667')
   const [setorPadrao,setSetorPadrao]=useState('')
   const [usuarioPadraoId,setUsuarioPadraoId]=useState('')
@@ -80,6 +88,7 @@ export default function ConfiguracaoWhatsAppPage() {
     setUsuarios(json.usuarios||[])
     setCanais(json.canais||[])
     setPermissoes(json.permissoes||[])
+    setGruposPermissoes(json.gruposPermissoes||[])
     const gruposRecebidos:GrupoWhatsApp[]=json.grupos||[]
     const automacoesRecebidas:any[]=json.gruposAutomacao||[]
     const automacaoPorGrupo=new Map(automacoesRecebidas.map(a=>[a.grupo_id,a]))
@@ -117,6 +126,43 @@ export default function ConfiguracaoWhatsAppPage() {
 
   function alterarGrupo(grupoId:string,campo:keyof GrupoAutomacao,valor:string|number|boolean){
     setGruposAutomacao(gs=>gs.map(g=>g.grupoId===grupoId?{...g,[campo]:valor}:g))
+  }
+
+  function permissaoDoGrupo(grupoId:string,usuarioId:string){
+    return gruposPermissoes.find(p=>p.grupo_id===grupoId&&p.usuario_id===usuarioId)||null
+  }
+
+  async function salvarPermissaoGrupo(
+    grupoId:string,
+    usuarioId:string,
+    nivel:'sem_acesso'|'acompanhar'|'atender'|'gerenciar'|'herdar',
+    responsavelPrincipal=false,
+  ){
+    setErro('')
+    try{
+      const headers=await authHeaders()
+      if(nivel==='herdar'){
+        const resp=await fetch(`/api/integracoes/whatsapp/grupos/permissoes?grupoId=${encodeURIComponent(grupoId)}&usuarioId=${encodeURIComponent(usuarioId)}`,{
+          method:'DELETE',headers,
+        })
+        const json=await resp.json()
+        if(!resp.ok)throw new Error(json.error||'Nao foi possivel remover a regra do grupo.')
+        setGruposPermissoes(lista=>lista.filter(p=>!(p.grupo_id===grupoId&&p.usuario_id===usuarioId)))
+        return
+      }
+      const resp=await fetch('/api/integracoes/whatsapp/grupos/permissoes',{
+        method:'PUT',headers,
+        body:JSON.stringify({grupoId,usuarioId,nivel,responsavelPrincipal}),
+      })
+      const json=await resp.json()
+      if(!resp.ok)throw new Error(json.error||'Nao foi possivel salvar a regra do grupo.')
+      setGruposPermissoes(lista=>[
+        ...lista.filter(p=>!(p.grupo_id===grupoId&&p.usuario_id===usuarioId) && !(responsavelPrincipal&&p.grupo_id===grupoId&&p.responsavel_principal)),
+        json.permissao,
+      ])
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Nao foi possivel salvar a permissao do grupo.')
+    }
   }
 
   function permissaoDoUsuario(canalId:string,usuarioId:string):PermissaoCanal {
@@ -352,7 +398,7 @@ export default function ConfiguracaoWhatsAppPage() {
           <div className="mb-3">
             <h2 className="font-bold text-slate-900">Grupos do WhatsApp e automações</h2>
             <p className="text-xs text-slate-500">
-              Os grupos são sincronizados por número conectado. Marque somente os grupos operacionais que devem gerar orçamento no Atlas.
+              Defina responsável, automações e quem pode ver ou atuar em cada grupo. "Só acompanhar" permite leitura sem responder, reagir, transferir ou finalizar.
             </p>
           </div>
           <div className="space-y-3">
@@ -364,46 +410,86 @@ export default function ConfiguracaoWhatsAppPage() {
             {grupos.map(g=>{
               const auto=gruposAutomacao.find(a=>a.grupoId===g.id)
               const canal=canais.find(c=>c.id===g.whatsapp_canal_id)
-              return <div key={g.id} className="grid gap-4 rounded-2xl border p-4 md:grid-cols-[minmax(0,1.4fr)_180px_210px_120px] md:items-center">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-50 text-violet-700"><Users size={17}/></span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-900">{g.nome}</p>
-                      <p className="truncate text-[11px] text-slate-500">
-                        {canal?.nome||'WhatsApp'}{canal?.principal?' · Principal':''} · {g.participantes||0} participantes
-                      </p>
+              return <div key={g.id} className="overflow-hidden rounded-2xl border">
+                <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,1.4fr)_180px_210px_120px] md:items-center">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-50 text-violet-700"><Users size={17}/></span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-slate-900">{g.nome}</p>
+                        <p className="truncate text-[11px] text-slate-500">
+                          {canal?.nome||'WhatsApp'}{canal?.principal?' · Principal':''} · {g.participantes||0} participantes
+                        </p>
+                      </div>
                     </div>
                   </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <input type="checkbox" checked={auto?.ativo===true}
+                      onChange={e=>alterarGrupo(g.id,'ativo',e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"/>
+                    Automatizar orçamento
+                  </label>
+                  <label className="text-xs font-semibold text-slate-500">
+                    Responsável da automação
+                    <select value={auto?.responsavelId||''} disabled={!auto?.ativo}
+                      onChange={e=>{
+                        alterarGrupo(g.id,'responsavelId',e.target.value)
+                        alterarGrupo(g.id,'criarTarefa',Boolean(e.target.value))
+                      }}
+                      className="mt-1 w-full rounded-lg border bg-white px-2 py-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:text-slate-400">
+                      <option value="">Só criar rascunho no Kanban</option>
+                      {usuarios.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-500">
+                    Agrupar por
+                    <div className="mt-1 flex items-center gap-1">
+                      <input type="number" min={1} max={120} value={auto?.janelaAgregacaoMinutos||1}
+                        disabled={!auto?.ativo}
+                        onChange={e=>alterarGrupo(g.id,'janelaAgregacaoMinutos',Number(e.target.value)||1)}
+                        className="w-16 rounded-lg border px-2 py-2 text-sm font-normal disabled:bg-slate-50"/>
+                      <span className="text-[11px] text-slate-500">min</span>
+                    </div>
+                  </label>
                 </div>
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                  <input type="checkbox" checked={auto?.ativo===true}
-                    onChange={e=>alterarGrupo(g.id,'ativo',e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300"/>
-                  Automatizar orçamento
-                </label>
-                <label className="text-xs font-semibold text-slate-500">
-                  Responsável
-                  <select value={auto?.responsavelId||''} disabled={!auto?.ativo}
-                    onChange={e=>{
-                      alterarGrupo(g.id,'responsavelId',e.target.value)
-                      alterarGrupo(g.id,'criarTarefa',Boolean(e.target.value))
-                    }}
-                    className="mt-1 w-full rounded-lg border bg-white px-2 py-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:text-slate-400">
-                    <option value="">Só criar rascunho no Kanban</option>
-                    {usuarios.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
-                  </select>
-                </label>
-                <label className="text-xs font-semibold text-slate-500">
-                  Agrupar por
-                  <div className="mt-1 flex items-center gap-1">
-                    <input type="number" min={1} max={120} value={auto?.janelaAgregacaoMinutos||1}
-                      disabled={!auto?.ativo}
-                      onChange={e=>alterarGrupo(g.id,'janelaAgregacaoMinutos',Number(e.target.value)||1)}
-                      className="w-16 rounded-lg border px-2 py-2 text-sm font-normal disabled:bg-slate-50"/>
-                    <span className="text-[11px] text-slate-500">min</span>
+
+                <details className="border-t bg-slate-50/70">
+                  <summary className="cursor-pointer px-4 py-3 text-xs font-bold text-slate-700">
+                    Responsável e permissões deste grupo
+                  </summary>
+                  <div className="divide-y border-t bg-white">
+                    {usuarios.filter(u=>u.role!=='master').map(u=>{
+                      const pg=permissaoDoGrupo(g.id,u.id)
+                      const nivel=(pg?.nivel||'herdar') as 'herdar'|'sem_acesso'|'acompanhar'|'atender'|'gerenciar'
+                      return <div key={u.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(130px,1fr)_210px_170px] md:items-center">
+                        <div>
+                          <b className="block text-sm text-slate-800">{u.nome}</b>
+                          <span className="text-[10px] text-slate-400">
+                            {pg?.responsavel_principal?'Responsável principal do grupo':'Permissão específica do grupo'}
+                          </span>
+                        </div>
+                        <select value={nivel}
+                          onChange={e=>void salvarPermissaoGrupo(g.id,u.id,e.target.value as any,false)}
+                          className="rounded-lg border bg-white px-2 py-2 text-xs font-semibold text-slate-700">
+                          <option value="herdar">Herdar permissão do número</option>
+                          <option value="sem_acesso">Sem acesso</option>
+                          <option value="acompanhar">Só acompanhar</option>
+                          <option value="atender">Pode atender</option>
+                          <option value="gerenciar">Pode gerenciar</option>
+                        </select>
+                        <button type="button"
+                          disabled={nivel==='sem_acesso'||nivel==='acompanhar'||nivel==='herdar'}
+                          onClick={()=>void salvarPermissaoGrupo(g.id,u.id,nivel==='gerenciar'?'gerenciar':'atender',true)}
+                          className={`rounded-lg border px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-35 ${pg?.responsavel_principal?'border-emerald-300 bg-emerald-50 text-emerald-800':'bg-white text-slate-600'}`}>
+                          {pg?.responsavel_principal?'✓ Responsável principal':'Definir responsável'}
+                        </button>
+                      </div>
+                    })}
                   </div>
-                </label>
+                  <div className="border-t bg-blue-50 px-4 py-3 text-[11px] leading-relaxed text-blue-800">
+                    <b>Só acompanhar:</b> lê a conversa sem responder ou alterar. <b>Pode atender:</b> responde, reage e finaliza quando assumir. <b>Pode gerenciar:</b> também transfere o atendimento.
+                  </div>
+                </details>
               </div>
             })}
           </div>
