@@ -114,7 +114,7 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
       const urlAnterior = txt(estadoAnterior?.url_origem) || null
       const urlMudou = Boolean(estadoAnterior) && urlAnterior !== urlOrigem
 
-      let imagemStatus = estadoAnterior?.imagem_status || (urlOrigem ? 'pendente' : 'sem_imagem_origem')
+      let imagemStatus = estadoAnterior?.imagem_status || (urlOrigem ? 'pendente' : 'sem_imagem')
       let imagemErro = estadoAnterior?.imagem_erro || null
       let imagemAtlasUrl = estadoAnterior?.imagem_atlas_url || null
 
@@ -127,8 +127,8 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
           || imagemStatus === 'copiada'
           || imagemStatus === 'preservada_atlas'
         if (!possuiImagemAtlas) {
-          imagemStatus = 'sem_imagem_origem'
-          imagemErro = null
+          imagemStatus = 'sem_imagem'
+          imagemErro = 'sem_imagem_origem'
         }
       }
 

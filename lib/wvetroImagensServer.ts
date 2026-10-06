@@ -21,6 +21,7 @@ type SnapshotImagem = {
   url_origem: string | null
   imagem_atlas_url: string | null
   imagem_status: string | null
+  imagem_erro: string | null
 }
 
 type ResultadoImagem = {
@@ -59,13 +60,16 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
   if (snap.imagem_status === 'copiada' && snap.imagem_atlas_url) return { ...vazio, copiada: 1 }
 
   if (snap.imagem_status === 'preservada_atlas') return { ...vazio, preservada: 1 }
-  if (snap.imagem_status === 'indisponivel_origem') return { ...vazio, indisponivel: 1 }
-  if (snap.imagem_status === 'url_invalida_origem') return { ...vazio, invalida: 1 }
-  if (snap.imagem_status === 'sem_imagem_origem') return { ...vazio, semImagem: 1 }
+  if (snap.imagem_status === 'sem_imagem') {
+    const motivo = String(snap.imagem_erro || '')
+    if (motivo.startsWith('indisponivel_origem:')) return { ...vazio, indisponivel: 1 }
+    if (motivo.startsWith('url_invalida_origem:')) return { ...vazio, invalida: 1 }
+    return { ...vazio, semImagem: 1 }
+  }
 
   const origemBruta = String(snap.url_origem).trim()
   if (urlRaizSemImagem(origemBruta)) {
-    await atualizarStatusImagem(snap.id, 'sem_imagem_origem', null)
+    await atualizarStatusImagem(snap.id, 'sem_imagem', 'sem_imagem_origem')
     return { ...vazio, semImagem: 1 }
   }
 
@@ -87,11 +91,11 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
     if (!resp.ok) {
       const mensagem = `HTTP ${resp.status}`
       if (resp.status === 404 || resp.status === 410) {
-        await atualizarStatusImagem(snap.id, 'indisponivel_origem', mensagem)
+        await atualizarStatusImagem(snap.id, 'sem_imagem', `indisponivel_origem: ${mensagem}`)
         return { ...vazio, indisponivel: 1 }
       }
       if (resp.status === 400 || resp.status === 422) {
-        await atualizarStatusImagem(snap.id, 'url_invalida_origem', mensagem)
+        await atualizarStatusImagem(snap.id, 'sem_imagem', `url_invalida_origem: ${mensagem}`)
         return { ...vazio, invalida: 1 }
       }
       throw new Error(mensagem)
@@ -101,15 +105,15 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
     if (!tipoConteudo.toLowerCase().startsWith('image/')) {
       await atualizarStatusImagem(
         snap.id,
-        'indisponivel_origem',
-        `Conteúdo não é imagem (${tipoConteudo || 'sem content-type'})`,
+        'sem_imagem',
+        `indisponivel_origem: Conteúdo não é imagem (${tipoConteudo || 'sem content-type'})`,
       )
       return { ...vazio, indisponivel: 1 }
     }
 
     const buffer = await resp.arrayBuffer()
     if (buffer.byteLength === 0) {
-      await atualizarStatusImagem(snap.id, 'indisponivel_origem', 'Imagem vazia')
+      await atualizarStatusImagem(snap.id, 'sem_imagem', 'indisponivel_origem: Imagem vazia')
       return { ...vazio, indisponivel: 1 }
     }
     if (buffer.byteLength > 12 * 1024 * 1024) throw new Error('Imagem acima de 12 MB')
@@ -153,7 +157,7 @@ export async function processarPendenciasImagensWVetro(limite = 15) {
 
   const { data, error } = await supabaseAdmin
     .from('wvetro_produtos_snapshot')
-    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status')
+    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status,imagem_erro')
     .eq('imagem_status', 'pendente')
     .not('produto_atlas_id', 'is', null)
     .not('url_origem', 'is', null)
@@ -198,7 +202,7 @@ export async function processarLoteImagensWVetro(offset: number, limite = 10) {
 
   const { data, error } = await supabaseAdmin
     .from('wvetro_produtos_snapshot')
-    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status')
+    .select('id,tipo,codigo,produto_atlas_id,url_origem,imagem_atlas_url,imagem_status,imagem_erro')
     .not('produto_atlas_id', 'is', null)
     .not('url_origem', 'is', null)
     .order('tipo')
