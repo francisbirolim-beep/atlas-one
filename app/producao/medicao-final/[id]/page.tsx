@@ -594,6 +594,7 @@ export default function DetalheMedicaoFinal() {
         {itens.length === 0 ? (
           <div className="text-center py-10 px-4 text-slate-400 text-sm bg-white rounded-2xl border border-slate-200 space-y-3">
             <p>Nenhuma tipologia na lista ainda.</p>
+            <p className="text-xs text-slate-500">Use “Adicionar tipologia” acima para cadastrar as posições que serão medidas.</p>
             {master && (
               <button
                 onClick={importarItensDoPdf}
@@ -627,6 +628,14 @@ export default function DetalheMedicaoFinal() {
                     )}
                   </div>
                   {item.descricao && <p className="text-xs text-slate-500 mt-0.5">{item.descricao}</p>}
+                  {ehContramarco && item.medido && item.producao_largura_mm && item.producao_altura_mm && (
+                    <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                      <b>Produção: {item.producao_largura_mm} × {item.producao_altura_mm} mm</b>
+                      <span className="block mt-0.5">
+                        Vão {item.vao_largura_mm} × {item.vao_altura_mm} mm · Folga {item.folga_largura_mm ?? 0} / {item.folga_altura_mm ?? 0} mm
+                      </span>
+                    </div>
+                  )}
                   {item.medido && item.medido_por_nome && (
                     <p className="text-xs text-slate-400 mt-1">
                       por {item.medido_por_nome}
@@ -796,6 +805,96 @@ export default function DetalheMedicaoFinal() {
               </button>
             </div>
 
+            {ehContramarco ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-bold text-amber-900">Medida simples do vão</p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    Informe uma largura e uma altura do vão. A folga é descontada automaticamente para chegar na medida de produção do contramarco.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Largura</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500">Largura do vão (mm)</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={vaoLargura}
+                        onChange={e => setVaoLargura(e.target.value)}
+                        placeholder="Ex.: 1000"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500">Folga total (mm)</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        value={folgaLargura}
+                        onChange={e => setFolgaLargura(e.target.value)}
+                        placeholder="Ex.: 20"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3">
+                    <p className="text-xs font-medium text-emerald-700">Largura para produzir</p>
+                    <p className="mt-0.5 text-2xl font-bold text-emerald-800">{producaoLargura > 0 ? `${producaoLargura} mm` : '—'}</p>
+                    {vaoLargura && folgaLargura !== '' && (
+                      <p className="mt-1 text-xs text-emerald-700">{vaoLargura} − {folgaLargura || '0'} = {producaoLargura || 0} mm</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Altura</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500">Altura do vão (mm)</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={vaoAltura}
+                        onChange={e => setVaoAltura(e.target.value)}
+                        placeholder="Ex.: 2100"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500">Folga total (mm)</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        value={folgaAltura}
+                        onChange={e => setFolgaAltura(e.target.value)}
+                        placeholder="Ex.: 20"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3">
+                    <p className="text-xs font-medium text-emerald-700">Altura para produzir</p>
+                    <p className="mt-0.5 text-2xl font-bold text-emerald-800">{producaoAltura > 0 ? `${producaoAltura} mm` : '—'}</p>
+                    {vaoAltura && folgaAltura !== '' && (
+                      <p className="mt-1 text-xs text-emerald-700">{vaoAltura} − {folgaAltura || '0'} = {producaoAltura || 0} mm</p>
+                    )}
+                  </div>
+                </div>
+
+                {producaoLargura > 0 && producaoAltura > 0 && (
+                  <div className="rounded-2xl border-2 border-brand-navy bg-brand-navyLight p-4 text-center">
+                    <p className="text-xs font-bold uppercase tracking-wide text-brand-navy">Medida final para fabricar</p>
+                    <p className="mt-1 text-3xl font-black text-brand-navy">{producaoLargura} × {producaoAltura} mm</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
             {/* Larguras */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -941,6 +1040,10 @@ export default function DetalheMedicaoFinal() {
                 </p>
               )}
             </div>
+
+
+              </>
+            )}
 
             {/* Informações universais da Medida Final */}
             <div className="space-y-3 border-t border-slate-100 pt-3">
