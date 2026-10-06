@@ -10,6 +10,7 @@ import {
   sincronizarCustosProdutosWVetro,
 } from '@/lib/wvetroBaseTecnicaServer'
 import { sincronizarLinhasApiWVetro } from '@/lib/wvetroAuditoriaServer'
+import { processarPendenciasImagensWVetro } from '@/lib/wvetroImagensServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -29,12 +30,42 @@ function dataLocal(offsetDias = 0) {
   return valor.year + '-' + valor.month + '-' + valor.day
 }
 
+async function processarFilaImagensAte(deadlineMs: number) {
+  const lotes: Array<{
+    processados: number
+    copiadas: number
+    preservadas: number
+    erros: number
+    restantes: number
+  }> = []
+
+  // O plano Hobby permite cron diário. Consumimos vários lotes na mesma execução,
+  // mas preservamos uma margem para a função terminar e responder antes de 300 s.
+  for (let i = 0; i < 4; i += 1) {
+    if (Date.now() >= deadlineMs - 20_000) break
+    const lote = await processarPendenciasImagensWVetro(30)
+    lotes.push(lote)
+    if (lote.processados === 0 || lote.restantes === 0) break
+  }
+
+  return {
+    lotes: lotes.length,
+    processados: lotes.reduce((n, l) => n + l.processados, 0),
+    copiadas: lotes.reduce((n, l) => n + l.copiadas, 0),
+    preservadas: lotes.reduce((n, l) => n + l.preservadas, 0),
+    erros: lotes.reduce((n, l) => n + l.erros, 0),
+    restantes: lotes.length ? lotes[lotes.length - 1].restantes : null,
+  }
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await autenticarSchedulerWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Scheduler não autorizado.' }, { status: 401 })
 
+  const inicioExecucao = Date.now()
   const hoje = dataLocal(0)
   const ontem = dataLocal(-1)
+
   try {
     // Antes de observar os orçamentos do dia, atualiza os catálogos completos.
     // Assim novas linhas, perfis, acessórios e tipologias do W.Vetro não ficam
@@ -56,6 +87,19 @@ export async function GET(req: NextRequest) {
     const custos = await sincronizarCustosProdutosWVetro()
     const resumo = await resumoBaseTecnicaWVetro()
 
+    // Imagens são uma etapa auxiliar: falha de uma URL não pode interromper
+    // catálogo, histórico, custos ou materialização de tipologias.
+    const imagens = await processarFilaImagensAte(inicioExecucao + 270_000)
+      .catch((e) => ({
+        lotes: 0,
+        processados: 0,
+        copiadas: 0,
+        preservadas: 0,
+        erros: 0,
+        restantes: null,
+        erro: e instanceof Error ? e.message : 'Falha ao processar fila de imagens.',
+      }))
+
     const catalogos = { linhas, perfis, acessorios, esquadrias }
 
     await supabaseAdmin.from('agente_memorias').insert({
@@ -63,7 +107,7 @@ export async function GET(req: NextRequest) {
       usuario_id: usuario.id,
       chave: 'atlas_operacional:v1:wvetro',
       valor: JSON.stringify({
-        versao: 2,
+        versao: 3,
         dominio: 'wvetro',
         tipo: 'observacao_tecnica_diaria',
         periodo: { inicio: ontem, fim: hoje },
@@ -72,6 +116,7 @@ export async function GET(req: NextRequest) {
         tipologias,
         mapeamento,
         custos,
+        imagens,
         resumo,
         evidencia: 'observado',
         registrado_em: new Date().toISOString(),
@@ -86,6 +131,7 @@ export async function GET(req: NextRequest) {
       tipologias,
       mapeamento,
       custos,
+      imagens,
       resumo,
       seguranca: {
         fonte: 'W.Vetro',
