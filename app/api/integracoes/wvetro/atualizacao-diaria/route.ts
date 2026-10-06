@@ -36,6 +36,9 @@ async function processarFilaImagensAte(deadlineMs: number) {
     copiadas: number
     preservadas: number
     erros: number
+    indisponiveis: number
+    invalidas: number
+    semImagem: number
     restantes: number
   }> = []
 
@@ -54,6 +57,9 @@ async function processarFilaImagensAte(deadlineMs: number) {
     copiadas: lotes.reduce((n, l) => n + l.copiadas, 0),
     preservadas: lotes.reduce((n, l) => n + l.preservadas, 0),
     erros: lotes.reduce((n, l) => n + l.erros, 0),
+    indisponiveis: lotes.reduce((n, l) => n + l.indisponiveis, 0),
+    invalidas: lotes.reduce((n, l) => n + l.invalidas, 0),
+    semImagem: lotes.reduce((n, l) => n + l.semImagem, 0),
     restantes: lotes.length ? lotes[lotes.length - 1].restantes : null,
   }
 }
@@ -96,6 +102,9 @@ export async function GET(req: NextRequest) {
         copiadas: 0,
         preservadas: 0,
         erros: 0,
+        indisponiveis: 0,
+        invalidas: 0,
+        semImagem: 0,
         restantes: null,
         erro: e instanceof Error ? e.message : 'Falha ao processar fila de imagens.',
       }))
