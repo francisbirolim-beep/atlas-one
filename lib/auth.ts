@@ -88,11 +88,33 @@ function salvarUsuarioOffline(usuario: Usuario) {
   try { window.localStorage.setItem(CHAVE_USUARIO_OFFLINE, JSON.stringify(usuario)) } catch {}
 }
 
+export async function sessaoAtualValida() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const expiraEmMs = Number(session?.expires_at || 0) * 1000
+    const aindaValida = Boolean(session?.access_token && (!expiraEmMs || expiraEmMs - Date.now() > 60_000))
+    if (session && aindaValida) return session
+
+    // Se existe refresh token, renova antes de qualquer chamada protegida.
+    if (session?.refresh_token) {
+      const { data, error } = await supabase.auth.refreshSession({ refresh_token: session.refresh_token })
+      if (!error && data.session?.access_token) return data.session
+    }
+
+    // refreshSession sem argumento também recupera a sessão persistida quando disponível.
+    const { data, error } = await supabase.auth.refreshSession()
+    if (!error && data.session?.access_token) return data.session
+    return null
+  } catch {
+    return null
+  }
+}
+
 export async function usuarioAtual(): Promise<Usuario | null> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return usuarioCacheLocal()
 
   try {
-    const { data: { session } } = await supabase.auth.getSession()
+    const session = await sessaoAtualValida()
     if (!session) return null
     const { data } = await supabase
       .from('usuarios')
@@ -106,13 +128,11 @@ export async function usuarioAtual(): Promise<Usuario | null> {
     const cache = usuarioCacheLocal()
     return cache?.id === session.user.id ? cache : null
   } catch {
-    const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } } as any))
-    const cache = usuarioCacheLocal()
-    return session?.user?.id && cache?.id === session.user.id ? cache : null
+    return null
   }
 }
 
 export async function tokenAtual(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await sessaoAtualValida()
   return session?.access_token || null
 }
