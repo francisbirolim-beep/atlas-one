@@ -198,10 +198,6 @@ async function carregarContexto(empresaId: string) {
   return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, existentes }
 }
 
-function origemWVetro(v: unknown) {
-  return norm(v).replace(/[^A-Z0-9]/g, '') === 'WVETRO'
-}
-
 function enderecoClienteWVetro(p: Record<string, any>) {
   const e = obj(p.Endereco) || obj(p.endereco) || {}
   const rua = txt(p.PessoaEndereco, p.ClienteEndereco, e.Rua, e.Logradouro)
