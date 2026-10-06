@@ -8,7 +8,7 @@ export type UsuarioWVetro = {
   empresa_id: string
 }
 
-export async function autenticarMasterWVetro(req: NextRequest): Promise<UsuarioWVetro | null> {
+async function autenticarUsuarioBaseWVetro(req: NextRequest): Promise<UsuarioWVetro | null> {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
 
@@ -20,7 +20,7 @@ export async function autenticarMasterWVetro(req: NextRequest): Promise<UsuarioW
     .select('id,nome,role,empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
-  if (usuarioError || !usuario?.empresa_id || usuario.role !== 'master') return null
+  if (usuarioError || !usuario?.empresa_id) return null
 
   const { data: empresa, error: empresaError } = await supabaseAdmin
     .from('empresas')
@@ -32,4 +32,13 @@ export async function autenticarMasterWVetro(req: NextRequest): Promise<UsuarioW
   if (empresaError || !empresa?.ativo || String(empresa.slug || '').toLowerCase() !== slugPermitido) return null
 
   return usuario as UsuarioWVetro
+}
+
+export async function autenticarUsuarioWVetro(req: NextRequest): Promise<UsuarioWVetro | null> {
+  return autenticarUsuarioBaseWVetro(req)
+}
+
+export async function autenticarMasterWVetro(req: NextRequest): Promise<UsuarioWVetro | null> {
+  const usuario = await autenticarUsuarioBaseWVetro(req)
+  return usuario?.role === 'master' ? usuario : null
 }
