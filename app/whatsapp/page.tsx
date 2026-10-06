@@ -371,8 +371,8 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao abrir conversa.')
       setDiretorioAberto(false)
-      setAtiva(json.conversa as Conversa)
-      agendarRefreshConversas()
+      selecionarConversa(json.conversa as Conversa)
+      agendarRefreshConversas(0)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao abrir conversa.')
     }
@@ -778,6 +778,15 @@ export default function WhatsAppAtendimentoPage() {
     await acaoConversaPorId(ativa.id, acao, extra)
   }
 
+  function podeAtenderConversa(conversa: Conversa) {
+    if (eu?.role === 'master') return true
+    if (conversa.whatsapp_chat_tipo === 'grupo') return conversa.grupo_pode_atender === true
+    const acesso = conversa.whatsapp_canal_id
+      ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
+      : null
+    return Boolean(acesso?.dono || acesso?.atender)
+  }
+
   function podeTransferirConversa(conversa: Conversa) {
     if (eu?.role === 'master') return true
     if (conversa.whatsapp_chat_tipo === 'grupo') return conversa.grupo_pode_transferir === true
@@ -1119,6 +1128,16 @@ export default function WhatsAppAtendimentoPage() {
     ativa.responsavel_id === eu?.id &&
     ativa.status === 'em_atendimento'
   )
+  const podeReabrirAtiva = Boolean(
+    ativa &&
+    ativa.status === 'finalizado' &&
+    ativa.whatsapp_chat_tipo !== 'grupo' &&
+    (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.atender
+    )
+  )
   const canalAtivo = ativa?.whatsapp_canal_id
     ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
     : null
@@ -1387,6 +1406,14 @@ export default function WhatsAppAtendimentoPage() {
                         )}
                       </div>
                     )}
+                    {c.status === 'finalizado' && c.whatsapp_chat_tipo !== 'grupo' && podeAtenderConversa(c) && (
+                      <div className="mt-2">
+                        <button type="button" onClick={async e=>{e.stopPropagation();selecionarConversa(c);await acaoConversaPorId(c.id,'assumir')}}
+                          className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100">
+                          Nova conversa
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1476,6 +1503,12 @@ export default function WhatsAppAtendimentoPage() {
                     className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${ativa.acompanhando?'bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
                     {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
                     {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
+                  </button>
+                )}
+                {podeReabrirAtiva && (
+                  <button onClick={()=>void acaoConversa('assumir')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                    <MessageCircle size={15}/> Iniciar nova conversa
                   </button>
                 )}
                 {podeAssumirAtiva && (
@@ -1738,7 +1771,22 @@ export default function WhatsAppAtendimentoPage() {
                     )}
                   </div>
                 )}
-                {(!ativa.responsavel_id || (ativa.responsavel_id === eu?.id && ativa.status === 'aguardando')) && ativa.status !== 'finalizado' ? (
+                {ativa.status === 'finalizado' ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">Atendimento encerrado</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">O histórico acima continua salvo. Para falar com esta pessoa novamente, inicie um novo ciclo de atendimento.</p>
+                    </div>
+                    {podeReabrirAtiva ? (
+                      <button type="button" onClick={()=>void acaoConversa('assumir')}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                        <MessageCircle size={15}/> Iniciar nova conversa
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Você possui acesso ao histórico, mas não permissão para atender neste número.</span>
+                    )}
+                  </div>
+                ) : (!ativa.responsavel_id || (ativa.responsavel_id === eu?.id && ativa.status === 'aguardando')) ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                     <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
                       <Clock3 size={16}/> {ativa.responsavel_id === eu?.id ? 'Atendimento transferido para você. Aceite para começar.' : 'Esta conversa está aguardando atendimento.'}
