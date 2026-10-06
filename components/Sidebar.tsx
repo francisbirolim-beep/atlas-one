@@ -15,7 +15,7 @@ import {
   Store,
   Sun,
 } from 'lucide-react'
-import { logout, usuarioAtual } from '@/lib/auth'
+import { logout, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import { agruparGuias, GUIAS } from '@/lib/guias'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
@@ -30,13 +30,13 @@ function normalizar(texto: string) {
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [usuario, setUsuario] = useState<Usuario | null>(() => usuarioCacheLocal())
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [busca, setBusca] = useState('')
   const [adminAberto, setAdminAberto] = useState(false)
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({})
 
-  useEffect(() => { usuarioAtual().then(setUsuario) }, [])
+  useEffect(() => { void usuarioAtual().then(u => { if (u) setUsuario(u) }) }, [])
 
   useEffect(() => {
     if (!usuario?.id) return
