@@ -118,8 +118,10 @@ export default function NumerosWhatsAppPage() {
 
   useEffect(()=>{
     void carregar()
-    const timer=setInterval(()=>void carregar(true),2500)
-    return()=>clearInterval(timer)
+    const atualizar=()=>{if(document.visibilityState==='visible')void carregar(true)}
+    const timer=setInterval(atualizar,12000)
+    document.addEventListener('visibilitychange',atualizar)
+    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',atualizar)}
   },[])
 
   const conectados=useMemo(
