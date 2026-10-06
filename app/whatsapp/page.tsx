@@ -208,6 +208,7 @@ export default function WhatsAppAtendimentoPage() {
   const partesAudioRef = useRef<Blob[]>([])
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canalFiltroInicializadoRef = useRef(false)
+  const conversaAtivaIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     try {
@@ -254,24 +255,36 @@ export default function WhatsAppAtendimentoPage() {
         setCanalFiltro(fallback)
         try { localStorage.setItem('atlas-whatsapp-canal-filtro', fallback) } catch {}
       }
-      if (selecionar && !ativa) {
-        const conversaId = typeof window !== 'undefined'
-          ? new URLSearchParams(window.location.search).get('conversaId')
-          : null
-        const solicitada = conversaId
-          ? conversasRecebidas.find((c: Conversa) => c.id === conversaId)
-          : null
-        if (solicitada) setAtiva(solicitada)
-      }
-      if (ativa) {
-        const atualizada = conversasRecebidas.find((c: Conversa) => c.id === ativa.id)
-        setAtiva(atualizada || null)
-      }
+      const conversaIdSolicitada = selecionar && typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('conversaId')
+        : null
+      setAtiva(atual => {
+        if (atual) {
+          return conversasRecebidas.find((c: Conversa) => c.id === atual.id) || null
+        }
+        if (conversaIdSolicitada) {
+          return conversasRecebidas.find((c: Conversa) => c.id === conversaIdSolicitada) || null
+        }
+        return atual
+      })
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar atendimento.')
     } finally {
       setCarregando(false)
     }
+  }
+
+  function selecionarConversa(conversa: Conversa) {
+    conversaAtivaIdRef.current = conversa.id
+    setMensagens([])
+    setEtiquetas([])
+    setEtiquetasAtivas([])
+    setNotas([])
+    setMensagensRapidas([])
+    setHistorico([])
+    setSugestaoIA(null)
+    setErro('')
+    setAtiva(conversa)
   }
 
   function selecionarCanal(canalId: string) {
@@ -393,8 +406,10 @@ export default function WhatsAppAtendimentoPage() {
       )
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar mensagens.')
+      if (conversaAtivaIdRef.current !== conversaId) return
       setMensagens(json.mensagens || [])
     } catch (e) {
+      if (conversaAtivaIdRef.current !== conversaId) return
       setErro(e instanceof Error ? e.message : 'Falha ao carregar mensagens.')
     }
   }
@@ -405,6 +420,7 @@ export default function WhatsAppAtendimentoPage() {
       const resp = await fetch(`/api/integracoes/whatsapp/ia?conversaId=${encodeURIComponent(conversaId)}`, { headers, cache: 'no-store' })
       const json = await resp.json()
       if (!resp.ok) return
+      if (conversaAtivaIdRef.current !== conversaId) return
       setSugestaoIA((json.sugestao || null) as SugestaoIA | null)
       setModoIA((json.modo || 'observando') as 'observando' | 'sugerindo' | 'automatico')
     } catch {}
@@ -433,12 +449,14 @@ export default function WhatsAppAtendimentoPage() {
       )
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar recursos internos.')
+      if (conversaAtivaIdRef.current !== conversaId) return
       setEtiquetas(json.etiquetas || [])
       setEtiquetasAtivas(json.etiquetasAtivas || [])
       setNotas(json.notas || [])
       setMensagensRapidas(json.mensagensRapidas || [])
       setHistorico(json.historico || [])
     } catch (e) {
+      if (conversaAtivaIdRef.current !== conversaId) return
       setErro(e instanceof Error ? e.message : 'Falha ao carregar recursos internos.')
     }
   }
@@ -498,6 +516,7 @@ export default function WhatsAppAtendimentoPage() {
   }, [busca, canalFiltro, canais])
 
   useEffect(() => {
+    conversaAtivaIdRef.current = ativa?.id || null
     if (!ativa?.id) {
       setMensagens([])
       setEtiquetas([])
@@ -505,12 +524,23 @@ export default function WhatsAppAtendimentoPage() {
       setNotas([])
       setMensagensRapidas([])
       setHistorico([])
+      setSugestaoIA(null)
       return
     }
     const conversaId = ativa.id
+    setMensagens([])
+    setEtiquetas([])
+    setEtiquetasAtivas([])
+    setNotas([])
+    setMensagensRapidas([])
+    setHistorico([])
+    setSugestaoIA(null)
     setMensagemRespondendo(null)
     setEmojiMensagemId(null)
     setEmojiCustom('')
+    setTransferenciaAberta(false)
+    setDelegacaoAberta(false)
+    setApoioAberto(null)
     void carregarMensagens(conversaId)
     void carregarApoio(conversaId)
     void (async () => {
@@ -632,22 +662,54 @@ export default function WhatsAppAtendimentoPage() {
   async function acaoConversaPorId(conversaId: string, acao: string, extra: Record<string, unknown> = {}) {
     if (!conversaId) return false
     setErro('')
-    const headers = await headersJson()
-    const resp = await fetch('/api/integracoes/whatsapp/conversas', {
-      method: 'POST', headers,
-      body: JSON.stringify({ acao, conversaId, ...extra }),
-    })
-    const json = await resp.json()
-    if (!resp.ok) {
-      setErro(json.error || 'Nao foi possivel alterar o atendimento.')
+
+    const anteriorLista = conversas.find(c => c.id === conversaId) || null
+    const anteriorAtiva = ativa?.id === conversaId ? ativa : null
+    const destino = extra.destinoId ? usuarios.find(u => u.id === String(extra.destinoId)) || null : null
+
+    const aplicar = (c: Conversa): Conversa => {
+      if (c.id !== conversaId) return c
+      if (acao === 'assumir') return { ...c, responsavel_id: eu?.id || c.responsavel_id, responsavel_nome: eu?.nome || c.responsavel_nome, status: 'em_atendimento', nao_lidas: 0 }
+      if (acao === 'finalizar') return { ...c, status: 'finalizado', nao_lidas: 0 }
+      if (acao === 'marcar_lida') return { ...c, nao_lidas: 0 }
+      if (acao === 'acompanhar') return { ...c, acompanhando: true }
+      if (acao === 'parar_acompanhar') return { ...c, acompanhando: false }
+      if (acao === 'transferir' && destino) {
+        return { ...c, responsavel_id: destino.id, responsavel_nome: destino.nome, status: 'aguardando', setor: extra.setor ? String(extra.setor) : c.setor }
+      }
+      return c
+    }
+
+    setConversas(lista => lista.map(aplicar))
+    setAtiva(atual => atual?.id === conversaId ? aplicar(atual) : atual)
+    if (acao === 'transferir') {
+      setDestinoId('')
+      setSetorTransferencia('')
+      setTransferenciaAberta(false)
+    }
+
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/conversas', {
+        method: 'POST', headers,
+        body: JSON.stringify({ acao, conversaId, ...extra }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel alterar o atendimento.')
+
+      void carregarConversas(false)
+      if (conversaAtivaIdRef.current === conversaId) void carregarApoio(conversaId)
+      return true
+    } catch (e) {
+      if (anteriorLista) {
+        setConversas(lista => lista.map(c => c.id === conversaId ? anteriorLista : c))
+      }
+      if (anteriorAtiva) {
+        setAtiva(atual => atual?.id === conversaId ? anteriorAtiva : atual)
+      }
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel alterar o atendimento.')
       return false
     }
-    setDestinoId('')
-    setSetorTransferencia('')
-    setTransferenciaAberta(false)
-    await carregarConversas(false)
-    if (ativa?.id === conversaId) await carregarApoio(conversaId)
-    return true
   }
 
   async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
@@ -1166,8 +1228,8 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
               ) : filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
-                  onClick={()=>setAtiva(c)}
-                  onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setAtiva(c)}}}
+                  onClick={()=>selecionarConversa(c)}
+                  onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selecionarConversa(c)}}}
                   className={`group flex w-full cursor-pointer gap-3 border-b px-4 py-3 text-left outline-none transition hover:bg-slate-50 focus:bg-slate-50 ${ativa?.id===c.id?'bg-emerald-50':''}`}>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-700">
                     {c.whatsapp_chat_tipo === 'grupo'
@@ -1224,17 +1286,17 @@ export default function WhatsAppAtendimentoPage() {
                           {c.acompanhando?'Acompanhando':'Acompanhar'}
                         </button>
                         {podeTransferirConversa(c) && (
-                          <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setTransferenciaAberta(true)}}
+                          <button type="button" onClick={e=>{e.stopPropagation();selecionarConversa(c);setTransferenciaAberta(true)}}
                             className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50">
                             Transferir
                           </button>
                         )}
-                        <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setApoioAberto('etiquetas')}}
+                        <button type="button" onClick={e=>{e.stopPropagation();selecionarConversa(c);setApoioAberto('etiquetas')}}
                           className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50">
                           Etiquetas
                         </button>
                         {(!c.responsavel_id || (c.responsavel_id === eu?.id && c.status === 'aguardando')) && (
-                          <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
+                          <button type="button" onClick={async e=>{e.stopPropagation();selecionarConversa(c);await acaoConversaPorId(c.id,'assumir')}}
                             className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100">
                             {c.responsavel_id === eu?.id ? 'Aceitar atendimento' : 'Atender'}
                           </button>
