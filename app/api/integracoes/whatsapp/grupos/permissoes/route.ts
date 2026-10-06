@@ -30,13 +30,19 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Grupo, usuario e nivel validos sao obrigatorios.' }, { status: 400 })
     }
 
-    const [{ data: grupo }, { data: destino }] = await Promise.all([
+    const [{ data: grupo }, { data: destino }, { data: permissaoAnterior }] = await Promise.all([
       supabaseAdmin.from('atendimento_whatsapp_grupos')
         .select('id,empresa_id,whatsapp_canal_id,grupo_jid,nome')
         .eq('id', grupoId).eq('empresa_id', usuario.empresa_id).maybeSingle(),
       supabaseAdmin.from('usuarios')
         .select('id,nome,role,empresa_id')
         .eq('id', usuarioId).eq('empresa_id', usuario.empresa_id).maybeSingle(),
+      supabaseAdmin.from('atendimento_whatsapp_grupo_permissoes')
+        .select('id,nivel,responsavel_principal')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('grupo_id', grupoId)
+        .eq('usuario_id', usuarioId)
+        .maybeSingle(),
     ])
     if (!grupo) return NextResponse.json({ error: 'Grupo invalido.' }, { status: 404 })
     if (!destino) return NextResponse.json({ error: 'Usuario invalido.' }, { status: 404 })
@@ -71,7 +77,7 @@ export async function PUT(req: NextRequest) {
     if (error) throw error
 
     const { data: conversa } = await supabaseAdmin.from('atendimento_conversas')
-      .select('id,status')
+      .select('id,status,responsavel_id,responsavel_nome')
       .eq('empresa_id', usuario.empresa_id)
       .eq('whatsapp_canal_id', grupo.whatsapp_canal_id)
       .eq('whatsapp_chat_jid', grupo.grupo_jid)
@@ -81,6 +87,19 @@ export async function PUT(req: NextRequest) {
       await supabaseAdmin.from('atendimento_conversas').update({
         responsavel_id: destino.id,
         responsavel_nome: destino.nome,
+        status: 'aguardando',
+        updated_at: new Date().toISOString(),
+      }).eq('id', conversa.id)
+    } else if (
+      permissaoAnterior?.responsavel_principal === true &&
+      !responsavelPrincipal &&
+      conversa?.id &&
+      conversa.status !== 'em_atendimento' &&
+      conversa.responsavel_id === destino.id
+    ) {
+      await supabaseAdmin.from('atendimento_conversas').update({
+        responsavel_id: null,
+        responsavel_nome: null,
         status: 'aguardando',
         updated_at: new Date().toISOString(),
       }).eq('id', conversa.id)
@@ -120,11 +139,56 @@ export async function DELETE(req: NextRequest) {
   if (!grupoId || !usuarioId) {
     return NextResponse.json({ error: 'Grupo e usuario sao obrigatorios.' }, { status: 400 })
   }
+
+  const [{ data: permissao }, { data: grupo }] = await Promise.all([
+    supabaseAdmin.from('atendimento_whatsapp_grupo_permissoes')
+      .select('id,responsavel_principal')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('grupo_id', grupoId)
+      .eq('usuario_id', usuarioId)
+      .maybeSingle(),
+    supabaseAdmin.from('atendimento_whatsapp_grupos')
+      .select('id,nome,whatsapp_canal_id,grupo_jid')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('id', grupoId)
+      .maybeSingle(),
+  ])
+
   const { error } = await supabaseAdmin.from('atendimento_whatsapp_grupo_permissoes')
     .delete()
     .eq('empresa_id', usuario.empresa_id)
     .eq('grupo_id', grupoId)
     .eq('usuario_id', usuarioId)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  if (permissao?.responsavel_principal && grupo) {
+    const { data: conversa } = await supabaseAdmin.from('atendimento_conversas')
+      .select('id,status,responsavel_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('whatsapp_canal_id', grupo.whatsapp_canal_id)
+      .eq('whatsapp_chat_jid', grupo.grupo_jid)
+      .maybeSingle()
+
+    if (conversa?.id && conversa.status !== 'em_atendimento' && conversa.responsavel_id === usuarioId) {
+      await supabaseAdmin.from('atendimento_conversas').update({
+        responsavel_id: null,
+        responsavel_nome: null,
+        status: 'aguardando',
+        updated_at: new Date().toISOString(),
+      }).eq('id', conversa.id)
+    }
+
+    if (conversa?.id) {
+      await supabaseAdmin.from('atendimento_eventos').insert({
+        empresa_id: usuario.empresa_id,
+        conversa_id: conversa.id,
+        tipo: 'grupo_responsavel_removido',
+        usuario_id: usuario.id,
+        usuario_nome: usuario.nome,
+        dados: { grupo_id: grupo.id, grupo_nome: grupo.nome, usuario_alvo_id: usuarioId },
+      })
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
