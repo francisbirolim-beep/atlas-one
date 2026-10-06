@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
     aprendizadoOperacaoResp,
     orcamentosIaResp,
     atividadeAgentesResp,
+    whatsappIaConfigResp,
+    orcamentoFeedbackResp,
   ] = await Promise.all([
     supabaseAdmin
       .from('usuarios')
@@ -113,6 +115,18 @@ export async function GET(req: NextRequest) {
       .gte('atualizou_em', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .order('atualizou_em', { ascending: false })
       .limit(120),
+    supabaseAdmin
+      .from('atendimento_whatsapp_ia_config')
+      .select('ativo,modo,aprender_todos_canais,updated_at')
+      .eq('empresa_id', empresaId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('ai_orcamento_feedback')
+      .select('id,avaliacao,created_at')
+      .eq('empresa_id', empresaId)
+      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(200),
   ])
 
   const usuarios = usuariosResp.data || []
@@ -233,6 +247,11 @@ export async function GET(req: NextRequest) {
   const aprendizadoOps = aprendizadoOperacaoResp.data || []
   const orcamentosIa = orcamentosIaResp.data || []
   const atividadesAgentes = atividadeAgentesResp.data || []
+  const whatsappIaConfig = whatsappIaConfigResp.data || null
+  const feedbacksOrcamento = orcamentoFeedbackResp.data || []
+  const whatsappMonitorando = Boolean(whatsappIaConfig?.ativo)
+  const orcamentoMonitorando = true
+  const correcoesOrcamento30d = feedbacksOrcamento.filter((x: any) => String(x.avaliacao || '') === 'corrigido').length
 
   const atividadeSupervisor = atividadesAgentes.find((x: any) =>
     String(x.agente_id || '') === 'supervisor' &&
@@ -257,24 +276,30 @@ export async function GET(req: NextRequest) {
     },
     whatsapp: {
       trabalhando: Boolean(whatsappAtivo),
+      monitorando: whatsappMonitorando,
       atividade: whatsappAtivo
         ? (String(whatsappAtivo.ai_status) === 'pendente' ? 'Recebeu um pacote e está preparando a leitura' : 'Lendo mensagens, imagens e áudios do WhatsApp')
-        : whatsappUltimo
-          ? 'Conferindo atividade recente do WhatsApp'
-          : 'Aguardando novas mensagens',
-      ultimaAtividadeEm: whatsappAtivo?.updated_at || whatsappUltimo?.updated_at || null,
+        : whatsappMonitorando
+          ? 'Monitorando conversas e procurando oportunidades de aprendizado'
+          : whatsappUltimo
+            ? 'Conferindo atividade recente do WhatsApp'
+            : 'IA do WhatsApp desativada',
+      ultimaAtividadeEm: whatsappAtivo?.updated_at || whatsappUltimo?.updated_at || whatsappIaConfig?.updated_at || null,
+      modo: whatsappIaConfig?.modo || null,
     },
     orcamento: {
       trabalhando: Boolean(whatsappAtivo && !whatsappAtivo.orcamento_id),
+      monitorando: orcamentoMonitorando,
       atividade: whatsappAtivo && !whatsappAtivo.orcamento_id
         ? 'Interpretando o pedido e montando o orçamento'
         : orcamentoAguardando > 0
-          ? 'Acompanhando ' + orcamentoAguardando + ' orçamento(s) criado(s) pela IA aguardando validação'
-          : orcamentoUltimo
-            ? 'Conferindo orçamento criado recentemente'
-            : 'Aguardando novo orçamento',
-      ultimaAtividadeEm: orcamentoUltimo?.updated_at || whatsappAtivo?.updated_at || null,
+          ? 'Aprendendo com correções e acompanhando ' + orcamentoAguardando + ' orçamento(s) aguardando validação'
+          : correcoesOrcamento30d > 0
+            ? 'Monitorando novos orçamentos e usando ' + correcoesOrcamento30d + ' correção(ões) recentes como aprendizado'
+            : 'Monitorando novos orçamentos, validações e correções',
+      ultimaAtividadeEm: orcamentoUltimo?.updated_at || whatsappAtivo?.updated_at || feedbacksOrcamento[0]?.created_at || null,
       aguardandoValidacao: orcamentoAguardando,
+      correcoes30d: correcoesOrcamento30d,
     },
     catalogo: {
       trabalhando: Boolean(catalogoAtivo),
