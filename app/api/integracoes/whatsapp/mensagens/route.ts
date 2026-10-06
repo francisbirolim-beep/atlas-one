@@ -3,6 +3,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import {
   enviarTextoWhatsApp,
   listarMensagensAtendimento,
+  reagirMensagemWhatsApp,
 } from '@/lib/whatsappServer'
 
 export const dynamic = 'force-dynamic'
@@ -42,13 +43,28 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const conversaId = String(body?.conversaId || '')
-    const texto = String(body?.texto || '')
+    const acao = String(body?.acao || 'enviar')
 
-    if (!conversaId || !texto.trim()) {
-      return NextResponse.json({ error: 'Conversa e mensagem sao obrigatorias.' }, { status: 400 })
+    if (!conversaId) {
+      return NextResponse.json({ error: 'Conversa obrigatoria.' }, { status: 400 })
     }
 
-    const resultado = await enviarTextoWhatsApp(conversaId, texto, usuario)
+    if (acao === 'reagir') {
+      const mensagemId = String(body?.mensagemId || '')
+      const emoji = String(body?.emoji || '')
+      if (!mensagemId || !emoji.trim()) {
+        return NextResponse.json({ error: 'Mensagem e emoji sao obrigatorios.' }, { status: 400 })
+      }
+      const resultado = await reagirMensagemWhatsApp(conversaId, mensagemId, emoji, usuario)
+      return NextResponse.json({ ok: true, ...resultado })
+    }
+
+    const texto = String(body?.texto || '')
+    if (!texto.trim()) {
+      return NextResponse.json({ error: 'Mensagem obrigatoria.' }, { status: 400 })
+    }
+    const respostaMensagemId = String(body?.respostaMensagemId || '') || null
+    const resultado = await enviarTextoWhatsApp(conversaId, texto, usuario, respostaMensagemId)
     return NextResponse.json({ ok: true, ...resultado })
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : 'Falha ao enviar mensagem.'
