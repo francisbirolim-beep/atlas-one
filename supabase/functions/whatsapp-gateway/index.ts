@@ -1854,18 +1854,34 @@ async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid:
     .maybeSingle();
   if (!group?.id) return null;
 
-  const { data: permission } = await db.from("atendimento_whatsapp_grupo_permissoes")
-    .select("usuario_id,nivel")
-    .eq("empresa_id", empresaId)
-    .eq("grupo_id", group.id)
-    .eq("responsavel_principal", true)
-    .neq("nivel", "sem_acesso")
-    .maybeSingle();
-  if (!permission?.usuario_id) return null;
+  const now = new Date().toISOString();
+  const [{ data: permission }, { data: delegation }] = await Promise.all([
+    db.from("atendimento_whatsapp_grupo_permissoes")
+      .select("usuario_id,nivel")
+      .eq("empresa_id", empresaId)
+      .eq("grupo_id", group.id)
+      .eq("responsavel_principal", true)
+      .neq("nivel", "sem_acesso")
+      .maybeSingle(),
+    db.from("atendimento_whatsapp_grupo_delegacoes")
+      .select("destino_usuario_id,fim_em")
+      .eq("empresa_id", empresaId)
+      .eq("grupo_id", group.id)
+      .eq("ativo", true)
+      .lte("inicio_em", now)
+      .gt("fim_em", now)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const userId = delegation?.destino_usuario_id || permission?.usuario_id || null;
+  if (!userId) return null;
 
   return {
-    id: permission.usuario_id,
-    nome: await userName(permission.usuario_id),
+    id: userId,
+    nome: await userName(userId),
+    grupoId: group.id,
+    delegacaoFimEm: delegation?.fim_em || null,
   };
 }
 
