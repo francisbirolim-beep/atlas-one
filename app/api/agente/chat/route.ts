@@ -7,7 +7,7 @@ import {
   validarConversaAgente,
   salvarMensagem,
 } from '@/lib/agente'
-import { consultarOpenCode, statusOpenCode, type OpenCodeAnexo } from '@/lib/ai/opencode'
+import { consultarOpenCode, type OpenCodeAnexo } from '@/lib/ai/opencode'
 import { registrarUsoIA } from '@/lib/ai/auditoria'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -285,11 +285,6 @@ export async function POST(req: NextRequest) {
     let modelId = direta ? 'consulta-direta' : 'free-router'
 
     if (!direta) {
-      const status = await statusOpenCode()
-      if (!status.configurado) {
-        throw new Error('Gateway gratuito OpenCode/FreeLLMAPI indisponível. Nenhum provedor pago foi acionado.')
-      }
-
       const anexos: OpenCodeAnexo[] = []
       let complementoAnexo = ''
       if (anexo?.tipo === 'imagem' && anexo?.dados) {
