@@ -239,6 +239,45 @@ export default function WhatsAppUsuarioPermissoes({ usuarioId, usuarioNome, usua
     }finally{setSalvando('')}
   }
 
+  async function salvarResponsavelGrupo(grupoId:string,novoUsuarioId:string){
+    const atual=responsavelPorGrupo.get(grupoId)
+    const chave=`responsavel:${grupoId}`
+    setSalvando(chave);setErro('')
+    try{
+      const headers=await headersJson()
+      if(!novoUsuarioId){
+        if(!atual?.usuario_id)return
+        const nivelAtual=(atual.nivel==='gerenciar'||atual.nivel==='atender')?atual.nivel:'atender'
+        const resp=await fetch('/api/integracoes/whatsapp/grupos/permissoes',{
+          method:'PUT',headers,
+          body:JSON.stringify({
+            grupoId,
+            usuarioId:atual.usuario_id,
+            nivel:nivelAtual,
+            responsavelPrincipal:false,
+          }),
+        })
+        const json=await resp.json()
+        if(!resp.ok)throw new Error(json.error||'Nao foi possivel remover o responsavel do grupo.')
+      }else{
+        const resp=await fetch('/api/integracoes/whatsapp/grupos/permissoes',{
+          method:'PUT',headers,
+          body:JSON.stringify({
+            grupoId,
+            usuarioId:novoUsuarioId,
+            nivel:'gerenciar',
+            responsavelPrincipal:true,
+          }),
+        })
+        const json=await resp.json()
+        if(!resp.ok)throw new Error(json.error||'Nao foi possivel definir o responsavel do grupo.')
+      }
+      await carregar(true)
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Nao foi possivel definir o responsavel do grupo.')
+    }finally{setSalvando('')}
+  }
+
   const master=usuarioRole==='master'
 
   return (
