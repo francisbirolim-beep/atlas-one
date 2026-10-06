@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npx -y tsx scripts/wvetro-one-time-sync.ts && next build",
     "start": "next start",
     "dev:lan": "next dev -H 0.0.0.0",
     "typecheck": "tsc --noEmit",
