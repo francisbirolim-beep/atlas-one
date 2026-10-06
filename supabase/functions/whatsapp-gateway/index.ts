@@ -417,6 +417,14 @@ async function syncGroups(config: any, channel: any, rawGroups: any[]) {
       jid: String(g?.jid || "").trim(),
       nome: String(g?.nome || "").trim(),
       participantes: Math.max(0, Number(g?.participantes || 0)),
+      membros: (Array.isArray(g?.membros) ? g.membros : [])
+        .map((m: any) => ({
+          jid: String(m?.jid || "").trim() || null,
+          telefone: normalizePhone(m?.telefone || "") || null,
+          admin: String(m?.admin || "").trim() || null,
+        }))
+        .filter((m: any) => m.jid || m.telefone)
+        .slice(0, 2048),
     }))
     .filter((g: any) => g.jid.endsWith("@g.us") && g.nome)
     .slice(0, 1000);
@@ -428,6 +436,7 @@ async function syncGroups(config: any, channel: any, rawGroups: any[]) {
       grupo_jid: group.jid,
       nome: group.nome.slice(0, 240),
       participantes: group.participantes,
+      membros: group.membros,
       ativo: true,
       sincronizado_em: now,
       updated_at: now,
