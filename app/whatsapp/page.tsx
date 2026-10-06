@@ -238,7 +238,7 @@ export default function WhatsAppAtendimentoPage() {
     carregandoConversasRef.current = true
     try {
       const headers = await headersJson()
-      const resp = await fetch('/api/integracoes/whatsapp/conversas', { headers })
+      const resp = await fetch('/api/integracoes/whatsapp/conversas', { headers, cache: 'no-store' })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar conversas.')
       setEu(json.usuario)
@@ -423,7 +423,7 @@ export default function WhatsAppAtendimentoPage() {
       const headers = await headersJson()
       const resp = await fetch(
         `/api/integracoes/whatsapp/mensagens?conversaId=${encodeURIComponent(conversaId)}`,
-        { headers },
+        { headers, cache: 'no-store' },
       )
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar mensagens.')
@@ -642,6 +642,31 @@ export default function WhatsAppAtendimentoPage() {
       })
       .subscribe()
     return () => { void supabase.removeChannel(canal) }
+  }, [eu?.id, ativa?.id])
+
+  useEffect(() => {
+    if (!eu?.id) return
+
+    const atualizarTela = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      agendarRefreshConversas(0)
+      const conversaId = conversaAtivaIdRef.current
+      if (conversaId) void carregarMensagens(conversaId)
+    }
+
+    const aoVoltarParaTela = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizarTela()
+    }
+
+    const timer = setInterval(atualizarTela, 5000)
+    window.addEventListener('focus', atualizarTela)
+    document.addEventListener('visibilitychange', aoVoltarParaTela)
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', atualizarTela)
+      document.removeEventListener('visibilitychange', aoVoltarParaTela)
+    }
   }, [eu?.id, ativa?.id])
 
   useEffect(() => {
