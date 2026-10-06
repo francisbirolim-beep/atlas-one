@@ -9,7 +9,7 @@ export type OpenCodeResultado = {
   resposta: string
   providerId: string
   modelId: string
-  rota: 'ollama-local' | 'freellmapi'
+  rota: 'apifreellm-community' | 'ollama-local' | 'freellmapi'
   custoEstimado: 0
   tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }>
 }
@@ -110,8 +110,9 @@ async function carregarConfig(): Promise<OpenCodeConfig> {
 
 export async function statusOpenCode() {
   const c = await carregarConfig()
+  const apiFreeLlmConfigurado = Boolean(String(process.env.APIFREELLM_API_KEY || '').trim())
   return {
-    configurado: Boolean(c.baseUrl && (c.authMode === 'atlas-jwt' || c.password)),
+    configurado: apiFreeLlmConfigurado || Boolean(c.baseUrl && (c.authMode === 'atlas-jwt' || c.password)),
     baseUrlConfigurada: Boolean(c.baseUrl),
     modoAutenticacao: c.authMode,
     agent: c.agent,
@@ -120,6 +121,12 @@ export async function statusOpenCode() {
     zeroCost: c.zeroCost,
     paidProvidersBloqueados: c.zeroCost,
     ordemGratis: [
+      {
+        rota: 'apifreellm-community',
+        providerId: 'apifreellm',
+        modelId: 'community',
+        habilitado: apiFreeLlmConfigurado,
+      },
       {
         rota: 'ollama-local',
         providerId: c.localProviderId,
@@ -346,6 +353,51 @@ async function enviar(
   }
 }
 
+async function consultarApiFreeLlmCommunity(params: {
+  system: string
+  prompt: string
+  anexos?: OpenCodeAnexo[]
+}): Promise<{ resposta: string } | null> {
+  const apiKey = String(process.env.APIFREELLM_API_KEY || '').trim()
+  if (!apiKey) return null
+
+  const temImagem = (params.anexos || []).some(a => String(a.mediaType || '').toLowerCase().startsWith('image/') && a.dados)
+  if (temImagem) return null
+
+  const mensagem = [params.system, '', params.prompt]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 28000)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 25000)
+  try {
+    const resp = await fetch('https://apifreellm.com/api/v1/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + apiKey,
+      },
+      body: JSON.stringify({ message: mensagem, model: 'apifreellm' }),
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      const erro: any = new Error(String(data?.error || data?.message || ('ApiFreeLLM HTTP ' + resp.status)).slice(0, 500))
+      erro.status = resp.status
+      throw erro
+    }
+
+    const resposta = String(data?.response || '').trim()
+    if (!resposta) throw new Error('ApiFreeLLM Community não retornou texto.')
+    return { resposta }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export async function consultarOpenCode(params: {
   accessToken: string
   sessionId?: string | null
@@ -354,6 +406,30 @@ export async function consultarOpenCode(params: {
   prompt: string
   anexos?: OpenCodeAnexo[]
 }): Promise<OpenCodeResultado> {
+  const tentativasExternas: Array<{ rota: string; ok: boolean; detalhe?: string }> = []
+
+  try {
+    const direta = await consultarApiFreeLlmCommunity(params)
+    if (direta) {
+      tentativasExternas.push({ rota: 'apifreellm-community', ok: true })
+      return {
+        sessionId: String(params.sessionId || ('apifreellm-' + Date.now())),
+        resposta: direta.resposta,
+        providerId: 'apifreellm',
+        modelId: 'community',
+        rota: 'apifreellm-community',
+        custoEstimado: 0,
+        tentativas: tentativasExternas,
+      }
+    }
+  } catch (e: any) {
+    tentativasExternas.push({
+      rota: 'apifreellm-community',
+      ok: false,
+      detalhe: String(e?.message || e || 'Falha ApiFreeLLM').slice(0, 300),
+    })
+  }
+
   const c = await carregarConfig()
   let sessionId = String(params.sessionId || '').trim()
 
@@ -373,7 +449,7 @@ export async function consultarOpenCode(params: {
     const padraoProvider = rota === 'ollama-local' ? c.localProviderId : c.providerId
     const padraoModelo = rota === 'ollama-local' ? c.localModelId : c.modelId
     const modelo = extrairModelo(data, padraoProvider, padraoModelo)
-    return { sessionId, resposta, ...modelo, rota, custoEstimado: 0, tentativas }
+    return { sessionId, resposta, ...modelo, rota, custoEstimado: 0, tentativas: [...tentativasExternas, ...tentativas] }
   } catch (e: any) {
     // Sessao antiga pode ter sido limpa/reiniciada no servidor OpenCode.
     if (e?.status !== 404) throw e
@@ -389,6 +465,6 @@ export async function consultarOpenCode(params: {
     const padraoProvider = rota === 'ollama-local' ? c.localProviderId : c.providerId
     const padraoModelo = rota === 'ollama-local' ? c.localModelId : c.modelId
     const modelo = extrairModelo(data, padraoProvider, padraoModelo)
-    return { sessionId, resposta, ...modelo, rota, custoEstimado: 0, tentativas }
+    return { sessionId, resposta, ...modelo, rota, custoEstimado: 0, tentativas: [...tentativasExternas, ...tentativas] }
   }
 }
