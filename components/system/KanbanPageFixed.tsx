@@ -572,8 +572,7 @@ if (atualizado?.id) {
 const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
 setEditando(exibicao)
 setCardSelecionado(exibicao)
-setCards(prev => prev.map(c => c.id === exibicao.id ? exibicao : c))
-await carregar()
+setCards(prev => prev.filter(c => c.id !== json.ocultadoId).map(c => c.id === exibicao.id ? exibicao : c))
 setHistorico(await listarHistorico(exibicao.id))
 }
 setCandidatosWVetro([])
