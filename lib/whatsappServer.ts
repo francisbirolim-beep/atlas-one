@@ -1642,7 +1642,7 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
     responsavel_id: destino.id,
     responsavel_nome: destino.nome,
     setor: setor || conversa.setor || null,
-    status: 'em_atendimento',
+    status: 'aguardando',
     updated_at: agora,
   }).eq('id', conversaId)
   const sessao = await garantirSessao(conversa)
@@ -1651,8 +1651,8 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
       responsavel_id: destino.id,
       responsavel_nome: destino.nome,
       setor: setor || conversa.setor || null,
-      status: 'em_atendimento',
-      assigned_at: agora,
+      status: 'aguardando',
+      assigned_at: null,
     }).eq('id', sessao.id)
   }
   await registrarEvento({
@@ -1663,6 +1663,18 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
     usuarioId: usuario.id,
     usuarioNome: usuario.nome,
     dados: { destino_id: destino.id, destino_nome: destino.nome, setor: setor || null },
+  })
+  await supabaseAdmin.from('notificacoes').insert({
+    empresa_id: usuario.empresa_id,
+    usuario_id: destino.id,
+    categoria: 'chat',
+    tipo: 'whatsapp_transferencia',
+    titulo: 'WhatsApp · atendimento transferido',
+    mensagem: `${usuario.nome} transferiu ${conversa.contato_nome || conversa.grupo_nome || conversa.telefone} para você.`,
+    href: `/whatsapp?conversaId=${conversaId}`,
+    origem_tipo: 'whatsapp_transferencia',
+    origem_id: `${conversaId}:${agora}`,
+    push_status: 'pendente',
   })
 }
 
