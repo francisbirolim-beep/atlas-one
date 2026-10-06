@@ -42,8 +42,8 @@ export default function HomeDashboard() {
 
       const usuario = await Promise.race([
         usuarioAtual(),
-        new Promise<null>(resolve => {
-          timer = setTimeout(() => resolve(cache || null), 1200)
+        new Promise<Awaited<ReturnType<typeof usuarioAtual>>>(resolve => {
+          timer = setTimeout(() => resolve(cache), 1200)
         }),
       ])
       if (!ativo || !usuario) return
