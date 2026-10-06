@@ -5,6 +5,7 @@ import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsul
 import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacionalServer'
 import { sincronizar } from '../sincronizar/route'
 import type { UsuarioWVetro } from '@/lib/wvetroAcessoServer'
+import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -211,7 +212,7 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'buscar') {
       const recentes = await listarRecentes(alvo.cliente_nome)
-      const candidatosBase = recentes.exatos.length ? recentes.exatos : recentes.todos.slice(0, 50)
+      const candidatosBase = recentes.todos.filter(c => nomesClientesCompativeis(c.cliente, alvo.cliente_nome)).slice(0, 50)
       const numeros = candidatosBase.map(c => c.numero)
       const { data: locais } = numeros.length
         ? await supabaseAdmin
@@ -240,10 +241,10 @@ export async function POST(req: NextRequest) {
         inicio: recentes.inicio,
         fim: recentes.fim,
         candidatos,
-        autoVincularNumero: recentes.exatos.length === 1 ? recentes.exatos[0].numero : null,
-        mensagem: recentes.exatos.length
-          ? `${recentes.exatos.length} orçamento(s) do W.Vetro encontrado(s) com o mesmo nome.`
-          : 'Não encontrei nome idêntico nos últimos 7 dias. Confira a lista e escolha manualmente, se for o mesmo cliente.',
+        autoVincularNumero: candidatosBase.length === 1 ? candidatosBase[0].numero : null,
+        mensagem: candidatosBase.length
+          ? `${candidatosBase.length} orçamento(s) do W.Vetro encontrado(s) com nome compatível com este cliente.`
+          : 'Nenhum orçamento W.Vetro com nome compatível foi encontrado nos últimos 7 dias.',
       })
     }
 
@@ -254,6 +255,11 @@ export async function POST(req: NextRequest) {
       const recentes = await listarRecentes(alvo.cliente_nome)
       const candidato = recentes.todos.find(c => c.numero === numeroWvetro)
       if (!candidato) return NextResponse.json({ error: 'O orçamento escolhido não apareceu no W.Vetro nos últimos 7 dias. Sincronize novamente ou confira o período.' }, { status: 404 })
+      if (!nomesClientesCompativeis(candidato.cliente, alvo.cliente_nome)) {
+        return NextResponse.json({
+          error: `O W.Vetro #${numeroWvetro} pertence a "${candidato.cliente}" e não pode ser vinculado ao cliente "${alvo.cliente_nome}".`,
+        }, { status: 409 })
+      }
 
       const { data: existentes } = await supabaseAdmin
         .from('orcamentos')
@@ -293,6 +299,7 @@ export async function POST(req: NextRequest) {
           forcar: true,
           numerosWvetro: [numeroWvetro],
           modo: 'vincular_kanban',
+          clienteAlvoId: alvo.cliente_id || null,
         }),
       })
       const syncResp = await sincronizar(reqSync, usuario as UsuarioWVetro, 7)
