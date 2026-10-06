@@ -1,5 +1,5 @@
-const CACHE_NAME = 'atlas-one-v17'
-const APP_SHELL_CACHE = 'atlas-one-shell-v9'
+const CACHE_NAME = 'atlas-one-v18'
+const APP_SHELL_CACHE = 'atlas-one-shell-v10'
 const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final', '/compartilhar']
 
 function ehAssetLocal(pathname) {
@@ -37,7 +37,9 @@ self.addEventListener('install', (event) => {
     const shell = await caches.open(APP_SHELL_CACHE)
     await Promise.allSettled(OFFLINE_URLS.map(path => cachearPaginaComDependencias(path, paginas, shell)))
   })())
-  self.skipWaiting()
+  // Não toma o controle de uma sessão ativa. A versão nova entra
+  // naturalmente quando o usuário fechar/reabrir o Atlas, evitando
+  // recarga ou interrupção no meio de orçamento, medição ou atendimento.
 })
 
 self.addEventListener('activate', (event) => {
