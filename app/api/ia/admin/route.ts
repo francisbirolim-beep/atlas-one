@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { statusOpenCode } from '@/lib/ai/opencode'
+import { statusRuntimesGratis } from '@/lib/ai/runtimeEndpoints'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -312,8 +314,19 @@ export async function GET(req: NextRequest) {
     },
   }
 
+  const [runtimeGratis, openCodeGratis] = await Promise.all([
+    statusRuntimesGratis(),
+    statusOpenCode(),
+  ])
+
   return NextResponse.json({
     periodoDias: 30,
+    runtimeGratis: {
+      ...runtimeGratis,
+      opencode: openCodeGratis,
+      custoVariavelAlvo: 0,
+      politicaDescricao: 'Banco/regra interna -> Ollama local -> FreeLLMAPI. Sem fallback pago automático.',
+    },
     operacaoAgora,
     atividadesRecentes: atividadesAgentes.slice(0, 40),
     resumo: {
