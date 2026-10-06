@@ -6,7 +6,7 @@
 // fallback automatico de Ollama para um provider pago.
 
 import { supabaseAdmin } from '../supabaseAdmin'
-import { ProviderNome } from './providerManager'
+import { ProviderNome, politicaZeroCustoAtiva } from './providerManager'
 
 export interface ConfigAgente {
   id: string | null
@@ -36,11 +36,20 @@ export async function carregarConfigAgente(setorId: string | null, escopo: 'seto
     }
     const { data } = await query.limit(1).maybeSingle()
     if (data) {
+      const providerConfigurado = String(data.provider || 'ollama') as ProviderNome
+      const providerPago = ['anthropic', 'openai', 'gemini', 'openrouter'].includes(providerConfigurado)
+      if (politicaZeroCustoAtiva() && providerPago) {
+        return {
+          ...padrao(escopo),
+          id: data.id,
+          nome: data.nome + ' (zero-custo)',
+        }
+      }
       return {
         id: data.id,
         nome: data.nome,
-        provider: (data.provider || 'anthropic') as ProviderNome,
-        modelo: data.modelo || 'claude-sonnet-5',
+        provider: providerConfigurado,
+        modelo: data.modelo || (providerConfigurado === 'ollama' ? (process.env.OLLAMA_DEFAULT_MODEL || 'llama3.1') : 'free-router'),
         maxTokens: escopo === 'master' ? 16000 : 1024,
         temperatura: data.temperatura ?? 1,
       }
