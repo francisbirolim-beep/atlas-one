@@ -323,6 +323,7 @@ export async function POST(req: NextRequest) {
         ok: true,
         orcamento: atualizado,
         numeroWvetro,
+        ocultadoId: fonteAtual?.id || null,
         mensagem: `Orçamento W.Vetro #${numeroWvetro} sincronizado neste card sem apagar anexos ou dados manuais.`,
       })
     }
