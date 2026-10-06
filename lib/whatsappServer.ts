@@ -1327,6 +1327,7 @@ export async function listarDiretorioWhatsApp(
     { data: contatos, error: contatosError },
     { data: grupos, error: gruposError },
     { data: conversasConhecidas, error: conversasError },
+    { data: bloqueios, error: bloqueiosError },
   ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_contatos')
@@ -1350,21 +1351,42 @@ export async function listarDiretorioWhatsApp(
       .eq('canal', 'whatsapp')
       .eq('whatsapp_chat_tipo', 'contato')
       .limit(3000),
+    supabaseAdmin
+      .from('atendimento_whatsapp_bloqueios')
+      .select('chat_jid,telefone,ativo,bloqueado_em,bloqueado_por_nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('canal_id', canalId)
+      .eq('ativo', true)
+      .limit(3000),
   ])
   if (contatosError) throw contatosError
   if (gruposError) throw gruposError
   if (conversasError) throw conversasError
+  if (bloqueiosError) throw bloqueiosError
+
+  const bloqueadosPorJid = new Map((bloqueios || []).map((item: any) => [String(item.chat_jid || ''), item]))
+  const bloqueadosPorTelefone = new Map((bloqueios || []).map((item: any) => [String(item.telefone || '').replace(/\D/g, ''), item]))
+  const statusBloqueio = (jid?: string | null, telefone?: string | null) => {
+    const tel = String(telefone || '').replace(/\D/g, '')
+    return bloqueadosPorJid.get(String(jid || '')) || (tel ? bloqueadosPorTelefone.get(tel) : null) || null
+  }
 
   const q = busca.toLocaleLowerCase('pt-BR').trim()
-  const contatosSincronizados = (acesso.visualizar ? (contatos || []) : []).map((item: any) => ({
-    id: item.id,
-    tipo: 'contato' as const,
-    jid: item.contato_jid,
-    telefone: item.telefone || null,
-    nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
-    participantes: null,
-    _busca: `${item.nome || ''} ${item.nome_verificado || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
-  }))
+  const contatosSincronizados = (acesso.visualizar ? (contatos || []) : []).map((item: any) => {
+    const bloqueio = statusBloqueio(item.contato_jid, item.telefone)
+    return {
+      id: item.id,
+      tipo: 'contato' as const,
+      jid: item.contato_jid,
+      telefone: item.telefone || null,
+      nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
+      participantes: null,
+      bloqueado: Boolean(bloqueio),
+      bloqueado_em: bloqueio?.bloqueado_em || null,
+      bloqueado_por_nome: bloqueio?.bloqueado_por_nome || null,
+      _busca: `${item.nome || ''} ${item.nome_verificado || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
+    }
+  })
   const chavesContatos = new Set(
     contatosSincronizados.flatMap((item: any) => [
       item.jid ? `jid:${item.jid}` : '',
@@ -1378,15 +1400,22 @@ export async function listarDiretorioWhatsApp(
       const telKey = tel ? `tel:${tel}` : ''
       return !chavesContatos.has(jidKey) && !chavesContatos.has(telKey)
     })
-    .map((item: any) => ({
-      id: `conversa-${item.id}`,
-      tipo: 'contato' as const,
-      jid: item.whatsapp_chat_jid || `${String(item.telefone || '').replace(/\D/g, '')}@s.whatsapp.net`,
-      telefone: item.telefone || null,
-      nome: item.contato_nome || item.telefone || 'Contato WhatsApp',
-      participantes: null,
-      _busca: `${item.contato_nome || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
-    }))
+    .map((item: any) => {
+      const jid = item.whatsapp_chat_jid || `${String(item.telefone || '').replace(/\D/g, '')}@s.whatsapp.net`
+      const bloqueio = statusBloqueio(jid, item.telefone)
+      return {
+        id: `conversa-${item.id}`,
+        tipo: 'contato' as const,
+        jid,
+        telefone: item.telefone || null,
+        nome: item.contato_nome || item.telefone || 'Contato WhatsApp',
+        participantes: null,
+        bloqueado: Boolean(bloqueio),
+        bloqueado_em: bloqueio?.bloqueado_em || null,
+        bloqueado_por_nome: bloqueio?.bloqueado_por_nome || null,
+        _busca: `${item.contato_nome || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
+      }
+    })
 
   const itens = [
     ...contatosSincronizados,
@@ -1476,6 +1505,20 @@ export async function iniciarConversaWhatsApp(
     ? jid.split('@')[0].replace(/\D/g, '')
     : normalizarTelefone(dados.telefone || jid.split('@')[0])
   if (!telefone) throw new Error('Contato sem telefone válido.')
+
+  if (tipo === 'contato') {
+    const { data: bloqueio } = await supabaseAdmin
+      .from('atendimento_whatsapp_bloqueios')
+      .select('id,bloqueado_em,bloqueado_por_nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('canal_id', dados.canalId)
+      .eq('chat_jid', jid)
+      .eq('ativo', true)
+      .maybeSingle()
+    if (bloqueio) {
+      throw new Error(`Este contato está bloqueado neste WhatsApp${bloqueio.bloqueado_por_nome ? ` por ${bloqueio.bloqueado_por_nome}` : ''}. Desbloqueie antes de iniciar uma nova conversa.`)
+    }
+  }
 
   const { data: existente } = await supabaseAdmin
     .from('atendimento_conversas')
@@ -2195,6 +2238,136 @@ export async function definirAcompanhamentoConversa(
     tipo: acompanhar ? 'conversa_acompanhada' : 'conversa_acompanhamento_removido',
     usuarioId: usuario.id,
     usuarioNome: usuario.nome,
+  })
+}
+
+export async function arquivarConversaWhatsApp(conversaId: string, usuario: UsuarioTenant) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const podeArquivar =
+    usuario.role === 'master' ||
+    acesso.dono ||
+    acesso.transferir ||
+    conversa.responsavel_id === usuario.id
+  if (!podeArquivar) throw new Error('Você não possui permissão para arquivar esta conversa.')
+
+  const agora = new Date().toISOString()
+  let query = supabaseAdmin
+    .from('atendimento_conversas')
+    .update({ ocultar_da_caixa: true, updated_at: agora })
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('canal', 'whatsapp')
+
+  if (conversa.whatsapp_canal_id) query = query.eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+  if (conversa.whatsapp_chat_jid) query = query.eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
+  else query = query.eq('telefone', conversa.telefone)
+
+  const { error } = await query
+  if (error) throw error
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: 'conversa_arquivada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: { preservou_historico: true },
+  })
+}
+
+export async function definirBloqueioContatoWhatsApp(
+  conversaId: string,
+  bloquear: boolean,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  if (conversa.whatsapp_chat_tipo === 'grupo') {
+    throw new Error('Bloqueio por esta ação está disponível apenas para contatos individuais.')
+  }
+  if (!conversa.whatsapp_canal_id || !conversa.whatsapp_chat_jid) {
+    throw new Error('Canal ou contato do WhatsApp não identificado.')
+  }
+
+  const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const podeBloquear = usuario.role === 'master' || acesso.dono || acesso.transferir
+  if (!podeBloquear) {
+    throw new Error('Para bloquear um contato é necessário ter permissão de Transferir neste WhatsApp.')
+  }
+
+  const agora = new Date().toISOString()
+  const telefone = normalizarTelefone(conversa.telefone)
+
+  const { error: bloqueioError } = await supabaseAdmin
+    .from('atendimento_whatsapp_bloqueios')
+    .upsert({
+      empresa_id: usuario.empresa_id,
+      canal_id: conversa.whatsapp_canal_id,
+      chat_jid: conversa.whatsapp_chat_jid,
+      telefone,
+      ativo: bloquear,
+      bloqueado_em: bloquear ? agora : null,
+      bloqueado_por: bloquear ? usuario.id : null,
+      bloqueado_por_nome: bloquear ? usuario.nome : null,
+      desbloqueado_em: bloquear ? null : agora,
+      desbloqueado_por: bloquear ? null : usuario.id,
+      desbloqueado_por_nome: bloquear ? null : usuario.nome,
+      updated_at: agora,
+    }, { onConflict: 'empresa_id,canal_id,chat_jid' })
+  if (bloqueioError) throw bloqueioError
+
+  if (bloquear) {
+    await supabaseAdmin
+      .from('atendimento_conversas')
+      .update({
+        ocultar_da_caixa: true,
+        status: 'finalizado',
+        nao_lidas: 0,
+        updated_at: agora,
+      })
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+      .eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
+
+    await supabaseAdmin
+      .from('atendimento_sessoes')
+      .update({ status: 'finalizado', closed_at: agora })
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('conversa_id', conversa.id)
+      .is('closed_at', null)
+  }
+
+  const { error: filaError } = await supabaseAdmin
+    .from('atendimento_fila_saida')
+    .insert({
+      empresa_id: usuario.empresa_id,
+      conversa_id: conversa.id,
+      mensagem_id: null,
+      telefone,
+      tipo: bloquear ? 'block' : 'unblock',
+      texto: null,
+      payload: {
+        transporte: 'qr_gateway',
+        chatJid: conversa.whatsapp_chat_jid,
+        acao: bloquear ? 'block' : 'unblock',
+      },
+      status: 'pendente',
+      whatsapp_canal_id: conversa.whatsapp_canal_id,
+    })
+  if (filaError) throw filaError
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: bloquear ? 'contato_bloqueado' : 'contato_desbloqueado',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: {
+      whatsapp_chat_jid: conversa.whatsapp_chat_jid,
+      telefone,
+      preservou_historico: true,
+    },
   })
 }
 
