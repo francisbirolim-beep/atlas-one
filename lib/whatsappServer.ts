@@ -1522,9 +1522,12 @@ export async function prepararUploadMidiaAtendimento(
   if (!conversa.whatsapp_canal_id) throw new Error('Esta conversa ainda não possui um número de WhatsApp associado.')
 
   const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
-  if (!acesso.atender) throw new Error('Você não possui permissão para responder por este canal.')
-  if (usuario.role !== 'master' && conversa.responsavel_id && conversa.responsavel_id !== usuario.id) {
-    throw new Error('Este atendimento está com outro atendente.')
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acesso)).atender
+    : acesso.atender
+  if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
+  if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento antes de enviar arquivos.')
   }
 
   return criarUploadAssinadoMidia({
@@ -1660,11 +1663,30 @@ export async function enviarMidiaWhatsApp(
   return { queued: true, mensagemId: mensagem.id }
 }
 
-export async function enviarTextoWhatsApp(conversaId: string, texto: string, usuario: UsuarioTenant) {
+export async function enviarTextoWhatsApp(
+  conversaId: string,
+  texto: string,
+  usuario: UsuarioTenant,
+  respostaMensagemId?: string | null,
+) {
   const conversa = await conversaAcessivel(conversaId, usuario, false)
   if (!conversa) throw new Error('Conversa não disponível para este usuário.')
   const corpo = texto.trim()
   if (!corpo) throw new Error('Mensagem vazia.')
+
+  let mensagemRespondida: any = null
+  if (respostaMensagemId) {
+    const { data: alvo } = await supabaseAdmin
+      .from('atendimento_mensagens')
+      .select('id,direcao,tipo,texto,whatsapp_message_id,payload')
+      .eq('id', respostaMensagemId)
+      .eq('conversa_id', conversa.id)
+      .eq('empresa_id', usuario.empresa_id)
+      .maybeSingle()
+    if (!alvo?.whatsapp_message_id) throw new Error('A mensagem original ainda não pode ser respondida pelo WhatsApp.')
+    mensagemRespondida = alvo
+  }
+
   const nomeAtendente = String(usuario.nome || 'Equipe Esquadrifácio').trim() || 'Equipe Esquadrifácio'
   const corpoCliente = `${nomeAtendente} diz:\n${corpo}`
 
@@ -1704,11 +1726,21 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       throw new Error('Assuma o atendimento antes de responder.')
     }
 
+    const alvoPayload = mensagemRespondida?.payload && typeof mensagemRespondida.payload === 'object'
+      ? mensagemRespondida.payload as Record<string, any>
+      : {}
     const destinoPayload = {
       transporte: 'qr_gateway',
       status: 'pendente',
       chatTipo: conversa.whatsapp_chat_tipo || 'contato',
       chatJid: conversa.whatsapp_chat_tipo === 'grupo' ? conversa.whatsapp_chat_jid || null : null,
+      quotedWhatsappMessageId: mensagemRespondida?.whatsapp_message_id || null,
+      quotedMessageId: mensagemRespondida?.id || null,
+      quotedText: mensagemRespondida?.texto || null,
+      quotedFromMe: mensagemRespondida ? mensagemRespondida.direcao === 'saida' : null,
+      quotedParticipantJid:
+        alvoPayload.participanteJid || alvoPayload.participante_jid ||
+        alvoPayload.participanteJidAlt || alvoPayload.participante_jid_alt || null,
     }
 
     const { data: mensagem, error: mensagemError } = await supabaseAdmin
@@ -1758,7 +1790,11 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       tipo: 'mensagem_enfileirada_qr',
       usuarioId: usuario.id,
       usuarioNome: usuario.nome,
-      dados: { mensagem_id: mensagem.id },
+      dados: {
+        mensagem_id: mensagem.id,
+        resposta_mensagem_id: mensagemRespondida?.id || null,
+        resposta_whatsapp_message_id: mensagemRespondida?.whatsapp_message_id || null,
+      },
     })
 
     return { messageId: null, queued: true }
@@ -1777,6 +1813,9 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       messaging_product: 'whatsapp',
       to: conversa.telefone,
       type: 'text',
+      ...(mensagemRespondida?.whatsapp_message_id
+        ? { context: { message_id: mensagemRespondida.whatsapp_message_id } }
+        : {}),
       text: { preview_url: false, body: corpoCliente },
     }),
   })
@@ -1795,7 +1834,12 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     usuario_id: usuario.id,
     usuario_nome: usuario.nome,
     provider_timestamp: agora,
-    payload: json,
+    payload: {
+      provider: json,
+      quotedWhatsappMessageId: mensagemRespondida?.whatsapp_message_id || null,
+      quotedMessageId: mensagemRespondida?.id || null,
+      quotedText: mensagemRespondida?.texto || null,
+    },
   })
   if (error) throw error
 
@@ -1815,10 +1859,114 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     tipo: 'mensagem_enviada',
     usuarioId: usuario.id,
     usuarioNome: usuario.nome,
-    dados: { whatsapp_message_id: messageId },
+    dados: {
+      whatsapp_message_id: messageId,
+      resposta_mensagem_id: mensagemRespondida?.id || null,
+      resposta_whatsapp_message_id: mensagemRespondida?.whatsapp_message_id || null,
+    },
   })
 
   return { messageId, queued: false }
+}
+
+export async function reagirMensagemWhatsApp(
+  conversaId: string,
+  mensagemId: string,
+  emoji: string,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, false)
+  if (!conversa) throw new Error('Conversa não disponível para este usuário.')
+  const reacao = String(emoji || '').trim()
+  if (!reacao || reacao.length > 16) throw new Error('Emoji inválido.')
+
+  const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
+    : acessoCanal.atender
+  if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não pode reagir às mensagens.')
+  if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento antes de reagir.')
+  }
+
+  const { data: alvo } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .select('id,direcao,texto,whatsapp_message_id,payload')
+    .eq('id', mensagemId)
+    .eq('conversa_id', conversaId)
+    .eq('empresa_id', usuario.empresa_id)
+    .maybeSingle()
+  if (!alvo?.whatsapp_message_id) throw new Error('Esta mensagem ainda não aceita reação.')
+
+  const { data: config } = await supabaseAdmin.from('atendimento_configuracoes')
+    .select('modo_integracao').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
+  if ((config?.modo_integracao || 'qr') !== 'qr') {
+    throw new Error('Reações pelo Atlas estão disponíveis nos canais conectados por QR.')
+  }
+  if (!conversa.whatsapp_canal_id) throw new Error('Canal WhatsApp não identificado.')
+
+  const alvoPayload = alvo.payload && typeof alvo.payload === 'object' ? alvo.payload as Record<string, any> : {}
+  const agora = new Date().toISOString()
+  const payload = {
+    transporte: 'qr_gateway',
+    status: 'pendente',
+    chatTipo: conversa.whatsapp_chat_tipo || 'contato',
+    chatJid: conversa.whatsapp_chat_tipo === 'grupo' ? conversa.whatsapp_chat_jid || null : null,
+    reactionTargetWhatsappId: alvo.whatsapp_message_id,
+    reactionTargetMessageId: alvo.id,
+    reactionTargetFromMe: alvo.direcao === 'saida',
+    reactionTargetParticipantJid:
+      alvoPayload.participanteJid || alvoPayload.participante_jid ||
+      alvoPayload.participanteJidAlt || alvoPayload.participante_jid_alt || null,
+  }
+
+  const sessao = await garantirSessao(conversa)
+  const { data: mensagem, error: mensagemError } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .insert({
+      empresa_id: usuario.empresa_id,
+      conversa_id: conversa.id,
+      sessao_id: sessao?.id || null,
+      direcao: 'saida',
+      tipo: 'reacao',
+      texto: reacao,
+      usuario_id: usuario.id,
+      usuario_nome: usuario.nome,
+      provider_timestamp: agora,
+      payload,
+    })
+    .select('id')
+    .single()
+  if (mensagemError) throw mensagemError
+
+  const { error: filaError } = await supabaseAdmin.from('atendimento_fila_saida').insert({
+    empresa_id: usuario.empresa_id,
+    conversa_id: conversa.id,
+    mensagem_id: mensagem.id,
+    telefone: conversa.telefone,
+    tipo: 'reaction',
+    texto: reacao,
+    payload,
+    status: 'pendente',
+    whatsapp_canal_id: conversa.whatsapp_canal_id,
+  })
+  if (filaError) throw filaError
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId: conversa.id,
+    sessaoId: sessao?.id || null,
+    tipo: 'mensagem_reagida',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: {
+      mensagem_id: alvo.id,
+      whatsapp_message_id: alvo.whatsapp_message_id,
+      emoji: reacao,
+    },
+  })
+
+  return { queued: true, mensagemId: mensagem.id }
 }
 
 export async function marcarConversaComoLida(conversaId: string, usuario: UsuarioTenant) {
