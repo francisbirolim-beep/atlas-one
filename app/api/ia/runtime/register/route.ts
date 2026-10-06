@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const runtime = 'nodejs'
 
 const RUNTIME_TOKEN_SHA256 = '0413cfd7c64307c11557c1504aa285a6df978e8e210019cb335c75ce837aedfe'
+const CHAVES_RUNTIME = new Set(['opencode_gateway','whisper_gateway','image_gateway'])
 
 function tokenValido(recebido: string) {
   if (!recebido) return false
@@ -35,13 +36,22 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}))
     const baseUrl = normalizarBaseUrl(body?.baseUrl)
+    const chave = String(body?.chave || 'opencode_gateway').trim()
+    if (!CHAVES_RUNTIME.has(chave)) throw new Error('Tipo de runtime não permitido.')
+
+    const observacoes: Record<string,string> = {
+      opencode_gateway: 'Gateway OpenCode do Atlas; ordem gratuita: Ollama local -> FreeLLMAPI.',
+      whisper_gateway: 'Whisper local compatível com /v1/audio/transcriptions; custo por token zero.',
+      image_gateway: 'Stable Diffusion WebUI/Forge local; geração de imagem sem API paga.',
+    }
+
     const { error } = await supabaseAdmin
       .from('ai_runtime_endpoints')
       .upsert({
-        chave: 'opencode_gateway',
+        chave,
         base_url: baseUrl,
         ativo: true,
-        observacao: 'Gateway OpenCode da IA Comercial do Atlas One; OpenCode -> FreeLLMAPI',
+        observacao: observacoes[chave] || 'Runtime gratuito Atlas',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'chave' })
 
