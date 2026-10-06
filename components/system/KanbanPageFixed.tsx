@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search, Wrench } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search, Wrench, RefreshCw, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
@@ -10,7 +10,7 @@ import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoI
 import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard, excluirOrcamento } from '@/lib/kanban'
 import { executarAutomacoesColuna } from '@/lib/automacoes'
 import { verificarDuplicatasAutomacaoSetor } from '@/lib/automacoesSetor'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { registrarHistorico, listarHistorico } from '@/lib/historico'
 import { uploadFoto, uploadArquivo } from '@/lib/upload'
 import { corTextoParaFundo } from '@/lib/cor'
@@ -87,6 +87,18 @@ versao += 1
 if (anexo.titulo !== 'Orçamento (PDF)') return anexo
 return { ...anexo, titulo: `Orçamento — Versão ${String(versao).padStart(2, '0')} — data anterior não registrada` }
 })
+}
+
+type WVetroCandidatoKanban = {
+  numero: string
+  cliente: string
+  valor: number
+  situacao?: string | null
+  data?: string | null
+  fonte: 'orcamento' | 'pedido'
+  nome_exato: boolean
+  atlas_id?: string | null
+  atlas_numero?: number | null
 }
 
 const acabamentoLabelsPdf: Record<string, string> = {
@@ -240,6 +252,10 @@ const [filtroDataAte, setFiltroDataAte] = useState('')
 const [filtroTemperatura, setFiltroTemperatura] = useState('')
 const [corAssistencia, setCorAssistencia] = useState('#8b5cf6')
 const [tiposVersao, setTiposVersao] = useState(0)
+const [buscandoWVetro, setBuscandoWVetro] = useState(false)
+const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
+const [candidatosWVetro, setCandidatosWVetro] = useState<WVetroCandidatoKanban[]>([])
+const [mensagemWVetro, setMensagemWVetro] = useState('')
 
 useEffect(() => {
 carregar()
@@ -265,7 +281,7 @@ supabase
 ])
 setColunas(cols)
 if (orc) {
-const lista = orc as OrcamentoRapido[]
+const lista = (orc as OrcamentoRapido[]).filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
 setCards(lista)
 if (typeof window !== 'undefined') {
 const idAlvo = new URLSearchParams(window.location.search).get('orcamento')
@@ -447,6 +463,8 @@ setSessaoAtiva(!cardAberto.orcamento_finalizado_em)
 setVendedorInfo(null)
 setWhatsappVendedor('')
 setMensagemVendedor(mensagemPadraoVendedor(cardAberto))
+setCandidatosWVetro([])
+setMensagemWVetro('')
 
 await registrarHistorico(
 cardAberto.id,
@@ -527,6 +545,66 @@ if (!cardSelecionado) return
 setSessaoAtiva(true)
 await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orçamento')
 listarHistorico(cardSelecionado.id).then(setHistorico)
+}
+
+async function apiWVetroKanban(acao: 'buscar' | 'vincular', numeroWvetro?: string) {
+const token = await tokenAtual()
+if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+if (!cardSelecionado) throw new Error('Abra um orçamento antes de sincronizar.')
+const resp = await fetch('/api/integracoes/wvetro/orcamentos/kanban', {
+method: 'POST',
+headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+body: JSON.stringify({ acao, cardId: cardSelecionado.id, numeroWvetro }),
+})
+const json = await resp.json().catch(() => ({}))
+if (!resp.ok) throw new Error(json?.error || 'Falha ao consultar o W.Vetro.')
+return json
+}
+
+async function vincularWVetroCard(numeroWvetro: string) {
+if (!cardSelecionado || sincronizandoWVetro) return
+setSincronizandoWVetro(true)
+setMensagemWVetro('')
+try {
+const json = await apiWVetroKanban('vincular', numeroWvetro)
+const atualizado = json.orcamento as OrcamentoRapido
+if (atualizado?.id) {
+const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
+setEditando(exibicao)
+setCardSelecionado(exibicao)
+setCards(prev => prev.map(c => c.id === exibicao.id ? exibicao : c))
+await carregar()
+setHistorico(await listarHistorico(exibicao.id))
+}
+setCandidatosWVetro([])
+setMensagemWVetro(json.mensagem || `Orçamento W.Vetro #${numeroWvetro} sincronizado.`)
+} catch (e) {
+setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao sincronizar o W.Vetro.')
+} finally {
+setSincronizandoWVetro(false)
+}
+}
+
+async function buscarWVetroCard() {
+if (!cardSelecionado || buscandoWVetro || sincronizandoWVetro) return
+setBuscandoWVetro(true)
+setMensagemWVetro('')
+setCandidatosWVetro([])
+try {
+const json = await apiWVetroKanban('buscar')
+const lista = (json.candidatos || []) as WVetroCandidatoKanban[]
+setCandidatosWVetro(lista)
+if (json.autoVincularNumero && lista.length === 1 && lista[0]?.nome_exato) {
+setMensagemWVetro(`Encontrei automaticamente o W.Vetro #${json.autoVincularNumero} para ${json.cliente}. Sincronizando...`)
+await vincularWVetroCard(String(json.autoVincularNumero))
+return
+}
+setMensagemWVetro(json.mensagem || 'Confira os orçamentos encontrados no W.Vetro.')
+} catch (e) {
+setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao buscar orçamentos no W.Vetro.')
+} finally {
+setBuscandoWVetro(false)
+}
 }
 
 async function adicionarAnexo(file: File | undefined) {
@@ -1740,6 +1818,87 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-1
 {(cardSelecionado as any).fotos_urls.map((url: string, i: number) => (
 <a key={i} href={url} target="_blank" rel="noreferrer"><img src={url} alt={`Foto ${i + 1}`} className="w-full h-16 object-cover rounded-lg" /></a>
 ))}
+</div>
+)}
+
+{podeEditarSemIniciar && (
+<div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+<div className="flex flex-wrap items-center justify-between gap-2">
+<div>
+<p className="text-xs font-semibold text-slate-700">Orçamento W.Vetro e arquivos</p>
+<p className="text-[11px] text-slate-500 mt-0.5">Sincronize o orçamento feito no W.Vetro ou anexe uma versão manual. O que já estiver neste card é preservado.</p>
+</div>
+<button
+type="button"
+onClick={() => void buscarWVetroCard()}
+disabled={buscandoWVetro || sincronizandoWVetro}
+className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+>
+{buscandoWVetro || sincronizandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+{sincronizandoWVetro ? 'Sincronizando...' : 'Sincronizar W.Vetro'}
+</button>
+</div>
+
+{mensagemWVetro && (
+<div className="rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs text-slate-600">{mensagemWVetro}</div>
+)}
+
+{candidatosWVetro.length > 0 && (
+<div className="space-y-2">
+<p className="text-[11px] font-semibold text-slate-500">Escolha o orçamento correto</p>
+{candidatosWVetro.map(c => (
+<div key={c.numero} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5 ${c.nome_exato ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+<div className="min-w-0">
+<p className="text-xs font-semibold text-slate-700">W.Vetro #{c.numero} · {c.cliente}</p>
+<p className="text-[11px] text-slate-500">{c.data || 'sem data'} · {formatarMoedaBRL(c.valor)}{c.situacao ? ` · situação ${c.situacao}` : ''}{c.atlas_numero ? ` · já importado no Atlas #${c.atlas_numero}` : ''}</p>
+</div>
+<button
+type="button"
+onClick={() => void vincularWVetroCard(c.numero)}
+disabled={sincronizandoWVetro}
+className="rounded-lg bg-brand-navy px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+>
+Usar este
+</button>
+</div>
+))}
+</div>
+)}
+
+<div className="border-t border-slate-200 pt-3">
+<label className="block text-xs font-medium text-slate-600 mb-2">Anexos e versões do orçamento</label>
+{(editando.anexos || []).length === 0 && (
+<p className="mb-2 text-[11px] text-slate-400">Nenhum arquivo anexado neste card.</p>
+)}
+{(editando.anexos || []).map((a, i) => (
+<div key={i} className={`mb-1.5 rounded-lg px-2 py-1.5 text-xs ${a.excluido_em ? 'border border-red-100 bg-red-50' : 'border border-slate-100 bg-white'}`}>
+<div className="flex flex-wrap items-center gap-2">
+<Paperclip size={12} className="flex-shrink-0" />
+<a href={a.url} target="_blank" rel="noreferrer" className={`min-w-0 flex-1 truncate font-medium hover:underline ${a.excluido_em ? 'text-red-500 line-through' : 'text-brand-navy'}`}>{a.titulo} <span className="font-normal text-slate-400">({a.nome})</span></a>
+{!a.excluido_em && (
+<>
+<button type="button" onClick={() => void enviarAnexoVendedor(a)} className="text-brand-navy hover:underline">Enviar</button>
+<button type="button" onClick={() => void excluirAnexo(i)} className="text-red-500 hover:underline">Excluir</button>
+</>
+)}
+</div>
+</div>
+))}
+<div className="mt-2 flex items-center gap-2">
+<input
+type="text"
+value={novoAnexoTitulo}
+onChange={e => setNovoAnexoTitulo(e.target.value)}
+placeholder="Título (ex: Orçamento W.Vetro / Revisão 02)"
+className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white p-2 text-xs"
+/>
+<label className={`flex flex-shrink-0 items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs ${novoAnexoTitulo.trim() ? 'cursor-pointer border-brand-navy text-brand-navy hover:bg-brand-navyLight' : 'border-slate-200 text-slate-300'}`}>
+<Paperclip size={13} /> Anexar
+<input type="file" className="hidden" disabled={!novoAnexoTitulo.trim()} onChange={e => void adicionarAnexo(e.target.files?.[0])} />
+</label>
+</div>
+<p className="mt-1 text-[11px] text-slate-400">Anexar ou sincronizar não apaga versões anteriores nem outros dados já preenchidos.</p>
+</div>
 </div>
 )}
 
