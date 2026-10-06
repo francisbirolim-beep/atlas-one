@@ -112,7 +112,7 @@ export async function statusOpenCode() {
   const c = await carregarConfig()
   const apiFreeLlmConfigurado = Boolean(String(process.env.APIFREELLM_API_KEY || '').trim())
   return {
-    configurado: apiFreeLlmConfigurado || Boolean(c.baseUrl && (c.authMode === 'atlas-jwt' || c.password)),
+    configurado: true,
     baseUrlConfigurada: Boolean(c.baseUrl),
     modoAutenticacao: c.authMode,
     agent: c.agent,
