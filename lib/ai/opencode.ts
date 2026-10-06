@@ -9,7 +9,7 @@ export type OpenCodeResultado = {
   resposta: string
   providerId: string
   modelId: string
-  rota: 'apifreellm-community' | 'ollama-local' | 'freellmapi'
+  rota: 'opencode-public-free' | 'apifreellm-community' | 'ollama-local' | 'freellmapi'
   custoEstimado: 0
   tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }>
 }
@@ -121,6 +121,12 @@ export async function statusOpenCode() {
     zeroCost: c.zeroCost,
     paidProvidersBloqueados: c.zeroCost,
     ordemGratis: [
+      {
+        rota: 'opencode-public-free',
+        providerId: 'opencode',
+        modelId: 'free-public-router',
+        habilitado: true,
+      },
       {
         rota: 'apifreellm-community',
         providerId: 'apifreellm',
@@ -353,6 +359,90 @@ async function enviar(
   }
 }
 
+async function consultarOpenCodePublicFree(params: {
+  system: string
+  prompt: string
+  anexos?: OpenCodeAnexo[]
+}): Promise<{ resposta: string; modelId: string; tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }> } | null> {
+  const temImagem = (params.anexos || []).some(a => String(a.mediaType || '').toLowerCase().startsWith('image/') && a.dados)
+  if (temImagem) return null
+
+  const modelos = String(
+    process.env.OPENCODE_PUBLIC_FREE_MODELS ||
+    'mimo-v2.6-flash-free,ling-3.1-flash-free,nemotron-3.5-lightning-free,space-bunny-free'
+  )
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+
+  const tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }> = []
+  const endpoint = 'https://opencode.ai/inference/openai/v1/chat/completions'
+
+  for (const model of modelos) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 18_000)
+    try {
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: params.system },
+            { role: 'user', content: params.prompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 2200,
+          stream: false,
+        }),
+        signal: controller.signal,
+        cache: 'no-store',
+      })
+
+      const texto = await resp.text()
+      let data: any = {}
+      try { data = texto ? JSON.parse(texto) : {} } catch { data = { text: texto } }
+
+      if (!resp.ok) {
+        const detalhe = String(
+          data?.error?.message || data?.error || data?.message || data?.text || ('OpenCode public HTTP ' + resp.status)
+        ).slice(0, 300)
+        tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe })
+        continue
+      }
+
+      const resposta = String(
+        data?.choices?.[0]?.message?.content ||
+        data?.choices?.[0]?.text ||
+        data?.output_text ||
+        ''
+      ).trim()
+
+      if (!resposta) {
+        tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe: 'Resposta vazia' })
+        continue
+      }
+
+      tentativas.push({ rota: 'opencode-public-free:' + model, ok: true })
+      return { resposta, modelId: model, tentativas }
+    } catch (e: any) {
+      const detalhe = e?.name === 'AbortError'
+        ? 'timeout 18s'
+        : String(e?.message || e || 'falha').slice(0, 300)
+      tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe })
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  const erro: any = new Error(
+    tentativas.map(t => t.rota + ': ' + (t.ok ? 'ok' : (t.detalhe || 'falhou'))).join(' | ').slice(0, 800)
+  )
+  erro.tentativas = tentativas
+  throw erro
+}
+
 async function consultarApiFreeLlmCommunity(params: {
   system: string
   prompt: string
@@ -407,6 +497,28 @@ export async function consultarOpenCode(params: {
   anexos?: OpenCodeAnexo[]
 }): Promise<OpenCodeResultado> {
   const tentativasExternas: Array<{ rota: string; ok: boolean; detalhe?: string }> = []
+
+  try {
+    const publica = await consultarOpenCodePublicFree(params)
+    if (publica) {
+      return {
+        sessionId: String(params.sessionId || ('opencode-public-' + Date.now())),
+        resposta: publica.resposta,
+        providerId: 'opencode',
+        modelId: publica.modelId,
+        rota: 'opencode-public-free',
+        custoEstimado: 0,
+        tentativas: publica.tentativas,
+      }
+    }
+  } catch (e: any) {
+    const tentativas = Array.isArray(e?.tentativas) ? e.tentativas : [{
+      rota: 'opencode-public-free',
+      ok: false,
+      detalhe: String(e?.message || e || 'Falha OpenCode público').slice(0, 300),
+    }]
+    tentativasExternas.push(...tentativas)
+  }
 
   try {
     const direta = await consultarApiFreeLlmCommunity(params)
