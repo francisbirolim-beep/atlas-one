@@ -354,8 +354,9 @@ export default function WhatsAppUsuarioPermissoes({ usuarioId, usuarioNome, usua
                     const pg=porGrupo.get(grupo.id)
                     const nivel=(pg?.nivel||'herdar') as 'herdar'|'sem_acesso'|'acompanhar'|'atender'|'gerenciar'
                     const respAtual=responsavelPorGrupo.get(grupo.id)
-                    const podeResponsavel=nivel==='atender'||nivel==='gerenciar'
-                    const souResponsavel=pg?.responsavel_principal===true
+                    const membros=grupo.membros||[]
+                    const opcoesResponsavel=grupo.opcoes_responsavel||[]
+                    const membrosAberto=membrosAbertos[grupo.id]===true
                     return <div key={grupo.id} className="p-3">
                       <div className="flex items-start gap-2">
                         <Users size={15} className="mt-0.5 shrink-0 text-violet-600"/>
@@ -363,12 +364,12 @@ export default function WhatsAppUsuarioPermissoes({ usuarioId, usuarioNome, usua
                           <p className="truncate text-xs font-bold text-slate-800">{grupo.nome}</p>
                           <p className="text-[10px] text-slate-400">{grupo.participantes||0} participantes</p>
                         </div>
-                        {salvando===`grupo:${grupo.id}`&&<Loader2 size={14} className="animate-spin text-slate-400"/>}
+                        {(salvando===`grupo:${grupo.id}`||salvando===`responsavel:${grupo.id}`)&&<Loader2 size={14} className="animate-spin text-slate-400"/>}
                       </div>
 
-                      <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_190px]">
+                      <div className="mt-2 grid gap-2 md:grid-cols-2">
                         <label className="text-[10px] font-semibold text-slate-500">
-                          Permissão neste grupo
+                          Permissão de {usuarioNome.split(' ')[0]} neste grupo
                           <select value={nivel}
                             onChange={e=>void salvarGrupo(grupo.id,e.target.value as any,false)}
                             className="mt-1 w-full rounded-lg border bg-white px-2 py-2 text-xs font-semibold text-slate-700">
@@ -379,12 +380,28 @@ export default function WhatsAppUsuarioPermissoes({ usuarioId, usuarioNome, usua
                             <option value="gerenciar">Pode gerenciar</option>
                           </select>
                         </label>
-                        <button type="button" disabled={!podeResponsavel}
-                          onClick={()=>void salvarGrupo(grupo.id,nivel as any,!souResponsavel)}
-                          className={`mt-auto inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-35 ${souResponsavel?'border-emerald-300 bg-emerald-50 text-emerald-800':'bg-white text-slate-600'}`}>
-                          <UserRoundCheck size={14}/>
-                          {souResponsavel?'✓ Responsável do grupo':'Definir responsável'}
-                        </button>
+
+                        <label className="text-[10px] font-semibold text-slate-500">
+                          Responsável principal do grupo
+                          <div className="relative mt-1">
+                            <UserRoundCheck size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-emerald-600"/>
+                            <select
+                              value={respAtual?.usuario_id||''}
+                              disabled={salvando===`responsavel:${grupo.id}`}
+                              onChange={e=>void salvarResponsavelGrupo(grupo.id,e.target.value)}
+                              className="w-full rounded-lg border bg-white py-2 pl-8 pr-2 text-xs font-semibold text-slate-700 disabled:opacity-50">
+                              <option value="">Sem responsável principal</option>
+                              {opcoesResponsavel.map(op=>
+                                <option key={op.usuario_id} value={op.usuario_id}>
+                                  {op.usuario_nome}{op.telefone?` · ${numeroFormatado(op.telefone)}`:''}
+                                </option>
+                              )}
+                              {respAtual?.usuario_id&&!opcoesResponsavel.some(op=>op.usuario_id===respAtual.usuario_id)&&(
+                                <option value={respAtual.usuario_id}>{respAtual.usuario_nome||'Responsável atual'} · vínculo antigo</option>
+                              )}
+                            </select>
+                          </div>
+                        </label>
                       </div>
 
                       <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] text-slate-600">
@@ -393,6 +410,43 @@ export default function WhatsAppUsuarioPermissoes({ usuarioId, usuarioNome, usua
                           : <>Este grupo ainda não tem responsável principal definido.</>}
                         {nivel==='acompanhar'&&<span> {usuarioNome.split(' ')[0]} pode ler, mas não responder ou transferir.</span>}
                         {nivel==='gerenciar'&&<span> {usuarioNome.split(' ')[0]} pode atender, transferir e gerenciar este grupo.</span>}
+                      </div>
+
+                      <div className="mt-2 rounded-xl border border-violet-100 bg-violet-50/40">
+                        <button type="button"
+                          onClick={()=>setMembrosAbertos(v=>({...v,[grupo.id]:!membrosAberto}))}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+                          <span className="inline-flex items-center gap-2 text-[11px] font-bold text-violet-800">
+                            <Users size={14}/> Participantes do grupo
+                          </span>
+                          <span className="text-[10px] font-semibold text-violet-600">
+                            {membros.length} identificados de {grupo.participantes||membros.length} · {membrosAberto?'Ocultar':'Ver nomes'}
+                          </span>
+                        </button>
+                        {membrosAberto&&(
+                          <div className="grid gap-1 border-t border-violet-100 p-2 sm:grid-cols-2">
+                            {membros.length===0&&(
+                              <p className="col-span-full px-2 py-3 text-[10px] text-slate-500">
+                                Os nomes ainda estão sendo sincronizados do WhatsApp. O total de participantes já foi identificado.
+                              </p>
+                            )}
+                            {membros.map((membro,indice)=>(
+                              <div key={`${membro.jid||membro.telefone||membro.nome}-${indice}`}
+                                className="flex items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-2 text-[10px]">
+                                <div className="min-w-0">
+                                  <p className="truncate font-bold text-slate-700">{membro.nome}</p>
+                                  <p className="truncate text-slate-400">
+                                    {membro.telefone?numeroFormatado(membro.telefone):'Número não identificado'}
+                                    {membro.admin?' · admin':''}
+                                  </p>
+                                </div>
+                                {membro.usuario_id
+                                  ? <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 font-bold text-emerald-700">Usuário Atlas</span>
+                                  : <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-500">Participante</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   })}
