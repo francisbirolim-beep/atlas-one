@@ -92,6 +92,22 @@ async function indiceProdutos() {
   return { mapa, produtos: data || [] }
 }
 
+function candidatosProdutoPrioritarios(
+  mapa: Map<string, any[]>,
+  categoria: string,
+  codigoWvetro: unknown,
+  codigoAlternativo: unknown,
+) {
+  for (const bruto of [codigoWvetro, codigoAlternativo]) {
+    const codigo = norm(bruto)
+    if (!codigo) continue
+    const candidatos = new Map<string, any>()
+    for (const p of mapa.get(`${categoria}:${codigo}`) || []) candidatos.set(p.id, p)
+    if (candidatos.size > 0) return candidatos
+  }
+  return new Map<string, any>()
+}
+
 async function indiceTipologias() {
   const [{ data: refs, error: e1 }, { data: tips, error: e2 }] = await Promise.all([
     supabaseAdmin.from('wvetro_referencias_tipologias').select('id,chave,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,largura_min_mm,largura_max_mm,altura_min_mm,altura_max_mm,ambientes_observados,nomes_observados'),
@@ -311,10 +327,12 @@ export async function processarBaseTecnicaWVetroDia(data: string) {
         const c = componenteDoRaw(tipo, raw)
         if (!c) continue
         const categoria = tipo === 'vidro' ? 'vidro' : tipo
-        const candidatos = new Map<string, any>()
-        for (const codigo of [c.codigo, c.codigoWvetro].map(norm).filter(Boolean)) {
-          for (const p of produtos.get(`${categoria}:${codigo}`) || []) candidatos.set(p.id, p)
-        }
+        const candidatos = candidatosProdutoPrioritarios(
+          produtos,
+          categoria,
+          c.codigoWvetro,
+          c.codigo,
+        )
         const produto = candidatos.size === 1 ? Array.from(candidatos.values())[0] : null
         const ak = `${ref.id}:${tipo}:${c.chave}`
         const atual = agregados.get(ak) || {
@@ -542,8 +560,12 @@ export async function mapearReferenciasComponentesExatas() {
     if (ref.produto_atlas_id) continue
     const categoria = ref.tipo === 'perfil' ? 'perfil' : ref.tipo === 'acessorio' ? 'acessorio' : null
     if (!categoria) continue
-    const candidatos = new Map<string, any>()
-    for (const codigo of [ref.codigo, ref.codigo_wvetro].map(norm).filter(Boolean)) for (const p of mapa.get(`${categoria}:${codigo}`) || []) candidatos.set(p.id, p)
+    const candidatos = candidatosProdutoPrioritarios(
+      mapa,
+      categoria,
+      ref.codigo_wvetro,
+      ref.codigo,
+    )
     if (candidatos.size === 1) {
       const p = Array.from(candidatos.values())[0]
       const { error } = await supabaseAdmin.from('wvetro_referencias_componentes').update({ produto_atlas_id: p.id, status_mapeamento: 'mapeada_exata', updated_at: new Date().toISOString() }).eq('id', ref.id)
