@@ -279,10 +279,6 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
       ...variaveisFormulaVisiveis.map(v => v.chave),
       'folhas',
     ])
-    // Quando o W.Vetro observou "contramarco" ou "vidro" como parte da
-    // configuração, eles podem coexistir com os campos gerais acima. As demais
-    // variáveis continuam protegidas contra duplicidade.
-    ocupadas.delete('vidro')
     const lista = variaveisOperacionaisDaTipologia(tipologia).filter(item => !ocupadas.has(item.chave))
     const agrupadas = new Map<string, ReferenciaVariavelWVetro[]>()
     for (const ref of referenciaWVetro?.variaveis || []) {
