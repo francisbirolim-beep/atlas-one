@@ -78,6 +78,7 @@ export default function DetalheMedicaoFinal() {
   const [editandoItemId, setEditandoItemId] = useState<string | null>(null)
   const [formTipo, setFormTipo] = useState<TipoEsquadria>('porta_correr')
   const [formTipoOutro, setFormTipoOutro] = useState('')
+  const [formAmbiente, setFormAmbiente] = useState('')
   const [formDescricao, setFormDescricao] = useState('')
   const [formQuantidade, setFormQuantidade] = useState(1)
   const [salvandoItem, setSalvandoItem] = useState(false)
@@ -177,6 +178,7 @@ export default function DetalheMedicaoFinal() {
     setEditandoItemId(null)
     setFormTipo('porta_correr')
     setFormTipoOutro('')
+    setFormAmbiente('')
     setFormDescricao('')
     setFormQuantidade(1)
     setModalItem(true)
@@ -186,6 +188,7 @@ export default function DetalheMedicaoFinal() {
     setEditandoItemId(item.id)
     setFormTipo(item.tipo_esquadria as TipoEsquadria)
     setFormTipoOutro(item.tipo_outro_texto || '')
+    setFormAmbiente(item.ambiente || '')
     setFormDescricao(item.descricao || '')
     setFormQuantidade(item.quantidade)
     setModalItem(true)
@@ -199,6 +202,7 @@ export default function DetalheMedicaoFinal() {
       const campos = {
         tipo_esquadria: formTipo,
         tipo_outro_texto: tipoOutroTexto,
+        ambiente: formAmbiente.trim() || null,
         descricao: formDescricao.trim(),
         quantidade: formQuantidade,
       }
@@ -209,7 +213,8 @@ export default function DetalheMedicaoFinal() {
     } else if (medicao) {
       const novo = await adicionarItemMedicao(
         medicao.id, formTipo, tipoOutroTexto,
-        formDescricao.trim() || labelTipo(formTipo), formQuantidade
+        formDescricao.trim() || labelTipo(formTipo), formQuantidade,
+        formAmbiente.trim() || null
       )
       if (novo) setItens(prev => [...prev, novo])
     }
@@ -627,6 +632,7 @@ export default function DetalheMedicaoFinal() {
                       </span>
                     )}
                   </div>
+                  {item.ambiente && <p className="mt-0.5 text-xs font-semibold text-brand-navy">Ambiente: {item.ambiente}</p>}
                   {item.descricao && <p className="text-xs text-slate-500 mt-0.5">{item.descricao}</p>}
                   {ehContramarco && item.medido && item.producao_largura_mm && item.producao_altura_mm && (
                     <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
@@ -761,7 +767,17 @@ export default function DetalheMedicaoFinal() {
             )}
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Descrição (ex: Item 1 - sala)</label>
+              <label className="block text-xs text-slate-500 mb-1">Ambiente</label>
+              <input
+                value={formAmbiente}
+                onChange={e => setFormAmbiente(e.target.value)}
+                placeholder="Ex.: Sala, Quarto 1, Cozinha"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Descrição (opcional)</label>
               <input
                 value={formDescricao}
                 onChange={e => setFormDescricao(e.target.value)}
