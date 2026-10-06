@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { usuarioAtual } from '@/lib/auth'
-import { DASHBOARDS, lerHomeUsuarioConfig, temModulo, type DashboardId, type HomeUsuarioConfig } from '@/lib/homeUsuario'
+import { usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
+import { DASHBOARDS, homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type DashboardId, type HomeUsuarioConfig } from '@/lib/homeUsuario'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeRecentQuotes from '@/components/system/HomeRecentQuotes'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
@@ -15,32 +15,57 @@ import HomeSectorOverview from '@/components/system/HomeSectorOverview'
 import HomeQuotesOverview from '@/components/system/HomeQuotesOverview'
 
 export default function HomeDashboard() {
-  const [config, setConfig] = useState<HomeUsuarioConfig | null>(null)
-  const [dashboard, setDashboard] = useState<DashboardId | 'executivo' | null>(null)
+  const usuarioInicial = usuarioCacheLocal()
+  const configInicial = homeConfigPadrao(usuarioInicial?.role || 'funcionario')
+  const [config, setConfig] = useState<HomeUsuarioConfig>(configInicial)
+  const [dashboard, setDashboard] = useState<DashboardId | 'executivo' | null>(
+    configInicial.dashboards?.includes('pessoal') ? 'pessoal' : (configInicial.dashboardPrincipal || configInicial.dashboards?.[0] || 'geral')
+  )
 
   useEffect(() => {
     let ativo = true
-    usuarioAtual().then(async usuario => {
-      if (!usuario) return
-      const carregada = await lerHomeUsuarioConfig(usuario)
-      if (ativo) {
-        setConfig(carregada)
-        setDashboard(carregada.dashboards?.includes('pessoal') ? 'pessoal' : (carregada.dashboardPrincipal || carregada.dashboards?.[0] || 'geral'))
-      }
-    })
-    return () => { ativo = false }
-  }, [])
+    let timer: ReturnType<typeof setTimeout> | null = null
 
-  if (!config) {
-    return (
-      <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
-        <HomeExecutiveHero modulos={[]} />
-        <section className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-400 shadow-sm">Carregando a tela configurada para este usuário...</div>
-        </section>
-      </div>
-    )
-  }
+    const aplicar = (carregada: HomeUsuarioConfig) => {
+      if (!ativo) return
+      setConfig(carregada)
+      setDashboard(atual => atual || (
+        carregada.dashboards?.includes('pessoal')
+          ? 'pessoal'
+          : (carregada.dashboardPrincipal || carregada.dashboards?.[0] || 'geral')
+      ))
+    }
+
+    void (async () => {
+      const cache = usuarioCacheLocal()
+      if (cache) aplicar(homeConfigPadrao(cache.role))
+
+      const usuario = await Promise.race([
+        usuarioAtual(),
+        new Promise<null>(resolve => {
+          timer = setTimeout(() => resolve(cache || null), 1200)
+        }),
+      ])
+      if (!ativo || !usuario) return
+
+      const padrao = homeConfigPadrao(usuario.role)
+      aplicar(padrao)
+
+      const promessaConfig = lerHomeUsuarioConfig(usuario)
+      promessaConfig.then(aplicar).catch(() => undefined)
+
+      const rapida = await Promise.race([
+        promessaConfig,
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 1200)),
+      ])
+      if (rapida) aplicar(rapida)
+    })()
+
+    return () => {
+      ativo = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
 
   const atual = dashboard || (config.dashboards?.includes('pessoal') ? 'pessoal' : config.dashboardPrincipal) || 'geral'
   const permitidos = config.dashboards?.length ? config.dashboards : ['geral'] as DashboardId[]
