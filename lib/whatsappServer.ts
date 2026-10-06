@@ -1502,6 +1502,19 @@ export async function iniciarConversaWhatsApp(
   const status = tipo === 'contato' ? 'em_atendimento' : 'finalizado'
 
   if (existente) {
+    const reabrindo = tipo === 'contato' && existente.status === 'finalizado'
+    if (
+      tipo === 'contato' &&
+      !reabrindo &&
+      existente.responsavel_id &&
+      existente.responsavel_id !== usuario.id &&
+      usuario.role !== 'master'
+    ) {
+      throw new Error(`Este contato já está em atendimento por ${existente.responsavel_nome || 'outro atendente'}.`)
+    }
+
+    const assumirAoAbrir = tipo === 'contato' && (reabrindo || !existente.responsavel_id)
+    const agora = new Date().toISOString()
     const { data, error } = await supabaseAdmin
       .from('atendimento_conversas')
       .update({
@@ -1514,21 +1527,47 @@ export async function iniciarConversaWhatsApp(
         whatsapp_numero: canal.numero_declarado,
         ocultar_da_caixa: false,
         responsavel_id: tipo === 'contato'
-          ? (existente.responsavel_id || responsavel)
+          ? (assumirAoAbrir ? usuario.id : (existente.responsavel_id || responsavel))
           : (existente.responsavel_id || responsavel),
         responsavel_nome: tipo === 'contato'
-          ? (existente.responsavel_nome || responsavelNome)
+          ? (assumirAoAbrir ? usuario.nome : (existente.responsavel_nome || responsavelNome))
           : (existente.responsavel_nome || responsavelNome),
         status: tipo === 'contato'
-          ? (existente.responsavel_id ? existente.status : status)
+          ? (assumirAoAbrir ? 'em_atendimento' : existente.status)
           : existente.status,
-        updated_at: new Date().toISOString(),
+        nao_lidas: assumirAoAbrir ? 0 : existente.nao_lidas,
+        updated_at: agora,
       })
       .eq('id', existente.id)
       .select('*')
       .single()
     if (error) throw error
-    if (tipo === 'contato') await garantirSessao(data as AtendimentoConversa)
+
+    if (tipo === 'contato') {
+      const sessao = await garantirSessao(data as AtendimentoConversa)
+      if (assumirAoAbrir && sessao?.id) {
+        await supabaseAdmin.from('atendimento_sessoes').update({
+          responsavel_id: usuario.id,
+          responsavel_nome: usuario.nome,
+          status: 'em_atendimento',
+          assigned_at: sessao.assigned_at || agora,
+        }).eq('id', sessao.id)
+      }
+      if (reabrindo) {
+        await registrarEvento({
+          empresaId: usuario.empresa_id,
+          conversaId: data.id,
+          sessaoId: sessao?.id || null,
+          tipo: 'conversa_reaberta',
+          usuarioId: usuario.id,
+          usuarioNome: usuario.nome,
+          dados: {
+            responsavel_anterior_id: existente.responsavel_id || null,
+            responsavel_anterior_nome: existente.responsavel_nome || null,
+          },
+        })
+      }
+    }
     return data as AtendimentoConversa
   }
 
@@ -1558,12 +1597,44 @@ export async function iniciarConversaWhatsApp(
   return data as AtendimentoConversa
 }
 
+async function idsHistoricoConversa(conversa: AtendimentoConversa) {
+  if (!conversa?.id) return [] as string[]
+
+  let query = supabaseAdmin
+    .from('atendimento_conversas')
+    .select('id')
+    .eq('empresa_id', conversa.empresa_id)
+    .eq('canal', 'whatsapp')
+    .eq('whatsapp_chat_tipo', conversa.whatsapp_chat_tipo || 'contato')
+
+  if (conversa.whatsapp_chat_jid) {
+    query = query.eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
+  } else {
+    query = query.eq('telefone', conversa.telefone)
+  }
+
+  // Mantem separado o historico de numeros diferentes.
+  // Se o mesmo numero foi reconectado em outro registro de canal, o historico acompanha o numero.
+  if (conversa.whatsapp_numero) {
+    query = query.eq('whatsapp_numero', conversa.whatsapp_numero)
+  } else if (conversa.whatsapp_canal_id) {
+    query = query.eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const ids = [...new Set([conversa.id, ...(data || []).map((item: any) => String(item.id || '')).filter(Boolean)])]
+  return ids
+}
+
 export async function listarMensagensAtendimento(conversaId: string, usuario: UsuarioTenant) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) return null
+  const conversaIds = await idsHistoricoConversa(conversa)
   const { data, error } = await supabaseAdmin.from('atendimento_mensagens')
     .select('id,conversa_id,sessao_id,direcao,tipo,texto,media_url,media_id,mime_type,payload,whatsapp_message_id,usuario_id,usuario_nome,created_at')
-    .eq('conversa_id', conversaId)
+    .in('conversa_id', conversaIds.length ? conversaIds : [conversaId])
     .order('created_at', { ascending: true })
   if (error) throw error
 
@@ -1760,11 +1831,12 @@ export async function enviarTextoWhatsApp(
 
   let mensagemRespondida: any = null
   if (respostaMensagemId) {
+    const conversaIdsHistorico = await idsHistoricoConversa(conversa)
     const { data: alvo } = await supabaseAdmin
       .from('atendimento_mensagens')
       .select('id,direcao,tipo,texto,whatsapp_message_id,payload')
       .eq('id', respostaMensagemId)
-      .eq('conversa_id', conversa.id)
+      .in('conversa_id', conversaIdsHistorico.length ? conversaIdsHistorico : [conversa.id])
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
     if (!alvo?.whatsapp_message_id) throw new Error('A mensagem original ainda não pode ser respondida pelo WhatsApp.')
@@ -1973,11 +2045,12 @@ export async function reagirMensagemWhatsApp(
     throw new Error('Assuma o atendimento antes de reagir.')
   }
 
+  const conversaIdsHistorico = await idsHistoricoConversa(conversa)
   const { data: alvo } = await supabaseAdmin
     .from('atendimento_mensagens')
     .select('id,direcao,texto,whatsapp_message_id,payload')
     .eq('id', mensagemId)
-    .eq('conversa_id', conversaId)
+    .in('conversa_id', conversaIdsHistorico.length ? conversaIdsHistorico : [conversaId])
     .eq('empresa_id', usuario.empresa_id)
     .maybeSingle()
   if (!alvo?.whatsapp_message_id) throw new Error('Esta mensagem ainda não aceita reação.')
@@ -2135,7 +2208,8 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
   if (!podeAtender) {
     throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para atender.')
   }
-  if (conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
+  const reabrindo = conversa.status === 'finalizado'
+  if (!reabrindo && conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
     throw new Error('Esta conversa já está com outro atendente.')
   }
   const agora = new Date().toISOString()
@@ -2159,9 +2233,13 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
     empresaId: usuario.empresa_id,
     conversaId,
     sessaoId: sessao?.id || null,
-    tipo: 'conversa_assumida',
+    tipo: reabrindo ? 'conversa_reaberta' : 'conversa_assumida',
     usuarioId: usuario.id,
     usuarioNome: usuario.nome,
+    dados: reabrindo ? {
+      responsavel_anterior_id: conversa.responsavel_id || null,
+      responsavel_anterior_nome: conversa.responsavel_nome || null,
+    } : {},
   })
 }
 
