@@ -6,6 +6,8 @@ import { sincronizar } from '../sincronizar/route'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// Sincronização restrita aos históricos W.Vetro já vinculados com segurança ao cliente.
+
 function dataIso(v: unknown) {
   const s = String(v ?? '').trim()
   const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
