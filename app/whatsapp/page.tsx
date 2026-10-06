@@ -547,8 +547,12 @@ export default function WhatsAppAtendimentoPage() {
     return conversas.filter(c => {
       if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
-      if (filtro === 'aguardando' && (c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
-      if (filtro === 'com_atendente' && (!c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
+      if (filtro === 'aguardando') {
+        const aguardandoContato = c.whatsapp_chat_tipo !== 'grupo' && !c.responsavel_id && c.status !== 'finalizado'
+        const aguardandoGrupo = c.whatsapp_chat_tipo === 'grupo' && Number(c.nao_lidas || 0) > 0 && c.status !== 'finalizado'
+        if (!aguardandoContato && !aguardandoGrupo) return false
+      }
+      if (filtro === 'com_atendente' && (!c.responsavel_id || c.status === 'finalizado')) return false
       if (filtro === 'minhas' && (c.responsavel_id !== eu?.id || c.status === 'finalizado')) return false
       if (filtro === 'nao_lidas' && !c.nao_lidas) return false
       if (filtro === 'acompanhando' && !c.acompanhando) return false
@@ -783,8 +787,13 @@ export default function WhatsAppAtendimentoPage() {
     return {
       todas: chats.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
-      aguardando: chats.filter(c => !c.responsavel_id && c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado').length,
-      comAtendente: chats.filter(c => Boolean(c.responsavel_id) && c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado').length,
+      aguardando: chats.filter(c =>
+        c.status !== 'finalizado' && (
+          (c.whatsapp_chat_tipo !== 'grupo' && !c.responsavel_id) ||
+          (c.whatsapp_chat_tipo === 'grupo' && Number(c.nao_lidas || 0) > 0)
+        )
+      ).length,
+      comAtendente: chats.filter(c => Boolean(c.responsavel_id) && c.status !== 'finalizado').length,
       minhas: chats.filter(c => c.responsavel_id === eu?.id && c.status !== 'finalizado').length,
       grupos: doCanal.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
       naoLidas: chats.filter(c => Number(c.nao_lidas || 0) > 0).length,
@@ -798,15 +807,12 @@ export default function WhatsAppAtendimentoPage() {
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
     : null
   const podeResponder = Boolean(
-    ativa && (
-      ativa.whatsapp_chat_tipo === 'grupo'
-        ? (eu?.role === 'master' || acessoCanalAtivo?.atender)
-        : ativa.responsavel_id === eu?.id
-    ),
+    ativa &&
+    ativa.responsavel_id === eu?.id &&
+    ativa.status !== 'finalizado'
   )
   const podeAssumirAtiva = Boolean(
     ativa &&
-    ativa.whatsapp_chat_tipo !== 'grupo' &&
     ativa.status !== 'finalizado' &&
     (
       !ativa.responsavel_id ||
@@ -815,7 +821,6 @@ export default function WhatsAppAtendimentoPage() {
   )
   const atendimentoMeu = Boolean(
     ativa &&
-    ativa.whatsapp_chat_tipo !== 'grupo' &&
     ativa.responsavel_id === eu?.id &&
     ativa.status !== 'finalizado'
   )
@@ -1035,7 +1040,7 @@ export default function WhatsAppAtendimentoPage() {
                       )}
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
-                    {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && (
+                    {c.status !== 'finalizado' && (
                       <div className={`mt-2 flex flex-wrap gap-1.5 ${!c.responsavel_id ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
                         <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
                           className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${c.acompanhando?'border-amber-300 bg-amber-50 text-amber-800':'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'}`}>
@@ -1055,6 +1060,12 @@ export default function WhatsAppAtendimentoPage() {
                           <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
                             className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100">
                             Atender
+                          </button>
+                        )}
+                        {c.responsavel_id === eu?.id && Number(c.nao_lidas || 0) > 0 && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,'marcar_lida')}}
+                            className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-800 hover:bg-blue-100">
+                            Dar baixa
                           </button>
                         )}
                       </div>
@@ -1154,14 +1165,20 @@ export default function WhatsAppAtendimentoPage() {
                     <CheckCircle2 size={15}/> Em atendimento por você
                   </span>
                 )}
-                {ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id && ativa.status !== 'finalizado' &&
+                {atendimentoMeu && Number(ativa.nao_lidas || 0) > 0 && (
+                  <button type="button" onClick={()=>void acaoConversa('marcar_lida')}
+                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100">
+                    <CheckCircle2 size={15}/> Dar baixa
+                  </button>
+                )}
+                {ativa.responsavel_id && ativa.status !== 'finalizado' &&
                   (eu?.role === 'master' || ativa.responsavel_id === eu?.id) && (
                   <button onClick={()=>void acaoConversa('finalizar')}
                     className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold">
                     <CheckCircle2 size={15}/> Finalizar
                   </button>
                 )}
-                {podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+                {podeTransferirAtiva && ativa.status !== 'finalizado' && (
                   <button onClick={()=>setTransferenciaAberta(aberta=>!aberta)}
                     className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${transferenciaAberta?'bg-slate-100 text-slate-900':'bg-white text-slate-600'}`}>
                     <ShieldCheck size={15}/> Transferir
@@ -1169,7 +1186,7 @@ export default function WhatsAppAtendimentoPage() {
                 )}
               </div>
 
-              {transferenciaAberta && podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+              {transferenciaAberta && podeTransferirAtiva && ativa.status !== 'finalizado' && (
                 <div className="flex flex-wrap items-center justify-end gap-2 border-b bg-slate-50 px-4 py-2">
                   <select value={destinoId} onChange={e=>setDestinoId(e.target.value)}
                     className="rounded-lg border bg-white px-2 py-1.5 text-xs">
@@ -1295,7 +1312,7 @@ export default function WhatsAppAtendimentoPage() {
                     )}
                   </div>
                 )}
-                {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id ? (
+                {!ativa.responsavel_id && ativa.status !== 'finalizado' ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                     <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
                       <Clock3 size={16}/> Esta conversa está aguardando atendimento.
@@ -1305,7 +1322,7 @@ export default function WhatsAppAtendimentoPage() {
                       <UserRoundCheck size={15}/> Atender agora
                     </button>
                   </div>
-                ) : ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id !== eu?.id ? (
+                ) : ativa.responsavel_id && ativa.responsavel_id !== eu?.id && ativa.status !== 'finalizado' ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
                     <div className="text-xs text-slate-600">
                       Atendimento de <b>{ativa.responsavel_nome || 'outro atendente'}</b>.
