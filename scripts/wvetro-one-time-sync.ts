@@ -119,23 +119,10 @@ async function registrarMemoriaIA(payload:any) {
 
 async function main() {
   const hoje = dataLocal(0)
-  console.log('[WVETRO] início sync one-time', hoje)
+  console.log('[WVETRO] início recuperação pendências', hoje)
 
   const resumoAntes = await resumoBaseTecnicaWVetro()
   console.log('[WVETRO] resumo antes', JSON.stringify(resumoAntes))
-
-  const linhas = await sincronizarLinhasApiWVetro()
-  console.log('[WVETRO] linhas', JSON.stringify(linhas))
-
-  const [perfis, acessorios, esquadrias] = await Promise.all([
-    descobrirEImportarCatalogoWVetro('P'),
-    descobrirEImportarCatalogoWVetro('A'),
-    sincronizarCatalogoEsquadriasWVetro(),
-  ])
-  console.log('[WVETRO] catalogos', JSON.stringify({ perfis, acessorios, esquadrias }))
-
-  const hojeResultado = await processarBaseTecnicaWVetroDia(hoje)
-  console.log('[WVETRO] hoje', JSON.stringify(hojeResultado))
 
   const pendencias = await resolverPendencias(200, 5)
   console.log('[WVETRO] pendencias', JSON.stringify({ processadas: pendencias.processadas, restantes: pendencias.restantes }))
@@ -153,10 +140,8 @@ async function main() {
   await registrarMemoriaIA({
     versao: 1,
     dominio: 'wvetro',
-    tipo: 'sincronizacao_manual_completa',
+    tipo: 'recuperacao_pendencias_historicas',
     periodo: { inicio: hoje, fim: hoje },
-    catalogos: { linhas, perfis, acessorios, esquadrias },
-    hoje: hojeResultado,
     pendencias: { processadas: pendencias.processadas, restantes: pendencias.restantes },
     resumo: resumoDepois,
     porta_giro_suprema: portaGiroSuprema,
@@ -164,7 +149,7 @@ async function main() {
     registrado_em: new Date().toISOString(),
   })
 
-  console.log('[WVETRO] fim sync one-time')
+  console.log('[WVETRO] fim recuperação pendências')
 }
 
 main().catch(err => {
