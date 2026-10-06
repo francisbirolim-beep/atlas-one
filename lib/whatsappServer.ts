@@ -1372,6 +1372,19 @@ export async function listarDiretorioWhatsApp(
   }
 
   const q = busca.toLocaleLowerCase('pt-BR').trim()
+  const conversaPorJid = new Map<string, any>()
+  const conversaPorTelefone = new Map<string, any>()
+  for (const item of conversasConhecidas || []) {
+    const jid = String((item as any).whatsapp_chat_jid || '')
+    const tel = String((item as any).telefone || '').replace(/\D/g, '')
+    if (jid && !conversaPorJid.has(jid)) conversaPorJid.set(jid, item)
+    if (tel && !conversaPorTelefone.has(tel)) conversaPorTelefone.set(tel, item)
+  }
+  const conversaConhecida = (jid?: string | null, telefone?: string | null) => {
+    const tel = String(telefone || '').replace(/\D/g, '')
+    return conversaPorJid.get(String(jid || '')) || (tel ? conversaPorTelefone.get(tel) : null) || null
+  }
+
   const contatosSincronizados = (acesso.visualizar ? (contatos || []) : []).map((item: any) => {
     const bloqueio = statusBloqueio(item.contato_jid, item.telefone)
     return {
@@ -1381,6 +1394,7 @@ export async function listarDiretorioWhatsApp(
       telefone: item.telefone || null,
       nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
       participantes: null,
+      conversaId: conversaConhecida(item.contato_jid, item.telefone)?.id || null,
       bloqueado: Boolean(bloqueio),
       bloqueado_em: bloqueio?.bloqueado_em || null,
       bloqueado_por_nome: bloqueio?.bloqueado_por_nome || null,
@@ -1410,6 +1424,7 @@ export async function listarDiretorioWhatsApp(
         telefone: item.telefone || null,
         nome: item.contato_nome || item.telefone || 'Contato WhatsApp',
         participantes: null,
+        conversaId: item.id,
         bloqueado: Boolean(bloqueio),
         bloqueado_em: bloqueio?.bloqueado_em || null,
         bloqueado_por_nome: bloqueio?.bloqueado_por_nome || null,
