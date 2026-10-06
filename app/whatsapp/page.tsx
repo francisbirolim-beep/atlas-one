@@ -2020,6 +2020,11 @@ export default function WhatsAppAtendimentoPage() {
                       else if(e.tipo==='mensagem_enfileirada_qr'||e.tipo==='mensagem_enviada')descricao='respondeu uma mensagem'
                       else if(e.tipo==='midia_enfileirada_qr')descricao='enviou um arquivo ou mídia'
                       else if(e.tipo==='mensagem_recebida_qr'||e.tipo==='mensagem_recebida')descricao='nova mensagem recebida'
+                      else if(e.tipo==='mensagem_reagida')descricao=`reagiu com ${String(dados.emoji||'emoji')}`
+                      else if(e.tipo==='grupo_responsavel_definido')descricao=`definiu ${String(dados.usuario_alvo_nome||'usuário')} como responsável principal do grupo`
+                      else if(e.tipo==='grupo_permissao_alterada')descricao=`alterou a permissão de ${String(dados.usuario_alvo_nome||'usuário')} para ${String(dados.nivel||'')}`
+                      else if(e.tipo==='grupo_responsabilidade_delegada')descricao=`delegou o grupo para ${String(dados.destino_usuario_nome||'outro usuário')} até ${dados.fim_em?new Date(String(dados.fim_em)).toLocaleString('pt-BR'):'o período definido'}`
+                      else if(e.tipo==='grupo_responsabilidade_retomada')descricao=`encerrou a delegação e devolveu o grupo para ${String(dados.responsavel_principal_nome||'responsável principal')}`
                       return <div key={e.id} className="rounded-xl border bg-white p-3">
                         <div className="flex items-start gap-2">
                           <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><History size={13}/></span>
