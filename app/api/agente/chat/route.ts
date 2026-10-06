@@ -185,8 +185,19 @@ async function montarContextoAtlas(texto: string, usuario: any) {
   return contexto
 }
 
-function respostaDiretaSemModelo(texto: string, contexto: any): string | null {
-  const t = normalizar(texto)
+function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): string | null {
+  const t = normalizar(texto).trim()
+
+  if (/^(oi|ola|opa|e ai|bom dia|boa tarde|boa noite|tudo bem|blz|beleza)[!?. ]*$/.test(t)) {
+    const primeiroNome = String(usuario?.nome || '').trim().split(/\s+/)[0]
+    const saudacao = primeiroNome ? `Olá, ${primeiroNome}!` : 'Olá!'
+    return saudacao + ' Estou online no Atlas. Posso consultar orçamentos, clientes, tarefas, eventos, financeiro, produtos e informações da operação.'
+  }
+
+  if (/^(obrigado|obrigada|valeu|vlw|show|perfeito|ok|certo)[!?. ]*$/.test(t)) {
+    return 'Disponha. Pode mandar a próxima consulta.'
+  }
+
   const hoje = contexto?.orcamentos_hoje
   if (!hoje || !/orcamento|orcamentos/.test(t) || !/hoje/.test(t)) return null
 
@@ -200,6 +211,17 @@ function respostaDiretaSemModelo(texto: string, contexto: any): string | null {
   const cabecalho = `Hoje foram criados ${hoje.quantidade} orçamento(s) no Atlas.`
   if (!linhas.length) return cabecalho
   return cabecalho + '\n\n' + linhas.join('\n')
+}
+
+function respostaQuandoRuntimeIndisponivel(texto: string, contexto: any, usuario?: any) {
+  const direta = respostaDiretaSemModelo(texto, contexto, usuario)
+  if (direta) return direta
+
+  return [
+    'O motor conversacional gratuito está temporariamente indisponível, mas o Atlas continua online.',
+    'As consultas internas diretas continuam funcionando sem custo.',
+    'Tente uma pergunta objetiva sobre orçamentos, clientes, tarefas, eventos, financeiro, produtos ou operação.',
+  ].join(' ')
 }
 
 export async function POST(req: NextRequest) {
@@ -256,7 +278,7 @@ export async function POST(req: NextRequest) {
     await salvarMensagem(conversaId, 'user', textoParaSalvar)
 
     const contexto = await montarContextoAtlas(mensagemTexto, usuario)
-    const direta = respostaDiretaSemModelo(mensagemTexto, contexto)
+    const direta = respostaDiretaSemModelo(mensagemTexto, contexto, usuario)
 
     let resposta = direta || ''
     let providerId = direta ? 'atlas-interno' : 'freellmapi'
@@ -306,34 +328,57 @@ export async function POST(req: NextRequest) {
       ].join('\n')
 
       const inicio = Date.now()
-      const resultado = await consultarOpenCode({
-        accessToken,
-        tituloSessao: `Atlas IA - ${usuario.nome || usuario.id}`,
-        system,
-        prompt,
-        anexos,
-      })
-      resposta = resultado.resposta
-      providerId = resultado.providerId
-      modelId = resultado.modelId
+      try {
+        const resultado = await consultarOpenCode({
+          accessToken,
+          tituloSessao: `Atlas IA - ${usuario.nome || usuario.id}`,
+          system,
+          prompt,
+          anexos,
+        })
+        resposta = resultado.resposta
+        providerId = resultado.providerId
+        modelId = resultado.modelId
 
-      await registrarUsoIA({
-        agenteId: null,
-        agenteNome: 'Atlas IA gratuita',
-        usuarioId: usuario.id,
-        usuarioNome: usuario.nome,
-        empresa: 'Atlas One',
-        setorId: null,
-        provider: providerId || 'freellmapi',
-        modelo: modelId || 'free-router',
-        passos: 1,
-        sucesso: true,
-        tokensEntrada: null,
-        tokensSaida: null,
-        custoEstimado: 0,
-        duracaoMs: Date.now() - inicio,
-        fallbackPolicy: 'free_only_no_paid_fallback',
-      })
+        await registrarUsoIA({
+          agenteId: null,
+          agenteNome: 'Atlas IA gratuita',
+          usuarioId: usuario.id,
+          usuarioNome: usuario.nome,
+          empresa: 'Atlas One',
+          setorId: null,
+          provider: providerId || 'freellmapi',
+          modelo: modelId || 'free-router',
+          passos: 1,
+          sucesso: true,
+          tokensEntrada: null,
+          tokensSaida: null,
+          custoEstimado: 0,
+          duracaoMs: Date.now() - inicio,
+          fallbackPolicy: 'free_only_no_paid_fallback',
+        })
+      } catch (runtimeErro: any) {
+        resposta = respostaQuandoRuntimeIndisponivel(mensagemTexto, contexto, usuario)
+        providerId = 'atlas-interno'
+        modelId = 'fallback-runtime-gratuito'
+
+        await registrarUsoIA({
+          agenteId: null,
+          agenteNome: 'Atlas IA fallback interno',
+          usuarioId: usuario.id,
+          usuarioNome: usuario.nome,
+          empresa: 'Atlas One',
+          setorId: null,
+          provider: providerId,
+          modelo: modelId,
+          passos: 0,
+          sucesso: true,
+          erro: String(runtimeErro?.message || runtimeErro || '').slice(0, 500),
+          custoEstimado: 0,
+          duracaoMs: Date.now() - inicio,
+          fallbackPolicy: 'internal_fallback_zero_cost',
+        })
+      }
     } else {
       await registrarUsoIA({
         agenteId: null,
