@@ -25,11 +25,28 @@ type PermissaoCanal = {
   pode_supervisionar: boolean
 }
 
+type MembroGrupo = {
+  jid?: string | null
+  telefone?: string | null
+  nome: string
+  admin?: string | null
+  usuario_id?: string | null
+  usuario_nome?: string | null
+}
+
+type OpcaoResponsavel = {
+  usuario_id: string
+  usuario_nome: string
+  telefone?: string | null
+}
+
 type Grupo = {
   id: string
   whatsapp_canal_id: string
   nome: string
   participantes?: number | null
+  membros?: MembroGrupo[]
+  opcoes_responsavel?: OpcaoResponsavel[]
 }
 
 type PermissaoGrupo = {
@@ -82,6 +99,7 @@ export default function WhatsAppUsuarioPermissoes({ usuarioId, usuarioNome, usua
   const [salvando,setSalvando]=useState('')
   const [erro,setErro]=useState('')
   const [abertos,setAbertos]=useState<Record<string,boolean>>({})
+  const [membrosAbertos,setMembrosAbertos]=useState<Record<string,boolean>>({})
 
   async function carregar(silencioso=false){
     if(!silencioso)setCarregando(true)
