@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { consultarOpenCode, statusOpenCode, type OpenCodeAnexo } from '@/lib/ai/opencode'
+import { respostaFallbackContexto } from '@/lib/ai/fallbackInterno'
 import { especialistaDoModulo } from '@/lib/ai/specialists'
 import { montarContextoAtlasGlobal } from '@/lib/ai/contextoAtlasGlobal'
 import type { AIModulo } from '@/lib/ai/types'
@@ -560,9 +561,6 @@ export async function POST(req: NextRequest) {
     }
 
     const status = await statusOpenCode()
-    if (!status.configurado) {
-      return NextResponse.json({ error: 'Gateway seguro do OpenCode indisponível.', codigo: 'OPENCODE_CONFIG_MISSING' }, { status: 503 })
-    }
     const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
     const sessionId = await validarSessao(usuario, modulo, String(body?.sessionId || '') || null)
     const [dados, contextoAtlasGlobal, setores, memoria] = await Promise.all([
@@ -628,19 +626,35 @@ export async function POST(req: NextRequest) {
         anexos: anexoPreparado.imagens,
       })
     } catch (e: any) {
-      const detalhe = String(e?.message || 'Falha ao consultar o OpenCode').slice(0, 800)
+      const detalhe = String(e?.message || 'Falha no motor gratuito').slice(0, 800)
+      const respostaLocal = respostaFallbackContexto({
+        pergunta: pergunta || 'Analise o material anexado.',
+        area: especialista.nome,
+        contexto,
+        anexoTexto: anexoPreparado.contexto || '',
+      })
+
+      resultado = {
+        sessionId: sessionId || ('local-especialista-' + Date.now()),
+        resposta: respostaLocal,
+        providerId: 'atlas-interno',
+        modelId: 'fallback-especialista',
+        rota: 'freellmapi',
+        custoEstimado: 0,
+        tentativas: [{ rota: 'gratuito-externo', ok: false, detalhe }],
+      } as any
+
       await supabaseAdmin.from('ai_interacoes').insert({
         empresa_id: usuario.empresa_id,
         contexto: contextoId(modulo),
         usuario_id: usuario.id,
         usuario_nome: usuario.nome || null,
         pergunta: perguntaRegistrada,
-        resposta: detalhe,
-        modelo: `${status.providerId}/${status.modelId}`,
-        contexto_json: { erro_opencode: true, modulo, orquestrador: 'opencode', motor: 'freellmapi' },
-        status: 'erro',
+        resposta: respostaLocal,
+        modelo: 'atlas-interno/fallback-especialista',
+        contexto_json: { fallback_interno: true, modulo, erro_motor_gratuito: detalhe },
+        status: 'ok',
       })
-      return NextResponse.json({ error: detalhe, codigo: 'OPENCODE_REQUEST_FAILED' }, { status: 502 })
     }
     let pesquisaPublica: ResultadoPesquisaPublica | null = null
     if (pergunta && podePesquisarPublicamente(pergunta) && respostaIndicaFaltaDeDado(resultado.resposta)) {
