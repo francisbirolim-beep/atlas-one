@@ -38,7 +38,22 @@ async function resolverEmail(identificador: string): Promise<{ email: string | n
   }
 }
 
+
+export function prepararLoginLimpo() {
+  if (typeof window === 'undefined') return
+  try { supabase.auth.stopAutoRefresh() } catch {}
+  try {
+    for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+      const chave = window.localStorage.key(i)
+      if (chave?.startsWith('sb-') && chave.endsWith('-auth-token')) {
+        window.localStorage.removeItem(chave)
+      }
+    }
+  } catch {}
+}
+
 export async function login(identificador: string, senha: string) {
+  prepararLoginLimpo()
   const resolvido = await resolverEmail(identificador)
   if (!resolvido.email) {
     return {
@@ -51,7 +66,11 @@ export async function login(identificador: string, senha: string) {
     } as any
   }
 
-  return supabase.auth.signInWithPassword({ email: resolvido.email, password: senha })
+  const resultado = await supabase.auth.signInWithPassword({ email: resolvido.email, password: senha })
+  if (!resultado.error && resultado.data.session) {
+    try { supabase.auth.startAutoRefresh() } catch {}
+  }
+  return resultado
 }
 
 export async function solicitarRedefinicaoSenha(identificador: string) {
