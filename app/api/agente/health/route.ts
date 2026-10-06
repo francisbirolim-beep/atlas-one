@@ -1,37 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verificarUsuario } from '@/lib/agente'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { carregarConfigAgente } from '@/lib/ai/agentManager'
-import { checarProvider } from '@/lib/ai/healthCheck'
+import { statusOpenCode } from '@/lib/ai/opencode'
+import { statusRuntimesGratis } from '@/lib/ai/runtimeEndpoints'
 
-// GET /api/agente/health - checa se o provider do agente atual (do usuario logado)
-// esta disponivel, sem gastar uma chamada de IA de verdade.
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization') || ''
-    const usuario = await verificarUsuario(authHeader)
-    if (!usuario) {
-      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
-    }
+    const usuario = await verificarUsuario(req.headers.get('authorization') || '')
+    if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
 
-    let setorIdPrincipal: string | null = null
-    const escopo: 'setor' | 'master' = usuario.role === 'master' ? 'master' : 'setor'
-
-    if (escopo === 'setor') {
-      const { data: permData } = await supabaseAdmin.from('permissoes').select('setor_id').eq('usuario_id', usuario.id)
-      const setorIds = (permData || []).map((p: any) => p.setor_id)
-      setorIdPrincipal = setorIds[0] || null
-    }
-
-    const configAgente = await carregarConfigAgente(setorIdPrincipal, escopo)
-    const apiKeyPresente = !!process.env.ANTHROPIC_API_KEY
-    const resultado = await checarProvider(configAgente.provider, configAgente.modelo, apiKeyPresente)
+    const [openCode, runtimes] = await Promise.all([
+      statusOpenCode(),
+      statusRuntimesGratis(),
+    ])
 
     return NextResponse.json({
-      agente: { nome: configAgente.nome, provider: configAgente.provider, modelo: configAgente.modelo },
-      health: resultado,
+      politica: 'zero_cost',
+      custoVariavelAlvo: 0,
+      paidProvidersBloqueados: runtimes.paidProvidersBloqueados,
+      ordem: openCode.ordemGratis,
+      openCode: {
+        configurado: openCode.configurado,
+        agent: openCode.agent,
+        providerFallback: openCode.providerId,
+        modeloFallback: openCode.modelId,
+      },
+      runtimes: runtimes.runtimes,
+      mensagem: openCode.configurado
+        ? 'IA gratuita configurada. Ordem: Ollama local -> FreeLLMAPI -> fallback interno.'
+        : 'Gateway gratuito OpenCode ainda não está conectado.',
     })
   } catch (e: any) {
-    return NextResponse.json({ error: 'Erro ao checar saude do provider: ' + String(e && e.message ? e.message : e) }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao checar a IA gratuita: ' + String(e?.message || e) }, { status: 500 })
   }
 }
