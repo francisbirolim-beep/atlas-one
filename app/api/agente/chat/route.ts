@@ -115,12 +115,62 @@ function linhaContaReceber(c: any, i: number) {
   return `${i + 1}. ${c?.cliente_nome || 'Cliente não informado'} — ${detalhe} — ${moeda(saldo || valor)} — ${c?.status || 'sem status'}`
 }
 
+async function contarCadastroTecnico(texto: string, usuario: any) {
+  const t = normalizar(texto)
+  const pedeContagem = /quantos|quantas|quantidade|total|numero/.test(t)
+  if (!pedeContagem || !usuario?.empresa_id) return null
+
+  let categoria: string | null = null
+  let rotulo = ''
+  if (/\bperfil|\bperfis/.test(t)) {
+    categoria = 'perfil'
+    rotulo = 'perfis'
+  } else if (/acessorio|acessorios/.test(t)) {
+    categoria = 'acessorio'
+    rotulo = 'acessórios'
+  } else if (/produto|produtos|cadastro tecnico|base tecnica/.test(t)) {
+    categoria = null
+    rotulo = 'produtos'
+  } else {
+    return null
+  }
+
+  let qTotal = supabaseAdmin
+    .from('produtos')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresa_id', usuario.empresa_id)
+  let qAtivos = supabaseAdmin
+    .from('produtos')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('ativo', true)
+
+  if (categoria) {
+    qTotal = qTotal.eq('categoria', categoria)
+    qAtivos = qAtivos.eq('categoria', categoria)
+  }
+
+  const [totalResp, ativosResp] = await Promise.all([qTotal, qAtivos])
+  if (totalResp.error) return { erro: totalResp.error.message, rotulo, categoria }
+  if (ativosResp.error) return { erro: ativosResp.error.message, rotulo, categoria }
+
+  return {
+    rotulo,
+    categoria,
+    total: Number(totalResp.count || 0),
+    ativos: Number(ativosResp.count || 0),
+  }
+}
+
 async function montarContextoAtlas(texto: string, usuario: any) {
   const t = normalizar(texto)
   const contexto: Record<string, any> = {
     data_hoje: dataLocalISO(),
     timezone: 'America/Sao_Paulo',
   }
+
+  const contagemCadastro = await contarCadastroTecnico(texto, usuario)
+  if (contagemCadastro) contexto.contagem_cadastro_tecnico = contagemCadastro
 
   if (/orcamento|orcamentos|venda|vendas/.test(t)) {
     const r: any = await executarFerramenta(
@@ -241,6 +291,20 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
 
   if (/^(obrigado|obrigada|valeu|vlw|show|perfeito|ok|certo)[!?. ]*$/.test(t)) {
     return 'Disponha. Pode mandar a próxima consulta.'
+  }
+
+  const contagemCadastro = contexto?.contagem_cadastro_tecnico
+  if (contagemCadastro) {
+    if (contagemCadastro.erro) {
+      return 'Não consegui consultar a contagem do cadastro técnico agora: ' + String(contagemCadastro.erro)
+    }
+    const total = Number(contagemCadastro.total || 0)
+    const ativos = Number(contagemCadastro.ativos || 0)
+    const rotulo = String(contagemCadastro.rotulo || 'itens')
+    if (total === ativos) {
+      return 'Temos ' + new Intl.NumberFormat('pt-BR').format(total) + ' ' + rotulo + ' cadastrados no banco de dados do Atlas, todos ativos.'
+    }
+    return 'Temos ' + new Intl.NumberFormat('pt-BR').format(total) + ' ' + rotulo + ' cadastrados no banco de dados do Atlas. Destes, ' + new Intl.NumberFormat('pt-BR').format(ativos) + ' estão ativos.'
   }
 
   const financeiro = contexto?.financeiro
