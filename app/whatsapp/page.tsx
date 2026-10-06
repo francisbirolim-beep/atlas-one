@@ -6,7 +6,7 @@ import {
   ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
-  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History,
+  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -63,6 +63,8 @@ type Mensagem = {
   mime_type?: string | null
   arquivo_nome?: string | null
   usuario_nome?: string | null
+  whatsapp_message_id?: string | null
+  payload?: Record<string, any> | null
   created_at: string
 }
 type ClienteResumo = {
@@ -150,6 +152,9 @@ export default function WhatsAppAtendimentoPage() {
   const [ativa, setAtiva] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
+  const [mensagemRespondendo, setMensagemRespondendo] = useState<Mensagem | null>(null)
+  const [emojiMensagemId, setEmojiMensagemId] = useState<string | null>(null)
+  const [emojiCustom, setEmojiCustom] = useState('')
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
@@ -503,6 +508,9 @@ export default function WhatsAppAtendimentoPage() {
       return
     }
     const conversaId = ativa.id
+    setMensagemRespondendo(null)
+    setEmojiMensagemId(null)
+    setEmojiCustom('')
     void carregarMensagens(conversaId)
     void carregarApoio(conversaId)
     void (async () => {
@@ -859,10 +867,15 @@ export default function WhatsAppAtendimentoPage() {
       const headers = await headersJson()
       const resp = await fetch('/api/integracoes/whatsapp/mensagens', {
         method: 'POST', headers,
-        body: JSON.stringify({ conversaId: ativa.id, texto: corpo }),
+        body: JSON.stringify({
+          conversaId: ativa.id,
+          texto: corpo,
+          respostaMensagemId: mensagemRespondendo?.id || null,
+        }),
       })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Nao foi possivel enviar.')
+      setMensagemRespondendo(null)
       await carregarMensagens(ativa.id)
       await carregarConversas(false)
     } catch (e) {
@@ -872,6 +885,62 @@ export default function WhatsAppAtendimentoPage() {
       setEnviando(false)
     }
   }
+
+  async function reagirMensagem(mensagemId: string, emoji: string) {
+    if (!ativa || !mensagemId || !emoji.trim()) return
+    setErro('')
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/mensagens', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'reagir',
+          conversaId: ativa.id,
+          mensagemId,
+          emoji: emoji.trim(),
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel reagir.')
+      setEmojiMensagemId(null)
+      setEmojiCustom('')
+      await carregarMensagens(ativa.id)
+      await carregarApoio(ativa.id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel reagir.')
+    }
+  }
+
+  const reacoesPorMensagem = useMemo(() => {
+    const porWhatsapp = new Map<string,string>()
+    for (const m of mensagens) {
+      if (m.whatsapp_message_id) porWhatsapp.set(m.whatsapp_message_id, m.id)
+    }
+    const mapa = new Map<string, Array<{emoji:string; usuario:string}>>()
+    for (const m of mensagens) {
+      if (m.tipo !== 'reacao') continue
+      const p = m.payload && typeof m.payload === 'object' ? m.payload : {}
+      const targetWhatsapp =
+        p.reactionTargetWhatsappId ||
+        p.reactionKey?.id ||
+        p.reactionKey?.key?.id ||
+        null
+      const targetId =
+        p.reactionTargetMessageId ||
+        (targetWhatsapp ? porWhatsapp.get(String(targetWhatsapp)) : null)
+      if (!targetId) continue
+      const atual = mapa.get(String(targetId)) || []
+      atual.push({ emoji: String(m.texto || '👍'), usuario: m.usuario_nome || (m.direcao === 'saida' ? 'Equipe' : 'WhatsApp') })
+      mapa.set(String(targetId), atual)
+    }
+    return mapa
+  }, [mensagens])
+
+  const mensagensVisiveis = useMemo(
+    () => mensagens.filter(m => m.tipo !== 'reacao'),
+    [mensagens],
+  )
 
   const totais = useMemo(() => {
     const doCanal = conversas.filter(c =>
@@ -1368,7 +1437,7 @@ export default function WhatsAppAtendimentoPage() {
               )}
 
               <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto bg-[#fbfcfe] p-2.5 sm:p-4">
-                {mensagens.map(m => {
+                {mensagensVisiveis.map(m => {
                   const saida = m.direcao === 'saida'
                   const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
                   const midia = Boolean(m.media_url)
@@ -1378,8 +1447,51 @@ export default function WhatsAppAtendimentoPage() {
                     (m.tipo === 'video' && texto === '🎥 Vídeo') ||
                     (m.tipo === 'documento' && texto === '📎 Documento')
                   return (
-                    <div key={m.id} className={`flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
-                      <div className={`min-w-0 max-w-[88%] overflow-hidden rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
+                    <div key={m.id} className={`group/msg flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
+                      <div className={`relative min-w-0 max-w-[88%] overflow-visible rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
+                        {podeResponder && (
+                          <div className={`absolute -top-3 z-10 hidden items-center gap-1 rounded-full border bg-white p-1 shadow-md group-hover/msg:flex ${saida?'right-2':'left-2'}`}>
+                            <button type="button" onClick={()=>setMensagemRespondendo(m)}
+                              className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+                              title="Responder esta mensagem">
+                              <Reply size={14}/>
+                            </button>
+                            <button type="button" onClick={()=>setEmojiMensagemId(atual=>atual===m.id?null:m.id)}
+                              className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+                              title="Reagir com emoji">
+                              <SmilePlus size={14}/>
+                            </button>
+                          </div>
+                        )}
+                        {emojiMensagemId===m.id && podeResponder && (
+                          <div className={`absolute top-7 z-20 flex flex-wrap items-center gap-1 rounded-xl border bg-white p-2 shadow-xl ${saida?'right-0':'left-0'}`}>
+                            {['👍','✅','❤️','😂','👏','🙏','🔥','👀'].map(emoji=>(
+                              <button key={emoji} type="button" onClick={()=>void reagirMensagem(m.id,emoji)}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-lg hover:bg-slate-100">
+                                {emoji}
+                              </button>
+                            ))}
+                            <div className="flex items-center gap-1 border-l pl-2">
+                              <input value={emojiCustom} onChange={e=>setEmojiCustom(e.target.value)}
+                                onKeyDown={e=>{if(e.key==='Enter'&&emojiCustom.trim()){e.preventDefault();void reagirMensagem(m.id,emojiCustom)}}}
+                                placeholder="emoji" className="w-16 rounded-md border px-2 py-1 text-xs"/>
+                              <button type="button" disabled={!emojiCustom.trim()} onClick={()=>void reagirMensagem(m.id,emojiCustom)}
+                                className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30">OK</button>
+                            </div>
+                          </div>
+                        )}
+                        {(() => {
+                          const p = m.payload && typeof m.payload === 'object' ? m.payload : {}
+                          const quotedId = p.quotedMessageId ? String(p.quotedMessageId) : ''
+                          const alvo = quotedId ? mensagens.find(x=>x.id===quotedId) : null
+                          const quotedText = alvo?.texto || p.quotedText
+                          return quotedText ? (
+                            <div className="mb-2 rounded-lg border-l-4 border-emerald-400 bg-white/60 px-2 py-1.5 text-[11px] text-slate-500">
+                              <b className="block text-[10px] text-slate-600">Resposta</b>
+                              <span className="block max-w-full truncate">{String(quotedText)}</span>
+                            </div>
+                          ) : null
+                        })()}
                         {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome} diz</p>}
 
                         {m.tipo === 'audio' && midia && (
@@ -1432,6 +1544,14 @@ export default function WhatsAppAtendimentoPage() {
                           <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-slate-900">{texto}</p>
                         )}
                         {!texto && !midia && <p className="text-sm text-slate-500">[{m.tipo}]</p>}
+                        {!!reacoesPorMensagem.get(m.id)?.length && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {reacoesPorMensagem.get(m.id)!.map((r,i)=>(
+                              <span key={`${r.emoji}-${i}`} title={r.usuario}
+                                className="rounded-full border bg-white/80 px-1.5 py-0.5 text-xs shadow-sm">{r.emoji}</span>
+                            ))}
+                          </div>
+                        )}
                         <p className="mt-1 text-right text-[10px] text-slate-400">{hora(m.created_at)}</p>
                       </div>
                     </div>
@@ -1588,6 +1708,19 @@ export default function WhatsAppAtendimentoPage() {
                             </button>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {mensagemRespondendo && (
+                      <div className="mb-2 flex items-center gap-3 rounded-xl border-l-4 border-emerald-500 bg-emerald-50 px-3 py-2">
+                        <Reply size={15} className="shrink-0 text-emerald-700"/>
+                        <div className="min-w-0 flex-1">
+                          <b className="block text-[10px] uppercase tracking-wide text-emerald-700">Respondendo</b>
+                          <p className="truncate text-xs text-slate-600">{mensagemRespondendo.texto || `[${mensagemRespondendo.tipo}]`}</p>
+                        </div>
+                        <button type="button" onClick={()=>setMensagemRespondendo(null)}
+                          className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-white">
+                          <X size={14}/>
+                        </button>
                       </div>
                     )}
                     {gravando && (
