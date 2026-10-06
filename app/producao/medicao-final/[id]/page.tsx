@@ -92,6 +92,10 @@ export default function DetalheMedicaoFinal() {
   const [alturaDireita, setAlturaDireita] = useState('')
   const [alturaMeio, setAlturaMeio] = useState('')
   const [alturaEsquerda, setAlturaEsquerda] = useState('')
+  const [vaoLargura, setVaoLargura] = useState('')
+  const [vaoAltura, setVaoAltura] = useState('')
+  const [folgaLargura, setFolgaLargura] = useState('')
+  const [folgaAltura, setFolgaAltura] = useState('')
   const [referenciaVista, setReferenciaVista] = useState<'interna' | 'externa' | ''>('')
   const [contramarco, setContramarco] = useState('')
   const [cadeirinha, setCadeirinha] = useState('')
@@ -232,6 +236,10 @@ export default function DetalheMedicaoFinal() {
     setAlturaDireita(item.altura_direita_mm != null ? String(item.altura_direita_mm) : '')
     setAlturaMeio(item.altura_meio_mm != null ? String(item.altura_meio_mm) : '')
     setAlturaEsquerda(item.altura_esquerda_mm != null ? String(item.altura_esquerda_mm) : '')
+    setVaoLargura(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
+    setVaoAltura(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
+    setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
+    setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
     setReferenciaVista(item.referencia_vista || '')
     setContramarco(ehContramarco ? 'sim' : (item.contramarco || ''))
     setCadeirinha(item.cadeirinha || '')
@@ -381,18 +389,36 @@ export default function DetalheMedicaoFinal() {
   const diffAltura = modoAltura === 'digitar' ? diferenca(alturaDireita, alturaMeio, alturaEsquerda) : null
   const alertaLargura = diffLargura !== null && diffLargura >= limiteAlerta
   const alertaAltura = diffAltura !== null && diffAltura >= limiteAlerta
+  const producaoLargura = Math.max(0, (parseFloat(vaoLargura) || 0) - (parseFloat(folgaLargura) || 0))
+  const producaoAltura = Math.max(0, (parseFloat(vaoAltura) || 0) - (parseFloat(folgaAltura) || 0))
 
   async function salvarMedicaoAtual() {
     if (!itemMedindo) return
 
-    const medidasObrigatorias = [larguraBaixo, larguraMeio, larguraCima, alturaDireita, alturaMeio, alturaEsquerda]
-    if (medidasObrigatorias.some(valor => !valor || Number(valor) <= 0)) {
-      alert('Preencha as 3 larguras e as 3 alturas com valores válidos.')
-      return
-    }
-    if (!referenciaVista) {
-      alert('Selecione a referência das alturas: vista interna ou vista externa.')
-      return
+    if (ehContramarco) {
+      const medidasObrigatorias = [vaoLargura, vaoAltura]
+      if (medidasObrigatorias.some(valor => !valor || Number(valor) <= 0)) {
+        alert('Informe a largura e a altura do vão.')
+        return
+      }
+      if (folgaLargura === '' || folgaAltura === '' || Number(folgaLargura) < 0 || Number(folgaAltura) < 0) {
+        alert('Informe a folga da largura e da altura. Use 0 quando não houver folga.')
+        return
+      }
+      if (producaoLargura <= 0 || producaoAltura <= 0) {
+        alert('A folga não pode ser maior ou igual à medida do vão.')
+        return
+      }
+    } else {
+      const medidasObrigatorias = [larguraBaixo, larguraMeio, larguraCima, alturaDireita, alturaMeio, alturaEsquerda]
+      if (medidasObrigatorias.some(valor => !valor || Number(valor) <= 0)) {
+        alert('Preencha as 3 larguras e as 3 alturas com valores válidos.')
+        return
+      }
+      if (!referenciaVista) {
+        alert('Selecione a referência das alturas: vista interna ou vista externa.')
+        return
+      }
     }
 
     const faltando = ehContramarco ? [] : camposExtrasItem.filter(c => c.obrigatorio && (valoresExtras[c.chave] === undefined || valoresExtras[c.chave] === '' || valoresExtras[c.chave] === null))
@@ -404,13 +430,19 @@ export default function DetalheMedicaoFinal() {
     setSalvandoMedida(true)
 
     const dados: DadosMedidaItem = {
-      largura_baixo_mm: parseFloat(larguraBaixo) || null,
-      largura_meio_mm: parseFloat(larguraMeio) || null,
-      largura_cima_mm: parseFloat(larguraCima) || null,
-      altura_direita_mm: parseFloat(alturaDireita) || null,
-      altura_meio_mm: parseFloat(alturaMeio) || null,
-      altura_esquerda_mm: parseFloat(alturaEsquerda) || null,
-      referencia_vista: referenciaVista || null,
+      largura_baixo_mm: ehContramarco ? null : (parseFloat(larguraBaixo) || null),
+      largura_meio_mm: ehContramarco ? null : (parseFloat(larguraMeio) || null),
+      largura_cima_mm: ehContramarco ? null : (parseFloat(larguraCima) || null),
+      altura_direita_mm: ehContramarco ? null : (parseFloat(alturaDireita) || null),
+      altura_meio_mm: ehContramarco ? null : (parseFloat(alturaMeio) || null),
+      altura_esquerda_mm: ehContramarco ? null : (parseFloat(alturaEsquerda) || null),
+      vao_largura_mm: ehContramarco ? (parseFloat(vaoLargura) || null) : null,
+      vao_altura_mm: ehContramarco ? (parseFloat(vaoAltura) || null) : null,
+      folga_largura_mm: ehContramarco ? (parseFloat(folgaLargura) || 0) : null,
+      folga_altura_mm: ehContramarco ? (parseFloat(folgaAltura) || 0) : null,
+      producao_largura_mm: ehContramarco ? producaoLargura : null,
+      producao_altura_mm: ehContramarco ? producaoAltura : null,
+      referencia_vista: ehContramarco ? null : (referenciaVista || null),
       contramarco: ehContramarco ? 'sim' : (contramarco.trim() || null),
       cadeirinha: cadeirinha.trim() || null,
       observacoes_medicao: observacoesMedicao.trim() || null,
@@ -543,14 +575,12 @@ export default function DetalheMedicaoFinal() {
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          {master && !ehContramarco && (
-            <button
-              onClick={abrirNovoItem}
+          <button
+            onClick={abrirNovoItem}
             className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline mb-1"
           >
             <Plus size={16} /> Adicionar tipologia
-            </button>
-          )}
+          </button>
           {itens.length > 0 && (
             <button
               onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
@@ -604,16 +634,14 @@ export default function DetalheMedicaoFinal() {
                     </p>
                   )}
                 </div>
-                {master && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => abrirEditarItem(item)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => removerItem(item)} className="p-1.5 rounded text-slate-400 hover:text-red-500 hover:bg-slate-100">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => abrirEditarItem(item)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                    <Pencil size={13} />
+                  </button>
+                  <button onClick={() => removerItem(item)} className="p-1.5 rounded text-slate-400 hover:text-red-500 hover:bg-slate-100">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
 
               <div className="mb-2 flex items-center justify-between gap-2">
