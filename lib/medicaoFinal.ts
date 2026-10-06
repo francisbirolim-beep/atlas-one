@@ -235,6 +235,7 @@ export async function criarMedicaoDoOrcamento(
                     medicao_id: medicao.id,
                     tipo_esquadria: it.tipo_esquadria,
                     tipo_outro_texto: it.tipo_outro_texto || null,
+                    ambiente: it.ambiente || null,
                     descricao: descricaoItemMedicao(it),
                     observacoes_medicao: it.observacao_producao || null,
                     quantidade: it.quantidade || 1,
@@ -360,7 +361,8 @@ export async function adicionarItemMedicao(
     tipoEsquadria: string,
     tipoOutroTexto: string | null,
     descricao: string,
-    quantidade: number
+    quantidade: number,
+    ambiente: string | null = null
   ): Promise<MedicaoItem | null> {
     const itensAtuais = await listarItensMedicao(medicaoId)
     const proximaOrdem = itensAtuais.length
@@ -371,6 +373,7 @@ export async function adicionarItemMedicao(
               medicao_id: medicaoId,
               tipo_esquadria: tipoEsquadria,
               tipo_outro_texto: tipoOutroTexto,
+              ambiente,
               descricao,
               quantidade,
               ordem: proximaOrdem,
@@ -387,7 +390,7 @@ export async function adicionarItemMedicao(
 
 export async function editarItemMedicao(
     itemId: string,
-    campos: { tipo_esquadria?: string; tipo_outro_texto?: string | null; descricao?: string; quantidade?: number }
+    campos: { tipo_esquadria?: string; tipo_outro_texto?: string | null; ambiente?: string | null; descricao?: string; quantidade?: number }
   ): Promise<boolean> {
     const { error } = await supabase.from('medicao_itens').update(campos).eq('id', itemId)
     return !error
