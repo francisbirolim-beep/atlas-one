@@ -398,7 +398,7 @@ async function garantirOrcamentoFallback(usuario: any, cliente: any, h: Historic
   return id
 }
 
-async function aprovar(usuario: any, cliente: any, historicoId: string, req: NextRequest) {
+async function aprovar(usuario: any, cliente: any, historicoId: string) {
   const { data: h, error } = await supabaseAdmin
     .from('wvetro_historico_comercial')
     .select('id,empresa_id,cliente_id,tipo_registro,chave_externa,numero_wvetro,situacao_wvetro,data_emissao,data_venda,valor_total,cliente_nome_origem,status_vinculo,metodo_identidade,itens')
@@ -445,29 +445,12 @@ async function aprovar(usuario: any, cliente: any, historicoId: string, req: Nex
     .eq('empresa_id', usuario.empresa_id)
   if (histError) throw histError
 
-  const numero = txt(historico.numero_wvetro)
-  const data = dataHistorico(historico)
-  let sincronizacao: Record<string, any> | null = null
-  if (numero && data) {
-    const interna = new NextRequest(new URL('/api/integracoes/wvetro/orcamentos/sincronizar', req.nextUrl.origin), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        inicio: data,
-        fim: data,
-        numerosWvetro: [numero],
-        clienteAlvoId: cliente.id,
-        vinculoManualValidado: true,
-        forcar: true,
-        modo: 'corrigir_tudo',
-      }),
-    })
-    const resposta = await sincronizar(interna, usuario, 1)
-    sincronizacao = await resposta.json().catch(() => ({}))
-  }
-
+  // A validação humana precisa responder rápido no celular. O histórico W.Vetro
+  // já contém nome, número, itens e valores; portanto criamos/vinculamos o
+  // orçamento operacional a partir desse snapshot sem esperar a API externa.
+  // A sincronização operacional normal pode enriquecer o orçamento depois.
   const orcamentoAtlasId = await garantirOrcamentoFallback(usuario, cliente, historico)
-  return { historico, sincronizacao, orcamentoAtlasId }
+  return { historico, orcamentoAtlasId }
 }
 
 async function rejeitar(usuario: any, cliente: any, historicoId: string) {
@@ -517,7 +500,7 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'aprovar') {
       if (!historicoId) return NextResponse.json({ error: 'Candidato não informado.' }, { status: 400 })
-      const resultado = await aprovar(usuario, cliente, historicoId, req)
+      const resultado = await aprovar(usuario, cliente, historicoId)
       const candidatos = await listarCandidatos(usuario, cliente)
       return NextResponse.json({
         ok: true,
@@ -538,7 +521,14 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const recentesEncontrados = await capturarRecentesComoCandidatos(usuario.empresa_id, cliente.nome, usuario)
+    let recentesEncontrados = 0
+    // Só consulta a API externa quando for solicitado de forma explícita.
+    // A ação "buscar" usada pela Medida Final devolve imediatamente o histórico
+    // já salvo no Atlas e nunca fica bloqueada esperando o W.Vetro.
+    if (acao === 'atualizar') {
+      recentesEncontrados = await capturarRecentesComoCandidatos(usuario.empresa_id, cliente.nome, usuario)
+    }
+
     const candidatos = await listarCandidatos(usuario, cliente)
     return NextResponse.json({
       ok: true,
