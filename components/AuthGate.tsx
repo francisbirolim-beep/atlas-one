@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { usuarioCacheLocal } from '@/lib/auth'
+import { sessaoAtualValida } from '@/lib/auth'
 import AppShell from '@/components/system/AppShell'
 import BalcaoShell from '@/components/system/BalcaoShell'
 import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
@@ -35,27 +35,28 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
     const timeout = window.setTimeout(() => {
       if (!ativo) return
-      const cache = usuarioCacheLocal()
+      // Online, cache local NÃO vale como autenticação. Mantém a tela protegida
+      // e direciona ao login se a sessão não puder ser recuperada.
       setChecking(false)
-      if (cache) {
-        setAutenticado(true)
-      } else if (!rotaPublica) {
-        router.replace('/login')
-      }
-    }, 2200)
+      setAutenticado(false)
+      if (!rotaPublica) router.replace('/login?motivo=sessao')
+    }, 5000)
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    sessaoAtualValida().then(session => {
       if (!ativo) return
       window.clearTimeout(timeout)
       setAutenticado(!!session)
       setChecking(false)
-      if (!session && !rotaPublica && navigator.onLine) router.replace('/login')
+      if (!session && !rotaPublica && navigator.onLine) router.replace('/login?motivo=sessao')
     }).catch(() => {
       if (!ativo) return
       window.clearTimeout(timeout)
       setChecking(false)
       if (!navigator.onLine) setAutenticado(true)
-      else if (!rotaPublica) router.replace('/login')
+      else if (!rotaPublica) {
+        setAutenticado(false)
+        router.replace('/login?motivo=sessao')
+      }
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
