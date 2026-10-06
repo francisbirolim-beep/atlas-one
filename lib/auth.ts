@@ -65,7 +65,7 @@ export async function logout() {
 
 const CHAVE_USUARIO_OFFLINE = 'atlas_usuario_offline_v1'
 
-function lerUsuarioOffline(): Usuario | null {
+export function usuarioCacheLocal(): Usuario | null {
   if (typeof window === 'undefined') return null
   try {
     const bruto = window.localStorage.getItem(CHAVE_USUARIO_OFFLINE)
@@ -81,11 +81,11 @@ function salvarUsuarioOffline(usuario: Usuario) {
 }
 
 export async function usuarioAtual(): Promise<Usuario | null> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return lerUsuarioOffline()
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return usuarioCacheLocal()
 
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return lerUsuarioOffline()
+    if (!session) return usuarioCacheLocal()
     const { data } = await supabase
       .from('usuarios')
       .select('*')
@@ -95,9 +95,9 @@ export async function usuarioAtual(): Promise<Usuario | null> {
       salvarUsuarioOffline(data as Usuario)
       return data as Usuario
     }
-    return lerUsuarioOffline()
+    return usuarioCacheLocal()
   } catch {
-    return lerUsuarioOffline()
+    return usuarioCacheLocal()
   }
 }
 
