@@ -20,6 +20,7 @@ const FERRAMENTA_SETORES: Record<string, string[]> = {
   buscar_clientes: ['crm'],
   buscar_assistencias: ['pos-venda', 'assistencia-abrir', 'assistencia-painel'],
   buscar_financeiro: ['financeiro'],
+  buscar_base_tecnica: ['cadastro', 'mee'],
 }
 
 async function buscarSetoresPermitidos(usuarioId: string, empresaId?: string): Promise<string[]> {
@@ -35,7 +36,7 @@ async function buscarSetoresPermitidos(usuarioId: string, empresaId?: string): P
     .map((p: any) => String(p.setor_id))
 }
 
-async function usuarioPodeUsarFerramenta(nome: string, usuarioId: string, usuarioRole: string, empresaId?: string) {
+export async function usuarioPodeUsarFerramenta(nome: string, usuarioId: string, usuarioRole: string, empresaId?: string) {
   if (usuarioRole === 'master') return true
   if (nome === 'buscar_financeiro') {
     return await usuarioPodeAcaoServer({ usuarioId, role: usuarioRole, empresaId, setorId: 'financeiro', acaoId: 'financeiro.ia.consultar', minimo: 'consulta' })
