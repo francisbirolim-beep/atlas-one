@@ -54,6 +54,22 @@ async function atualizarStatusImagem(id: string, imagem_status: string, imagem_e
   if (error) throw error
 }
 
+async function marcarSemImagem(snap: SnapshotImagem, motivo: string) {
+  await atualizarStatusImagem(snap.id, 'sem_imagem', motivo)
+
+  // Se o produto ainda aponta exatamente para a URL do W.Vetro que acabou de
+  // ser comprovada como inválida/indisponível, remove só essa referência.
+  // Fotos manuais, fotos já copiadas para o Storage do Atlas e qualquer URL
+  // diferente são preservadas.
+  if (!snap.produto_atlas_id || !snap.url_origem) return
+  const { error } = await supabaseAdmin
+    .from('produtos')
+    .update({ foto_url: null, updated_at: new Date().toISOString() })
+    .eq('id', snap.produto_atlas_id)
+    .eq('foto_url', snap.url_origem)
+  if (error) throw error
+}
+
 async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImagem> {
   const vazio = resultadoZero()
   if (!snap.produto_atlas_id || !snap.url_origem) return vazio
@@ -69,7 +85,7 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
 
   const origemBruta = String(snap.url_origem).trim()
   if (urlRaizSemImagem(origemBruta)) {
-    await atualizarStatusImagem(snap.id, 'sem_imagem', 'sem_imagem_origem')
+    await marcarSemImagem(snap, 'sem_imagem_origem')
     return { ...vazio, semImagem: 1 }
   }
 
@@ -91,11 +107,11 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
     if (!resp.ok) {
       const mensagem = `HTTP ${resp.status}`
       if (resp.status === 404 || resp.status === 410) {
-        await atualizarStatusImagem(snap.id, 'sem_imagem', `indisponivel_origem: ${mensagem}`)
+        await marcarSemImagem(snap, `indisponivel_origem: ${mensagem}`)
         return { ...vazio, indisponivel: 1 }
       }
       if (resp.status === 400 || resp.status === 422) {
-        await atualizarStatusImagem(snap.id, 'sem_imagem', `url_invalida_origem: ${mensagem}`)
+        await marcarSemImagem(snap, `url_invalida_origem: ${mensagem}`)
         return { ...vazio, invalida: 1 }
       }
       throw new Error(mensagem)
@@ -103,9 +119,8 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
 
     const tipoConteudo = resp.headers.get('content-type') || ''
     if (!tipoConteudo.toLowerCase().startsWith('image/')) {
-      await atualizarStatusImagem(
-        snap.id,
-        'sem_imagem',
+      await marcarSemImagem(
+        snap,
         `indisponivel_origem: Conteúdo não é imagem (${tipoConteudo || 'sem content-type'})`,
       )
       return { ...vazio, indisponivel: 1 }
@@ -113,7 +128,7 @@ async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImag
 
     const buffer = await resp.arrayBuffer()
     if (buffer.byteLength === 0) {
-      await atualizarStatusImagem(snap.id, 'sem_imagem', 'indisponivel_origem: Imagem vazia')
+      await marcarSemImagem(snap, 'indisponivel_origem: Imagem vazia')
       return { ...vazio, indisponivel: 1 }
     }
     if (buffer.byteLength > 12 * 1024 * 1024) throw new Error('Imagem acima de 12 MB')
