@@ -146,14 +146,15 @@ async function openSession(conversation: any) {
     .maybeSingle();
   if (existing) return existing;
 
+  const emAtendimento = conversation.status === "em_atendimento";
   const { data, error } = await db.from("atendimento_sessoes").insert({
     empresa_id: conversation.empresa_id,
     conversa_id: conversation.id,
-    status: conversation.responsavel_id ? "em_atendimento" : "aguardando",
+    status: emAtendimento ? "em_atendimento" : "aguardando",
     responsavel_id: conversation.responsavel_id || null,
     responsavel_nome: conversation.responsavel_nome || null,
     setor: conversation.setor || null,
-    assigned_at: conversation.responsavel_id ? new Date().toISOString() : null,
+    assigned_at: emAtendimento ? new Date().toISOString() : null,
   }).select("*").single();
   if (error) throw error;
   return data;
@@ -1842,6 +1843,32 @@ async function processGroupBudgetIntake(
   }
 }
 
+async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid: string | null) {
+  if (!groupJid) return null;
+  const { data: group } = await db.from("atendimento_whatsapp_grupos")
+    .select("id")
+    .eq("empresa_id", empresaId)
+    .eq("whatsapp_canal_id", channelId)
+    .eq("grupo_jid", groupJid)
+    .eq("ativo", true)
+    .maybeSingle();
+  if (!group?.id) return null;
+
+  const { data: permission } = await db.from("atendimento_whatsapp_grupo_permissoes")
+    .select("usuario_id,nivel")
+    .eq("empresa_id", empresaId)
+    .eq("grupo_id", group.id)
+    .eq("responsavel_principal", true)
+    .neq("nivel", "sem_acesso")
+    .maybeSingle();
+  if (!permission?.usuario_id) return null;
+
+  return {
+    id: permission.usuario_id,
+    nome: await userName(permission.usuario_id),
+  };
+}
+
 async function conversationForInbound(
   config: any,
   channel: any,
@@ -1871,20 +1898,30 @@ async function conversationForInbound(
   const customer = isGroup ? null : await customerByPhone(config.empresa_id, telefone);
 
   let ownerId = channel.usuario_id || null;
+  let ownerName: string | null = null;
   let sector = null;
-  if (!isGroup && !ownerId && channel.principal) {
+  if (isGroup) {
+    const principal = await groupPrimaryOwner(config.empresa_id, channel.id, chatJid);
+    if (principal?.id) {
+      ownerId = principal.id;
+      ownerName = principal.nome || null;
+    }
+  } else if (!ownerId && channel.principal) {
     const rule = await routingRule(config.empresa_id, texto);
     ownerId = rule?.usuario_id || config.usuario_padrao_id || null;
     sector = rule?.setor || config.setor_padrao || null;
   }
-  const ownerName = await userName(ownerId);
+  if (!ownerName) ownerName = await userName(ownerId);
   const displayName = isGroup ? (grupoNome || nome || "Grupo WhatsApp") : (nome || customer?.nome || null);
 
   if (existing) {
-    const keepExistingOwner = existing.responsavel_id || ownerId;
-    const keepExistingOwnerName = existing.responsavel_nome || (
-      keepExistingOwner === ownerId ? ownerName : await userName(keepExistingOwner)
-    );
+    const usarPrincipalDoGrupo = isGroup && ownerId && existing.status === "finalizado";
+    const keepExistingOwner = usarPrincipalDoGrupo ? ownerId : (existing.responsavel_id || ownerId);
+    const keepExistingOwnerName = usarPrincipalDoGrupo
+      ? ownerName
+      : (existing.responsavel_nome || (
+          keepExistingOwner === ownerId ? ownerName : await userName(keepExistingOwner)
+        ));
     const { data, error } = await db.from("atendimento_conversas").update({
       contato_nome: displayName || existing.contato_nome || null,
       cliente_id: isGroup ? null : (customer?.id || existing.cliente_id || null),
@@ -1897,7 +1934,7 @@ async function conversationForInbound(
       responsavel_id: keepExistingOwner,
       responsavel_nome: keepExistingOwnerName,
       setor: existing.setor || sector || null,
-      status: keepExistingOwner ? "em_atendimento" : "aguardando",
+      status: "aguardando",
       updated_at: new Date().toISOString(),
     }).eq("id", existing.id).select("*").single();
     if (error) throw error;
@@ -1916,7 +1953,7 @@ async function conversationForInbound(
     whatsapp_chat_jid: chatJid || (telefone ? `${telefone}@s.whatsapp.net` : null),
     grupo_nome: isGroup ? (grupoNome || displayName) : null,
     ocultar_da_caixa: false,
-    status: ownerId ? "em_atendimento" : "aguardando",
+    status: "aguardando",
     responsavel_id: ownerId,
     responsavel_nome: ownerName,
     setor: sector,
@@ -2170,11 +2207,14 @@ Deno.serve(async (req) => {
       const conversaUpdate: Record<string, unknown> = {
         ultimo_preview: text,
         ultima_mensagem_em: now,
-        status: conversation.responsavel_id ? "em_atendimento" : "aguardando",
+        status: fromMe
+          ? (conversation.responsavel_id ? "em_atendimento" : conversation.status || "aguardando")
+          : "aguardando",
         updated_at: new Date().toISOString(),
       };
       if (fromMe) {
         conversaUpdate.ultima_saida_em = now;
+        conversaUpdate.nao_lidas = 0;
       } else {
         conversaUpdate.nao_lidas = Number(conversation.nao_lidas || 0) + 1;
         conversaUpdate.ultima_entrada_em = now;
