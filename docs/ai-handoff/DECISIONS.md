@@ -118,3 +118,18 @@ PR #280 permanece draft até aprovação do usuário.
 ## Campos controlados pelo React
 
 Nunca alterar o valor de um input/textarea controlado com `elemento.value = ...` fora do React (providers globais, máscaras, conversões). Isso atualiza o rastreador interno do React e o `onChange` deixa de disparar. Usar o setter nativo do protótipo (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, novo)`), como em `UppercaseInputProvider` (PR #490).
+
+
+## Preservação funcional / mudanças aditivas
+
+Regra obrigatória para qualquer alteração no Atlas:
+
+- alterar somente o escopo solicitado;
+- não remover, ocultar, substituir, zerar ou recriar silenciosamente uma função que já existe;
+- campos, botões, anexos, históricos, ações e dados manuais existentes devem ser preservados por padrão;
+- integrações e automações devem usar patches seletivos, nunca regravar o registro inteiro quando apenas parte dele precisa mudar;
+- quando uma tela for reorganizada, funcionalidades existentes precisam continuar acessíveis;
+- se for realmente necessário retirar ou mudar um comportamento existente, isso exige pedido explícito e deve aparecer no diff/validação;
+- antes do merge, conferir regressão do fluxo imediatamente vizinho ao que foi alterado.
+
+Exemplo canônico: sincronizar um orçamento W.Vetro pode atualizar itens, valores e metadados da integração, mas não pode apagar anexos, fotos, observações, histórico ou outros dados preenchidos manualmente no card.

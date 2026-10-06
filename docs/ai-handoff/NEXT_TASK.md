@@ -463,3 +463,15 @@ Depois de validar a sincronização por Cliente 360:
 6. testar incluir/trocar/excluir componente pela Conferência de Custos filtrada por `itemRef`;
 7. confirmar que o original W.Vetro continua preservado e que o PDF Atlas permanece separado;
 8. após aprovação visual/funcional, fazer o merge e um único deploy de produção.
+
+## TAREFA ATUAL — validar vínculo W.Vetro no card do Kanban
+
+Branch: `fix/kanban-wvetro-sync-preservacao-v1`
+
+1. abrir o card da RAKELLY LORRANA no Kanban e confirmar que a área de anexos voltou a aparecer;
+2. clicar em **Sincronizar W.Vetro** e confirmar identificação do W.Vetro #1171 pelo mesmo nome;
+3. conferir que itens, valor e dados técnicos entram no card sem apagar nome, cidade, cor, observações ou anexos existentes;
+4. anexar um PDF manual e repetir a sincronização, confirmando que o arquivo permanece;
+5. conferir que o card W.Vetro duplicado deixa de aparecer no Kanban e no Cliente 360;
+6. validar com usuário Keila, não apenas Master;
+7. rodar `npm run release:check` antes do PR/merge.

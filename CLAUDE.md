@@ -12,6 +12,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind, backend em Supabase (Postgres +
 - Nunca commitar direto na branch main. Sempre: branch nova -> validar localmente com `npm run release:check` -> PR -> merge manual. Nao usar Preview Vercel como teste cotidiano; Preview so deve ser disparado manualmente quando houver um pacote candidato real.
 - Ao finalizar uma implementacao relevante, atualize docs/ai-handoff/CURRENT_STATE.md, docs/ai-handoff/IMPLEMENTATIONS.md e docs/ai-handoff/NEXT_TASK.md.
 - Decisoes tecnicas ja tomadas (que nao devem ser revertidas sem necessidade) estao em docs/ai-handoff/DECISIONS.md.
+- REGRA DE PRESERVACAO FUNCIONAL: uma alteracao deve mexer somente no escopo solicitado. Nao remover, ocultar, substituir ou zerar campos, botoes, anexos, acoes ou fluxos que ja funcionavam, salvo pedido explicito. Mudancas devem ser aditivas por padrao e a validacao deve conferir regressao das funcoes vizinhas.
 
 ## Comandos essenciais
 `npm run dev:lan` para desenvolvimento local, `npm run typecheck`, `npm run validate`, `npm run release:check`, `npm run vercel:preview` e `npm run vercel:prod`. Os dois comandos Vercel sao manuais e protegidos por preflight. Detalhes em docs/ai-handoff/COMMANDS.md.

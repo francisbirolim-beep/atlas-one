@@ -194,7 +194,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     ])
     if(c.error||!c.data){setErro('Cliente não encontrado.');setCarregando(false);return}
     const r=rec||[]; const alo=await listarAlocacoesCliente(r.map(x=>x.id))
-    setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]) as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setWvetroOperacional((wvo.data||[]) as HistoricoWVetroOperacional[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
+    setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]).filter((o:any)=>o.modo_entrada!=='wvetro_api_vinculado') as Orcamento[]);setWvetroHistorico((wvh.data||[]) as HistoricoWVetroComercial[]);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setWvetroOperacional((wvo.data||[]) as HistoricoWVetroOperacional[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
   }
 
   async function sincronizarWVetroAgora(){
