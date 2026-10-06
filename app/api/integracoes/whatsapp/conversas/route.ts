@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
       listarConversasAtendimento(usuario),
       listarAcessosCanaisAtendimento(usuario),
     ])
-    const podeTransferir = usuario.role === 'master' || acessos.some(a => a.transferir)
+    const podeTransferir = usuario.role === 'master' ||
+      acessos.some(a => a.transferir) ||
+      (conversas as any[]).some(c => c.grupo_pode_transferir || c.grupo_pode_delegar)
     let usuarios: { id: string; nome: string }[] = []
 
     if (podeTransferir) {
