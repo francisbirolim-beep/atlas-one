@@ -74,6 +74,46 @@ function extrairHistoricoTexto(historico: any[]) {
   }).filter(Boolean)
 }
 
+function perguntaEfetiva(textoAtual: string, historico: any[]) {
+  const atual = normalizar(textoAtual).trim()
+  const ehReferenciaInterna = /^(esta|essa|aquela)?\s*(pergunta\s+)?(e|eh|é)?\s*(uma\s+)?(pergunta\s+)?interna[.!? ]*$/.test(atual)
+    || /^(isso|isto)\s+(e|eh|é)\s+intern[oa][.!? ]*$/.test(atual)
+  if (!ehReferenciaInterna) return textoAtual
+
+  const anteriores = extrairHistoricoTexto(historico)
+    .filter((m: any) => m?.role === 'user' && String(m?.content || '').trim())
+    .map((m: any) => String(m.content).trim())
+    .filter((v: string) => normalizar(v) !== atual)
+
+  return anteriores.at(-1) || textoAtual
+}
+
+function statusEmAberto(status: unknown) {
+  const s = normalizar(String(status || ''))
+  return !/(pago|quitado|cancelado|cancelada|baixado|baixa total|recebido)/.test(s)
+}
+
+function dataVencimentoLocal(valor: unknown) {
+  if (!valor) return null
+  try { return dataLocalISO(String(valor)) } catch { return null }
+}
+
+function linhaContaPagar(c: any, i: number) {
+  const pago = Number(c?.valor_pago || 0)
+  const valor = Number(c?.valor || 0)
+  const saldo = Math.max(0, valor - pago)
+  const detalhe = c?.descricao || c?.documento || 'Sem descrição'
+  return `${i + 1}. ${c?.fornecedor_nome || 'Fornecedor não informado'} — ${detalhe} — ${moeda(saldo || valor)} — ${c?.status || 'sem status'}`
+}
+
+function linhaContaReceber(c: any, i: number) {
+  const pago = Number(c?.valor_pago || 0)
+  const valor = Number(c?.valor || 0)
+  const saldo = Math.max(0, valor - pago)
+  const detalhe = c?.documento || (c?.parcela ? 'Parcela ' + c.parcela : 'Sem documento')
+  return `${i + 1}. ${c?.cliente_nome || 'Cliente não informado'} — ${detalhe} — ${moeda(saldo || valor)} — ${c?.status || 'sem status'}`
+}
+
 async function montarContextoAtlas(texto: string, usuario: any) {
   const t = normalizar(texto)
   const contexto: Record<string, any> = {
@@ -198,6 +238,64 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
     return 'Disponha. Pode mandar a próxima consulta.'
   }
 
+  const financeiro = contexto?.financeiro
+  const querFinanceiro = /financeir|conta|contas|pagar|receber|vencid|atrasad/.test(t)
+  if (querFinanceiro && financeiro?.erro) {
+    return String(financeiro.erro).toLowerCase().includes('acesso negado')
+      ? 'Esta é uma consulta interna do Financeiro, mas seu usuário não possui permissão para visualizar esses dados.'
+      : 'Não consegui consultar o Financeiro agora: ' + String(financeiro.erro)
+  }
+
+  if (querFinanceiro && /pagar/.test(t)) {
+    const bruto = financeiro?.contas_pagar
+    if (bruto?.erro) {
+      return String(bruto.erro).toLowerCase().includes('acesso negado')
+        ? 'Esta é uma consulta interna de contas a pagar, mas seu usuário não possui permissão para visualizar esses dados.'
+        : 'Não consegui consultar as contas a pagar agora: ' + String(bruto.erro)
+    }
+    const todas = Array.isArray(bruto) ? bruto : []
+    let lista = todas.filter((c: any) => statusEmAberto(c?.status))
+    let titulo = 'Contas a pagar em aberto'
+    if (/hoje/.test(t)) {
+      lista = lista.filter((c: any) => dataVencimentoLocal(c?.vencimento) === contexto?.data_hoje)
+      titulo = 'Contas a pagar com vencimento hoje'
+    } else if (/vencid|atrasad/.test(t)) {
+      lista = lista.filter((c: any) => {
+        const d = dataVencimentoLocal(c?.vencimento)
+        return Boolean(d && contexto?.data_hoje && d < contexto.data_hoje)
+      })
+      titulo = 'Contas a pagar vencidas'
+    }
+    const total = lista.reduce((s: number, c: any) => s + Math.max(0, Number(c?.valor || 0) - Number(c?.valor_pago || 0)), 0)
+    if (!lista.length) return titulo + ': nenhuma conta encontrada.'
+    return titulo + ': ' + lista.length + ' conta(s), total em aberto de ' + moeda(total) + '.\n\n' + lista.slice(0, 30).map(linhaContaPagar).join('\n')
+  }
+
+  if (querFinanceiro && /receber/.test(t)) {
+    const bruto = financeiro?.contas_receber
+    if (bruto?.erro) {
+      return String(bruto.erro).toLowerCase().includes('acesso negado')
+        ? 'Esta é uma consulta interna de contas a receber, mas seu usuário não possui permissão para visualizar esses dados.'
+        : 'Não consegui consultar as contas a receber agora: ' + String(bruto.erro)
+    }
+    const todas = Array.isArray(bruto) ? bruto : []
+    let lista = todas.filter((c: any) => statusEmAberto(c?.status))
+    let titulo = 'Contas a receber em aberto'
+    if (/hoje/.test(t)) {
+      lista = lista.filter((c: any) => dataVencimentoLocal(c?.vencimento) === contexto?.data_hoje)
+      titulo = 'Contas a receber com vencimento hoje'
+    } else if (/vencid|atrasad/.test(t)) {
+      lista = lista.filter((c: any) => {
+        const d = dataVencimentoLocal(c?.vencimento)
+        return Boolean(d && contexto?.data_hoje && d < contexto.data_hoje)
+      })
+      titulo = 'Contas a receber vencidas'
+    }
+    const total = lista.reduce((s: number, c: any) => s + Math.max(0, Number(c?.valor || 0) - Number(c?.valor_pago || 0)), 0)
+    if (!lista.length) return titulo + ': nenhuma conta encontrada.'
+    return titulo + ': ' + lista.length + ' conta(s), total em aberto de ' + moeda(total) + '.\n\n' + lista.slice(0, 30).map(linhaContaReceber).join('\n')
+  }
+
   const hoje = contexto?.orcamentos_hoje
   if (!hoje || !/orcamento|orcamentos/.test(t) || !/hoje/.test(t)) return null
 
@@ -237,6 +335,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const mensagemTexto = String(body.mensagem || '').trim()
     const historico = Array.isArray(body.messages) ? body.messages : []
+    const mensagemConsulta = perguntaEfetiva(mensagemTexto, historico)
     const anexo = body.anexo && typeof body.anexo === 'object' ? body.anexo : null
     const conversaSolicitada = String(body.conversaId || '').trim()
     const forcarNovaConversa = body.novaConversa === true
@@ -255,7 +354,7 @@ export async function POST(req: NextRequest) {
       agente_id: 'supervisor',
       agente_nome: 'Supervisor IA',
       contexto: 'atlas_ia_geral',
-      tarefa: tarefaResumida(mensagemTexto),
+      tarefa: tarefaResumida(mensagemConsulta),
       status: 'processando',
       atualizou_em: new Date().toISOString(),
       detalhe: { possui_anexo: Boolean(anexo), motor: 'opencode_freellmapi' },
@@ -277,8 +376,8 @@ export async function POST(req: NextRequest) {
     if (anexo) textoParaSalvar = (mensagemTexto ? mensagemTexto + '\n\n' : '') + '[Anexo: ' + (anexo.nome || 'arquivo') + ']'
     await salvarMensagem(conversaId, 'user', textoParaSalvar)
 
-    const contexto = await montarContextoAtlas(mensagemTexto, usuario)
-    const direta = respostaDiretaSemModelo(mensagemTexto, contexto, usuario)
+    const contexto = await montarContextoAtlas(mensagemConsulta, usuario)
+    const direta = respostaDiretaSemModelo(mensagemConsulta, contexto, usuario)
 
     let resposta = direta || ''
     let providerId = direta ? 'atlas-interno' : 'freellmapi'
@@ -318,7 +417,7 @@ export async function POST(req: NextRequest) {
         JSON.stringify(extrairHistoricoTexto(historico)),
         '',
         'PERGUNTA DO USUÁRIO:',
-        mensagemTexto || 'Analise o anexo.',
+        mensagemConsulta || 'Analise o anexo.',
         complementoAnexo,
       ].join('\n')
 
@@ -353,7 +452,7 @@ export async function POST(req: NextRequest) {
           fallbackPolicy: 'free_only_no_paid_fallback',
         })
       } catch (runtimeErro: any) {
-        resposta = respostaQuandoRuntimeIndisponivel(mensagemTexto, contexto, usuario)
+        resposta = respostaQuandoRuntimeIndisponivel(mensagemConsulta, contexto, usuario)
         providerId = 'atlas-interno'
         modelId = 'fallback-runtime-gratuito'
 
