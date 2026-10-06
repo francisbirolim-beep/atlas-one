@@ -340,7 +340,7 @@ export default function WhatsAppAtendimentoPage() {
         canalId: canalDiretorio,
         busca: buscaDiretorio.trim(),
       })
-      const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers })
+      const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers, cache: 'no-store' })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao buscar contatos do WhatsApp.')
       setDiretorio(json.itens || [])
@@ -509,7 +509,7 @@ export default function WhatsAppAtendimentoPage() {
             : canais.filter(c => c.id === canalFiltro).map(c => c.id)
           const respostas = await Promise.all(ids.map(async canalId => {
             const params = new URLSearchParams({ canalId, busca: q })
-            const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers })
+            const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers, cache: 'no-store' })
             const json = await resp.json()
             if (!resp.ok) return [] as DiretorioWhatsApp[]
             return ((json.itens || []) as DiretorioWhatsApp[]).map(item => ({ ...item, canalId }))
@@ -640,6 +640,12 @@ export default function WhatsAppAtendimentoPage() {
         if (mensagem.conversa_id === ativa?.id) void carregarMensagens(ativa.id)
         agendarRefreshConversas()
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_whatsapp_permissoes' }, () => {
+        agendarRefreshConversas(0)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_whatsapp_canais' }, () => {
+        agendarRefreshConversas(0)
+      })
       .subscribe()
     return () => { void supabase.removeChannel(canal) }
   }, [eu?.id, ativa?.id])
@@ -658,7 +664,7 @@ export default function WhatsAppAtendimentoPage() {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizarTela()
     }
 
-    const timer = setInterval(atualizarTela, 5000)
+    const timer = setInterval(atualizarTela, 2000)
     window.addEventListener('focus', atualizarTela)
     document.addEventListener('visibilitychange', aoVoltarParaTela)
 
@@ -779,6 +785,14 @@ export default function WhatsAppAtendimentoPage() {
       ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
       : null
     return Boolean(acesso?.transferir)
+  }
+
+  function podeSupervisionarConversa(conversa: Conversa) {
+    if (eu?.role === 'master') return true
+    const acesso = conversa.whatsapp_canal_id
+      ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
+      : null
+    return Boolean(acesso?.dono || acesso?.supervisionar)
   }
 
   async function delegarResponsabilidadeGrupo() {
@@ -1118,6 +1132,13 @@ export default function WhatsAppAtendimentoPage() {
       (ativa.whatsapp_chat_tipo === 'grupo' ? ativa.grupo_pode_transferir === true : acessoCanalAtivo?.transferir)
     ),
   )
+  const podeSupervisionarAtiva = Boolean(
+    ativa && (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.supervisionar
+    )
+  )
   const podeDelegarGrupo = Boolean(
     ativa?.whatsapp_chat_tipo === 'grupo' &&
     ativa.grupo_id &&
@@ -1336,10 +1357,12 @@ export default function WhatsAppAtendimentoPage() {
                     </div>
                     {c.status !== 'finalizado' && (
                       <div className={`mt-2 flex flex-wrap gap-1.5 ${!c.responsavel_id ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
-                        <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
-                          className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${c.acompanhando?'border-amber-300 bg-amber-50 text-amber-800':'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'}`}>
-                          {c.acompanhando?'Acompanhando':'Acompanhar'}
-                        </button>
+                        {podeSupervisionarConversa(c) && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
+                            className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${c.acompanhando?'border-amber-300 bg-amber-50 text-amber-800':'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'}`}>
+                            {c.acompanhando?'Acompanhando':'Acompanhar'}
+                          </button>
+                        )}
                         {podeTransferirConversa(c) && (
                           <button type="button" onClick={e=>{e.stopPropagation();selecionarConversa(c);setTransferenciaAberta(true)}}
                             className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50">
@@ -1448,11 +1471,13 @@ export default function WhatsAppAtendimentoPage() {
                     Cliente 360
                   </Link>
                 )}
-                <button onClick={()=>void acaoConversa(ativa.acompanhando?'parar_acompanhar':'acompanhar')}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${ativa.acompanhando?'bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
-                  {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
-                  {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
-                </button>
+                {podeSupervisionarAtiva && (
+                  <button onClick={()=>void acaoConversa(ativa.acompanhando?'parar_acompanhar':'acompanhar')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${ativa.acompanhando?'bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
+                    {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
+                    {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
+                  </button>
+                )}
                 {podeAssumirAtiva && (
                   <button onClick={()=>void acaoConversa('assumir')}
                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
@@ -1669,7 +1694,7 @@ export default function WhatsAppAtendimentoPage() {
                             ))}
                           </div>
                         )}
-                        <p className="mt-1 text-right text-[10px] text-slate-400">{hora(m.created_at)}</p>
+                        <p className="mt-1 text-right text-[10px] text-slate-400">{new Date(m.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
                       </div>
                     </div>
                   )
