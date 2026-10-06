@@ -699,9 +699,38 @@ async function processQueue(channelId) {
         ? String(payload.chatJid)
         : `${String(item.telefone).replace(/\D/g, '')}@s.whatsapp.net`
       let conteudo
+      let sendOptions = undefined
 
       if (item.tipo === 'text') {
         conteudo = { text: String(item.texto || '') }
+        if (payload.quotedWhatsappMessageId) {
+          const quotedKey = {
+            remoteJid: jid,
+            id: String(payload.quotedWhatsappMessageId),
+            fromMe: payload.quotedFromMe === true,
+            ...(payload.quotedParticipantJid ? { participant: String(payload.quotedParticipantJid) } : {}),
+          }
+          sendOptions = {
+            quoted: {
+              key: quotedKey,
+              message: { conversation: String(payload.quotedText || '') },
+            },
+          }
+        }
+      } else if (item.tipo === 'reaction') {
+        if (!payload.reactionTargetWhatsappId) throw new Error('Mensagem alvo da reação não identificada.')
+        const targetKey = {
+          remoteJid: jid,
+          id: String(payload.reactionTargetWhatsappId),
+          fromMe: payload.reactionTargetFromMe === true,
+          ...(payload.reactionTargetParticipantJid ? { participant: String(payload.reactionTargetParticipantJid) } : {}),
+        }
+        conteudo = {
+          react: {
+            text: String(item.texto || ''),
+            key: targetKey,
+          },
+        }
       } else if (item.tipo === 'image') {
         if (!payload.mediaUrl) throw new Error('URL da imagem não disponível.')
         conteudo = {
@@ -735,7 +764,7 @@ async function processQueue(channelId) {
         throw new Error(`Tipo de saida ainda nao suportado: ${item.tipo}`)
       }
 
-      const sent = await state.sock.sendMessage(jid, conteudo)
+      const sent = await state.sock.sendMessage(jid, conteudo, sendOptions)
       await atlas('', {
         method: 'POST',
         body: JSON.stringify({
