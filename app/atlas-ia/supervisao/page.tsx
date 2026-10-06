@@ -7,7 +7,7 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 
 type AgenteApi={nome:string;execucoes30d:number;custo30d:number;ultimaAtividadeEm:string|null;provider:string|null;modelo:string|null;setor:string|null}
 type Uso={agente_nome:string|null;setor_id:string|null;created_at:string;sucesso:boolean}
-type OperacaoAgente={trabalhando:boolean;atividade:string;ultimaAtividadeEm:string|null;aguardandoValidacao?:number}
+type OperacaoAgente={trabalhando:boolean;monitorando?:boolean;atividade:string;ultimaAtividadeEm:string|null;aguardandoValidacao?:number;correcoes30d?:number;modo?:string|null}
 type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>}
 type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number}}
 
@@ -58,13 +58,14 @@ export default function SupervisaoIAPage(){
     const operacional=dados?.operacaoAgora?.[r.id]
     const ultima=operacional?.ultimaAtividadeEm||uso?.created_at||base?.ultimaAtividadeEm||null
     const mins=min(ultima)
-    let estado=operacional?.trabalhando?'trabalhando':mins<=4?'trabalhando':mins<=20?'observando':'disponível'
-    let atividade=operacional?.atividade||(estado==='trabalhando'?'Processando uma tarefa agora':estado==='observando'?'Acompanhando atividade recente':'Aguardando nova tarefa')
-    if(r.id==='orcamento'&&(operacional?.aguardandoValidacao||0)>0&&estado==='disponível')estado='observando'
+    let estado=operacional?.trabalhando?'trabalhando':operacional?.monitorando?'monitorando':mins<=4?'trabalhando':mins<=20?'observando':'disponível'
+    let atividade=operacional?.atividade||(estado==='trabalhando'?'Processando uma tarefa agora':estado==='monitorando'?'Monitorando e aprendendo continuamente':estado==='observando'?'Acompanhando atividade recente':'Aguardando nova tarefa')
+    if(r.id==='orcamento'&&(operacional?.aguardandoValidacao||0)>0&&estado==='disponível')estado='monitorando'
     if(r.id==='catalogo'&&(apr?.totais.pendentes||0)>0&&!operacional?.trabalhando){atividade='Acompanhando '+(apr?.totais.pendentes||0)+' validação(ões) pendente(s)';if(estado==='disponível')estado='observando'}
     return {...r,estado,atividade,ultima,exec:Number(base?.execucoes30d||0),custo:Number(base?.custo30d||0),provider:base?.provider||'—',modelo:base?.modelo||'—'}
   }),[dados,apr])
   const ativosEspecialistas=agentes.filter(a=>a.id!=='supervisor'&&a.estado==='trabalhando').length
+  const monitorandoContinuo=agentes.filter(a=>a.id!=='supervisor'&&a.estado==='monitorando').length
   const supervisor=agentes.find(a=>a.id==='supervisor')
   const supervisorOperacao=dados?.operacaoAgora?.supervisor
   if(supervisor){
@@ -94,7 +95,7 @@ export default function SupervisaoIAPage(){
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
 
       <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Card icon={<Activity size={16}/>} label="Trabalhando agora" valor={String(ativos)} sub="últimos 3 minutos"/>
+        <Card icon={<Activity size={16}/>} label="Trabalhando agora" valor={String(ativos)} sub={monitorandoContinuo+' agente(s) monitorando continuamente'}/>
         <Card icon={<Bot size={16}/>} label="Execuções hoje" valor={num(dados?.resumoHoje?.execucoes||0)} sub={(dados?.resumoHoje?.sucessos||0)+' concluídas'}/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo hoje" valor={usd(dados?.resumoHoje?.custoEstimado||0)} sub="estimativa"/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo 30 dias" valor={usd(dados?.resumo?.custoEstimado||0)} sub="estimativa"/>
@@ -107,15 +108,15 @@ export default function SupervisaoIAPage(){
         <div className="office relative hidden h-[500px] overflow-hidden md:block">
           {ROLES.map((r,i)=>{
             const a=agentes.find(x=>x.id===r.id)
-            return <div key={r.id} className={'station station-'+(i+1)+' '+(a?.estado==='trabalhando'?'station-active':a?.estado==='observando'?'station-watch':'')}>
-              <span className="station-state">{a?.estado==='trabalhando'?'● trabalhando':a?.estado==='observando'?'● observando':'○ disponível'}</span>
+            return <div key={r.id} className={'station station-'+(i+1)+' '+(a?.estado==='trabalhando'?'station-active':a?.estado==='monitorando'?'station-learning':a?.estado==='observando'?'station-watch':'')}>
+              <span className="station-state">{a?.estado==='trabalhando'?'● trabalhando':a?.estado==='monitorando'?'● monitorando/aprendendo':a?.estado==='observando'?'● observando':'○ disponível'}</span>
               <b>{r.emoji} {r.nome.replace('IA ','')}</b><small>{r.funcao}</small>
             </div>
           })}
           {agentes.map((a,i)=>{
             const movimento=a.id==='supervisor'
               ? (a.estado==='trabalhando'?'patrolling supervisor-working':'watching')
-              : a.estado==='trabalhando'?'working':a.estado==='observando'?'watching':'idle'
+              : a.estado==='trabalhando'?'working':a.estado==='monitorando'?'learning':a.estado==='observando'?'watching':'idle'
             return <button key={a.id} onClick={()=>setSel(a.id)} className={'agent agent-'+(i+1)+' '+movimento+' '+(sel===a.id?'selected':'')}>
               <span className="bubble"><i className={'dot '+a.estado}/>{a.atividade}</span>
               <span className="person"><i style={{background:a.cor}}/><b>{a.emoji}</b></span>
@@ -134,19 +135,22 @@ export default function SupervisaoIAPage(){
         </div>
         <div className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="font-black">Supervisão e validação</h3><p className="mt-1 text-xs text-slate-500">Acesse os controles ligados à operação dos agentes.</p><div className="mt-4 space-y-2"><Link href="/atlas-ia/aprendizado" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><GraduationCap/><span><b className="block text-sm">Central de Aprendizado</b><small className="text-slate-500">{apr?.totais.pendentes||0} pendente(s)</small></span></Link><Link href="/administracao/ia" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><ShieldCheck/><span><b className="block text-sm">Controle Master da IA</b><small className="text-slate-500">Custos, permissões e auditoria</small></span></Link></div></div>
       </section>
-      <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa estado operacional: trabalhando, observando ou disponível.</p>
+      <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa estado operacional: trabalhando, monitorando/aprendendo, observando ou disponível. WhatsApp e Orçamentista permanecem ativos em monitoramento contínuo enquanto suas automações estiverem ligadas.</p>
     </div>
     <style jsx>{`
       .office{background:linear-gradient(90deg,#e2e8f066 1px,transparent 1px),linear-gradient(#e2e8f066 1px,transparent 1px),#f8fafc;background-size:40px 40px}
-      .station{position:absolute;width:170px;height:72px;border:1px solid #dbe3ee;border-radius:16px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 22px #0f17240d;transition:.3s}.station b{font-size:11px}.station small{font-size:9px;color:#94a3b8}.station-state{position:absolute;right:8px;top:6px;font-size:8px;font-weight:900;color:#94a3b8}.station-active{border-color:#86efac;box-shadow:0 0 0 3px #dcfce7,0 12px 30px #16a34a26}.station-active .station-state{color:#16a34a}.station-watch{border-color:#bfdbfe}.station-watch .station-state{color:#2563eb}.station-1{left:4%;top:8%}.station-2{left:39%;top:6%}.station-3{right:4%;top:8%}.station-4{left:5%;bottom:8%}.station-5{left:40%;bottom:6%}.station-6{right:4%;bottom:8%}
+      .station{position:absolute;width:170px;height:72px;border:1px solid #dbe3ee;border-radius:16px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 22px #0f17240d;transition:.3s}.station b{font-size:11px}.station small{font-size:9px;color:#94a3b8}.station-state{position:absolute;right:8px;top:6px;font-size:8px;font-weight:900;color:#94a3b8}.station-active{border-color:#86efac;box-shadow:0 0 0 3px #dcfce7,0 12px 30px #16a34a26}.station-active .station-state{color:#16a34a}.station-learning{border-color:#c4b5fd;box-shadow:0 0 0 3px #ede9fe,0 12px 30px #7c3aed1f}.station-learning .station-state{color:#7c3aed}.station-watch{border-color:#bfdbfe}.station-watch .station-state{color:#2563eb}.station-1{left:4%;top:8%}.station-2{left:39%;top:6%}.station-3{right:4%;top:8%}.station-4{left:5%;bottom:8%}.station-5{left:40%;bottom:6%}.station-6{right:4%;bottom:8%}
       .agent{--wx:0px;--wy:0px;position:absolute;width:150px;height:112px;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;z-index:5;will-change:transform}.agent-1{left:20%;top:28%;--wx:-125px;--wy:-105px}.agent-2{left:43%;top:25%;--wx:-22px;--wy:-100px}.agent-3{right:18%;top:28%;--wx:125px;--wy:-105px}.agent-4{left:20%;bottom:26%;--wx:-120px;--wy:100px}.agent-5{left:44%;bottom:23%;--wx:-25px;--wy:105px}.agent-6{right:18%;bottom:26%}.selected{filter:drop-shadow(0 7px 12px #2563eb33)}
-      .bubble{position:absolute;bottom:82px;max-width:185px;border-radius:10px;background:#0f172a;color:white;padding:6px 8px;font-size:9px;font-weight:700;line-height:1.2;opacity:.9;box-shadow:0 5px 14px #0f172426}.bubble .dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;background:#94a3b8}.bubble .dot.trabalhando{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}.bubble .dot.observando{background:#3b82f6}.person{position:relative;width:48px;height:58px;display:grid;place-items:center}.person i{position:absolute;bottom:0;width:42px;height:34px;border-radius:16px 16px 8px 8px}.person b{z-index:2;display:grid;width:34px;height:34px;place-items:center;border:2px solid #cbd5e1;border-radius:50%;background:white}.tag{margin-top:3px;border:1px solid #e2e8f0;border-radius:999px;background:white;padding:3px 7px;font-size:10px;font-weight:900;white-space:nowrap}
-      .working{animation:walkToDesk 6s ease-in-out infinite}.working .person{animation:hop 650ms ease-in-out infinite}.working .bubble{animation:pulse 1.2s ease-in-out infinite}.watching{animation:inspect 7s ease-in-out infinite}.watching .person b{animation:look 2.4s ease-in-out infinite}.idle .person{animation:breathe 3.5s ease-in-out infinite}.patrolling{animation:patrol 8s ease-in-out infinite}.patrolling .person{animation:hop .75s ease-in-out infinite}.supervisor-working .bubble{background:#4c1d95;box-shadow:0 0 0 4px #8b5cf633,0 8px 24px #4c1d9540}
+      .bubble{position:absolute;bottom:82px;max-width:185px;border-radius:10px;background:#0f172a;color:white;padding:6px 8px;font-size:9px;font-weight:700;line-height:1.2;opacity:.9;box-shadow:0 5px 14px #0f172426}.bubble .dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;background:#94a3b8}.bubble .dot.trabalhando{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}.bubble .dot.monitorando{background:#8b5cf6;box-shadow:0 0 0 3px #8b5cf633}.bubble .dot.observando{background:#3b82f6}.person{position:relative;width:48px;height:58px;display:grid;place-items:center}.person i{position:absolute;bottom:0;width:42px;height:34px;border-radius:16px 16px 8px 8px}.person b{z-index:2;display:grid;width:34px;height:34px;place-items:center;border:2px solid #cbd5e1;border-radius:50%;background:white}.tag{margin-top:3px;border:1px solid #e2e8f0;border-radius:999px;background:white;padding:3px 7px;font-size:10px;font-weight:900;white-space:nowrap}
+      .working{animation:walkToDesk 6s ease-in-out infinite}.working .person{animation:hop 650ms ease-in-out infinite}.working .bubble{animation:pulse 1.2s ease-in-out infinite}.learning{animation:learningLoop 9s ease-in-out infinite}.learning .person{animation:learningHop 1.8s ease-in-out infinite}.learning .bubble{animation:learningPulse 2.4s ease-in-out infinite}.watching{animation:inspect 7s ease-in-out infinite}.watching .person b{animation:look 2.4s ease-in-out infinite}.idle .person{animation:breathe 3.5s ease-in-out infinite}.patrolling{animation:patrol 8s ease-in-out infinite}.patrolling .person{animation:hop .75s ease-in-out infinite}.supervisor-working .bubble{background:#4c1d95;box-shadow:0 0 0 4px #8b5cf633,0 8px 24px #4c1d9540}
       @keyframes walkToDesk{0%,12%,100%{transform:translate(0,0)}42%,68%{transform:translate(var(--wx),var(--wy))}82%{transform:translate(calc(var(--wx)*.35),calc(var(--wy)*.35))}}
+      @keyframes learningLoop{0%,100%{transform:translate(0,0)}28%{transform:translate(calc(var(--wx)*.28),calc(var(--wy)*.28))}55%{transform:translate(calc(var(--wx)*.08),calc(var(--wy)*.08))}78%{transform:translate(calc(var(--wx)*.2),calc(var(--wy)*.2))}}
+      @keyframes learningHop{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+      @keyframes learningPulse{0%,100%{opacity:.9}50%{opacity:1;box-shadow:0 0 0 4px #8b5cf633,0 5px 14px #0f172426}}
       @keyframes inspect{0%,100%{transform:translate(0,0)}25%{transform:translate(12px,-5px)}50%{transform:translate(-8px,4px)}75%{transform:translate(8px,8px)}}
       @keyframes patrol{0%,100%{transform:translate(0,0)}22%{transform:translate(-90px,-60px)}48%{transform:translate(-220px,-12px)}72%{transform:translate(-100px,72px)}}
       @keyframes hop{50%{transform:translateY(-5px)}}@keyframes look{0%,100%{transform:rotate(0)}35%{transform:rotate(-8deg)}70%{transform:rotate(8deg)}}@keyframes breathe{50%{transform:translateY(-2px)}}@keyframes pulse{50%{opacity:1;transform:scale(1.03)}}
-      @media(prefers-reduced-motion:reduce){.working,.watching,.idle .person,.patrolling,.working .person,.working .bubble,.watching .person b,.patrolling .person{animation:none}}
+      @media(prefers-reduced-motion:reduce){.working,.learning,.watching,.idle .person,.patrolling,.working .person,.working .bubble,.learning .person,.learning .bubble,.watching .person b,.patrolling .person{animation:none}}
     `}</style>
   </main>
 }
