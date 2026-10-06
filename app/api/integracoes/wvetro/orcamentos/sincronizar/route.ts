@@ -413,6 +413,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
   const fim = txt(body.fim) || new Date().toISOString().slice(0, 10)
   const inicio = txt(body.inicio) || new Date(Date.now() - (Math.max(1, diasPadrao) - 1) * 86400000).toISOString().slice(0, 10)
   const clienteAlvoId = txt(body.clienteAlvoId)
+  const vinculoManualValidado = body.vinculoManualValidado === true
 
   try {
     const [payloadOrcamentos, payloadPedidos] = await Promise.all([
@@ -457,7 +458,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       const numeroW = txt(p.Nro, p.OrcamentoId, p.Orcamentoid)
       if (!numeroW) continue
       const nome = nomeCliente(p)
-      if (clienteAlvo && !nomesClientesCompativeis(nome, clienteAlvo.nome)) {
+      if (clienteAlvo && !nomesClientesCompativeis(nome, clienteAlvo.nome) && !vinculoManualValidado) {
         ignoradosClienteDivergente += 1
         resultados.push({
           numeroWvetro: numeroW,
@@ -466,6 +467,13 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           clienteAlvo: clienteAlvo.nome,
         })
         continue
+      }
+
+      // Exceção controlada: um nome abreviado/homônimo só pode ultrapassar a trava
+      // quando veio de uma validação humana e a chamada está limitada a números
+      // W.Vetro explícitos. Nunca liberamos uma janela inteira por esse caminho.
+      if (clienteAlvo && vinculoManualValidado && numerosSolicitados.size === 0) {
+        return NextResponse.json({ error: 'Validação manual exige número W.Vetro explícito.' }, { status: 400 })
       }
 
       const rawItens = arr(p.Itens).length ? arr(p.Itens) : arr(p.itens)
@@ -501,6 +509,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         cliente_codigo_wvetro: txt(p.ClienteCodigo, p.PessoaCodigo) || null,
         cliente_nome_wvetro: nome || null,
         cliente_alvo_id: clienteAlvo?.id || null,
+        validacao_manual_cliente: vinculoManualValidado || null,
         payload_bruto: p,
         mapeamento_versao: 3,
       }
