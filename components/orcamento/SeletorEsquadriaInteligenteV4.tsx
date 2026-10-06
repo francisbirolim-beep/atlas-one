@@ -143,14 +143,35 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
     // preenchimentos diferentes (ex.: porta de giro Suprema com vidro ou lambri).
     // Esses qualificadores não podem esconder a tipologia-base do resultado.
     const palavrasLigacao = new Set(['de','da','do','das','dos','e','em','com','sem','para'])
+    const palavrasContexto = new Set(['linha','linhas','modelo','modelos','tipologia','tipologias','esquadria','esquadrias','projeto','projetos'])
     const qualificadoresTecnicos = new Set([
       'vidro','vidros','lambril','lambri','duplo','dupla','horizontal','vertical',
       'fechadura','convencional','contramarco','veneziana','cega','ripado','ripado',
       'motor','automatizada','automatizado','automatica','automatico','persiana',
       'tela','mosquiteiro','mosquiteira','fixo','fixa','movel','moveis',
     ])
-    const estruturais = termos.filter(termo => !palavrasLigacao.has(termo) && !qualificadoresTecnicos.has(termo))
-    const obrigatorios = estruturais.length ? estruturais : termos.filter(termo => !palavrasLigacao.has(termo))
+
+    // Quando a linha já foi escolhida, palavras que apenas repetem o nome/alias
+    // da linha não podem virar requisito da busca da tipologia. Ex.:
+    // "porta giro da linha Suprema de vidro" precisa procurar por "porta giro"
+    // dentro de SUPREMA, e não exigir que o texto da tipologia contenha "linha".
+    const termosLinhaSelecionada = new Set(
+      linhaSelecionada
+        ? [linhaSelecionada.nome, linhaSelecionada.chave, ...(linhaSelecionada.apelidos || [])]
+            .flatMap(valor => normalizar(String(valor || '')).split(/\s+/))
+            .filter(Boolean)
+        : [],
+    )
+    const ignorarNaEstrutura = (termo: string) =>
+      palavrasLigacao.has(termo)
+      || palavrasContexto.has(termo)
+      || qualificadoresTecnicos.has(termo)
+      || (Boolean(linhaSelecionada) && termosLinhaSelecionada.has(termo))
+
+    const estruturais = termos.filter(termo => !ignorarNaEstrutura(termo))
+    const obrigatorios = estruturais.length
+      ? estruturais
+      : termos.filter(termo => !palavrasLigacao.has(termo) && !palavrasContexto.has(termo) && !(linhaSelecionada && termosLinhaSelecionada.has(termo)))
 
     return tipologiasDaLinha
       .map(t => {
@@ -174,7 +195,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       .sort((a, b) => b.pontuacao - a.pontuacao || a.t.label.localeCompare(b.t.label, 'pt-BR'))
       .slice(0, 30)
       .map(item => item.t)
-  }, [buscaTipologia, tipologiasDaLinha])
+  }, [buscaTipologia, tipologiasDaLinha, linhaSelecionada])
 
   const projetosVisiveis = useMemo(() => {
     if (!linhaSelecionada || buscaTipologia.trim()) return []
