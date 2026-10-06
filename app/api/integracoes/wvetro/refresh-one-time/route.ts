@@ -10,6 +10,7 @@ import {
   sincronizarCustosProdutosWVetro,
 } from '@/lib/wvetroBaseTecnicaServer'
 import { sincronizarLinhasApiWVetro } from '@/lib/wvetroAuditoriaServer'
+import { processarPendenciasImagensWVetro } from '@/lib/wvetroImagensServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -44,6 +45,25 @@ export async function GET(req: NextRequest) {
 
   const acao = String(req.nextUrl.searchParams.get('acao') || 'resumo')
   try {
+    if (acao === 'imagens') {
+      const lotes: any[] = []
+      for (let i = 0; i < 4; i += 1) {
+        const lote = await processarPendenciasImagensWVetro(30)
+        lotes.push(lote)
+        if (lote.processados === 0 || lote.restantes === 0) break
+      }
+      return NextResponse.json({
+        ok: true,
+        acao,
+        lotes: lotes.length,
+        processados: lotes.reduce((n, l) => n + Number(l.processados || 0), 0),
+        copiadas: lotes.reduce((n, l) => n + Number(l.copiadas || 0), 0),
+        preservadas: lotes.reduce((n, l) => n + Number(l.preservadas || 0), 0),
+        erros: lotes.reduce((n, l) => n + Number(l.erros || 0), 0),
+        restantes: lotes.length ? Number(lotes[lotes.length - 1].restantes || 0) : 0,
+      })
+    }
+
     if (acao === 'catalogos') {
       const linhas = await sincronizarLinhasApiWVetro()
       const [perfis, acessorios, esquadrias] = await Promise.all([
