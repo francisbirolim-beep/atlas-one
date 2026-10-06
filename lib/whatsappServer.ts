@@ -147,6 +147,7 @@ type AcessoGrupo = {
   responsavelEfetivoNome: string | null
   delegacaoFimEm: string | null
   delegacaoAtiva: boolean
+  delegacaoExpiradaDestinoId: string | null
   podeDelegar: boolean
 }
 
@@ -169,6 +170,7 @@ async function acessoGrupoWhatsApp(
     responsavelEfetivoNome: null,
     delegacaoFimEm: null,
     delegacaoAtiva: false,
+    delegacaoExpiradaDestinoId: null,
     podeDelegar: usuario.role === 'master',
   }
   if (conversa.whatsapp_chat_tipo !== 'grupo' || !conversa.whatsapp_canal_id || !conversa.whatsapp_chat_jid) {
@@ -186,7 +188,7 @@ async function acessoGrupoWhatsApp(
   if (!grupo?.id) return herdado
 
   const agora = new Date().toISOString()
-  const [{ data: permissoes }, { data: delegacao }] = await Promise.all([
+  const [{ data: permissoes }, { data: delegacao }, { data: delegacaoExpirada }] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_grupo_permissoes')
       .select('usuario_id,nivel,responsavel_principal')
@@ -194,13 +196,23 @@ async function acessoGrupoWhatsApp(
       .eq('grupo_id', grupo.id),
     supabaseAdmin
       .from('atendimento_whatsapp_grupo_delegacoes')
-      .select('origem_usuario_id,destino_usuario_id,inicio_em,fim_em')
+      .select('id,origem_usuario_id,destino_usuario_id,inicio_em,fim_em')
       .eq('empresa_id', conversa.empresa_id)
       .eq('grupo_id', grupo.id)
       .eq('ativo', true)
       .lte('inicio_em', agora)
       .gt('fim_em', agora)
       .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_delegacoes')
+      .select('id,destino_usuario_id,fim_em')
+      .eq('empresa_id', conversa.empresa_id)
+      .eq('grupo_id', grupo.id)
+      .eq('ativo', true)
+      .lte('fim_em', agora)
+      .order('fim_em', { ascending: false })
       .limit(1)
       .maybeSingle(),
   ])
@@ -229,6 +241,7 @@ async function acessoGrupoWhatsApp(
       responsavelEfetivoNome: efetivoNome,
       delegacaoFimEm: delegacao?.fim_em || null,
       delegacaoAtiva: Boolean(delegacao),
+      delegacaoExpiradaDestinoId: delegacaoExpirada?.destino_usuario_id || null,
       podeDelegar: true,
     }
   }
@@ -281,6 +294,7 @@ async function acessoGrupoWhatsApp(
     responsavelEfetivoNome: efetivoNome,
     delegacaoFimEm: delegacao?.fim_em || null,
     delegacaoAtiva: Boolean(delegacao),
+    delegacaoExpiradaDestinoId: delegacaoExpirada?.destino_usuario_id || null,
     podeDelegar: principalId === usuario.id,
   }
 }
@@ -1201,17 +1215,30 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
       const grupo = await acessoGrupoWhatsApp(conversa, usuario, acesso)
       if (!grupo.visualizar) return { conversa, permitido: false, grupo }
 
-      // Ao terminar uma delegacao, a caixa volta ao responsavel efetivo atual sem apagar o historico.
+      // Delegacao vencida volta automaticamente ao responsavel principal.
+      // Transferencias pontuais continuam com o destinatario ate ele finalizar.
       if (
         grupo.responsavelEfetivoId &&
+        grupo.delegacaoExpiradaDestinoId &&
         conversa.status !== 'em_atendimento' &&
-        conversa.responsavel_id !== grupo.responsavelEfetivoId
+        conversa.responsavel_id === grupo.delegacaoExpiradaDestinoId
       ) {
+        const agora = new Date().toISOString()
         await supabaseAdmin.from('atendimento_conversas').update({
           responsavel_id: grupo.responsavelEfetivoId,
           responsavel_nome: grupo.responsavelEfetivoNome,
-          updated_at: new Date().toISOString(),
+          updated_at: agora,
         }).eq('id', conversa.id)
+        if (grupo.grupoId) {
+          await supabaseAdmin.from('atendimento_whatsapp_grupo_delegacoes').update({
+            ativo: false,
+            encerrado_em: agora,
+          })
+            .eq('empresa_id', usuario.empresa_id)
+            .eq('grupo_id', grupo.grupoId)
+            .eq('ativo', true)
+            .lte('fim_em', agora)
+        }
         conversa = {
           ...conversa,
           responsavel_id: grupo.responsavelEfetivoId,
