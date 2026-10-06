@@ -3,12 +3,12 @@ import { Usuario } from './tipos'
 
 const CHAVE_USUARIO_OFFLINE = 'atlas_usuario_offline_v1'
 
-async function resolverEmail(identificador: string): Promise<{ email: string | null; error: string | null }> {
+async function resolverEmail(identificador: string): Promise<{ email: string | null; error: string | null; status: number }> {
   const valor = identificador.trim()
-  if (!valor) return { email: null, error: 'Informe usuário ou e-mail' }
+  if (!valor) return { email: null, error: 'Informe usuário ou e-mail', status: 400 }
 
   if (valor.includes('@')) {
-    return { email: valor.toLowerCase(), error: null }
+    return { email: valor.toLowerCase(), error: null, status: 200 }
   }
 
   try {
@@ -17,25 +17,37 @@ async function resolverEmail(identificador: string): Promise<{ email: string | n
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identificador: valor }),
     })
-    const json = await resp.json()
+    const json = await resp.json().catch(() => ({}))
     if (!resp.ok || !json.email) {
-      return { email: null, error: json.error || 'Usuário não encontrado' }
+      if (resp.status >= 500) {
+        return {
+          email: null,
+          error: 'O Atlas está temporariamente sem conexão com o servidor. Tente novamente em instantes.',
+          status: resp.status,
+        }
+      }
+      return { email: null, error: json.error || 'Usuário não encontrado', status: resp.status || 400 }
     }
-    return { email: String(json.email).toLowerCase(), error: null }
+    return { email: String(json.email).toLowerCase(), error: null, status: 200 }
   } catch {
-    return { email: null, error: 'Não foi possível localizar o usuário' }
+    return {
+      email: null,
+      error: 'O Atlas está temporariamente sem conexão com o servidor. Tente novamente em instantes.',
+      status: 503,
+    }
   }
 }
 
 export async function login(identificador: string, senha: string) {
-  if (typeof window !== 'undefined') {
-    try { window.localStorage.removeItem(CHAVE_USUARIO_OFFLINE) } catch {}
-  }
   const resolvido = await resolverEmail(identificador)
   if (!resolvido.email) {
     return {
       data: { user: null, session: null },
-      error: { message: resolvido.error || 'Usuário ou senha incorretos', name: 'AuthApiError', status: 400 } as any,
+      error: {
+        message: resolvido.error || 'Usuário ou senha incorretos',
+        name: resolvido.status >= 500 ? 'AuthRetryableFetchError' : 'AuthApiError',
+        status: resolvido.status,
+      } as any,
     } as any
   }
 
@@ -88,9 +100,24 @@ function salvarUsuarioOffline(usuario: Usuario) {
   try { window.localStorage.setItem(CHAVE_USUARIO_OFFLINE, JSON.stringify(usuario)) } catch {}
 }
 
+function erroAuthTransitorio(error: any) {
+  const status = Number(error?.status || 0)
+  const nome = String(error?.name || '').toLowerCase()
+  const mensagem = String(error?.message || '').toLowerCase()
+  return status >= 500
+    || status === 0
+    || nome.includes('retryable')
+    || nome.includes('fetch')
+    || mensagem.includes('failed to fetch')
+    || mensagem.includes('network')
+    || mensagem.includes('timeout')
+}
+
 export async function sessaoAtualValida() {
+  let sessionLocal: any = null
   try {
     const { data: { session } } = await supabase.auth.getSession()
+    sessionLocal = session
     const expiraEmMs = Number(session?.expires_at || 0) * 1000
     const aindaValida = Boolean(session?.access_token && (!expiraEmMs || expiraEmMs - Date.now() > 60_000))
     if (session && aindaValida) return session
@@ -99,13 +126,25 @@ export async function sessaoAtualValida() {
     if (session?.refresh_token) {
       const { data, error } = await supabase.auth.refreshSession({ refresh_token: session.refresh_token })
       if (!error && data.session?.access_token) return data.session
+      if (erroAuthTransitorio(error) && session.access_token) {
+        const expirouHa = expiraEmMs ? Date.now() - expiraEmMs : 0
+        if (!expiraEmMs || expirouHa < 15 * 60_000) return session
+      }
     }
 
     // refreshSession sem argumento também recupera a sessão persistida quando disponível.
     const { data, error } = await supabase.auth.refreshSession()
     if (!error && data.session?.access_token) return data.session
+    if (erroAuthTransitorio(error) && sessionLocal?.access_token) {
+      const expiraEmMs = Number(sessionLocal.expires_at || 0) * 1000
+      const expirouHa = expiraEmMs ? Date.now() - expiraEmMs : 0
+      if (!expiraEmMs || expirouHa < 15 * 60_000) return sessionLocal
+    }
     return null
   } catch {
+    // Em falha transitória de rede, não força logout imediato de uma sessão
+    // que já existia localmente. O backend continua validando o JWT normalmente.
+    if (sessionLocal?.access_token) return sessionLocal
     return null
   }
 }
