@@ -17,8 +17,12 @@ type VariavelObservada = {
   dados_origem: Record<string, unknown>
 }
 
-function txt(v: unknown) {
-  return String(v ?? '').replace(/\s+/g, ' ').trim()
+function txt(...vs: unknown[]) {
+  for (const v of vs) {
+    const s = String(v ?? '').replace(/\s+/g, ' ').trim()
+    if (s) return s
+  }
+  return ''
 }
 
 function norm(v: unknown) {
