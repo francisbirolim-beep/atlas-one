@@ -44,7 +44,13 @@ export default function SupervisaoIAPage(){
       setDados(aj);if(b.ok)setApr(bj)
     }catch(e:any){setErro(e?.message||'Erro ao carregar.')}finally{if(!silencioso)setLoading(false)}
   }
-  useEffect(()=>{void carregar();const i=window.setInterval(()=>void carregar(true),5000);return()=>window.clearInterval(i)},[])
+  useEffect(()=>{
+    void carregar()
+    const atualizar=()=>{if(document.visibilityState==='visible')void carregar(true)}
+    const i=window.setInterval(atualizar,15000)
+    document.addEventListener('visibilitychange',atualizar)
+    return()=>{window.clearInterval(i);document.removeEventListener('visibilitychange',atualizar)}
+  },[])
 
   const agentes=useMemo(()=>ROLES.map(r=>{
     const base=(dados?.agentes||[]).find(a=>r.termos.some(t=>norm([a.nome,a.setor].join(' ')).includes(norm(t))))
@@ -128,7 +134,7 @@ export default function SupervisaoIAPage(){
         </div>
         <div className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="font-black">Supervisão e validação</h3><p className="mt-1 text-xs text-slate-500">Acesse os controles ligados à operação dos agentes.</p><div className="mt-4 space-y-2"><Link href="/atlas-ia/aprendizado" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><GraduationCap/><span><b className="block text-sm">Central de Aprendizado</b><small className="text-slate-500">{apr?.totais.pendentes||0} pendente(s)</small></span></Link><Link href="/administracao/ia" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><ShieldCheck/><span><b className="block text-sm">Controle Master da IA</b><small className="text-slate-500">Custos, permissões e auditoria</small></span></Link></div></div>
       </section>
-      <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática a cada 5 segundos. Movimento representa estado operacional: trabalhando, observando ou disponível.</p>
+      <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa estado operacional: trabalhando, observando ou disponível.</p>
     </div>
     <style jsx>{`
       .office{background:linear-gradient(90deg,#e2e8f066 1px,transparent 1px),linear-gradient(#e2e8f066 1px,transparent 1px),#f8fafc;background-size:40px 40px}
