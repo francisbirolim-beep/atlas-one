@@ -27,7 +27,22 @@ export default function Login() {
     const { error } = await login(identificador.trim(), senha)
     setCarregando(false)
     if (error) {
-      setErro('Usuário ou senha incorretos')
+      const status = Number((error as any)?.status || 0)
+      const nome = String((error as any)?.name || '').toLowerCase()
+      const mensagem = String(error.message || '').toLowerCase()
+      const indisponivel = status >= 500
+        || status === 0
+        || nome.includes('retryable')
+        || nome.includes('fetch')
+        || mensagem.includes('failed to fetch')
+        || mensagem.includes('network')
+        || mensagem.includes('timeout')
+
+      setErro(
+        indisponivel
+          ? 'O Atlas está temporariamente sem conexão com o servidor. Sua senha não foi considerada errada. Tente novamente em instantes.'
+          : 'Usuário ou senha incorretos'
+      )
       return
     }
     router.replace('/')
