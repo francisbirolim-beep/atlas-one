@@ -37,7 +37,7 @@ function urlImagem(obj: Record<string, unknown>) {
   const candidatos = [obj.URL, obj.Url, obj.url, obj.Imagem, obj.ImagemUrl, obj.imagemUrl, obj.Foto, obj.FotoUrl, obj.fotoUrl]
   for (const item of candidatos) {
     const valor = txt(item)
-    if (/^https?:\/\//i.test(valor)) return valor
+    if (/^https?:\/\//i.test(valor) && !/\/wvetro\/?$/i.test(valor)) return valor
   }
   return null
 }
