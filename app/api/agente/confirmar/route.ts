@@ -1,5 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarUsuario, rodarLoop, executarPropostaTarefa, executarPropostaEvento, obterOuCriarConversaHoje, salvarMensagem, ACTION_TOOLS } from '@/lib/agente'
+import {
+  verificarUsuario,
+  executarPropostaTarefa,
+  executarPropostaEvento,
+  obterOuCriarConversaHoje,
+  salvarMensagem,
+  ACTION_TOOLS,
+} from '@/lib/agente'
+
+function textoResultado(decisao: string, proposta: any, resultado: any) {
+  if (decisao === 'cancelar') return 'Ação cancelada.'
+  if (resultado?.ok) {
+    if (proposta?.name === 'propor_criar_tarefa') {
+      return 'Tarefa criada com sucesso' + (resultado?.titulo ? ': ' + resultado.titulo : '.') 
+    }
+    if (proposta?.name === 'propor_criar_evento') {
+      return 'Evento criado com sucesso' + (resultado?.titulo ? ': ' + resultado.titulo : '.')
+    }
+    return 'Ação concluída com sucesso.'
+  }
+  return resultado?.erro || resultado?.mensagem || 'Não foi possível concluir a ação.'
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,8 +29,6 @@ export async function POST(req: NextRequest) {
     if (!usuario) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY || ''
 
     const body = await req.json()
     const historico = Array.isArray(body.messages) ? body.messages : []
@@ -42,24 +61,25 @@ export async function POST(req: NextRequest) {
     }
 
     const conversaId = await obterOuCriarConversaHoje(usuario.id, usuario.empresa_id)
+    const texto = textoResultado(decisao, proposta, resultadoExecucao)
+    await salvarMensagem(conversaId, 'assistant', texto)
 
     const messages = [
       ...historico,
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: JSON.stringify(resultadoExecucao) }] },
+      { role: 'assistant', content: [{ type: 'text', text: texto }] },
     ]
-    const resultado = await rodarLoop(messages, usuario.id, usuario.nome, usuario.role, apiKey, usuario.empresa_id)
-
-    if (resultado.done && resultado.text) {
-      await salvarMensagem(conversaId, 'assistant', resultado.text)
-    }
 
     return NextResponse.json({
-      text: resultado.text || '',
-      done: resultado.done,
-      pendingAction: resultado.pendingAction || null,
-      messages: resultado.messages,
+      text: texto,
+      done: true,
+      pendingAction: null,
+      messages,
       execucao: resultadoExecucao,
       conversaId,
+      provider: 'atlas-interno',
+      modelo: 'acao-direta',
+      custoEstimado: 0,
     })
   } catch (e: any) {
     return NextResponse.json({ error: 'Erro inesperado no agente: ' + String(e && e.message ? e.message : e) }, { status: 500 })
