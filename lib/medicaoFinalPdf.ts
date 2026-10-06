@@ -180,7 +180,7 @@ async function gerarPdfContramarcos(
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9.5)
-    const titulo = `${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}${item.quantidade > 1 ? ` · ${item.quantidade} un.` : ''}`
+    const titulo = `${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}${item.ambiente ? ` · ${item.ambiente}` : ''}${item.quantidade > 1 ? ` · ${item.quantidade} un.` : ''}`
     doc.text(doc.splitTextToSize(titulo, 172), 19, y + 6)
 
     doc.setFillColor(248, 250, 252)
