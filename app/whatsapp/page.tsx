@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
+  Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus,
@@ -112,6 +112,10 @@ type DiretorioWhatsApp = {
   nome: string
   participantes?: number | null
   canalId?: string
+  conversaId?: string | null
+  bloqueado?: boolean
+  bloqueado_em?: string | null
+  bloqueado_por_nome?: string | null
 }
 type SugestaoIA = {
   id: string
@@ -758,6 +762,15 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Nao foi possivel alterar o atendimento.')
 
+      if (acao === 'arquivar' || acao === 'bloquear') {
+        setConversas(lista => lista.filter(c => c.id !== conversaId))
+        if (conversaAtivaIdRef.current === conversaId) {
+          conversaAtivaIdRef.current = null
+          setAtiva(null)
+          setMensagens([])
+          setHistorico([])
+        }
+      }
       void carregarConversas(false)
       if (conversaAtivaIdRef.current === conversaId) void carregarApoio(conversaId)
       return true
@@ -1151,6 +1164,23 @@ export default function WhatsAppAtendimentoPage() {
       (ativa.whatsapp_chat_tipo === 'grupo' ? ativa.grupo_pode_transferir === true : acessoCanalAtivo?.transferir)
     ),
   )
+  const podeArquivarAtiva = Boolean(
+    ativa && (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.transferir ||
+      ativa.responsavel_id === eu?.id
+    )
+  )
+  const podeBloquearAtiva = Boolean(
+    ativa &&
+    ativa.whatsapp_chat_tipo !== 'grupo' &&
+    (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.transferir
+    )
+  )
   const podeSupervisionarAtiva = Boolean(
     ativa && (
       eu?.role === 'master' ||
@@ -1426,21 +1456,38 @@ export default function WhatsAppAtendimentoPage() {
                   {contatosBuscaVisiveis.map(item => (
                     <button
                       key={`${item.canalId || ''}:${item.jid}`}
-                      onClick={() => void iniciarDoDiretorio(item)}
-                      className="flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 text-left hover:bg-emerald-50"
+                      onClick={async () => {
+                        if (item.bloqueado) {
+                          if (!item.conversaId) {
+                            setErro('O contato está bloqueado, mas a conversa original não foi localizada para desbloqueio.')
+                            return
+                          }
+                          if (!window.confirm('Desbloquear este contato neste WhatsApp e abrir a conversa novamente?')) return
+                          const ok = await acaoConversaPorId(item.conversaId, 'desbloquear')
+                          if (!ok) return
+                          await iniciarDoDiretorio({ ...item, bloqueado: false })
+                          return
+                        }
+                        await iniciarDoDiretorio(item)
+                      }}
+                      className={`flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 text-left ${item.bloqueado?'bg-red-50/60 hover:bg-red-50':'hover:bg-emerald-50'}`}
                     >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700">
-                        {item.tipo === 'grupo' ? <Users size={16}/> : item.nome.slice(0,1).toUpperCase()}
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${item.bloqueado?'bg-red-100 text-red-700':'bg-emerald-50 text-emerald-700'}`}>
+                        {item.bloqueado ? <Ban size={16}/> : item.tipo === 'grupo' ? <Users size={16}/> : item.nome.slice(0,1).toUpperCase()}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-800">{item.nome}</p>
-                        <p className="truncate text-[11px] text-slate-400">
-                          {item.tipo === 'grupo'
-                            ? `Grupo · ${item.participantes || 0} participantes`
-                            : (item.telefone ? telefoneFormatado(item.telefone) : 'Contato salvo no WhatsApp')}
+                        <p className={`truncate text-[11px] ${item.bloqueado?'text-red-600':'text-slate-400'}`}>
+                          {item.bloqueado
+                            ? `Bloqueado${item.bloqueado_por_nome ? ` por ${item.bloqueado_por_nome}` : ''}`
+                            : item.tipo === 'grupo'
+                              ? `Grupo · ${item.participantes || 0} participantes`
+                              : (item.telefone ? telefoneFormatado(item.telefone) : 'Contato salvo no WhatsApp')}
                         </p>
                       </div>
-                      <span className="text-[10px] font-semibold text-emerald-700">Abrir</span>
+                      <span className={`text-[10px] font-semibold ${item.bloqueado?'text-red-700':'text-emerald-700'}`}>
+                        {item.bloqueado ? 'Desbloquear' : 'Abrir'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1508,7 +1555,7 @@ export default function WhatsAppAtendimentoPage() {
                 {podeReabrirAtiva && (
                   <button onClick={()=>void acaoConversa('assumir')}
                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
-                    <MessageCircle size={15}/> Iniciar nova conversa
+                    <MessageCircle size={15}/> Reativar conversa
                   </button>
                 )}
                 {podeAssumirAtiva && (
@@ -1546,6 +1593,21 @@ export default function WhatsAppAtendimentoPage() {
                   <button onClick={()=>setTransferenciaAberta(aberta=>!aberta)}
                     className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${transferenciaAberta?'bg-slate-100 text-slate-900':'bg-white text-slate-600'}`}>
                     <ShieldCheck size={15}/> Transferir
+                  </button>
+                )}
+                {podeArquivarAtiva && (
+                  <button type="button"
+                    onClick={()=>{if(window.confirm('Remover esta conversa da caixa? O histórico continuará salvo e poderá ser encontrado novamente pela busca.'))void acaoConversa('arquivar')}}
+                    className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    title="Remove da caixa, mas preserva todo o histórico">
+                    <Archive size={15}/> Remover da lista
+                  </button>
+                )}
+                {podeBloquearAtiva && (
+                  <button type="button"
+                    onClick={()=>{if(window.confirm('Bloquear este contato neste número do WhatsApp? O histórico ficará salvo no Atlas.'))void acaoConversa('bloquear')}}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100">
+                    <Ban size={15}/> Bloquear
                   </button>
                 )}
               </div>
@@ -1775,12 +1837,12 @@ export default function WhatsAppAtendimentoPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div>
                       <p className="text-xs font-bold text-slate-700">Atendimento encerrado</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">O histórico acima continua salvo. Para falar com esta pessoa novamente, inicie um novo ciclo de atendimento.</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">O histórico acima continua salvo. Reative para abrir um novo ciclo de atendimento sem perder nenhuma mensagem anterior.</p>
                     </div>
                     {podeReabrirAtiva ? (
                       <button type="button" onClick={()=>void acaoConversa('assumir')}
                         className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
-                        <MessageCircle size={15}/> Iniciar nova conversa
+                        <MessageCircle size={15}/> Reativar conversa
                       </button>
                     ) : (
                       <span className="text-[11px] text-slate-500">Você possui acesso ao histórico, mas não permissão para atender neste número.</span>
