@@ -72,6 +72,51 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, acao, inicio, fim, resultados, tipologias, resumo: await resumoBaseTecnicaWVetro() })
     }
 
+    if (acao === 'pendencias-explicitas') {
+      const datas = String(req.nextUrl.searchParams.get('datas') || '')
+        .split(',')
+        .map(v => v.trim())
+        .filter(dataOk)
+        .slice(0, 10)
+      if (!datas.length) return NextResponse.json({ error: 'Informe ao menos uma data válida.' }, { status: 400 })
+
+      const resultados: any[] = []
+      for (const data of datas) {
+        try {
+          const resultado = await processarBaseTecnicaWVetroDia(data)
+          const agora = new Date().toISOString()
+          const { error: erroUpdate } = await supabaseAdmin
+            .from('wvetro_base_tecnica_pendencias')
+            .update({ status: 'resolvida', resultado, resolvido_em: agora, atualizado_em: agora })
+            .eq('data', data)
+            .eq('status', 'pendente')
+          if (erroUpdate) throw erroUpdate
+          resultados.push({ data, ok: true, resultado })
+        } catch (e) {
+          const mensagem = e instanceof Error ? e.message : 'Falha ao reprocessar.'
+          await supabaseAdmin
+            .from('wvetro_base_tecnica_pendencias')
+            .update({ erro: mensagem, atualizado_em: new Date().toISOString() })
+            .eq('data', data)
+            .eq('status', 'pendente')
+          resultados.push({ data, ok: false, erro: mensagem })
+        }
+      }
+
+      const { count: restantes } = await supabaseAdmin
+        .from('wvetro_base_tecnica_pendencias')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pendente')
+
+      await materializarReferenciasTipologiasWVetroPendentes()
+      await mapearReferenciasComponentesExatas()
+      await sincronizarCustosProdutosWVetro()
+      return NextResponse.json({
+        ok: true, acao, processadas: resultados.length, restantes: restantes || 0,
+        resultados, resumo: await resumoBaseTecnicaWVetro(),
+      })
+    }
+
     if (acao === 'pendencias') {
       const limite = Math.min(7, Math.max(1, Number(req.nextUrl.searchParams.get('limite') || 3)))
       const { data: pendencias, error } = await supabaseAdmin
