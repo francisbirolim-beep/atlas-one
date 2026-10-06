@@ -38,6 +38,26 @@ export function extrairItensComparacao(texto: string): ItemComparacao[] {
     const linha = original.replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim()
     if (!linha || linha.length > 220) continue
 
+    // Layout típico do PDF do fornecedor:
+    // 102436 SU 007 PRETO UN 1,000 2,249
+    const fornecedor = linha.match(/^\d{3,}\s+([A-Za-z]{2,5})\s*[- ]?\s*(\d{2,4})\s+(.+?)\s+(UN|UND|UNID|PC|PCS|PÇ|PÇS)\s+(\d+(?:[.,]\d+)?)\b/i)
+    if (fornecedor) {
+      const codigo = normalizarCodigo(fornecedor[1], fornecedor[2])
+      const quantidadeDecimal = Number(String(fornecedor[5]).replace(/\./g, '').replace(',', '.'))
+      const quantidade = Number.isFinite(quantidadeDecimal) ? Math.round(quantidadeDecimal) : 0
+      if (codigo && quantidade > 0) {
+        const detalhe = limparDetalhe(fornecedor[3] || '')
+        const corMatch = detalhe.match(/\b(PRETO|BRANCO|ANODIZADO FOSCO|FOSCO|IMBUIA|LINHEIRO CLARO|MARROM AVELA|CORTEN)\b/i)
+        itens.push({
+          codigo,
+          quantidade,
+          detalhe,
+          cor: corMatch ? corMatch[1].toUpperCase() : undefined,
+        })
+        continue
+      }
+    }
+
     const m = linha.match(/^([A-Za-z]{2,5})\s*[- ]?\s*(\d{2,4})?\b(.*?)(?:\s*=\s*|\s+-\s+|\s+–\s+|\s+—\s+)([0O]?\d{1,3})\b(.*)$/i)
     if (!m) continue
 
@@ -59,7 +79,7 @@ export function extrairItensComparacao(texto: string): ItemComparacao[] {
 
   // Fallback para texto extraído de PDF em que as colunas ficam coladas.
   const bruto = semAcento(String(texto || '')).toUpperCase()
-  const rx = /\b(SU|DP|TMC|MG|NYL|PAR|CHU|CON|FIT|RPCS)\s*[- ]?\s*(\d{2,4})?\b[^\n]{0,55}?(?:=|\s-\s)\s*([0O]?\d{1,3})\b/g
+  const rx = /\b(SU|DP|TMC|PR|MG|NYL|PAR|CHU|CON|FIT|RPCS)\s*[- ]?\s*(\d{2,4})?\b[^\n]{0,55}?(?:=|\s-\s)\s*([0O]?\d{1,3})\b/g
   let m: RegExpExecArray | null
   while ((m = rx.exec(bruto)) !== null) {
     const codigo = normalizarCodigo(m[1], m[2])
