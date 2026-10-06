@@ -423,3 +423,11 @@ Nenhum merge para `main`.
 - lista de materiais filtrável por tipo e seleção;
 - regra automática de cobrança de sobra por cor com override manual;
 - edição técnica reutiliza o motor já existente de overrides e histórico, sem duplicar regras.
+
+## 2026-10-06 — Sincronização W.Vetro pelo card do Kanban
+
+- Modal do Kanban voltou a exibir anexos e versões mesmo no fluxo de edição direta.
+- Botão de sincronização consulta W.Vetro pelo cliente e período recente, com autoidentificação por nome exato quando há somente um resultado.
+- Vínculo usa o card atual como destino; dados técnicos do W.Vetro são atualizados sem apagar informações manuais.
+- Duplicado W.Vetro já importado pode ser consolidado no card escolhido e ocultado das visões Kanban/Cliente 360.
+- Regra de preservação funcional adicionada ao repositório para impedir regressões por alterações fora do escopo.
