@@ -70,17 +70,38 @@ export async function PUT(req: NextRequest) {
       .single()
     if (error) throw error
 
-    if (responsavelPrincipal) {
+    const { data: conversa } = await supabaseAdmin.from('atendimento_conversas')
+      .select('id,status')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('whatsapp_canal_id', grupo.whatsapp_canal_id)
+      .eq('whatsapp_chat_jid', grupo.grupo_jid)
+      .maybeSingle()
+
+    if (responsavelPrincipal && conversa?.id && conversa.status !== 'em_atendimento') {
       await supabaseAdmin.from('atendimento_conversas').update({
         responsavel_id: destino.id,
         responsavel_nome: destino.nome,
         status: 'aguardando',
         updated_at: new Date().toISOString(),
+      }).eq('id', conversa.id)
+    }
+
+    if (conversa?.id) {
+      await supabaseAdmin.from('atendimento_eventos').insert({
+        empresa_id: usuario.empresa_id,
+        conversa_id: conversa.id,
+        tipo: responsavelPrincipal ? 'grupo_responsavel_definido' : 'grupo_permissao_alterada',
+        usuario_id: usuario.id,
+        usuario_nome: usuario.nome,
+        dados: {
+          grupo_id: grupo.id,
+          grupo_nome: grupo.nome,
+          usuario_alvo_id: destino.id,
+          usuario_alvo_nome: destino.nome,
+          nivel,
+          responsavel_principal: responsavelPrincipal,
+        },
       })
-        .eq('empresa_id', usuario.empresa_id)
-        .eq('whatsapp_canal_id', grupo.whatsapp_canal_id)
-        .eq('whatsapp_chat_jid', grupo.grupo_jid)
-        .neq('status', 'em_atendimento')
     }
 
     return NextResponse.json({ ok: true, permissao: data })
