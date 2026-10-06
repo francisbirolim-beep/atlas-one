@@ -1209,7 +1209,8 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
   const avaliadas = await Promise.all(((data || []) as AtendimentoConversa[]).map(async conversa => {
     if (!conversa.whatsapp_canal_id) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
     const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id)
-    if (!acesso?.visualizar && usuario.role !== 'master') return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
+    if (!acesso) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
+    if (!acesso.visualizar && usuario.role !== 'master') return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
 
     if (conversa.whatsapp_chat_tipo === 'grupo') {
       const grupo = await acessoGrupoWhatsApp(conversa, usuario, acesso)
