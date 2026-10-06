@@ -1573,9 +1573,12 @@ export async function enviarMidiaWhatsApp(
   if (canal.gateway_status !== 'connected') throw new Error('O número WhatsApp desta conversa não está conectado.')
 
   const acesso = await acessoCanalWhatsApp(usuario, canalId)
-  if (!acesso.atender) throw new Error('Você não possui permissão para responder por este canal.')
-  if (usuario.role !== 'master' && conversa.responsavel_id && conversa.responsavel_id !== usuario.id) {
-    throw new Error('Este atendimento está com outro atendente.')
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acesso)).atender
+    : acesso.atender
+  if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
+  if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento antes de responder.')
   }
 
   const tipoGateway = tipoMidiaPorMime(mime, dados.fileName)
