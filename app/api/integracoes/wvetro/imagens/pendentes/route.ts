@@ -16,6 +16,21 @@ async function contarStatus(status: string) {
   return count || 0
 }
 
+async function contarSemImagemMotivo(tipo: 'indisponivel' | 'invalida' | 'sem_origem') {
+  let query = supabaseAdmin
+    .from('wvetro_produtos_snapshot')
+    .select('id', { count: 'exact', head: true })
+    .eq('imagem_status', 'sem_imagem')
+
+  if (tipo === 'indisponivel') query = query.like('imagem_erro', 'indisponivel_origem:%')
+  if (tipo === 'invalida') query = query.like('imagem_erro', 'url_invalida_origem:%')
+  if (tipo === 'sem_origem') query = query.eq('imagem_erro', 'sem_imagem_origem')
+
+  const { count, error } = await query
+  if (error) throw error
+  return count || 0
+}
+
 export async function GET(req: NextRequest) {
   if (!await autenticarMasterWVetro(req)) {
     return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 403 })
@@ -25,6 +40,7 @@ export async function GET(req: NextRequest) {
     pendentes,
     copiadas,
     preservadas,
+    semImagem,
     indisponiveis,
     invalidas,
     semImagemOrigem,
@@ -33,9 +49,10 @@ export async function GET(req: NextRequest) {
     contarStatus('pendente'),
     contarStatus('copiada'),
     contarStatus('preservada_atlas'),
-    contarStatus('indisponivel_origem'),
-    contarStatus('url_invalida_origem'),
-    contarStatus('sem_imagem_origem'),
+    contarStatus('sem_imagem'),
+    contarSemImagemMotivo('indisponivel'),
+    contarSemImagemMotivo('invalida'),
+    contarSemImagemMotivo('sem_origem'),
     contarStatus('erro'),
   ])
 
@@ -44,6 +61,7 @@ export async function GET(req: NextRequest) {
     pendentes,
     copiadas,
     preservadas,
+    semImagem,
     indisponiveis,
     invalidas,
     semImagemOrigem,
