@@ -1090,7 +1090,14 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
 }
 
 export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
-  const [{ data: canais, error: canaisError }, { data: permissoes, error: permissoesError }] = await Promise.all([
+  const agora = new Date().toISOString()
+  const [
+    { data: canais, error: canaisError },
+    { data: permissoes, error: permissoesError },
+    { data: permissoesGrupo, error: permissoesGrupoError },
+    { data: delegacoes, error: delegacoesError },
+    { data: atribuidas, error: atribuidasError },
+  ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
       .select('id,principal,usuario_id,ativo,gateway_status')
@@ -1102,9 +1109,50 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
       .select('canal_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
       .eq('empresa_id', usuario.empresa_id)
       .eq('usuario_id', usuario.id),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_permissoes')
+      .select('grupo_id,nivel')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('usuario_id', usuario.id)
+      .neq('nivel', 'sem_acesso'),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_delegacoes')
+      .select('grupo_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('destino_usuario_id', usuario.id)
+      .eq('ativo', true)
+      .lte('inicio_em', agora)
+      .gt('fim_em', agora),
+    supabaseAdmin
+      .from('atendimento_conversas')
+      .select('whatsapp_canal_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('responsavel_id', usuario.id)
+      .neq('status', 'finalizado'),
   ])
   if (canaisError) throw canaisError
   if (permissoesError) throw permissoesError
+  if (permissoesGrupoError) throw permissoesGrupoError
+  if (delegacoesError) throw delegacoesError
+  if (atribuidasError) throw atribuidasError
+
+  const grupoIds = [...new Set([
+    ...(permissoesGrupo || []).map((p: any) => p.grupo_id),
+    ...(delegacoes || []).map((d: any) => d.grupo_id),
+  ].filter(Boolean))]
+  const canaisGrupo = new Set<string>()
+  if (grupoIds.length) {
+    const { data: grupos, error: gruposError } = await supabaseAdmin
+      .from('atendimento_whatsapp_grupos')
+      .select('id,whatsapp_canal_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .in('id', grupoIds)
+    if (gruposError) throw gruposError
+    for (const grupo of grupos || []) if (grupo.whatsapp_canal_id) canaisGrupo.add(grupo.whatsapp_canal_id)
+  }
+  for (const conversa of atribuidas || []) {
+    if (conversa.whatsapp_canal_id) canaisGrupo.add(conversa.whatsapp_canal_id)
+  }
 
   const porCanal = new Map((permissoes || []).map((p: any) => [p.canal_id, p]))
   return (canais || []).map((canal: any) => {
@@ -1112,9 +1160,10 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
     const dono = canal.usuario_id === usuario.id
     const principal = canal.principal === true
     const master = usuario.role === 'master'
+    const acessoPorGrupo = canaisGrupo.has(canal.id)
     return {
       canal_id: canal.id as string,
-      visualizar: master || dono || Boolean(
+      visualizar: master || dono || acessoPorGrupo || Boolean(
         permissao?.pode_visualizar || permissao?.pode_atender ||
         permissao?.pode_transferir || permissao?.pode_supervisionar
       ),
