@@ -37,8 +37,10 @@ export async function carregarConfigAgente(setorId: string | null, escopo: 'seto
     const { data } = await query.limit(1).maybeSingle()
     if (data) {
       const providerConfigurado = String(data.provider || 'ollama') as ProviderNome
-      const providerPago = ['anthropic', 'openai', 'gemini', 'openrouter'].includes(providerConfigurado)
-      if (politicaZeroCustoAtiva() && providerPago) {
+      // O loop legado suporta ferramentas pelo Ollama. FreeLLMAPI é usado pelo OpenCode
+      // nas rotas novas; por isso qualquer configuração diferente de Ollama cai no local
+      // quando a política zero-custo está ativa.
+      if (politicaZeroCustoAtiva() && providerConfigurado !== 'ollama') {
         return {
           ...padrao(escopo),
           id: data.id,
