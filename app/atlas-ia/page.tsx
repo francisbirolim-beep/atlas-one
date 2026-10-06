@@ -174,7 +174,7 @@ export default function AtlasIAPage() {
   }
 
   async function carregarConversa(id: string) {
-    if (!id || carregando || carregandoConversa) return
+    if (!id || carregandoConversa) return
     setCarregandoConversa(true)
     setErro('')
     try {
@@ -481,7 +481,6 @@ export default function AtlasIAPage() {
               {conversas.slice(0, 12).map(c => <button
                 key={c.id}
                 onClick={() => void carregarConversa(c.id)}
-                disabled={carregandoConversa}
                 className={"w-full rounded-lg px-2.5 py-2 text-left transition " + (conversaLivreId === c.id && modo === 'livre' ? 'bg-white/15' : 'text-white/70 hover:bg-white/10')}
                 title={c.preview || c.titulo}
               >
