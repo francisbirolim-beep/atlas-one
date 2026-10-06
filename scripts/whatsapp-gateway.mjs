@@ -666,8 +666,11 @@ async function syncHistoryMessages(channel, messages, lidToPn) {
   return rows.length
 }
 
-async function syncHistoryBundle(channel, data) {
-  const lidToPn = lidMapFromHistory(data.lidPnMappings || [])
+async function syncHistoryBundle(channel, data, lidToPnBase = null) {
+  const lidToPn = lidToPnBase instanceof Map ? lidToPnBase : new Map()
+  for (const [lid, pn] of lidMapFromHistory(data.lidPnMappings || [])) {
+    lidToPn.set(lid, pn)
+  }
   const contacts = (data.contacts || []).map((contact) => {
     const rawId = String(contact?.id || '').trim()
     const resolvedId = resolvePnJid(rawId, lidToPn)
@@ -817,22 +820,23 @@ async function connectChannel(channel) {
     sending: false,
     qrOpened: false,
     mismatch: false,
+    lidToPn: new Map(),
   }
   sessions.set(channel.id, stateEntry)
 
   try {
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
     const versionInfo = await fetchLatestWaWebVersion().catch(() => null)
-    const pareamentoNovo = !state?.creds?.me?.id
-
     await reportState(channel.id, 'connecting')
 
     const sock = makeWASocket({
       auth: state,
       browser: Browsers.macOS('Desktop'),
       markOnlineOnConnect: false,
-      syncFullHistory: pareamentoNovo,
-      ...(pareamentoNovo ? { shouldSyncHistoryMessage: () => true } : {}),
+      // O Atlas precisa reconstruir o histórico também após troca/reconexão de computador.
+      // O backend deduplica pelo whatsapp_message_id, então reprocessar é seguro.
+      syncFullHistory: true,
+      shouldSyncHistoryMessage: () => true,
       ...(versionInfo?.version ? { version: versionInfo.version } : {}),
     })
     stateEntry.sock = sock
@@ -920,19 +924,19 @@ async function connectChannel(channel) {
           lidPnMappings: lidPnMappings || [],
           progress,
           syncType,
-        })
+        }, stateEntry.lidToPn)
       } catch (error) {
         console.error(`[gateway:${channel.id}] historico:`, error.message)
       }
     })
 
     sock.ev.on('chats.upsert', async (chats) => {
-      try { await syncHistoryChats(channel, chats || [], new Map()) }
+      try { await syncHistoryChats(channel, chats || [], stateEntry.lidToPn) }
       catch (error) { console.error(`[gateway:${channel.id}] chats:`, error.message) }
     })
 
     sock.ev.on('chats.update', async (chats) => {
-      try { await syncHistoryChats(channel, chats || [], new Map()) }
+      try { await syncHistoryChats(channel, chats || [], stateEntry.lidToPn) }
       catch (error) { console.error(`[gateway:${channel.id}] chats update:`, error.message) }
     })
 
@@ -947,10 +951,30 @@ async function connectChannel(channel) {
     })
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-      if (type !== 'notify') return
-      for (const msg of messages || []) {
+      const lote = messages || []
+
+      if (type !== 'notify') {
         try {
-          await registerInbound(channel, msg, sock)
+          await syncHistoryMessages(channel, lote, stateEntry.lidToPn)
+        } catch (error) {
+          console.error(`[gateway:${channel.id}] mensagens de historico:`, error.message)
+        }
+        return
+      }
+
+      for (const msg of lote) {
+        try {
+          if (msg?.key?.fromMe === true) {
+            // Mensagem enviada pelo celular/outro dispositivo também precisa aparecer no Atlas.
+            // Pequeno atraso deixa a confirmação da fila do Atlas gravar o mesmo ID primeiro,
+            // evitando duplicidade quando a própria mensagem saiu pelo Atlas.
+            setTimeout(() => {
+              void syncHistoryMessages(channel, [msg], stateEntry.lidToPn)
+                .catch((error) => console.error(`[gateway:${channel.id}] saida do dispositivo:`, error.message))
+            }, 800)
+          } else {
+            await registerInbound(channel, msg, sock)
+          }
         } catch (error) {
           console.error(`[gateway:${channel.id}] entrada:`, error.message)
         }
