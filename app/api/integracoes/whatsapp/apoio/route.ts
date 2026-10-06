@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [etiquetasResp, vinculosResp, notasResp, rapidasResp] = await Promise.all([
+    const [etiquetasResp, vinculosResp, notasResp, rapidasResp, historicoResp] = await Promise.all([
       supabaseAdmin.from('atendimento_etiquetas')
         .select('id,nome,cor').eq('empresa_id', usuario.empresa_id)
         .eq('ativo', true).order('nome'),
@@ -36,9 +36,13 @@ export async function GET(req: NextRequest) {
         .select('id,titulo,mensagem,atalho,categoria')
         .eq('empresa_id', usuario.empresa_id).eq('ativo', true)
         .order('titulo'),
+      supabaseAdmin.from('atendimento_eventos')
+        .select('id,tipo,usuario_id,usuario_nome,dados,created_at')
+        .eq('empresa_id', usuario.empresa_id).eq('conversa_id', conversaId)
+        .order('created_at', { ascending: false }).limit(300),
     ])
 
-    const erro = etiquetasResp.error || vinculosResp.error || notasResp.error || rapidasResp.error
+    const erro = etiquetasResp.error || vinculosResp.error || notasResp.error || rapidasResp.error || historicoResp.error
     if (erro) throw erro
 
     return NextResponse.json({
@@ -47,6 +51,7 @@ export async function GET(req: NextRequest) {
       etiquetasAtivas: (vinculosResp.data || []).map(x => x.etiqueta_id),
       notas: notasResp.data || [],
       mensagensRapidas: rapidasResp.data || [],
+      historico: historicoResp.data || [],
     })
   } catch (error) {
     console.error('Erro ao carregar apoio WhatsApp:', error)
