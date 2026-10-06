@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant } from '@/lib/tenantServer'
 import {
+  arquivarConversaWhatsApp,
   assumirConversa,
   definirAcompanhamentoConversa,
+  definirBloqueioContatoWhatsApp,
   finalizarConversa,
   listarAcessosCanaisAtendimento,
   listarConversasAtendimento,
@@ -112,6 +114,12 @@ export async function POST(req: NextRequest) {
       )
     } else if (acao === 'finalizar') {
       await finalizarConversa(conversaId, usuario)
+    } else if (acao === 'arquivar') {
+      await arquivarConversaWhatsApp(conversaId, usuario)
+    } else if (acao === 'bloquear') {
+      await definirBloqueioContatoWhatsApp(conversaId, true, usuario)
+    } else if (acao === 'desbloquear') {
+      await definirBloqueioContatoWhatsApp(conversaId, false, usuario)
     } else {
       return NextResponse.json({ error: 'Acao invalida.' }, { status: 400 })
     }
