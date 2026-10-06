@@ -23,9 +23,51 @@ type SnapshotImagem = {
   imagem_status: string | null
 }
 
-async function copiarSnapshotImagem(snap: SnapshotImagem) {
-  if (!snap.produto_atlas_id || !snap.url_origem) return { copiada: 0, preservada: 0, erro: 0 }
-  if (snap.imagem_status === 'copiada' && snap.imagem_atlas_url) return { copiada: 1, preservada: 0, erro: 0 }
+type ResultadoImagem = {
+  copiada: number
+  preservada: number
+  erro: number
+  indisponivel: number
+  invalida: number
+  semImagem: number
+}
+
+function resultadoZero(): ResultadoImagem {
+  return { copiada: 0, preservada: 0, erro: 0, indisponivel: 0, invalida: 0, semImagem: 0 }
+}
+
+function urlRaizSemImagem(valor: string) {
+  try {
+    const url = new URL(valor)
+    return /^\/wvetro\/?$/i.test(url.pathname)
+  } catch {
+    return false
+  }
+}
+
+async function atualizarStatusImagem(id: string, imagem_status: string, imagem_erro: string | null) {
+  const { error } = await supabaseAdmin
+    .from('wvetro_produtos_snapshot')
+    .update({ imagem_status, imagem_erro })
+    .eq('id', id)
+  if (error) throw error
+}
+
+async function copiarSnapshotImagem(snap: SnapshotImagem): Promise<ResultadoImagem> {
+  const vazio = resultadoZero()
+  if (!snap.produto_atlas_id || !snap.url_origem) return vazio
+  if (snap.imagem_status === 'copiada' && snap.imagem_atlas_url) return { ...vazio, copiada: 1 }
+
+  if (snap.imagem_status === 'preservada_atlas') return { ...vazio, preservada: 1 }
+  if (snap.imagem_status === 'indisponivel_origem') return { ...vazio, indisponivel: 1 }
+  if (snap.imagem_status === 'url_invalida_origem') return { ...vazio, invalida: 1 }
+  if (snap.imagem_status === 'sem_imagem_origem') return { ...vazio, semImagem: 1 }
+
+  const origemBruta = String(snap.url_origem).trim()
+  if (urlRaizSemImagem(origemBruta)) {
+    await atualizarStatusImagem(snap.id, 'sem_imagem_origem', null)
+    return { ...vazio, semImagem: 1 }
+  }
 
   const { data: produto } = await supabaseAdmin
     .from('produtos')
@@ -34,18 +76,42 @@ async function copiarSnapshotImagem(snap: SnapshotImagem) {
     .maybeSingle()
 
   if (produto?.foto_url && produto.foto_url !== snap.url_origem && !produto.foto_url.includes('/storage/v1/object/public/fotos/wvetro/')) {
-    await supabaseAdmin.from('wvetro_produtos_snapshot').update({ imagem_status: 'preservada_atlas', imagem_erro: null }).eq('id', snap.id)
-    return { copiada: 0, preservada: 1, erro: 0 }
+    await atualizarStatusImagem(snap.id, 'preservada_atlas', null)
+    return { ...vazio, preservada: 1 }
   }
 
   try {
-    const origem = encodeURI(String(snap.url_origem).trim())
+    const origem = encodeURI(origemBruta)
     const resp = await fetch(origem, { cache: 'no-store' })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+    if (!resp.ok) {
+      const mensagem = `HTTP ${resp.status}`
+      if (resp.status === 404 || resp.status === 410) {
+        await atualizarStatusImagem(snap.id, 'indisponivel_origem', mensagem)
+        return { ...vazio, indisponivel: 1 }
+      }
+      if (resp.status === 400 || resp.status === 422) {
+        await atualizarStatusImagem(snap.id, 'url_invalida_origem', mensagem)
+        return { ...vazio, invalida: 1 }
+      }
+      throw new Error(mensagem)
+    }
+
     const tipoConteudo = resp.headers.get('content-type') || ''
-    if (!tipoConteudo.toLowerCase().startsWith('image/')) throw new Error(`Conteúdo não é imagem (${tipoConteudo || 'sem content-type'})`)
+    if (!tipoConteudo.toLowerCase().startsWith('image/')) {
+      await atualizarStatusImagem(
+        snap.id,
+        'indisponivel_origem',
+        `Conteúdo não é imagem (${tipoConteudo || 'sem content-type'})`,
+      )
+      return { ...vazio, indisponivel: 1 }
+    }
+
     const buffer = await resp.arrayBuffer()
-    if (buffer.byteLength === 0) throw new Error('Imagem vazia')
+    if (buffer.byteLength === 0) {
+      await atualizarStatusImagem(snap.id, 'indisponivel_origem', 'Imagem vazia')
+      return { ...vazio, indisponivel: 1 }
+    }
     if (buffer.byteLength > 12 * 1024 * 1024) throw new Error('Imagem acima de 12 MB')
 
     const ext = extensao(tipoConteudo.toLowerCase())
@@ -60,14 +126,19 @@ async function copiarSnapshotImagem(snap: SnapshotImagem) {
     const { data: urlData } = supabaseAdmin.storage.from('fotos').getPublicUrl(caminho)
     const urlAtlas = urlData.publicUrl
     await supabaseAdmin.from('produtos').update({ foto_url: urlAtlas, updated_at: new Date().toISOString() }).eq('id', snap.produto_atlas_id)
-    await supabaseAdmin.from('wvetro_produtos_snapshot').update({ imagem_atlas_url: urlAtlas, imagem_status: 'copiada', imagem_erro: null }).eq('id', snap.id)
-    return { copiada: 1, preservada: 0, erro: 0 }
-  } catch (e) {
     await supabaseAdmin.from('wvetro_produtos_snapshot').update({
-      imagem_status: 'erro',
-      imagem_erro: e instanceof Error ? e.message : 'Falha ao copiar imagem',
+      imagem_atlas_url: urlAtlas,
+      imagem_status: 'copiada',
+      imagem_erro: null,
     }).eq('id', snap.id)
-    return { copiada: 0, preservada: 0, erro: 1 }
+    return { ...vazio, copiada: 1 }
+  } catch (e) {
+    await atualizarStatusImagem(
+      snap.id,
+      'erro',
+      e instanceof Error ? e.message : 'Falha ao copiar imagem',
+    )
+    return { ...vazio, erro: 1 }
   }
 }
 
@@ -91,16 +162,28 @@ export async function processarPendenciasImagensWVetro(limite = 15) {
     .limit(tamanho)
   if (error) throw error
 
-  let copiadas = 0, preservadas = 0, erros = 0
+  let copiadas = 0, preservadas = 0, erros = 0, indisponiveis = 0, invalidas = 0, semImagem = 0
   for (const snap of (data || []) as SnapshotImagem[]) {
     const r = await copiarSnapshotImagem(snap)
     copiadas += r.copiada
     preservadas += r.preservada
     erros += r.erro
+    indisponiveis += r.indisponivel
+    invalidas += r.invalida
+    semImagem += r.semImagem
   }
 
   const restantes = Math.max(0, Number(count || 0) - (data || []).length)
-  return { processados: (data || []).length, copiadas, preservadas, erros, restantes }
+  return {
+    processados: (data || []).length,
+    copiadas,
+    preservadas,
+    erros,
+    indisponiveis,
+    invalidas,
+    semImagem,
+    restantes,
+  }
 }
 
 export async function processarLoteImagensWVetro(offset: number, limite = 10) {
@@ -123,12 +206,15 @@ export async function processarLoteImagensWVetro(offset: number, limite = 10) {
     .range(inicio, inicio + tamanho - 1)
   if (error) throw error
 
-  let copiadas = 0, preservadas = 0, erros = 0
+  let copiadas = 0, preservadas = 0, erros = 0, indisponiveis = 0, invalidas = 0, semImagem = 0
   for (const snap of (data || []) as SnapshotImagem[]) {
     const r = await copiarSnapshotImagem(snap)
     copiadas += r.copiada
     preservadas += r.preservada
     erros += r.erro
+    indisponiveis += r.indisponivel
+    invalidas += r.invalida
+    semImagem += r.semImagem
   }
 
   return {
@@ -138,6 +224,9 @@ export async function processarLoteImagensWVetro(offset: number, limite = 10) {
     copiadas,
     preservadas,
     erros,
+    indisponiveis,
+    invalidas,
+    semImagem,
     proximoOffset: inicio + (data || []).length,
   }
 }
