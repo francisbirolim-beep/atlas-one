@@ -1,6 +1,8 @@
 import { supabase } from './supabase'
 import { Usuario } from './tipos'
 
+const CHAVE_USUARIO_OFFLINE = 'atlas_usuario_offline_v1'
+
 async function resolverEmail(identificador: string): Promise<{ email: string | null; error: string | null }> {
   const valor = identificador.trim()
   if (!valor) return { email: null, error: 'Informe usuário ou e-mail' }
@@ -26,6 +28,9 @@ async function resolverEmail(identificador: string): Promise<{ email: string | n
 }
 
 export async function login(identificador: string, senha: string) {
+  if (typeof window !== 'undefined') {
+    try { window.localStorage.removeItem(CHAVE_USUARIO_OFFLINE) } catch {}
+  }
   const resolvido = await resolverEmail(identificador)
   if (!resolvido.email) {
     return {
@@ -60,10 +65,13 @@ export async function redefinirMinhaSenha(novaSenha: string) {
 }
 
 export async function logout() {
+  if (typeof window !== 'undefined') {
+    try { window.localStorage.removeItem(CHAVE_USUARIO_OFFLINE) } catch {}
+  }
   await supabase.auth.signOut()
 }
 
-const CHAVE_USUARIO_OFFLINE = 'atlas_usuario_offline_v1'
+
 
 export function usuarioCacheLocal(): Usuario | null {
   if (typeof window === 'undefined') return null
@@ -85,7 +93,7 @@ export async function usuarioAtual(): Promise<Usuario | null> {
 
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return usuarioCacheLocal()
+    if (!session) return null
     const { data } = await supabase
       .from('usuarios')
       .select('*')
@@ -95,9 +103,12 @@ export async function usuarioAtual(): Promise<Usuario | null> {
       salvarUsuarioOffline(data as Usuario)
       return data as Usuario
     }
-    return usuarioCacheLocal()
+    const cache = usuarioCacheLocal()
+    return cache?.id === session.user.id ? cache : null
   } catch {
-    return usuarioCacheLocal()
+    const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } } as any))
+    const cache = usuarioCacheLocal()
+    return session?.user?.id && cache?.id === session.user.id ? cache : null
   }
 }
 
