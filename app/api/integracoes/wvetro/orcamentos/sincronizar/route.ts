@@ -164,7 +164,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id').eq('empresa_id', empresaId),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
