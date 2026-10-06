@@ -8,7 +8,7 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 type AgenteApi={nome:string;execucoes30d:number;custo30d:number;ultimaAtividadeEm:string|null;provider:string|null;modelo:string|null;setor:string|null}
 type Uso={agente_nome:string|null;setor_id:string|null;created_at:string;sucesso:boolean}
 type OperacaoAgente={trabalhando:boolean;monitorando?:boolean;atividade:string;ultimaAtividadeEm:string|null;aguardandoValidacao?:number;correcoes30d?:number;modo?:string|null}
-type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>}
+type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>;runtimeGratis?:any}
 type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number}}
 
 const ROLES=[
@@ -98,9 +98,26 @@ export default function SupervisaoIAPage(){
         <Card icon={<Activity size={16}/>} label="Trabalhando agora" valor={String(ativos)} sub={monitorandoContinuo+' agente(s) monitorando continuamente'}/>
         <Card icon={<Bot size={16}/>} label="Execuções hoje" valor={num(dados?.resumoHoje?.execucoes||0)} sub={(dados?.resumoHoje?.sucessos||0)+' concluídas'}/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo hoje" valor={usd(dados?.resumoHoje?.custoEstimado||0)} sub="estimativa"/>
-        <Card icon={<CircleDollarSign size={16}/>} label="Custo 30 dias" valor={usd(dados?.resumo?.custoEstimado||0)} sub="estimativa"/>
+        <Card icon={<CircleDollarSign size={16}/>} label="Custo 30 dias" valor={usd(dados?.resumo?.custoEstimado||0)} sub="histórico; política atual = zero-custo"/>
         <Card icon={<GraduationCap size={16}/>} label="Aguardando validação" valor={num(apr?.totais.pendentes||0)} sub="aprendizado"/>
         <Card icon={<TriangleAlert size={16}/>} label="Erros hoje" valor={num(dados?.resumoHoje?.erros||0)} sub="execuções com falha"/>
+      </section>
+
+      <section className="mb-5 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2"><ShieldCheck size={19} className="text-emerald-700"/><h2 className="font-black text-emerald-950">Política Zero Custo</h2></div>
+            <p className="mt-1 text-xs text-emerald-800">{dados?.runtimeGratis?.politicaDescricao||'Banco/regra interna → Ollama local → FreeLLMAPI. Sem fallback pago automático.'}</p>
+          </div>
+          <span className="rounded-full bg-emerald-700 px-3 py-1.5 text-[11px] font-black text-white">{dados?.runtimeGratis?.paidProvidersBloqueados!==false?'PAGOS BLOQUEADOS':'ATENÇÃO: política alterada'}</span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <RuntimeCard titulo="1 · Ollama local" ativo={Boolean(dados?.runtimeGratis?.opencode?.ordemGratis?.[0]?.habilitado)} detalhe={(dados?.runtimeGratis?.opencode?.ordemGratis?.[0]?.modelId||'modelo local')+(dados?.runtimeGratis?.opencode?.ordemGratis?.[0]?.temporariamentePulado?' · em espera após falha':'')}/>
+          <RuntimeCard titulo="2 · FreeLLMAPI" ativo={Boolean(dados?.runtimeGratis?.runtimes?.opencode?.configurado)} detalhe={(dados?.runtimeGratis?.opencode?.providerId||'freellmapi')+'/'+(dados?.runtimeGratis?.opencode?.modelId||'free-router')}/>
+          <RuntimeCard titulo="Áudio · Whisper local" ativo={Boolean(dados?.runtimeGratis?.runtimes?.whisper?.configurado)} detalhe={dados?.runtimeGratis?.runtimes?.whisper?.configurado?'conectado · US$ 0':'aguardando runtime local'}/>
+          <RuntimeCard titulo="Imagem · Stable Diffusion" ativo={Boolean(dados?.runtimeGratis?.runtimes?.imagem_local?.configurado)} detalhe={dados?.runtimeGratis?.runtimes?.imagem_local?.configurado?'conectado · US$ 0':'aguardando runtime local'}/>
+        </div>
+        <p className="mt-3 text-[11px] text-emerald-800">Consultas internas do Atlas usam banco e regras antes de chamar qualquer modelo. Se um runtime gratuito cair, o Atlas não migra silenciosamente para API paga.</p>
       </section>
 
       <section className="mb-5 overflow-hidden rounded-3xl border bg-white shadow-sm">
@@ -156,4 +173,5 @@ export default function SupervisaoIAPage(){
 }
 
 function Card({icon,label,valor,sub}:{icon:React.ReactNode;label:string;valor:string;sub:string}){return <div className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex justify-between text-xs font-bold text-slate-500"><span>{label}</span>{icon}</div><div className="mt-2 text-xl font-black">{valor}</div><div className="text-[11px] text-slate-400">{sub}</div></div>}
+function RuntimeCard({titulo,ativo,detalhe}:{titulo:string;ativo:boolean;detalhe:string}){return <div className="rounded-2xl border border-emerald-200 bg-white p-3"><div className="flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className={'rounded-full px-2 py-0.5 text-[9px] font-black '+(ativo?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700')}>{ativo?'ATIVO':'PENDENTE'}</span></div><p className="mt-2 text-[10px] leading-4 text-slate-500">{detalhe}</p></div>}
 function Mini({l,v}:{l:string;v:string}){return <div className="rounded-xl border bg-slate-50 p-3"><small className="font-bold uppercase text-slate-400">{l}</small><div className="truncate text-xs font-black" title={v}>{v}</div></div>}
