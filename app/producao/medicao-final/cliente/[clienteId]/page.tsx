@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, FileText, Loader2, Ruler } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, CloudDownload, FileText, Loader2, RefreshCw, Ruler } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { criarMedicaoDoOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
 type ClienteResumo = { id: string; nome: string; cidade?: string | null }
@@ -27,6 +27,14 @@ type MedicaoResumo = {
   status_operacional?: string | null
   orcamento_id?: string | null
   tipo_medicao?: TipoMedicaoFinal | null
+}
+type HistoricoWVetroResumo = {
+  numero_wvetro?: string | null
+  tipo_registro?: string | null
+  data_emissao?: string | null
+  data_venda?: string | null
+  valor_total?: number | null
+  situacao_wvetro?: string | null
 }
 
 function dataBR(v?: string | null) {
@@ -51,6 +59,9 @@ export default function AbrirMedidaFinalCliente() {
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [orcamentos, setOrcamentos] = useState<OrcamentoResumo[]>([])
   const [medicoes, setMedicoes] = useState<MedicaoResumo[]>([])
+  const [historicosWVetro, setHistoricosWVetro] = useState<HistoricoWVetroResumo[]>([])
+  const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
+  const [mensagemSync, setMensagemSync] = useState('')
   const [tipo, setTipo] = useState<TipoMedicaoFinal | null>(null)
   const [orcamentoId, setOrcamentoId] = useState('')
   const [carregando, setCarregando] = useState(true)
@@ -76,7 +87,7 @@ export default function AbrirMedidaFinalCliente() {
         return
       }
 
-      const [c, o, m] = await Promise.all([
+      const [c, o, m, h] = await Promise.all([
         supabase.from('clientes').select('id,nome,cidade').eq('id', clienteId).maybeSingle(),
         supabase
           .from('orcamentos')
@@ -89,14 +100,24 @@ export default function AbrirMedidaFinalCliente() {
           .select('id,created_at,status_operacional,orcamento_id,tipo_medicao')
           .eq('cliente_id', clienteId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('wvetro_historico_comercial')
+          .select('numero_wvetro,tipo_registro,data_emissao,data_venda,valor_total,situacao_wvetro')
+          .eq('cliente_id', clienteId)
+          .eq('status_vinculo', 'seguro')
+          .eq('somente_historico', true)
+          .order('data_emissao', { ascending: false })
+          .limit(200),
       ])
 
       if (c.error || !c.data) throw new Error('Cliente não encontrado.')
       if (o.error) throw o.error
       if (m.error) throw m.error
+      if (h.error) throw h.error
       setCliente(c.data as ClienteResumo)
       setOrcamentos((o.data || []) as OrcamentoResumo[])
       setMedicoes((m.data || []) as MedicaoResumo[])
+      setHistoricosWVetro((h.data || []) as HistoricoWVetroResumo[])
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível carregar a Medida Final deste cliente.')
     } finally {
@@ -116,6 +137,43 @@ export default function AbrirMedidaFinalCliente() {
 
   function medicaoExistente(orcId: string, t: TipoMedicaoFinal) {
     return medicoes.find(m => m.orcamento_id === orcId && (m.tipo_medicao || 'tipologia') === t)
+  }
+
+  async function sincronizarWVetroCliente() {
+    if (sincronizandoWVetro) return
+    setSincronizandoWVetro(true)
+    setMensagemSync('')
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+
+      const resposta = await fetch('/api/integracoes/wvetro/orcamentos/sincronizar-cliente', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ clienteId }),
+      })
+      const json = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) throw new Error(json?.error || 'Não foi possível sincronizar os orçamentos do W.Vetro.')
+
+      await carregar()
+      const disponiveis = Number(json?.orcamentosDisponiveis || 0)
+      const criados = Number(json?.criados || 0)
+      const atualizados = Number(json?.atualizados || 0)
+      setMensagemSync(
+        disponiveis > 0
+          ? `W.Vetro sincronizado: ${disponiveis} orçamento(s) disponível(is) para este cliente · ${criados} novo(s) · ${atualizados} atualizado(s).`
+          : (json?.mensagem || 'Sincronização concluída, mas nenhum orçamento operacional ficou disponível.')
+      )
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível sincronizar os orçamentos do W.Vetro.')
+    } finally {
+      setSincronizandoWVetro(false)
+    }
   }
 
   async function continuarOuCriar() {
@@ -201,13 +259,34 @@ export default function AbrirMedidaFinalCliente() {
 
         {tipo && (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-navy text-sm font-bold text-white">2</div>
-              <div>
-                <h2 className="font-bold text-slate-900">Escolha o orçamento</h2>
-                <p className="text-xs text-slate-500">Mesmo quando houver apenas um orçamento, confirme qual será usado.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-navy text-sm font-bold text-white">2</div>
+                <div>
+                  <h2 className="font-bold text-slate-900">Escolha o orçamento</h2>
+                  <p className="text-xs text-slate-500">Mesmo quando houver apenas um orçamento, confirme qual será usado.</p>
+                </div>
               </div>
+              <button
+                onClick={sincronizarWVetroCliente}
+                disabled={sincronizandoWVetro}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50"
+              >
+                {sincronizandoWVetro ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {sincronizandoWVetro ? 'Sincronizando...' : 'Sincronizar W.Vetro'}
+              </button>
             </div>
+
+            {historicosWVetro.length > 0 && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800">
+                <CloudDownload size={17} className="mt-0.5 shrink-0" />
+                <div>
+                  <b>Encontramos {historicosWVetro.length} registro(s) histórico(s) do W.Vetro vinculados a este cliente.</b>
+                  <p className="mt-1 text-xs">Se algum orçamento não aparecer abaixo, use “Sincronizar W.Vetro” para trazer os dados operacionais e as tipologias.</p>
+                </div>
+              </div>
+            )}
+            {mensagemSync && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemSync}</div>}
 
             <div className="mt-4 space-y-2">
               {orcamentosAtuais.map(o => {
@@ -230,7 +309,28 @@ export default function AbrirMedidaFinalCliente() {
                   </button>
                 )
               })}
-              {orcamentosAtuais.length === 0 && <div className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-500">Este cliente não possui orçamento disponível para selecionar.</div>}
+              {orcamentosAtuais.length === 0 && (
+                <div className="rounded-xl border border-dashed p-5 text-center">
+                  <p className="text-sm font-semibold text-slate-700">
+                    {historicosWVetro.length > 0
+                      ? 'Há histórico no W.Vetro, mas ainda não existe orçamento operacional vinculado no Atlas.'
+                      : 'Este cliente não possui orçamento disponível para selecionar.'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {historicosWVetro.length > 0
+                      ? 'Sincronize o W.Vetro acima e a lista será atualizada automaticamente.'
+                      : 'Se realmente não existir orçamento, crie um novo orçamento e depois volte para a Medida Final.'}
+                  </p>
+                  {historicosWVetro.length === 0 && (
+                    <Link
+                      href={`/orcamento-rapido?cliente=${clienteId}&modo=sob-medida&novo=1&origem=medida-final`}
+                      className="mt-3 inline-flex items-center justify-center rounded-lg border border-brand-navy px-3 py-2 text-xs font-bold text-brand-navy"
+                    >
+                      Criar orçamento para Medida Final
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
 
             <button onClick={continuarOuCriar} disabled={!orcamentoId || criando} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 py-3 text-sm font-bold text-white disabled:opacity-40">
