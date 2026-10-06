@@ -81,14 +81,14 @@ export default function NumerosWhatsAppPage() {
     if(!silencioso){setErro('');setCarregando(true)}
     try {
       const headers=await headersJson()
-      const resp=await fetch('/api/integracoes/whatsapp/canais',{headers})
+      const resp=await fetch('/api/integracoes/whatsapp/canais',{headers,cache:'no-store'})
       const json=await resp.json()
       if(!resp.ok)throw new Error(json.error||'Nao foi possivel carregar os numeros.')
       setEu(json.usuario||null)
       setCanais(json.canais||[])
       setUsuarios(json.usuarios||[])
       if(json.usuario?.role==='master'){
-        const pResp=await fetch('/api/integracoes/whatsapp/canais/permissoes',{headers})
+        const pResp=await fetch('/api/integracoes/whatsapp/canais/permissoes',{headers,cache:'no-store'})
         const pJson=await pResp.json()
         if(!pResp.ok)throw new Error(pJson.error||'Nao foi possivel carregar as permissoes.')
         setPermissoes(pJson.permissoes||[])
@@ -119,9 +119,14 @@ export default function NumerosWhatsAppPage() {
   useEffect(()=>{
     void carregar()
     const atualizar=()=>{if(document.visibilityState==='visible')void carregar(true)}
-    const timer=setInterval(atualizar,12000)
+    const timer=setInterval(atualizar,3000)
+    window.addEventListener('focus',atualizar)
     document.addEventListener('visibilitychange',atualizar)
-    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',atualizar)}
+    return()=>{
+      clearInterval(timer)
+      window.removeEventListener('focus',atualizar)
+      document.removeEventListener('visibilitychange',atualizar)
+    }
   },[])
 
   const conectados=useMemo(
@@ -196,6 +201,17 @@ export default function NumerosWhatsAppPage() {
     const atual=permissaoDoUsuario(canalId,usuarioId)
     const proxima={...atual,[campo]:valor}
     if(campo!=='pode_visualizar'&&valor)proxima.pode_visualizar=true
+    if(campo==='pode_visualizar'&&!valor){
+      proxima.pode_atender=false
+      proxima.pode_transferir=false
+      proxima.pode_supervisionar=false
+    }
+
+    setPermissoes(lista=>[
+      ...lista.filter(p=>!(p.canal_id===canalId&&p.usuario_id===usuarioId)),
+      proxima,
+    ])
+
     try{
       const headers=await headersJson()
       const resp=await fetch('/api/integracoes/whatsapp/canais/permissoes',{
@@ -215,6 +231,10 @@ export default function NumerosWhatsAppPage() {
         json.permissao,
       ])
     }catch(e){
+      setPermissoes(lista=>[
+        ...lista.filter(p=>!(p.canal_id===canalId&&p.usuario_id===usuarioId)),
+        atual,
+      ])
       setErro(e instanceof Error?e.message:'Falha ao salvar permissao.')
     }
   }
