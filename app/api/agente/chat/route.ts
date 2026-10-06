@@ -9,6 +9,7 @@ import {
 } from '@/lib/agente'
 import { consultarOpenCode, type OpenCodeAnexo } from '@/lib/ai/opencode'
 import { registrarUsoIA } from '@/lib/ai/auditoria'
+import { compararListasItens, extrairItensComparacao, extrairTextoDeAnexo } from '@/lib/ai/documentoComparador'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const TAMANHO_MAX_BASE64 = 12_000_000
@@ -315,6 +316,42 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
   return cabecalho + '\n\n' + linhas.join('\n')
 }
 
+function itensReferenciaHistorico(historico: any[]) {
+  const anteriores = extrairHistoricoTexto(historico)
+    .filter((m: any) => m?.role === 'user')
+    .map((m: any) => ({
+      texto: String(m?.content || ''),
+      itens: extrairItensComparacao(String(m?.content || '')),
+    }))
+    .filter((x: any) => x.itens.length >= 2)
+
+  return anteriores.at(-1)?.itens || []
+}
+
+function respostaDocumentoSemModelo(texto: string, historico: any[], textoAnexo: string) {
+  const itensMensagem = extrairItensComparacao(texto)
+  const itensAnexo = extrairItensComparacao(textoAnexo)
+  const itensHistorico = itensReferenciaHistorico(historico)
+
+  if (itensAnexo.length >= 1) {
+    const referencia = itensMensagem.length >= 2 ? itensMensagem : itensHistorico
+    if (referencia.length >= 2) {
+      return compararListasItens(referencia, itensAnexo)
+    }
+  }
+
+  if (itensMensagem.length >= 2 && itensHistorico.length >= 2) {
+    return compararListasItens(itensHistorico, itensMensagem)
+  }
+
+  if (itensMensagem.length >= 2) {
+    const total = itensMensagem.reduce((s, i) => s + i.quantidade, 0)
+    return 'Recebi o pedido e identifiquei ' + itensMensagem.length + ' código(s), totalizando ' + total + ' unidade(s). Envie agora o material do fornecedor (PDF, texto ou lista) que eu confiro item por item.'
+  }
+
+  return null
+}
+
 function respostaQuandoRuntimeIndisponivel(texto: string, contexto: any, usuario?: any) {
   const direta = respostaDiretaSemModelo(texto, contexto, usuario)
   if (direta) return direta
@@ -380,8 +417,10 @@ export async function POST(req: NextRequest) {
     if (anexo) textoParaSalvar = (mensagemTexto ? mensagemTexto + '\n\n' : '') + '[Anexo: ' + (anexo.nome || 'arquivo') + ']'
     await salvarMensagem(conversaId, 'user', textoParaSalvar)
 
+    const textoAnexo = await extrairTextoDeAnexo(anexo)
     const contexto = await montarContextoAtlas(mensagemConsulta, usuario)
-    const direta = respostaDiretaSemModelo(mensagemConsulta, contexto, usuario)
+    const diretaDocumento = respostaDocumentoSemModelo(mensagemConsulta, historico, textoAnexo)
+    const direta = diretaDocumento || respostaDiretaSemModelo(mensagemConsulta, contexto, usuario)
 
     let resposta = direta || ''
     let providerId = direta ? 'atlas-interno' : 'freellmapi'
@@ -399,7 +438,9 @@ export async function POST(req: NextRequest) {
       } else if (anexo?.tipo === 'texto' && anexo?.dados) {
         complementoAnexo = '\n\nCONTEÚDO DO ANEXO:\n' + String(anexo.dados).slice(0, 30000)
       } else if (anexo?.tipo === 'pdf') {
-        complementoAnexo = '\n\nOBSERVAÇÃO: há um PDF anexado. Este motor gratuito não deve inventar conteúdo do PDF se ele não estiver no contexto textual.'
+        complementoAnexo = textoAnexo
+          ? '\n\nTEXTO EXTRAÍDO DO PDF:\n' + textoAnexo.slice(0, 30000)
+          : '\n\nOBSERVAÇÃO: há um PDF anexado, mas não foi possível extrair texto dele.'
       }
 
       const system = [
