@@ -266,11 +266,11 @@ async function listarCandidatos(usuario: any, cliente: any) {
     .contains('wvetro_fluxo', { origem: 'wvetro_api' })
     .neq('modo_entrada', 'wvetro_api_vinculado')
   if (opError) throw opError
-  const operacionalPorNumero = new Map(
-    (operacionais || [])
-      .map((o: any) => [txt(o?.wvetro_fluxo?.numero), o])
-      .filter(([n]) => !!n),
-  )
+  const operacionalPorNumero = new Map<string, any>()
+  for (const o of operacionais || []) {
+    const numeroOperacional = txt((o as any)?.wvetro_fluxo?.numero)
+    if (numeroOperacional) operacionalPorNumero.set(numeroOperacional, o)
+  }
 
   const rankTipo = (tipo: string) => tipo === 'venda_historica_pedido' ? 2 : 1
   const porNumero = new Map<string, any>()
