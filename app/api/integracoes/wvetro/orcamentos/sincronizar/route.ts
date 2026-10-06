@@ -7,6 +7,7 @@ import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacion
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadastroPendenciasServer'
 import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
+import { nomesClientesCompativeis, normalizarNomeClienteWVetro } from '@/lib/wvetroClienteIdentidade'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -183,7 +184,7 @@ async function carregarContexto(empresaId: string) {
       const f = digitos(contato).slice(-11)
       if (f) porFone.set(f, [...(porFone.get(f) || []), c])
     }
-    const n = norm(c.nome)
+    const n = normalizarNomeClienteWVetro(c.nome)
     if (n) porNome.set(n, [...(porNome.get(n) || []), c])
   }
   const colunas = (colunasR.data || []) as any[]
@@ -216,18 +217,31 @@ function enderecoClienteWVetro(p: Record<string, any>) {
 }
 
 function acharCliente(p: Record<string, any>, ctx: Awaited<ReturnType<typeof carregarContexto>>) {
+  const nome = nomeCliente(p)
+  const chaveNome = normalizarNomeClienteWVetro(nome)
+  if (!chaveNome) return null
+
+  // Regra principal: o nome do cliente vindo do W.Vetro precisa ser compatível.
+  // CPF/CNPJ e telefone servem apenas para desempatar nomes compatíveis; nunca
+  // podem vincular um orçamento a um nome diferente.
+  const exatos = ctx.porNome.get(chaveNome) || []
+  if (exatos.length === 1) return exatos[0]
+
+  const compativeis = ctx.clientes.filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
+
   const d = digitos(documentoCliente(p))
-  if (d && ctx.porDoc.get(d)?.length === 1) return ctx.porDoc.get(d)![0]
+  if (d) {
+    const porDocumento = (ctx.porDoc.get(d) || []).filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
+    if (porDocumento.length === 1) return porDocumento[0]
+  }
+
   const f = digitos(telefoneCliente(p)).slice(-11)
-  if (f && ctx.porFone.get(f)?.length === 1) return ctx.porFone.get(f)![0]
+  if (f) {
+    const porTelefone = (ctx.porFone.get(f) || []).filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
+    if (porTelefone.length === 1) return porTelefone[0]
+  }
 
-  // Autorreparo seguro: se o próprio W.Vetro criou um único cadastro com exatamente
-  // o mesmo nome, a sincronização pode religar o orçamento a esse cadastro.
-  // Cadastros Atlas/manuais e nomes parecidos continuam exigindo validação humana.
-  const n = norm(nomeCliente(p))
-  const exatos = n ? (ctx.porNome.get(n) || []) : []
-  if (exatos.length === 1 && origemWVetro(exatos[0]?.origem)) return exatos[0]
-
+  if (compativeis.length === 1) return compativeis[0]
   return null
 }
 
@@ -273,8 +287,9 @@ function adicionarClienteAoContexto(cliente: any, ctx: Awaited<ReturnType<typeof
   if (d) ctx.porDoc.set(d, [...(ctx.porDoc.get(d) || []), cliente])
   const f = digitos(cliente?.whatsapp || cliente?.telefone).slice(-11)
   if (f) ctx.porFone.set(f, [...(ctx.porFone.get(f) || []), cliente])
-  const n = norm(cliente?.nome)
+  const n = normalizarNomeClienteWVetro(cliente?.nome)
   if (n) ctx.porNome.set(n, [...(ctx.porNome.get(n) || []), cliente])
+  if (cliente?.id && !ctx.clientes.some((c: any) => c.id === cliente.id)) ctx.clientes.push(cliente)
 }
 
 async function garantirCliente(
@@ -308,17 +323,13 @@ async function garantirCliente(
 
   const documento = documentoCliente(p)
   const telefone = telefoneCliente(p)
-  const nomeNorm = norm(nome)
+  const nomeNorm = normalizarNomeClienteWVetro(nome)
   const codigoWvetro = txt(p.ClienteCodigo, p.PessoaCodigo, p.PessoaId, p.ClienteId)
   const semIdentificadorForte = !digitos(documento) && !digitos(telefone)
 
   if (semIdentificadorForte) {
     const candidatos = ctx.clientes
-      .filter((c: any) => {
-        const atual = norm(c.nome)
-        if (!atual || !nomeNorm) return false
-        return atual === nomeNorm || atual.startsWith(`${nomeNorm} `) || nomeNorm.startsWith(`${atual} `)
-      })
+      .filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
       .slice(0, 20)
 
     if (candidatos.length > 0) {
@@ -405,6 +416,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
   const forcar = body.forcar === true || String(body.modo || '').trim().toLowerCase() === 'corrigir_tudo'
   const fim = txt(body.fim) || new Date().toISOString().slice(0, 10)
   const inicio = txt(body.inicio) || new Date(Date.now() - (Math.max(1, diasPadrao) - 1) * 86400000).toISOString().slice(0, 10)
+  const clienteAlvoId = txt(body.clienteAlvoId)
 
   try {
     const [payloadOrcamentos, payloadPedidos] = await Promise.all([
@@ -436,8 +448,10 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       .map(([, valor]) => valor)
 
     const ctx = await carregarContexto(usuario.empresa_id)
+    const clienteAlvo = clienteAlvoId ? ctx.clientes.find((c: any) => String(c.id) === clienteAlvoId) || null : null
+    if (clienteAlvoId && !clienteAlvo) return NextResponse.json({ error: 'Cliente alvo não encontrado nesta empresa.' }, { status: 404 })
     const margensCidade = new Map<string, Awaited<ReturnType<typeof resolverMargemOrcamentoPorCidade>>>()
-    let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0
+    let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0, ignoradosClienteDivergente = 0
     const resultados: any[] = []
 
     for (const entrada of registros) {
@@ -446,16 +460,29 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       const p = registro.payload
       const numeroW = txt(p.Nro, p.OrcamentoId, p.Orcamentoid)
       if (!numeroW) continue
+      const nome = nomeCliente(p)
+      if (clienteAlvo && !nomesClientesCompativeis(nome, clienteAlvo.nome)) {
+        ignoradosClienteDivergente += 1
+        resultados.push({
+          numeroWvetro: numeroW,
+          acao: 'ignorado_cliente_divergente',
+          clienteWvetro: nome,
+          clienteAlvo: clienteAlvo.nome,
+        })
+        continue
+      }
+
       const rawItens = arr(p.Itens).length ? arr(p.Itens) : arr(p.itens)
       const itens = rawItens.map((x, i) => itemWVetro(obj(x) || {}, i, ctx.refs, ctx.linhas, ctx.tipologias))
       itensMapeados += itens.filter(i => i.tipologia_id).length
       itensPendentes += itens.filter(i => !i.tipologia_id).length
-      const clienteResolvido = await garantirCliente(p, ctx, usuario.empresa_id, numeroW)
+      const clienteResolvido = clienteAlvo
+        ? { cliente: await hidratarClienteWVetro(clienteAlvo, p, usuario.empresa_id), criado: false, pendencia: false }
+        : await garantirCliente(p, ctx, usuario.empresa_id, numeroW)
       const cliente = clienteResolvido.cliente
       if (cliente) clientesVinculados += 1
       if (clienteResolvido.criado) clientesCriados += 1
       if (clienteResolvido.pendencia) pendenciasCadastro += 1
-      const nome = nomeCliente(p)
       const cidadeOrcamento = txt(p.Cidade, p.PessoaCidade, p.ClienteCidade, obj(p.Endereco)?.Cidade, cliente?.cidade)
       const chaveCidade = normalizarCidadeMargem(cidadeOrcamento)
       let regraMargem = margensCidade.get(chaveCidade)
@@ -476,8 +503,10 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         vendedor: txt(p.VendedorNome, p.NomeVendedor) || null,
         fonte_registro: fonteRegistro,
         cliente_codigo_wvetro: txt(p.ClienteCodigo, p.PessoaCodigo) || null,
+        cliente_nome_wvetro: nome || null,
+        cliente_alvo_id: clienteAlvo?.id || null,
         payload_bruto: p,
-        mapeamento_versao: 2,
+        mapeamento_versao: 3,
       }
       const existente = ctx.existentes.get(numeroW)
       if (existente) {
@@ -576,6 +605,8 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       semChave: stagingOrcamentos.semChave.length + stagingPedidos.semChave.length,
       criados, atualizados, semAlteracao,
       clientesVinculados, clientesCriados, itensMapeados, itensPendentes, pendenciasCadastro,
+      ignoradosClienteDivergente,
+      clienteAlvoId: clienteAlvo?.id || null,
       forcar,
       resultados: resultados.slice(0, 200),
     })
