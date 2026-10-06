@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { usuarioCacheLocal } from '@/lib/auth'
 import AppShell from '@/components/system/AppShell'
 import BalcaoShell from '@/components/system/BalcaoShell'
 import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
@@ -34,13 +35,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
     const timeout = window.setTimeout(() => {
       if (!ativo) return
-      // Se a rede caiu durante a abertura, libera o shell local em vez de
-      // manter o usuário preso em "Carregando...".
-      if (!navigator.onLine) {
+      const cache = usuarioCacheLocal()
+      setChecking(false)
+      if (cache) {
         setAutenticado(true)
-        setChecking(false)
+      } else if (!rotaPublica) {
+        router.replace('/login')
       }
-    }, 2500)
+    }, 2200)
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!ativo) return
