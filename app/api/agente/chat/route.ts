@@ -234,6 +234,10 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
     return saudacao + ' Estou online no Atlas. Posso consultar orçamentos, clientes, tarefas, eventos, financeiro, produtos e informações da operação.'
   }
 
+  if (/(vou|quero|irei).*(mandar|enviar|anexar).*(duas|2).*(coisa|arquivo|pedido|cotacao|documento)|((comparar|conferir|analisar).*(pedido|fornecedor|cotacao))/.test(t)) {
+    return 'Pode mandar os dois materiais. Envie primeiro o pedido/original e depois o retorno ou cotação do fornecedor. Eu vou conferir item por item, quantidade, código/descrição, cor, valores quando houver e destacar qualquer divergência.'
+  }
+
   if (/^(obrigado|obrigada|valeu|vlw|show|perfeito|ok|certo)[!?. ]*$/.test(t)) {
     return 'Disponha. Pode mandar a próxima consulta.'
   }
