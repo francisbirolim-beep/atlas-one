@@ -11,6 +11,7 @@ import {
 } from '@/lib/wvetroBaseTecnicaServer'
 import { sincronizarLinhasApiWVetro } from '@/lib/wvetroAuditoriaServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { reprocessarAprendizadoTecnicoWVetro } from '@/lib/wvetroAprendizadoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
     const tipologias = await materializarReferenciasTipologiasWVetroPendentes()
     const mapeamento = await mapearReferenciasComponentesExatas()
     const custos = await sincronizarCustosProdutosWVetro()
+    const aprendizado = await reprocessarAprendizadoTecnicoWVetro(usuario.empresa_id)
     const resumo = await resumoBaseTecnicaWVetro()
 
     const catalogos = { linhas, perfis, acessorios, esquadrias }
@@ -72,6 +74,7 @@ export async function GET(req: NextRequest) {
         tipologias,
         mapeamento,
         custos,
+        aprendizado,
         resumo,
         evidencia: 'observado',
         registrado_em: new Date().toISOString(),
@@ -86,6 +89,7 @@ export async function GET(req: NextRequest) {
       tipologias,
       mapeamento,
       custos,
+      aprendizado,
       resumo,
       seguranca: {
         fonte: 'W.Vetro',
