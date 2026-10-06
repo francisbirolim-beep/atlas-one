@@ -18,7 +18,7 @@ export function estimarCustoUSD(
   inputTokens?: number | null,
   outputTokens?: number | null
 ): number | null {
-  if (provider === 'ollama') return 0
+  if (['ollama','freellmapi','opencode','atlas-interno','local-whisper','local-stable-diffusion'].includes(provider)) return 0
 
   const preco = PRECOS_USD[modelo]
   if (!preco || inputTokens == null || outputTokens == null) return null
