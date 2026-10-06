@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, CloudDownload, FileText, Loader2, RefreshCw, Ruler } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, CloudDownload, FileText, Loader2, RefreshCw, Ruler, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { criarMedicaoDoOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -13,6 +13,7 @@ type ClienteResumo = { id: string; nome: string; cidade?: string | null }
 type OrcamentoResumo = {
   id: string
   numero?: number | null
+  cliente_nome?: string | null
   created_at: string
   status?: string | null
   obra_id?: string | null
@@ -20,6 +21,23 @@ type OrcamentoResumo = {
   revisao_atual?: boolean | null
   descricao_livre?: string | null
   itens?: unknown[] | null
+  wvetro_fluxo?: { origem?: string | null; numero?: string | null; cliente_nome_wvetro?: string | null } | null
+}
+
+type CandidatoWVetro = {
+  historicoId: string
+  numeroWvetro: string
+  clienteNomeWvetro?: string | null
+  tipoRegistro?: string | null
+  data?: string | null
+  valor?: number | null
+  situacao?: string | null
+  quantidadeItens?: number
+  tipoCorrespondencia?: 'nome_exato' | 'primeiro_nome' | null
+  statusValidacao: 'pendente' | 'aprovado' | 'rejeitado' | 'outro_cliente'
+  validadoPor?: string | null
+  validadoEm?: string | null
+  orcamentoAtlasId?: string | null
 }
 type MedicaoResumo = {
   id: string
@@ -60,7 +78,9 @@ export default function AbrirMedidaFinalCliente() {
   const [orcamentos, setOrcamentos] = useState<OrcamentoResumo[]>([])
   const [medicoes, setMedicoes] = useState<MedicaoResumo[]>([])
   const [historicosWVetro, setHistoricosWVetro] = useState<HistoricoWVetroResumo[]>([])
+  const [candidatosWVetro, setCandidatosWVetro] = useState<CandidatoWVetro[]>([])
   const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
+  const [candidatoOcupado, setCandidatoOcupado] = useState('')
   const [mensagemSync, setMensagemSync] = useState('')
   const [tipo, setTipo] = useState<TipoMedicaoFinal | null>(null)
   const [orcamentoId, setOrcamentoId] = useState('')
@@ -91,7 +111,7 @@ export default function AbrirMedidaFinalCliente() {
         supabase.from('clientes').select('id,nome,cidade').eq('id', clienteId).maybeSingle(),
         supabase
           .from('orcamentos')
-          .select('id,numero,created_at,status,obra_id,revisao_versao,revisao_atual,descricao_livre,itens')
+          .select('id,numero,cliente_nome,created_at,status,obra_id,revisao_versao,revisao_atual,descricao_livre,itens,wvetro_fluxo')
           .eq('cliente_id', clienteId)
           .or('modo_entrada.is.null,modo_entrada.neq.balcao')
           .order('created_at', { ascending: false }),
@@ -129,6 +149,16 @@ export default function AbrirMedidaFinalCliente() {
     () => orcamentos.filter(o => o.revisao_atual !== false),
     [orcamentos]
   )
+  const candidatosVisiveis = useMemo(
+    () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado'),
+    [candidatosWVetro]
+  )
+  const candidatosDescartados = candidatosWVetro.filter(c => c.statusValidacao === 'rejeitado').length
+
+  function numeroExibicao(o: OrcamentoResumo) {
+    const numeroWVetro = String(o.wvetro_fluxo?.numero || '').trim()
+    return numeroWVetro ? { origem: 'W.Vetro', numero: numeroWVetro } : { origem: 'Atlas', numero: String(o.numero || '—') }
+  }
 
   function selecionarTipo(novoTipo: TipoMedicaoFinal) {
     setTipo(novoTipo)
@@ -148,31 +178,60 @@ export default function AbrirMedidaFinalCliente() {
       const token = await tokenAtual()
       if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
 
-      const resposta = await fetch('/api/integracoes/wvetro/orcamentos/sincronizar-cliente', {
+      const resposta = await fetch('/api/integracoes/wvetro/orcamentos/candidatos-cliente', {
         method: 'POST',
         cache: 'no-store',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ clienteId }),
+        body: JSON.stringify({ clienteId, acao: 'buscar' }),
       })
       const json = await resposta.json().catch(() => ({}))
-      if (!resposta.ok) throw new Error(json?.error || 'Não foi possível sincronizar os orçamentos do W.Vetro.')
+      if (!resposta.ok) throw new Error(json?.error || 'Não foi possível consultar os orçamentos do W.Vetro.')
 
-      await carregar()
-      const disponiveis = Number(json?.orcamentosDisponiveis || 0)
-      const criados = Number(json?.criados || 0)
-      const atualizados = Number(json?.atualizados || 0)
+      const candidatos = Array.isArray(json?.candidatos) ? json.candidatos as CandidatoWVetro[] : []
+      setCandidatosWVetro(candidatos)
+      const pendentes = candidatos.filter(c => c.statusValidacao === 'pendente').length
+      const aprovados = candidatos.filter(c => c.statusValidacao === 'aprovado').length
+      const rejeitados = candidatos.filter(c => c.statusValidacao === 'rejeitado').length
       setMensagemSync(
-        disponiveis > 0
-          ? `W.Vetro sincronizado: ${disponiveis} orçamento(s) disponível(is) para este cliente · ${criados} novo(s) · ${atualizados} atualizado(s).`
-          : (json?.mensagem || 'Sincronização concluída, mas nenhum orçamento operacional ficou disponível.')
+        candidatos.length
+          ? `Encontramos ${candidatos.length} orçamento(s) W.Vetro pelo nome. ${pendentes} aguardando validação · ${aprovados} validado(s)${rejeitados ? ` · ${rejeitados} descartado(s)` : ''}.`
+          : 'Nenhum orçamento W.Vetro com o mesmo primeiro nome foi encontrado.'
       )
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Não foi possível sincronizar os orçamentos do W.Vetro.')
+      setErro(e instanceof Error ? e.message : 'Não foi possível consultar os orçamentos do W.Vetro.')
     } finally {
       setSincronizandoWVetro(false)
+    }
+  }
+
+  async function validarCandidatoWVetro(candidato: CandidatoWVetro, acao: 'aprovar' | 'rejeitar') {
+    if (candidatoOcupado) return
+    setCandidatoOcupado(candidato.historicoId)
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const resposta = await fetch('/api/integracoes/wvetro/orcamentos/candidatos-cliente', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ clienteId, acao, historicoId: candidato.historicoId }),
+      })
+      const json = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) throw new Error(json?.error || 'Não foi possível validar este orçamento W.Vetro.')
+      setCandidatosWVetro(Array.isArray(json?.candidatos) ? json.candidatos : [])
+      setMensagemSync(json?.mensagem || (acao === 'aprovar' ? 'Orçamento validado.' : 'Candidato descartado.'))
+      if (acao === 'aprovar') await carregar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível validar este orçamento W.Vetro.')
+    } finally {
+      setCandidatoOcupado('')
     }
   }
 
@@ -281,26 +340,90 @@ export default function AbrirMedidaFinalCliente() {
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800">
                 <CloudDownload size={17} className="mt-0.5 shrink-0" />
                 <div>
-                  <b>Encontramos {historicosWVetro.length} registro(s) histórico(s) do W.Vetro vinculados a este cliente.</b>
-                  <p className="mt-1 text-xs">Se algum orçamento não aparecer abaixo, use “Sincronizar W.Vetro” para trazer os dados operacionais e as tipologias.</p>
+                  <b>Já existem {historicosWVetro.length} registro(s) W.Vetro validados para este cliente.</b>
+                  <p className="mt-1 text-xs">Para localizar outros orçamentos com nome igual ou parecido, toque em “Sincronizar W.Vetro” e valide um por um.</p>
                 </div>
               </div>
             )}
             {mensagemSync && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemSync}</div>}
+
+            {candidatosWVetro.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/50 p-3">
+                <div className="mb-3">
+                  <p className="text-sm font-bold text-slate-900">Conferir candidatos do W.Vetro</p>
+                  <p className="mt-1 text-xs text-slate-600">Confira o nome e o número. Valide somente os que realmente pertencem a {cliente?.nome || 'este cliente'}.</p>
+                </div>
+                <div className="space-y-2">
+                  {candidatosVisiveis.map(candidato => {
+                    const ocupado = candidatoOcupado === candidato.historicoId
+                    const aprovado = candidato.statusValidacao === 'aprovado'
+                    const bloqueado = candidato.statusValidacao === 'outro_cliente'
+                    return (
+                      <div key={candidato.historicoId} className={`rounded-xl border bg-white p-3 ${aprovado ? 'border-emerald-200' : bloqueado ? 'border-amber-200' : 'border-violet-100'}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <b className="text-sm text-slate-900">W.Vetro #{candidato.numeroWvetro}</b>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${candidato.tipoCorrespondencia === 'nome_exato' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {candidato.tipoCorrespondencia === 'nome_exato' ? 'NOME EXATO' : 'MESMO PRIMEIRO NOME'}
+                              </span>
+                              {aprovado && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">VALIDADO</span>}
+                            </div>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">{candidato.clienteNomeWvetro || 'Nome não informado'}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {dataBR(candidato.data)}
+                              {candidato.valor ? ` · ${Number(candidato.valor).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}` : ''}
+                              {candidato.quantidadeItens ? ` · ${candidato.quantidadeItens} item(ns)` : ''}
+                            </p>
+                          </div>
+                          {!aprovado && !bloqueado && (
+                            <div className="flex shrink-0 gap-2">
+                              <button
+                                onClick={() => void validarCandidatoWVetro(candidato, 'rejeitar')}
+                                disabled={!!candidatoOcupado}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 disabled:opacity-50"
+                              >
+                                {ocupado ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
+                                Não é
+                              </button>
+                              <button
+                                onClick={() => void validarCandidatoWVetro(candidato, 'aprovar')}
+                                disabled={!!candidatoOcupado}
+                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-xs font-bold text-white disabled:opacity-50"
+                              >
+                                {ocupado ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                                Validar
+                              </button>
+                            </div>
+                          )}
+                          {bloqueado && <span className="text-xs font-bold text-amber-700">Já vinculado a outro cliente</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {candidatosVisiveis.length === 0 && <p className="rounded-lg bg-white p-3 text-xs text-slate-500">Todos os candidatos encontrados foram descartados para este cliente.</p>}
+                </div>
+                {candidatosDescartados > 0 && <p className="mt-2 text-[11px] text-slate-500">{candidatosDescartados} candidato(s) descartado(s) não aparecem mais na lista de validação.</p>}
+              </div>
+            )}
 
             <div className="mt-4 space-y-2">
               {orcamentosAtuais.map(o => {
                 const existente = medicaoExistente(o.id, tipo)
                 const selecionado = orcamentoId === o.id
                 const qtdItens = Array.isArray(o.itens) ? o.itens.length : 0
+                const exibicao = numeroExibicao(o)
+                const ehWVetro = exibicao.origem === 'W.Vetro'
                 return (
                   <button key={o.id} onClick={() => setOrcamentoId(o.id)} className={`w-full rounded-xl border p-4 text-left transition ${selecionado ? 'border-brand-navy bg-blue-50 ring-1 ring-brand-navy' : 'hover:border-slate-400'}`}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold text-slate-900">Orçamento #{o.numero || '—'} · V{o.revisao_versao || 1}</p>
+                          <p className="font-bold text-slate-900">{exibicao.origem} #{exibicao.numero}{ehWVetro && o.numero ? ` · Atlas #${o.numero}` : ''}</p>
+                          {ehWVetro && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">W.VETRO</span>}
                           {existente && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> Já iniciado</span>}
                         </div>
+                        <p className="mt-1 text-sm font-semibold text-slate-700">{o.wvetro_fluxo?.cliente_nome_wvetro || o.cliente_nome || cliente?.nome || 'Cliente'}</p>
                         <p className="mt-1 text-xs text-slate-500">{dataBR(o.created_at)} · {statusLabel(o.status)}{qtdItens ? ` · ${qtdItens} tipologia(s)` : ''}</p>
                         {o.descricao_livre && <p className="mt-1 text-xs text-slate-400">{o.descricao_livre}</p>}
                       </div>
