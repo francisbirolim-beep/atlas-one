@@ -1097,6 +1097,7 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
     return data as AtendimentoConversa
   }
   if (!acesso.visualizar) return null
+  if (data.status === 'finalizado') return data as AtendimentoConversa
   if (data.responsavel_id === usuario.id) return data as AtendimentoConversa
   if (acesso.supervisionar) return data as AtendimentoConversa
   if (incluirFila && !data.responsavel_id && acesso.atender) return data as AtendimentoConversa
@@ -1252,6 +1253,11 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     if (usuario.role === 'master') return { conversa, permitido: true, grupo: null }
     if (acesso?.dono || acesso?.supervisionar) return { conversa, permitido: true, grupo: null }
     if (conversa.responsavel_id === usuario.id) return { conversa, permitido: true, grupo: null }
+    // "Ver canal" inclui o histórico já finalizado do número.
+    // Conversa ativa de outro atendente continua protegida pela permissão "Supervisionar".
+    if (conversa.status === 'finalizado' && acesso?.visualizar) {
+      return { conversa, permitido: true, grupo: null }
+    }
     return { conversa, permitido: !conversa.responsavel_id && Boolean(acesso?.atender), grupo: null }
   }))
   const permitidasComGrupo = avaliadas.filter(item => item.permitido)
@@ -1317,7 +1323,11 @@ export async function listarDiretorioWhatsApp(
 ) {
   const acesso = await acessoCanalWhatsApp(usuario, canalId)
 
-  const [{ data: contatos, error: contatosError }, { data: grupos, error: gruposError }] = await Promise.all([
+  const [
+    { data: contatos, error: contatosError },
+    { data: grupos, error: gruposError },
+    { data: conversasConhecidas, error: conversasError },
+  ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_contatos')
       .select('id,whatsapp_canal_id,contato_jid,telefone,nome,nome_verificado,sincronizado_em')
@@ -1332,20 +1342,55 @@ export async function listarDiretorioWhatsApp(
       .eq('whatsapp_canal_id', canalId)
       .eq('ativo', true)
       .limit(1000),
+    supabaseAdmin
+      .from('atendimento_conversas')
+      .select('id,whatsapp_chat_jid,telefone,contato_nome,whatsapp_chat_tipo')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('whatsapp_canal_id', canalId)
+      .eq('canal', 'whatsapp')
+      .eq('whatsapp_chat_tipo', 'contato')
+      .limit(3000),
   ])
   if (contatosError) throw contatosError
   if (gruposError) throw gruposError
+  if (conversasError) throw conversasError
 
   const q = busca.toLocaleLowerCase('pt-BR').trim()
-  const itens = [
-    ...(acesso.visualizar ? (contatos || []) : []).map((item: any) => ({
-      id: item.id,
+  const contatosSincronizados = (acesso.visualizar ? (contatos || []) : []).map((item: any) => ({
+    id: item.id,
+    tipo: 'contato' as const,
+    jid: item.contato_jid,
+    telefone: item.telefone || null,
+    nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
+    participantes: null,
+    _busca: `${item.nome || ''} ${item.nome_verificado || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
+  }))
+  const chavesContatos = new Set(
+    contatosSincronizados.flatMap((item: any) => [
+      item.jid ? `jid:${item.jid}` : '',
+      item.telefone ? `tel:${String(item.telefone).replace(/\D/g, '')}` : '',
+    ]).filter(Boolean),
+  )
+  const contatosPorHistorico = (acesso.visualizar ? (conversasConhecidas || []) : [])
+    .filter((item: any) => {
+      const jidKey = item.whatsapp_chat_jid ? `jid:${item.whatsapp_chat_jid}` : ''
+      const tel = String(item.telefone || '').replace(/\D/g, '')
+      const telKey = tel ? `tel:${tel}` : ''
+      return !chavesContatos.has(jidKey) && !chavesContatos.has(telKey)
+    })
+    .map((item: any) => ({
+      id: `conversa-${item.id}`,
       tipo: 'contato' as const,
-      jid: item.contato_jid,
+      jid: item.whatsapp_chat_jid || `${String(item.telefone || '').replace(/\D/g, '')}@s.whatsapp.net`,
       telefone: item.telefone || null,
-      nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
+      nome: item.contato_nome || item.telefone || 'Contato WhatsApp',
       participantes: null,
-    })),
+      _busca: `${item.contato_nome || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
+    }))
+
+  const itens = [
+    ...contatosSincronizados,
+    ...contatosPorHistorico,
     ...(await Promise.all((grupos || []).map(async (item: any) => {
       const conversa: AtendimentoConversa = {
         id: '',
@@ -1371,12 +1416,12 @@ export async function listarDiretorioWhatsApp(
         participantes: Number(item.participantes || 0),
       }
     }))).filter(Boolean) as any[],
-  ].filter(item => {
+  ].filter((item: any) => {
     if (!q) return true
-    return `${item.nome} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR').includes(q)
-  }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    return String(item._busca || `${item.nome} ${item.telefone || ''}`).includes(q)
+  }).sort((a: any, b: any) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
-  return itens.slice(0, 250)
+  return itens.slice(0, 250).map(({ _busca, ...item }: any) => item)
 }
 
 export async function iniciarConversaWhatsApp(
@@ -2047,6 +2092,10 @@ export async function definirAcompanhamentoConversa(
 ) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não disponível.')
+  const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  if (usuario.role !== 'master' && !acessoCanal.dono && !acessoCanal.supervisionar) {
+    throw new Error('Você não possui permissão para supervisionar este canal.')
+  }
 
   if (acompanhar) {
     const { error } = await supabaseAdmin
