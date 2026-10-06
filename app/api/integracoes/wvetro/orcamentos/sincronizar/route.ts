@@ -7,6 +7,7 @@ import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacion
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadastroPendenciasServer'
 import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
+import { observarAprendizadoTecnicoWVetro } from '@/lib/wvetroAprendizadoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -439,6 +440,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
     const margensCidade = new Map<string, Awaited<ReturnType<typeof resolverMargemOrcamentoPorCidade>>>()
     let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0
     const resultados: any[] = []
+    const amostrasAprendizado: Array<{ itens: any[]; numeroWvetro: string; dataReferencia: string | null }> = []
 
     for (const entrada of registros) {
       const registro = entrada.registro
@@ -448,6 +450,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       if (!numeroW) continue
       const rawItens = arr(p.Itens).length ? arr(p.Itens) : arr(p.itens)
       const itens = rawItens.map((x, i) => itemWVetro(obj(x) || {}, i, ctx.refs, ctx.linhas, ctx.tipologias))
+      amostrasAprendizado.push({ itens, numeroWvetro: numeroW, dataReferencia: registro.dataReferencia || null })
       itensMapeados += itens.filter(i => i.tipologia_id).length
       itensPendentes += itens.filter(i => !i.tipologia_id).length
       const clienteResolvido = await garantirCliente(p, ctx, usuario.empresa_id, numeroW)
@@ -570,12 +573,21 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       }
     }
 
+    let aprendizadoWVetro: any = null
+    try {
+      aprendizadoWVetro = await observarAprendizadoTecnicoWVetro(amostrasAprendizado)
+    } catch (erroAprendizado) {
+      console.error('Aprendizado técnico W.Vetro:', erroAprendizado)
+      aprendizadoWVetro = { erro: erroAprendizado instanceof Error ? erroAprendizado.message : 'Falha ao registrar aprendizado técnico.' }
+    }
+
     return NextResponse.json({
       ok: true, inicio, fim,
       lidos: registros.length,
       semChave: stagingOrcamentos.semChave.length + stagingPedidos.semChave.length,
       criados, atualizados, semAlteracao,
       clientesVinculados, clientesCriados, itensMapeados, itensPendentes, pendenciasCadastro,
+      aprendizadoWVetro,
       forcar,
       resultados: resultados.slice(0, 200),
     })
