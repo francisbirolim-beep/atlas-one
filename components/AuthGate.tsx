@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { sessaoAtualValida } from '@/lib/auth'
+import { sessaoAtualValida, usuarioCacheLocal } from '@/lib/auth'
 import AppShell from '@/components/system/AppShell'
 import BalcaoShell from '@/components/system/BalcaoShell'
 import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
@@ -33,36 +33,54 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       return () => { ativo = false }
     }
 
+    const usuarioEmCache = usuarioCacheLocal()
     const timeout = window.setTimeout(() => {
       if (!ativo) return
-      // Online, cache local NÃO vale como autenticação. Mantém a tela protegida
-      // e direciona ao login se a sessão não puder ser recuperada.
+      // Se o Supabase estiver congestionado, mantém o shell aberto para quem já
+      // tinha sessão local. O backend continua responsável por validar o JWT.
       setChecking(false)
-      setAutenticado(false)
-      if (!rotaPublica) router.replace('/login?motivo=sessao')
+      if (usuarioEmCache) {
+        setAutenticado(true)
+      } else {
+        setAutenticado(false)
+        if (!rotaPublica) router.replace('/login?motivo=sessao')
+      }
     }, 5000)
 
     sessaoAtualValida().then(session => {
       if (!ativo) return
       window.clearTimeout(timeout)
-      setAutenticado(!!session)
       setChecking(false)
-      if (!session && !rotaPublica && navigator.onLine) router.replace('/login?motivo=sessao')
+      if (session) {
+        setAutenticado(true)
+      } else if (!usuarioEmCache) {
+        setAutenticado(false)
+        if (!rotaPublica && navigator.onLine) router.replace('/login?motivo=sessao')
+      }
     }).catch(() => {
       if (!ativo) return
       window.clearTimeout(timeout)
       setChecking(false)
-      if (!navigator.onLine) setAutenticado(true)
-      else if (!rotaPublica) {
+      if (!navigator.onLine || usuarioEmCache) {
+        setAutenticado(true)
+      } else if (!rotaPublica) {
         setAutenticado(false)
         router.replace('/login?motivo=sessao')
       }
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!ativo) return
-      setAutenticado(!!session)
-      if (!session && !rotaPublica && navigator.onLine) router.replace('/login')
+      if (session) {
+        setAutenticado(true)
+        return
+      }
+      // Só força saída quando o logout foi explícito. Falha transitória de
+      // refresh não deve expulsar o usuário para a tela de login.
+      if (event === 'SIGNED_OUT' && !rotaPublica && navigator.onLine) {
+        setAutenticado(false)
+        router.replace('/login')
+      }
     })
 
     return () => {
