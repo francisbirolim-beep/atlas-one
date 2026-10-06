@@ -32,10 +32,10 @@ export async function PUT(req: NextRequest) {
 
     const [{ data: grupo }, { data: destino }, { data: permissaoAnterior }] = await Promise.all([
       supabaseAdmin.from('atendimento_whatsapp_grupos')
-        .select('id,empresa_id,whatsapp_canal_id,grupo_jid,nome')
+        .select('id,empresa_id,whatsapp_canal_id,grupo_jid,nome,membros')
         .eq('id', grupoId).eq('empresa_id', usuario.empresa_id).maybeSingle(),
       supabaseAdmin.from('usuarios')
-        .select('id,nome,role,empresa_id')
+        .select('id,nome,role,empresa_id,whatsapp')
         .eq('id', usuarioId).eq('empresa_id', usuario.empresa_id).maybeSingle(),
       supabaseAdmin.from('atendimento_whatsapp_grupo_permissoes')
         .select('id,nivel,responsavel_principal')
@@ -46,11 +46,50 @@ export async function PUT(req: NextRequest) {
     ])
     if (!grupo) return NextResponse.json({ error: 'Grupo invalido.' }, { status: 404 })
     if (!destino) return NextResponse.json({ error: 'Usuario invalido.' }, { status: 404 })
-    if (destino.role === 'master') {
-      return NextResponse.json({ error: 'O Master ja possui acesso total.' }, { status: 400 })
-    }
     if (responsavelPrincipal && !['atender','gerenciar'].includes(nivel)) {
       return NextResponse.json({ error: 'O responsavel principal precisa ter permissao para atender.' }, { status: 400 })
+    }
+
+    if (responsavelPrincipal) {
+      const normalizarTelefone = (valor: unknown) => {
+        let numero = String(valor || '').replace(/\D/g, '')
+        if (numero.length === 10 || numero.length === 11) numero = `55${numero}`
+        return numero
+      }
+      const telefoneDestino = normalizarTelefone(destino.whatsapp)
+      const membros = Array.isArray((grupo as any).membros) ? (grupo as any).membros : []
+      const membroPorTelefone = Boolean(
+        telefoneDestino &&
+        membros.some((membro: any) => {
+          const telefone = normalizarTelefone(membro?.telefone || String(membro?.jid || '').split('@')[0])
+          return telefone && telefone === telefoneDestino
+        })
+      )
+
+      let membroPorUsoDoAtlas = false
+      const { data: conversaGrupo } = await supabaseAdmin.from('atendimento_conversas')
+        .select('id')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('whatsapp_canal_id', grupo.whatsapp_canal_id)
+        .eq('whatsapp_chat_jid', grupo.grupo_jid)
+        .maybeSingle()
+      if (conversaGrupo?.id) {
+        const { data: mensagemDoUsuario } = await supabaseAdmin.from('atendimento_mensagens')
+          .select('id')
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('conversa_id', conversaGrupo.id)
+          .eq('usuario_id', destino.id)
+          .limit(1)
+          .maybeSingle()
+        membroPorUsoDoAtlas = Boolean(mensagemDoUsuario?.id)
+      }
+
+      if (membros.length > 0 && !membroPorTelefone && !membroPorUsoDoAtlas) {
+        return NextResponse.json(
+          { error: 'O responsavel principal precisa fazer parte deste grupo do WhatsApp.' },
+          { status: 400 },
+        )
+      }
     }
 
     if (responsavelPrincipal) {
