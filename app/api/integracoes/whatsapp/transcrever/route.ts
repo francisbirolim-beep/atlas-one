@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { transcreverAudioGratis } from '@/lib/ai/transcricaoGratis'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,9 +26,6 @@ export async function POST(req:NextRequest){
       return NextResponse.json({error:'Fonte de áudio inválida.'},{status:400})
     }
 
-    const apiKey=process.env.OPENAI_API_KEY||''
-    if(!apiKey)return NextResponse.json({error:'Transcrição de áudio não configurada.'},{status:503})
-
     const origem=await fetch(audioUrl,{cache:'no-store'})
     if(!origem.ok)return NextResponse.json({error:'Não foi possível abrir o áudio temporário.'},{status:502})
     const blob=await origem.blob()
@@ -35,22 +33,19 @@ export async function POST(req:NextRequest){
     if(!mime.startsWith('audio/'))return NextResponse.json({error:'Arquivo não é áudio.'},{status:400})
     if(!blob.size||blob.size>MAX_AUDIO_BYTES)return NextResponse.json({error:'Áudio vazio ou maior que 20 MB.'},{status:400})
 
-    const form=new FormData()
-    form.append('file',new File([blob],nome,{type:mime}),nome)
-    form.append('model','gpt-transcribe')
-    form.append('language','pt')
-
-    const resposta=await fetch('https://api.openai.com/v1/audio/transcriptions',{
-      method:'POST',
-      headers:{Authorization:'Bearer '+apiKey},
-      body:form,
+    const resultado=await transcreverAudioGratis(new File([blob],nome,{type:mime}))
+    return NextResponse.json({
+      text:resultado.text,
+      provider:resultado.provider,
+      model:resultado.model,
+      custoEstimado:0,
+      paidFallbackUsed:false,
     })
-    const json=await resposta.json().catch(()=>({}))
-    if(!resposta.ok)return NextResponse.json({error:json?.error?.message||'Falha ao transcrever áudio.'},{status:502})
-    const texto=String(json?.text||'').trim()
-    if(!texto)return NextResponse.json({error:'Não foi possível entender o áudio.'},{status:422})
-    return NextResponse.json({text:texto})
   }catch(e:any){
-    return NextResponse.json({error:e?.message||'Erro ao transcrever áudio do WhatsApp.'},{status:500})
+    return NextResponse.json({
+      error:e?.message||'Erro ao transcrever áudio do WhatsApp.',
+      custoEstimado:0,
+      paidFallbackUsed:false,
+    },{status:503})
   }
 }
