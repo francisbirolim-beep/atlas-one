@@ -1855,7 +1855,7 @@ async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid:
   if (!group?.id) return null;
 
   const now = new Date().toISOString();
-  const [{ data: permission }, { data: delegation }] = await Promise.all([
+  const [{ data: permission }, { data: delegation }, { data: expiredDelegation }] = await Promise.all([
     db.from("atendimento_whatsapp_grupo_permissoes")
       .select("usuario_id,nivel")
       .eq("empresa_id", empresaId)
@@ -1873,6 +1873,15 @@ async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid:
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    db.from("atendimento_whatsapp_grupo_delegacoes")
+      .select("id,destino_usuario_id,fim_em")
+      .eq("empresa_id", empresaId)
+      .eq("grupo_id", group.id)
+      .eq("ativo", true)
+      .lte("fim_em", now)
+      .order("fim_em", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
   const userId = delegation?.destino_usuario_id || permission?.usuario_id || null;
   if (!userId) return null;
@@ -1882,6 +1891,7 @@ async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid:
     nome: await userName(userId),
     grupoId: group.id,
     delegacaoFimEm: delegation?.fim_em || null,
+    delegacaoExpiradaDestinoId: expiredDelegation?.destino_usuario_id || null,
   };
 }
 
@@ -1931,7 +1941,22 @@ async function conversationForInbound(
   const displayName = isGroup ? (grupoNome || nome || "Grupo WhatsApp") : (nome || customer?.nome || null);
 
   if (existing) {
-    const usarPrincipalDoGrupo = isGroup && ownerId && existing.status === "finalizado";
+    const delegacaoExpiradaDoAtual =
+      isGroup &&
+      principal?.delegacaoExpiradaDestinoId &&
+      existing.responsavel_id === principal.delegacaoExpiradaDestinoId &&
+      existing.status !== "em_atendimento";
+    const usarPrincipalDoGrupo = isGroup && ownerId && (existing.status === "finalizado" || delegacaoExpiradaDoAtual);
+    if (delegacaoExpiradaDoAtual && principal?.grupoId) {
+      await db.from("atendimento_whatsapp_grupo_delegacoes").update({
+        ativo: false,
+        encerrado_em: new Date().toISOString(),
+      })
+        .eq("empresa_id", config.empresa_id)
+        .eq("grupo_id", principal.grupoId)
+        .eq("ativo", true)
+        .lte("fim_em", new Date().toISOString());
+    }
     const keepExistingOwner = usarPrincipalDoGrupo ? ownerId : (existing.responsavel_id || ownerId);
     const keepExistingOwnerName = usarPrincipalDoGrupo
       ? ownerName
