@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ChevronDown, Command, FileText, LogOut, MapPin, Plus, Search, Settings, Sparkles, UserRound, X } from 'lucide-react'
-import { logout, usuarioAtual } from '@/lib/auth'
+import { logout, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { bateBusca } from '@/lib/texto'
 import type { Usuario } from '@/lib/tipos'
@@ -75,7 +75,7 @@ function IconeResultado({ tipo }: { tipo: ResultadoBusca['tipo'] }) {
 export default function AppTopbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [usuario, setUsuario] = useState<Usuario | null>(() => usuarioCacheLocal())
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [perfilAberto, setPerfilAberto] = useState(false)
   const [termo, setTermo] = useState('')
@@ -84,7 +84,7 @@ export default function AppTopbar() {
   const [erroBusca, setErroBusca] = useState('')
 
   useEffect(() => {
-    usuarioAtual().then(setUsuario)
+    void usuarioAtual().then(u => { if (u) setUsuario(u) })
   }, [])
 
   useEffect(() => {
