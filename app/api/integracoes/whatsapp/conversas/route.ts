@@ -8,6 +8,7 @@ import {
   listarAcessosCanaisAtendimento,
   listarConversasAtendimento,
   marcarConversaComoLida,
+  registrarVisualizacaoConversa,
   transferirConversa,
 } from '@/lib/whatsappServer'
 
@@ -92,6 +93,8 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'assumir') {
       await assumirConversa(conversaId, usuario)
+    } else if (acao === 'visualizar') {
+      await registrarVisualizacaoConversa(conversaId, usuario)
     } else if (acao === 'marcar_lida') {
       await marcarConversaComoLida(conversaId, usuario)
     } else if (acao === 'acompanhar') {
