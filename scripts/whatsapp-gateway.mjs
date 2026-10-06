@@ -763,6 +763,19 @@ async function processQueue(channelId) {
           fileName: payload.fileName ? String(payload.fileName) : 'documento',
           caption: item.texto ? String(item.texto) : undefined,
         }
+      } else if (item.tipo === 'block' || item.tipo === 'unblock') {
+        await state.sock.updateBlockStatus(jid, item.tipo === 'block' ? 'block' : 'unblock')
+        await atlas('', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'sent',
+            channelId,
+            filaId: item.id,
+            sucesso: true,
+            whatsappMessageId: null,
+          }),
+        })
+        return
       } else {
         throw new Error(`Tipo de saida ainda nao suportado: ${item.tipo}`)
       }
