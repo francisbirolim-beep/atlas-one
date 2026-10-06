@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   verificarUsuario,
   executarFerramenta,
+  usuarioPodeUsarFerramenta,
   obterOuCriarConversaHoje,
   criarConversaAgente,
   validarConversaAgente,
@@ -133,6 +134,20 @@ async function contarCadastroTecnico(texto: string, usuario: any) {
     rotulo = 'produtos'
   } else {
     return null
+  }
+
+  const permitido = await usuarioPodeUsarFerramenta(
+    'buscar_base_tecnica',
+    String(usuario?.id || ''),
+    String(usuario?.role || ''),
+    String(usuario?.empresa_id || ''),
+  )
+  if (!permitido) {
+    return {
+      erro: 'Acesso negado: este usuario nao possui permissao ativa no Cadastro ou Engenharia para consultar a base tecnica.',
+      rotulo,
+      categoria,
+    }
   }
 
   let qTotal = supabaseAdmin
@@ -296,7 +311,11 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
   const contagemCadastro = contexto?.contagem_cadastro_tecnico
   if (contagemCadastro) {
     if (contagemCadastro.erro) {
-      return 'Não consegui consultar a contagem do cadastro técnico agora: ' + String(contagemCadastro.erro)
+      const erroContagem = String(contagemCadastro.erro)
+      if (normalizar(erroContagem).includes('acesso negado')) {
+        return 'Esta é uma consulta interna da base técnica, mas seu usuário não possui permissão para visualizar esses dados.'
+      }
+      return 'Não consegui consultar a contagem do cadastro técnico agora: ' + erroContagem
     }
     const total = Number(contagemCadastro.total || 0)
     const ativos = Number(contagemCadastro.ativos || 0)
