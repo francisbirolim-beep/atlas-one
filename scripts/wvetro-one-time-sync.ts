@@ -23,7 +23,7 @@ function dataLocal(offsetDias = 0) {
   return valor.year + '-' + valor.month + '-' + valor.day
 }
 
-async function resolverPendencias(limite = 25) {
+async function resolverPendencias(limite = 200, concorrencia = 5) {
   const { data: pendencias, error } = await supabaseAdmin
     .from('wvetro_base_tecnica_pendencias')
     .select('*')
@@ -32,8 +32,7 @@ async function resolverPendencias(limite = 25) {
     .limit(limite)
   if (error) throw error
 
-  const resultados:any[] = []
-  for (const p of pendencias || []) {
+  async function processar(p:any) {
     const tentativas = Number(p.tentativas || 0) + 1
     try {
       const resultado = await processarBaseTecnicaWVetroDia(String(p.data))
@@ -44,17 +43,29 @@ async function resolverPendencias(limite = 25) {
         .eq('id', p.id)
         .eq('status', 'pendente')
       if (erroUpdate) throw erroUpdate
-      resultados.push({ data: p.data, ok: true, resultado })
       console.log('[WVETRO][PENDENCIA][OK]', p.data, JSON.stringify(resultado))
+      return { data: p.data, ok: true, resultado }
     } catch (e) {
       const mensagem = e instanceof Error ? e.message : 'Falha ao reprocessar.'
       await supabaseAdmin
         .from('wvetro_base_tecnica_pendencias')
         .update({ erro: mensagem, tentativas, atualizado_em: new Date().toISOString() })
         .eq('id', p.id)
-      resultados.push({ data: p.data, ok: false, erro: mensagem })
       console.error('[WVETRO][PENDENCIA][ERRO]', p.data, mensagem)
+      return { data: p.data, ok: false, erro: mensagem }
     }
+  }
+
+  const resultados:any[] = []
+  const lista = pendencias || []
+  for (let i = 0; i < lista.length; i += concorrencia) {
+    const lote = lista.slice(i, i + concorrencia)
+    const feitos = await Promise.all(lote.map(processar))
+    resultados.push(...feitos)
+    console.log('[WVETRO][PENDENCIA][LOTE]', JSON.stringify({
+      concluidas: Math.min(i + lote.length, lista.length),
+      totalSelecionado: lista.length,
+    }))
   }
 
   const { count: restantes } = await supabaseAdmin
@@ -126,7 +137,7 @@ async function main() {
   const hojeResultado = await processarBaseTecnicaWVetroDia(hoje)
   console.log('[WVETRO] hoje', JSON.stringify(hojeResultado))
 
-  const pendencias = await resolverPendencias(25)
+  const pendencias = await resolverPendencias(200, 5)
   console.log('[WVETRO] pendencias', JSON.stringify({ processadas: pendencias.processadas, restantes: pendencias.restantes }))
 
   const tipologias = await materializarReferenciasTipologiasWVetroPendentes()
