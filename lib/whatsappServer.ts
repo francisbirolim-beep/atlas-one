@@ -1319,14 +1319,31 @@ export async function listarDiretorioWhatsApp(
       nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
       participantes: null,
     })),
-    ...(grupos || []).map((item: any) => ({
-      id: item.id,
-      tipo: 'grupo' as const,
-      jid: item.grupo_jid,
-      telefone: null,
-      nome: item.nome || 'Grupo WhatsApp',
-      participantes: Number(item.participantes || 0),
-    })),
+    ...(await Promise.all((grupos || []).map(async (item: any) => {
+      const conversa: AtendimentoConversa = {
+        id: '',
+        empresa_id: usuario.empresa_id,
+        canal: 'whatsapp',
+        telefone: '0',
+        whatsapp_canal_id: canalId,
+        whatsapp_chat_tipo: 'grupo',
+        whatsapp_chat_jid: item.grupo_jid,
+        grupo_nome: item.nome,
+        status: 'finalizado',
+        created_at: '',
+        updated_at: '',
+      }
+      const acessoGrupo = await acessoGrupoWhatsApp(conversa, usuario, acesso)
+      if (!acessoGrupo.visualizar) return null
+      return {
+        id: item.id,
+        tipo: 'grupo' as const,
+        jid: item.grupo_jid,
+        telefone: null,
+        nome: item.nome || 'Grupo WhatsApp',
+        participantes: Number(item.participantes || 0),
+      }
+    }))).filter(Boolean) as any[],
   ].filter(item => {
     if (!q) return true
     return `${item.nome} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR').includes(q)
@@ -1346,7 +1363,6 @@ export async function iniciarConversaWhatsApp(
   },
 ) {
   const acesso = await acessoCanalWhatsApp(usuario, dados.canalId)
-  if (!acesso.atender) throw new Error('Você não possui permissão para iniciar conversa neste canal.')
 
   const { data: canal } = await supabaseAdmin
     .from('atendimento_whatsapp_canais')
@@ -1362,6 +1378,25 @@ export async function iniciarConversaWhatsApp(
   if (!jid) throw new Error('Contato ou grupo inválido.')
   const tipo = dados.tipo === 'grupo' ? 'grupo' : 'contato'
   if (tipo === 'grupo' && !jid.endsWith('@g.us')) throw new Error('Grupo WhatsApp inválido.')
+  if (tipo === 'grupo') {
+    const conversaGrupo: AtendimentoConversa = {
+      id: '',
+      empresa_id: usuario.empresa_id,
+      canal: 'whatsapp',
+      telefone: '0',
+      whatsapp_canal_id: dados.canalId,
+      whatsapp_chat_tipo: 'grupo',
+      whatsapp_chat_jid: jid,
+      grupo_nome: dados.nome || null,
+      status: 'finalizado',
+      created_at: '',
+      updated_at: '',
+    }
+    const grupo = await acessoGrupoWhatsApp(conversaGrupo, usuario, acesso)
+    if (!grupo.visualizar) throw new Error('Você não possui acesso a este grupo.')
+  } else if (!acesso.atender) {
+    throw new Error('Você não possui permissão para iniciar conversa neste canal.')
+  }
 
   const telefone = tipo === 'grupo'
     ? jid.split('@')[0].replace(/\D/g, '')
