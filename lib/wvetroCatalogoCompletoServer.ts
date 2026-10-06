@@ -6,7 +6,7 @@ function norm(v: unknown) { return txt(v).normalize('NFD').replace(/[\u0300-\u03
 function foto(o: Record<string, unknown>) {
   for (const v of [o.URL, o.Url, o.url, o.Imagem, o.ImagemUrl, o.Foto, o.FotoUrl]) {
     const s = txt(v)
-    if (/^https?:\/\//i.test(s)) return s
+    if (/^https?:\/\//i.test(s) && !/\/wvetro\/?$/i.test(s)) return s
   }
   return null
 }
@@ -38,6 +38,15 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
       .select('id,codigo,codigo_origem,id_externo_wvetro')
       .eq('categoria', categoria)
     if (error) throw error
+
+    const { data: snapshotsAtuais, error: erroSnapshotsAtuais } = await supabaseAdmin
+      .from('wvetro_produtos_snapshot')
+      .select('codigo,url_origem,imagem_atlas_url,imagem_status,imagem_erro')
+      .eq('tipo', tipo)
+    if (erroSnapshotsAtuais) throw erroSnapshotsAtuais
+    const estadosImagem = new Map(
+      (snapshotsAtuais || []).map(s => [norm(s.codigo), s]),
+    )
 
     const indice = new Map<string, any[]>()
     for (const p of produtos || []) {
@@ -100,6 +109,29 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
         indice.set(codigoNorm, [{ id: produtoId, codigo, codigo_origem: codigo }])
       }
 
+      const urlOrigem = foto(o)
+      const estadoAnterior = estadosImagem.get(codigoNorm) as any
+      const urlAnterior = txt(estadoAnterior?.url_origem) || null
+      const urlMudou = Boolean(estadoAnterior) && urlAnterior !== urlOrigem
+
+      let imagemStatus = estadoAnterior?.imagem_status || (urlOrigem ? 'pendente' : 'sem_imagem_origem')
+      let imagemErro = estadoAnterior?.imagem_erro || null
+      let imagemAtlasUrl = estadoAnterior?.imagem_atlas_url || null
+
+      if (urlMudou && urlOrigem) {
+        imagemStatus = 'pendente'
+        imagemErro = null
+        imagemAtlasUrl = null
+      } else if ((!estadoAnterior || urlMudou) && !urlOrigem) {
+        const possuiImagemAtlas = Boolean(imagemAtlasUrl)
+          || imagemStatus === 'copiada'
+          || imagemStatus === 'preservada_atlas'
+        if (!possuiImagemAtlas) {
+          imagemStatus = 'sem_imagem_origem'
+          imagemErro = null
+        }
+      }
+
       snapshots.push({
         tipo,
         codigo,
@@ -116,7 +148,10 @@ export async function descobrirEImportarCatalogoWVetro(tipo: 'P' | 'A') {
         tipo_nome: txt(o.TipoNome) || null,
         unidade: txt(o.Unidade) || null,
         ncm: txt(o.ProdutoNCM) || null,
-        url_origem: foto(o),
+        url_origem: urlOrigem,
+        imagem_atlas_url: imagemAtlasUrl,
+        imagem_status: imagemStatus,
+        imagem_erro: imagemErro,
         payload: o,
         consultado_em: new Date().toISOString(),
         erro: candidatos.length > 1 ? 'Código encontrou mais de um produto Atlas.' : null,
