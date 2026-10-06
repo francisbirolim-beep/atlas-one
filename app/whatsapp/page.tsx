@@ -6,7 +6,7 @@ import {
   ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
-  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X,
+  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -76,6 +76,14 @@ type AcessoCanal = {
 }
 type Etiqueta = { id: string; nome: string; cor: string }
 type Nota = { id: string; usuario_nome?: string | null; texto: string; created_at: string }
+type EventoAtendimento = {
+  id: string
+  tipo: string
+  usuario_id?: string | null
+  usuario_nome?: string | null
+  dados?: Record<string, unknown> | null
+  created_at: string
+}
 type MensagemRapida = {
   id: string
   titulo: string
@@ -147,11 +155,12 @@ export default function WhatsAppAtendimentoPage() {
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [obras, setObras] = useState<ObraResumo[]>([])
   const [carregandoCliente, setCarregandoCliente] = useState(false)
-  const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas'>('cliente')
+  const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas' | 'historico'>('cliente')
   const [painelDireitoRecolhido, setPainelDireitoRecolhido] = useState(true)
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([])
   const [etiquetasAtivas, setEtiquetasAtivas] = useState<string[]>([])
   const [notas, setNotas] = useState<Nota[]>([])
+  const [historico, setHistorico] = useState<EventoAtendimento[]>([])
   const [mensagensRapidas, setMensagensRapidas] = useState<MensagemRapida[]>([])
   const [apoioAberto, setApoioAberto] = useState<'rapidas' | 'etiquetas' | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
@@ -407,6 +416,7 @@ export default function WhatsAppAtendimentoPage() {
       setEtiquetasAtivas(json.etiquetasAtivas || [])
       setNotas(json.notas || [])
       setMensagensRapidas(json.mensagensRapidas || [])
+      setHistorico(json.historico || [])
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar recursos internos.')
     }
@@ -473,10 +483,22 @@ export default function WhatsAppAtendimentoPage() {
       setEtiquetasAtivas([])
       setNotas([])
       setMensagensRapidas([])
+      setHistorico([])
       return
     }
-    void carregarMensagens(ativa.id)
-    void carregarApoio(ativa.id)
+    const conversaId = ativa.id
+    void carregarMensagens(conversaId)
+    void carregarApoio(conversaId)
+    void (async () => {
+      try {
+        const headers = await headersJson()
+        await fetch('/api/integracoes/whatsapp/conversas', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ acao: 'visualizar', conversaId }),
+        })
+      } catch {}
+    })()
   }, [ativa?.id])
 
   useEffect(() => {
@@ -600,6 +622,7 @@ export default function WhatsAppAtendimentoPage() {
     setSetorTransferencia('')
     setTransferenciaAberta(false)
     await carregarConversas(false)
+    if (ativa?.id === conversaId) await carregarApoio(conversaId)
     return true
   }
 
@@ -1483,6 +1506,10 @@ export default function WhatsAppAtendimentoPage() {
                   className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Notas">
                   <StickyNote size={17}/>
                 </button>
+                <button onClick={()=>{setPainelDireito('historico');alternarPainelDireitoRecolhido(false)}}
+                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Histórico">
+                  <History size={17}/>
+                </button>
               </div>
             ) : <>
             <div className="border-b p-3">
@@ -1505,18 +1532,22 @@ export default function WhatsAppAtendimentoPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-1 border-b bg-slate-50 p-2 text-xs font-bold">
+            <div className="grid grid-cols-4 gap-1 border-b bg-slate-50 p-2 text-[11px] font-bold">
               <button onClick={()=>setPainelDireito('cliente')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
-                Cliente 360
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='cliente'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Cliente
               </button>
               <button onClick={()=>setPainelDireito('agenda')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='agenda'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
                 Agenda
               </button>
               <button onClick={()=>setPainelDireito('notas')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='notas'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
-                Minhas notas
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='notas'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Notas
+              </button>
+              <button onClick={()=>setPainelDireito('historico')}
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='historico'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Histórico
               </button>
             </div>
 
@@ -1650,7 +1681,7 @@ export default function WhatsAppAtendimentoPage() {
                     Os agendamentos vinculados ao atendimento aparecerão aqui.
                   </div>
                 </div>
-              ) : (
+              ) : painelDireito === 'notas' ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <StickyNote size={17} className="text-amber-600"/>
@@ -1689,6 +1720,44 @@ export default function WhatsAppAtendimentoPage() {
                         Nenhuma nota interna nesta conversa.
                       </div>
                     )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <History size={17} className="text-blue-600"/>
+                    <div>
+                      <b className="block text-sm text-slate-800">Histórico do atendimento</b>
+                      <span className="text-[10px] text-slate-500">Aberturas, responsáveis, respostas, transferências, baixas e finalizações.</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {historico.filter(e=>!['status_whatsapp','mensagem_enviada_qr'].includes(e.tipo)).map(e=>{
+                      const dados=(e.dados||{}) as Record<string,unknown>
+                      const nome=e.usuario_nome||'Sistema'
+                      let descricao=e.tipo.replaceAll('_',' ')
+                      if(e.tipo==='conversa_visualizada')descricao='abriu a conversa'
+                      else if(e.tipo==='conversa_assumida')descricao='assumiu o atendimento'
+                      else if(e.tipo==='conversa_transferida')descricao=`transferiu o atendimento para ${String(dados.destino_nome||'outro usuário')}`
+                      else if(e.tipo==='conversa_direcionada_mencao')descricao=`direcionou para ${String(dados.destino_nome||'outro usuário')}`
+                      else if(e.tipo==='conversa_finalizada')descricao='finalizou o atendimento'
+                      else if(e.tipo==='conversa_baixada')descricao='deu baixa nas mensagens pendentes'
+                      else if(e.tipo==='conversa_acompanhada')descricao='começou a acompanhar'
+                      else if(e.tipo==='conversa_acompanhamento_removido')descricao='parou de acompanhar'
+                      else if(e.tipo==='mensagem_enfileirada_qr'||e.tipo==='mensagem_enviada')descricao='respondeu uma mensagem'
+                      else if(e.tipo==='midia_enfileirada_qr')descricao='enviou um arquivo ou mídia'
+                      else if(e.tipo==='mensagem_recebida_qr'||e.tipo==='mensagem_recebida')descricao='nova mensagem recebida'
+                      return <div key={e.id} className="rounded-xl border bg-white p-3">
+                        <div className="flex items-start gap-2">
+                          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><History size={13}/></span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-slate-700"><b>{nome}</b> {descricao}</p>
+                            <p className="mt-1 text-[10px] text-slate-400">{new Date(e.created_at).toLocaleString('pt-BR')}</p>
+                          </div>
+                        </div>
+                      </div>
+                    })}
+                    {!historico.length&&<div className="rounded-2xl border border-dashed p-5 text-center text-xs text-slate-500">Nenhum evento registrado ainda.</div>}
                   </div>
                 </div>
               )}
