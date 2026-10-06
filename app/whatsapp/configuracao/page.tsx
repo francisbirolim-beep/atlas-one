@@ -460,7 +460,8 @@ export default function ConfiguracaoWhatsAppPage() {
                   <div className="divide-y border-t bg-white">
                     {usuarios.filter(u=>u.role!=='master').map(u=>{
                       const pg=permissaoDoGrupo(g.id,u.id)
-                      const nivel=(pg?.nivel||'herdar') as 'herdar'|'sem_acesso'|'acompanhar'|'atender'|'gerenciar'
+                      const grupoConfigurado=gruposPermissoes.some(p=>p.grupo_id===g.id)
+                      const nivel=(pg?.nivel||(grupoConfigurado?'sem_acesso':'herdar')) as 'herdar'|'sem_acesso'|'acompanhar'|'atender'|'gerenciar'
                       return <div key={u.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(130px,1fr)_210px_170px] md:items-center">
                         <div>
                           <b className="block text-sm text-slate-800">{u.nome}</b>
@@ -471,8 +472,10 @@ export default function ConfiguracaoWhatsAppPage() {
                         <select value={nivel}
                           onChange={e=>void salvarPermissaoGrupo(g.id,u.id,e.target.value as any,false)}
                           className="rounded-lg border bg-white px-2 py-2 text-xs font-semibold text-slate-700">
-                          <option value="herdar">Herdar permissão do número</option>
-                          <option value="sem_acesso">Sem acesso</option>
+                          {!gruposPermissoes.some(p=>p.grupo_id===g.id)&&(
+                            <option value="herdar">Ainda segue acesso do número</option>
+                          )}
+                          <option value="sem_acesso">Não pode ver este grupo</option>
                           <option value="acompanhar">Só acompanhar</option>
                           <option value="atender">Pode atender</option>
                           <option value="gerenciar">Pode gerenciar</option>
@@ -487,7 +490,8 @@ export default function ConfiguracaoWhatsAppPage() {
                     })}
                   </div>
                   <div className="border-t bg-blue-50 px-4 py-3 text-[11px] leading-relaxed text-blue-800">
-                    <b>Só acompanhar:</b> lê a conversa sem responder ou alterar. <b>Pode atender:</b> responde, reage e finaliza quando assumir. <b>Pode gerenciar:</b> também transfere o atendimento.
+                    Ao configurar o primeiro usuário, este grupo fica <b>restrito somente às pessoas liberadas aqui</b> (o Master continua com acesso total).
+                    <span className="mt-1 block"><b>Só acompanhar:</b> lê a conversa sem responder ou alterar. <b>Pode atender:</b> responde, reage e finaliza quando assumir. <b>Pode gerenciar:</b> também transfere atendimentos.</span>
                   </div>
                 </details>
               </div>
