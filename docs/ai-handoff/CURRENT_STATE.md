@@ -632,3 +632,18 @@ Branch: `feat/orcamento-atlas-v2-20261004`
 - A conferência de custos aceita `itemRef` e filtra os componentes para editar somente a tipologia escolhida.
 - Regra automática de sobra introduzida via `configuracoes_gerais`: preto e branco não cobram sobra por padrão; demais cores cobram. A decisão manual por item prevalece.
 - O botão de PDF original W.Vetro só é habilitado quando a sincronização tiver recebido uma URL real de PDF no payload; o sistema não inventa um PDF W.Vetro.
+
+## 2026-10-06 — Kanban: vínculo W.Vetro sem perder dados
+
+Branch: `fix/kanban-wvetro-sync-preservacao-v1`
+
+- restaurada a área visível de anexos/versões no modal do orçamento do Kanban;
+- adicionado botão **Sincronizar W.Vetro** no próprio card;
+- busca os orçamentos dos últimos 7 dias e identifica automaticamente quando existe um único orçamento com o mesmo nome do cliente;
+- quando houver mais de um candidato, o usuário escolhe o orçamento correto;
+- o vínculo reaproveita o card existente para evitar duplicidade e preserva anexos, fotos, observações, histórico e demais dados manuais;
+- se o orçamento W.Vetro já tiver sido importado como outro card, ele é mesclado no card escolhido e o duplicado técnico fica oculto das visões principais;
+- a sincronização W.Vetro ganhou comentário/invariante explícita de patch seletivo;
+- regra global de preservação funcional registrada em `CLAUDE.md` e `DECISIONS.md`.
+
+Validação técnica pendente nesta branch.
