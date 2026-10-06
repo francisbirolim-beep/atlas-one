@@ -1316,7 +1316,6 @@ export async function listarDiretorioWhatsApp(
   busca = '',
 ) {
   const acesso = await acessoCanalWhatsApp(usuario, canalId)
-  if (!acesso.visualizar) throw new Error('Você não possui acesso a este canal.')
 
   const [{ data: contatos, error: contatosError }, { data: grupos, error: gruposError }] = await Promise.all([
     supabaseAdmin
@@ -1339,7 +1338,7 @@ export async function listarDiretorioWhatsApp(
 
   const q = busca.toLocaleLowerCase('pt-BR').trim()
   const itens = [
-    ...(contatos || []).map((item: any) => ({
+    ...(acesso.visualizar ? (contatos || []) : []).map((item: any) => ({
       id: item.id,
       tipo: 'contato' as const,
       jid: item.contato_jid,
@@ -1406,6 +1405,7 @@ export async function iniciarConversaWhatsApp(
   if (!jid) throw new Error('Contato ou grupo inválido.')
   const tipo = dados.tipo === 'grupo' ? 'grupo' : 'contato'
   if (tipo === 'grupo' && !jid.endsWith('@g.us')) throw new Error('Grupo WhatsApp inválido.')
+  let grupoContexto: AcessoGrupo | null = null
   if (tipo === 'grupo') {
     const conversaGrupo: AtendimentoConversa = {
       id: '',
@@ -1422,6 +1422,7 @@ export async function iniciarConversaWhatsApp(
     }
     const grupo = await acessoGrupoWhatsApp(conversaGrupo, usuario, acesso)
     if (!grupo.visualizar) throw new Error('Você não possui acesso a este grupo.')
+    grupoContexto = grupo
   } else if (!acesso.atender) {
     throw new Error('Você não possui permissão para iniciar conversa neste canal.')
   }
@@ -1447,9 +1448,13 @@ export async function iniciarConversaWhatsApp(
     : null
   const nome = String(dados.nome || '').trim() || (cliente as any)?.nome || (tipo === 'grupo' ? 'Grupo WhatsApp' : telefone)
 
-  const responsavel = tipo === 'contato' ? usuario.id : null
-  const responsavelNome = tipo === 'contato' ? usuario.nome : null
-  const status = tipo === 'contato' ? 'em_atendimento' : 'aguardando'
+  const responsavel = tipo === 'contato'
+    ? usuario.id
+    : (grupoContexto?.responsavelEfetivoId || null)
+  const responsavelNome = tipo === 'contato'
+    ? usuario.nome
+    : (grupoContexto?.responsavelEfetivoNome || null)
+  const status = tipo === 'contato' ? 'em_atendimento' : 'finalizado'
 
   if (existente) {
     const { data, error } = await supabaseAdmin
@@ -1463,9 +1468,15 @@ export async function iniciarConversaWhatsApp(
         grupo_nome: tipo === 'grupo' ? nome : null,
         whatsapp_numero: canal.numero_declarado,
         ocultar_da_caixa: false,
-        responsavel_id: tipo === 'contato' ? (existente.responsavel_id || responsavel) : null,
-        responsavel_nome: tipo === 'contato' ? (existente.responsavel_nome || responsavelNome) : null,
-        status: tipo === 'contato' ? (existente.responsavel_id ? existente.status : status) : 'aguardando',
+        responsavel_id: tipo === 'contato'
+          ? (existente.responsavel_id || responsavel)
+          : (existente.responsavel_id || responsavel),
+        responsavel_nome: tipo === 'contato'
+          ? (existente.responsavel_nome || responsavelNome)
+          : (existente.responsavel_nome || responsavelNome),
+        status: tipo === 'contato'
+          ? (existente.responsavel_id ? existente.status : status)
+          : existente.status,
         updated_at: new Date().toISOString(),
       })
       .eq('id', existente.id)
