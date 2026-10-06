@@ -41,6 +41,17 @@ type Conversa = {
   ultima_mensagem_em?: string | null
   transferida_em?: string | null
   acompanhando?: boolean
+  grupo_id?: string | null
+  grupo_nivel_acesso?: 'sem_acesso' | 'acompanhar' | 'atender' | 'gerenciar' | 'herdado' | null
+  grupo_pode_atender?: boolean | null
+  grupo_pode_transferir?: boolean | null
+  grupo_pode_delegar?: boolean | null
+  grupo_responsavel_principal_id?: string | null
+  grupo_responsavel_principal_nome?: string | null
+  grupo_responsavel_efetivo_id?: string | null
+  grupo_responsavel_efetivo_nome?: string | null
+  grupo_delegacao_fim_em?: string | null
+  grupo_delegacao_ativa?: boolean
 }
 type Mensagem = {
   id: string
@@ -152,6 +163,11 @@ export default function WhatsAppAtendimentoPage() {
   const [destinoId, setDestinoId] = useState('')
   const [setorTransferencia, setSetorTransferencia] = useState('')
   const [transferenciaAberta, setTransferenciaAberta] = useState(false)
+  const [delegacaoAberta, setDelegacaoAberta] = useState(false)
+  const [destinoDelegacaoId, setDestinoDelegacaoId] = useState('')
+  const [diasDelegacao, setDiasDelegacao] = useState(1)
+  const [motivoDelegacao, setMotivoDelegacao] = useState('')
+  const [salvandoDelegacao, setSalvandoDelegacao] = useState(false)
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [obras, setObras] = useState<ObraResumo[]>([])
   const [carregandoCliente, setCarregandoCliente] = useState(false)
@@ -633,10 +649,64 @@ export default function WhatsAppAtendimentoPage() {
 
   function podeTransferirConversa(conversa: Conversa) {
     if (eu?.role === 'master') return true
+    if (conversa.whatsapp_chat_tipo === 'grupo') return conversa.grupo_pode_transferir === true
     const acesso = conversa.whatsapp_canal_id
       ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
       : null
     return Boolean(acesso?.transferir)
+  }
+
+  async function delegarResponsabilidadeGrupo() {
+    if (!ativa?.grupo_id || !destinoDelegacaoId || salvandoDelegacao) return
+    setErro('')
+    setSalvandoDelegacao(true)
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/grupos/delegacoes', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          grupoId: ativa.grupo_id,
+          destinoId: destinoDelegacaoId,
+          dias: Math.max(1, diasDelegacao || 1),
+          motivo: motivoDelegacao.trim() || null,
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel delegar a responsabilidade.')
+      setDelegacaoAberta(false)
+      setDestinoDelegacaoId('')
+      setDiasDelegacao(1)
+      setMotivoDelegacao('')
+      await carregarConversas(false)
+      await carregarApoio(ativa.id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel delegar a responsabilidade.')
+    } finally {
+      setSalvandoDelegacao(false)
+    }
+  }
+
+  async function encerrarDelegacaoGrupo() {
+    if (!ativa?.grupo_id || salvandoDelegacao) return
+    setErro('')
+    setSalvandoDelegacao(true)
+    try {
+      const headers = await headersJson()
+      const resp = await fetch(`/api/integracoes/whatsapp/grupos/delegacoes?grupoId=${encodeURIComponent(ativa.grupo_id)}`, {
+        method: 'DELETE',
+        headers,
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel encerrar a delegacao.')
+      setDelegacaoAberta(false)
+      await carregarConversas(false)
+      await carregarApoio(ativa.id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel encerrar a delegacao.')
+    } finally {
+      setSalvandoDelegacao(false)
+    }
   }
 
   async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
@@ -837,6 +907,7 @@ export default function WhatsAppAtendimentoPage() {
   const podeAssumirAtiva = Boolean(
     ativa &&
     ativa.status !== 'finalizado' &&
+    (ativa.whatsapp_chat_tipo !== 'grupo' || ativa.grupo_pode_atender === true || eu?.role === 'master') &&
     (
       !ativa.responsavel_id ||
       (ativa.responsavel_id === eu?.id && ativa.status === 'aguardando') ||
@@ -856,7 +927,15 @@ export default function WhatsAppAtendimentoPage() {
     : null
   const canalPronto = canalAtivo?.gateway_status === 'connected'
   const podeTransferirAtiva = Boolean(
-    ativa && (eu?.role === 'master' || acessoCanalAtivo?.transferir),
+    ativa && (
+      eu?.role === 'master' ||
+      (ativa.whatsapp_chat_tipo === 'grupo' ? ativa.grupo_pode_transferir === true : acessoCanalAtivo?.transferir)
+    ),
+  )
+  const podeDelegarGrupo = Boolean(
+    ativa?.whatsapp_chat_tipo === 'grupo' &&
+    ativa.grupo_id &&
+    (eu?.role === 'master' || ativa.grupo_pode_delegar === true)
   )
 
   const cadastroNome = ativa?.contato_nome || ''
@@ -1039,13 +1118,18 @@ export default function WhatsAppAtendimentoPage() {
                       {c.ultimo_preview || (c.whatsapp_chat_tipo === 'grupo' ? 'Grupo sincronizado do WhatsApp' : 'Conversa WhatsApp')}
                     </p>
                     <div className="mt-1 flex items-center gap-2 text-[10px]">
-                      {c.whatsapp_chat_tipo === 'grupo' ? (
+                      {c.whatsapp_chat_tipo === 'grupo' && (
                         <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">Grupo</span>
-                      ) : c.status === 'finalizado' ? (
+                      )}
+                      {c.status === 'finalizado' ? (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">Finalizado</span>
+                      ) : c.status === 'em_atendimento' && c.responsavel_id ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+                          Atendimento por {c.responsavel_nome || (c.responsavel_id===eu?.id ? 'você' : 'atendente')}
+                        </span>
                       ) : c.responsavel_id ? (
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                          {c.responsavel_id===eu?.id ? 'Meu atendimento' : (c.responsavel_nome || 'Com atendente')}
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                          Aguardando {c.responsavel_id===eu?.id ? 'você' : (c.responsavel_nome || 'atendente')}
                         </span>
                       ) : (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Aguardando atendimento</span>
@@ -1148,8 +1232,14 @@ export default function WhatsAppAtendimentoPage() {
                   </b>
                   <p className="text-xs text-slate-500">
                     {ativa.whatsapp_chat_tipo === 'grupo'
-                      ? 'Grupo WhatsApp · canal compartilhado'
-                      : `${telefoneFormatado(ativa.telefone)} · ${ativa.responsavel_nome || 'Em espera'}`}
+                      ? `Grupo WhatsApp · ${ativa.status === 'em_atendimento' && ativa.responsavel_nome
+                          ? `Atendimento por ${ativa.responsavel_nome}`
+                          : ativa.responsavel_nome
+                            ? `Aguardando ${ativa.responsavel_nome}`
+                            : 'Aguardando atendimento'}`
+                      : `${telefoneFormatado(ativa.telefone)} · ${ativa.status === 'em_atendimento' && ativa.responsavel_nome
+                          ? `Atendimento por ${ativa.responsavel_nome}`
+                          : ativa.responsavel_nome || 'Em espera'}`}
                     {ativa.setor ? ` · ${ativa.setor}` : ''}
                   </p>
                   {canalAtivo&&(
@@ -1184,10 +1274,16 @@ export default function WhatsAppAtendimentoPage() {
                     {ativa.responsavel_id ? 'Assumir atendimento' : 'Atender'}
                   </button>
                 )}
-                {atendimentoMeu && (
+                {ativa.status === 'em_atendimento' && ativa.responsavel_nome && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
-                    <CheckCircle2 size={15}/> Em atendimento por você
+                    <CheckCircle2 size={15}/> Atendimento por {ativa.responsavel_nome}
                   </span>
+                )}
+                {podeDelegarGrupo && (
+                  <button onClick={()=>setDelegacaoAberta(aberta=>!aberta)}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${delegacaoAberta?'bg-violet-50 text-violet-800':'bg-white text-violet-700'}`}>
+                    <Users size={15}/> {ativa.grupo_delegacao_ativa ? 'Responsável temporário' : 'Delegar grupo'}
+                  </button>
                 )}
                 {atendimentoMeu && Number(ativa.nao_lidas || 0) > 0 && (
                   <button type="button" onClick={()=>void acaoConversa('marcar_lida')}
@@ -1209,6 +1305,50 @@ export default function WhatsAppAtendimentoPage() {
                   </button>
                 )}
               </div>
+
+              {delegacaoAberta && podeDelegarGrupo && ativa.grupo_id && (
+                <div className="border-b bg-violet-50/70 px-4 py-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <b className="text-xs text-violet-900">Responsabilidade temporária do grupo</b>
+                      <p className="text-[10px] text-violet-700">
+                        Responsável principal: {ativa.grupo_responsavel_principal_nome || 'não definido'}
+                        {ativa.grupo_delegacao_ativa && ativa.grupo_delegacao_fim_em
+                          ? ` · temporário até ${new Date(ativa.grupo_delegacao_fim_em).toLocaleString('pt-BR')}`
+                          : ''}
+                      </p>
+                    </div>
+                    {ativa.grupo_delegacao_ativa && (
+                      <button type="button" disabled={salvandoDelegacao}
+                        onClick={()=>void encerrarDelegacaoGrupo()}
+                        className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-bold text-violet-700 disabled:opacity-40">
+                        Encerrar e devolver
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-[minmax(170px,1fr)_90px_minmax(180px,1.2fr)_auto]">
+                    <select value={destinoDelegacaoId} onChange={e=>setDestinoDelegacaoId(e.target.value)}
+                      className="rounded-lg border bg-white px-2 py-2 text-xs">
+                      <option value="">Delegar para...</option>
+                      {usuarios.filter(u=>u.id!==ativa.grupo_responsavel_principal_id).map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 rounded-lg border bg-white px-2">
+                      <input type="number" min={1} max={365} value={diasDelegacao}
+                        onChange={e=>setDiasDelegacao(Math.max(1,Number(e.target.value)||1))}
+                        className="w-12 bg-transparent py-2 text-xs outline-none"/>
+                      <span className="text-[10px] text-slate-500">dias</span>
+                    </label>
+                    <input value={motivoDelegacao} onChange={e=>setMotivoDelegacao(e.target.value)}
+                      placeholder="Motivo (férias, folga, ausência...)"
+                      className="rounded-lg border bg-white px-2 py-2 text-xs"/>
+                    <button type="button" disabled={!destinoDelegacaoId||salvandoDelegacao}
+                      onClick={()=>void delegarResponsabilidadeGrupo()}
+                      className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
+                      {salvandoDelegacao?'Salvando...':'Confirmar'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {transferenciaAberta && podeTransferirAtiva && ativa.status !== 'finalizado' && (
                 <div className="flex flex-wrap items-center justify-end gap-2 border-b bg-slate-50 px-4 py-2">
