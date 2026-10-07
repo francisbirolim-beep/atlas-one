@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2, ZoomIn } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
 import { excluirFotoComHistorico, listarCorrecoesFoto, type CorrecaoFoto } from '@/lib/medicaoFotoCorrecoes'
@@ -120,7 +120,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     painelRef.current?.focus({ preventScroll: true })
   }, [selecao, carregando, dados.itens])
   const campos = useMemo(() => item ? camposDoItemV2(dados.campos, item, dados.respostas) : [], [dados.campos, dados.respostas, item])
-  const fotosItem = useMemo(() => dados.fotos.filter(f => f.item_id === itemId), [dados.fotos, itemId])
+  const fotosItem = useMemo(() => dados.fotos.filter(f => f.item_id === itemId && !f.categoria.startsWith('checklist:')), [dados.fotos, itemId])
 
   useEffect(() => {
     if (!item) {
@@ -179,6 +179,61 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
+  async function lerTrenaEPreencher(eixo: 'largura' | 'altura', imageUrl: string) {
+    setMensagem(`Foto de ${eixo} registrada. Lendo a trena automaticamente...`)
+    try {
+      const token = await tokenAtual()
+      if (!token) {
+        setMensagem('Foto registrada, mas a sessão não permitiu a leitura automática. Preencha as medidas manualmente.')
+        return false
+      }
+
+      const resp = await fetch('/api/medicao-final/ler-trena', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ imageUrl, eixo }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setMensagem(json?.error || 'Foto registrada, mas não foi possível ler a trena automaticamente.')
+        return false
+      }
+
+      const lidas = Array.isArray(json?.medidas_mm)
+        ? json.medidas_mm.map(Number).filter((v: number) => Number.isFinite(v) && v > 0 && v <= 10000)
+        : []
+
+      if (lidas.length !== 3) {
+        setMensagem(`Foto registrada. A IA encontrou ${lidas.length} de 3 medidas de ${eixo}; os campos não foram alterados para evitar trocar posições.`)
+        return false
+      }
+
+      // Mantém a mesma regra posicional já validada no leitor automático usado no Atlas:
+      // largura troca primeiro/terceiro; altura permanece direita/meio/esquerda.
+      const ordenadas = eixo === 'largura' ? [lidas[2], lidas[1], lidas[0]] : lidas
+      const chaves = eixo === 'largura'
+        ? (['largura_baixo_mm', 'largura_meio_mm', 'largura_cima_mm'] as const)
+        : (['altura_direita_mm', 'altura_meio_mm', 'altura_esquerda_mm'] as const)
+
+      setMedidas(prev => {
+        const proximo = { ...prev }
+        chaves.forEach((chave, indice) => { proximo[chave] = String(Math.round(ordenadas[indice])) })
+        return proximo
+      })
+
+      const confianca = Math.round((Number(json?.confianca) || 0) * 100)
+      setMensagem(`${eixo === 'largura' ? 'Larguras' : 'Alturas'} preenchidas automaticamente${confianca ? ` (${confianca}% de confiança)` : ''}. Confira os valores e clique em “Salvar medidas”.`)
+      return true
+    } catch (erro) {
+      console.error('Erro ao ler foto da trena na Medição Final V2:', erro)
+      setMensagem('Foto registrada, mas a leitura automática falhou. As medidas podem ser preenchidas manualmente.')
+      return false
+    }
+  }
+
   async function enviarFotoTrena(eixo: 'largura' | 'altura', file: File) {
     if (!item) return
 
@@ -194,20 +249,20 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     }
 
     const salvo = await salvarFotoMedicaoItem(item.id, eixo === 'largura' ? 'larguras' : 'alturas', url)
-    setEnviandoFoto(null)
-
     if (!salvo) {
+      setEnviandoFoto(null)
       setMensagem('A foto foi enviada, mas não foi possível vinculá-la à peça.')
       return
     }
 
-    setMensagem(eixo === 'largura' ? 'Foto da largura registrada.' : 'Foto da altura registrada.')
+    await lerTrenaEPreencher(eixo, url)
+    setEnviandoFoto(null)
     await carregar()
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
   async function salvarCampo(campo: CampoChecklistV2, valorForcado?: string, fotoUrls: string[] = []) {
-    if (!item) return
+    if (!item) return false
     const bruto = valorForcado ?? valores[campo.chave] ?? ''
     const valor: unknown = campo.tipo_valor === 'numero' && bruto !== '' ? Number(bruto) : bruto
     setSalvando(campo.chave)
@@ -216,11 +271,12 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     setSalvando(null)
     if (!ok) {
       setMensagem(`Não foi possível salvar “${campo.nome}”.`)
-      return
+      return false
     }
     setMensagem(`“${campo.nome}” salvo.`)
     await carregar()
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
+    return true
   }
 
   async function enviarFotoCampo(campo: CampoChecklistV2, file: File) {
@@ -232,9 +288,12 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       setMensagem('Não foi possível enviar a foto.')
       return
     }
-    await adicionarFotoMedicaoV2(medicaoId, item.id, `checklist:${campo.chave}`, url, usuario, campo.nome)
     setValores(prev => ({ ...prev, [campo.chave]: url }))
-    await salvarCampo(campo, url, [url])
+    const salvo = await salvarCampo(campo, url, [url])
+    if (salvo) {
+      const registro = await adicionarFotoMedicaoV2(medicaoId, item.id, `checklist:${campo.chave}`, url, usuario, campo.nome)
+      if (!registro) setMensagem(`“${campo.nome}” salvo, mas o registro auxiliar da foto ficou pendente.`)
+    }
     setEnviandoFoto(null)
   }
 
@@ -501,7 +560,12 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                               {salvando === campo.chave && <Loader2 size={14} className="animate-spin text-slate-400" />}
                             </div>
 
-                            {campo.tipo_valor === 'foto' && valor && <button type="button" onClick={() => setFotoAmpliada(valor)} className="mb-2 text-xs text-blue-700">Abrir foto</button>}
+                            {campo.tipo_valor === 'foto' && valor && (
+                              <button type="button" onClick={() => setFotoAmpliada(valor)} className="mb-2 block w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-left">
+                                <img src={valor} alt={campo.nome} className="h-32 w-full object-cover" />
+                                <span className="block px-3 py-2 text-xs font-semibold text-blue-700">Foto selecionada · abrir maior</span>
+                              </button>
+                            )}
                             {campo.tipo_valor === 'foto' ? (
                               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-200 px-3 py-3 text-xs font-medium text-slate-500 hover:border-slate-300">
                                 {enviandoFoto === `campo:${campo.chave}` ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
