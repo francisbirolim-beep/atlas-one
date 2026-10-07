@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, Menu, MoreVertical,
+  ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, Loader2, Menu,
   Pencil, Plus, Ruler, Save, Trash2, X
 } from 'lucide-react'
 import type { MedicaoFinal, MedicaoItem, TipoEsquadria, Tipologia, Usuario } from '@/lib/tipos'
@@ -131,7 +131,11 @@ export default function ContramarcoFlow({
   function iniciarMedicao() {
     if (!itens.length) return
     const pendente = itens.findIndex(i => !i.medido)
-    carregarPosicao(pendente >= 0 ? pendente : 0)
+    if (pendente < 0) {
+      setTela('resumo')
+      return
+    }
+    carregarPosicao(pendente)
   }
 
   function abrirNovo() {
@@ -398,9 +402,29 @@ export default function ContramarcoFlow({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-700">{origemLabel}</p>
-              <p className="text-xs text-slate-500">Adicione as tipologias para medir os vãos.</p>
+              <p className="text-xs text-slate-500">Para cada item, informe se será usado contramarco.</p>
             </div>
             <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{revisados}/{itens.length} definidos</span>
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+            <b>Revise item por item.</b>
+            <p className="mt-1 text-xs">Se usar contramarco, informe as medidas do vão e as folgas. Se não usar, marque “Não usar” e siga para o próximo.</p>
+          </div>
+
+          <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-2">
+              <p className="text-lg font-black text-emerald-700">{comContramarco}</p>
+              <p className="text-[10px] font-bold uppercase text-emerald-700">Medidos</p>
+            </div>
+            <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2">
+              <p className="text-lg font-black text-red-700">{semContramarco}</p>
+              <p className="text-[10px] font-bold uppercase text-red-700">Não usam</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-2">
+              <p className="text-lg font-black text-amber-700">{pendentes}</p>
+              <p className="text-[10px] font-bold uppercase text-amber-700">Pendentes</p>
+            </div>
           </div>
 
           <button
@@ -410,33 +434,77 @@ export default function ContramarcoFlow({
             <Plus size={17} /> Adicionar tipologia
           </button>
 
-          <div className="space-y-2">
-            {itens.map((item, pos) => (
-              <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                <button
-                  onClick={() => carregarPosicao(pos)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-xs font-black text-blue-700">
-                    {pos + 1}
-                  </span>
-                  <IconeTipologia tipo={item.tipo_esquadria} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-900">{item.ambiente || 'Sem ambiente'}</p>
-                    <p className="truncate text-xs text-slate-500">{nomeTipo(item, tipos)}</p>
-                    {item.medido && item.producao_largura_mm && item.producao_altura_mm && (
-                      <p className="mt-1 text-[11px] font-bold text-emerald-700">
-                        Produção: {item.producao_largura_mm} × {item.producao_altura_mm} mm
-                      </p>
-                    )}
+          <div className="space-y-3">
+            {itens.map((item, pos) => {
+              const usa = item.contramarco === 'sim'
+              const naoUsa = item.contramarco === 'nao'
+              const medidoComContramarco = Boolean(item.medido && usa && item.producao_largura_mm && item.producao_altura_mm)
+              const temMedidaOrcamento = Number(item.orcamento_largura_mm) > 0 || Number(item.orcamento_altura_mm) > 0
+              return (
+                <div key={item.id} className={`rounded-2xl border bg-white p-4 shadow-sm ${medidoComContramarco ? 'border-emerald-200' : naoUsa ? 'border-red-200' : 'border-slate-200'}`}>
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-xs font-black text-blue-700">
+                      {pos + 1}
+                    </span>
+                    <IconeTipologia tipo={item.tipo_esquadria} />
+                    <button onClick={() => carregarPosicao(pos)} className="min-w-0 flex-1 text-left">
+                      <p className="truncate text-sm font-black text-slate-900">{nomeTipo(item, tipos)}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">Ambiente: {item.ambiente || '—'}</p>
+                      <p className="text-xs text-slate-500">Quantidade: {item.quantidade || 1} unidade{(item.quantidade || 1) > 1 ? 's' : ''}</p>
+                    </button>
+                    <div className="flex shrink-0 gap-1">
+                      <button onClick={() => abrirEditar(item)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><Pencil size={14} /></button>
+                      <button onClick={() => excluir(item)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={14} /></button>
+                    </div>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-slate-500">{item.quantidade || 1} un</span>
-                  <ChevronRight size={17} className="shrink-0 text-slate-400" />
-                </button>
-                <button onClick={() => abrirEditar(item)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><Pencil size={14} /></button>
-                <button onClick={() => excluir(item)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={14} /></button>
-              </div>
-            ))}
+
+                  <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Medidas no orçamento</p>
+                    <p className="mt-1 text-xs font-bold text-slate-600">
+                      {temMedidaOrcamento
+                        ? `Largura: ${item.orcamento_largura_mm || '—'} mm · Altura: ${item.orcamento_altura_mm || '—'} mm`
+                        : 'Medida não informada no orçamento'}
+                    </p>
+                  </div>
+
+                  {medidoComContramarco && (
+                    <button onClick={() => carregarPosicao(pos)} className="mt-3 flex w-full items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-left">
+                      <span>
+                        <span className="block text-[10px] font-black uppercase text-emerald-700">Contramarco medido</span>
+                        <span className="mt-0.5 block text-xs font-semibold text-emerald-800">Produção: {item.producao_largura_mm} × {item.producao_altura_mm} mm</span>
+                      </span>
+                      <ChevronRight size={17} className="text-emerald-700" />
+                    </button>
+                  )}
+
+                  {naoUsa && (
+                    <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5">
+                      <p className="text-xs font-black text-red-700">Não usa contramarco</p>
+                      <p className="mt-0.5 text-[11px] text-red-600">Esta posição foi revisada e será pulada na produção de contramarcos.</p>
+                    </div>
+                  )}
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        carregarPosicao(pos)
+                        setDecisaoUso('sim')
+                      }}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-black ${usa && !naoUsa ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                    >
+                      <Check size={14} /> Usar contramarco
+                    </button>
+                    <button
+                      onClick={() => void escolherUso(item, pos, false, false)}
+                      disabled={salvandoUso === item.id}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-black disabled:opacity-50 ${naoUsa ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-600'}`}
+                    >
+                      {salvandoUso === item.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Não usar
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
 
             {!itens.length && (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -450,9 +518,9 @@ export default function ContramarcoFlow({
           <button
             onClick={iniciarMedicao}
             disabled={!itens.length}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3.5 text-sm font-black text-white shadow-sm disabled:opacity-40"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-black text-white shadow-sm disabled:opacity-40"
           >
-            Avançar para medição <ChevronRight size={17} />
+            {pendentes > 0 ? 'Continuar revisão dos itens' : 'Ver resumo e gerar PDF'} <ChevronRight size={17} />
           </button>
         </main>
       )}
@@ -463,103 +531,141 @@ export default function ContramarcoFlow({
             <div className="flex min-w-0 items-center gap-3">
               <IconeTipologia tipo={atual.tipo_esquadria} />
               <div className="min-w-0">
-                <p className="truncate text-sm font-black text-slate-900">{atual.ambiente || 'Sem ambiente'} · {nomeTipo(atual, tipos)}</p>
-                <p className="text-xs text-slate-500">Quantidade: {atual.quantidade || 1} unidade{(atual.quantidade || 1) > 1 ? 's' : ''}</p>
+                <p className="truncate text-sm font-black text-slate-900">{nomeTipo(atual, tipos)}</p>
+                <p className="truncate text-xs text-slate-500">Ambiente: {atual.ambiente || '—'} · Quantidade: {atual.quantidade || 1}</p>
               </div>
             </div>
             <span className="shrink-0 text-xs font-bold text-slate-500">{indice + 1} de {itens.length}</span>
           </div>
 
+          <div className="mb-4 rounded-xl bg-slate-100 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Medidas no orçamento</p>
+            <p className="mt-1 text-sm font-bold text-slate-700">
+              {Number(atual.orcamento_largura_mm) > 0 || Number(atual.orcamento_altura_mm) > 0
+                ? `Largura: ${atual.orcamento_largura_mm || '—'} mm · Altura: ${atual.orcamento_altura_mm || '—'} mm`
+                : 'Medida não informada no orçamento'}
+            </p>
+          </div>
+
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-black text-slate-900">Medidas do vão e folga</h2>
-
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-black uppercase tracking-[.08em] text-slate-500">Largura</p>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs text-slate-500">
-                  Largura do vão (mm)
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={vaoLargura}
-                    onChange={e => setVaoLargura(e.target.value)}
-                    placeholder="Ex.: 3000"
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
-                  />
-                </label>
-                <label className="text-xs text-slate-500">
-                  Folga da largura (mm)
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    value={folgaLargura}
-                    onChange={e => setFolgaLargura(e.target.value)}
-                    placeholder="Ex.: 20"
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
-                  />
-                </label>
-              </div>
-              <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-                <div className="flex items-end justify-between gap-3">
-                  <p className="text-xs font-bold text-emerald-700">Largura para produzir</p>
-                  <p className="text-2xl font-black text-emerald-700">{producaoLargura > 0 ? `${producaoLargura} mm` : '—'}</p>
-                </div>
-                {vaoLargura && folgaLargura !== '' && (
-                  <p className="mt-1 text-right text-[11px] text-emerald-600">{vaoLargura} − {folgaLargura || '0'} = {producaoLargura} mm</p>
-                )}
-              </div>
+            <h2 className="text-sm font-black text-slate-900">Uso de contramarco</h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <button
+                onClick={() => setDecisaoUso('sim')}
+                className={`rounded-xl border p-4 text-left ${decisaoUso === 'sim' ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-300' : 'border-slate-200 bg-white'}`}
+              >
+                <div className="flex items-center gap-2 text-sm font-black text-slate-900"><Check size={16} className="text-emerald-600" /> Usar contramarco</div>
+                <p className="mt-1 text-xs text-slate-500">Informar as medidas do vão e a folga para calcular a medida de produção.</p>
+              </button>
+              <button
+                onClick={() => setDecisaoUso('nao')}
+                className={`rounded-xl border p-4 text-left ${decisaoUso === 'nao' ? 'border-red-400 bg-red-50 ring-1 ring-red-200' : 'border-slate-200 bg-white'}`}
+              >
+                <div className="flex items-center gap-2 text-sm font-black text-slate-900"><X size={16} className="text-red-600" /> Não usar contramarco</div>
+                <p className="mt-1 text-xs text-slate-500">Esta tipologia não terá contramarco e será pulada nesta medição.</p>
+              </button>
             </div>
-
-            <div className="mt-5">
-              <p className="mb-2 text-xs font-black uppercase tracking-[.08em] text-slate-500">Altura</p>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs text-slate-500">
-                  Altura do vão (mm)
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={vaoAltura}
-                    onChange={e => setVaoAltura(e.target.value)}
-                    placeholder="Ex.: 2200"
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
-                  />
-                </label>
-                <label className="text-xs text-slate-500">
-                  Folga da altura (mm)
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    value={folgaAltura}
-                    onChange={e => setFolgaAltura(e.target.value)}
-                    placeholder="Ex.: 20"
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
-                  />
-                </label>
-              </div>
-              <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-                <div className="flex items-end justify-between gap-3">
-                  <p className="text-xs font-bold text-emerald-700">Altura para produzir</p>
-                  <p className="text-2xl font-black text-emerald-700">{producaoAltura > 0 ? `${producaoAltura} mm` : '—'}</p>
-                </div>
-                {vaoAltura && folgaAltura !== '' && (
-                  <p className="mt-1 text-right text-[11px] text-emerald-600">{vaoAltura} − {folgaAltura || '0'} = {producaoAltura} mm</p>
-                )}
-              </div>
-            </div>
-
-            <label className="mt-5 block text-xs text-slate-500">
-              Observações
-              <textarea
-                value={observacoes}
-                onChange={e => setObservacoes(e.target.value)}
-                rows={2}
-                placeholder="Opcional"
-                className="mt-1 w-full resize-y rounded-xl border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
           </section>
+
+          {decisaoUso === 'nao' && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-black text-amber-800">A medição de contramarco será pulada para este item.</p>
+              <p className="mt-1 text-xs text-amber-700">Ao salvar, essa decisão fica registrada para quando você abrir a medição novamente.</p>
+            </div>
+          )}
+
+          {decisaoUso === 'sim' && (
+            <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-black text-slate-900">Medidas do vão e folga</h2>
+
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-black uppercase tracking-[.08em] text-slate-500">Largura</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-slate-500">
+                    Largura do vão (mm)
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={vaoLargura}
+                      onChange={e => setVaoLargura(e.target.value)}
+                      placeholder="Ex.: 3000"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
+                    />
+                  </label>
+                  <label className="text-xs text-slate-500">
+                    Folga da largura (mm)
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      value={folgaLargura}
+                      onChange={e => setFolgaLargura(e.target.value)}
+                      placeholder="Ex.: 20"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <p className="text-xs font-bold text-emerald-700">Largura para produzir</p>
+                    <p className="text-2xl font-black text-emerald-700">{producaoLargura > 0 ? `${producaoLargura} mm` : '—'}</p>
+                  </div>
+                  {vaoLargura && folgaLargura !== '' && (
+                    <p className="mt-1 text-right text-[11px] text-emerald-600">{vaoLargura} − {folgaLargura || '0'} = {producaoLargura} mm</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <p className="mb-2 text-xs font-black uppercase tracking-[.08em] text-slate-500">Altura</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-slate-500">
+                    Altura do vão (mm)
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={vaoAltura}
+                      onChange={e => setVaoAltura(e.target.value)}
+                      placeholder="Ex.: 2200"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
+                    />
+                  </label>
+                  <label className="text-xs text-slate-500">
+                    Folga da altura (mm)
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      value={folgaAltura}
+                      onChange={e => setFolgaAltura(e.target.value)}
+                      placeholder="Ex.: 20"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-semibold text-slate-900"
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <p className="text-xs font-bold text-emerald-700">Altura para produzir</p>
+                    <p className="text-2xl font-black text-emerald-700">{producaoAltura > 0 ? `${producaoAltura} mm` : '—'}</p>
+                  </div>
+                  {vaoAltura && folgaAltura !== '' && (
+                    <p className="mt-1 text-right text-[11px] text-emerald-600">{vaoAltura} − {folgaAltura || '0'} = {producaoAltura} mm</p>
+                  )}
+                </div>
+              </div>
+
+              <label className="mt-5 block text-xs text-slate-500">
+                Observações
+                <textarea
+                  value={observacoes}
+                  onChange={e => setObservacoes(e.target.value)}
+                  rows={2}
+                  placeholder="Opcional"
+                  className="mt-1 w-full resize-y rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+            </section>
+          )}
 
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
@@ -572,12 +678,15 @@ export default function ContramarcoFlow({
               <ChevronLeft size={17} /> Anterior
             </button>
             <button
-              onClick={salvarEAvancar}
-              disabled={salvandoMedida}
-              className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+              onClick={() => {
+                if (decisaoUso === 'nao') void escolherUso(atual, indice, false, true)
+                else void salvarEAvancar()
+              }}
+              disabled={!decisaoUso || salvandoMedida || salvandoUso === atual.id}
+              className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
             >
-              {salvandoMedida ? <Save size={16} className="animate-pulse" /> : null}
-              {indice === itens.length - 1 ? 'Finalizar' : 'Próximo'} <ChevronRight size={17} />
+              {(salvandoMedida || salvandoUso === atual.id) && <Loader2 size={16} className="animate-spin" />}
+              {indice === itens.length - 1 ? 'Finalizar' : 'Salvar e próximo'} <ChevronRight size={17} />
             </button>
           </div>
         </main>
@@ -585,37 +694,64 @@ export default function ContramarcoFlow({
 
       {tela === 'resumo' && (
         <main className="mx-auto max-w-3xl px-4 py-5">
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{origemLabel}</span>
+            <span className={`rounded-lg px-2.5 py-1 text-xs font-black ${pendentes === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+              {pendentes === 0 ? 'Revisão concluída' : `${pendentes} pendente(s)`}
+            </span>
+          </div>
+
+          <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-2">
+              <p className="text-lg font-black text-emerald-700">{comContramarco}</p>
+              <p className="text-[10px] font-bold uppercase text-emerald-700">Produzir</p>
+            </div>
+            <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2">
+              <p className="text-lg font-black text-red-700">{semContramarco}</p>
+              <p className="text-[10px] font-bold uppercase text-red-700">Sem contramarco</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-2">
+              <p className="text-lg font-black text-amber-700">{pendentes}</p>
+              <p className="text-[10px] font-bold uppercase text-amber-700">Pendentes</p>
+            </div>
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="hidden grid-cols-[1.3fr_.8fr_.7fr_1fr_.35fr] gap-2 border-b bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500 sm:grid">
+            <div className="hidden grid-cols-[1.35fr_.8fr_.7fr_1fr_.35fr] gap-2 border-b bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500 sm:grid">
               <span>Ambiente / Tipologia</span>
               <span>Vão (mm)</span>
               <span>Folga (mm)</span>
-              <span>Medida (mm)</span>
+              <span>Resultado</span>
               <span>Qtd</span>
             </div>
-            {resumo.map(({ item, pos, tipo }) => (
-              <div key={item.id} className="border-b border-slate-100 p-3 last:border-b-0 sm:grid sm:grid-cols-[1.3fr_.8fr_.7fr_1fr_.35fr] sm:items-center sm:gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-black text-slate-900">{item.ambiente || 'Sem ambiente'}</p>
-                  <p className="text-xs text-slate-500">{tipo}</p>
+            {resumo.map(({ item, pos, tipo }) => {
+              const naoUsa = item.contramarco === 'nao'
+              const medido = Boolean(item.medido && item.producao_largura_mm && item.producao_altura_mm)
+              return (
+                <div key={item.id} className="border-b border-slate-100 p-3 last:border-b-0 sm:grid sm:grid-cols-[1.35fr_.8fr_.7fr_1fr_.35fr] sm:items-center sm:gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-slate-900">{item.ambiente || 'Sem ambiente'}</p>
+                    <p className="text-xs text-slate-500">{tipo}</p>
+                    {(item.orcamento_largura_mm || item.orcamento_altura_mm) && (
+                      <p className="mt-0.5 text-[10px] text-slate-400">Orçamento: {item.orcamento_largura_mm || '—'} × {item.orcamento_altura_mm || '—'} mm</p>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600 sm:mt-0">{naoUsa ? '—' : `${item.vao_largura_mm || '—'} × ${item.vao_altura_mm || '—'}`}</p>
+                  <p className="text-xs text-slate-600">{naoUsa ? '—' : `${item.folga_largura_mm ?? '—'} × ${item.folga_altura_mm ?? '—'}`}</p>
+                  <button
+                    onClick={() => carregarPosicao(pos)}
+                    className={`mt-2 rounded-lg px-2 py-1.5 text-left text-xs font-black sm:mt-0 ${naoUsa ? 'bg-red-50 text-red-700' : medido ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}
+                  >
+                    {naoUsa
+                      ? 'Não usa'
+                      : medido
+                        ? `${item.producao_largura_mm} × ${item.producao_altura_mm}`
+                        : 'Pendente'}
+                  </button>
+                  <p className="text-xs font-bold text-slate-600">{item.quantidade || 1}</p>
                 </div>
-                <p className="mt-2 text-xs text-slate-600 sm:mt-0">{item.vao_largura_mm || '—'} × {item.vao_altura_mm || '—'}</p>
-                <p className="text-xs text-slate-600">{item.folga_largura_mm ?? '—'} × {item.folga_altura_mm ?? '—'}</p>
-                <button
-                  onClick={() => carregarPosicao(pos)}
-                  className="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-left text-xs font-black text-emerald-700 sm:mt-0"
-                >
-                  {item.producao_largura_mm && item.producao_altura_mm
-                    ? `${item.producao_largura_mm} × ${item.producao_altura_mm}`
-                    : 'Pendente'}
-                </button>
-                <p className="text-xs font-bold text-slate-600">{item.quantidade || 1}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <button
@@ -625,13 +761,19 @@ export default function ContramarcoFlow({
             <Plus size={16} /> Adicionar tipologia
           </button>
 
+          {pendentes > 0 && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Revise os {pendentes} item(ns) pendente(s) antes de gerar o PDF final para produção.
+            </div>
+          )}
+
           <div className="mt-3 grid grid-cols-2 gap-3">
             <button onClick={() => setTela('lista')} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">
               Voltar
             </button>
             <button
               onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
-              disabled={!itens.some(i => i.medido)}
+              disabled={pendentes > 0 || comContramarco === 0}
               className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
             >
               <FileText size={16} /> Gerar PDF para produção
