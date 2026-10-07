@@ -194,6 +194,95 @@ async function carregarProdutosTecnicos(codigos?: string[]) {
   return mapa
 }
 
+function menorMedidaPositiva(...valores: any[]) {
+  const validas = valores.map(valor => n(valor)).filter(valor => valor > 0)
+  return validas.length ? Math.min(...validas) : 0
+}
+
+function indiceOrigemDaMedicao(item: any, itensBase: any[], separada: boolean) {
+  const explicito = Number(item?.origem_item_indice)
+  if (Number.isInteger(explicito) && explicito >= 0 && explicito < itensBase.length) return explicito
+  if (itensBase.length === 1) return 0
+
+  const ref = String(item?.origem_item_ref || '').trim()
+  if (ref) {
+    const porRef = itensBase.findIndex((base, indice) => itemRef(base, indice) === ref)
+    if (porRef >= 0) return porRef
+  }
+
+  const ordem = Math.max(0, Math.floor(n(item?.ordem)))
+  const indiceOrdem = separada ? Math.floor(ordem / 100) : ordem
+  if (indiceOrdem >= 0 && indiceOrdem < itensBase.length) return indiceOrdem
+
+  const tipo = String(item?.tipo_esquadria || '').trim()
+  const candidatos = itensBase
+    .map((base, indice) => ({ base, indice }))
+    .filter(({ base }) => String(base?.tipo_esquadria || '').trim() === tipo)
+  return candidatos.length === 1 ? candidatos[0].indice : -1
+}
+
+async function itensDaMedicaoFinal(orcamentoId: string, itensBase: any[]) {
+  const { data: medicao } = await supabase
+    .from('medicoes_finais')
+    .select('id,status_operacional,tipo_medicao')
+    .eq('orcamento_id', orcamentoId)
+    .in('status_operacional', ['concluido', 'aprovado'])
+    .or('tipo_medicao.is.null,tipo_medicao.eq.tipologia')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!medicao?.id) return null
+
+  const { data: itens, error } = await supabase
+    .from('medicao_itens')
+    .select('id,origem_item_indice,origem_item_ref,tipo_esquadria,tipo_outro_texto,descricao,ambiente,folhas,quantidade,ordem,largura_baixo_mm,largura_meio_mm,largura_cima_mm,altura_direita_mm,altura_meio_mm,altura_esquerda_mm,producao_largura_mm,producao_altura_mm,contramarco,cadeirinha,observacoes_medicao,campos_extras,medido')
+    .eq('medicao_id', medicao.id)
+    .order('ordem', { ascending: true })
+
+  if (error || !itens?.length) return []
+
+  const separada = itens.length > itensBase.length || itens.some((item: any) => n(item?.ordem) >= 100)
+
+  return itens.map((item: any) => {
+    const indiceOrigem = indiceOrigemDaMedicao(item, itensBase, separada)
+    const origemItem = indiceOrigem >= 0 ? itensBase[indiceOrigem] : null
+    const largura = n(item?.producao_largura_mm) > 0
+      ? n(item.producao_largura_mm)
+      : menorMedidaPositiva(item?.largura_baixo_mm, item?.largura_meio_mm, item?.largura_cima_mm)
+    const altura = n(item?.producao_altura_mm) > 0
+      ? n(item.producao_altura_mm)
+      : menorMedidaPositiva(item?.altura_direita_mm, item?.altura_meio_mm, item?.altura_esquerda_mm)
+    const ref = item?.origem_item_ref || (origemItem ? itemRef(origemItem, indiceOrigem) : `medicao-${item.id}`)
+
+    return {
+      ...(origemItem || {}),
+      id: ref,
+      tipo_esquadria: item?.tipo_esquadria || origemItem?.tipo_esquadria || 'outro',
+      tipo_outro_texto: item?.tipo_outro_texto || origemItem?.tipo_outro_texto || null,
+      descricao: item?.descricao || origemItem?.descricao || null,
+      ambiente: item?.ambiente || origemItem?.ambiente || null,
+      folhas: item?.folhas || origemItem?.folhas || null,
+      largura_mm: largura,
+      altura_mm: altura,
+      quantidade: 1,
+      contramarco: item?.contramarco || origemItem?.contramarco || null,
+      observacao_producao: item?.observacoes_medicao || origemItem?.observacao_producao || null,
+      medicao_final_id: medicao.id,
+      medicao_item_id: item.id,
+      medicao_campos_extras: item?.campos_extras || {},
+      medicao_medidas: {
+        largura_baixo_mm: item?.largura_baixo_mm ?? null,
+        largura_meio_mm: item?.largura_meio_mm ?? null,
+        largura_cima_mm: item?.largura_cima_mm ?? null,
+        altura_direita_mm: item?.altura_direita_mm ?? null,
+        altura_meio_mm: item?.altura_meio_mm ?? null,
+        altura_esquerda_mm: item?.altura_esquerda_mm ?? null,
+      },
+    }
+  })
+}
+
 async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['origem']) {
   const { data: venda } = await supabase
     .from('vendas_obras')
@@ -203,8 +292,17 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
     .limit(1)
     .maybeSingle()
 
+  let estadoBase: {
+    venda: any
+    itens: any[]
+    config: any
+    cliente_id: any
+    obra_id: any
+    custo_previsto: any
+  }
+
   if (!venda || origem === 'orcamento_simulacao') {
-    return {
+    estadoBase = {
       venda: null,
       itens: Array.isArray(orcamento.itens) ? orcamento.itens : [],
       config: { contramarco: orcamento.contramarco, acabamento: orcamento.acabamento },
@@ -212,17 +310,27 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
       obra_id: orcamento.obra_id,
       custo_previsto: null,
     }
+  } else {
+    const { data: estado } = await supabase.rpc('fn_venda_estado_atual_v1', { p_venda_obra_id: venda.id })
+    const atual: any = estado || {}
+    estadoBase = {
+      venda,
+      itens: Array.isArray(atual?.itens_snapshot) ? atual.itens_snapshot : (venda.itens_snapshot || []),
+      config: atual?.config_snapshot || venda.config_snapshot || {},
+      cliente_id: venda.cliente_id || orcamento.cliente_id,
+      obra_id: venda.obra_id || orcamento.obra_id,
+      custo_previsto: venda.custo_previsto,
+    }
   }
 
-  const { data: estado } = await supabase.rpc('fn_venda_estado_atual_v1', { p_venda_obra_id: venda.id })
-  const atual: any = estado || {}
+  if (origem !== 'medicao_final') return estadoBase
+
+  const medidos = await itensDaMedicaoFinal(orcamento.id, estadoBase.itens)
   return {
-    venda,
-    itens: Array.isArray(atual?.itens_snapshot) ? atual.itens_snapshot : (venda.itens_snapshot || []),
-    config: atual?.config_snapshot || venda.config_snapshot || {},
-    cliente_id: venda.cliente_id || orcamento.cliente_id,
-    obra_id: venda.obra_id || orcamento.obra_id,
-    custo_previsto: venda.custo_previsto,
+    ...estadoBase,
+    // Nunca volta silenciosamente para a medida comercial quando a origem é
+    // Medição Final. Sem uma medição enviada/aprovada, o pacote fica pendente.
+    itens: medidos || [],
   }
 }
 
