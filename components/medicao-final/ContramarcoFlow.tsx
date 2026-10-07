@@ -9,6 +9,7 @@ import {
 import type { MedicaoFinal, MedicaoItem, TipoEsquadria, Tipologia, Usuario } from '@/lib/tipos'
 import {
   adicionarItemMedicao,
+  definirUsoContramarco,
   editarItemMedicao,
   removerItemMedicao,
   salvarMedidaItem as salvarMedidaItemApi,
@@ -83,6 +84,8 @@ export default function ContramarcoFlow({
   const [folgaAltura, setFolgaAltura] = useState('')
   const [observacoes, setObservacoes] = useState('')
   const [salvandoMedida, setSalvandoMedida] = useState(false)
+  const [salvandoUso, setSalvandoUso] = useState<string | null>(null)
+  const [decisaoUso, setDecisaoUso] = useState<'sim' | 'nao' | ''>('')
 
   useEffect(() => setItens(itensIniciais), [itensIniciais])
 
@@ -101,7 +104,10 @@ export default function ContramarcoFlow({
   }, [medicao.orcamento_id])
 
   const atual = itens[indice] || null
-  const medidos = itens.filter(i => i.medido).length
+  const revisados = itens.filter(i => i.medido).length
+  const comContramarco = itens.filter(i => i.medido && i.contramarco !== 'nao' && i.producao_largura_mm && i.producao_altura_mm).length
+  const semContramarco = itens.filter(i => i.medido && i.contramarco === 'nao').length
+  const pendentes = itens.length - revisados
   const producaoLargura = Math.max(0, (Number(vaoLargura) || 0) - (Number(folgaLargura) || 0))
   const producaoAltura = Math.max(0, (Number(vaoAltura) || 0) - (Number(folgaAltura) || 0))
   const origemLabel = orcamentoNumero ? `Orçamento #${orcamentoNumero}` : 'Sem orçamento'
@@ -118,6 +124,7 @@ export default function ContramarcoFlow({
     setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
     setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
     setObservacoes(item.observacoes_medicao || '')
+    setDecisaoUso(item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
     setTela('medicao')
   }
 
@@ -203,8 +210,82 @@ export default function ContramarcoFlow({
     }
   }
 
+  function avancarDepois(pos: number, novos: MedicaoItem[]) {
+    if (pos < novos.length - 1) {
+      const prox = pos + 1
+      const item = novos[prox]
+      setIndice(prox)
+      setVaoLargura(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
+      setVaoAltura(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
+      setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
+      setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
+      setObservacoes(item.observacoes_medicao || '')
+      setDecisaoUso(item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
+      setTela('medicao')
+    } else {
+      setTela('resumo')
+    }
+  }
+
+  async function escolherUso(item: MedicaoItem, pos: number, usar: boolean, avancar = false) {
+    if (salvandoUso) return
+    setSalvandoUso(item.id)
+    const ok = await definirUsoContramarco(item.id, usar, usuario)
+    setSalvandoUso(null)
+    if (!ok) {
+      alert('Não foi possível salvar a decisão de contramarco.')
+      return
+    }
+
+    const atualizado: MedicaoItem = usar
+      ? {
+          ...item,
+          contramarco: 'sim',
+          medido: false,
+          status_medicao: 'rascunho',
+          medido_em: null,
+          medido_por_id: null,
+          medido_por_nome: null,
+        }
+      : {
+          ...item,
+          contramarco: 'nao',
+          vao_largura_mm: null,
+          vao_altura_mm: null,
+          folga_largura_mm: null,
+          folga_altura_mm: null,
+          producao_largura_mm: null,
+          producao_altura_mm: null,
+          medido: true,
+          status_medicao: 'concluida',
+          medido_em: new Date().toISOString(),
+          medido_por_id: usuario?.id || null,
+          medido_por_nome: usuario?.nome || null,
+        }
+
+    const novos = itens.map(i => i.id === item.id ? atualizado : i)
+    setItens(novos)
+    setIndice(pos)
+    setDecisaoUso(usar ? 'sim' : 'nao')
+
+    if (usar) {
+      setVaoLargura(atualizado.vao_largura_mm != null ? String(atualizado.vao_largura_mm) : '')
+      setVaoAltura(atualizado.vao_altura_mm != null ? String(atualizado.vao_altura_mm) : '')
+      setFolgaLargura(atualizado.folga_largura_mm != null ? String(atualizado.folga_largura_mm) : '')
+      setFolgaAltura(atualizado.folga_altura_mm != null ? String(atualizado.folga_altura_mm) : '')
+      setObservacoes(atualizado.observacoes_medicao || '')
+      setTela('medicao')
+    } else if (avancar) {
+      avancarDepois(pos, novos)
+    }
+  }
+
   async function salvarEAvancar() {
     if (!atual || salvandoMedida) return
+    if (decisaoUso !== 'sim') {
+      alert('Selecione “Usar contramarco” para informar as medidas, ou “Não usar” para pular este item.')
+      return
+    }
     const vaoL = Number(vaoLargura)
     const vaoA = Number(vaoAltura)
     const folgaL = Number(folgaLargura)
@@ -264,18 +345,7 @@ export default function ContramarcoFlow({
     const novos = itens.map(i => i.id === atual.id ? atualizado : i)
     setItens(novos)
 
-    if (indice < novos.length - 1) {
-      const prox = indice + 1
-      const item = novos[prox]
-      setIndice(prox)
-      setVaoLargura(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
-      setVaoAltura(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
-      setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
-      setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
-      setObservacoes(item.observacoes_medicao || '')
-    } else {
-      setTela('resumo')
-    }
+    avancarDepois(indice, novos)
   }
 
   const resumo = useMemo(() => itens.map((item, pos) => ({
@@ -330,7 +400,7 @@ export default function ContramarcoFlow({
               <p className="text-sm font-semibold text-slate-700">{origemLabel}</p>
               <p className="text-xs text-slate-500">Adicione as tipologias para medir os vãos.</p>
             </div>
-            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{medidos}/{itens.length} medidos</span>
+            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{revisados}/{itens.length} definidos</span>
           </div>
 
           <button
