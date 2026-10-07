@@ -1685,21 +1685,29 @@ export async function iniciarConversaWhatsApp(
 async function idsHistoricoConversa(conversa: AtendimentoConversa) {
   if (!conversa?.id) return [] as string[]
 
+  const tipo = conversa.whatsapp_chat_tipo || 'contato'
+  const jid = String(conversa.whatsapp_chat_jid || '').trim()
+  const telefone = String(conversa.telefone || '').replace(/\D/g, '')
+
   let query = supabaseAdmin
     .from('atendimento_conversas')
-    .select('id')
+    .select('id,whatsapp_chat_jid,telefone,whatsapp_numero,whatsapp_canal_id')
     .eq('empresa_id', conversa.empresa_id)
     .eq('canal', 'whatsapp')
-    .eq('whatsapp_chat_tipo', conversa.whatsapp_chat_tipo || 'contato')
+    .eq('whatsapp_chat_tipo', tipo)
 
-  if (conversa.whatsapp_chat_jid) {
-    query = query.eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
-  } else {
-    query = query.eq('telefone', conversa.telefone)
-  }
+  // Histórico nunca pode depender de um único identificador. O WhatsApp pode
+  // alternar entre JID normal e LID para o mesmo contato, e uma conversa pode
+  // ser finalizada/reaberta em outro registro. Juntamos por JID OU telefone.
+  const filtrosIdentidade: string[] = []
+  if (jid) filtrosIdentidade.push(`whatsapp_chat_jid.eq.${jid}`)
+  if (telefone) filtrosIdentidade.push(`telefone.eq.${telefone}`)
+  if (filtrosIdentidade.length > 1) query = query.or(filtrosIdentidade.join(','))
+  else if (jid) query = query.eq('whatsapp_chat_jid', jid)
+  else if (telefone) query = query.eq('telefone', telefone)
 
-  // Mantem separado o historico de numeros diferentes.
-  // Se o mesmo numero foi reconectado em outro registro de canal, o historico acompanha o numero.
+  // Mantém separado o histórico de números empresariais diferentes, mas aceita
+  // reconexão do mesmo número em outro registro de canal.
   if (conversa.whatsapp_numero) {
     query = query.eq('whatsapp_numero', conversa.whatsapp_numero)
   } else if (conversa.whatsapp_canal_id) {
@@ -1709,7 +1717,10 @@ async function idsHistoricoConversa(conversa: AtendimentoConversa) {
   const { data, error } = await query
   if (error) throw error
 
-  const ids = [...new Set([conversa.id, ...(data || []).map((item: any) => String(item.id || '')).filter(Boolean)])]
+  const ids = [...new Set([
+    conversa.id,
+    ...(data || []).map((item: any) => String(item.id || '')).filter(Boolean),
+  ])]
   return ids
 }
 
