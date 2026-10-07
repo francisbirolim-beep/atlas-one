@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, Plus, RefreshCw, Ruler, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
+import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, verificarFluxoVendaOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 
@@ -299,6 +299,12 @@ export default function AbrirMedidaFinalCliente() {
       return
     }
 
+    const fluxo = await verificarFluxoVendaOrcamento(escolhido)
+    if (!fluxo.ativo) {
+      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(escolhido)}&origem=medicao-final`)
+      return
+    }
+
     setCriando(true)
     setErro('')
     const medicao = await criarMedicaoDoOrcamento(escolhido, usuario, tipo)
@@ -519,6 +525,9 @@ export default function AbrirMedidaFinalCliente() {
               {criando ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
               Iniciar sem orçamento
             </button>
+            <p className="mt-2 text-center text-[11px] text-amber-700">
+              Medição sem orçamento é avulsa e não libera Engenharia, Compras ou Produção automaticamente.
+            </p>
           </section>
         )}
 
