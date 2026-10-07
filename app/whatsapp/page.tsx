@@ -718,6 +718,14 @@ export default function WhatsAppAtendimentoPage() {
     })
   }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
 
+  const usuariosInternosBusca = useMemo(() => {
+    const q = busca.toLocaleLowerCase('pt-BR').trim()
+    if (q.length < 2) return []
+    return usuarios
+      .filter(u => u.id !== eu?.id && String(u.nome || '').toLocaleLowerCase('pt-BR').includes(q))
+      .slice(0, 12)
+  }, [usuarios, eu?.id, busca])
+
   const contatosBuscaVisiveis = useMemo(() => {
     if (busca.trim().length < 2) return []
     const visiveis = new Set(
@@ -1358,7 +1366,7 @@ export default function WhatsAppAtendimentoPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && !buscandoContatos ? (
+              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
@@ -1458,6 +1466,30 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 </div>
               ))}
+              {busca.trim().length >= 2 && usuariosInternosBusca.length > 0 && (
+                <div className="border-t border-blue-100 bg-blue-50/30">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-500">Equipe Atlas · conversa interna</span>
+                  </div>
+                  {usuariosInternosBusca.map(item => (
+                    <Link
+                      key={item.id}
+                      href={`/chat?usuarioId=${encodeURIComponent(item.id)}`}
+                      className="flex w-full items-center gap-3 border-t border-blue-100 px-3 py-2.5 text-left hover:bg-blue-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                        {String(item.nome || '?').slice(0,1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">{item.nome}</p>
+                        <p className="truncate text-[11px] text-blue-500">Usuário interno do Atlas</p>
+                      </div>
+                      <span className="text-[10px] font-semibold text-blue-700">Conversar</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
               {busca.trim().length >= 2 && (buscandoContatos || contatosBuscaVisiveis.length > 0) && (
                 <div className="border-t border-slate-200">
                   <div className="flex items-center justify-between px-3 py-2">
