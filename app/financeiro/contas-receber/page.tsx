@@ -8,17 +8,28 @@ import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
+type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
+
 function moeda(valor: number) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 function dataBR(valor?: string | null) {
-  if (!valor) return 'Sem vencimento'
-  return new Date(`${valor}T12:00:00`).toLocaleDateString('pt-BR')
+  if (!valor) return '—'
+  const base = valor.length === 10 ? `${valor}T12:00:00` : valor
+  const d = new Date(base)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR')
+}
+
+function dataHoraBR(valor?: string | null) {
+  if (!valor) return '—'
+  const d = new Date(valor)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 export default function ContasReceberPage() {
   const [contas, setContas] = useState<ContaReceberCliente360[]>([])
+  const [recebimentos, setRecebimentos] = useState<RecebimentoGeral[]>([])
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<'aberto' | 'vencido' | 'pago' | 'todos'>('aberto')
   const [carregando, setCarregando] = useState(true)
@@ -27,17 +38,45 @@ export default function ContasReceberPage() {
   async function carregar() {
     setCarregando(true)
     setErro('')
-    const { data, error } = await supabase
-      .from('financeiro_contas_receber')
-      .select('*')
-      .order('vencimento', { ascending: true, nullsFirst: false })
-      .limit(1500)
+    const [contasResp, recebimentosResp] = await Promise.all([
+      supabase
+        .from('financeiro_contas_receber')
+        .select('*')
+        .order('vencimento', { ascending: true, nullsFirst: false })
+        .limit(1500),
+      supabase
+        .from('financeiro_recebimentos')
+        .select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,forma,referencia,observacoes,status,criado_por_nome,created_at')
+        .neq('status','cancelado')
+        .order('data_recebimento', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1000),
+    ])
 
-    if (error) {
+    if (contasResp.error) {
       setErro('Não foi possível carregar as contas a receber.')
       setContas([])
     } else {
-      setContas((data || []) as ContaReceberCliente360[])
+      setContas((contasResp.data || []) as ContaReceberCliente360[])
+    }
+
+    if (recebimentosResp.error) {
+      setErro(prev => prev || 'Não foi possível carregar o histórico de recebimentos.')
+      setRecebimentos([])
+    } else {
+      const lista = (recebimentosResp.data || []) as RecebimentoGeral[]
+      const ids = lista.map(r => r.id)
+      const descontos:Record<string,number> = {}
+      if (ids.length) {
+        const { data: alocacoes } = await supabase
+          .from('financeiro_recebimento_alocacoes')
+          .select('recebimento_id,tipo,valor')
+          .in('recebimento_id', ids)
+        ;(alocacoes || []).filter((a:any)=>a.tipo==='desconto').forEach((a:any)=>{
+          descontos[a.recebimento_id]=(descontos[a.recebimento_id]||0)+Number(a.valor||0)
+        })
+      }
+      setRecebimentos(lista.map(r=>({...r,desconto:descontos[r.id]||0})))
     }
     setCarregando(false)
   }
@@ -67,6 +106,10 @@ export default function ContasReceberPage() {
 
     return bateFiltro && correspondeBuscaAtlas(busca, conta.cliente_nome, conta.documento, conta.forma, conta.observacoes, conta.status)
   }), [busca, contas, filtro, hoje])
+
+  const recebimentosFiltrados = useMemo(() => recebimentos.filter(r =>
+    correspondeBuscaAtlas(busca, r.cliente_nome, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
+  ), [busca, recebimentos])
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
@@ -140,6 +183,40 @@ export default function ContasReceberPage() {
               {!filtradas.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhuma conta encontrada neste filtro.</div>}
             </div>
           )}
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Financeiro geral</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-900">Histórico de recebimentos</h2>
+            <p className="mt-1 text-sm text-slate-500">Entradas registradas no Atlas, com data real do recebimento, forma de pagamento e descontos separados do caixa.</p>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
+                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recebimentosFiltrados.map(r => {
+                  const desconto=Number(r.desconto||0)
+                  return <tr key={r.id} className="border-b last:border-0">
+                    <td className="p-3 font-semibold text-slate-800">{dataBR(r.data_recebimento)}</td>
+                    <td className="p-3">{r.cliente_id?<Link href={`/clientes/${r.cliente_id}`} className="font-semibold text-brand-navy hover:underline">{r.cliente_nome||'Cliente'}</Link>:(r.cliente_nome||'Cliente')}</td>
+                    <td className="p-3 uppercase">{r.forma||'—'}</td>
+                    <td className="p-3 text-right font-semibold text-emerald-700">{moeda(Number(r.valor||0))}</td>
+                    <td className="p-3 text-right font-semibold text-amber-700">{moeda(desconto)}</td>
+                    <td className="p-3 text-right font-bold text-slate-900">{moeda(Number(r.valor||0)+desconto)}</td>
+                    <td className="p-3 text-slate-600">{r.referencia||'—'}</td>
+                    <td className="p-3 text-slate-500">{dataHoraBR(r.created_at)}</td>
+                    <td className="p-3 text-slate-600">{r.criado_por_nome||'—'}</td>
+                  </tr>
+                })}
+              </tbody>
+            </table>
+            {!recebimentosFiltrados.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhum recebimento encontrado.</div>}
+          </div>
         </section>
       </div>
     </main>
