@@ -140,103 +140,144 @@ async function gerarPdfContramarcos(
     Number(item.producao_largura_mm) > 0 &&
     Number(item.producao_altura_mm) > 0
   )
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const margem = 15
+  const larguraTotal = 180
+  const colunas = [
+    { titulo: 'Ambiente', largura: 30 },
+    { titulo: 'Tipologia', largura: 42 },
+    { titulo: 'Vão (mm)', largura: 30 },
+    { titulo: 'Folga (mm)', largura: 25 },
+    { titulo: 'Medida para produzir (mm)', largura: 38 },
+    { titulo: 'Qtd', largura: 15 },
+  ]
   let y = 14
 
-  const cabecalho = () => {
+  function cabecalho() {
+    doc.setTextColor(15, 23, 42)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(14)
-    doc.text('ATLAS ONE — MEDIÇÃO DE CONTRAMARCO', 15, y)
+    doc.setFontSize(11)
+    doc.text('ESQUADRIFÁCIO', margem, y)
+    doc.setFontSize(10)
+    doc.text('MEDIÇÃO DE CONTRAMARCOS', 195, y, { align: 'right' })
+    y += 5
+    doc.setFontSize(8)
+    doc.text('PARA PRODUÇÃO', 195, y, { align: 'right' })
     y += 7
-    doc.setFontSize(8.5)
-    doc.text(`Cliente: ${texto(identificacao.cliente_nome || medicao.cliente_nome)}`, 15, y)
-    doc.text(`Obra: ${texto(identificacao.nome_obra)}`, 78, y)
-    doc.text(`Orçamento: ${identificacao.numero_orcamento ? 'Nº ' + identificacao.numero_orcamento : '-'}`, 150, y)
-    y += 7
-    doc.setDrawColor(220, 224, 228)
-    doc.line(15, y, 195, y)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.text(`Cliente: ${texto(identificacao.cliente_nome || medicao.cliente_nome)}`, margem, y)
+    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 195, y, { align: 'right' })
+    y += 5
+    doc.text(`Obra: ${texto(identificacao.nome_obra)}`, margem, y)
+    y += 5
+    doc.text(`Orçamento: ${identificacao.numero_orcamento ? '#' + identificacao.numero_orcamento : 'Sem orçamento'}`, margem, y)
     y += 6
+
+    doc.setDrawColor(205, 213, 221)
+    doc.line(margem, y, 195, y)
+    y += 5
+  }
+
+  function cabecalhoTabela() {
+    let x = margem
+    doc.setFillColor(245, 247, 250)
+    doc.setDrawColor(210, 218, 226)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6.2)
+    for (const coluna of colunas) {
+      doc.rect(x, y, coluna.largura, 9, 'FD')
+      const linhas = doc.splitTextToSize(coluna.titulo, coluna.largura - 3)
+      doc.text(linhas, x + 1.5, y + 3.5)
+      x += coluna.largura
+    }
+    y += 9
   }
 
   cabecalho()
+  cabecalhoTabela()
 
-  for (let index = 0; index < concluidos.length; index++) {
-    const item = concluidos[index]
-    if (y > 245) {
+  for (const item of concluidos) {
+    const ambiente = texto(item.ambiente || '-')
+    const tipologia = texto(item.descricao || item.tipo_outro_texto || item.tipo_esquadria)
+    const vao = `${texto(item.vao_largura_mm)} × ${texto(item.vao_altura_mm)}`
+    const folga = `${texto(item.folga_largura_mm ?? 0)} × ${texto(item.folga_altura_mm ?? 0)}`
+    const producao = `${texto(item.producao_largura_mm)} × ${texto(item.producao_altura_mm)}`
+    const qtd = texto(item.quantidade || 1)
+
+    const valores = [ambiente, tipologia, vao, folga, producao, qtd]
+    const linhasPorColuna = valores.map((valor, i) => doc.splitTextToSize(valor, colunas[i].largura - 3))
+    const maxLinhas = Math.max(...linhasPorColuna.map(v => v.length), 1)
+    const alturaLinha = Math.max(12, maxLinhas * 3.3 + 5)
+
+    if (y + alturaLinha > 260) {
       doc.addPage()
       y = 14
       cabecalho()
+      cabecalhoTabela()
     }
 
-    const vaoL = Number(item.vao_largura_mm || 0)
-    const vaoA = Number(item.vao_altura_mm || 0)
-    const folgaL = Number(item.folga_largura_mm || 0)
-    const folgaA = Number(item.folga_altura_mm || 0)
-    const prodL = Number(item.producao_largura_mm || 0)
-    const prodA = Number(item.producao_altura_mm || 0)
-
-    doc.setDrawColor(205, 213, 221)
-    doc.roundedRect(15, y, 180, 49, 2, 2)
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9.5)
-    const titulo = `${index + 1}. ${texto(item.descricao || item.tipo_esquadria)}${item.ambiente ? ` · ${item.ambiente}` : ''}${item.quantidade > 1 ? ` · ${item.quantidade} un.` : ''}`
-    doc.text(doc.splitTextToSize(titulo, 172), 19, y + 6)
-
-    doc.setFillColor(248, 250, 252)
-    doc.rect(19, y + 12, 78, 24, 'F')
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'bold')
-    doc.text('MEDIDA DO VÃO', 22, y + 17)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Largura: ${texto(vaoL)} mm`, 22, y + 23)
-    doc.text(`Folga largura: ${texto(folgaL)} mm`, 22, y + 28)
-    doc.text(`Altura: ${texto(vaoA)} mm`, 22, y + 33)
-
-    doc.setFillColor(234, 247, 240)
-    doc.rect(101, y + 12, 90, 24, 'F')
-    doc.setFont('helvetica', 'bold')
-    doc.text('MEDIDA PARA PRODUÇÃO', 104, y + 17)
-    doc.setFontSize(13)
-    doc.text(`${prodL} × ${prodA} mm`, 104, y + 26)
-    doc.setFontSize(6.5)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Folga altura: ${texto(folgaA)} mm`, 104, y + 33)
-
-    doc.setFontSize(6.5)
-    doc.setTextColor(70, 78, 88)
-    const formula = `L: ${vaoL} - ${folgaL} = ${prodL} mm   |   A: ${vaoA} - ${folgaA} = ${prodA} mm`
-    doc.text(formula, 19, y + 41)
-    if (item.observacoes_medicao) {
-      const obs = doc.splitTextToSize(`Obs.: ${item.observacoes_medicao}`, 170)
-      doc.text(obs.slice(0, 2), 19, y + 46)
+    let x = margem
+    doc.setFontSize(6.6)
+    for (let i = 0; i < colunas.length; i++) {
+      const destaque = i === 4
+      if (destaque) {
+        doc.setFillColor(235, 249, 241)
+        doc.rect(x, y, colunas[i].largura, alturaLinha, 'F')
+      }
+      doc.setDrawColor(220, 225, 230)
+      doc.rect(x, y, colunas[i].largura, alturaLinha)
+      doc.setTextColor(destaque ? 5 : 51, destaque ? 120 : 65, destaque ? 75 : 85)
+      doc.setFont('helvetica', destaque || i === 0 ? 'bold' : 'normal')
+      const centro = i >= 2
+      if (centro) {
+        doc.text(linhasPorColuna[i], x + colunas[i].largura / 2, y + 5, {
+          align: 'center',
+          maxWidth: colunas[i].largura - 3,
+        })
+      } else {
+        doc.text(linhasPorColuna[i], x + 1.5, y + 5)
+      }
+      x += colunas[i].largura
     }
-    doc.setTextColor(0, 0, 0)
-
-    y += 55
+    doc.setTextColor(15, 23, 42)
+    y += alturaLinha
   }
 
   if (!concluidos.length) {
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.text('Nenhum contramarco concluído para emissão.', 15, y)
+    doc.setFontSize(8)
+    doc.setTextColor(100, 116, 139)
+    doc.text('Nenhum contramarco concluído para emissão.', margem, y + 8)
+    y += 16
+  }
+
+  if (y > 250) {
+    doc.addPage()
+    y = 18
+  } else {
     y += 9
   }
 
-  if (y > 265) {
-    doc.addPage()
-    y = 18
-  }
+  doc.setTextColor(15, 23, 42)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.text('RESUMO PARA PRODUÇÃO', 15, y)
-  y += 5
-  doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
-  doc.text(`${concluidos.length} posição(ões) de contramarco pronta(s) para produção.`, 15, y)
-  y += 5
-  doc.setFontSize(6)
-  doc.text(`Gerado pelo Atlas One em ${new Date().toLocaleString('pt-BR')}`, 15, y)
+  doc.text('Observações:', margem, y)
+  y += 4
+  doc.setDrawColor(220, 225, 230)
+  doc.line(margem, y, 195, y)
+  y += 8
+  doc.line(margem, y, 195, y)
+
+  y += 12
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(7)
+  doc.text('ESQUADRIFÁCIO', 195, y, { align: 'right' })
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(5.8)
+  doc.text('Soluções em Alumínio', 195, y + 3.5, { align: 'right' })
 
   if (salvar) {
     doc.save(`contramarcos-${medicao.cliente_nome.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || medicao.id}.pdf`)
