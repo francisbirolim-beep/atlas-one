@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Factory,
-  FileText, Loader2, PackageCheck, Receipt, ShoppingCart, Wallet, Wrench, X
+  FileText, Loader2, PackageCheck, Receipt, RefreshCw, ShoppingCart, Wallet, Wrench, X
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { registrarRecebimentoVendaComDesconto } from '@/lib/cliente360Recebimentos'
-import { tokenAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { gerarPacoteTecnico } from '@/lib/materialPlanejamento'
 
 type Venda = {
   id:string
@@ -118,6 +119,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [erro,setErro]=useState('')
   const [modalRecebimento,setModalRecebimento]=useState(false)
   const [salvando,setSalvando]=useState(false)
+  const [preparandoFluxo,setPreparandoFluxo]=useState(false)
+  const [mensagemFluxo,setMensagemFluxo]=useState('')
   const [recebimento,setRecebimento]=useState({valor:'',desconto:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
 
   useEffect(()=>{
@@ -309,6 +312,52 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     await carregar()
   }
 
+  async function prepararFluxoCompleto(){
+    if(!venda)return
+    setPreparandoFluxo(true);setErro('');setMensagemFluxo('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const chamar=async(body:Record<string,unknown>)=>{
+        const resp=await fetch('/api/vendas/reconstruir-fluxo',{
+          method:'POST',
+          headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+          body:JSON.stringify({vendaId:venda.id,...body}),
+        })
+        const json=await resp.json().catch(()=>({}))
+        if(!resp.ok){
+          if(json?.code==='wvetro_ambiguo'&&Array.isArray(json?.candidatos)){
+            const numeros=json.candidatos.map((x:any)=>`#${x.wvetro_numero}`).join(', ')
+            throw new Error(`${json.error} Candidatos: ${numeros}`)
+          }
+          throw new Error(json?.error||'Não foi possível preparar o fluxo da obra.')
+        }
+        return json
+      }
+
+      const preparado=await chamar({acao:'preparar'})
+      const pacoteAtual=await supabase.from('pacotes_tecnicos').select('id,status').eq('orcamento_id',venda.orcamento_id).neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
+      let pacoteId=pacoteAtual.data?.id||null
+
+      if(preparado.revisaoCriada||!pacoteId){
+        const usuario=await usuarioAtual()
+        const gerado=await gerarPacoteTecnico(venda.orcamento_id,'projeto_conferido',usuario,{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
+        if(!gerado.ok)throw new Error(gerado.error||'Não foi possível gerar o pacote técnico da obra.')
+        pacoteId=gerado.pacote.id
+      }
+
+      const compras=await chamar({acao:'materializar_compras'})
+      setMensagemFluxo(
+        `${preparado.mensagem} Pacote técnico ${pacoteId?'gerado/conferível':'preparado'}; ${compras.compras?.totalLinhas||0} linha(s) sincronizadas com Compras. As ordens de Produção foram criadas bloqueadas para respeitar Medição Final e liberação de materiais.`
+      )
+      await carregar()
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Falha ao preparar o fluxo completo da obra.')
+    }finally{
+      setPreparandoFluxo(false)
+    }
+  }
+
   if(carregando)return <div className="min-h-screen bg-slate-50 p-8 text-center text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando central da venda...</div>
   if(!venda||!cliente)return <div className="min-h-screen bg-slate-50 p-8 text-red-600">{erro||'Venda não encontrada.'}</div>
 
@@ -332,6 +381,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={()=>setModalRecebimento(true)} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2 text-sm font-bold text-white"><Wallet size={15}/>Registrar recebimento</button>
+            <button disabled={preparandoFluxo} onClick={()=>void prepararFluxoCompleto()} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 disabled:opacity-50">{preparandoFluxo?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>}Preparar fluxo da obra</button>
             <Link href={`/orcamento/${venda.orcamento_id}/composicao`} className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold text-slate-700"><FileText size={15}/>Abrir orçamento</Link>
           </div>
         </div>
@@ -340,6 +390,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
     <main className="mx-auto max-w-7xl px-4 py-5">
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
+      {mensagemFluxo&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemFluxo}</div>}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
