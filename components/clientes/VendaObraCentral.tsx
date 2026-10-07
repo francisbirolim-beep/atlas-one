@@ -89,13 +89,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     if(vr.error||!vr.data){setErro('Venda não encontrada para este cliente.');setCarregando(false);return}
     const v=vr.data as Venda; setVenda(v)
 
-    const [cr,or,co,op,si,docs]=await Promise.all([
+    const [cr,or,co,op,si]=await Promise.all([
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
       supabase.from('orcamentos').select('id,numero,valor_estimado,custo_estimado,status,itens,wvetro_fluxo').eq('id',v.orcamento_id).maybeSingle(),
       supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
       supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,status,created_at').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id,titulo,atualizado_em').eq('orcamento_id',v.orcamento_id),
-      Promise.resolve({data:[],error:null} as any),
     ])
 
     if(cr.data)setCliente(cr.data as Cliente)
