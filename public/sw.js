@@ -1,5 +1,5 @@
-const CACHE_NAME = 'atlas-one-v18'
-const APP_SHELL_CACHE = 'atlas-one-shell-v10'
+const CACHE_NAME = 'atlas-one-v19'
+const APP_SHELL_CACHE = 'atlas-one-shell-v11'
 const OFFLINE_URLS = ['/', '/clientes', '/orcamento', '/orcamento/novo', '/orcamento-rapido', '/assistencia', '/producao/medicao-final', '/compartilhar']
 
 function ehAssetLocal(pathname) {
@@ -37,9 +37,10 @@ self.addEventListener('install', (event) => {
     const shell = await caches.open(APP_SHELL_CACHE)
     await Promise.allSettled(OFFLINE_URLS.map(path => cachearPaginaComDependencias(path, paginas, shell)))
   })())
-  // Não toma o controle de uma sessão ativa. A versão nova entra
-  // naturalmente quando o usuário fechar/reabrir o Atlas, evitando
-  // recarga ou interrupção no meio de orçamento, medição ou atendimento.
+  // Ativa a correção assim que o novo service worker terminar de instalar.
+  // Não força reload da tela atual; apenas evita que uma versão antiga
+  // permaneça aguardando indefinidamente no iPhone/PWA.
+  self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
@@ -169,18 +170,18 @@ self.addEventListener('fetch', (event) => {
 
   if (ehAssetLocal(url.pathname)) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached
-        return fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              const copy = response.clone()
-              caches.open(APP_SHELL_CACHE).then((cache) => cache.put(request, copy))
-            }
-            return response
-          })
-          .catch(() => Response.error())
-      })
+      fetch(new Request(request, { cache: 'no-store' }))
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone()
+            caches.open(APP_SHELL_CACHE).then((cache) => cache.put(request, copy))
+          }
+          return response
+        })
+        .catch(async () => {
+          const cached = await caches.match(request)
+          return cached || Response.error()
+        })
     )
   }
 })
