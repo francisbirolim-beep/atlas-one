@@ -31,6 +31,7 @@ export default function SupervisaoIAPage(){
   const [loading,setLoading]=useState(true)
   const [erro,setErro]=useState('')
   const [sel,setSel]=useState('supervisor')
+  const [movimentoAtivo,setMovimentoAtivo]=useState(true)
 
   async function carregar(silencioso=false){
     if(!silencioso)setLoading(true);setErro('')
@@ -121,27 +122,76 @@ export default function SupervisaoIAPage(){
       </section>
 
       <section className="mb-5 overflow-hidden rounded-3xl border bg-white shadow-sm">
-        <div className="border-b px-5 py-4"><h2 className="font-black">Escritório animado dos agentes</h2><p className="text-xs text-slate-500">Agentes em atividade se movimentam entre a mesa e a estação de trabalho.</p></div>
-        <div className="office relative hidden h-[500px] overflow-hidden md:block">
-          {ROLES.map((r,i)=>{
-            const a=agentes.find(x=>x.id===r.id)
-            return <div key={r.id} className={'station station-'+(i+1)+' '+(a?.estado==='trabalhando'?'station-active':a?.estado==='monitorando'?'station-learning':a?.estado==='observando'?'station-watch':'')}>
-              <span className="station-state">{a?.estado==='trabalhando'?'● trabalhando':a?.estado==='monitorando'?'● monitorando/aprendendo':a?.estado==='observando'?'● observando':'○ disponível'}</span>
-              <b>{r.emoji} {r.nome.replace('IA ','')}</b><small>{r.funcao}</small>
-            </div>
-          })}
-          {agentes.map((a,i)=>{
-            const movimento=a.id==='supervisor'
-              ? (a.estado==='trabalhando'?'patrolling supervisor-working':'watching')
-              : a.estado==='trabalhando'?'working':a.estado==='monitorando'?'learning':a.estado==='observando'?'watching':'idle'
-            return <button key={a.id} onClick={()=>setSel(a.id)} className={'agent agent-'+(i+1)+' '+movimento+' '+(sel===a.id?'selected':'')}>
-              <span className="bubble"><i className={'dot '+a.estado}/>{a.atividade}</span>
-              <span className="person"><i style={{background:a.cor}}/><b>{a.emoji}</b></span>
-              <span className="tag">{a.nome}</span>
-            </button>
-          })}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+          <div>
+            <h2 className="font-black">Escritório vivo dos agentes</h2>
+            <p className="text-xs text-slate-500">Os bonequinhos caminham até as mesas conforme o setor consultado e mostram o que estão fazendo.</p>
+          </div>
+          <button onClick={()=>setMovimentoAtivo(v=>!v)} className="rounded-xl border bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
+            {movimentoAtivo?'Pausar movimento':'Continuar movimento'}
+          </button>
         </div>
-        <div className="grid gap-2 p-4 md:hidden">{agentes.map(a=><button key={a.id} onClick={()=>setSel(a.id)} className="flex items-center gap-3 rounded-xl border p-3 text-left"><span className="grid h-10 w-10 place-items-center rounded-xl text-lg text-white" style={{background:a.cor}}>{a.emoji}</span><span className="min-w-0 flex-1"><b className="block">{a.nome}</b><small className="block truncate text-slate-500">{a.atividade}</small></span></button>)}</div>
+
+        <div className="p-3 md:p-5">
+          <div className={'atlas-office relative hidden h-[560px] overflow-hidden rounded-2xl border md:block '+(!movimentoAtivo?'office-paused':'')}>
+            <div className="office-wall office-wall-top"/>
+            <div className="office-title">ATLAS ONE · CENTRAL DE IA</div>
+            <div className="office-plant plant-1">🪴</div>
+            <div className="office-plant plant-2">🌿</div>
+            <div className="office-printer">🖨️<small>Impressora</small></div>
+
+            {ROLES.map((r,i)=>{
+              const a=agentes.find(x=>x.id===r.id)
+              return <button key={r.id} onClick={()=>setSel(r.id)} className={'workstation workstation-'+(i+1)+' '+(sel===r.id?'workstation-selected ':'')+(a?.estado==='trabalhando'?'workstation-active':a?.estado==='monitorando'?'workstation-learning':a?.estado==='observando'?'workstation-watch':'')}>
+                <span className="desk-label"><b>{r.nome}</b><small>{r.funcao}</small></span>
+                <span className="desk">
+                  <i className="monitor"><em/></i>
+                  <i className="keyboard"/>
+                  <i className="desk-paper">📄</i>
+                  <i className="desk-cup">☕</i>
+                </span>
+                <span className="chair"><i/></span>
+                <span className="station-state">{a?.estado==='trabalhando'?'● trabalhando':a?.estado==='monitorando'?'● monitorando':a?.estado==='observando'?'● observando':'○ disponível'}</span>
+              </button>
+            })}
+
+            <div className="office-central">
+              <span className="central-brain">🧠</span>
+              <b>Central Atlas IA</b>
+              <small>recebe · cruza · distribui</small>
+              <i className="central-pulse"/>
+            </div>
+
+            {agentes.map((a,i)=>{
+              const movimento=a.id==='supervisor'
+                ? (a.estado==='trabalhando'?'agent-patrol supervisor-working':'agent-watch')
+                : a.estado==='trabalhando'?'agent-working':a.estado==='monitorando'?'agent-learning':a.estado==='observando'?'agent-watch':'agent-idle'
+              const pessoa=['🧑‍💼','🧑‍💻','👩‍💻','🧑‍🔧','👩‍💼','🧑‍💼'][i]||'🧑‍💻'
+              return <button key={a.id} onClick={()=>setSel(a.id)} className={'office-agent office-agent-'+(i+1)+' '+movimento+' '+(sel===a.id?'agent-selected':'')}>
+                <span className="activity-bubble"><i className={'dot '+a.estado}/>{a.atividade}</span>
+                <span className="walker">
+                  <span className="person-emoji">{pessoa}</span>
+                  <span className="carried-file">{a.estado==='trabalhando'?'📁':a.estado==='monitorando'?'📋':'📄'}</span>
+                  <i className="step-shadow"/>
+                </span>
+                <span className="agent-name">{a.nome.replace('IA ','')}</span>
+              </button>
+            })}
+
+            <div className="office-legend">
+              <span><i className="legend-dot working-dot"/> trabalhando</span>
+              <span><i className="legend-dot learning-dot"/> monitorando</span>
+              <span><i className="legend-dot watch-dot"/> observando</span>
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:hidden">
+            {agentes.map(a=><button key={a.id} onClick={()=>setSel(a.id)} className="flex items-center gap-3 rounded-xl border p-3 text-left">
+              <span className="grid h-10 w-10 place-items-center rounded-xl text-lg text-white" style={{background:a.cor}}>{a.emoji}</span>
+              <span className="min-w-0 flex-1"><b className="block">{a.nome}</b><small className="block truncate text-slate-500">{a.atividade}</small></span>
+            </button>)}
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
@@ -155,19 +205,46 @@ export default function SupervisaoIAPage(){
       <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa estado operacional: trabalhando, monitorando/aprendendo, observando ou disponível. WhatsApp e Orçamentista permanecem ativos em monitoramento contínuo enquanto suas automações estiverem ligadas.</p>
     </div>
     <style jsx>{`
-      .office{background:linear-gradient(90deg,#e2e8f066 1px,transparent 1px),linear-gradient(#e2e8f066 1px,transparent 1px),#f8fafc;background-size:40px 40px}
-      .station{position:absolute;width:170px;height:72px;border:1px solid #dbe3ee;border-radius:16px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 22px #0f17240d;transition:.3s}.station b{font-size:11px}.station small{font-size:9px;color:#94a3b8}.station-state{position:absolute;right:8px;top:6px;font-size:8px;font-weight:900;color:#94a3b8}.station-active{border-color:#86efac;box-shadow:0 0 0 3px #dcfce7,0 12px 30px #16a34a26}.station-active .station-state{color:#16a34a}.station-learning{border-color:#c4b5fd;box-shadow:0 0 0 3px #ede9fe,0 12px 30px #7c3aed1f}.station-learning .station-state{color:#7c3aed}.station-watch{border-color:#bfdbfe}.station-watch .station-state{color:#2563eb}.station-1{left:4%;top:8%}.station-2{left:39%;top:6%}.station-3{right:4%;top:8%}.station-4{left:5%;bottom:8%}.station-5{left:40%;bottom:6%}.station-6{right:4%;bottom:8%}
-      .agent{--wx:0px;--wy:0px;position:absolute;width:150px;height:112px;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;z-index:5;will-change:transform}.agent-1{left:20%;top:28%;--wx:-125px;--wy:-105px}.agent-2{left:43%;top:25%;--wx:-22px;--wy:-100px}.agent-3{right:18%;top:28%;--wx:125px;--wy:-105px}.agent-4{left:20%;bottom:26%;--wx:-120px;--wy:100px}.agent-5{left:44%;bottom:23%;--wx:-25px;--wy:105px}.agent-6{right:18%;bottom:26%}.selected{filter:drop-shadow(0 7px 12px #2563eb33)}
-      .bubble{position:absolute;bottom:82px;max-width:185px;border-radius:10px;background:#0f172a;color:white;padding:6px 8px;font-size:9px;font-weight:700;line-height:1.2;opacity:.9;box-shadow:0 5px 14px #0f172426}.bubble .dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;background:#94a3b8}.bubble .dot.trabalhando{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}.bubble .dot.monitorando{background:#8b5cf6;box-shadow:0 0 0 3px #8b5cf633}.bubble .dot.observando{background:#3b82f6}.person{position:relative;width:48px;height:58px;display:grid;place-items:center}.person i{position:absolute;bottom:0;width:42px;height:34px;border-radius:16px 16px 8px 8px}.person b{z-index:2;display:grid;width:34px;height:34px;place-items:center;border:2px solid #cbd5e1;border-radius:50%;background:white}.tag{margin-top:3px;border:1px solid #e2e8f0;border-radius:999px;background:white;padding:3px 7px;font-size:10px;font-weight:900;white-space:nowrap}
-      .working{animation:walkToDesk 6s ease-in-out infinite}.working .person{animation:hop 650ms ease-in-out infinite}.working .bubble{animation:pulse 1.2s ease-in-out infinite}.learning{animation:learningLoop 9s ease-in-out infinite}.learning .person{animation:learningHop 1.8s ease-in-out infinite}.learning .bubble{animation:learningPulse 2.4s ease-in-out infinite}.watching{animation:inspect 7s ease-in-out infinite}.watching .person b{animation:look 2.4s ease-in-out infinite}.idle .person{animation:breathe 3.5s ease-in-out infinite}.patrolling{animation:patrol 8s ease-in-out infinite}.patrolling .person{animation:hop .75s ease-in-out infinite}.supervisor-working .bubble{background:#4c1d95;box-shadow:0 0 0 4px #8b5cf633,0 8px 24px #4c1d9540}
-      @keyframes walkToDesk{0%,12%,100%{transform:translate(0,0)}42%,68%{transform:translate(var(--wx),var(--wy))}82%{transform:translate(calc(var(--wx)*.35),calc(var(--wy)*.35))}}
-      @keyframes learningLoop{0%,100%{transform:translate(0,0)}28%{transform:translate(calc(var(--wx)*.28),calc(var(--wy)*.28))}55%{transform:translate(calc(var(--wx)*.08),calc(var(--wy)*.08))}78%{transform:translate(calc(var(--wx)*.2),calc(var(--wy)*.2))}}
-      @keyframes learningHop{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-      @keyframes learningPulse{0%,100%{opacity:.9}50%{opacity:1;box-shadow:0 0 0 4px #8b5cf633,0 5px 14px #0f172426}}
-      @keyframes inspect{0%,100%{transform:translate(0,0)}25%{transform:translate(12px,-5px)}50%{transform:translate(-8px,4px)}75%{transform:translate(8px,8px)}}
-      @keyframes patrol{0%,100%{transform:translate(0,0)}22%{transform:translate(-90px,-60px)}48%{transform:translate(-220px,-12px)}72%{transform:translate(-100px,72px)}}
-      @keyframes hop{50%{transform:translateY(-5px)}}@keyframes look{0%,100%{transform:rotate(0)}35%{transform:rotate(-8deg)}70%{transform:rotate(8deg)}}@keyframes breathe{50%{transform:translateY(-2px)}}@keyframes pulse{50%{opacity:1;transform:scale(1.03)}}
-      @media(prefers-reduced-motion:reduce){.working,.learning,.watching,.idle .person,.patrolling,.working .person,.working .bubble,.learning .person,.learning .bubble,.watching .person b,.patrolling .person{animation:none}}
+      .atlas-office{
+        background:
+          linear-gradient(90deg,rgba(148,163,184,.10) 1px,transparent 1px),
+          linear-gradient(rgba(148,163,184,.10) 1px,transparent 1px),
+          linear-gradient(180deg,#f8fafc,#eef2f7);
+        background-size:32px 32px,32px 32px,100% 100%;
+      }
+      .office-wall{position:absolute;background:#dbe4ee}.office-wall-top{left:0;right:0;top:0;height:10px}
+      .office-title{position:absolute;left:50%;top:15px;transform:translateX(-50%);font-size:10px;font-weight:900;letter-spacing:.18em;color:#64748b;background:#fff;border:1px solid #dbe3ee;border-radius:999px;padding:5px 12px}
+      .office-plant{position:absolute;font-size:25px;filter:drop-shadow(0 4px 3px #0f172420)}.plant-1{left:2%;top:43%}.plant-2{right:2%;top:47%}
+      .office-printer{position:absolute;left:46%;bottom:13px;display:flex;gap:5px;align-items:center;border:1px solid #dbe3ee;border-radius:10px;background:white;padding:6px 9px;font-size:17px}.office-printer small{font-size:8px;color:#64748b;font-weight:800}
+      .workstation{position:absolute;width:180px;height:128px;border:0;background:transparent;z-index:2;text-align:center}
+      .workstation-1{left:4%;top:10%}.workstation-2{left:39%;top:8%}.workstation-3{right:4%;top:10%}.workstation-4{left:4%;bottom:9%}.workstation-5{left:39%;bottom:7%}.workstation-6{right:4%;bottom:9%}
+      .desk-label{position:absolute;left:50%;top:0;transform:translateX(-50%);width:176px;border-radius:9px;background:#fff;border:1px solid #e2e8f0;padding:4px 6px;box-shadow:0 4px 10px #0f172410;z-index:3}
+      .desk-label b{display:block;font-size:9px;color:#0f172a}.desk-label small{display:block;font-size:7px;color:#94a3b8}
+      .desk{position:absolute;left:12px;right:12px;top:39px;height:49px;border-radius:7px;background:linear-gradient(180deg,#a16207,#854d0e);box-shadow:0 5px 0 #713f12,0 9px 14px #0f172422}
+      .desk:before,.desk:after{content:'';position:absolute;bottom:-24px;width:7px;height:26px;background:#713f12;border-radius:2px}.desk:before{left:13px}.desk:after{right:13px}
+      .monitor{position:absolute;left:50%;top:-17px;transform:translateX(-50%);width:40px;height:28px;border:3px solid #334155;border-radius:4px;background:#dbeafe;box-shadow:0 2px 5px #0f172433}
+      .monitor:after{content:'';position:absolute;left:15px;bottom:-9px;width:6px;height:7px;background:#475569}.monitor em{position:absolute;inset:4px;background:linear-gradient(135deg,#93c5fd,#e0f2fe);border-radius:2px}
+      .keyboard{position:absolute;left:55px;bottom:7px;width:42px;height:8px;border-radius:3px;background:#e2e8f0;border:1px solid #cbd5e1}.desk-paper{position:absolute;left:12px;bottom:5px;font-size:14px}.desk-cup{position:absolute;right:12px;bottom:5px;font-size:13px}
+      .chair{position:absolute;left:50%;top:92px;transform:translateX(-50%);width:40px;height:26px;border-radius:10px 10px 5px 5px;background:#475569;box-shadow:0 4px 0 #334155}.chair:after{content:'';position:absolute;left:18px;bottom:-13px;width:4px;height:13px;background:#64748b}.chair i:before,.chair i:after{content:'';position:absolute;bottom:-15px;width:17px;height:3px;background:#64748b}.chair i:before{left:4px;transform:rotate(-18deg)}.chair i:after{right:4px;transform:rotate(18deg)}
+      .station-state{position:absolute;right:7px;top:43px;z-index:4;font-size:7px;font-weight:900;color:#94a3b8;background:#fff;border-radius:999px;padding:2px 5px;border:1px solid #e2e8f0}
+      .workstation-active .station-state{color:#16a34a}.workstation-learning .station-state{color:#7c3aed}.workstation-watch .station-state{color:#2563eb}
+      .workstation-active .desk-label{border-color:#86efac;box-shadow:0 0 0 3px #dcfce7,0 4px 12px #16a34a1c}.workstation-learning .desk-label{border-color:#c4b5fd;box-shadow:0 0 0 3px #ede9fe}.workstation-selected .desk-label{outline:2px solid #334155;outline-offset:2px}
+      .office-central{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);width:180px;height:105px;border-radius:50%;border:2px solid #cbd5e1;background:radial-gradient(circle at 50% 35%,#fff,#e2e8f0);box-shadow:0 12px 30px #0f17241a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1}
+      .office-central b{font-size:11px}.office-central small{font-size:8px;color:#64748b}.central-brain{font-size:25px}.central-pulse{position:absolute;inset:-8px;border:2px solid #94a3b8;border-radius:50%;opacity:.25;animation:centralPulse 2.2s ease-in-out infinite}
+      .office-agent{position:absolute;width:142px;height:110px;border:0;background:transparent;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;will-change:transform}
+      .office-agent-1{left:29%;top:36%;--tx:-205px;--ty:-128px}.office-agent-2{left:42%;top:34%;--tx:0px;--ty:-140px}.office-agent-3{left:55%;top:36%;--tx:205px;--ty:-128px}.office-agent-4{left:29%;top:52%;--tx:-205px;--ty:145px}.office-agent-5{left:42%;top:55%;--tx:0px;--ty:142px}.office-agent-6{left:55%;top:52%;--tx:205px;--ty:145px}
+      .activity-bubble{position:absolute;bottom:79px;max-width:190px;border-radius:10px;background:#0f172a;color:#fff;padding:6px 8px;font-size:8px;font-weight:800;line-height:1.25;box-shadow:0 5px 14px #0f172426;white-space:normal}
+      .dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;background:#94a3b8}.dot.trabalhando{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}.dot.monitorando{background:#8b5cf6;box-shadow:0 0 0 3px #8b5cf633}.dot.observando{background:#3b82f6}
+      .walker{position:relative;height:58px;width:62px;display:grid;place-items:center}.person-emoji{position:relative;z-index:2;font-size:36px;filter:drop-shadow(0 3px 2px #0f172426)}.carried-file{position:absolute;right:2px;top:21px;z-index:3;font-size:15px;transform:rotate(9deg)}.step-shadow{position:absolute;left:13px;right:13px;bottom:2px;height:7px;border-radius:50%;background:#0f172a1c;filter:blur(1px)}
+      .agent-name{border:1px solid #e2e8f0;border-radius:999px;background:#fff;padding:3px 7px;font-size:8px;font-weight:900;color:#334155;white-space:nowrap}.agent-selected .agent-name{border-color:#334155;box-shadow:0 0 0 2px #cbd5e1}
+      .agent-working{animation:walkToDesk 7s ease-in-out infinite}.agent-working .walker{animation:stepBob .48s ease-in-out infinite}.agent-working .carried-file{animation:fileSwing .5s ease-in-out infinite}
+      .agent-learning{animation:walkToDesk 10s ease-in-out infinite}.agent-learning .walker{animation:stepBob .8s ease-in-out infinite}.agent-watch{animation:smallPatrol 8s ease-in-out infinite}.agent-idle .walker{animation:breathe 3.2s ease-in-out infinite}
+      .agent-patrol{animation:supervisorPatrol 12s ease-in-out infinite}.agent-patrol .walker{animation:stepBob .6s ease-in-out infinite}.supervisor-working .activity-bubble{background:#4c1d95}
+      .office-legend{position:absolute;right:14px;bottom:10px;display:flex;gap:9px;align-items:center;border:1px solid #e2e8f0;background:#ffffffd9;border-radius:999px;padding:5px 8px;font-size:7px;color:#64748b;font-weight:800}.legend-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:3px}.working-dot{background:#22c55e}.learning-dot{background:#8b5cf6}.watch-dot{background:#3b82f6}
+      .office-paused *{animation-play-state:paused!important}
+      @keyframes walkToDesk{0%,14%,100%{transform:translate(0,0)}38%,65%{transform:translate(var(--tx),var(--ty))}76%{transform:translate(calc(var(--tx)*.75),calc(var(--ty)*.75))}88%{transform:translate(calc(var(--tx)*.3),calc(var(--ty)*.3))}}
+      @keyframes stepBob{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-5px) rotate(1deg)}}@keyframes fileSwing{0%,100%{transform:rotate(8deg)}50%{transform:rotate(-8deg)}}@keyframes smallPatrol{0%,100%{transform:translate(0,0)}30%{transform:translate(22px,-10px)}58%{transform:translate(-18px,10px)}80%{transform:translate(10px,16px)}}@keyframes breathe{50%{transform:translateY(-2px)}}@keyframes supervisorPatrol{0%,100%{transform:translate(0,0)}20%{transform:translate(-160px,-95px)}42%{transform:translate(110px,-100px)}64%{transform:translate(130px,115px)}82%{transform:translate(-140px,105px)}}@keyframes centralPulse{0%,100%{transform:scale(.98);opacity:.15}50%{transform:scale(1.05);opacity:.35}}
+      @media(prefers-reduced-motion:reduce){.agent-working,.agent-learning,.agent-watch,.agent-idle .walker,.agent-patrol,.agent-working .walker,.agent-working .carried-file,.agent-learning .walker,.central-pulse{animation:none}}
     `}</style>
   </main>
 }
