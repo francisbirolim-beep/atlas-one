@@ -1213,6 +1213,33 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     if (!acesso) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
     if (!acesso.visualizar && usuario.role !== 'master') return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
 
+    // Master já tem acesso total. Não faz consultas extras de permissão/delegação
+    // para cada grupo durante a listagem, evitando centenas de queries e travamento.
+    if (usuario.role === 'master') {
+      return {
+        conversa,
+        permitido: true,
+        grupo: conversa.whatsapp_chat_tipo === 'grupo'
+          ? {
+              grupoId: null,
+              configurado: false,
+              nivel: 'gerenciar',
+              visualizar: true,
+              atender: true,
+              transferir: true,
+              responsavelPrincipalId: null,
+              responsavelPrincipalNome: null,
+              responsavelEfetivoId: conversa.responsavel_id || null,
+              responsavelEfetivoNome: conversa.responsavel_nome || null,
+              delegacaoFimEm: null,
+              delegacaoAtiva: false,
+              delegacaoExpiradaDestinoId: null,
+              podeDelegar: true,
+            } as AcessoGrupo
+          : null,
+      }
+    }
+
     if (conversa.whatsapp_chat_tipo === 'grupo') {
       const grupo = await acessoGrupoWhatsApp(conversa, usuario, acesso)
       if (!grupo.visualizar) return { conversa, permitido: false, grupo }
