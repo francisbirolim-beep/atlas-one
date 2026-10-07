@@ -403,7 +403,7 @@ export default function AbrirMedidaFinalCliente() {
         {tipo && !orcamentoVisualizado && (
           <section>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <button onClick={() => selecionarTipo(tipo === 'contramarco' ? 'contramarco' : 'tipologia') || setTipo(null)} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500">
+              <button onClick={() => { setTipo(null); setOrcamentoId(''); setOrcamentoAbertoId('') }} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500">
                 <ChevronLeft size={17} /> Voltar
               </button>
               <button
