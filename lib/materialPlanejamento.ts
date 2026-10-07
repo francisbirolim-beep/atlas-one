@@ -42,6 +42,9 @@ export type MaterialPacote = {
   incluido_manual: boolean
   excluido: boolean
   justificativa_ajuste?: string | null
+  custo_wvetro?: number | null
+  venda_wvetro?: number | null
+  wvetro_dados?: Record<string, any> | null
   ordem: number
 }
 
@@ -302,6 +305,9 @@ function materiaisDoOrcamentoWvetro(
         justificativa_ajuste: detalhes
           ? `Copiado do orçamento W.Vetro: ${detalhes}.`
           : 'Copiado diretamente da composição do orçamento W.Vetro.',
+        custo_wvetro: n(raw?.CustoVlr) || null,
+        venda_wvetro: n(raw?.VendaVlr) || null,
+        wvetro_dados: raw,
         ordem: ordem++,
       })
     }

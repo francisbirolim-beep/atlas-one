@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Factory,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { registrarRecebimentoVendaComDesconto } from '@/lib/cliente360Recebimentos'
+import { tokenAtual } from '@/lib/auth'
 
 type Venda = {
   id:string
@@ -37,7 +38,7 @@ type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
 type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null }
-type MaterialTecnico = { id:string; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null }
+type MaterialTecnico = { id:string; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null; custo_wvetro?:number|null; venda_wvetro?:number|null; wvetro_dados?:Record<string,any>|null }
 
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
@@ -107,6 +108,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
   const [pacoteTecnicoId,setPacoteTecnicoId]=useState<string|null>(null)
+  const [sincronizandoMateriais,setSincronizandoMateriais]=useState(false)
+  const [mensagemMateriais,setMensagemMateriais]=useState('')
+  const tentouMaterializarVenda=useRef<string|null>(null)
   const [aba,setAba]=useState<Aba>('visao')
   const [painelEtapa,setPainelEtapa]=useState<'financeiro'|'compras'|'mercadoria'|'producao'|'instalacao'|'venda'|null>(null)
   const [categoriaAberta,setCategoriaAberta]=useState<'perfil'|'vidro'|'acessorios'|'outros'>('perfil')
@@ -116,7 +120,17 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [salvando,setSalvando]=useState(false)
   const [recebimento,setRecebimento]=useState({valor:'',desconto:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
 
-  useEffect(()=>{void carregar()},[vendaId,clienteId])
+  useEffect(()=>{
+    tentouMaterializarVenda.current=null
+    void carregar()
+  },[vendaId,clienteId])
+
+  useEffect(()=>{
+    if(carregando||!venda||pacoteTecnicoId||sincronizandoMateriais)return
+    if(tentouMaterializarVenda.current===venda.id)return
+    tentouMaterializarVenda.current=venda.id
+    void sincronizarMateriaisWVetro(true)
+  },[carregando,venda?.id,pacoteTecnicoId])
 
   async function carregar(){
     setCarregando(true);setErro('')
@@ -141,7 +155,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const pacoteResp=await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id',v.orcamento_id).neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
     if(pacoteResp.data?.id){
       setPacoteTecnicoId(pacoteResp.data.id)
-      const mt=await supabase.from('pacote_tecnico_materiais').select('id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,incluido_manual,justificativa_ajuste').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem')
+      const mt=await supabase.from('pacote_tecnico_materiais').select('id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,incluido_manual,justificativa_ajuste,custo_wvetro,venda_wvetro,wvetro_dados').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem')
       setMateriaisTecnicos((mt.data||[]) as MaterialTecnico[])
     }else{
       setPacoteTecnicoId(null)
@@ -206,6 +220,34 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const falha=cr.error||or.error||co.error||op.error||si.error
     if(falha)setErro(falha.message)
     setCarregando(false)
+  }
+
+  async function sincronizarMateriaisWVetro(silencioso=false){
+    if(!venda||sincronizandoMateriais)return
+    setSincronizandoMateriais(true)
+    if(!silencioso)setMensagemMateriais('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const resp=await fetch('/api/integracoes/wvetro/vendas/materializar',{
+        method:'POST',
+        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId:venda.id}),
+      })
+      const json=await resp.json().catch(()=>({}))
+      if(!resp.ok){
+        const mensagem=json?.error||'Não foi possível carregar os materiais do W.Vetro.'
+        if(!silencioso||resp.status!==409)setMensagemMateriais(mensagem)
+        return
+      }
+      setMensagemMateriais(json?.mensagem||`Materiais W.Vetro #${json?.numeroWvetro||''} carregados.`)
+      await carregar()
+    }catch(e){
+      const mensagem=e instanceof Error?e.message:'Falha ao sincronizar materiais do W.Vetro.'
+      if(!silencioso)setMensagemMateriais(mensagem)
+    }finally{
+      setSincronizandoMateriais(false)
+    }
   }
 
   const valorVenda=Number(venda?.valor_venda||orcamento?.valor_estimado||0)
@@ -466,25 +508,29 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='materiais'&&<Box titulo="Materiais técnicos desta venda">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
-            <div><b className="text-sm text-slate-800">Pacote técnico da obra</b><p className="mt-1 text-xs text-slate-500">{pacoteTecnicoId?'Dados do WVetro + ajustes validados no Atlas.':'Ainda não existe pacote técnico para esta venda.'}</p></div>
-            {obra?.id&&<div className="flex flex-wrap gap-2">
+            <div><b className="text-sm text-slate-800">Pacote técnico da venda</b><p className="mt-1 text-xs text-slate-500">{pacoteTecnicoId?'Perfis, acessórios e vidros do W.Vetro + ajustes validados no Atlas.':'Ainda não existe pacote técnico. O Atlas tenta localizar e carregar o W.Vetro automaticamente.'}</p>{mensagemMateriais&&<p className="mt-1 text-[11px] text-blue-700">{mensagemMateriais}</p>}</div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={()=>void sincronizarMateriaisWVetro(false)} disabled={sincronizandoMateriais} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{sincronizandoMateriais?<Loader2 size={13} className="animate-spin"/>:<PackageCheck size={13}/>} {sincronizandoMateriais?'Sincronizando...':'Sincronizar W.Vetro'}</button>
+            {obra?.id&&<>
               <Link href={`/obras/${obra.id}/materiais`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Conferir / editar materiais</Link>
               <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=perfis`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Perfis</Link>
               <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=acessorios`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Acessórios</Link>
               <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=vidros`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Vidros</Link>
-            </div>}
+            </>}
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               ['Perfis',materiaisTecnicos.filter(m=>['perfil','contramarco'].includes(String(m.categoria))).length],
               ['Acessórios',materiaisTecnicos.filter(m=>String(m.categoria)==='acessorio').length],
               ['Vidros',materiaisTecnicos.filter(m=>String(m.categoria)==='vidro').length],
+              ['Outros',materiaisTecnicos.filter(m=>!['perfil','contramarco','acessorio','vidro'].includes(String(m.categoria))).length],
             ].map(([nome,total]:any)=><div key={nome} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">{nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">linha(s) no pacote técnico</p></div>)}
           </div>
           <div className="mt-4 overflow-x-auto rounded-xl border">
-            <table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5">Categoria</th><th>Código / material</th><th>Qtd. técnica</th><th>Qtd. validada</th><th>Corte</th><th>Origem</th><th>Ajuste</th></tr></thead><tbody>
-              {materiaisTecnicos.map(m=><tr key={m.id} className="border-t"><td className="px-3 py-3 font-semibold">{m.categoria==='acessorio'?'Acessório':m.categoria==='vidro'?'Vidro':m.categoria==='contramarco'?'Contramarco':'Perfil'}</td><td className="px-3 py-3"><b>{m.codigo||'—'}</b>{m.codigo?' · ':''}{m.descricao}{m.cor_ref?<div className="text-[11px] text-slate-400">Cor: {m.cor_ref}</div>:null}</td><td className="px-3 py-3">{Number(m.quantidade_tecnica||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3 font-bold">{Number(m.quantidade_ajustada||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:'—'}</td><td className="px-3 py-3">{m.incluido_manual?'Ajuste Atlas':String(m.origem_calculo||'').toLowerCase().includes('wvetro')?'W.Vetro':'Técnico'}</td><td className="px-3 py-3 text-xs text-slate-500">{m.justificativa_ajuste||'—'}</td></tr>)}
-              {!materiaisTecnicos.length&&<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Nenhum material técnico carregado. Gere ou sincronize o pacote técnico desta venda.</td></tr>}
+            <table className="w-full min-w-[1150px] text-sm"><thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5">Categoria</th><th>Código / material</th><th>Qtd. técnica</th><th>Qtd. validada</th><th>Corte</th><th>Custo W.Vetro</th><th>Venda W.Vetro</th><th>Origem</th><th>Ajuste</th></tr></thead><tbody>
+              {materiaisTecnicos.map(m=><tr key={m.id} className="border-t"><td className="px-3 py-3 font-semibold">{m.categoria==='acessorio'?'Acessório':m.categoria==='vidro'?'Vidro':m.categoria==='contramarco'?'Contramarco':m.categoria==='perfil'?'Perfil':'Outro'}</td><td className="px-3 py-3"><b>{m.codigo||'—'}</b>{m.codigo?' · ':''}{m.descricao}{m.cor_ref?<div className="text-[11px] text-slate-400">Cor: {m.cor_ref}</div>:null}</td><td className="px-3 py-3">{Number(m.quantidade_tecnica||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3 font-bold">{Number(m.quantidade_ajustada||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:'—'}</td><td className="px-3 py-3">{m.custo_wvetro!=null?moeda(m.custo_wvetro):'—'}</td><td className="px-3 py-3">{m.venda_wvetro!=null?moeda(m.venda_wvetro):'—'}</td><td className="px-3 py-3">{m.incluido_manual?'Ajuste Atlas':m.wvetro_dados&&Object.keys(m.wvetro_dados).length?'W.Vetro':'Técnico'}</td><td className="px-3 py-3 text-xs text-slate-500">{m.justificativa_ajuste||'—'}</td></tr>)}
+              {!materiaisTecnicos.length&&<tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Nenhum material técnico carregado. Clique em “Sincronizar W.Vetro” para buscar a composição completa desta venda.</td></tr>}
             </tbody></table>
           </div>
           <p className="mt-3 text-xs text-slate-500">Para adicionar um perfil extra, trocar um perfil ou retirar um item, use “Conferir / editar materiais”. A alteração fica registrada com justificativa e os PDFs passam a refletir a versão validada.</p>
