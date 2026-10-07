@@ -522,6 +522,8 @@ export interface MedicaoColuna {
 export interface MedicaoItem {
       id: string
       medicao_id: string
+      origem_item_indice?: number | null
+      origem_item_ref?: string | null
       tipo_esquadria: string
       tipo_outro_texto?: string | null
       descricao?: string | null
