@@ -21,6 +21,7 @@ import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medica
 import { listarTipologias } from '@/lib/tipologias'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import { obterRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
+import ContramarcoFlow from '@/components/medicao-final/ContramarcoFlow'
 
 let tiposCache: Tipologia[] = []
 
@@ -543,6 +544,10 @@ export default function DetalheMedicaoFinal() {
         Medição não encontrada.
       </div>
     )
+  }
+
+  if (medicao.tipo_medicao === 'contramarco') {
+    return <ContramarcoFlow medicao={medicao} itensIniciais={itens} usuario={usuario} />
   }
 
   const medidos = itens.filter(i => i.medido).length
