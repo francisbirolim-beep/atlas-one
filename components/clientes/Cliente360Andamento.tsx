@@ -13,7 +13,7 @@ type ObraResumo = { id: string; nome: string; status: string }
 type OrcamentoResumo = { id: string; numero?: number | null; obra_id?: string | null; status?: string | null; valor_estimado?: number | null }
 type VendaResumo = { id: string; orcamento_id: string; obra_id?: string | null; valor_venda: number; custo_previsto?: number | null; status: string; confirmado_em: string }
 type MedicaoResumo = { id: string; orcamento_id?: string | null; obra_id?: string | null; status_operacional?: string | null; created_at: string }
-type ContaResumo = { id: string; orcamento_id?: string | null; obra_id?: string | null; valor: number; valor_pago?: number | null; status: string }
+type ContaResumo = { id: string; orcamento_id?: string | null; obra_id?: string | null; valor: number; valor_pago?: number | null; valor_desconto?: number | null; status: string }
 type ColunaFluxo = { id: string; setor_id: string; nome: string; ordem: number | null }
 type ItemFluxo = { id: string; orcamento_id?: string | null; obra_id?: string | null; coluna_id?: string | null; created_at: string; atualizado_em?: string | null }
 type ProducaoColuna = { id: string; nome: string; ordem?: number | null }
@@ -140,7 +140,7 @@ export default function Cliente360Andamento({ clienteId }: { clienteId: string }
       supabase.from('orcamentos').select('id,numero,obra_id,status,valor_estimado').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
       supabase.from('vendas_obras').select('id,orcamento_id,obra_id,valor_venda,custo_previsto,status,confirmado_em').eq('cliente_id', clienteId).order('confirmado_em', { ascending: true }),
       supabase.from('medicoes_finais').select('id,orcamento_id,obra_id,status_operacional,created_at').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
-      supabase.from('financeiro_contas_receber').select('id,orcamento_id,obra_id,valor,valor_pago,status').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
+      supabase.from('financeiro_contas_receber').select('id,orcamento_id,obra_id,valor,valor_pago,valor_desconto,status').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
       supabase.from('setor_kanban_colunas').select('id,setor_id,nome,ordem').in('setor_id', SETORES).order('ordem', { ascending: true }),
       supabase.from('setor_kanban_itens').select('id,orcamento_id,obra_id,coluna_id,created_at,atualizado_em').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
       supabase.from('producao_colunas').select('id,nome,ordem').order('ordem', { ascending: true }),
@@ -238,7 +238,7 @@ export default function Cliente360Andamento({ clienteId }: { clienteId: string }
       const instalacaoOk = instalacao.existe && instalacao.nome.toLowerCase().includes('conclu')
 
       const aReceber = vendaOk
-        ? contasObra.reduce((s, c) => s + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0)), 0)
+        ? contasObra.reduce((s, c) => s + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0) - Number(c.valor_desconto || 0)), 0)
         : 0
 
       let bloqueio = 'Sem pendência crítica identificada.'
