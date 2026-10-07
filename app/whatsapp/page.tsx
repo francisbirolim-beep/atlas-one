@@ -190,6 +190,10 @@ export default function WhatsAppAtendimentoPage() {
   const [apoioAberto, setApoioAberto] = useState<'rapidas' | 'etiquetas' | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
+  const [conversaInternaAberta, setConversaInternaAberta] = useState(false)
+  const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
+  const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
+  const [nomeGrupoInterno, setNomeGrupoInterno] = useState('')
   const [diretorioAberto, setDiretorioAberto] = useState(false)
   const [diretorio, setDiretorio] = useState<DiretorioWhatsApp[]>([])
   const [buscaDiretorio, setBuscaDiretorio] = useState('')
@@ -320,6 +324,26 @@ export default function WhatsAppAtendimentoPage() {
       if (!atual || canalId === 'todos' || atual.whatsapp_canal_id === canalId) return atual
       return null
     })
+  }
+
+  function abrirConversaInterna() {
+    setBuscaUsuarioInterno('')
+    setUsuariosInternosSelecionados([])
+    setNomeGrupoInterno('')
+    setConversaInternaAberta(true)
+  }
+
+  function iniciarConversaInternaSelecionada() {
+    const ids = usuariosInternosSelecionados.filter(id => id && id !== eu?.id)
+    if (!ids.length) return
+    const params = new URLSearchParams()
+    if (ids.length === 1) {
+      params.set('usuarioId', ids[0])
+    } else {
+      params.set('usuarios', ids.join(','))
+      if (nomeGrupoInterno.trim()) params.set('nome', nomeGrupoInterno.trim())
+    }
+    window.location.href = `/chat?${params.toString()}`
   }
 
   function abrirDiretorio() {
@@ -1250,6 +1274,15 @@ export default function WhatsAppAtendimentoPage() {
             <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 sm:inline-flex">
               {canaisConectados === 1 ? '1 canal conectado' : `${canaisConectados} canais conectados`}
             </span>
+            <button
+              type="button"
+              onClick={abrirConversaInterna}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+              title="Iniciar conversa interna com alguém da empresa"
+            >
+              <Users size={16}/>
+              <span className="hidden sm:inline">Conversa interna</span>
+            </button>
             <Link href="/whatsapp/numeros" className="rounded-xl border p-2 hover:bg-slate-50" title="Gerenciar canais WhatsApp">
               <Smartphone size={18}/>
             </Link>
@@ -2339,6 +2372,82 @@ export default function WhatsAppAtendimentoPage() {
           </aside>
         </div>
       </div>
+
+        {conversaInternaAberta && (
+          <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+            onMouseDown={e=>{if(e.currentTarget===e.target)setConversaInternaAberta(false)}}>
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl border bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-5 py-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Nova conversa interna</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">Escolha quem da empresa participa da conversa.</p>
+                </div>
+                <button type="button" onClick={()=>setConversaInternaAberta(false)}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Fechar"><X size={17}/></button>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
+                  <Search size={16} className="text-slate-400"/>
+                  <input autoFocus value={buscaUsuarioInterno}
+                    onChange={e=>setBuscaUsuarioInterno(e.target.value)}
+                    placeholder="Buscar Keila, Júlio, Gabi..."
+                    className="w-full bg-transparent py-2.5 text-sm outline-none"/>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto rounded-xl border">
+                  {usuarios
+                    .filter(u=>u.id!==eu?.id)
+                    .filter(u=>!buscaUsuarioInterno.trim()||u.nome.toLocaleLowerCase('pt-BR').includes(buscaUsuarioInterno.toLocaleLowerCase('pt-BR').trim()))
+                    .map(u=>{
+                      const selecionado=usuariosInternosSelecionados.includes(u.id)
+                      return (
+                        <button type="button" key={u.id}
+                          onClick={()=>setUsuariosInternosSelecionados(lista=>selecionado?lista.filter(id=>id!==u.id):[...lista,u.id])}
+                          className={`flex w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 ${selecionado?'bg-blue-50':'hover:bg-slate-50'}`}>
+                          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${selecionado?'bg-blue-600 text-white':'bg-slate-100 text-slate-700'}`}>
+                            {u.nome.slice(0,1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <b className="block truncate text-sm text-slate-900">{u.nome}</b>
+                            <span className="block text-[11px] text-slate-400">Usuário da empresa</span>
+                          </span>
+                          <span className={`grid h-5 w-5 place-items-center rounded border text-[10px] ${selecionado?'border-blue-600 bg-blue-600 text-white':'border-slate-300'}`}>
+                            {selecionado?'✓':''}
+                          </span>
+                        </button>
+                      )
+                    })}
+                </div>
+
+                {usuariosInternosSelecionados.length>1 && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-slate-600">Nome do grupo interno</span>
+                    <input value={nomeGrupoInterno} onChange={e=>setNomeGrupoInterno(e.target.value)}
+                      placeholder="Ex.: Comercial e Produção"
+                      className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100"/>
+                  </label>
+                )}
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500">
+                    {usuariosInternosSelecionados.length===0
+                      ? 'Selecione uma pessoa ou várias.'
+                      : usuariosInternosSelecionados.length===1
+                        ? 'Conversa privada interna.'
+                        : `${usuariosInternosSelecionados.length} pessoas · grupo interno`}
+                  </p>
+                  <button type="button" disabled={!usuariosInternosSelecionados.length}
+                    onClick={iniciarConversaInternaSelecionada}
+                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40">
+                    Iniciar conversa
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {diretorioAberto && (
           <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
