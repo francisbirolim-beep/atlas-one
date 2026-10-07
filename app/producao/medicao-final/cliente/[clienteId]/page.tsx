@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, CloudDownload, FileText, Loader2, Plus, RefreshCw, Ruler, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, Plus, RefreshCw, Ruler, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -289,9 +289,10 @@ export default function AbrirMedidaFinalCliente() {
     router.push(`/producao/medicao-final/${medicao.id}`)
   }
 
-  async function continuarOuCriar() {
-    if (!tipo || !orcamentoId || criando) return
-    const existente = medicaoExistente(orcamentoId, tipo)
+  async function continuarOuCriar(orcamentoEscolhido?: string) {
+    const escolhido = orcamentoEscolhido || orcamentoId
+    if (!tipo || !escolhido || criando) return
+    const existente = medicaoExistente(escolhido, tipo)
     if (existente) {
       try { localStorage.setItem(`atlas-medicao-cliente-${clienteId}`, existente.id) } catch {}
       router.push(`/producao/medicao-final/${existente.id}`)
@@ -300,7 +301,7 @@ export default function AbrirMedidaFinalCliente() {
 
     setCriando(true)
     setErro('')
-    const medicao = await criarMedicaoDoOrcamento(orcamentoId, usuario, tipo)
+    const medicao = await criarMedicaoDoOrcamento(escolhido, usuario, tipo)
     setCriando(false)
     if (!medicao) {
       setErro('Não foi possível criar a Medida Final. Confira o orçamento e tente novamente.')
@@ -314,263 +315,259 @@ export default function AbrirMedidaFinalCliente() {
     return <div className="min-h-[70vh] grid place-items-center text-slate-500"><Loader2 className="animate-spin" /></div>
   }
 
+  const orcamentoVisualizado = orcamentosAtuais.find(o => o.id === orcamentoAbertoId) || null
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="mx-auto max-w-4xl px-4 py-5">
-          <div className="flex items-start gap-3">
-            <Link href={`/clientes/${clienteId}`} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft size={19} /></Link>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Cliente 360 · Medida Final</p>
-              <h1 className="mt-1 text-2xl font-bold text-slate-900">{cliente?.nome || 'Cliente'}</h1>
-              <p className="mt-1 text-sm text-slate-500">Escolha primeiro o tipo de medição e depois o orçamento correto.</p>
-            </div>
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-3xl items-start gap-3 px-4 py-5">
+          <Link href={`/clientes/${clienteId}`} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-600">
+            <ArrowLeft size={19} />
+          </Link>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600">Medida Final</p>
+            <h1 className="mt-1 truncate text-2xl font-black text-slate-900">{cliente?.nome || 'Cliente'}</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {!tipo
+                ? 'Escolha o tipo de medição para continuar.'
+                : orcamentoVisualizado
+                  ? 'Confira as tipologias antes de selecionar.'
+                  : 'Escolha o orçamento que será usado para a medição.'}
+            </p>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-5 px-4 py-6">
-        {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
+      <main className="mx-auto max-w-3xl px-4 py-5">
+        {erro && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
 
-        {medicoes.length > 0 && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <h2 className="font-bold text-slate-800">Medições já iniciadas</h2>
-            <p className="mt-1 text-xs text-slate-500">Continue uma medição existente sem criar duplicidade.</p>
-            <div className="mt-3 space-y-2">
-              {medicoes.map(m => (
-                <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{dataBR(m.created_at)} · {statusLabel(m.status_operacional)}</p>
-                  </div>
-                  <span className="text-xs font-bold text-brand-navy">Continuar</span>
-                </Link>
-              ))}
+        {!tipo && (
+          <section>
+            <h2 className="text-xl font-black text-slate-900">O que você vai medir?</h2>
+            <p className="mt-1 text-sm text-slate-500">Escolha o tipo de medição.</p>
+
+            <div className="mt-5 space-y-3">
+              <button
+                onClick={() => selecionarTipo('contramarco')}
+                className="flex w-full items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 text-left shadow-sm transition hover:border-emerald-400"
+              >
+                <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white text-slate-800 shadow-sm">
+                  <Ruler size={28} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xl font-black text-slate-900">Contramarco</p>
+                  <p className="mt-1 text-sm text-slate-600">Medir os vãos e fabricar os contramarcos.</p>
+                </div>
+                <ChevronRight size={22} className="text-emerald-600" />
+              </button>
+
+              <button
+                onClick={() => selecionarTipo('tipologia')}
+                className="flex w-full items-center gap-4 rounded-2xl border border-blue-200 bg-blue-50/80 p-5 text-left shadow-sm transition hover:border-blue-400"
+              >
+                <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white text-slate-800 shadow-sm">
+                  <FileText size={28} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xl font-black text-slate-900">Tipologia / Esquadria</p>
+                  <p className="mt-1 text-sm text-slate-600">Fazer a Medida Final das esquadrias que serão fabricadas.</p>
+                </div>
+                <ChevronRight size={22} className="text-blue-600" />
+              </button>
             </div>
+
+            <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+              <b>São processos separados.</b>
+              <p className="mt-1 text-xs">Primeiro faz o contramarco e depois a medida final das esquadrias.</p>
+            </div>
+
+            {medicoes.length > 0 && (
+              <div className="mt-6">
+                <p className="mb-2 text-xs font-black uppercase tracking-[.1em] text-slate-400">Medições já iniciadas</p>
+                <div className="space-y-2">
+                  {medicoes.map(m => (
+                    <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}</p>
+                        <p className="text-xs text-slate-500">{dataBR(m.created_at)} · {statusLabel(m.status_operacional)}</p>
+                      </div>
+                      <span className="text-xs font-bold text-blue-700">Continuar</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-navy text-sm font-bold text-white">1</div>
-            <div>
-              <h2 className="font-bold text-slate-900">O que será medido?</h2>
-              <p className="text-xs text-slate-500">Cada opção cria um processo separado para o mesmo orçamento.</p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <button onClick={() => selecionarTipo('contramarco')} className={`rounded-2xl border p-4 text-left transition ${tipo === 'contramarco' ? 'border-brand-navy bg-blue-50 ring-1 ring-brand-navy' : 'hover:border-slate-400'}`}>
-              <div className="flex items-center gap-2 font-bold text-slate-900"><Ruler size={18} /> Contramarco</div>
-              <p className="mt-2 text-sm text-slate-500">Seleciona as tipologias do orçamento para medir os vãos e fabricar os contramarcos.</p>
-            </button>
-            <button onClick={() => selecionarTipo('tipologia')} className={`rounded-2xl border p-4 text-left transition ${tipo === 'tipologia' ? 'border-brand-navy bg-blue-50 ring-1 ring-brand-navy' : 'hover:border-slate-400'}`}>
-              <div className="flex items-center gap-2 font-bold text-slate-900"><FileText size={18} /> Tipologia / fabricação de peça</div>
-              <p className="mt-2 text-sm text-slate-500">Faz a Medida Final das esquadrias que serão efetivamente fabricadas.</p>
-            </button>
-          </div>
-        </section>
-
-        {tipo && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-navy text-sm font-bold text-white">2</div>
-                <div>
-                  <h2 className="font-bold text-slate-900">Escolha o orçamento</h2>
-                  <p className="text-xs text-slate-500">Mesmo quando houver apenas um orçamento, confirme qual será usado.</p>
-                </div>
-              </div>
+        {tipo && !orcamentoVisualizado && (
+          <section>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <button onClick={() => { setTipo(null); setOrcamentoId(''); setOrcamentoAbertoId('') }} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500">
+                <ChevronLeft size={17} /> Voltar
+              </button>
               <button
                 onClick={sincronizarWVetroCliente}
                 disabled={sincronizandoWVetro}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-50"
               >
                 {sincronizandoWVetro ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                 {sincronizandoWVetro ? 'Sincronizando...' : 'Sincronizar W.Vetro'}
               </button>
             </div>
 
-            {historicosWVetro.length > 0 && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800">
-                <CloudDownload size={17} className="mt-0.5 shrink-0" />
-                <div>
-                  <b>Já existem {historicosWVetro.length} registro(s) W.Vetro validados para este cliente.</b>
-                  <p className="mt-1 text-xs">Para localizar outros orçamentos com nome igual ou parecido, toque em “Sincronizar W.Vetro” e valide um por um.</p>
-                </div>
-              </div>
+            <h2 className="text-xl font-black text-slate-900">Selecionar orçamento</h2>
+            <p className="mt-1 text-sm text-slate-500">Lista com as tipologias de cada um.</p>
+
+            {mensagemSync && (
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">{mensagemSync}</div>
             )}
-            {mensagemSync && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemSync}</div>}
 
             {candidatosWVetro.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/50 p-3">
-                <div className="mb-3">
-                  <p className="text-sm font-bold text-slate-900">Conferir candidatos do W.Vetro</p>
-                  <p className="mt-1 text-xs text-slate-600">Confira o nome e o número. Valide somente os que realmente pertencem a {cliente?.nome || 'este cliente'}.</p>
-                </div>
-                <div className="space-y-2">
+              <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
+                <p className="text-sm font-black text-slate-900">Confirmar orçamento do W.Vetro</p>
+                <p className="mt-1 text-xs text-slate-500">Valide somente os registros que realmente pertencem a este cliente.</p>
+                <div className="mt-3 space-y-2">
                   {candidatosVisiveis.map(candidato => {
                     const ocupado = candidatoOcupado === candidato.historicoId
                     const aprovado = candidato.statusValidacao === 'aprovado'
                     const bloqueado = candidato.statusValidacao === 'outro_cliente'
                     return (
-                      <div key={candidato.historicoId} className={`rounded-xl border bg-white p-3 ${aprovado ? 'border-emerald-200' : bloqueado ? 'border-amber-200' : 'border-violet-100'}`}>
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div key={candidato.historicoId} className="rounded-xl border border-violet-100 bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <b className="text-sm text-slate-900">W.Vetro #{candidato.numeroWvetro}</b>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${candidato.tipoCorrespondencia === 'nome_exato' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {candidato.tipoCorrespondencia === 'nome_exato' ? 'NOME EXATO' : 'MESMO PRIMEIRO NOME'}
-                              </span>
-                              {aprovado && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">VALIDADO</span>}
-                            </div>
-                            <p className="mt-1 text-sm font-semibold text-slate-700">{candidato.clienteNomeWvetro || 'Nome não informado'}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {dataBR(candidato.data)}
-                              {candidato.valor ? ` · ${Number(candidato.valor).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}` : ''}
-                              {candidato.quantidadeItens ? ` · ${candidato.quantidadeItens} item(ns)` : ''}
-                            </p>
+                            <p className="text-sm font-black text-slate-900">W.Vetro #{candidato.numeroWvetro}</p>
+                            <p className="truncate text-xs font-semibold text-slate-600">{candidato.clienteNomeWvetro || 'Nome não informado'}</p>
+                            <p className="mt-1 text-[11px] text-slate-400">{dataBR(candidato.data)}{candidato.quantidadeItens ? ` · ${candidato.quantidadeItens} item(ns)` : ''}</p>
                           </div>
-                          {!aprovado && !bloqueado && (
-                            <div className="flex shrink-0 gap-2">
-                              <button
-                                onClick={() => void validarCandidatoWVetro(candidato, 'rejeitar')}
-                                disabled={!!candidatoOcupado}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 disabled:opacity-50"
-                              >
-                                {ocupado ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
-                                Não é
-                              </button>
-                              <button
-                                onClick={() => void validarCandidatoWVetro(candidato, 'aprovar')}
-                                disabled={!!candidatoOcupado}
-                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-xs font-bold text-white disabled:opacity-50"
-                              >
-                                {ocupado ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                                Validar
+                          {aprovado ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">VALIDADO</span>
+                          ) : bloqueado ? (
+                            <span className="text-[10px] font-bold text-amber-700">Outro cliente</span>
+                          ) : (
+                            <div className="flex gap-1">
+                              <button onClick={() => void validarCandidatoWVetro(candidato, 'rejeitar')} disabled={!!candidatoOcupado} className="rounded-lg border px-2 py-1.5 text-[11px] font-bold text-slate-500"><XCircle size={12} /></button>
+                              <button onClick={() => void validarCandidatoWVetro(candidato, 'aprovar')} disabled={!!candidatoOcupado} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-[11px] font-bold text-white">
+                                {ocupado ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Validar
                               </button>
                             </div>
                           )}
-                          {bloqueado && <span className="text-xs font-bold text-amber-700">Já vinculado a outro cliente</span>}
                         </div>
                       </div>
                     )
                   })}
-                  {candidatosVisiveis.length === 0 && <p className="rounded-lg bg-white p-3 text-xs text-slate-500">Todos os candidatos encontrados foram descartados para este cliente.</p>}
                 </div>
-                {candidatosDescartados > 0 && <p className="mt-2 text-[11px] text-slate-500">{candidatosDescartados} candidato(s) descartado(s) não aparecem mais na lista de validação.</p>}
               </div>
             )}
 
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 space-y-3">
               {orcamentosAtuais.map(o => {
-                const existente = medicaoExistente(o.id, tipo)
-                const selecionado = orcamentoId === o.id
-                const aberto = orcamentoAbertoId === o.id
                 const itens = itensDoOrcamento(o)
-                const qtdItens = itens.length
                 const exibicao = numeroExibicao(o)
-                const ehWVetro = exibicao.origem === 'W.Vetro'
+                const existente = medicaoExistente(o.id, tipo)
                 return (
-                  <div key={o.id} className={`rounded-xl border transition ${selecionado ? 'border-brand-navy bg-blue-50 ring-1 ring-brand-navy' : 'bg-white hover:border-slate-400'}`}>
-                    <button
-                      type="button"
-                      onClick={() => setOrcamentoId(o.id)}
-                      className="w-full p-4 text-left"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-bold text-slate-900">{exibicao.origem} #{exibicao.numero}{ehWVetro && o.numero ? ` · Atlas #${o.numero}` : ''}</p>
-                            {ehWVetro && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">W.VETRO</span>}
-                            {existente && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><CheckCircle2 size={11} /> Já iniciado</span>}
-                          </div>
-                          <p className="mt-1 text-sm font-semibold text-slate-700">{o.wvetro_fluxo?.cliente_nome_wvetro || o.cliente_nome || cliente?.nome || 'Cliente'}</p>
-                          <p className="mt-1 text-xs text-slate-500">{dataBR(o.created_at)} · {statusLabel(o.status)}{qtdItens ? ` · ${qtdItens} tipologia(s)` : ''}</p>
-                          {o.descricao_livre && <p className="mt-1 text-xs text-slate-400">{o.descricao_livre}</p>}
+                  <div key={o.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-lg font-black text-slate-900">#{exibicao.numero}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${exibicao.origem === 'W.Vetro' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {exibicao.origem}
+                          </span>
+                          {existente && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">JÁ INICIADO</span>}
                         </div>
-                        {selecionado && <CheckCircle2 size={19} className="text-brand-navy" />}
+                        <p className="mt-1 text-xs text-slate-500">{dataBR(o.created_at)} · {itens.length} tipologia(s)</p>
+                        {o.descricao_livre && <p className="mt-1 truncate text-xs text-slate-500">{o.descricao_livre}</p>}
                       </div>
-                    </button>
-
-                    <div className="border-t border-slate-100 px-4 py-2">
-                      <button
-                        type="button"
-                        onClick={() => setOrcamentoAbertoId(aberto ? '' : o.id)}
-                        className="flex w-full items-center justify-between text-xs font-bold text-brand-navy"
-                      >
-                        <span>{aberto ? 'Fechar itens do orçamento' : 'Abrir orçamento e conferir tipologias'}</span>
-                        {aberto ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                      </button>
+                      <div className="flex shrink-0 flex-col gap-2">
+                        <button onClick={() => setOrcamentoAbertoId(o.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">
+                          Ver itens
+                        </button>
+                        <button onClick={() => void continuarOuCriar(o.id)} disabled={criando} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+                          {existente ? 'Continuar' : 'Selecionar'}
+                        </button>
+                      </div>
                     </div>
 
-                    {aberto && (
-                      <div className="border-t border-slate-100 bg-slate-50 p-3">
-                        {itens.length > 0 ? (
-                          <div className="space-y-2">
-                            {itens.map((item, index) => (
-                              <div key={item.id || index} className="rounded-lg border bg-white px-3 py-2">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-xs font-bold text-slate-800">{index + 1}. {nomeItemOrcamento(item)}</p>
-                                    {item.ambiente && <p className="mt-0.5 text-[11px] text-slate-500">Ambiente: {item.ambiente}</p>}
-                                  </div>
-                                  <span className="shrink-0 text-[11px] font-semibold text-slate-500">{item.quantidade || 1} un.</span>
-                                </div>
-                                {(item.largura_mm || item.altura_mm) && (
-                                  <p className="mt-1 text-[11px] text-slate-500">
-                                    Medida do orçamento: {item.largura_mm || '—'} × {item.altura_mm || '—'} mm
-                                  </p>
-                                )}
-                              </div>
-                            ))}
+                    {itens.length > 0 && (
+                      <div className="mt-3 flex items-center gap-1.5 overflow-hidden">
+                        {itens.slice(0, 4).map((item, idx) => (
+                          <div key={item.id || idx} title={nomeItemOrcamento(item)} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-[10px] font-black text-slate-500">
+                            {idx + 1}
                           </div>
-                        ) : (
-                          <p className="rounded-lg bg-white p-3 text-xs text-slate-500">Este orçamento ainda não possui tipologias detalhadas. Você pode selecioná-lo e adicionar as tipologias durante a medição.</p>
-                        )}
+                        ))}
+                        {itens.length > 4 && <span className="rounded-lg bg-slate-100 px-2 py-2 text-xs font-bold text-slate-500">+{itens.length - 4}</span>}
                       </div>
                     )}
                   </div>
                 )
               })}
+
               {orcamentosAtuais.length === 0 && (
-                <div className="rounded-xl border border-dashed p-5 text-center">
-                  <p className="text-sm font-semibold text-slate-700">
-                    {historicosWVetro.length > 0
-                      ? 'Há histórico no W.Vetro, mas ainda não existe orçamento operacional vinculado no Atlas.'
-                      : 'Este cliente não possui orçamento disponível para selecionar.'}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {historicosWVetro.length > 0
-                      ? 'Sincronize o W.Vetro acima e a lista será atualizada automaticamente.'
-                      : 'Você pode iniciar a medição agora e adicionar as tipologias diretamente no local.'}
-                  </p>
-                  {historicosWVetro.length === 0 && (
-                    <p className="mt-3 text-xs text-slate-500">Se preferir, também é possível criar o orçamento antes e retornar depois.</p>
-                  )}
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
+                  <p className="text-sm font-black text-slate-800">Nenhum orçamento disponível no Atlas.</p>
+                  <p className="mt-1 text-xs text-slate-500">Sincronize o W.Vetro ou inicie a medição sem orçamento.</p>
                 </div>
               )}
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <button
-                onClick={iniciarSemOrcamento}
-                disabled={criando}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-brand-navy bg-white px-4 py-3 text-sm font-bold text-brand-navy disabled:opacity-40"
-              >
-                {criando ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                {tipo === 'contramarco' ? 'Iniciar contramarco sem orçamento' : 'Iniciar Medida Final sem orçamento'}
-              </button>
-              <button onClick={continuarOuCriar} disabled={!orcamentoId || criando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 py-3 text-sm font-bold text-white disabled:opacity-40">
-                {criando && <Loader2 size={16} className="animate-spin" />}
-                {orcamentoId && medicaoExistente(orcamentoId, tipo) ? 'Continuar medição existente' : tipo === 'contramarco' ? 'Usar orçamento e medir contramarcos' : 'Usar orçamento e iniciar Medida Final'}
-              </button>
+            <button
+              onClick={iniciarSemOrcamento}
+              disabled={criando}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-600 bg-white px-4 py-3 text-sm font-black text-blue-700 disabled:opacity-50"
+            >
+              {criando ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              Iniciar sem orçamento
+            </button>
+          </section>
+        )}
+
+        {tipo && orcamentoVisualizado && (
+          <section>
+            <button onClick={() => setOrcamentoAbertoId('')} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-slate-500">
+              <ChevronLeft size={17} /> Voltar aos orçamentos
+            </button>
+
+            <div className="mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xl font-black text-slate-900">Orçamento #{numeroExibicao(orcamentoVisualizado).numero}</h2>
+                <span className="text-xs font-semibold text-slate-500">{dataBR(orcamentoVisualizado.created_at)}</span>
+              </div>
+              {orcamentoVisualizado.descricao_livre && <p className="mt-1 text-sm text-slate-500">Obra: {orcamentoVisualizado.descricao_livre}</p>}
             </div>
-            <p className="mt-2 text-center text-[11px] text-slate-500">
-              Com orçamento: confira as tipologias antes de selecionar. Sem orçamento: você adiciona as tipologias diretamente na próxima tela.
-            </p>
+
+            <div className="space-y-2">
+              {itensDoOrcamento(orcamentoVisualizado).map((item, idx) => (
+                <div key={item.id || idx} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-black text-slate-500">{idx + 1}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-black text-slate-900">{item.ambiente || 'Sem ambiente'}</p>
+                    <p className="truncate text-xs text-slate-500">{nomeItemOrcamento(item)}</p>
+                    {(item.largura_mm || item.altura_mm) && <p className="mt-1 text-[11px] text-slate-400">{item.largura_mm || '—'} × {item.altura_mm || '—'} mm</p>}
+                  </div>
+                  <span className="text-xs font-bold text-slate-500">{item.quantidade || 1} un</span>
+                </div>
+              ))}
+
+              {itensDoOrcamento(orcamentoVisualizado).length === 0 && (
+                <div className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-500">
+                  Este orçamento ainda não possui tipologias detalhadas. Você poderá adicionar na próxima tela.
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => void continuarOuCriar(orcamentoVisualizado.id)}
+              disabled={criando}
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-black text-white shadow-sm disabled:opacity-50"
+            >
+              {criando && <Loader2 size={16} className="animate-spin" />}
+              Selecionar este orçamento
+            </button>
           </section>
         )}
       </main>
     </div>
   )
+
 }
