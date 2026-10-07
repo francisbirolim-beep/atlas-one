@@ -34,8 +34,9 @@ type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:st
 type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_em?:string|null }
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
+type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null }
 
-type Aba='visao'|'financeiro'|'custos'|'compras'|'tipologias'|'producao'|'instalacao'|'documentos'|'historico'
+type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
 
 function moeda(v?:number|null){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
@@ -74,6 +75,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [setorItens,setSetorItens]=useState<SetorItem[]>([])
   const [setorColunas,setSetorColunas]=useState<Record<string,SetorColuna>>({})
   const [documentos,setDocumentos]=useState<Documento[]>([])
+  const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [aba,setAba]=useState<Aba>('visao')
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
@@ -102,6 +104,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setContas((co.data||[]) as Conta[])
     setOrdens((op.data||[]) as Ordem[])
     setSetorItens((si.data||[]) as SetorItem[])
+
+    const contaIds=((co.data||[]) as Conta[]).map(x=>x.id)
+    if(contaIds.length){
+      const aloc=await supabase.from('financeiro_recebimento_alocacoes').select('recebimento_id,conta_receber_id').in('conta_receber_id',contaIds)
+      const recebimentoIds=[...new Set((aloc.data||[]).map((x:any)=>x.recebimento_id).filter(Boolean))]
+      if(recebimentoIds.length){
+        const rr=await supabase.from('financeiro_recebimentos').select('id,data_recebimento,valor,forma,referencia,observacoes,status').in('id',recebimentoIds).order('data_recebimento',{ascending:false})
+        setRecebimentosVenda((rr.data||[]) as RecebimentoVenda[])
+      }else setRecebimentosVenda([])
+    }else setRecebimentosVenda([])
 
     if(v.obra_id){
       const [ob,cp,dc]=await Promise.all([
@@ -174,8 +186,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const abas:{id:Aba;label:string}[]=[
     {id:'visao',label:'Visão geral'},{id:'financeiro',label:'Financeiro'},{id:'custos',label:'Custos / CMV'},
-    {id:'compras',label:'Compras e materiais'},{id:'tipologias',label:'Tipologias'},{id:'producao',label:'Produção'},
-    {id:'instalacao',label:'Instalação'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'}
+    {id:'compras',label:'Compras'},{id:'materiais',label:'Materiais'},{id:'tipologias',label:'Tipologias'},{id:'producao',label:'Produção'},
+    {id:'instalacao',label:'Instalação'},{id:'notas',label:'Notas / Recibos'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'}
   ]
 
   return <div className="min-h-screen bg-slate-50">
@@ -263,6 +275,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <div className="space-y-2">{compras.map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b className="text-sm">{c.descricao||c.categoria||'Material'}</b><p className="text-xs text-slate-500">{c.quantidade||0} {c.unidade||''} · {c.categoria||'Sem categoria'} · lançado em {dataBR(c.created_at)}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${c.recebido_em||finalizada(c.status)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{c.recebido_em?'Recebido':status(c.status)}</span></div>)}{!compras.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhuma compra/material vinculado à obra ainda.</p>}</div>
         </Box>}
 
+        {aba==='materiais'&&<Box titulo="Materiais desta venda">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {['perfil','vidro','acessorio','outros'].map(cat=>{const lista=compras.filter(x=>String(x.categoria||'').toLowerCase().includes(cat==='acessorio'?'acess':cat));const recebidos=lista.filter(x=>x.recebido_em||finalizada(x.status)).length;return <div key={cat} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">{cat==='acessorio'?'Acessórios':cat.replace(/^./,s=>s.toUpperCase())}</p><p className="mt-1 text-xl font-bold text-slate-900">{lista.length}</p><p className="mt-1 text-xs text-slate-500">{recebidos} recebido(s) · {Math.max(0,lista.length-recebidos)} pendente(s)</p></div>})}
+          </div>
+          <p className="mt-4 text-xs text-slate-500">Esta visão usa as necessidades de compra já vinculadas à obra. Conforme entrada e conferência dos materiais forem lançadas, os status desta venda acompanham automaticamente.</p>
+        </Box>}
+
         {aba==='tipologias'&&<Box titulo="Tipologias vendidas">
           <div className="grid gap-3 md:grid-cols-2">{itens.map((item:any,idx:number)=><div key={item.id||idx} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">Item {idx+1}</p><b className="mt-1 block text-slate-800">{item.ambiente||item.descricao||item.configuracao_nome||item.tipo_esquadria||'Tipologia'}</b><p className="mt-1 text-xs text-slate-500">{item.descricao||item.tipo_outro_texto||''}</p><p className="mt-2 text-xs text-slate-500">Qtd {item.quantidade||1}{item.largura_mm&&item.altura_mm?` · ${item.largura_mm} x ${item.altura_mm} mm`:''}</p></div>)}{!itens.length&&<p className="text-sm text-slate-400">O orçamento desta venda ainda não possui itens estruturados.</p>}</div>
         </Box>}
@@ -274,6 +293,11 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='instalacao'&&<Box titulo="Instalação desta venda">
           <div className="rounded-xl border p-4"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700"><Wrench size={20}/></span><div><b className="text-slate-800">{colunaInstalacao?.nome||'Ainda não gerada'}</b><p className="text-xs text-slate-500">{colunaInstalacao?'Status sincronizado com o Kanban de Instalação.':'Quando a obra entrar no fluxo de instalação, o status aparecerá aqui automaticamente.'}</p></div></div></div>
+        </Box>}
+
+        {aba==='notas'&&<Box titulo="Notas / Recibos desta venda">
+          <div className="space-y-2">{recebimentosVenda.map(r=><div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b className="text-sm">{moeda(r.valor)} · {r.forma||'Forma não informada'}</b><p className="text-xs text-slate-500">{dataBR(r.data_recebimento)}{r.referencia?` · ${r.referencia}`:''}</p>{r.observacoes&&<p className="mt-1 text-xs text-slate-400">{r.observacoes}</p>}</div><span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">{status(r.status||'confirmado')}</span></div>)}{!recebimentosVenda.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum recibo/recebimento alocado a esta venda ainda.</p>}</div>
+          <div className="mt-4 rounded-xl border border-dashed p-3 text-xs text-slate-500">Notas fiscais emitidas para a obra serão incluídas aqui quando estiverem vinculadas à venda. Nenhuma nota de outro cliente/obra será misturada nesta tela.</div>
         </Box>}
 
         {aba==='documentos'&&<Box titulo="Documentos vinculados ao cliente / obra">
