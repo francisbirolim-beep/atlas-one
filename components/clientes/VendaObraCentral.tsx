@@ -28,7 +28,7 @@ type Orcamento = {
   id:string; numero?:number|null; valor_estimado?:number|null; custo_estimado?:number|null;
   status?:string|null; itens?:any[]|null; wvetro_fluxo?:{numero?:string|null;origem?:string|null}|null
 }
-type Conta = { id:string; venda_obra_id?:string|null; valor?:number|null; valor_pago?:number|null; status?:string|null; vencimento?:string|null; documento?:string|null; parcela?:number|null; total_parcelas?:number|null }
+type Conta = { id:string; venda_obra_id?:string|null; valor?:number|null; valor_pago?:number|null; valor_desconto?:number|null; status?:string|null; vencimento?:string|null; documento?:string|null; parcela?:number|null; total_parcelas?:number|null }
 type Compra = { id:string; produto_id?:string|null; descricao?:string|null; categoria?:string|null; quantidade?:number|null; unidade?:string|null; status?:string|null; recebido_em?:string|null; created_at:string }
 type CotacaoCompra = { id:string; necessidade_id:string; fornecedor_id?:string|null; preco_unitario?:number|null; frete?:number|null; prazo_dias?:number|null; previsao_entrega?:string|null; selecionada?:boolean|null }
 type FornecedorCompra = { id:string; nome:string }
@@ -122,7 +122,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const [cr,or,co,op,si]=await Promise.all([
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
       supabase.from('orcamentos').select('id,numero,valor_estimado,custo_estimado,status,itens,wvetro_fluxo').eq('id',v.orcamento_id).maybeSingle(),
-      supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
+      supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,valor_desconto,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
       supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,status,created_at').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id,titulo,atualizado_em').eq('orcamento_id',v.orcamento_id),
     ])
@@ -190,7 +190,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const valorVenda=Number(venda?.valor_venda||orcamento?.valor_estimado||0)
   const custoPrevisto=Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
   const recebido=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0)
-  const saldoContas=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)),0)
+  const saldoContas=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
   const aReceber=contas.length?saldoContas:Math.max(0,valorVenda-recebido)
   const margemPrevista=valorVenda>0&&custoPrevisto>0?((valorVenda-custoPrevisto)/valorVenda)*100:0
   const markup=valorVenda>0&&custoPrevisto>0?(valorVenda/custoPrevisto):0
@@ -374,7 +374,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {painelEtapa==='financeiro'&&<div className="p-4">
           <div className="mb-4 grid gap-3 sm:grid-cols-3"><Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/><Kpi titulo="Recebido" valor={moeda(recebido)}/><Kpi titulo="A receber" valor={moeda(aReceber)} destaque/></div>
-          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-t"><td className="px-3 py-3">{c.documento||'Venda sob medida'}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)))}</td><td>{status(c.status)}</td></tr>)}{!contas.length&&<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma parcela vinculada.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-t"><td className="px-3 py-3">{c.documento||'Venda sob medida'}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)))}</td><td>{status(c.status)}</td></tr>)}{!contas.length&&<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma parcela vinculada.</td></tr>}</tbody></table></div>
         </div>}
 
         {painelEtapa==='producao'&&<div className="p-4">
@@ -425,7 +425,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         {aba==='financeiro'&&<Box titulo="Financeiro desta venda">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 text-sm"><span>Valor da venda <b>{moeda(valorVenda)}</b></span><span>Recebido <b>{moeda(recebido)}</b></span><span>Saldo <b>{moeda(aReceber)}</b></span></div>
           <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Parcela</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>
-            {contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||'Venda sob medida'}</td><td>{c.parcela||1}/{c.total_parcelas||1}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)))}</td><td>{status(c.status)}</td></tr>)}
+            {contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||'Venda sob medida'}</td><td>{c.parcela||1}/{c.total_parcelas||1}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)))}</td><td>{status(c.status)}</td></tr>)}
             {!contas.length&&<tr><td colSpan={7} className="py-8 text-center text-slate-400">Nenhuma conta vinculada a esta venda.</td></tr>}
           </tbody></table></div>
         </Box>}
