@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const { data: medicao } = await supabaseAdmin
       .from('medicoes_finais')
-      .select('id,empresa_id,status_operacional,tipo_medicao')
+      .select('id,empresa_id,orcamento_id,status_operacional,tipo_medicao')
       .eq('id', id)
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
@@ -78,6 +78,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (!medicao) return NextResponse.json({ error: 'Medicao Final nao encontrada.' }, { status: 404 })
 
     if (action === 'enviar') {
+      if (medicao.orcamento_id) {
+        const { data: venda } = await supabaseAdmin
+          .from('vendas_obras')
+          .select('id')
+          .eq('orcamento_id', medicao.orcamento_id)
+          .eq('empresa_id', usuario.empresa_id)
+          .limit(1)
+          .maybeSingle()
+
+        if (!venda?.id) {
+          return NextResponse.json({
+            error: 'Este orçamento ainda não entrou no fluxo Vendido. Confirme a venda antes de enviar a medição para liberação.',
+            code: 'VENDA_OPERACIONAL_AUSENTE',
+            orcamentoId: medicao.orcamento_id,
+          }, { status: 409 })
+        }
+      }
+
       const { data: itens } = await supabaseAdmin
         .from('medicao_itens')
         .select('id,medido,status_medicao')
@@ -90,9 +108,22 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       }
 
       await criarSnapshot(id, usuario, prontas.length === itens.length ? 'Envio para conferencia' : 'Envio parcial para conferencia')
+      const { data: colunaFinalizada } = await supabaseAdmin
+        .from('medicao_colunas')
+        .select('id')
+        .eq('empresa_id', usuario.empresa_id)
+        .ilike('nome', '%finalizada%')
+        .order('ordem', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
       const { error } = await supabaseAdmin
         .from('medicoes_finais')
-        .update({ status_operacional: 'aguardando_conferencia' })
+        .update({
+          status_operacional: 'aguardando_conferencia',
+          coluna_id: colunaFinalizada?.id || undefined,
+          coluna_atualizada_em: colunaFinalizada?.id ? new Date().toISOString() : undefined,
+        })
         .eq('id', id)
         .eq('empresa_id', usuario.empresa_id)
 
