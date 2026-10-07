@@ -41,7 +41,7 @@ const STATUS: Record<StatusOperacionalMedicao, { label: string; classe: string }
   liberado: { label: 'Liberado para medir', classe: 'border-sky-200 bg-sky-50 text-sky-700' },
   em_medicao: { label: 'Em medição', classe: 'border-blue-200 bg-blue-50 text-blue-700' },
   com_pendencia: { label: 'Com pendência', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
-  concluido: { label: 'Concluído — aguardando aprovação', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  concluido: { label: 'Enviada — aguardando liberação para produção', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
   aprovado: { label: 'Aprovado', classe: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
 }
 
@@ -117,7 +117,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     setProcessando(false)
     if (!resultado.ok) setErro(resultado.mensagem || 'Não foi possível concluir a ação.')
     else {
-      setMensagem(sucesso)
+      setMensagem(resultado.mensagem || sucesso)
       void carregar()
     }
   }
@@ -329,10 +329,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               <button
                 type="button"
                 disabled={processando}
-                onClick={() => void executar(() => aprovarMedicaoFinal(medicaoId, usuario), 'Medição aprovada. Pronta para seguir ao próximo setor.')}
+                onClick={() => void executar(
+                  () => aprovarMedicaoFinal(medicaoId, usuario),
+                  'Medição liberada para preparação da produção.',
+                )}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               >
-                <ShieldCheck size={14} /> Aprovar medição
+                <ShieldCheck size={14} /> Liberar medida para produção
               </button>
             )}
 
@@ -361,7 +364,10 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               <button
                 type="button"
                 disabled={processando || !podeConcluir}
-                onClick={() => void executar(() => concluirMedicaoFinal(medicaoId), 'Medição Final enviada para aprovação.').then(() => setRevisando(false))}
+                onClick={() => void executar(
+                  () => concluirMedicaoFinal(medicaoId),
+                  'Medição Final enviada. Ela entrou na fila de liberação para produção.',
+                ).then(() => setRevisando(false))}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
               >
                 <CheckCircle2 size={14} /> Enviar medição final
