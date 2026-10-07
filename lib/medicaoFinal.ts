@@ -236,6 +236,8 @@ export async function criarMedicaoDoOrcamento(
                     tipo_esquadria: it.tipo_esquadria,
                     tipo_outro_texto: it.tipo_outro_texto || null,
                     ambiente: it.ambiente || null,
+                    orcamento_largura_mm: Number.isFinite(Number(it.largura_mm)) ? Number(it.largura_mm) : null,
+                    orcamento_altura_mm: Number.isFinite(Number(it.altura_mm)) ? Number(it.altura_mm) : null,
                     descricao: descricaoItemMedicao(it),
                     observacoes_medicao: it.observacao_producao || null,
                     quantidade: it.quantidade || 1,
