@@ -119,7 +119,7 @@ function dataBR(valor?: string | null) {
 }
 
 function saldoConta(c: ContaReceberCliente360) {
-  return Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0))
+  return Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0) - Number(c.valor_desconto || 0))
 }
 
 function statusLabel(valor?: string | null) {
