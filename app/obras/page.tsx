@@ -19,7 +19,7 @@ type ObraLista = {
   clientes?: { id: string; nome: string; cidade?: string | null; whatsapp?: string | null; telefone?: string | null } | null
 }
 
-type ContaObra = { obra_id?: string | null; valor: number; valor_pago?: number | null; status: string }
+type ContaObra = { obra_id?: string | null; valor: number; valor_pago?: number | null; valor_desconto?: number | null; status: string }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   planejamento: { label: 'Planejamento', cls: 'bg-slate-100 text-slate-600' },
@@ -49,7 +49,7 @@ export default function ObrasPage() {
     setCarregando(true)
     const [obrasResp, contasResp] = await Promise.all([
       supabase.from('obras').select('*,clientes(id,nome,cidade,whatsapp,telefone)').order('updated_at', { ascending: false }),
-      supabase.from('financeiro_contas_receber').select('obra_id,valor,valor_pago,status').not('obra_id', 'is', null),
+      supabase.from('financeiro_contas_receber').select('obra_id,valor,valor_pago,valor_desconto,status').not('obra_id', 'is', null),
     ])
     setObras((obrasResp.data || []) as ObraLista[])
     setContas((contasResp.data || []) as ContaObra[])
@@ -60,7 +60,7 @@ export default function ObrasPage() {
     const mapa: Record<string, number> = {}
     for (const c of contas) {
       if (!c.obra_id || c.status === 'cancelado') continue
-      mapa[c.obra_id] = (mapa[c.obra_id] || 0) + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0))
+      mapa[c.obra_id] = (mapa[c.obra_id] || 0) + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0) - Number(c.valor_desconto || 0))
     }
     return mapa
   }, [contas])
