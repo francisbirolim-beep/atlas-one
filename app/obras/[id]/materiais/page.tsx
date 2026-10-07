@@ -194,13 +194,17 @@ export default function MateriaisObraPage() {
     if (!inclusao.ok) {
       setOcupado(false); setErro(msgErro(inclusao.error)); return
     }
+    const novoMaterialId = inclusao.material?.id
+    if (!novoMaterialId) {
+      setOcupado(false); setErro('O novo perfil foi incluído sem identificador válido. A troca foi interrompida.'); return
+    }
 
     const retirada = await excluirMaterialDoPacote(
       m.id,
       `Substituído por ${p.codigo || p.nome}. ${motivo.trim()}`
     )
     if (!retirada.ok) {
-      await excluirMaterialDoPacote(inclusao.material.id, 'Rollback automático: a retirada do perfil original falhou.')
+      await excluirMaterialDoPacote(novoMaterialId, 'Rollback automático: a retirada do perfil original falhou.')
       setOcupado(false); setErro(msgErro(retirada.error)); return
     }
 
