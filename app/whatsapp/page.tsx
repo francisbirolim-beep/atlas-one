@@ -1487,6 +1487,10 @@ export default function WhatsAppAtendimentoPage() {
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
                   Todas {totais.todas}
                 </button>
+                <button onClick={()=>setFiltro('internas')}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='internas'?'border-blue-500 bg-blue-50 text-blue-700':'bg-white text-slate-600'}`}>
+                  Internas {totais.internas}
+                </button>
                 <button onClick={()=>setFiltro('aguardando')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='aguardando'?'border-amber-500 bg-amber-50 text-amber-800':'bg-white text-slate-600'}`}>
                   Aguardando {totais.aguardando}
@@ -1525,11 +1529,41 @@ export default function WhatsAppAtendimentoPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
+              ) : filtradas.length === 0 && internasFiltradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
-              ) : filtradas.map(c => (
+              ) : (
+                <>
+                  {internasFiltradas.length > 0 && (
+                    <div className="border-b border-blue-100 bg-blue-50/40">
+                      <div className="flex items-center justify-between px-4 py-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-600">Conversas internas</span>
+                        <span className="text-[10px] font-semibold text-blue-500">{internasFiltradas.length}</span>
+                      </div>
+                      {internasFiltradas.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={()=>selecionarConversaInterna(c)}
+                          className={`flex w-full items-center gap-3 border-t border-blue-100 px-4 py-3 text-left transition hover:bg-blue-50 ${conversaInternaAtiva?.id===c.id?'bg-blue-100/70':''}`}
+                        >
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-600 font-bold text-white">
+                            {c.tipo==='grupo'?<Users size={17}/>:String(c.nome||'?').slice(0,1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <b className="truncate text-sm text-slate-900">{c.nome || 'Conversa interna'}</b>
+                              <span className="ml-auto shrink-0 text-[10px] text-slate-400">{hora(c.ultima_mensagem_em)}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-500">{c.ultima_mensagem || (c.tipo==='grupo'?'Grupo interno':'Conversa privada')}</span>
+                            <span className="mt-1 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Interna</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
                   onClick={()=>selecionarConversa(c)}
                   onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selecionarConversa(c)}}}
@@ -1625,15 +1659,21 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 </div>
               ))}
+                </>
+              )}
               {busca.trim().length >= 2 && usuariosInternosBusca.length > 0 && (
                 <div className="border-t border-blue-100 bg-blue-50/30">
                   <div className="flex items-center justify-between px-3 py-2">
                     <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-500">Equipe Atlas · conversa interna</span>
                   </div>
                   {usuariosInternosBusca.map(item => (
-                    <Link
+                    <button
+                      type="button"
                       key={item.id}
-                      href={`/chat?usuarioId=${encodeURIComponent(item.id)}`}
+                      onClick={async()=>{
+                        const conversa=await criarConversaInterna(item.nome,'direta',[{id:item.id,nome:item.nome}])
+                        if(conversa){selecionarConversaInterna(conversa);await atualizarConversasInternas()}
+                      }}
                       className="flex w-full items-center gap-3 border-t border-blue-100 px-3 py-2.5 text-left hover:bg-blue-50"
                     >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
@@ -1644,7 +1684,7 @@ export default function WhatsAppAtendimentoPage() {
                         <p className="truncate text-[11px] text-blue-500">Usuário interno do Atlas</p>
                       </div>
                       <span className="text-[10px] font-semibold text-blue-700">Conversar</span>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               )}
