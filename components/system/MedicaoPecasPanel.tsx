@@ -1,12 +1,61 @@
 'use client'
 
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2, X } from 'lucide-react'
 import MedicaoParcialPanel from './MedicaoParcialPanel'
 import MedicaoChecklistV2Panel from './MedicaoChecklistV2Panel'
+import ContramarcoFlow from '@/components/medicao-final/ContramarcoFlow'
+import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
+import { usuarioAtual } from '@/lib/auth'
+import type { MedicaoFinal, MedicaoItem, Usuario } from '@/lib/tipos'
 
 export default function MedicaoPecasPanel({ medicaoId }: { medicaoId: string }) {
   const [selecao, setSelecao] = useState<{ itemId: string } | null>(null)
+  const [medicao, setMedicao] = useState<MedicaoFinal | null>(null)
+  const [itens, setItens] = useState<MedicaoItem[]>([])
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [carregandoTipo, setCarregandoTipo] = useState(true)
+
+  useEffect(() => {
+    let ativo = true
+    setCarregandoTipo(true)
+
+    void Promise.all([
+      buscarMedicao(medicaoId),
+      listarItensMedicao(medicaoId),
+      usuarioAtual(),
+    ]).then(([med, lista, usr]) => {
+      if (!ativo) return
+      setMedicao(med)
+      setItens(lista)
+      setUsuario(usr)
+      setCarregandoTipo(false)
+    }).catch(() => {
+      if (!ativo) return
+      setCarregandoTipo(false)
+    })
+
+    return () => { ativo = false }
+  }, [medicaoId])
+
+  if (carregandoTipo) {
+    return (
+      <div className="mx-auto flex w-full max-w-4xl items-center justify-center gap-2 px-4 py-8 text-sm text-slate-500">
+        <Loader2 size={17} className="animate-spin" /> Preparando medição...
+      </div>
+    )
+  }
+
+  if (medicao?.tipo_medicao === 'contramarco') {
+    return (
+      <ContramarcoFlow
+        medicao={medicao}
+        itensIniciais={itens}
+        usuario={usuario}
+        embedded
+      />
+    )
+  }
 
   return <>
     <MedicaoParcialPanel
