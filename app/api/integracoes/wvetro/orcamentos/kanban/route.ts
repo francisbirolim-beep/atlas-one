@@ -6,6 +6,7 @@ import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacion
 import { sincronizar } from '../sincronizar/route'
 import type { UsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
+import { materializarPacoteTecnicoWVetro } from '@/lib/wvetroPacoteTecnicoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -364,18 +365,29 @@ export async function POST(req: NextRequest) {
         .single()
       if (validarErro) throw validarErro
 
+      const pacoteTecnico = await materializarPacoteTecnicoWVetro(alvo.id, usuario)
+        .catch((erro) => ({
+          ok: false as const,
+          error: erro instanceof Error ? erro.message : 'Falha ao gerar pacote técnico W.Vetro.',
+        }))
+
       await inserirHistorico(
         alvo.id,
         usuario,
         'Validou orçamento importado do W.Vetro',
-        `W.Vetro #${numeroWvetro} conferido e liberado para seguir o fluxo comercial.`,
+        pacoteTecnico.ok
+          ? `W.Vetro #${numeroWvetro} conferido, liberado e com pacote técnico de materiais gerado.`
+          : `W.Vetro #${numeroWvetro} conferido e liberado. Pacote técnico pendente: ${pacoteTecnico.error}`,
       )
 
       return NextResponse.json({
         ok: true,
         orcamento: atualizado,
         numeroWvetro,
-        mensagem: `Orçamento W.Vetro #${numeroWvetro} validado e liberado.`,
+        pacoteTecnico,
+        mensagem: pacoteTecnico.ok
+          ? `Orçamento W.Vetro #${numeroWvetro} validado com materiais técnicos carregados.`
+          : `Orçamento W.Vetro #${numeroWvetro} validado. Materiais ainda precisam ser sincronizados: ${pacoteTecnico.error}`,
       })
     }
 
