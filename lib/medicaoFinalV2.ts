@@ -22,6 +22,7 @@ export type StatusOperacionalMedicao =
   | 'aprovado'
 
 export type OperacaoMedicaoV2 = {
+  orcamento_id: string | null
   status_operacional: StatusOperacionalMedicao
   responsavel_id: string | null
   responsavel_nome: string | null
@@ -90,7 +91,7 @@ export async function carregarOperacaoMedicaoV2(medicaoId: string): Promise<Oper
   const [{ data: medicao, error }, { count: pendenciasAbertas }] = await Promise.all([
     supabase
       .from('medicoes_finais')
-      .select('status_operacional, responsavel_id, responsavel_nome, liberado_em, iniciado_em, concluido_em, aprovado_em, aprovado_por_nome, observacoes, versao')
+      .select('orcamento_id, status_operacional, responsavel_id, responsavel_nome, liberado_em, iniciado_em, concluido_em, aprovado_em, aprovado_por_nome, observacoes, versao')
       .eq('id', medicaoId)
       .maybeSingle(),
     supabase
@@ -106,6 +107,7 @@ export async function carregarOperacaoMedicaoV2(medicaoId: string): Promise<Oper
   }
 
   return {
+    orcamento_id: medicao.orcamento_id || null,
     status_operacional: (medicao.status_operacional || 'aguardando_liberacao') as StatusOperacionalMedicao,
     responsavel_id: medicao.responsavel_id || null,
     responsavel_nome: medicao.responsavel_nome || null,
