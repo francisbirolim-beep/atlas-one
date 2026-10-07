@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2, ZoomIn } from 'lucide-react'
-import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { usuarioAtual } from '@/lib/auth'
 import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
 import { excluirFotoComHistorico, listarCorrecoesFoto, type CorrecaoFoto } from '@/lib/medicaoFotoCorrecoes'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import { referenciaDaTipologia } from '@/lib/medicaoChecklistRegras'
 import MedicaoCroqui from './MedicaoCroqui'
+import LeituraTrenaIA from './LeituraTrenaIA'
 import MedicaoAdicionarCampo from './MedicaoAdicionarCampo'
 import {
   adicionarFotoMedicaoV2,
@@ -151,6 +152,23 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const obrigatoriosRespondidos = obrigatorios.filter(c => campoRespondido(valorRespostaItemV2(item as MedicaoItem, c, dados.respostas))).length
   const medidasCompletas = item ? itemTemMedidasFinais(item) : false
   const statusItem = item ? statusItemChecklistV2(item, dados.campos, dados.respostas) : 'pendente'
+  const itemLeituraTrena = useMemo(() => item ? ({
+    id: item.id,
+    tipo_esquadria: item.tipo_esquadria,
+    tipo_outro_texto: item.tipo_outro_texto,
+    ambiente: item.ambiente,
+    largura_mm: Number(item.orcamento_largura_mm || 0),
+    altura_mm: Number(item.orcamento_altura_mm || 0),
+    quantidade: Number(item.quantidade || 1),
+    foto_larguras_url: item.foto_larguras_url || null,
+    foto_alturas_url: item.foto_alturas_url || null,
+    largura_baixo_mm: item.largura_baixo_mm,
+    largura_meio_mm: item.largura_meio_mm,
+    largura_cima_mm: item.largura_cima_mm,
+    altura_direita_mm: item.altura_direita_mm,
+    altura_meio_mm: item.altura_meio_mm,
+    altura_esquerda_mm: item.altura_esquerda_mm,
+  }) : null, [item])
 
   async function salvarMedidasFixas() {
     if (!item || salvandoMedidas) return
@@ -179,61 +197,6 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
   }
 
-  async function lerTrenaEPreencher(eixo: 'largura' | 'altura', imageUrl: string) {
-    setMensagem(`Foto de ${eixo} registrada. Lendo a trena automaticamente...`)
-    try {
-      const token = await tokenAtual()
-      if (!token) {
-        setMensagem('Foto registrada, mas a sessão não permitiu a leitura automática. Preencha as medidas manualmente.')
-        return false
-      }
-
-      const resp = await fetch('/api/medicao-final/ler-trena', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ imageUrl, eixo }),
-      })
-      const json = await resp.json().catch(() => ({}))
-      if (!resp.ok) {
-        setMensagem(json?.error || 'Foto registrada, mas não foi possível ler a trena automaticamente.')
-        return false
-      }
-
-      const lidas = Array.isArray(json?.medidas_mm)
-        ? json.medidas_mm.map(Number).filter((v: number) => Number.isFinite(v) && v > 0 && v <= 10000)
-        : []
-
-      if (lidas.length !== 3) {
-        setMensagem(`Foto registrada. A IA encontrou ${lidas.length} de 3 medidas de ${eixo}; os campos não foram alterados para evitar trocar posições.`)
-        return false
-      }
-
-      // Mantém a mesma regra posicional já validada no leitor automático usado no Atlas:
-      // largura troca primeiro/terceiro; altura permanece direita/meio/esquerda.
-      const ordenadas = eixo === 'largura' ? [lidas[2], lidas[1], lidas[0]] : lidas
-      const chaves = eixo === 'largura'
-        ? (['largura_baixo_mm', 'largura_meio_mm', 'largura_cima_mm'] as const)
-        : (['altura_direita_mm', 'altura_meio_mm', 'altura_esquerda_mm'] as const)
-
-      setMedidas(prev => {
-        const proximo = { ...prev }
-        chaves.forEach((chave, indice) => { proximo[chave] = String(Math.round(ordenadas[indice])) })
-        return proximo
-      })
-
-      const confianca = Math.round((Number(json?.confianca) || 0) * 100)
-      setMensagem(`${eixo === 'largura' ? 'Larguras' : 'Alturas'} preenchidas automaticamente${confianca ? ` (${confianca}% de confiança)` : ''}. Confira os valores e clique em “Salvar medidas”.`)
-      return true
-    } catch (erro) {
-      console.error('Erro ao ler foto da trena na Medição Final V2:', erro)
-      setMensagem('Foto registrada, mas a leitura automática falhou. As medidas podem ser preenchidas manualmente.')
-      return false
-    }
-  }
-
   async function enviarFotoTrena(eixo: 'largura' | 'altura', file: File) {
     if (!item) return
 
@@ -255,7 +218,9 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       return
     }
 
-    await lerTrenaEPreencher(eixo, url)
+    setMensagem(eixo === 'largura'
+      ? 'Foto da largura registrada. A IA vai ler a trena automaticamente.'
+      : 'Foto da altura registrada. A IA vai ler a trena automaticamente.')
     setEnviandoFoto(null)
     await carregar()
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
@@ -454,6 +419,13 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                       <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFotoTrena('altura', e.target.files[0])} />
                     </label>
                   </div>
+
+                  {itemLeituraTrena && (item.foto_larguras_url || item.foto_alturas_url) && (
+                    <LeituraTrenaIA
+                      item={itemLeituraTrena}
+                      onAtualizar={(campo, valor) => setMedidas(prev => ({ ...prev, [campo]: String(valor) }))}
+                    />
+                  )}
 
                   <div className="flex flex-wrap gap-3">
                     {item.foto_larguras_url && <button type="button" disabled={excluindoFoto || Boolean(enviandoFoto)} onClick={() => prepararExclusao('larguras', item.foto_larguras_url!)} className="text-xs font-semibold text-red-700 disabled:opacity-50">Excluir foto da largura</button>}
