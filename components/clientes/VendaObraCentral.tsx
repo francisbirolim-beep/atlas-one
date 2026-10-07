@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Building2, CheckCircle2, CircleDollarSign, ClipboardList, Factory,
+  ArrowLeft, Building2, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Factory,
   FileText, Loader2, PackageCheck, Receipt, ShoppingCart, Wallet, Wrench, X
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -29,7 +29,9 @@ type Orcamento = {
   status?:string|null; itens?:any[]|null; wvetro_fluxo?:{numero?:string|null;origem?:string|null}|null
 }
 type Conta = { id:string; venda_obra_id?:string|null; valor?:number|null; valor_pago?:number|null; status?:string|null; vencimento?:string|null; documento?:string|null; parcela?:number|null; total_parcelas?:number|null }
-type Compra = { id:string; descricao?:string|null; categoria?:string|null; quantidade?:number|null; unidade?:string|null; status?:string|null; recebido_em?:string|null; created_at:string }
+type Compra = { id:string; produto_id?:string|null; descricao?:string|null; categoria?:string|null; quantidade?:number|null; unidade?:string|null; status?:string|null; recebido_em?:string|null; created_at:string }
+type CotacaoCompra = { id:string; necessidade_id:string; fornecedor_id?:string|null; preco_unitario?:number|null; frete?:number|null; prazo_dias?:number|null; previsao_entrega?:string|null; selecionada?:boolean|null }
+type FornecedorCompra = { id:string; nome:string }
 type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:string|null; quantidade?:number|null; status?:string|null; created_at:string }
 type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_em?:string|null }
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
@@ -45,6 +47,20 @@ function status(v?:string|null){return v?v.replace(/_/g,' ').replace(/^./,s=>s.t
 function pct(parte:number,total:number){return total>0?Math.min(100,Math.max(0,(parte/total)*100)):0}
 function numeroOrcamento(o?:Orcamento|null){return o?.wvetro_fluxo?.numero||o?.numero||'—'}
 function finalizada(v?:string|null){return ['concluido','concluida','concluído','concluída','finalizado','finalizada','produzido','pronto','recebido'].includes(String(v||'').toLowerCase())}
+function compraEfetivada(v?:string|null){return ['aprovado','pedido_emitido','aguardando_entrega','recebido'].includes(String(v||'').toLowerCase())}
+function categoriaMaterial(v?:string|null):'perfil'|'vidro'|'acessorios'|'outros'{
+  const s=String(v||'').toLocaleLowerCase('pt-BR')
+  if(s.includes('perfil'))return 'perfil'
+  if(s.includes('vidro'))return 'vidro'
+  if(s.includes('acess'))return 'acessorios'
+  return 'outros'
+}
+function progressoItens(lista:Compra[], predicado:(item:Compra)=>boolean){
+  return lista.length ? (lista.filter(predicado).length/lista.length)*100 : 0
+}
+function rotuloCategoria(cat:'perfil'|'vidro'|'acessorios'|'outros'){
+  return cat==='perfil'?'Perfil':cat==='vidro'?'Vidro':cat==='acessorios'?'Acessórios':'Outros'
+}
 
 function Kpi({titulo,valor,detalhe,destaque}:{titulo:string;valor:string;detalhe?:string;destaque?:boolean}){
   return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -53,12 +69,12 @@ function Kpi({titulo,valor,detalhe,destaque}:{titulo:string;valor:string;detalhe
     {detalhe&&<p className="mt-1 text-xs text-slate-500">{detalhe}</p>}
   </div>
 }
-function Progresso({titulo,valor,detalhe}:{titulo:string;valor:number;detalhe:string}){
-  return <div className="rounded-xl border border-slate-200 bg-white p-3">
-    <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-800">{titulo}</b><span className="text-xs font-bold text-slate-500">{Math.round(valor)}%</span></div>
+function Progresso({titulo,valor,detalhe,ativo,onClick}:{titulo:string;valor:number;detalhe:string;ativo?:boolean;onClick:()=>void}){
+  return <button type="button" onClick={onClick} className={`rounded-xl border bg-white p-3 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-sm ${ativo?'border-blue-500 ring-2 ring-blue-100':'border-slate-200'}`}>
+    <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-800">{titulo}</b><span className="flex items-center gap-1 text-xs font-bold text-slate-500">{Math.round(valor)}% <ChevronRight size={13}/></span></div>
     <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-brand-teal" style={{width:`${valor}%`}}/></div>
     <p className="mt-2 text-[11px] text-slate-500">{detalhe}</p>
-  </div>
+  </button>
 }
 function Box({titulo,children}:{titulo:string;children:React.ReactNode}){
   return <section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-800">{titulo}</h2></div><div className="p-5">{children}</div></section>
@@ -71,12 +87,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
   const [compras,setCompras]=useState<Compra[]>([])
+  const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
+  const [fornecedoresCompras,setFornecedoresCompras]=useState<Record<string,FornecedorCompra>>({})
   const [ordens,setOrdens]=useState<Ordem[]>([])
   const [setorItens,setSetorItens]=useState<SetorItem[]>([])
   const [setorColunas,setSetorColunas]=useState<Record<string,SetorColuna>>({})
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [aba,setAba]=useState<Aba>('visao')
+  const [painelEtapa,setPainelEtapa]=useState<'financeiro'|'compras'|'mercadoria'|'producao'|'instalacao'|'venda'|null>(null)
+  const [categoriaAberta,setCategoriaAberta]=useState<'perfil'|'vidro'|'acessorios'|'outros'>('perfil')
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
   const [modalRecebimento,setModalRecebimento]=useState(false)
@@ -118,15 +138,33 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     if(v.obra_id){
       const [ob,cp,dc]=await Promise.all([
         supabase.from('obras').select('id,numero,nome,status,previsao_entrega').eq('id',v.obra_id).maybeSingle(),
-        supabase.from('compras_necessidades').select('id,descricao,categoria,quantidade,unidade,status,recebido_em,created_at').eq('obra_id',v.obra_id).order('created_at',{ascending:true}),
+        supabase.from('compras_necessidades').select('id,produto_id,descricao,categoria,quantidade,unidade,status,recebido_em,created_at').eq('obra_id',v.obra_id).order('created_at',{ascending:true}),
         supabase.from('cliente_documentos').select('id,obra_id,titulo,nome_arquivo,url,created_at,tipo').eq('cliente_id',v.cliente_id).eq('obra_id',v.obra_id).order('created_at',{ascending:false}),
       ])
       if(ob.data)setObra(ob.data as Obra)
-      setCompras((cp.data||[]) as Compra[])
+      const comprasObra=(cp.data||[]) as Compra[]
+      setCompras(comprasObra)
       setDocumentos((dc.data||[]) as Documento[])
+
+      const necessidadeIds=comprasObra.map(item=>item.id)
+      if(necessidadeIds.length){
+        const cot=await supabase.from('compras_cotacoes').select('id,necessidade_id,fornecedor_id,preco_unitario,frete,prazo_dias,previsao_entrega,selecionada').in('necessidade_id',necessidadeIds).eq('selecionada',true)
+        const cotacoes=(cot.data||[]) as CotacaoCompra[]
+        setCotacoesCompras(cotacoes)
+        const fornecedorIds=[...new Set(cotacoes.map(item=>item.fornecedor_id).filter(Boolean))] as string[]
+        if(fornecedorIds.length){
+          const fr=await supabase.from('fornecedores').select('id,nome').in('id',fornecedorIds)
+          setFornecedoresCompras(Object.fromEntries(((fr.data||[]) as FornecedorCompra[]).map(item=>[item.id,item])))
+        }else setFornecedoresCompras({})
+      }else{
+        setCotacoesCompras([])
+        setFornecedoresCompras({})
+      }
     }else{
       setObra(null)
       setCompras([])
+      setCotacoesCompras([])
+      setFornecedoresCompras({})
       setDocumentos([])
     }
 
@@ -148,10 +186,20 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const margemPrevista=valorVenda>0&&custoPrevisto>0?((valorVenda-custoPrevisto)/valorVenda)*100:0
   const markup=valorVenda>0&&custoPrevisto>0?(valorVenda/custoPrevisto):0
 
-  const comprasRecebidas=compras.filter(c=>c.recebido_em||finalizada(c.status)).length
-  const progressoCompras=pct(comprasRecebidas,compras.length)
+  const comprasEfetivadas=compras.filter(c=>compraEfetivada(c.status)).length
+  const comprasRecebidas=compras.filter(c=>c.recebido_em||String(c.status||'').toLowerCase()==='recebido').length
+  const progressoCompras=pct(comprasEfetivadas,compras.length)
+  const progressoMercadoria=pct(comprasRecebidas,compras.length)
   const ordensConcluidas=ordens.filter(o=>finalizada(o.status)).length
   const progressoProducao=pct(ordensConcluidas,ordens.length)
+
+  const cotacaoPorNecessidade=useMemo(()=>Object.fromEntries(cotacoesCompras.map(item=>[item.necessidade_id,item])),[cotacoesCompras])
+  const comprasPorCategoria=useMemo(()=>{
+    const base:{perfil:Compra[];vidro:Compra[];acessorios:Compra[];outros:Compra[]}={perfil:[],vidro:[],acessorios:[],outros:[]}
+    compras.forEach(item=>base[categoriaMaterial(item.categoria)].push(item))
+    return base
+  },[compras])
+  const listaCategoria=comprasPorCategoria[categoriaAberta]
 
   const setorPorNome=useMemo(()=>{
     const r:Record<string,SetorColuna>={}
@@ -223,13 +271,112 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <Progresso titulo="Financeiro" valor={pct(recebido,valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`}/>
-        <Progresso titulo="Compras" valor={progressoCompras} detalhe={compras.length?`${comprasRecebidas} de ${compras.length} necessidade(s) recebidas`:'Ainda sem compras vinculadas'}/>
-        <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')}/>
-        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={colunaInstalacao?.nome||'Ainda não gerada'}/>
-        <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada"/>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <Progresso titulo="Financeiro" valor={pct(recebido,valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
+        <Progresso titulo="Compras" valor={progressoCompras} detalhe={compras.length?`${comprasEfetivadas} de ${compras.length} item(ns) comprados`:'Ainda sem compras vinculadas'} ativo={painelEtapa==='compras'} onClick={()=>setPainelEtapa(painelEtapa==='compras'?null:'compras')}/>
+        <Progresso titulo="Mercadoria recebida" valor={progressoMercadoria} detalhe={compras.length?`${comprasRecebidas} de ${compras.length} item(ns) recebidos`:'Ainda sem entradas vinculadas'} ativo={painelEtapa==='mercadoria'} onClick={()=>setPainelEtapa(painelEtapa==='mercadoria'?null:'mercadoria')}/>
+        <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
+        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={colunaInstalacao?.nome||'Ainda não gerada'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
+        <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
       </div>
+
+      {painelEtapa&&<section className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+        <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50/40 px-5 py-4">
+          <div>
+            <h2 className="font-bold text-slate-900">
+              {painelEtapa==='financeiro'?'Detalhamento financeiro':
+               painelEtapa==='compras'?'Detalhamento de compras':
+               painelEtapa==='mercadoria'?'Mercadoria recebida':
+               painelEtapa==='producao'?'Detalhamento da produção':
+               painelEtapa==='instalacao'?'Detalhamento da instalação':'Resumo da venda'}
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {painelEtapa==='compras'?'Clique em cada categoria para ver o que foi comprado, o que falta chegar e o fornecedor.':
+               painelEtapa==='mercadoria'?'Acompanhe o que já entrou na obra e o que ainda está pendente de recebimento.':
+               painelEtapa==='producao'?'Veja o que já foi produzido e o que ainda falta fabricar.':
+               painelEtapa==='financeiro'?'Recebimentos, saldo e parcelas desta venda.':
+               painelEtapa==='instalacao'?'Acompanhe o estágio de instalação desta obra.':'Dados do fechamento que originou esta venda.'}
+            </p>
+          </div>
+          <button type="button" onClick={()=>setPainelEtapa(null)} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500 hover:bg-slate-50"><X size={15}/></button>
+        </div>
+
+        {(painelEtapa==='compras'||painelEtapa==='mercadoria')&&<div className="p-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(['perfil','vidro','acessorios','outros'] as const).map(cat=>{
+              const lista=comprasPorCategoria[cat]
+              const progresso=painelEtapa==='compras'
+                ? progressoItens(lista,item=>compraEfetivada(item.status))
+                : progressoItens(lista,item=>Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido')
+              return <button key={cat} type="button" onClick={()=>setCategoriaAberta(cat)} className={`rounded-xl border p-4 text-left transition hover:border-blue-300 ${categoriaAberta===cat?'border-blue-500 bg-blue-50/30 ring-2 ring-blue-100':'border-slate-200 bg-white'}`}>
+                <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-800">{rotuloCategoria(cat)}</b><span className="text-xs font-bold text-slate-600">{Math.round(progresso)}%</span></div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-blue-600" style={{width:`${progresso}%`}}/></div>
+                <p className="mt-2 text-[11px] text-slate-500">{lista.length} item(ns) nesta categoria</p>
+              </button>
+            })}
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-3 py-2.5">Item / {rotuloCategoria(categoriaAberta)}</th>
+                  <th className="px-3 py-2.5">Solicitado</th>
+                  <th className="px-3 py-2.5">{painelEtapa==='compras'?'Comprado':'Recebido'}</th>
+                  <th className="px-3 py-2.5">Falta chegar</th>
+                  <th className="px-3 py-2.5">Fornecedor</th>
+                  <th className="px-3 py-2.5">Previsão</th>
+                  <th className="px-3 py-2.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaCategoria.map(item=>{
+                  const cot=cotacaoPorNecessidade[item.id]
+                  const fornecedor=cot?.fornecedor_id?fornecedoresCompras[cot.fornecedor_id]?.nome:null
+                  const comprado=compraEfetivada(item.status)
+                  const recebidoItem=Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido'
+                  const qtd=Number(item.quantidade||0)
+                  const unidade=item.unidade||''
+                  const quantidadeMostrada=painelEtapa==='compras'?(comprado?qtd:0):(recebidoItem?qtd:0)
+                  const falta=recebidoItem?0:qtd
+                  return <tr key={item.id} className="border-t">
+                    <td className="px-3 py-3 font-semibold text-slate-800">{item.descricao||rotuloCategoria(categoriaAberta)}</td>
+                    <td className="px-3 py-3 text-slate-600">{qtd} {unidade}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-700">{quantidadeMostrada} {unidade}</td>
+                    <td className="px-3 py-3 text-slate-600">{falta} {unidade}</td>
+                    <td className="px-3 py-3 text-slate-600">{fornecedor||'—'}</td>
+                    <td className="px-3 py-3 text-slate-600">{dataBR(cot?.previsao_entrega)}</td>
+                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${recebidoItem?'bg-emerald-100 text-emerald-700':comprado?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{recebidoItem?'Recebido':status(item.status)}</span></td>
+                  </tr>
+                })}
+                {!listaCategoria.length&&<tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>}
+
+        {painelEtapa==='financeiro'&&<div className="p-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-3"><Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/><Kpi titulo="Recebido" valor={moeda(recebido)}/><Kpi titulo="A receber" valor={moeda(aReceber)} destaque/></div>
+          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-t"><td className="px-3 py-3">{c.documento||'Venda sob medida'}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)))}</td><td>{status(c.status)}</td></tr>)}{!contas.length&&<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma parcela vinculada.</td></tr>}</tbody></table></div>
+        </div>}
+
+        {painelEtapa==='producao'&&<div className="p-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-3"><Kpi titulo="Ordens" valor={String(ordens.length)}/><Kpi titulo="Produzidas" valor={String(ordensConcluidas)}/><Kpi titulo="Faltam" valor={String(Math.max(0,ordens.length-ordensConcluidas))}/></div>
+          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Peça / ordem</th><th>Quantidade</th><th>Produzido</th><th>Falta</th><th>Status</th></tr></thead><tbody>{ordens.map(o=>{const qtd=Number(o.quantidade||1);const pronta=finalizada(o.status);return <tr key={o.id} className="border-t"><td className="px-3 py-3 font-semibold">OP #{o.numero||'—'} · {o.titulo||o.item_ref||'Peça'}</td><td>{qtd}</td><td>{pronta?qtd:0}</td><td>{pronta?0:qtd}</td><td><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{status(o.status)}</span></td></tr>})}{!ordens.length&&<tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Ainda não existem ordens de produção para esta venda.</td></tr>}</tbody></table></div>
+        </div>}
+
+        {painelEtapa==='instalacao'&&<div className="p-4">
+          <div className="rounded-xl border p-4"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-100 text-violet-700"><Wrench size={19}/></span><div><b className="text-slate-800">{colunaInstalacao?.nome||'Ainda não gerada'}</b><p className="text-xs text-slate-500">{colunaInstalacao?'Status sincronizado com o Kanban de Instalação.':'Quando a obra entrar no fluxo de instalação, o andamento aparecerá aqui automaticamente.'}</p></div></div></div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">{itens.map((item:any,idx:number)=><div key={item.id||idx} className="flex items-center justify-between rounded-xl border p-3"><div><b className="text-sm">{item.ambiente||item.descricao||item.configuracao_nome||`Tipologia ${idx+1}`}</b><p className="text-xs text-slate-500">Qtd {item.quantidade||1}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${progressoInstalacao===100?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-600'}`}>{progressoInstalacao===100?'Instalado':'Pendente'}</span></div>)}</div>
+        </div>}
+
+        {painelEtapa==='venda'&&<div className="grid gap-3 p-4 md:grid-cols-2 lg:grid-cols-4">
+          <Kpi titulo="Venda" valor={`#${venda.numero||'—'}`}/>
+          <Kpi titulo="Orçamento" valor={`#${numeroOrcamento(orcamento)}`}/>
+          <Kpi titulo="Valor" valor={moeda(valorVenda)}/>
+          <Kpi titulo="Confirmação" valor={dataBR(venda.confirmado_em)} detalhe={venda.confirmado_por_nome?`Por ${venda.confirmado_por_nome}`:undefined}/>
+        </div>}
+      </section>}
 
       <div className="mt-5 overflow-x-auto border-b"><div className="flex min-w-max">{abas.map(a=><button key={a.id} onClick={()=>setAba(a.id)} className={`border-b-2 px-3 py-3 text-sm font-semibold ${aba===a.id?'border-brand-navy text-brand-navy':'border-transparent text-slate-500'}`}>{a.label}</button>)}</div></div>
 
