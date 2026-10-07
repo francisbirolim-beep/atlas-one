@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { MedicaoItem, Usuario } from './tipos'
 import { carregarChecklistMedicaoV2, statusItemChecklistV2, validarChecklistObrigatorioV2 } from './medicaoChecklistV2'
+import { gerarPacoteTecnico } from './materialPlanejamento'
 
 export type ResumoMedicaoV2 = {
   totalLinhas: number
@@ -272,7 +273,7 @@ export async function aprovarMedicaoFinal(
 ): Promise<ResultadoTransicaoMedicao> {
   const { data: medicao, error: erroBusca } = await supabase
     .from('medicoes_finais')
-    .select('status_operacional')
+    .select('status_operacional, orcamento_id')
     .eq('id', medicaoId)
     .maybeSingle()
 
@@ -298,7 +299,39 @@ export async function aprovarMedicaoFinal(
     console.error('Erro ao aprovar Medicao Final:', error)
     return { ok: false, mensagem: 'Nao foi possivel aprovar a medicao.' }
   }
-  return { ok: true }
+
+  if (!medicao.orcamento_id) {
+    return {
+      ok: true,
+      mensagem: 'Medição aprovada. Como não há orçamento técnico vinculado, o plano de corte automático ficou pendente.',
+    }
+  }
+
+  const pacote = await gerarPacoteTecnico(String(medicao.orcamento_id), 'medicao_final', usuario, {
+    perdaCorteMm: 0,
+    minimoSobraReaproveitavelMm: 300,
+  })
+
+  if (!pacote.ok) {
+    console.warn('Medição aprovada, mas o pacote técnico final não pôde ser gerado:', pacote.error)
+    return {
+      ok: true,
+      mensagem: `Medição aprovada. O plano de corte ficou pendente: ${pacote.error}`,
+    }
+  }
+
+  await supabase
+    .from('pacotes_tecnicos')
+    .update({ status: 'substituido' })
+    .eq('orcamento_id', medicao.orcamento_id)
+    .eq('origem', 'medicao_final')
+    .neq('id', pacote.pacote.id)
+    .neq('status', 'substituido')
+
+  return {
+    ok: true,
+    mensagem: 'Medição liberada. O plano de corte final foi gerado com as receitas técnicas já validadas.',
+  }
 }
 
 export async function listarPendenciasMedicao(medicaoId: string): Promise<PendenciaMedicao[]> {
@@ -444,9 +477,16 @@ export async function separarUnidadesNaoMedidas(medicaoId: string): Promise<{
 
     const novasUnidades = Array.from({ length: quantidade - 1 }, (_, indice) => ({
       medicao_id: item.medicao_id,
+      origem_item_indice: item.origem_item_indice ?? null,
+      origem_item_ref: item.origem_item_ref || null,
       tipo_esquadria: item.tipo_esquadria,
       tipo_outro_texto: item.tipo_outro_texto || null,
+      ambiente: item.ambiente || null,
+      folhas: item.folhas || null,
+      orcamento_largura_mm: item.orcamento_largura_mm ?? null,
+      orcamento_altura_mm: item.orcamento_altura_mm ?? null,
       descricao: `${descricaoBase} — ${indice + 2}/${quantidade}`,
+      observacoes_medicao: item.observacoes_medicao || null,
       quantidade: 1,
       ordem: ordemBase + indice + 1,
       campos_extras: {},
