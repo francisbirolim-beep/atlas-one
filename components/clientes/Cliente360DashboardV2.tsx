@@ -135,7 +135,7 @@ function valorOrcamento(o:Orcamento){
   return o.itens.reduce((total,item)=>total+numeroSeguro(item?.wvetro_item?.ValorTotalAlterado||item?.preco_total||item?.wvetro_item?.ValorTotal||item?.wvetro_item?.Total),0)
 }
 function dataInputLocal(d:Date){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
-function saldo(c:ContaReceberCliente360){ return Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)) }
+function saldo(c:ContaReceberCliente360){ return Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)) }
 
 function Kpi({titulo,valor,detalhe,destaque}:{titulo:string;valor:string;detalhe?:string;destaque?:boolean}){
   return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{titulo}</p><p className={`mt-1 text-xl font-bold ${destaque?'text-brand-teal':'text-slate-900'}`}>{valor}</p>{detalhe&&<p className="mt-1 text-xs text-slate-500">{detalhe}</p>}</div>
