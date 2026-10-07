@@ -25,7 +25,19 @@ with origem as (
     with ordinality as j(item, ord)
   where mi.ordem = j.ord - 1
     and mi.tipo_esquadria = coalesce(j.item->>'tipo_esquadria', mi.tipo_esquadria)
-    and mi.quantidade = coalesce(nullif(j.item->>'quantidade', '')::integer, 1)
+    and mi.quantidade = case
+      when coalesce(j.item->>'quantidade', '') ~ '^[0-9]+)
+update public.medicao_itens mi
+set
+  orcamento_largura_mm = coalesce(mi.orcamento_largura_mm, origem.largura_mm),
+  orcamento_altura_mm = coalesce(mi.orcamento_altura_mm, origem.altura_mm)
+from origem
+where mi.id = origem.id
+  and (mi.orcamento_largura_mm is null or mi.orcamento_altura_mm is null);
+
+        then (j.item->>'quantidade')::integer
+      else 1
+    end
 )
 update public.medicao_itens mi
 set
