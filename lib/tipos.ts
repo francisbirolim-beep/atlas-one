@@ -527,6 +527,8 @@ export interface MedicaoItem {
       descricao?: string | null
       ambiente?: string | null
       folhas?: string | null
+      orcamento_largura_mm?: number | null
+      orcamento_altura_mm?: number | null
       quantidade: number
       ordem: number
       largura_baixo_mm?: number | null

@@ -31,6 +31,8 @@ export function identificarItensMedicao(itens: MedicaoItem[], origem: ItemEsquad
       observacoes_medicao: item.observacoes_medicao || origemItem?.observacao_producao || null,
       ambiente: origemItem?.ambiente || item.ambiente || null,
       folhas: origemItem?.folhas || item.folhas || null,
+      orcamento_largura_mm: origemItem?.largura_mm ?? item.orcamento_largura_mm ?? null,
+      orcamento_altura_mm: origemItem?.altura_mm ?? item.orcamento_altura_mm ?? null,
     }
   })
 }
