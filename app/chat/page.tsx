@@ -13,6 +13,8 @@ function diaRotulo(data:string){const d=new Date(data),hoje=new Date(),ontem=new
 export default function ChatInternoPage(){
  const searchParams=useSearchParams()
  const usuarioInicialId=searchParams.get('usuarioId')||''
+ const usuariosIniciaisIds=(searchParams.get('usuarios')||'').split(',').map(v=>v.trim()).filter(Boolean)
+ const nomeGrupoInicial=searchParams.get('nome')||''
  const [eu,setEu]=useState<UsuarioLista|null>(null),[conversas,setConversas]=useState<ChatConversa[]>([]),[naoLidas,setNaoLidas]=useState<Record<string,number>>({}),[ativa,setAtiva]=useState<ChatConversa|null>(null),[mostrarBuscaMensagem,setMostrarBuscaMensagem]=useState(false),[mostrarListaMobile,setMostrarListaMobile]=useState(true),[carregandoMensagens,setCarregandoMensagens]=useState(false)
  const [mensagens,setMensagens]=useState<ChatMensagem[]>([]),[texto,setTexto]=useState(''),[busca,setBusca]=useState(''),[buscaMensagem,setBuscaMensagem]=useState(''),[respondendo,setRespondendo]=useState<ChatMensagem|null>(null),[copiado,setCopiado]=useState<string|null>(null),[enviando,setEnviando]=useState(false),[criando,setCriando]=useState(false),[carregandoConversas,setCarregandoConversas]=useState(true),[erroCarregamento,setErroCarregamento]=useState(false),[erro,setErro]=useState('')
  const [usuarios,setUsuarios]=useState<UsuarioLista[]>([]),[participantesAtivos,setParticipantesAtivos]=useState<UsuarioLista[]>([]),[buscaUsuario,setBuscaUsuario]=useState(''),[novo,setNovo]=useState(false),[nomeGrupo,setNomeGrupo]=useState(''),[selecionados,setSelecionados]=useState<string[]>([])
@@ -33,14 +35,21 @@ export default function ChatInternoPage(){
  const usuariosFiltrados=useMemo(()=>{const q=buscaUsuario.toLocaleLowerCase('pt-BR').trim();return usuarios.filter(u=>u.id!==eu?.id&&(!q||u.nome.toLocaleLowerCase('pt-BR').includes(q)))},[usuarios,buscaUsuario,eu?.id]),totalOutrosUsuarios=useMemo(()=>usuarios.filter(u=>u.id!==eu?.id).length,[usuarios,eu?.id])
  const usuarioInicialProcessado=useRef(false)
  useEffect(()=>{
-   if(usuarioInicialProcessado.current||!usuarioInicialId||!eu||!usuarios.length)return
-   const destino=usuarios.find(u=>u.id===usuarioInicialId&&u.id!==eu.id)
-   if(!destino){usuarioInicialProcessado.current=true;return}
+   if(usuarioInicialProcessado.current||!eu||!usuarios.length)return
+   const ids=[...(usuarioInicialId?[usuarioInicialId]:[]),...usuariosIniciaisIds]
+     .filter((id,index,arr)=>id&&id!==eu.id&&arr.indexOf(id)===index)
+   if(!ids.length)return
+   const destinos=usuarios.filter(u=>ids.includes(u.id)&&u.id!==eu.id)
+   if(!destinos.length){usuarioInicialProcessado.current=true;return}
    usuarioInicialProcessado.current=true
    void (async()=>{
      setCriando(true);setErro('')
      try{
-       const conversa=await criarConversa(destino.nome,'direta',[destino])
+       const tipo=destinos.length>1?'grupo':'direta'
+       const nome=tipo==='grupo'
+         ? (nomeGrupoInicial.trim()||destinos.map(d=>d.nome).join(', '))
+         : destinos[0].nome
+       const conversa=await criarConversa(nome,tipo,destinos)
        if(!conversa){setErro('Não foi possível abrir a conversa interna.');return}
        setMensagens([]);setRespondendo(null);setAtiva(conversa);setMostrarListaMobile(false)
        await carregar({selecionarPrimeira:false})
@@ -50,7 +59,7 @@ export default function ChatInternoPage(){
        setCriando(false)
      }
    })()
- },[usuarioInicialId,eu?.id,usuarios.length])
+ },[usuarioInicialId,usuariosIniciaisIds.join(','),nomeGrupoInicial,eu?.id,usuarios.length])
  async function criar(){if(criando||!selecionados.length)return;setCriando(true);setErro('');try{const ps=usuarios.filter(u=>selecionados.includes(u.id));const conversa=await criarConversa(nomeGrupo||ps.map(p=>p.nome).join(', '),ps.length>1?'grupo':'direta',ps);if(!conversa){setErro('Não foi possível criar a conversa. Tente novamente.');return}setNovo(false);setNomeGrupo('');setBuscaUsuario('');setSelecionados([]);setMensagens([]);setRespondendo(null);setErro('');setAtiva(conversa);setMostrarListaMobile(false);await carregar({selecionarPrimeira:false})}catch{setErro('Não foi possível criar a conversa. Tente novamente.')}finally{setCriando(false)}}
  return <main className="min-h-screen bg-slate-100 p-3 md:p-6"><div className="mx-auto max-w-7xl overflow-hidden rounded-2xl border bg-white shadow-sm">
   <header className="flex items-center justify-between border-b px-4 py-3"><div className="flex items-center gap-3"><Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link><div><div className="flex items-center gap-2"><h1 className="font-bold text-slate-900">Chat interno</h1>{totalNaoLidas>0&&<span className="grid min-w-5 place-items-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{totalNaoLidas>99?'99+':totalNaoLidas}</span>}</div><p className="text-xs text-slate-500">Equipe Atlas One</p></div></div><div className="flex gap-2"><Link href="/compartilhar" aria-label="Enviar pedido para o Atlas" className="inline-flex items-center gap-2 rounded-xl border px-2.5 py-2 text-sm font-semibold md:px-3"><ClipboardList size={16}/><span className="hidden sm:inline">Enviar pedido</span></Link><button type="button" disabled={carregandoConversas||totalOutrosUsuarios===0} title={!carregandoConversas&&totalOutrosUsuarios===0?(usuarios.length===0?'Lista de usuários indisponível':'Não há outra pessoa cadastrada para conversar'):undefined} onClick={()=>{setErro('');setNomeGrupo('');setBuscaUsuario('');setSelecionados([]);setNovo(true)}} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-2.5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 md:px-3"><Plus size={16}/><span className="hidden sm:inline">Nova conversa</span></button></div></header>
