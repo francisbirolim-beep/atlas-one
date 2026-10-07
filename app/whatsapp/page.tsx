@@ -3,10 +3,10 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
+  Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
-  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X,
+  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -41,6 +41,17 @@ type Conversa = {
   ultima_mensagem_em?: string | null
   transferida_em?: string | null
   acompanhando?: boolean
+  grupo_id?: string | null
+  grupo_nivel_acesso?: 'sem_acesso' | 'acompanhar' | 'atender' | 'gerenciar' | 'herdado' | null
+  grupo_pode_atender?: boolean | null
+  grupo_pode_transferir?: boolean | null
+  grupo_pode_delegar?: boolean | null
+  grupo_responsavel_principal_id?: string | null
+  grupo_responsavel_principal_nome?: string | null
+  grupo_responsavel_efetivo_id?: string | null
+  grupo_responsavel_efetivo_nome?: string | null
+  grupo_delegacao_fim_em?: string | null
+  grupo_delegacao_ativa?: boolean
 }
 type Mensagem = {
   id: string
@@ -52,6 +63,8 @@ type Mensagem = {
   mime_type?: string | null
   arquivo_nome?: string | null
   usuario_nome?: string | null
+  whatsapp_message_id?: string | null
+  payload?: Record<string, any> | null
   created_at: string
 }
 type ClienteResumo = {
@@ -76,6 +89,14 @@ type AcessoCanal = {
 }
 type Etiqueta = { id: string; nome: string; cor: string }
 type Nota = { id: string; usuario_nome?: string | null; texto: string; created_at: string }
+type EventoAtendimento = {
+  id: string
+  tipo: string
+  usuario_id?: string | null
+  usuario_nome?: string | null
+  dados?: Record<string, unknown> | null
+  created_at: string
+}
 type MensagemRapida = {
   id: string
   titulo: string
@@ -91,6 +112,10 @@ type DiretorioWhatsApp = {
   nome: string
   participantes?: number | null
   canalId?: string
+  conversaId?: string | null
+  bloqueado?: boolean
+  bloqueado_em?: string | null
+  bloqueado_por_nome?: string | null
 }
 type SugestaoIA = {
   id: string
@@ -131,6 +156,9 @@ export default function WhatsAppAtendimentoPage() {
   const [ativa, setAtiva] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [texto, setTexto] = useState('')
+  const [mensagemRespondendo, setMensagemRespondendo] = useState<Mensagem | null>(null)
+  const [emojiMensagemId, setEmojiMensagemId] = useState<string | null>(null)
+  const [emojiCustom, setEmojiCustom] = useState('')
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
@@ -144,18 +172,28 @@ export default function WhatsAppAtendimentoPage() {
   const [destinoId, setDestinoId] = useState('')
   const [setorTransferencia, setSetorTransferencia] = useState('')
   const [transferenciaAberta, setTransferenciaAberta] = useState(false)
+  const [delegacaoAberta, setDelegacaoAberta] = useState(false)
+  const [destinoDelegacaoId, setDestinoDelegacaoId] = useState('')
+  const [diasDelegacao, setDiasDelegacao] = useState(1)
+  const [motivoDelegacao, setMotivoDelegacao] = useState('')
+  const [salvandoDelegacao, setSalvandoDelegacao] = useState(false)
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [obras, setObras] = useState<ObraResumo[]>([])
   const [carregandoCliente, setCarregandoCliente] = useState(false)
-  const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas'>('cliente')
+  const [painelDireito, setPainelDireito] = useState<'cliente' | 'agenda' | 'notas' | 'historico'>('cliente')
   const [painelDireitoRecolhido, setPainelDireitoRecolhido] = useState(true)
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([])
   const [etiquetasAtivas, setEtiquetasAtivas] = useState<string[]>([])
   const [notas, setNotas] = useState<Nota[]>([])
+  const [historico, setHistorico] = useState<EventoAtendimento[]>([])
   const [mensagensRapidas, setMensagensRapidas] = useState<MensagemRapida[]>([])
   const [apoioAberto, setApoioAberto] = useState<'rapidas' | 'etiquetas' | null>(null)
   const [notaTexto, setNotaTexto] = useState('')
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
+  const [conversaInternaAberta, setConversaInternaAberta] = useState(false)
+  const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
+  const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
+  const [nomeGrupoInterno, setNomeGrupoInterno] = useState('')
   const [diretorioAberto, setDiretorioAberto] = useState(false)
   const [diretorio, setDiretorio] = useState<DiretorioWhatsApp[]>([])
   const [buscaDiretorio, setBuscaDiretorio] = useState('')
@@ -178,11 +216,15 @@ export default function WhatsAppAtendimentoPage() {
   const partesAudioRef = useRef<Blob[]>([])
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canalFiltroInicializadoRef = useRef(false)
+  const conversaAtivaIdRef = useRef<string | null>(null)
+  const carregandoConversasRef = useRef(false)
+  const recarregarConversasPendenteRef = useRef(false)
+  const refreshConversasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     try {
       const salvo = localStorage.getItem('atlas-whatsapp-painel-direito-recolhido')
-      setPainelDireitoRecolhido(salvo === null ? true : salvo === '1')
+      setPainelDireitoRecolhido(salvo === null ? false : salvo === '1')
     } catch {}
   }, [])
 
@@ -197,9 +239,14 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   async function carregarConversas(selecionar = true) {
+    if (carregandoConversasRef.current) {
+      recarregarConversasPendenteRef.current = true
+      return
+    }
+    carregandoConversasRef.current = true
     try {
       const headers = await headersJson()
-      const resp = await fetch('/api/integracoes/whatsapp/conversas', { headers })
+      const resp = await fetch('/api/integracoes/whatsapp/conversas', { headers, cache: 'no-store' })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar conversas.')
       setEu(json.usuario)
@@ -224,24 +271,49 @@ export default function WhatsAppAtendimentoPage() {
         setCanalFiltro(fallback)
         try { localStorage.setItem('atlas-whatsapp-canal-filtro', fallback) } catch {}
       }
-      if (selecionar && !ativa) {
-        const conversaId = typeof window !== 'undefined'
-          ? new URLSearchParams(window.location.search).get('conversaId')
-          : null
-        const solicitada = conversaId
-          ? conversasRecebidas.find((c: Conversa) => c.id === conversaId)
-          : null
-        if (solicitada) setAtiva(solicitada)
-      }
-      if (ativa) {
-        const atualizada = conversasRecebidas.find((c: Conversa) => c.id === ativa.id)
-        setAtiva(atualizada || null)
-      }
+      const conversaIdSolicitada = selecionar && typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('conversaId')
+        : null
+      setAtiva(atual => {
+        if (atual) {
+          return conversasRecebidas.find((c: Conversa) => c.id === atual.id) || null
+        }
+        if (conversaIdSolicitada) {
+          return conversasRecebidas.find((c: Conversa) => c.id === conversaIdSolicitada) || null
+        }
+        return atual
+      })
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao carregar atendimento.')
     } finally {
       setCarregando(false)
+      carregandoConversasRef.current = false
+      if (recarregarConversasPendenteRef.current) {
+        recarregarConversasPendenteRef.current = false
+        queueMicrotask(() => { void carregarConversas(false) })
+      }
     }
+  }
+
+  function agendarRefreshConversas(delay = 250) {
+    if (refreshConversasTimerRef.current) clearTimeout(refreshConversasTimerRef.current)
+    refreshConversasTimerRef.current = setTimeout(() => {
+      refreshConversasTimerRef.current = null
+      void carregarConversas(false)
+    }, delay)
+  }
+
+  function selecionarConversa(conversa: Conversa) {
+    conversaAtivaIdRef.current = conversa.id
+    setMensagens([])
+    setEtiquetas([])
+    setEtiquetasAtivas([])
+    setNotas([])
+    setMensagensRapidas([])
+    setHistorico([])
+    setSugestaoIA(null)
+    setErro('')
+    setAtiva(conversa)
   }
 
   function selecionarCanal(canalId: string) {
@@ -252,6 +324,26 @@ export default function WhatsAppAtendimentoPage() {
       if (!atual || canalId === 'todos' || atual.whatsapp_canal_id === canalId) return atual
       return null
     })
+  }
+
+  function abrirConversaInterna() {
+    setBuscaUsuarioInterno('')
+    setUsuariosInternosSelecionados([])
+    setNomeGrupoInterno('')
+    setConversaInternaAberta(true)
+  }
+
+  function iniciarConversaInternaSelecionada() {
+    const ids = usuariosInternosSelecionados.filter(id => id && id !== eu?.id)
+    if (!ids.length) return
+    const params = new URLSearchParams()
+    if (ids.length === 1) {
+      params.set('usuarioId', ids[0])
+    } else {
+      params.set('usuarios', ids.join(','))
+      if (nomeGrupoInterno.trim()) params.set('nome', nomeGrupoInterno.trim())
+    }
+    window.location.href = `/chat?${params.toString()}`
   }
 
   function abrirDiretorio() {
@@ -276,7 +368,7 @@ export default function WhatsAppAtendimentoPage() {
         canalId: canalDiretorio,
         busca: buscaDiretorio.trim(),
       })
-      const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers })
+      const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers, cache: 'no-store' })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao buscar contatos do WhatsApp.')
       setDiretorio(json.itens || [])
@@ -307,8 +399,8 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao abrir conversa.')
       setDiretorioAberto(false)
-      setAtiva(json.conversa as Conversa)
-      await carregarConversas(false)
+      selecionarConversa(json.conversa as Conversa)
+      agendarRefreshConversas(0)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao abrir conversa.')
     }
@@ -359,12 +451,14 @@ export default function WhatsAppAtendimentoPage() {
       const headers = await headersJson()
       const resp = await fetch(
         `/api/integracoes/whatsapp/mensagens?conversaId=${encodeURIComponent(conversaId)}`,
-        { headers },
+        { headers, cache: 'no-store' },
       )
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar mensagens.')
+      if (conversaAtivaIdRef.current !== conversaId) return
       setMensagens(json.mensagens || [])
     } catch (e) {
+      if (conversaAtivaIdRef.current !== conversaId) return
       setErro(e instanceof Error ? e.message : 'Falha ao carregar mensagens.')
     }
   }
@@ -375,6 +469,7 @@ export default function WhatsAppAtendimentoPage() {
       const resp = await fetch(`/api/integracoes/whatsapp/ia?conversaId=${encodeURIComponent(conversaId)}`, { headers, cache: 'no-store' })
       const json = await resp.json()
       if (!resp.ok) return
+      if (conversaAtivaIdRef.current !== conversaId) return
       setSugestaoIA((json.sugestao || null) as SugestaoIA | null)
       setModoIA((json.modo || 'observando') as 'observando' | 'sugerindo' | 'automatico')
     } catch {}
@@ -403,11 +498,14 @@ export default function WhatsAppAtendimentoPage() {
       )
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar recursos internos.')
+      if (conversaAtivaIdRef.current !== conversaId) return
       setEtiquetas(json.etiquetas || [])
       setEtiquetasAtivas(json.etiquetasAtivas || [])
       setNotas(json.notas || [])
       setMensagensRapidas(json.mensagensRapidas || [])
+      setHistorico(json.historico || [])
     } catch (e) {
+      if (conversaAtivaIdRef.current !== conversaId) return
       setErro(e instanceof Error ? e.message : 'Falha ao carregar recursos internos.')
     }
   }
@@ -434,20 +532,31 @@ export default function WhatsAppAtendimentoPage() {
         setBuscandoContatos(true)
         try {
           const headers = await headersJson()
-          const ids = canalFiltro === 'todos'
-            ? canais.map(c => c.id)
-            : canais.filter(c => c.id === canalFiltro).map(c => c.id)
+          // Busca global: procura o contato em todos os WhatsApps conectados,
+          // independente do filtro/canal que estiver aberto na tela.
+          const canalSelecionado = canalFiltro !== 'todos' ? canalFiltro : ''
+          const principal = canais.find(c => c.principal)?.id || ''
+          const ids = [
+            ...(canalSelecionado ? [canalSelecionado] : []),
+            ...(principal && principal !== canalSelecionado ? [principal] : []),
+            ...canais.map(c => c.id).filter(id => id !== canalSelecionado && id !== principal),
+          ]
+
           const respostas = await Promise.all(ids.map(async canalId => {
             const params = new URLSearchParams({ canalId, busca: q })
-            const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers })
+            const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers, cache: 'no-store' })
             const json = await resp.json()
             if (!resp.ok) return [] as DiretorioWhatsApp[]
             return ((json.itens || []) as DiretorioWhatsApp[]).map(item => ({ ...item, canalId }))
           }))
           if (ativo) {
+            // Remove duplicados por telefone/JID. Como a ordem acima prioriza
+            // o canal atual e depois o número principal, o melhor resultado fica.
             const unicos = new Map<string, DiretorioWhatsApp>()
             for (const item of respostas.flat()) {
-              const chave = `${item.canalId || ''}:${item.jid}`
+              const telefone = String(item.telefone || '').replace(/\D/g, '')
+              const jidNormalizado = String(item.jid || '').replace(/^\d+@lid$/, '')
+              const chave = telefone ? `tel:${telefone}` : `jid:${jidNormalizado || item.jid}`
               if (!unicos.has(chave)) unicos.set(chave, item)
             }
             setContatosBusca([...unicos.values()].slice(0, 40))
@@ -467,16 +576,43 @@ export default function WhatsAppAtendimentoPage() {
   }, [busca, canalFiltro, canais])
 
   useEffect(() => {
+    conversaAtivaIdRef.current = ativa?.id || null
     if (!ativa?.id) {
       setMensagens([])
       setEtiquetas([])
       setEtiquetasAtivas([])
       setNotas([])
       setMensagensRapidas([])
+      setHistorico([])
+      setSugestaoIA(null)
       return
     }
-    void carregarMensagens(ativa.id)
-    void carregarApoio(ativa.id)
+    const conversaId = ativa.id
+    setMensagens([])
+    setEtiquetas([])
+    setEtiquetasAtivas([])
+    setNotas([])
+    setMensagensRapidas([])
+    setHistorico([])
+    setSugestaoIA(null)
+    setMensagemRespondendo(null)
+    setEmojiMensagemId(null)
+    setEmojiCustom('')
+    setTransferenciaAberta(false)
+    setDelegacaoAberta(false)
+    setApoioAberto(null)
+    void carregarMensagens(conversaId)
+    void carregarApoio(conversaId)
+    void (async () => {
+      try {
+        const headers = await headersJson()
+        await fetch('/api/integracoes/whatsapp/conversas', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ acao: 'visualizar', conversaId }),
+        })
+      } catch {}
+    })()
   }, [ativa?.id])
 
   useEffect(() => {
@@ -486,9 +622,18 @@ export default function WhatsAppAtendimentoPage() {
       return
     }
     const conversaId = ativa.id
-    void carregarSugestaoIA(conversaId)
-    const timer = setInterval(() => { void carregarSugestaoIA(conversaId) }, 4000)
-    return () => clearInterval(timer)
+    const atualizar = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void carregarSugestaoIA(conversaId)
+      }
+    }
+    atualizar()
+    const timer = setInterval(atualizar, 15000)
+    document.addEventListener('visibilitychange', atualizar)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizar)
+    }
   }, [ativa?.id])
 
   useEffect(() => {
@@ -527,15 +672,46 @@ export default function WhatsAppAtendimentoPage() {
     const canal = supabase
       .channel(`atendimento-whatsapp-${eu.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_conversas' }, () => {
-        void carregarConversas(false)
+        agendarRefreshConversas()
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'atendimento_mensagens' }, p => {
         const mensagem = p.new as Mensagem
         if (mensagem.conversa_id === ativa?.id) void carregarMensagens(ativa.id)
-        void carregarConversas(false)
+        agendarRefreshConversas()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_whatsapp_permissoes' }, () => {
+        agendarRefreshConversas(0)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_whatsapp_canais' }, () => {
+        agendarRefreshConversas(0)
       })
       .subscribe()
     return () => { void supabase.removeChannel(canal) }
+  }, [eu?.id, ativa?.id])
+
+  useEffect(() => {
+    if (!eu?.id) return
+
+    const atualizarTela = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      agendarRefreshConversas(0)
+      const conversaId = conversaAtivaIdRef.current
+      if (conversaId) void carregarMensagens(conversaId)
+    }
+
+    const aoVoltarParaTela = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizarTela()
+    }
+
+    const timer = setInterval(atualizarTela, 2000)
+    window.addEventListener('focus', atualizarTela)
+    document.addEventListener('visibilitychange', aoVoltarParaTela)
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', atualizarTela)
+      document.removeEventListener('visibilitychange', aoVoltarParaTela)
+    }
   }, [eu?.id, ativa?.id])
 
   useEffect(() => {
@@ -547,8 +723,13 @@ export default function WhatsAppAtendimentoPage() {
     return conversas.filter(c => {
       if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
-      if (filtro === 'aguardando' && (c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
-      if (filtro === 'com_atendente' && (!c.responsavel_id || c.whatsapp_chat_tipo === 'grupo' || c.status === 'finalizado')) return false
+      if (filtro === 'aguardando') {
+        const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
+        const aguardandoAceite = c.status === 'aguardando' && podeSerMeu
+        const aguardandoMensagem = Number(c.nao_lidas || 0) > 0 && podeSerMeu && c.status !== 'finalizado'
+        if (!aguardandoAceite && !aguardandoMensagem) return false
+      }
+      if (filtro === 'com_atendente' && (!c.responsavel_id || c.status === 'finalizado')) return false
       if (filtro === 'minhas' && (c.responsavel_id !== eu?.id || c.status === 'finalizado')) return false
       if (filtro === 'nao_lidas' && !c.nao_lidas) return false
       if (filtro === 'acompanhando' && !c.acompanhando) return false
@@ -560,6 +741,14 @@ export default function WhatsAppAtendimentoPage() {
         .toLocaleLowerCase('pt-BR').includes(q)
     })
   }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
+
+  const usuariosInternosBusca = useMemo(() => {
+    const q = busca.toLocaleLowerCase('pt-BR').trim()
+    if (q.length < 2) return []
+    return usuarios
+      .filter(u => u.id !== eu?.id && String(u.nome || '').toLocaleLowerCase('pt-BR').includes(q))
+      .slice(0, 12)
+  }, [usuarios, eu?.id, busca])
 
   const contatosBuscaVisiveis = useMemo(() => {
     if (busca.trim().length < 2) return []
@@ -581,21 +770,63 @@ export default function WhatsAppAtendimentoPage() {
   async function acaoConversaPorId(conversaId: string, acao: string, extra: Record<string, unknown> = {}) {
     if (!conversaId) return false
     setErro('')
-    const headers = await headersJson()
-    const resp = await fetch('/api/integracoes/whatsapp/conversas', {
-      method: 'POST', headers,
-      body: JSON.stringify({ acao, conversaId, ...extra }),
-    })
-    const json = await resp.json()
-    if (!resp.ok) {
-      setErro(json.error || 'Nao foi possivel alterar o atendimento.')
+
+    const anteriorLista = conversas.find(c => c.id === conversaId) || null
+    const anteriorAtiva = ativa?.id === conversaId ? ativa : null
+    const destino = extra.destinoId ? usuarios.find(u => u.id === String(extra.destinoId)) || null : null
+
+    const aplicar = (c: Conversa): Conversa => {
+      if (c.id !== conversaId) return c
+      if (acao === 'assumir') return { ...c, responsavel_id: eu?.id || c.responsavel_id, responsavel_nome: eu?.nome || c.responsavel_nome, status: 'em_atendimento', nao_lidas: 0 }
+      if (acao === 'finalizar') return { ...c, status: 'finalizado', nao_lidas: 0 }
+      if (acao === 'marcar_lida') return { ...c, nao_lidas: 0 }
+      if (acao === 'acompanhar') return { ...c, acompanhando: true }
+      if (acao === 'parar_acompanhar') return { ...c, acompanhando: false }
+      if (acao === 'transferir' && destino) {
+        return { ...c, responsavel_id: destino.id, responsavel_nome: destino.nome, status: 'aguardando', setor: extra.setor ? String(extra.setor) : c.setor }
+      }
+      return c
+    }
+
+    setConversas(lista => lista.map(aplicar))
+    setAtiva(atual => atual?.id === conversaId ? aplicar(atual) : atual)
+    if (acao === 'transferir') {
+      setDestinoId('')
+      setSetorTransferencia('')
+      setTransferenciaAberta(false)
+    }
+
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/conversas', {
+        method: 'POST', headers,
+        body: JSON.stringify({ acao, conversaId, ...extra }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel alterar o atendimento.')
+
+      if (acao === 'arquivar' || acao === 'bloquear') {
+        setConversas(lista => lista.filter(c => c.id !== conversaId))
+        if (conversaAtivaIdRef.current === conversaId) {
+          conversaAtivaIdRef.current = null
+          setAtiva(null)
+          setMensagens([])
+          setHistorico([])
+        }
+      }
+      void carregarConversas(false)
+      if (conversaAtivaIdRef.current === conversaId) void carregarApoio(conversaId)
+      return true
+    } catch (e) {
+      if (anteriorLista) {
+        setConversas(lista => lista.map(c => c.id === conversaId ? anteriorLista : c))
+      }
+      if (anteriorAtiva) {
+        setAtiva(atual => atual?.id === conversaId ? anteriorAtiva : atual)
+      }
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel alterar o atendimento.')
       return false
     }
-    setDestinoId('')
-    setSetorTransferencia('')
-    setTransferenciaAberta(false)
-    await carregarConversas(false)
-    return true
   }
 
   async function acaoConversa(acao: string, extra: Record<string, unknown> = {}) {
@@ -603,12 +834,83 @@ export default function WhatsAppAtendimentoPage() {
     await acaoConversaPorId(ativa.id, acao, extra)
   }
 
+  function podeAtenderConversa(conversa: Conversa) {
+    if (eu?.role === 'master') return true
+    if (conversa.whatsapp_chat_tipo === 'grupo') return conversa.grupo_pode_atender === true
+    const acesso = conversa.whatsapp_canal_id
+      ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
+      : null
+    return Boolean(acesso?.dono || acesso?.atender)
+  }
+
   function podeTransferirConversa(conversa: Conversa) {
     if (eu?.role === 'master') return true
+    if (conversa.whatsapp_chat_tipo === 'grupo') return conversa.grupo_pode_transferir === true
     const acesso = conversa.whatsapp_canal_id
       ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
       : null
     return Boolean(acesso?.transferir)
+  }
+
+  function podeSupervisionarConversa(conversa: Conversa) {
+    if (eu?.role === 'master') return true
+    const acesso = conversa.whatsapp_canal_id
+      ? acessos.find(a => a.canal_id === conversa.whatsapp_canal_id)
+      : null
+    return Boolean(acesso?.dono || acesso?.supervisionar)
+  }
+
+  async function delegarResponsabilidadeGrupo() {
+    if (!ativa?.grupo_id || !destinoDelegacaoId || salvandoDelegacao) return
+    setErro('')
+    setSalvandoDelegacao(true)
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/grupos/delegacoes', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          grupoId: ativa.grupo_id,
+          destinoId: destinoDelegacaoId,
+          dias: Math.max(1, diasDelegacao || 1),
+          motivo: motivoDelegacao.trim() || null,
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel delegar a responsabilidade.')
+      setDelegacaoAberta(false)
+      setDestinoDelegacaoId('')
+      setDiasDelegacao(1)
+      setMotivoDelegacao('')
+      agendarRefreshConversas()
+      void carregarApoio(ativa.id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel delegar a responsabilidade.')
+    } finally {
+      setSalvandoDelegacao(false)
+    }
+  }
+
+  async function encerrarDelegacaoGrupo() {
+    if (!ativa?.grupo_id || salvandoDelegacao) return
+    setErro('')
+    setSalvandoDelegacao(true)
+    try {
+      const headers = await headersJson()
+      const resp = await fetch(`/api/integracoes/whatsapp/grupos/delegacoes?grupoId=${encodeURIComponent(ativa.grupo_id)}`, {
+        method: 'DELETE',
+        headers,
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel encerrar a delegacao.')
+      setDelegacaoAberta(false)
+      agendarRefreshConversas()
+      await carregarApoio(ativa.id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel encerrar a delegacao.')
+    } finally {
+      setSalvandoDelegacao(false)
+    }
   }
 
   async function acaoApoio(acao: string, extra: Record<string, unknown> = {}) {
@@ -694,7 +996,7 @@ export default function WhatsAppAtendimentoPage() {
       if (!registrar.ok) throw new Error(envio.error || 'Não foi possível enfileirar a mídia.')
 
       await carregarMensagens(ativa.id)
-      await carregarConversas(false)
+      agendarRefreshConversas()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.')
     } finally {
@@ -761,12 +1063,17 @@ export default function WhatsAppAtendimentoPage() {
       const headers = await headersJson()
       const resp = await fetch('/api/integracoes/whatsapp/mensagens', {
         method: 'POST', headers,
-        body: JSON.stringify({ conversaId: ativa.id, texto: corpo }),
+        body: JSON.stringify({
+          conversaId: ativa.id,
+          texto: corpo,
+          respostaMensagemId: mensagemRespondendo?.id || null,
+        }),
       })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Nao foi possivel enviar.')
+      setMensagemRespondendo(null)
       await carregarMensagens(ativa.id)
-      await carregarConversas(false)
+      agendarRefreshConversas()
     } catch (e) {
       setTexto(corpo)
       setErro(e instanceof Error ? e.message : 'Nao foi possivel enviar.')
@@ -774,6 +1081,62 @@ export default function WhatsAppAtendimentoPage() {
       setEnviando(false)
     }
   }
+
+  async function reagirMensagem(mensagemId: string, emoji: string) {
+    if (!ativa || !mensagemId || !emoji.trim()) return
+    setErro('')
+    try {
+      const headers = await headersJson()
+      const resp = await fetch('/api/integracoes/whatsapp/mensagens', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'reagir',
+          conversaId: ativa.id,
+          mensagemId,
+          emoji: emoji.trim(),
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Nao foi possivel reagir.')
+      setEmojiMensagemId(null)
+      setEmojiCustom('')
+      await carregarMensagens(ativa.id)
+      await carregarApoio(ativa.id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel reagir.')
+    }
+  }
+
+  const reacoesPorMensagem = useMemo(() => {
+    const porWhatsapp = new Map<string,string>()
+    for (const m of mensagens) {
+      if (m.whatsapp_message_id) porWhatsapp.set(m.whatsapp_message_id, m.id)
+    }
+    const mapa = new Map<string, Array<{emoji:string; usuario:string}>>()
+    for (const m of mensagens) {
+      if (m.tipo !== 'reacao') continue
+      const p = m.payload && typeof m.payload === 'object' ? m.payload : {}
+      const targetWhatsapp =
+        p.reactionTargetWhatsappId ||
+        p.reactionKey?.id ||
+        p.reactionKey?.key?.id ||
+        null
+      const targetId =
+        p.reactionTargetMessageId ||
+        (targetWhatsapp ? porWhatsapp.get(String(targetWhatsapp)) : null)
+      if (!targetId) continue
+      const atual = mapa.get(String(targetId)) || []
+      atual.push({ emoji: String(m.texto || '👍'), usuario: m.usuario_nome || (m.direcao === 'saida' ? 'Equipe' : 'WhatsApp') })
+      mapa.set(String(targetId), atual)
+    }
+    return mapa
+  }, [mensagens])
+
+  const mensagensVisiveis = useMemo(
+    () => mensagens.filter(m => m.tipo !== 'reacao'),
+    [mensagens],
+  )
 
   const totais = useMemo(() => {
     const doCanal = conversas.filter(c =>
@@ -783,8 +1146,12 @@ export default function WhatsAppAtendimentoPage() {
     return {
       todas: chats.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
-      aguardando: chats.filter(c => !c.responsavel_id && c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado').length,
-      comAtendente: chats.filter(c => Boolean(c.responsavel_id) && c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado').length,
+      aguardando: chats.filter(c => {
+        const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
+        return c.status !== 'finalizado' && podeSerMeu &&
+          (c.status === 'aguardando' || Number(c.nao_lidas || 0) > 0)
+      }).length,
+      comAtendente: chats.filter(c => Boolean(c.responsavel_id) && c.status !== 'finalizado').length,
       minhas: chats.filter(c => c.responsavel_id === eu?.id && c.status !== 'finalizado').length,
       grupos: doCanal.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
       naoLidas: chats.filter(c => Number(c.nao_lidas || 0) > 0).length,
@@ -798,11 +1165,34 @@ export default function WhatsAppAtendimentoPage() {
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
     : null
   const podeResponder = Boolean(
-    ativa && (
+    ativa &&
+    ativa.responsavel_id === eu?.id &&
+    ativa.status === 'em_atendimento'
+  )
+  const podeAssumirAtiva = Boolean(
+    ativa &&
+    ativa.status !== 'finalizado' &&
+    (ativa.whatsapp_chat_tipo !== 'grupo' || ativa.grupo_pode_atender === true || eu?.role === 'master') &&
+    (
+      !ativa.responsavel_id ||
+      (ativa.responsavel_id === eu?.id && ativa.status === 'aguardando') ||
+      (eu?.role === 'master' && ativa.responsavel_id !== eu?.id)
+    )
+  )
+  const atendimentoMeu = Boolean(
+    ativa &&
+    ativa.responsavel_id === eu?.id &&
+    ativa.status === 'em_atendimento'
+  )
+  const podeReabrirAtiva = Boolean(
+    ativa &&
+    ativa.status === 'finalizado' &&
+    ativa.whatsapp_chat_tipo !== 'grupo' &&
+    (
       eu?.role === 'master' ||
-      ativa.responsavel_id === eu?.id ||
-      (ativa.whatsapp_chat_tipo === 'grupo' && acessoCanalAtivo?.atender)
-    ),
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.atender
+    )
   )
   const canalAtivo = ativa?.whatsapp_canal_id
     ? canais.find(c=>c.id===ativa.whatsapp_canal_id) || null
@@ -812,7 +1202,39 @@ export default function WhatsAppAtendimentoPage() {
     : null
   const canalPronto = canalAtivo?.gateway_status === 'connected'
   const podeTransferirAtiva = Boolean(
-    ativa && (eu?.role === 'master' || acessoCanalAtivo?.transferir),
+    ativa && (
+      eu?.role === 'master' ||
+      (ativa.whatsapp_chat_tipo === 'grupo' ? ativa.grupo_pode_transferir === true : acessoCanalAtivo?.transferir)
+    ),
+  )
+  const podeArquivarAtiva = Boolean(
+    ativa && (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.transferir ||
+      ativa.responsavel_id === eu?.id
+    )
+  )
+  const podeBloquearAtiva = Boolean(
+    ativa &&
+    ativa.whatsapp_chat_tipo !== 'grupo' &&
+    (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.transferir
+    )
+  )
+  const podeSupervisionarAtiva = Boolean(
+    ativa && (
+      eu?.role === 'master' ||
+      acessoCanalAtivo?.dono ||
+      acessoCanalAtivo?.supervisionar
+    )
+  )
+  const podeDelegarGrupo = Boolean(
+    ativa?.whatsapp_chat_tipo === 'grupo' &&
+    ativa.grupo_id &&
+    (eu?.role === 'master' || ativa.grupo_pode_delegar === true)
   )
 
   const cadastroNome = ativa?.contato_nome || ''
@@ -852,6 +1274,15 @@ export default function WhatsAppAtendimentoPage() {
             <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 sm:inline-flex">
               {canaisConectados === 1 ? '1 canal conectado' : `${canaisConectados} canais conectados`}
             </span>
+            <button
+              type="button"
+              onClick={abrirConversaInterna}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+              title="Iniciar conversa interna com alguém da empresa"
+            >
+              <Users size={16}/>
+              <span className="hidden sm:inline">Conversa interna</span>
+            </button>
             <Link href="/whatsapp/numeros" className="rounded-xl border p-2 hover:bg-slate-50" title="Gerenciar canais WhatsApp">
               <Smartphone size={18}/>
             </Link>
@@ -870,7 +1301,7 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[280px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[280px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[280px_minmax(0,1fr)_260px]'}`}>
+        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
           <aside className={`${ativa ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -921,8 +1352,8 @@ export default function WhatsAppAtendimentoPage() {
                   placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
               <div className="mt-3 flex items-center justify-between px-0.5">
-                <span className="text-xs font-bold text-slate-700">Abertas {totais.abertas}</span>
-                <span className="text-[10px] text-slate-400">Filtros do atendimento</span>
+                <span className="text-xs font-extrabold text-slate-800">Abertas <span className="text-slate-500">{totais.abertas}</span></span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600"><Tag size={12}/>Filtros</span>
               </div>
               <div className="mt-2 min-w-0 max-w-full">
                 <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
@@ -968,14 +1399,14 @@ export default function WhatsAppAtendimentoPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && !buscandoContatos ? (
+              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
               ) : filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
-                  onClick={()=>setAtiva(c)}
-                  onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setAtiva(c)}}}
+                  onClick={()=>selecionarConversa(c)}
+                  onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selecionarConversa(c)}}}
                   className={`group flex w-full cursor-pointer gap-3 border-b px-4 py-3 text-left outline-none transition hover:bg-slate-50 focus:bg-slate-50 ${ativa?.id===c.id?'bg-emerald-50':''}`}>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-700">
                     {c.whatsapp_chat_tipo === 'grupo'
@@ -995,13 +1426,18 @@ export default function WhatsAppAtendimentoPage() {
                       {c.ultimo_preview || (c.whatsapp_chat_tipo === 'grupo' ? 'Grupo sincronizado do WhatsApp' : 'Conversa WhatsApp')}
                     </p>
                     <div className="mt-1 flex items-center gap-2 text-[10px]">
-                      {c.whatsapp_chat_tipo === 'grupo' ? (
+                      {c.whatsapp_chat_tipo === 'grupo' && (
                         <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">Grupo</span>
-                      ) : c.status === 'finalizado' ? (
+                      )}
+                      {c.status === 'finalizado' ? (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">Finalizado</span>
+                      ) : c.status === 'em_atendimento' && c.responsavel_id ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+                          Atendimento por {c.responsavel_nome || (c.responsavel_id===eu?.id ? 'você' : 'atendente')}
+                        </span>
                       ) : c.responsavel_id ? (
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                          {c.responsavel_id===eu?.id ? 'Meu atendimento' : (c.responsavel_nome || 'Com atendente')}
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                          Aguardando {c.responsavel_id===eu?.id ? 'você' : (c.responsavel_nome || 'atendente')}
                         </span>
                       ) : (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Aguardando atendimento</span>
@@ -1020,39 +1456,73 @@ export default function WhatsAppAtendimentoPage() {
                       )}
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
-                    {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && !c.responsavel_id && (
-                      <div className="mt-2 flex">
-                        <button type="button" onClick={async e=>{e.stopPropagation();setAtiva(c);await acaoConversaPorId(c.id,'assumir')}}
-                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700">
-                          Atender
-                        </button>
-                      </div>
-                    )}
-                    {c.whatsapp_chat_tipo !== 'grupo' && c.status !== 'finalizado' && (
-                      <div className="mt-2 hidden flex-wrap gap-1.5 group-hover:flex group-focus-within:flex">
-                        <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
-                          className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${c.acompanhando?'border-cyan-200 bg-cyan-50 text-cyan-700':'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                          {c.acompanhando?'Parar acompanhamento':'Acompanhar'}
-                        </button>
+                    {c.status !== 'finalizado' && (
+                      <div className={`mt-2 flex flex-wrap gap-1.5 ${!c.responsavel_id ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
+                        {podeSupervisionarConversa(c) && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
+                            className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${c.acompanhando?'border-amber-300 bg-amber-50 text-amber-800':'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'}`}>
+                            {c.acompanhando?'Acompanhando':'Acompanhar'}
+                          </button>
+                        )}
                         {podeTransferirConversa(c) && (
-                          <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setTransferenciaAberta(true)}}
-                            className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                          <button type="button" onClick={e=>{e.stopPropagation();selecionarConversa(c);setTransferenciaAberta(true)}}
+                            className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50">
                             Transferir
                           </button>
                         )}
-                        <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c);setApoioAberto('etiquetas')}}
-                          className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
+                        <button type="button" onClick={e=>{e.stopPropagation();selecionarConversa(c);setApoioAberto('etiquetas')}}
+                          className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50">
                           Etiquetas
                         </button>
-                        <button type="button" onClick={e=>{e.stopPropagation();setAtiva(c)}}
-                          className="rounded-md border bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">
-                          Ver tudo
+                        {(!c.responsavel_id || (c.responsavel_id === eu?.id && c.status === 'aguardando')) && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();selecionarConversa(c);await acaoConversaPorId(c.id,'assumir')}}
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100">
+                            {c.responsavel_id === eu?.id ? 'Aceitar atendimento' : 'Atender'}
+                          </button>
+                        )}
+                        {c.responsavel_id === eu?.id && Number(c.nao_lidas || 0) > 0 && (
+                          <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,'marcar_lida')}}
+                            className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-800 hover:bg-blue-100">
+                            Dar baixa
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {c.status === 'finalizado' && c.whatsapp_chat_tipo !== 'grupo' && podeAtenderConversa(c) && (
+                      <div className="mt-2">
+                        <button type="button" onClick={async e=>{e.stopPropagation();selecionarConversa(c);await acaoConversaPorId(c.id,'assumir')}}
+                          className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100">
+                          Nova conversa
                         </button>
                       </div>
                     )}
                   </div>
                 </div>
               ))}
+              {busca.trim().length >= 2 && usuariosInternosBusca.length > 0 && (
+                <div className="border-t border-blue-100 bg-blue-50/30">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-500">Equipe Atlas · conversa interna</span>
+                  </div>
+                  {usuariosInternosBusca.map(item => (
+                    <Link
+                      key={item.id}
+                      href={`/chat?usuarioId=${encodeURIComponent(item.id)}`}
+                      className="flex w-full items-center gap-3 border-t border-blue-100 px-3 py-2.5 text-left hover:bg-blue-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                        {String(item.nome || '?').slice(0,1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">{item.nome}</p>
+                        <p className="truncate text-[11px] text-blue-500">Usuário interno do Atlas</p>
+                      </div>
+                      <span className="text-[10px] font-semibold text-blue-700">Conversar</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
               {busca.trim().length >= 2 && (buscandoContatos || contatosBuscaVisiveis.length > 0) && (
                 <div className="border-t border-slate-200">
                   <div className="flex items-center justify-between px-3 py-2">
@@ -1062,21 +1532,38 @@ export default function WhatsAppAtendimentoPage() {
                   {contatosBuscaVisiveis.map(item => (
                     <button
                       key={`${item.canalId || ''}:${item.jid}`}
-                      onClick={() => void iniciarDoDiretorio(item)}
-                      className="flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 text-left hover:bg-emerald-50"
+                      onClick={async () => {
+                        if (item.bloqueado) {
+                          if (!item.conversaId) {
+                            setErro('O contato está bloqueado, mas a conversa original não foi localizada para desbloqueio.')
+                            return
+                          }
+                          if (!window.confirm('Desbloquear este contato neste WhatsApp e abrir a conversa novamente?')) return
+                          const ok = await acaoConversaPorId(item.conversaId, 'desbloquear')
+                          if (!ok) return
+                          await iniciarDoDiretorio({ ...item, bloqueado: false })
+                          return
+                        }
+                        await iniciarDoDiretorio(item)
+                      }}
+                      className={`flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 text-left ${item.bloqueado?'bg-red-50/60 hover:bg-red-50':'hover:bg-emerald-50'}`}
                     >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700">
-                        {item.tipo === 'grupo' ? <Users size={16}/> : item.nome.slice(0,1).toUpperCase()}
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${item.bloqueado?'bg-red-100 text-red-700':'bg-emerald-50 text-emerald-700'}`}>
+                        {item.bloqueado ? <Ban size={16}/> : item.tipo === 'grupo' ? <Users size={16}/> : item.nome.slice(0,1).toUpperCase()}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-800">{item.nome}</p>
-                        <p className="truncate text-[11px] text-slate-400">
-                          {item.tipo === 'grupo'
-                            ? `Grupo · ${item.participantes || 0} participantes`
-                            : (item.telefone ? telefoneFormatado(item.telefone) : 'Contato salvo no WhatsApp')}
+                        <p className={`truncate text-[11px] ${item.bloqueado?'text-red-600':'text-slate-400'}`}>
+                          {item.bloqueado
+                            ? `Bloqueado${item.bloqueado_por_nome ? ` por ${item.bloqueado_por_nome}` : ''}`
+                            : item.tipo === 'grupo'
+                              ? `Grupo · ${item.participantes || 0} participantes`
+                              : (item.telefone ? telefoneFormatado(item.telefone) : 'Contato salvo no WhatsApp')}
                         </p>
                       </div>
-                      <span className="text-[10px] font-semibold text-emerald-700">Abrir</span>
+                      <span className={`text-[10px] font-semibold ${item.bloqueado?'text-red-700':'text-emerald-700'}`}>
+                        {item.bloqueado ? 'Desbloquear' : 'Abrir'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1087,7 +1574,7 @@ export default function WhatsAppAtendimentoPage() {
           <section className={`${ativa ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
             {!ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
-                <div><MessageCircle className="mx-auto mb-3" size={42}/><p>Selecione uma conversa.</p></div>
+                <div><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border-2 border-blue-200 bg-blue-50 text-blue-500"><MessageCircle size={30}/></div><p className="font-semibold text-slate-600">Selecione uma conversa para começar</p></div>
               </div>
             ) : <>
               <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-white px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
@@ -1104,8 +1591,14 @@ export default function WhatsAppAtendimentoPage() {
                   </b>
                   <p className="text-xs text-slate-500">
                     {ativa.whatsapp_chat_tipo === 'grupo'
-                      ? 'Grupo WhatsApp · canal compartilhado'
-                      : `${telefoneFormatado(ativa.telefone)} · ${ativa.responsavel_nome || 'Em espera'}`}
+                      ? `Grupo WhatsApp · ${ativa.status === 'em_atendimento' && ativa.responsavel_nome
+                          ? `Atendimento por ${ativa.responsavel_nome}`
+                          : ativa.responsavel_nome
+                            ? `Aguardando ${ativa.responsavel_nome}`
+                            : 'Aguardando atendimento'}`
+                      : `${telefoneFormatado(ativa.telefone)} · ${ativa.status === 'em_atendimento' && ativa.responsavel_nome
+                          ? `Atendimento por ${ativa.responsavel_nome}`
+                          : ativa.responsavel_nome || 'Em espera'}`}
                     {ativa.setor ? ` · ${ativa.setor}` : ''}
                   </p>
                   {canalAtivo&&(
@@ -1128,33 +1621,118 @@ export default function WhatsAppAtendimentoPage() {
                     Cliente 360
                   </Link>
                 )}
-                <button onClick={()=>void acaoConversa(ativa.acompanhando?'parar_acompanhar':'acompanhar')}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${ativa.acompanhando?'bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
-                  {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
-                  {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
-                </button>
-                {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id && (
-                  <button onClick={()=>void acaoConversa('assumir')}
-                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
-                    <UserRoundCheck size={15}/> Atender
+                {podeSupervisionarAtiva && (
+                  <button onClick={()=>void acaoConversa(ativa.acompanhando?'parar_acompanhar':'acompanhar')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${ativa.acompanhando?'bg-cyan-50 text-cyan-700':'bg-white text-slate-600'}`}>
+                    {ativa.acompanhando ? <EyeOff size={15}/> : <Eye size={15}/>}
+                    {ativa.acompanhando ? 'Parar de acompanhar' : 'Acompanhar'}
                   </button>
                 )}
-                {ativa.whatsapp_chat_tipo !== 'grupo' && ativa.responsavel_id && ativa.status !== 'finalizado' &&
+                {podeReabrirAtiva && (
+                  <button onClick={()=>void acaoConversa('assumir')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                    <MessageCircle size={15}/> Reativar conversa
+                  </button>
+                )}
+                {podeAssumirAtiva && (
+                  <button onClick={()=>void acaoConversa('assumir')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                    <UserRoundCheck size={15}/>
+                    {ativa.responsavel_id ? 'Assumir atendimento' : 'Atender'}
+                  </button>
+                )}
+                {ativa.status === 'em_atendimento' && ativa.responsavel_nome && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+                    <CheckCircle2 size={15}/> Atendimento por {ativa.responsavel_nome}
+                  </span>
+                )}
+                {podeDelegarGrupo && (
+                  <button onClick={()=>setDelegacaoAberta(aberta=>!aberta)}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${delegacaoAberta?'bg-violet-50 text-violet-800':'bg-white text-violet-700'}`}>
+                    <Users size={15}/> {ativa.grupo_delegacao_ativa ? 'Responsável temporário' : 'Delegar grupo'}
+                  </button>
+                )}
+                {atendimentoMeu && Number(ativa.nao_lidas || 0) > 0 && (
+                  <button type="button" onClick={()=>void acaoConversa('marcar_lida')}
+                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100">
+                    <CheckCircle2 size={15}/> Dar baixa
+                  </button>
+                )}
+                {ativa.responsavel_id && ativa.status !== 'finalizado' &&
                   (eu?.role === 'master' || ativa.responsavel_id === eu?.id) && (
                   <button onClick={()=>void acaoConversa('finalizar')}
                     className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold">
                     <CheckCircle2 size={15}/> Finalizar
                   </button>
                 )}
-                {podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+                {podeTransferirAtiva && ativa.status !== 'finalizado' && (
                   <button onClick={()=>setTransferenciaAberta(aberta=>!aberta)}
                     className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${transferenciaAberta?'bg-slate-100 text-slate-900':'bg-white text-slate-600'}`}>
                     <ShieldCheck size={15}/> Transferir
                   </button>
                 )}
+                {podeArquivarAtiva && (
+                  <button type="button"
+                    onClick={()=>{if(window.confirm('Remover esta conversa da caixa? O histórico continuará salvo e poderá ser encontrado novamente pela busca.'))void acaoConversa('arquivar')}}
+                    className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    title="Remove da caixa, mas preserva todo o histórico">
+                    <Archive size={15}/> Remover da lista
+                  </button>
+                )}
+                {podeBloquearAtiva && (
+                  <button type="button"
+                    onClick={()=>{if(window.confirm('Bloquear este contato neste número do WhatsApp? O histórico ficará salvo no Atlas.'))void acaoConversa('bloquear')}}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100">
+                    <Ban size={15}/> Bloquear
+                  </button>
+                )}
               </div>
 
-              {transferenciaAberta && podeTransferirAtiva && ativa.whatsapp_chat_tipo !== 'grupo' && (
+              {delegacaoAberta && podeDelegarGrupo && ativa.grupo_id && (
+                <div className="border-b bg-violet-50/70 px-4 py-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <b className="text-xs text-violet-900">Responsabilidade temporária do grupo</b>
+                      <p className="text-[10px] text-violet-700">
+                        Responsável principal: {ativa.grupo_responsavel_principal_nome || 'não definido'}
+                        {ativa.grupo_delegacao_ativa && ativa.grupo_delegacao_fim_em
+                          ? ` · temporário até ${new Date(ativa.grupo_delegacao_fim_em).toLocaleString('pt-BR')}`
+                          : ''}
+                      </p>
+                    </div>
+                    {ativa.grupo_delegacao_ativa && (
+                      <button type="button" disabled={salvandoDelegacao}
+                        onClick={()=>void encerrarDelegacaoGrupo()}
+                        className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-bold text-violet-700 disabled:opacity-40">
+                        Encerrar e devolver
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-[minmax(170px,1fr)_90px_minmax(180px,1.2fr)_auto]">
+                    <select value={destinoDelegacaoId} onChange={e=>setDestinoDelegacaoId(e.target.value)}
+                      className="rounded-lg border bg-white px-2 py-2 text-xs">
+                      <option value="">Delegar para...</option>
+                      {usuarios.filter(u=>u.id!==ativa.grupo_responsavel_principal_id).map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 rounded-lg border bg-white px-2">
+                      <input type="number" min={1} max={365} value={diasDelegacao}
+                        onChange={e=>setDiasDelegacao(Math.max(1,Number(e.target.value)||1))}
+                        className="w-12 bg-transparent py-2 text-xs outline-none"/>
+                      <span className="text-[10px] text-slate-500">dias</span>
+                    </label>
+                    <input value={motivoDelegacao} onChange={e=>setMotivoDelegacao(e.target.value)}
+                      placeholder="Motivo (férias, folga, ausência...)"
+                      className="rounded-lg border bg-white px-2 py-2 text-xs"/>
+                    <button type="button" disabled={!destinoDelegacaoId||salvandoDelegacao}
+                      onClick={()=>void delegarResponsabilidadeGrupo()}
+                      className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
+                      {salvandoDelegacao?'Salvando...':'Confirmar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {transferenciaAberta && podeTransferirAtiva && ativa.status !== 'finalizado' && (
                 <div className="flex flex-wrap items-center justify-end gap-2 border-b bg-slate-50 px-4 py-2">
                   <select value={destinoId} onChange={e=>setDestinoId(e.target.value)}
                     className="rounded-lg border bg-white px-2 py-1.5 text-xs">
@@ -1172,7 +1750,7 @@ export default function WhatsAppAtendimentoPage() {
               )}
 
               <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto bg-[#fbfcfe] p-2.5 sm:p-4">
-                {mensagens.map(m => {
+                {mensagensVisiveis.map(m => {
                   const saida = m.direcao === 'saida'
                   const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
                   const midia = Boolean(m.media_url)
@@ -1182,8 +1760,51 @@ export default function WhatsAppAtendimentoPage() {
                     (m.tipo === 'video' && texto === '🎥 Vídeo') ||
                     (m.tipo === 'documento' && texto === '📎 Documento')
                   return (
-                    <div key={m.id} className={`flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
-                      <div className={`min-w-0 max-w-[88%] overflow-hidden rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
+                    <div key={m.id} className={`group/msg flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
+                      <div className={`relative min-w-0 max-w-[88%] overflow-visible rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
+                        {podeResponder && (
+                          <div className={`absolute -top-3 z-10 hidden items-center gap-1 rounded-full border bg-white p-1 shadow-md group-hover/msg:flex ${saida?'right-2':'left-2'}`}>
+                            <button type="button" onClick={()=>setMensagemRespondendo(m)}
+                              className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+                              title="Responder esta mensagem">
+                              <Reply size={14}/>
+                            </button>
+                            <button type="button" onClick={()=>setEmojiMensagemId(atual=>atual===m.id?null:m.id)}
+                              className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
+                              title="Reagir com emoji">
+                              <SmilePlus size={14}/>
+                            </button>
+                          </div>
+                        )}
+                        {emojiMensagemId===m.id && podeResponder && (
+                          <div className={`absolute top-7 z-20 flex flex-wrap items-center gap-1 rounded-xl border bg-white p-2 shadow-xl ${saida?'right-0':'left-0'}`}>
+                            {['👍','✅','❤️','😂','👏','🙏','🔥','👀'].map(emoji=>(
+                              <button key={emoji} type="button" onClick={()=>void reagirMensagem(m.id,emoji)}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-lg hover:bg-slate-100">
+                                {emoji}
+                              </button>
+                            ))}
+                            <div className="flex items-center gap-1 border-l pl-2">
+                              <input value={emojiCustom} onChange={e=>setEmojiCustom(e.target.value)}
+                                onKeyDown={e=>{if(e.key==='Enter'&&emojiCustom.trim()){e.preventDefault();void reagirMensagem(m.id,emojiCustom)}}}
+                                placeholder="emoji" className="w-16 rounded-md border px-2 py-1 text-xs"/>
+                              <button type="button" disabled={!emojiCustom.trim()} onClick={()=>void reagirMensagem(m.id,emojiCustom)}
+                                className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30">OK</button>
+                            </div>
+                          </div>
+                        )}
+                        {(() => {
+                          const p = m.payload && typeof m.payload === 'object' ? m.payload : {}
+                          const quotedId = p.quotedMessageId ? String(p.quotedMessageId) : ''
+                          const alvo = quotedId ? mensagens.find(x=>x.id===quotedId) : null
+                          const quotedText = alvo?.texto || p.quotedText
+                          return quotedText ? (
+                            <div className="mb-2 rounded-lg border-l-4 border-emerald-400 bg-white/60 px-2 py-1.5 text-[11px] text-slate-500">
+                              <b className="block text-[10px] text-slate-600">Resposta</b>
+                              <span className="block max-w-full truncate">{String(quotedText)}</span>
+                            </div>
+                          ) : null
+                        })()}
                         {saida && m.usuario_nome && <p className="mb-1 text-[10px] font-bold text-emerald-700">{m.usuario_nome} diz</p>}
 
                         {m.tipo === 'audio' && midia && (
@@ -1236,7 +1857,15 @@ export default function WhatsAppAtendimentoPage() {
                           <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-slate-900">{texto}</p>
                         )}
                         {!texto && !midia && <p className="text-sm text-slate-500">[{m.tipo}]</p>}
-                        <p className="mt-1 text-right text-[10px] text-slate-400">{hora(m.created_at)}</p>
+                        {!!reacoesPorMensagem.get(m.id)?.length && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {reacoesPorMensagem.get(m.id)!.map((r,i)=>(
+                              <span key={`${r.emoji}-${i}`} title={r.usuario}
+                                className="rounded-full border bg-white/80 px-1.5 py-0.5 text-xs shadow-sm">{r.emoji}</span>
+                            ))}
+                          </div>
+                        )}
+                        <p className="mt-1 text-right text-[10px] text-slate-400">{new Date(m.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
                       </div>
                     </div>
                   )
@@ -1280,13 +1909,48 @@ export default function WhatsAppAtendimentoPage() {
                     )}
                   </div>
                 )}
-                {ativa.whatsapp_chat_tipo !== 'grupo' && !ativa.responsavel_id ? (
-                  <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    <Clock3 size={16}/> Esta conversa esta na fila. Assuma para responder.
+                {ativa.status === 'finalizado' ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">Atendimento encerrado</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">O histórico acima continua salvo. Reative para abrir um novo ciclo de atendimento sem perder nenhuma mensagem anterior.</p>
+                    </div>
+                    {podeReabrirAtiva ? (
+                      <button type="button" onClick={()=>void acaoConversa('assumir')}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                        <MessageCircle size={15}/> Reativar conversa
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Você possui acesso ao histórico, mas não permissão para atender neste número.</span>
+                    )}
+                  </div>
+                ) : (!ativa.responsavel_id || (ativa.responsavel_id === eu?.id && ativa.status === 'aguardando')) ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                      <Clock3 size={16}/> {ativa.responsavel_id === eu?.id ? 'Atendimento transferido para você. Aceite para começar.' : 'Esta conversa está aguardando atendimento.'}
+                    </div>
+                    <button type="button" onClick={()=>void acaoConversa('assumir')}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                      <UserRoundCheck size={15}/> {ativa.responsavel_id === eu?.id ? 'Aceitar atendimento' : 'Atender agora'}
+                    </button>
+                  </div>
+                ) : ativa.responsavel_id && ativa.responsavel_id !== eu?.id && ativa.status !== 'finalizado' ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+                    <div className="text-xs text-slate-600">
+                      Atendimento de <b>{ativa.responsavel_nome || 'outro atendente'}</b>.
+                    </div>
+                    {eu?.role === 'master' ? (
+                      <button type="button" onClick={()=>void acaoConversa('assumir')}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700">
+                        <UserRoundCheck size={15}/> Assumir atendimento
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Você pode acompanhar em tempo real.</span>
+                    )}
                   </div>
                 ) : !podeResponder ? (
                   <div className="rounded-xl bg-slate-100 p-3 text-center text-xs text-slate-600">
-                    Atendimento de {ativa.responsavel_nome}. O Master pode acompanhar em tempo real.
+                    Você não possui permissão para responder por este canal.
                   </div>
                 ) : (
                   <div>
@@ -1374,6 +2038,19 @@ export default function WhatsAppAtendimentoPage() {
                         )}
                       </div>
                     )}
+                    {mensagemRespondendo && (
+                      <div className="mb-2 flex items-center gap-3 rounded-xl border-l-4 border-emerald-500 bg-emerald-50 px-3 py-2">
+                        <Reply size={15} className="shrink-0 text-emerald-700"/>
+                        <div className="min-w-0 flex-1">
+                          <b className="block text-[10px] uppercase tracking-wide text-emerald-700">Respondendo</b>
+                          <p className="truncate text-xs text-slate-600">{mensagemRespondendo.texto || `[${mensagemRespondendo.tipo}]`}</p>
+                        </div>
+                        <button type="button" onClick={()=>setMensagemRespondendo(null)}
+                          className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-white">
+                          <X size={14}/>
+                        </button>
+                      </div>
+                    )}
                     {gravando && (
                       <div className="mb-2 flex items-center justify-between rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
                         <span>● Gravando áudio · {Math.floor(segundosGravacao/60)}:{String(segundosGravacao%60).padStart(2,'0')}</span>
@@ -1430,6 +2107,10 @@ export default function WhatsAppAtendimentoPage() {
                   className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Notas">
                   <StickyNote size={17}/>
                 </button>
+                <button onClick={()=>{setPainelDireito('historico');alternarPainelDireitoRecolhido(false)}}
+                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Histórico">
+                  <History size={17}/>
+                </button>
               </div>
             ) : <>
             <div className="border-b p-3">
@@ -1452,18 +2133,22 @@ export default function WhatsAppAtendimentoPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 border-b p-2 text-xs font-bold">
+            <div className="grid grid-cols-4 gap-1 border-b bg-slate-50 p-2 text-[11px] font-bold">
               <button onClick={()=>setPainelDireito('cliente')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='cliente'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
-                Cadastro 360
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='cliente'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Cliente
               </button>
               <button onClick={()=>setPainelDireito('agenda')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='agenda'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='agenda'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
                 Agenda
               </button>
               <button onClick={()=>setPainelDireito('notas')}
-                className={`rounded-lg px-2 py-2 ${painelDireito==='notas'?'bg-blue-50 text-blue-700':'text-slate-500'}`}>
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='notas'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
                 Notas
+              </button>
+              <button onClick={()=>setPainelDireito('historico')}
+                className={`rounded-lg px-1.5 py-2 ${painelDireito==='historico'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
+                Histórico
               </button>
             </div>
 
@@ -1597,7 +2282,7 @@ export default function WhatsAppAtendimentoPage() {
                     Os agendamentos vinculados ao atendimento aparecerão aqui.
                   </div>
                 </div>
-              ) : (
+              ) : painelDireito === 'notas' ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <StickyNote size={17} className="text-amber-600"/>
@@ -1638,12 +2323,131 @@ export default function WhatsAppAtendimentoPage() {
                     )}
                   </div>
                 </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <History size={17} className="text-blue-600"/>
+                    <div>
+                      <b className="block text-sm text-slate-800">Histórico do atendimento</b>
+                      <span className="text-[10px] text-slate-500">Aberturas, responsáveis, respostas, transferências, baixas e finalizações.</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {historico.filter(e=>!['status_whatsapp','mensagem_enviada_qr'].includes(e.tipo)).map(e=>{
+                      const dados=(e.dados||{}) as Record<string,unknown>
+                      const nome=e.usuario_nome||'Sistema'
+                      let descricao=e.tipo.replaceAll('_',' ')
+                      if(e.tipo==='conversa_visualizada')descricao='abriu a conversa'
+                      else if(e.tipo==='conversa_assumida')descricao='assumiu o atendimento'
+                      else if(e.tipo==='conversa_transferida')descricao=`transferiu o atendimento para ${String(dados.destino_nome||'outro usuário')}`
+                      else if(e.tipo==='conversa_direcionada_mencao')descricao=`direcionou para ${String(dados.destino_nome||'outro usuário')}`
+                      else if(e.tipo==='conversa_finalizada')descricao='finalizou o atendimento'
+                      else if(e.tipo==='conversa_baixada')descricao='deu baixa nas mensagens pendentes'
+                      else if(e.tipo==='conversa_acompanhada')descricao='começou a acompanhar'
+                      else if(e.tipo==='conversa_acompanhamento_removido')descricao='parou de acompanhar'
+                      else if(e.tipo==='mensagem_enfileirada_qr'||e.tipo==='mensagem_enviada')descricao='respondeu uma mensagem'
+                      else if(e.tipo==='midia_enfileirada_qr')descricao='enviou um arquivo ou mídia'
+                      else if(e.tipo==='mensagem_recebida_qr'||e.tipo==='mensagem_recebida')descricao='nova mensagem recebida'
+                      else if(e.tipo==='mensagem_reagida')descricao=`reagiu com ${String(dados.emoji||'emoji')}`
+                      else if(e.tipo==='grupo_responsavel_definido')descricao=`definiu ${String(dados.usuario_alvo_nome||'usuário')} como responsável principal do grupo`
+                      else if(e.tipo==='grupo_permissao_alterada')descricao=`alterou a permissão de ${String(dados.usuario_alvo_nome||'usuário')} para ${String(dados.nivel||'')}`
+                      else if(e.tipo==='grupo_responsabilidade_delegada')descricao=`delegou o grupo para ${String(dados.destino_usuario_nome||'outro usuário')} até ${dados.fim_em?new Date(String(dados.fim_em)).toLocaleString('pt-BR'):'o período definido'}`
+                      else if(e.tipo==='grupo_responsabilidade_retomada')descricao=`encerrou a delegação e devolveu o grupo para ${String(dados.responsavel_principal_nome||'responsável principal')}`
+                      return <div key={e.id} className="rounded-xl border bg-white p-3">
+                        <div className="flex items-start gap-2">
+                          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><History size={13}/></span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-slate-700"><b>{nome}</b> {descricao}</p>
+                            <p className="mt-1 text-[10px] text-slate-400">{new Date(e.created_at).toLocaleString('pt-BR')}</p>
+                          </div>
+                        </div>
+                      </div>
+                    })}
+                    {!historico.length&&<div className="rounded-2xl border border-dashed p-5 text-center text-xs text-slate-500">Nenhum evento registrado ainda.</div>}
+                  </div>
+                </div>
               )}
             </div>
             </>}
           </aside>
         </div>
       </div>
+
+        {conversaInternaAberta && (
+          <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+            onMouseDown={e=>{if(e.currentTarget===e.target)setConversaInternaAberta(false)}}>
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl border bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-5 py-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Nova conversa interna</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">Escolha quem da empresa participa da conversa.</p>
+                </div>
+                <button type="button" onClick={()=>setConversaInternaAberta(false)}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Fechar"><X size={17}/></button>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
+                  <Search size={16} className="text-slate-400"/>
+                  <input autoFocus value={buscaUsuarioInterno}
+                    onChange={e=>setBuscaUsuarioInterno(e.target.value)}
+                    placeholder="Buscar Keila, Júlio, Gabi..."
+                    className="w-full bg-transparent py-2.5 text-sm outline-none"/>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto rounded-xl border">
+                  {usuarios
+                    .filter(u=>u.id!==eu?.id)
+                    .filter(u=>!buscaUsuarioInterno.trim()||u.nome.toLocaleLowerCase('pt-BR').includes(buscaUsuarioInterno.toLocaleLowerCase('pt-BR').trim()))
+                    .map(u=>{
+                      const selecionado=usuariosInternosSelecionados.includes(u.id)
+                      return (
+                        <button type="button" key={u.id}
+                          onClick={()=>setUsuariosInternosSelecionados(lista=>selecionado?lista.filter(id=>id!==u.id):[...lista,u.id])}
+                          className={`flex w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 ${selecionado?'bg-blue-50':'hover:bg-slate-50'}`}>
+                          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${selecionado?'bg-blue-600 text-white':'bg-slate-100 text-slate-700'}`}>
+                            {u.nome.slice(0,1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <b className="block truncate text-sm text-slate-900">{u.nome}</b>
+                            <span className="block text-[11px] text-slate-400">Usuário da empresa</span>
+                          </span>
+                          <span className={`grid h-5 w-5 place-items-center rounded border text-[10px] ${selecionado?'border-blue-600 bg-blue-600 text-white':'border-slate-300'}`}>
+                            {selecionado?'✓':''}
+                          </span>
+                        </button>
+                      )
+                    })}
+                </div>
+
+                {usuariosInternosSelecionados.length>1 && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-slate-600">Nome do grupo interno</span>
+                    <input value={nomeGrupoInterno} onChange={e=>setNomeGrupoInterno(e.target.value)}
+                      placeholder="Ex.: Comercial e Produção"
+                      className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100"/>
+                  </label>
+                )}
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500">
+                    {usuariosInternosSelecionados.length===0
+                      ? 'Selecione uma pessoa ou várias.'
+                      : usuariosInternosSelecionados.length===1
+                        ? 'Conversa privada interna.'
+                        : `${usuariosInternosSelecionados.length} pessoas · grupo interno`}
+                  </p>
+                  <button type="button" disabled={!usuariosInternosSelecionados.length}
+                    onClick={iniciarConversaInternaSelecionada}
+                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40">
+                    Iniciar conversa
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {diretorioAberto && (
           <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
