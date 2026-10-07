@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { MedicaoItem, Usuario } from './tipos'
 import { carregarChecklistMedicaoV2, statusItemChecklistV2, validarChecklistObrigatorioV2 } from './medicaoChecklistV2'
+import { verificarFluxoVendaOrcamento } from './medicaoFinal'
 
 export type ResumoMedicaoV2 = {
   totalLinhas: number
@@ -21,6 +22,10 @@ export type StatusOperacionalMedicao =
   | 'aprovado'
 
 export type OperacaoMedicaoV2 = {
+  orcamento_id: string | null
+  fluxo_venda_ativo: boolean | null
+  fluxo_venda_status_orcamento: string | null
+  fluxo_venda_coluna_comercial: string | null
   status_operacional: StatusOperacionalMedicao
   responsavel_id: string | null
   responsavel_nome: string | null
@@ -89,7 +94,7 @@ export async function carregarOperacaoMedicaoV2(medicaoId: string): Promise<Oper
   const [{ data: medicao, error }, { count: pendenciasAbertas }] = await Promise.all([
     supabase
       .from('medicoes_finais')
-      .select('status_operacional, responsavel_id, responsavel_nome, liberado_em, iniciado_em, concluido_em, aprovado_em, aprovado_por_nome, observacoes, versao')
+      .select('orcamento_id, status_operacional, responsavel_id, responsavel_nome, liberado_em, iniciado_em, concluido_em, aprovado_em, aprovado_por_nome, observacoes, versao')
       .eq('id', medicaoId)
       .maybeSingle(),
     supabase
@@ -104,7 +109,15 @@ export async function carregarOperacaoMedicaoV2(medicaoId: string): Promise<Oper
     return null
   }
 
+  const fluxoVenda = medicao.orcamento_id
+    ? await verificarFluxoVendaOrcamento(String(medicao.orcamento_id))
+    : null
+
   return {
+    orcamento_id: medicao.orcamento_id || null,
+    fluxo_venda_ativo: fluxoVenda ? fluxoVenda.ativo : null,
+    fluxo_venda_status_orcamento: fluxoVenda?.statusOrcamento || null,
+    fluxo_venda_coluna_comercial: fluxoVenda?.colunaComercial || null,
     status_operacional: (medicao.status_operacional || 'aguardando_liberacao') as StatusOperacionalMedicao,
     responsavel_id: medicao.responsavel_id || null,
     responsavel_nome: medicao.responsavel_nome || null,
@@ -214,6 +227,22 @@ export async function iniciarMedicaoFinal(
 export async function concluirMedicaoFinal(
   medicaoId: string,
 ): Promise<ResultadoTransicaoMedicao> {
+  const { data: medicaoFluxo } = await supabase
+    .from('medicoes_finais')
+    .select('orcamento_id')
+    .eq('id', medicaoId)
+    .maybeSingle()
+
+  if (medicaoFluxo?.orcamento_id) {
+    const fluxo = await verificarFluxoVendaOrcamento(String(medicaoFluxo.orcamento_id))
+    if (!fluxo.ativo) {
+      return {
+        ok: false,
+        mensagem: 'Confirme a venda e envie o orçamento para o fluxo Vendido antes de enviar a Medição Final.',
+      }
+    }
+  }
+
   const checklist = await validarChecklistObrigatorioV2(medicaoId)
   if (!checklist.ok) return { ok: false, mensagem: `Complete as medidas e ${checklist.faltantes.length} campo(s) obrigatório(s).` }
   const [{ data: itens, error: erroItens }, { count: pendenciasAbertas, error: erroPendencias }] = await Promise.all([

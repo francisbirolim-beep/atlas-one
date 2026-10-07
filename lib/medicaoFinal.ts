@@ -13,6 +13,49 @@ const LIMITE_DIFERENCA_PADRAO = 10
 
 export type TipoMedicaoFinal = 'contramarco' | 'tipologia'
 
+export type FluxoVendaMedicao = {
+  ativo: boolean
+  vendaId: string | null
+  obraId: string | null
+  statusOrcamento: string | null
+  colunaComercial: string | null
+}
+
+export async function verificarFluxoVendaOrcamento(orcamentoId: string): Promise<FluxoVendaMedicao> {
+  const [{ data: venda }, { data: orcamento }] = await Promise.all([
+    supabase
+      .from('vendas_obras')
+      .select('id,obra_id')
+      .eq('orcamento_id', orcamentoId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('orcamentos')
+      .select('status,obra_id,coluna_id')
+      .eq('id', orcamentoId)
+      .maybeSingle(),
+  ])
+
+  let colunaComercial: string | null = null
+  if (orcamento?.coluna_id) {
+    const { data: coluna } = await supabase
+      .from('kanban_colunas')
+      .select('nome')
+      .eq('id', orcamento.coluna_id)
+      .maybeSingle()
+    colunaComercial = coluna?.nome || null
+  }
+
+  return {
+    ativo: Boolean(venda?.id),
+    vendaId: venda?.id || null,
+    obraId: venda?.obra_id || orcamento?.obra_id || null,
+    statusOrcamento: orcamento?.status || null,
+    colunaComercial,
+  }
+}
+
 // ---------- Colunas do quadro ----------
 
 export async function listarColunasMedicao(): Promise<MedicaoColuna[]> {
@@ -170,7 +213,7 @@ export async function criarMedicaoDoOrcamento(
 
     const { data: orcamento, error: erroOrcamento } = await supabase
       .from('orcamentos')
-      .select('id, cliente_id, cliente_nome, cliente_whatsapp, cidade, itens, anexos')
+      .select('id, cliente_id, cliente_nome, cliente_whatsapp, cidade, obra_id, itens, anexos')
       .eq('id', orcamentoId)
       .single()
 
@@ -207,6 +250,7 @@ export async function criarMedicaoDoOrcamento(
               cliente_id: orcamento.cliente_id || null,
               cliente_nome: orcamento.cliente_nome,
               cliente_whatsapp: orcamento.cliente_whatsapp || null,
+              obra_id: orcamento.obra_id || null,
               endereco,
               bairro,
               cep,

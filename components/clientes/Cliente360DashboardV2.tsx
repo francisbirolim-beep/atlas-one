@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Cliente } from '@/lib/tipos'
-import { criarMedicaoDoOrcamento, criarMedicaoManualCliente } from '@/lib/medicaoFinal'
+import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, verificarFluxoVendaOrcamento } from '@/lib/medicaoFinal'
 import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { gerarBasePrecificacao } from '@/lib/orcamentoPrecificacao'
@@ -281,6 +281,13 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   async function iniciarMedidaFinalDoOrcamento(){
     if(!orcamentoMedidaId)return
     setSalvando(true);setErro('')
+    const fluxo=await verificarFluxoVendaOrcamento(orcamentoMedidaId)
+    if(!fluxo.ativo){
+      setSalvando(false)
+      setModalMedidaFinal(false)
+      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(orcamentoMedidaId)}&origem=medicao-final`)
+      return
+    }
     const medicao=await criarMedicaoDoOrcamento(orcamentoMedidaId,usuario)
     setSalvando(false)
     if(!medicao){setErro('Não foi possível criar a Medida Final a partir do orçamento.');return}

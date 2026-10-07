@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   AlertTriangle, CheckCircle2, CircleDot, ClipboardCheck, Layers3, Loader2,
   Play, Plus, Ruler, ShieldCheck, UserRound, Wrench, XCircle,
@@ -102,7 +103,8 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
 
   const statusAtual = STATUS[operacao?.status_operacional || 'aguardando_liberacao'] || STATUS.aguardando_liberacao
   const pendenciasAbertas = pendencias.filter(p => p.status === 'aberta')
-  const podeConcluir = resumo.totalPecas > 0 && resumo.percentual === 100 && resumo.itensAgrupados.length === 0 && pendenciasAbertas.length === 0
+  const fluxoVendaBloqueado = Boolean(operacao?.orcamento_id) && operacao?.fluxo_venda_ativo === false
+  const podeConcluir = resumo.totalPecas > 0 && resumo.percentual === 100 && resumo.itensAgrupados.length === 0 && pendenciasAbertas.length === 0 && !fluxoVendaBloqueado
 
   function limparRetorno() {
     setMensagem('')
@@ -290,6 +292,29 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             </div>
           </div>
 
+          {fluxoVendaBloqueado && operacao?.orcamento_id && (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                    <AlertTriangle size={14} /> Medição Final fora do fluxo operacional
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    Este orçamento ainda não possui uma Venda operacional no Atlas
+                    {operacao.fluxo_venda_coluna_comercial ? ` e está na coluna “${operacao.fluxo_venda_coluna_comercial}”` : ''}.
+                    Para enviar a Medição Final e liberar as próximas etapas, confirme a venda primeiro.
+                  </p>
+                </div>
+                <Link
+                  href={`/vendas/confirmar?orcamento=${encodeURIComponent(operacao.orcamento_id)}&origem=medicao-final`}
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg bg-amber-900 px-3 py-2 text-xs font-bold text-white hover:bg-amber-950"
+                >
+                  Enviar para o fluxo / Vendido
+                </Link>
+              </div>
+            </div>
+          )}
+
           <div className="mt-3 flex flex-wrap gap-2">
             {operacao?.status_operacional === 'aguardando_liberacao' && master && (
               <button
@@ -317,7 +342,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               <button
                 type="button"
                 disabled={processando || !podeConcluir}
-                title={!podeConcluir ? 'Meça todas as peças, separe agrupamentos e resolva as pendências antes de concluir.' : undefined}
+                title={fluxoVendaBloqueado ? 'Confirme a venda e envie o orçamento para o fluxo Vendido antes de concluir.' : !podeConcluir ? 'Meça todas as peças, separe agrupamentos e resolva as pendências antes de concluir.' : undefined}
                 onClick={() => { limparRetorno(); setRevisando(true) }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -361,6 +386,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               <button
                 type="button"
                 disabled={processando || !podeConcluir}
+                title={fluxoVendaBloqueado ? 'Confirme a venda e envie o orçamento para o fluxo Vendido antes de enviar a Medição Final.' : undefined}
                 onClick={() => void executar(() => concluirMedicaoFinal(medicaoId), 'Medição Final enviada para aprovação.').then(() => setRevisando(false))}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
               >

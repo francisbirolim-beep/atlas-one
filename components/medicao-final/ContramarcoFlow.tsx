@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, Loader2, Menu,
-  Pencil, Plus, Ruler, Save, Trash2, X
+  AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, Loader2, Menu,
+  Pencil, Plus, Ruler, Send, ShieldCheck, Trash2, X
 } from 'lucide-react'
 import type { MedicaoFinal, MedicaoItem, TipoEsquadria, Tipologia, Usuario } from '@/lib/tipos'
 import {
@@ -13,11 +13,13 @@ import {
   editarItemMedicao,
   removerItemMedicao,
   salvarMedidaItem as salvarMedidaItemApi,
+  verificarFluxoVendaOrcamento,
   type DadosMedidaItem,
 } from '@/lib/medicaoFinal'
 import { listarTipologias } from '@/lib/tipologias'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import { supabase } from '@/lib/supabase'
+import { tokenAtual } from '@/lib/auth'
 
 type Tela = 'lista' | 'medicao' | 'resumo'
 
@@ -65,9 +67,19 @@ export default function ContramarcoFlow({
 }) {
   const [itens, setItens] = useState<MedicaoItem[]>(itensIniciais)
   const [tipos, setTipos] = useState<Tipologia[]>([])
-  const [tela, setTela] = useState<Tela>('lista')
+  const [tela, setTela] = useState<Tela>(
+    medicao.status_operacional === 'aguardando_conferencia' || medicao.status_operacional === 'contramarco_aprovado'
+      ? 'resumo'
+      : 'lista'
+  )
   const [indice, setIndice] = useState(0)
   const [orcamentoNumero, setOrcamentoNumero] = useState<string>('')
+  const [fluxoVendaAtivo, setFluxoVendaAtivo] = useState<boolean | null>(medicao.orcamento_id ? null : true)
+  const [colunaComercial, setColunaComercial] = useState<string | null>(null)
+  const [statusOperacional, setStatusOperacional] = useState(String(medicao.status_operacional || ''))
+  const [processandoFluxo, setProcessandoFluxo] = useState(false)
+  const [mensagemFluxo, setMensagemFluxo] = useState('')
+  const [erroFluxo, setErroFluxo] = useState('')
 
   const [modalItem, setModalItem] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
@@ -92,6 +104,12 @@ export default function ContramarcoFlow({
   useEffect(() => {
     void listarTipologias().then(setTipos)
     if (!medicao.orcamento_id) return
+
+    void verificarFluxoVendaOrcamento(medicao.orcamento_id).then(fluxo => {
+      setFluxoVendaAtivo(fluxo.ativo)
+      setColunaComercial(fluxo.colunaComercial)
+    })
+
     void supabase
       .from('orcamentos')
       .select('numero,wvetro_fluxo')
@@ -111,6 +129,10 @@ export default function ContramarcoFlow({
   const producaoLargura = Math.max(0, (Number(vaoLargura) || 0) - (Number(folgaLargura) || 0))
   const producaoAltura = Math.max(0, (Number(vaoAltura) || 0) - (Number(folgaAltura) || 0))
   const origemLabel = orcamentoNumero ? `Orçamento #${orcamentoNumero}` : 'Sem orçamento'
+  const fluxoVendaBloqueado = Boolean(medicao.orcamento_id) && fluxoVendaAtivo === false
+  const aguardandoConferencia = statusOperacional === 'aguardando_conferencia' || itens.some(i => i.status_medicao === 'aguardando_conferencia')
+  const contramarcoAprovado = statusOperacional === 'contramarco_aprovado'
+  const master = usuario?.role === 'master'
   const voltarHref = medicao.cliente_id
     ? `/producao/medicao-final/cliente/${medicao.cliente_id}`
     : '/producao/medicao-final'
@@ -352,6 +374,87 @@ export default function ContramarcoFlow({
     avancarDepois(indice, novos)
   }
 
+  async function chamarConferencia(action: 'enviar' | 'aprovar' | 'sincronizar_contramarco', itemId?: string) {
+    const token = await tokenAtual()
+    if (!token) return { ok: false, error: 'Sua sessão expirou. Entre novamente no Atlas.' }
+
+    const resp = await fetch(`/api/medicao-final/${medicao.id}/conferencia`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action, itemId }),
+    })
+    const json = await resp.json().catch(() => ({}))
+    return { ...json, ok: resp.ok && json?.ok !== false }
+  }
+
+  async function enviarParaConferencia() {
+    if (processandoFluxo || pendentes > 0) return
+    if (fluxoVendaBloqueado) {
+      setErroFluxo('Confirme a venda e envie o orçamento para o fluxo Vendido antes de enviar os contramarcos.')
+      return
+    }
+    if (!window.confirm('Enviar a medição de contramarcos para conferência e liberação?')) return
+
+    setProcessandoFluxo(true)
+    setErroFluxo('')
+    setMensagemFluxo('')
+    const r = await chamarConferencia('enviar')
+    setProcessandoFluxo(false)
+
+    if (!r.ok) {
+      setErroFluxo(r.error || 'Não foi possível enviar a medição de contramarcos.')
+      return
+    }
+
+    setItens(prev => prev.map(item => (
+      item.medido && item.status_medicao === 'concluida'
+        ? { ...item, status_medicao: 'aguardando_conferencia' }
+        : item
+    )))
+    setStatusOperacional('aguardando_conferencia')
+    setMensagemFluxo('Medição enviada. Ela está aguardando conferência/liberação.')
+    setTela('resumo')
+    window.setTimeout(() => { window.location.href = '/producao/medicao-final' }, 650)
+  }
+
+  async function aprovarContramarcos() {
+    if (!master || processandoFluxo) return
+    const paraAprovar = itens.filter(item => item.medido && item.status_medicao === 'aguardando_conferencia')
+    if (!paraAprovar.length) return
+    if (!window.confirm(`Aprovar ${paraAprovar.length} posição(ões) de contramarco e liberar as ordens de produção quando o Projeto já estiver conferido?`)) return
+
+    setProcessandoFluxo(true)
+    setErroFluxo('')
+    setMensagemFluxo('')
+
+    for (const item of paraAprovar) {
+      const r = await chamarConferencia('aprovar', item.id)
+      if (!r.ok) {
+        setProcessandoFluxo(false)
+        setErroFluxo(r.error || `Não foi possível aprovar ${item.ambiente || item.descricao || 'uma posição'}.`)
+        return
+      }
+    }
+
+    setItens(prev => prev.map(item => (
+      item.medido && item.status_medicao === 'aguardando_conferencia'
+        ? { ...item, status_medicao: 'aprovada' }
+        : item
+    )))
+    setStatusOperacional('contramarco_aprovado')
+
+    const sincronizacao = await chamarConferencia('sincronizar_contramarco')
+    setProcessandoFluxo(false)
+
+    if (sincronizacao.ok) {
+      setMensagemFluxo(`Contramarcos aprovados e Produção atualizada: ${sincronizacao.liberadas || 0} ordem(ns) liberada(s).`)
+    } else if (sincronizacao.code === 'PROJETO_NAO_CONFERIDO') {
+      setMensagemFluxo('Contramarcos aprovados. O card de Produção será ligado assim que o Projeto for conferido.')
+    } else {
+      setErroFluxo(sincronizacao.error || 'Contramarcos aprovados, mas a sincronização com Produção ficou pendente.')
+    }
+  }
+
   const resumo = useMemo(() => itens.map((item, pos) => ({
     item,
     pos,
@@ -407,10 +510,58 @@ export default function ContramarcoFlow({
             <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{revisados}/{itens.length} definidos</span>
           </div>
 
+          {fluxoVendaBloqueado && medicao.orcamento_id && (
+            <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-black text-amber-900">
+                    <AlertTriangle size={16} /> Fora do fluxo Vendido
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    Este orçamento ainda não possui uma Venda operacional no Atlas
+                    {colunaComercial ? ` e está em “${colunaComercial}”` : ''}.
+                    A medição fica preservada, mas não libera Produção até a venda ser confirmada.
+                  </p>
+                </div>
+                <Link
+                  href={`/vendas/confirmar?orcamento=${encodeURIComponent(medicao.orcamento_id)}&origem=medicao-final`}
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white"
+                >
+                  Enviar para o fluxo / Vendido
+                </Link>
+              </div>
+            </div>
+          )}
+
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
             <b>Revise item por item.</b>
             <p className="mt-1 text-xs">Se usar contramarco, informe as medidas do vão e as folgas. Se não usar, marque “Não usar” e siga para o próximo.</p>
           </div>
+
+          {fluxoVendaBloqueado && medicao.orcamento_id && (
+            <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+              <p className="flex items-center gap-2 text-sm font-black text-amber-900"><AlertTriangle size={16} /> Falta confirmar a venda</p>
+              <p className="mt-1 text-xs text-amber-800">As medidas estão salvas. Para enviar ao Kanban de liberação e liberar Produção, coloque este orçamento no fluxo Vendido.</p>
+              <Link href={`/vendas/confirmar?orcamento=${encodeURIComponent(medicao.orcamento_id)}&origem=medicao-final`} className="mt-3 inline-flex rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white">Enviar para o fluxo / Vendido</Link>
+            </div>
+          )}
+
+          {mensagemFluxo && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">{mensagemFluxo}</div>}
+          {erroFluxo && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700">{erroFluxo}</div>}
+
+          {aguardandoConferencia && (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-black text-amber-900">Aguardando conferência/liberação</p>
+              <p className="mt-1 text-xs text-amber-800">A medição já foi enviada. Um usuário Master pode conferir e liberar os contramarcos.</p>
+            </div>
+          )}
+
+          {contramarcoAprovado && (
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-black text-emerald-900">Contramarcos aprovados</p>
+              <p className="mt-1 text-xs text-emerald-800">As ordens de Produção usam as medidas aprovadas quando o Projeto já estiver conferido.</p>
+            </div>
+          )}
 
           <div className="mb-4 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-2">
@@ -774,11 +925,33 @@ export default function ContramarcoFlow({
             <button
               onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
               disabled={pendentes > 0 || comContramarco === 0}
-              className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
+              className="flex items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-white px-4 py-3 text-sm font-black text-emerald-700 disabled:opacity-40"
             >
-              <FileText size={16} /> Gerar PDF para produção
+              <FileText size={16} /> Gerar PDF
             </button>
           </div>
+
+          {!aguardandoConferencia && !contramarcoAprovado && (
+            <button
+              onClick={() => void enviarParaConferencia()}
+              disabled={pendentes > 0 || comContramarco === 0 || fluxoVendaBloqueado || processandoFluxo}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3.5 text-sm font-black text-white disabled:opacity-40"
+            >
+              {processandoFluxo ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              Enviar medição de contramarcos para liberação
+            </button>
+          )}
+
+          {aguardandoConferencia && master && (
+            <button
+              onClick={() => void aprovarContramarcos()}
+              disabled={processandoFluxo}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3.5 text-sm font-black text-white disabled:opacity-40"
+            >
+              {processandoFluxo ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+              Aprovar e liberar contramarcos
+            </button>
+          )}
         </main>
       )}
 

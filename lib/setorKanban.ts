@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
-import { usuarioAtual } from './auth'
+import { tokenAtual, usuarioAtual } from './auth'
 import { gerarPacoteTecnico } from './materialPlanejamento'
+import { criarMedicaoDoOrcamento } from './medicaoFinal'
 import { SetorKanbanColuna, SetorKanbanItem } from './tipos'
 
 const COLUNA_PADRAO = 'A Fazer'
@@ -78,6 +79,46 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
 
     const orcamentoId = card?.orcamento_id ? String(card.orcamento_id) : ''
     if (orcamentoId) {
+      // Medição de contramarco é separada da Medição Final das esquadrias.
+      // Se já existir apenas um contramarco, não o reutiliza como Medição Final:
+      // garante explicitamente uma medição do tipo "tipologia".
+      const medicaoTipologia = await criarMedicaoDoOrcamento(orcamentoId, usuario, 'tipologia')
+      if (!medicaoTipologia) {
+        console.warn('Projeto conferido, mas não foi possível garantir a Medição Final das tipologias.')
+      }
+
+      // Se os contramarcos já tinham sido medidos/aprovados antes da conferência
+      // do projeto, agora já existe o card de Produção. Sincroniza as ordens usando
+      // as medidas aprovadas, sem depender do valor comercial do orçamento.
+      const { data: medicaoContramarco } = await supabase
+        .from('medicoes_finais')
+        .select('id')
+        .eq('orcamento_id', orcamentoId)
+        .eq('tipo_medicao', 'contramarco')
+        .eq('status_operacional', 'contramarco_aprovado')
+        .order('aprovado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (medicaoContramarco?.id) {
+        try {
+          const token = await tokenAtual()
+          if (token) {
+            const resp = await fetch(`/api/medicao-final/${medicaoContramarco.id}/conferencia`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ action: 'sincronizar_contramarco' }),
+            })
+            if (!resp.ok) {
+              const json = await resp.json().catch(() => ({}))
+              console.warn('Contramarco aprovado, mas a sincronização com Produção ficou pendente:', json?.error || resp.statusText)
+            }
+          }
+        } catch (erro) {
+          console.warn('Falha ao sincronizar contramarco aprovado após Projeto conferido:', erro)
+        }
+      }
+
       const { data: existente } = await supabase
         .from('pacotes_tecnicos')
         .select('id')
