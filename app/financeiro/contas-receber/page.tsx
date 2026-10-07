@@ -151,7 +151,7 @@ export default function ContasReceberPage() {
               <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
-                    <th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Parcela</th><th className="p-3">Vencimento</th><th className="p-3">Forma</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Saldo</th><th className="p-3">Status</th><th className="p-3"></th>
+                    <th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Parcela</th><th className="p-3">Vencimento</th><th className="p-3">Forma</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Saldo</th><th className="p-3">Status</th><th className="p-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -166,6 +166,7 @@ export default function ContasReceberPage() {
                         <td className={`p-3 ${vencida ? 'font-semibold text-red-600' : ''}`}>{dataBR(conta.vencimento)}</td>
                         <td className="p-3 capitalize">{(conta.forma || '—').replaceAll('_',' ')}</td>
                         <td className="p-3 text-right font-semibold">{moeda(Number(conta.valor || 0))}</td>
+                        <td className="p-3 text-right font-semibold text-amber-700">{moeda(Number(conta.valor_desconto || 0))}</td>
                         <td className="p-3 text-right font-bold text-slate-900">{moeda(saldo)}</td>
                         <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${conta.status === 'pago' || saldo <= 0.009 ? 'bg-emerald-100 text-emerald-700' : vencida ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{conta.status === 'pago' || saldo <= 0.009 ? 'pago' : vencida ? 'vencido' : conta.status}</span></td>
                         <td className="p-3 text-right">
