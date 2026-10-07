@@ -18,6 +18,7 @@ import {
   listarConversas as listarConversasInternas,
   listarMensagens as listarMensagensInternas,
   listarParticipantes as listarParticipantesInternos,
+  marcarConversaComoLida,
 } from '@/lib/chatInterno'
 
 type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
@@ -209,6 +210,7 @@ export default function WhatsAppAtendimentoPage() {
   const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
   const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
   const [nomeGrupoInterno, setNomeGrupoInterno] = useState('')
+  const [buscaInterna, setBuscaInterna] = useState('')
   const [diretorioAberto, setDiretorioAberto] = useState(false)
   const [diretorio, setDiretorio] = useState<DiretorioWhatsApp[]>([])
   const [buscaDiretorio, setBuscaDiretorio] = useState('')
@@ -360,6 +362,10 @@ export default function WhatsAppAtendimentoPage() {
     setMensagens([])
     setErro('')
     setConversaInternaAtiva(conversa)
+    if (eu?.id) {
+      setConversasInternas(lista=>lista.map(item=>item.id===conversa.id?{...item,nao_lidas:0}:item))
+      void marcarConversaComoLida(conversa.id,eu.id).then(()=>atualizarConversasInternas(eu.id))
+    }
   }
 
   async function enviarInterno() {
@@ -583,9 +589,36 @@ export default function WhatsAppAtendimentoPage() {
 
   useEffect(() => {
     if (!eu?.id) return
-    void atualizarConversasInternas(eu.id)
-    const timer = setInterval(() => { void atualizarConversasInternas(eu.id) }, 5000)
-    return () => clearInterval(timer)
+    const usuarioId = eu.id
+
+    const atualizar = () => { void atualizarConversasInternas(usuarioId) }
+    atualizar()
+
+    const canal = supabase
+      .channel(`whatsapp-atlas-lista-interna-${usuarioId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' }, atualizar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversas' }, atualizar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_participantes' }, atualizar)
+      .subscribe()
+
+    // Fallback para manter a experiência em tempo real mesmo se o websocket
+    // oscilar ou o navegador suspender a aba por alguns segundos.
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizar()
+    }, 2000)
+
+    const aoVoltar = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizar()
+    }
+    window.addEventListener('focus', aoVoltar)
+    document.addEventListener('visibilitychange', aoVoltar)
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', aoVoltar)
+      document.removeEventListener('visibilitychange', aoVoltar)
+      void supabase.removeChannel(canal)
+    }
   }, [eu?.id])
 
   useEffect(() => {
@@ -608,6 +641,10 @@ export default function WhatsAppAtendimentoPage() {
         id: p.usuario_id,
         nome: p.usuario_nome || 'Usuário',
       })))
+      if (eu?.id) {
+        await marcarConversaComoLida(conversaId, eu.id)
+        if (vivo) setConversasInternas(lista=>lista.map(item=>item.id===conversaId?{...item,nao_lidas:0}:item))
+      }
     }
 
     void carregar()
@@ -834,13 +871,17 @@ export default function WhatsAppAtendimentoPage() {
   }, [mensagens.length])
 
   const internasFiltradas = useMemo(() => {
-    const q = busca.toLocaleLowerCase('pt-BR').trim()
-    if (filtro !== 'todas' && filtro !== 'internas') return []
+    const q = buscaInterna.toLocaleLowerCase('pt-BR').trim()
     return conversasInternas.filter(c => {
       if (!q) return true
       return `${c.nome || ''} ${c.ultima_mensagem || ''}`.toLocaleLowerCase('pt-BR').includes(q)
     })
-  }, [conversasInternas, busca, filtro])
+  }, [conversasInternas, buscaInterna])
+
+  const totalInternasNaoLidas = useMemo(
+    () => conversasInternas.reduce((soma,c)=>soma+Number(c.nao_lidas||0),0),
+    [conversasInternas],
+  )
 
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
@@ -1269,7 +1310,7 @@ export default function WhatsAppAtendimentoPage() {
     )
     const chats = doCanal.filter(c => Boolean(c.ultima_mensagem_em))
     return {
-      todas: chats.length + conversasInternas.length,
+      todas: chats.length,
       internas: conversasInternas.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
       aguardando: chats.filter(c => {
@@ -1427,7 +1468,7 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-72px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] ${conversaInternaAtiva ? 'xl:grid-cols-[360px_minmax(0,1fr)_320px]' : painelDireitoRecolhido ? 'xl:grid-cols-[360px_minmax(0,1fr)_52px]' : 'xl:grid-cols-[360px_minmax(0,1fr)_320px]'}`}>
+        <div className="grid h-[calc(100dvh-72px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px]">
           <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -1487,10 +1528,6 @@ export default function WhatsAppAtendimentoPage() {
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
                   Todas {totais.todas}
                 </button>
-                <button onClick={()=>setFiltro('internas')}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='internas'?'border-blue-500 bg-blue-50 text-blue-700':'bg-white text-slate-600'}`}>
-                  Internas {totais.internas}
-                </button>
                 <button onClick={()=>setFiltro('aguardando')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='aguardando'?'border-amber-500 bg-amber-50 text-amber-800':'bg-white text-slate-600'}`}>
                   Aguardando {totais.aguardando}
@@ -1529,40 +1566,12 @@ export default function WhatsAppAtendimentoPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && internasFiltradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
+              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
               ) : (
                 <>
-                  {internasFiltradas.length > 0 && (
-                    <div className="border-b border-blue-100 bg-blue-50/40">
-                      <div className="flex items-center justify-between px-4 py-2">
-                        <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-600">Conversas internas</span>
-                        <span className="text-[10px] font-semibold text-blue-500">{internasFiltradas.length}</span>
-                      </div>
-                      {internasFiltradas.map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={()=>selecionarConversaInterna(c)}
-                          className={`flex w-full items-center gap-3 border-t border-blue-100 px-4 py-3 text-left transition hover:bg-blue-50 ${conversaInternaAtiva?.id===c.id?'bg-blue-100/70':''}`}
-                        >
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-600 font-bold text-white">
-                            {c.tipo==='grupo'?<Users size={17}/>:String(c.nome||'?').slice(0,1).toUpperCase()}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <b className="truncate text-sm text-slate-900">{c.nome || 'Conversa interna'}</b>
-                              <span className="ml-auto shrink-0 text-[10px] text-slate-400">{hora(c.ultima_mensagem_em)}</span>
-                            </span>
-                            <span className="mt-0.5 block truncate text-xs text-slate-500">{c.ultima_mensagem || (c.tipo==='grupo'?'Grupo interno':'Conversa privada')}</span>
-                            <span className="mt-1 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Interna</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   {filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
                   onClick={()=>selecionarConversa(c)}
@@ -2324,339 +2333,91 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className={`hidden min-h-0 border-l bg-white xl:flex ${conversaInternaAtiva ? 'flex-col' : painelDireitoRecolhido ? 'flex-col items-center' : 'flex-col'}`}>
-            {conversaInternaAtiva ? (
-              <>
-                <div className="border-b p-4">
-                  <div className="flex items-center gap-3">
-                    <span className="grid h-11 w-11 place-items-center rounded-full bg-blue-100 text-blue-700">
-                      <Users size={19}/>
+          <aside className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white xl:flex">
+            <div className="border-b border-slate-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Users size={17} className="shrink-0 text-blue-600"/>
+                    <b className="truncate text-sm text-slate-900">Conversas internas</b>
+                    {totalInternasNaoLidas > 0 && (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {totalInternasNaoLidas > 99 ? '99+' : totalInternasNaoLidas}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Equipe Atlas · atualiza em tempo real</p>
+                </div>
+                <button type="button" onClick={abrirConversaInterna}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                  title="Nova conversa interna">
+                  <Plus size={16}/>
+                </button>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
+                <Search size={15} className="text-slate-400"/>
+                <input value={buscaInterna} onChange={e=>setBuscaInterna(e.target.value)}
+                  placeholder="Buscar conversa interna..."
+                  className="w-full bg-transparent py-2.5 text-xs outline-none"/>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {internasFiltradas.length === 0 ? (
+                <div className="grid min-h-[260px] place-items-center px-5 text-center">
+                  <div>
+                    <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-blue-50 text-blue-500">
+                      <Users size={20}/>
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <b className="block truncate text-sm text-slate-900">{conversaInternaAtiva.nome || 'Conversa interna'}</b>
-                      <p className="text-xs text-slate-500">
-                        {conversaInternaAtiva.tipo==='grupo'?'Grupo interno':'Conversa privada interna'}
-                      </p>
-                    </div>
+                    <p className="mt-3 text-sm font-semibold text-slate-700">
+                      {buscaInterna.trim() ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa interna ainda'}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                      Use o botão + para conversar com alguém da equipe.
+                    </p>
                   </div>
                 </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <b className="text-xs uppercase tracking-[0.12em] text-slate-500">Participantes</b>
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                      {participantesConversaInterna.length}
+              ) : internasFiltradas.map(c=>{
+                const naoLidas=Number(c.nao_lidas||0)
+                const selecionada=conversaInternaAtiva?.id===c.id
+                return (
+                  <button key={c.id} type="button" onClick={()=>selecionarConversaInterna(c)}
+                    className={`flex w-full items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-blue-50/60 ${selecionada?'bg-blue-50':''}`}>
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full font-bold ${selecionada?'bg-blue-600 text-white':'bg-blue-100 text-blue-700'}`}>
+                      {c.tipo==='grupo'?<Users size={17}/>:String(c.nome||'?').slice(0,1).toUpperCase()}
                     </span>
-                  </div>
-                  <div className="space-y-2">
-                    {participantesConversaInterna.map(p=>(
-                      <div key={p.id} className="flex items-center gap-3 rounded-xl border bg-white p-3">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">
-                          {p.nome.slice(0,1).toUpperCase()}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <b className={`truncate text-sm ${naoLidas>0?'font-extrabold text-slate-950':'font-semibold text-slate-800'}`}>
+                          {c.nome || 'Conversa interna'}
+                        </b>
+                        <span className={`ml-auto shrink-0 text-[10px] ${naoLidas>0?'font-bold text-blue-600':'text-slate-400'}`}>
+                          {hora(c.ultima_mensagem_em)}
                         </span>
-                        <div className="min-w-0 flex-1">
-                          <b className="block truncate text-sm text-slate-800">{p.nome}</b>
-                          <span className="text-[11px] text-slate-400">{p.id===eu?.id?'Você':'Equipe Atlas'}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button type="button" onClick={abrirConversaInterna}
-                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
-                    <Plus size={14}/> Nova conversa interna
-                  </button>
-
-                  <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
-                    <Info size={15} className="mb-1"/>
-                    <b>Conversa interna</b>
-                    <p className="mt-1">Estas mensagens ficam somente dentro do Atlas e nunca aparecem para clientes do WhatsApp.</p>
-                  </div>
-                </div>
-              </>
-            ) : painelDireitoRecolhido ? (
-              <div className="flex h-full w-full flex-col items-center gap-2 py-3">
-                <button
-                  onClick={()=>alternarPainelDireitoRecolhido(false)}
-                  className="grid h-9 w-9 place-items-center rounded-lg border text-slate-600 hover:bg-slate-50"
-                  title="Abrir painel lateral">
-                  <ChevronLeft size={18}/>
-                </button>
-                <div className="my-1 h-px w-7 bg-slate-200"/>
-                <button onClick={()=>{setPainelDireito('cliente');alternarPainelDireitoRecolhido(false)}}
-                  className="grid h-9 w-9 place-items-center rounded-lg text-blue-700 hover:bg-blue-50" title="Cadastro 360">
-                  <UserPlus size={17}/>
-                </button>
-                <button onClick={()=>{setPainelDireito('agenda');alternarPainelDireitoRecolhido(false)}}
-                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Agenda">
-                  <CalendarDays size={17}/>
-                </button>
-                <button onClick={()=>{setPainelDireito('notas');alternarPainelDireitoRecolhido(false)}}
-                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Notas">
-                  <StickyNote size={17}/>
-                </button>
-                <button onClick={()=>{setPainelDireito('historico');alternarPainelDireitoRecolhido(false)}}
-                  className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-50" title="Histórico">
-                  <History size={17}/>
-                </button>
-              </div>
-            ) : <>
-            <div className="border-b p-3">
-              <div className="flex items-center gap-2">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-50 font-bold text-blue-700">
-                  {ativa ? (ativa.contato_nome || ativa.telefone).slice(0,1).toUpperCase() : '?'}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <b className="block truncate text-sm">{ativa?.contato_nome || 'Contexto do atendimento'}</b>
-                  <p className="truncate text-xs text-slate-500">
-                    {ativa ? telefoneFormatado(ativa.telefone) : 'Selecione uma conversa'}
-                  </p>
-                </div>
-                <button
-                  onClick={()=>alternarPainelDireitoRecolhido(true)}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-slate-500 hover:bg-slate-50"
-                  title="Recolher painel e ampliar conversa">
-                  <ChevronRight size={17}/>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-1 border-b bg-slate-50 p-2 text-[11px] font-bold">
-              <button onClick={()=>setPainelDireito('cliente')}
-                className={`rounded-lg px-1.5 py-2 ${painelDireito==='cliente'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
-                Cliente
-              </button>
-              <button onClick={()=>setPainelDireito('agenda')}
-                className={`rounded-lg px-1.5 py-2 ${painelDireito==='agenda'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
-                Agenda
-              </button>
-              <button onClick={()=>setPainelDireito('notas')}
-                className={`rounded-lg px-1.5 py-2 ${painelDireito==='notas'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
-                Notas
-              </button>
-              <button onClick={()=>setPainelDireito('historico')}
-                className={`rounded-lg px-1.5 py-2 ${painelDireito==='historico'?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>
-                Histórico
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {!ativa ? (
-                <div className="py-12 text-center text-sm text-slate-400">Selecione uma conversa.</div>
-              ) : painelDireito === 'cliente' ? (
-                carregandoCliente ? (
-                  <div className="py-10 text-center text-sm text-slate-400">Carregando Cliente 360...</div>
-                ) : cliente ? (
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border bg-slate-50 p-4">
-                      <div className="mb-3 flex items-center gap-2">
-                        <Building2 size={17} className="text-blue-600"/>
-                        <b className="text-sm text-slate-900">{cliente.nome}</b>
-                      </div>
-                      <div className="space-y-2 text-xs text-slate-600">
-                        {(cliente.whatsapp || cliente.telefone) && (
-                          <p><b>Contato:</b> {cliente.whatsapp || cliente.telefone}</p>
-                        )}
-                        {(cliente.cidade || cliente.bairro) && (
-                          <p className="flex items-start gap-1.5">
-                            <MapPin size={14} className="mt-0.5 shrink-0"/>
-                            {[cliente.bairro,cliente.cidade].filter(Boolean).join(' · ')}
-                          </p>
-                        )}
-                        {cliente.endereco && <p>{cliente.endereco}</p>}
-                      </div>
-                      <Link href={'/clientes/' + cliente.id}
-                        className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
-                        Abrir Cliente 360 <ExternalLink size={13}/>
-                      </Link>
-                    </div>
-
-                    <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <BriefcaseBusiness size={16} className="text-slate-500"/>
-                        <b className="text-xs uppercase tracking-wide text-slate-600">Obras recentes</b>
-                      </div>
-                      {obras.length ? (
-                        <div className="space-y-2">
-                          {obras.map(o=>(
-                            <Link key={o.id} href={'/obras/' + o.id}
-                              className="block rounded-xl border p-3 hover:bg-slate-50">
-                              <p className="truncate text-sm font-semibold text-slate-800">{o.nome || 'Obra'}</p>
-                              <p className="mt-0.5 text-[11px] text-slate-500">{o.status || 'Em andamento'}</p>
-                            </Link>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-                          Nenhuma obra encontrada para este cliente.
-                        </p>
-                      )}
-                    </div>
-
-                    {cliente.observacoes && (
-                      <div className="rounded-xl border-l-4 border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                        <b>Observações do cliente</b>
-                        <p className="mt-1 whitespace-pre-wrap">{cliente.observacoes}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : ativa.whatsapp_chat_tipo === 'grupo' ? (
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border bg-violet-50 p-5">
-                      <div className="mb-3 flex items-center gap-2 text-violet-700">
-                        <Users size={20}/>
-                        <b className="text-sm">Grupo do WhatsApp</b>
-                      </div>
-                      <p className="font-semibold text-slate-900">{ativa.grupo_nome || ativa.contato_nome || 'Grupo'}</p>
-                      <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                        Este grupo pertence ao número selecionado e não é um Cliente 360. Mensagens e anexos ficam no histórico do grupo.
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-800">
-                      <Info size={15} className="mb-1"/>
-                      Grupos configurados para Orçamento podem criar automaticamente rascunho, tarefa e card no Kanban.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-dashed p-4">
-                      <div className="text-center">
-                        <UserPlus className="mx-auto mb-2 text-slate-400" size={26}/>
-                        <b className="text-sm text-slate-800">Como deseja cadastrar este contato?</b>
-                        <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                          Nome e WhatsApp seguem preenchidos para o cadastro escolhido.
-                        </p>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        <Link href={urlCadastroCliente}
-                          className="flex items-center gap-3 rounded-xl border bg-emerald-50/70 p-3 hover:border-emerald-300">
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700"><UserPlus size={17}/></span>
-                          <span><b className="block text-xs text-slate-800">Cliente</b><span className="text-[11px] text-slate-500">Cria Cliente 360 e vincula esta conversa.</span></span>
-                        </Link>
-                        <Link href={urlCadastroColaborador} target="_blank"
-                          className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50">
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700"><Users size={17}/></span>
-                          <span><b className="block text-xs text-slate-800">Colaborador</b><span className="text-[11px] text-slate-500">Abre o cadastro da equipe.</span></span>
-                        </Link>
-                        <Link href={urlCadastroFornecedor} target="_blank"
-                          className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50">
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-700"><BriefcaseBusiness size={17}/></span>
-                          <span><b className="block text-xs text-slate-800">Fornecedor</b><span className="text-[11px] text-slate-500">Abre o cadastro comercial.</span></span>
-                        </Link>
-                        <Link href="/cadastros" target="_blank"
-                          className="flex items-center justify-center rounded-xl border border-dashed px-3 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
-                          Outros cadastros
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-800">
-                      <Info size={15} className="mb-1"/>
-                      Se cadastrar como cliente, o histórico deste atendimento fica vinculado ao Cliente 360.
-                    </div>
-                  </div>
-                )
-              ) : painelDireito === 'agenda' ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays size={17} className="text-blue-600"/>
-                    <b className="text-sm text-slate-800">Agenda do atendimento</b>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
-                    <div className="rounded-xl bg-slate-50 p-2">Hoje</div>
-                    <div className="rounded-xl bg-slate-50 p-2">Amanhã</div>
-                    <div className="rounded-xl bg-slate-50 p-2">Futuros</div>
-                  </div>
-                  <div className="rounded-2xl border border-dashed p-6 text-center text-xs text-slate-500">
-                    Os agendamentos vinculados ao atendimento aparecerão aqui.
-                  </div>
-                </div>
-              ) : painelDireito === 'notas' ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <StickyNote size={17} className="text-amber-600"/>
-                    <b className="text-sm text-slate-800">Notas internas</b>
-                  </div>
-                  <div className="rounded-xl border bg-amber-50 p-3">
-                    <textarea value={notaTexto} onChange={e=>setNotaTexto(e.target.value)}
-                      rows={3} placeholder="Escreva uma nota para a equipe..."
-                      className="w-full resize-none rounded-lg border bg-white px-3 py-2 text-xs outline-none"/>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="text-[10px] text-amber-800">Nunca é enviada ao cliente.</span>
-                      <button disabled={!notaTexto.trim()}
-                        onClick={async()=>{
-                          const ok=await acaoApoio('nota_criar',{texto:notaTexto.trim()})
-                          if(ok)setNotaTexto('')
-                        }}
-                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
-                        Salvar nota
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {notas.map(n=>(
-                      <div key={n.id} className="rounded-xl border bg-white p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <b className="text-[11px] text-slate-700">{n.usuario_nome || 'Equipe'}</b>
-                          <span className="text-[10px] text-slate-400">
-                            {new Date(n.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                      </span>
+                      <span className={`mt-0.5 flex items-center gap-2 text-xs ${naoLidas>0?'font-semibold text-slate-700':'text-slate-500'}`}>
+                        <span className="min-w-0 flex-1 truncate">
+                          {c.ultima_mensagem || (c.tipo==='grupo'?'Grupo interno':'Conversa privada')}
+                        </span>
+                        {naoLidas>0 && (
+                          <span className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            {naoLidas>99?'99+':naoLidas}
                           </span>
-                        </div>
-                        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">{n.texto}</p>
-                      </div>
-                    ))}
-                    {!notas.length && (
-                      <div className="rounded-2xl border border-dashed p-5 text-center text-xs text-slate-500">
-                        Nenhuma nota interna nesta conversa.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <History size={17} className="text-blue-600"/>
-                    <div>
-                      <b className="block text-sm text-slate-800">Histórico do atendimento</b>
-                      <span className="text-[10px] text-slate-500">Aberturas, responsáveis, respostas, transferências, baixas e finalizações.</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {historico.filter(e=>!['status_whatsapp','mensagem_enviada_qr'].includes(e.tipo)).map(e=>{
-                      const dados=(e.dados||{}) as Record<string,unknown>
-                      const nome=e.usuario_nome||'Sistema'
-                      let descricao=e.tipo.replaceAll('_',' ')
-                      if(e.tipo==='conversa_visualizada')descricao='abriu a conversa'
-                      else if(e.tipo==='conversa_assumida')descricao='assumiu o atendimento'
-                      else if(e.tipo==='conversa_transferida')descricao=`transferiu o atendimento para ${String(dados.destino_nome||'outro usuário')}`
-                      else if(e.tipo==='conversa_direcionada_mencao')descricao=`direcionou para ${String(dados.destino_nome||'outro usuário')}`
-                      else if(e.tipo==='conversa_finalizada')descricao='finalizou o atendimento'
-                      else if(e.tipo==='conversa_baixada')descricao='deu baixa nas mensagens pendentes'
-                      else if(e.tipo==='conversa_acompanhada')descricao='começou a acompanhar'
-                      else if(e.tipo==='conversa_acompanhamento_removido')descricao='parou de acompanhar'
-                      else if(e.tipo==='mensagem_enfileirada_qr'||e.tipo==='mensagem_enviada')descricao='respondeu uma mensagem'
-                      else if(e.tipo==='midia_enfileirada_qr')descricao='enviou um arquivo ou mídia'
-                      else if(e.tipo==='mensagem_recebida_qr'||e.tipo==='mensagem_recebida')descricao='nova mensagem recebida'
-                      else if(e.tipo==='mensagem_reagida')descricao=`reagiu com ${String(dados.emoji||'emoji')}`
-                      else if(e.tipo==='grupo_responsavel_definido')descricao=`definiu ${String(dados.usuario_alvo_nome||'usuário')} como responsável principal do grupo`
-                      else if(e.tipo==='grupo_permissao_alterada')descricao=`alterou a permissão de ${String(dados.usuario_alvo_nome||'usuário')} para ${String(dados.nivel||'')}`
-                      else if(e.tipo==='grupo_responsabilidade_delegada')descricao=`delegou o grupo para ${String(dados.destino_usuario_nome||'outro usuário')} até ${dados.fim_em?new Date(String(dados.fim_em)).toLocaleString('pt-BR'):'o período definido'}`
-                      else if(e.tipo==='grupo_responsabilidade_retomada')descricao=`encerrou a delegação e devolveu o grupo para ${String(dados.responsavel_principal_nome||'responsável principal')}`
-                      return <div key={e.id} className="rounded-xl border bg-white p-3">
-                        <div className="flex items-start gap-2">
-                          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><History size={13}/></span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-slate-700"><b>{nome}</b> {descricao}</p>
-                            <p className="mt-1 text-[10px] text-slate-400">{new Date(e.created_at).toLocaleString('pt-BR')}</p>
-                          </div>
-                        </div>
-                      </div>
-                    })}
-                    {!historico.length&&<div className="rounded-2xl border border-dashed p-5 text-center text-xs text-slate-500">Nenhum evento registrado ainda.</div>}
-                  </div>
-                </div>
-              )}
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
-            </>}
+
+            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
+                <span className="h-2 w-2 rounded-full bg-emerald-500"/>
+                Mensagens internas ficam somente no Atlas
+              </div>
+            </div>
           </aside>
         </div>
       </div>
