@@ -37,6 +37,7 @@ type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
 type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null }
+type MaterialTecnico = { id:string; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null }
 
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
@@ -104,6 +105,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [setorColunas,setSetorColunas]=useState<Record<string,SetorColuna>>({})
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
+  const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
+  const [pacoteTecnicoId,setPacoteTecnicoId]=useState<string|null>(null)
   const [aba,setAba]=useState<Aba>('visao')
   const [painelEtapa,setPainelEtapa]=useState<'financeiro'|'compras'|'mercadoria'|'producao'|'instalacao'|'venda'|null>(null)
   const [categoriaAberta,setCategoriaAberta]=useState<'perfil'|'vidro'|'acessorios'|'outros'>('perfil')
@@ -134,6 +137,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setContas((co.data||[]) as Conta[])
     setOrdens((op.data||[]) as Ordem[])
     setSetorItens((si.data||[]) as SetorItem[])
+
+    const pacoteResp=await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id',v.orcamento_id).neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
+    if(pacoteResp.data?.id){
+      setPacoteTecnicoId(pacoteResp.data.id)
+      const mt=await supabase.from('pacote_tecnico_materiais').select('id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,incluido_manual,justificativa_ajuste').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem')
+      setMateriaisTecnicos((mt.data||[]) as MaterialTecnico[])
+    }else{
+      setPacoteTecnicoId(null)
+      setMateriaisTecnicos([])
+    }
 
     const contasBase=((co.data||[]) as Conta[])
     const contaIds=contasBase.map(x=>x.id)
@@ -451,11 +464,30 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <div className="space-y-2">{compras.map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b className="text-sm">{c.descricao||c.categoria||'Material'}</b><p className="text-xs text-slate-500">{c.quantidade||0} {c.unidade||''} · {c.categoria||'Sem categoria'} · lançado em {dataBR(c.created_at)}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${c.recebido_em||finalizada(c.status)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{c.recebido_em?'Recebido':status(c.status)}</span></div>)}{!compras.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhuma compra/material vinculado à obra ainda.</p>}</div>
         </Box>}
 
-        {aba==='materiais'&&<Box titulo="Materiais desta venda">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {['perfil','vidro','acessorio','outros'].map(cat=>{const lista=compras.filter(x=>String(x.categoria||'').toLowerCase().includes(cat==='acessorio'?'acess':cat));const recebidos=lista.filter(x=>x.recebido_em||finalizada(x.status)).length;return <div key={cat} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">{cat==='acessorio'?'Acessórios':cat.replace(/^./,s=>s.toUpperCase())}</p><p className="mt-1 text-xl font-bold text-slate-900">{lista.length}</p><p className="mt-1 text-xs text-slate-500">{recebidos} recebido(s) · {Math.max(0,lista.length-recebidos)} pendente(s)</p></div>})}
+        {aba==='materiais'&&<Box titulo="Materiais técnicos desta venda">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+            <div><b className="text-sm text-slate-800">Pacote técnico da obra</b><p className="mt-1 text-xs text-slate-500">{pacoteTecnicoId?'Dados do WVetro + ajustes validados no Atlas.':'Ainda não existe pacote técnico para esta venda.'}</p></div>
+            {obra?.id&&<div className="flex flex-wrap gap-2">
+              <Link href={`/obras/${obra.id}/materiais`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Conferir / editar materiais</Link>
+              <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=perfis`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Perfis</Link>
+              <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=acessorios`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Acessórios</Link>
+              <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=vidros`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Vidros</Link>
+            </div>}
           </div>
-          <p className="mt-4 text-xs text-slate-500">Esta visão usa as necessidades de compra já vinculadas à obra. Conforme entrada e conferência dos materiais forem lançadas, os status desta venda acompanham automaticamente.</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ['Perfis',materiaisTecnicos.filter(m=>['perfil','contramarco'].includes(String(m.categoria))).length],
+              ['Acessórios',materiaisTecnicos.filter(m=>String(m.categoria)==='acessorio').length],
+              ['Vidros',materiaisTecnicos.filter(m=>String(m.categoria)==='vidro').length],
+            ].map(([nome,total]:any)=><div key={nome} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">{nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">linha(s) no pacote técnico</p></div>)}
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5">Categoria</th><th>Código / material</th><th>Qtd. técnica</th><th>Qtd. validada</th><th>Corte</th><th>Origem</th><th>Ajuste</th></tr></thead><tbody>
+              {materiaisTecnicos.map(m=><tr key={m.id} className="border-t"><td className="px-3 py-3 font-semibold">{m.categoria==='acessorio'?'Acessório':m.categoria==='vidro'?'Vidro':m.categoria==='contramarco'?'Contramarco':'Perfil'}</td><td className="px-3 py-3"><b>{m.codigo||'—'}</b>{m.codigo?' · ':''}{m.descricao}{m.cor_ref?<div className="text-[11px] text-slate-400">Cor: {m.cor_ref}</div>:null}</td><td className="px-3 py-3">{Number(m.quantidade_tecnica||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3 font-bold">{Number(m.quantidade_ajustada||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:'—'}</td><td className="px-3 py-3">{m.incluido_manual?'Ajuste Atlas':String(m.origem_calculo||'').toLowerCase().includes('wvetro')?'W.Vetro':'Técnico'}</td><td className="px-3 py-3 text-xs text-slate-500">{m.justificativa_ajuste||'—'}</td></tr>)}
+              {!materiaisTecnicos.length&&<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Nenhum material técnico carregado. Gere ou sincronize o pacote técnico desta venda.</td></tr>}
+            </tbody></table>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Para adicionar um perfil extra, trocar um perfil ou retirar um item, use “Conferir / editar materiais”. A alteração fica registrada com justificativa e os PDFs passam a refletir a versão validada.</p>
         </Box>}
 
         {aba==='tipologias'&&<Box titulo="Tipologias vendidas">

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Boxes, Check, Loader2, Plus, RefreshCw, RotateCcw, Trash2, Warehouse } from 'lucide-react'
+import { ArrowLeft, Boxes, Check, FileDown, Loader2, Plus, RefreshCw, Replace, RotateCcw, Trash2, Warehouse } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
 import {
@@ -161,6 +161,58 @@ export default function MateriaisObraPage() {
     setNovo(NOVO_MATERIAL); await recalcular()
   }
 
+  async function trocarMaterial(m: MaterialPacote) {
+    if (!pacote) return
+    const termo = window.prompt(`Digite o código do novo perfil para substituir ${m.codigo || m.descricao}:`, '')?.trim()
+    if (!termo) return
+    const termoBusca = termo.toLocaleLowerCase('pt-BR')
+    const candidatos = produtos.filter((p: any) =>
+      String(p.categoria || '').toLowerCase() === 'perfil' &&
+      (String(p.codigo || '').toLocaleLowerCase('pt-BR') === termoBusca ||
+       String(p.nome || '').toLocaleLowerCase('pt-BR').includes(termoBusca))
+    )
+    if (candidatos.length !== 1) {
+      setErro(candidatos.length ? 'Encontrei mais de um perfil com esse termo. Informe o código exato do perfil.' : 'Perfil não encontrado no catálogo. Cadastre o perfil ou use Acrescentar material.')
+      return
+    }
+    const p = candidatos[0]
+    const motivo = window.prompt('Motivo da troca:', 'Ajuste após conferência técnica') || ''
+    if (motivo.trim().length < 3) return
+
+    setOcupado(true); setErro('')
+    const inclusao = await adicionarMaterialManual(pacote.id, {
+      categoria: m.categoria,
+      produto_id: p.id,
+      codigo: p.codigo || null,
+      descricao: p.nome,
+      unidade: p.unidade || m.unidade || 'UN',
+      quantidade: Number(m.quantidade_ajustada || m.quantidade_tecnica || 0),
+      comprimento_corte_mm: m.comprimento_corte_mm ?? null,
+      comprimento_barra_mm: p.tamanho_barra_mm || m.comprimento_barra_mm || null,
+      justificativa: `Substitui ${m.codigo || m.descricao}. ${motivo.trim()}`,
+    })
+    if (!inclusao.ok) {
+      setOcupado(false); setErro(msgErro(inclusao.error)); return
+    }
+    const novoMaterialId = inclusao.material?.id
+    if (!novoMaterialId) {
+      setOcupado(false); setErro('O novo perfil foi incluído sem identificador válido. A troca foi interrompida.'); return
+    }
+
+    const retirada = await excluirMaterialDoPacote(
+      m.id,
+      `Substituído por ${p.codigo || p.nome}. ${motivo.trim()}`
+    )
+    if (!retirada.ok) {
+      await excluirMaterialDoPacote(novoMaterialId, 'Rollback automático: a retirada do perfil original falhou.')
+      setOcupado(false); setErro(msgErro(retirada.error)); return
+    }
+
+    setOcupado(false)
+    setMensagem(`${m.codigo || m.descricao} trocado por ${p.codigo || p.nome}. Histórico preservado.`)
+    await recalcular()
+  }
+
   async function separarSaldo(s: SaldoPerfilEstoque) {
     if (!pacote) return
     const valor = window.prompt(`Quantas barras separar? Disponível: ${qtd(s.disponivel)}`, '1')
@@ -232,12 +284,19 @@ export default function MateriaisObraPage() {
 
     <section className="grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Orçamento / venda<select value={orcamentoId} onChange={e => setOrcamentoId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm">{orcamentos.map(o => <option key={o.id} value={o.id}>#{o.numero || '—'} · {o.status} · {dinheiro(o.valor_estimado)}</option>)}</select></label><label className="text-xs font-semibold text-slate-600">Pacote técnico<select value={pacoteId} onChange={e => setPacoteId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"><option value="">Selecione...</option>{pacotes.map(p => <option key={p.id} value={p.id}>{p.origem} · v{p.versao} · {p.status}</option>)}</select></label></section>
 
+    {pacote && <section className="flex flex-wrap items-center gap-2 rounded-2xl border bg-white p-4">
+      <span className="mr-1 text-xs font-bold uppercase tracking-wide text-slate-400">PDF por material</span>
+      <Link target="_blank" href={`/obras/${obraId}/materiais/pdf?pacote=${pacote.id}&grupo=perfis`} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold text-slate-700"><FileDown size={14}/>Perfis</Link>
+      <Link target="_blank" href={`/obras/${obraId}/materiais/pdf?pacote=${pacote.id}&grupo=acessorios`} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold text-slate-700"><FileDown size={14}/>Acessórios</Link>
+      <Link target="_blank" href={`/obras/${obraId}/materiais/pdf?pacote=${pacote.id}&grupo=vidros`} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold text-slate-700"><FileDown size={14}/>Vidros</Link>
+    </section>}
+
     {!pacote ? <div className="rounded-2xl border border-dashed bg-white p-10 text-center text-slate-500">Selecione ou gere um pacote técnico para começar.</div> : <>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Materiais', ativos.length], ['Barras planejadas', barras.length], ['Separações do estoque', separacoes.length], ['Linhas para comprar', compras.filter(c => !c.excluido && n(c.quantidade_ajustada) > 0).length]].map(([l, v]) => <div key={String(l)} className="rounded-2xl border bg-white p-4"><p className="text-xs uppercase text-slate-400">{l}</p><p className="text-xl font-bold">{v}</p></div>)}</section>
       <div className="overflow-x-auto border-b"><div className="flex min-w-max gap-1">{abas.map(x => <button key={x.id} onClick={() => setAba(x.id)} className={`border-b-2 px-4 py-3 text-sm font-semibold ${aba === x.id ? 'border-amber-600 text-amber-700' : 'border-transparent text-slate-500'}`}>{x.label}</button>)}</div></div>
 
       {aba === 'necessidade' && <div className="space-y-4">
-        {(['perfil', 'contramarco', 'acessorio', 'vidro', 'outro'] as const).map(cat => { const lista = porCategoria(cat); if (!lista.length) return null; return <section key={cat} className="overflow-hidden rounded-2xl border bg-white"><div className="border-b px-5 py-3 font-bold capitalize">{cat === 'acessorio' ? 'Acessórios' : cat === 'contramarco' ? 'Contramarcos' : `${cat}s`}</div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-400"><tr><th className="px-4 py-2">Código</th><th>Descrição</th><th>Técnico</th><th>Ajustado</th><th>Corte</th><th>Status</th><th /></tr></thead><tbody className="divide-y">{lista.map(m => <tr key={m.id} className={m.status_calculo === 'pendente_formula' ? 'bg-amber-50' : ''}><td className="px-4 py-3 font-semibold">{m.codigo || '—'}</td><td>{m.descricao}{m.justificativa_ajuste && <div className="text-[11px] text-slate-500">{m.justificativa_ajuste}</div>}</td><td>{qtd(m.quantidade_tecnica)} {m.unidade}</td><td className="font-semibold">{qtd(m.quantidade_ajustada)} {m.unidade}</td><td>{m.comprimento_corte_mm ? mm(m.comprimento_corte_mm) : '—'}</td><td><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{m.status_calculo}</span></td><td className="px-4"><div className="flex gap-1"><button onClick={() => void editarMaterial(m)} className="rounded-lg border px-2 py-1 text-xs">Editar</button><button onClick={() => void removerMaterial(m)} className="rounded-lg border p-1.5 text-red-600"><Trash2 size={13} /></button></div></td></tr>)}</tbody></table></div></section> })}
+        {(['perfil', 'contramarco', 'acessorio', 'vidro', 'outro'] as const).map(cat => { const lista = porCategoria(cat); if (!lista.length) return null; return <section key={cat} className="overflow-hidden rounded-2xl border bg-white"><div className="border-b px-5 py-3 font-bold capitalize">{cat === 'acessorio' ? 'Acessórios' : cat === 'contramarco' ? 'Contramarcos' : `${cat}s`}</div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-400"><tr><th className="px-4 py-2">Código</th><th>Descrição</th><th>Técnico</th><th>Ajustado</th><th>Corte</th><th>Status</th><th /></tr></thead><tbody className="divide-y">{lista.map(m => <tr key={m.id} className={m.status_calculo === 'pendente_formula' ? 'bg-amber-50' : ''}><td className="px-4 py-3 font-semibold">{m.codigo || '—'}</td><td>{m.descricao}{m.justificativa_ajuste && <div className="text-[11px] text-slate-500">{m.justificativa_ajuste}</div>}</td><td>{qtd(m.quantidade_tecnica)} {m.unidade}</td><td className="font-semibold">{qtd(m.quantidade_ajustada)} {m.unidade}</td><td>{m.comprimento_corte_mm ? mm(m.comprimento_corte_mm) : '—'}</td><td><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{m.status_calculo}</span></td><td className="px-4"><div className="flex gap-1"><button onClick={() => void editarMaterial(m)} className="rounded-lg border px-2 py-1 text-xs">Editar</button>{['perfil','contramarco'].includes(m.categoria) && <button onClick={() => void trocarMaterial(m)} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs text-blue-700"><Replace size={12}/>Trocar</button>}<button onClick={() => void removerMaterial(m)} className="rounded-lg border p-1.5 text-red-600"><Trash2 size={13} /></button></div></td></tr>)}</tbody></table></div></section> })}
         <section className="rounded-2xl border bg-white p-5"><h3 className="font-bold">Acrescentar material</h3><div className="mt-3 grid gap-3 md:grid-cols-6"><select value={novo.categoria} onChange={e => setNovo({ ...novo, categoria: e.target.value as MaterialPacote['categoria'] })} className="rounded-xl border px-3 py-2 text-sm"><option value="perfil">Perfil</option><option value="contramarco">Contramarco</option><option value="acessorio">Acessório</option><option value="vidro">Vidro</option><option value="outro">Outro</option></select><select value={novo.produto_id} onChange={e => setNovo({ ...novo, produto_id: e.target.value })} className="rounded-xl border px-3 py-2 text-sm"><option value="">Catálogo opcional</option>{produtos.map((p: any) => <option key={p.id} value={p.id}>{p.codigo} · {p.nome}</option>)}</select><input value={novo.descricao} onChange={e => setNovo({ ...novo, descricao: e.target.value })} placeholder="Descrição" className="rounded-xl border px-3 py-2 text-sm" /><input value={novo.quantidade} onChange={e => setNovo({ ...novo, quantidade: e.target.value })} placeholder="Qtd." className="rounded-xl border px-3 py-2 text-sm" /><input value={novo.corte} onChange={e => setNovo({ ...novo, corte: e.target.value })} placeholder="Corte mm" className="rounded-xl border px-3 py-2 text-sm" /><button onClick={() => { const motivo = window.prompt('Motivo da inclusão:', 'Ajuste após conferência') || ''; if (motivo.trim().length >= 3) void adicionarMaterialComMotivo(motivo) }} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white"><Plus size={14} className="mr-1 inline" />Adicionar</button></div></section>
       </div>}
 
