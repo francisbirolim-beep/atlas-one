@@ -1,19 +1,22 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-function n(valor: unknown) {
-  if (valor === null || valor === undefined || valor === '') return 0
-  if (typeof valor === 'number' && Number.isFinite(valor)) return valor
-  let s = String(valor).trim().replace(/[^0-9,.-]/g, '')
-  if (!s) return 0
-  if (s.includes(',') && s.includes('.')) {
-    s = s.lastIndexOf(',') > s.lastIndexOf('.')
-      ? s.replace(/\./g, '').replace(',', '.')
-      : s.replace(/,/g, '')
-  } else if (s.includes(',')) {
-    s = s.replace(/\./g, '').replace(',', '.')
+function n(...valores: unknown[]) {
+  for (const valor of valores) {
+    if (valor === null || valor === undefined || valor === '') continue
+    if (typeof valor === 'number' && Number.isFinite(valor)) return valor
+    let s = String(valor).trim().replace(/[^0-9,.-]/g, '')
+    if (!s) continue
+    if (s.includes(',') && s.includes('.')) {
+      s = s.lastIndexOf(',') > s.lastIndexOf('.')
+        ? s.replace(/\./g, '').replace(',', '.')
+        : s.replace(/,/g, '')
+    } else if (s.includes(',')) {
+      s = s.replace(/\./g, '').replace(',', '.')
+    }
+    const numero = Number(s)
+    if (Number.isFinite(numero)) return numero
   }
-  const numero = Number(s)
-  return Number.isFinite(numero) ? numero : 0
+  return 0
 }
 
 function texto(...valores: unknown[]) {
