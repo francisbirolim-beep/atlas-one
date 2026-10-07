@@ -227,6 +227,22 @@ export async function iniciarMedicaoFinal(
 export async function concluirMedicaoFinal(
   medicaoId: string,
 ): Promise<ResultadoTransicaoMedicao> {
+  const { data: medicaoFluxo } = await supabase
+    .from('medicoes_finais')
+    .select('orcamento_id')
+    .eq('id', medicaoId)
+    .maybeSingle()
+
+  if (medicaoFluxo?.orcamento_id) {
+    const fluxo = await verificarFluxoVendaOrcamento(String(medicaoFluxo.orcamento_id))
+    if (!fluxo.ativo) {
+      return {
+        ok: false,
+        mensagem: 'Confirme a venda e envie o orçamento para o fluxo Vendido antes de enviar a Medição Final.',
+      }
+    }
+  }
+
   const checklist = await validarChecklistObrigatorioV2(medicaoId)
   if (!checklist.ok) return { ok: false, mensagem: `Complete as medidas e ${checklist.faltantes.length} campo(s) obrigatório(s).` }
   const [{ data: itens, error: erroItens }, { count: pendenciasAbertas, error: erroPendencias }] = await Promise.all([
