@@ -468,6 +468,59 @@ export async function salvarMedidaItem(
     return !error
 }
 
+export async function definirUsoContramarco(
+    itemId: string,
+    usar: boolean,
+    usuario: Usuario | null
+  ): Promise<boolean> {
+    const agora = new Date().toISOString()
+    const atualizacao = usar
+      ? {
+          contramarco: 'sim',
+          medido: false,
+          status_medicao: 'rascunho',
+          updated_at: agora,
+          medido_em: null,
+          medido_por_id: null,
+          medido_por_nome: null,
+        }
+      : {
+          contramarco: 'nao',
+          vao_largura_mm: null,
+          vao_altura_mm: null,
+          folga_largura_mm: null,
+          folga_altura_mm: null,
+          producao_largura_mm: null,
+          producao_altura_mm: null,
+          largura_baixo_mm: null,
+          largura_meio_mm: null,
+          largura_cima_mm: null,
+          altura_direita_mm: null,
+          altura_meio_mm: null,
+          altura_esquerda_mm: null,
+          referencia_vista: null,
+          foto_larguras_url: null,
+          foto_alturas_url: null,
+          medido: true,
+          status_medicao: 'concluida',
+          updated_at: agora,
+          medido_em: agora,
+          medido_por_id: usuario?.id || null,
+          medido_por_nome: usuario?.nome || null,
+        }
+
+    const { error } = await supabase
+      .from('medicao_itens')
+      .update(atualizacao)
+      .eq('id', itemId)
+
+    if (error) {
+      console.error('Erro ao definir uso de contramarco:', error)
+      return false
+    }
+    return true
+}
+
 export async function reabrirItemMedicao(itemId: string): Promise<boolean> {
     const { error } = await supabase.from('medicao_itens').update({ medido: false, status_medicao: 'rascunho', updated_at: new Date().toISOString() }).eq('id', itemId)
     return !error
