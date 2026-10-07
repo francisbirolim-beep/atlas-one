@@ -147,9 +147,9 @@ async function gerarPdfContramarcos(
   const colunas = [
     { titulo: 'Ambiente', largura: 30 },
     { titulo: 'Tipologia', largura: 42 },
-    { titulo: 'Vão (mm)', largura: 30 },
-    { titulo: 'Folga (mm)', largura: 25 },
-    { titulo: 'Medida para produzir (mm)', largura: 38 },
+    { titulo: 'Vão\nLargura x Altura (mm)', largura: 30 },
+    { titulo: 'Folga\nLargura x Altura (mm)', largura: 25 },
+    { titulo: 'Produção\nLargura x Altura (mm)', largura: 38 },
     { titulo: 'Qtd', largura: 15 },
   ]
   let y = 14
@@ -178,22 +178,34 @@ async function gerarPdfContramarcos(
 
     doc.setDrawColor(205, 213, 221)
     doc.line(margem, y, 195, y)
+    y += 4
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6.5)
+    doc.setTextColor(51, 65, 85)
+    doc.text('PADRÃO DAS MEDIDAS: LARGURA x ALTURA', margem, y)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6)
+    doc.text('Ex.: Folga 20 x 30 = 20 mm na largura e 30 mm na altura.', 195, y, { align: 'right' })
     y += 5
   }
 
   function cabecalhoTabela() {
     let x = margem
-    doc.setFillColor(245, 247, 250)
-    doc.setDrawColor(210, 218, 226)
+    const alturaCabecalho = 12
+    doc.setFillColor(15, 23, 42)
+    doc.setDrawColor(15, 23, 42)
+    doc.setTextColor(255, 255, 255)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(6.2)
+    doc.setFontSize(6.1)
     for (const coluna of colunas) {
-      doc.rect(x, y, coluna.largura, 9, 'FD')
+      doc.rect(x, y, coluna.largura, alturaCabecalho, 'FD')
       const linhas = doc.splitTextToSize(coluna.titulo, coluna.largura - 3)
-      doc.text(linhas, x + 1.5, y + 3.5)
+      doc.text(linhas, x + 1.5, y + 4)
       x += coluna.largura
     }
-    y += 9
+    doc.setTextColor(15, 23, 42)
+    y += alturaCabecalho
   }
 
   cabecalho()
