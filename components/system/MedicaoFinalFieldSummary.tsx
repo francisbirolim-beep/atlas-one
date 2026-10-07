@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   AlertTriangle, CheckCircle2, CircleDot, ClipboardCheck, Layers3, Loader2,
   Play, Plus, Ruler, ShieldCheck, UserRound, Wrench, XCircle,
@@ -337,6 +338,15 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               >
                 <ShieldCheck size={14} /> Liberar medida para produção
               </button>
+            )}
+
+            {operacao?.status_operacional === 'aprovado' && operacao.orcamento_id && (
+              <Link
+                href={`/orcamento/${operacao.orcamento_id}/plano-corte`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                <Layers3 size={14} /> Abrir plano de corte final
+              </Link>
             )}
 
             <button
