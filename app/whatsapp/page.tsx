@@ -2324,8 +2324,57 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className={`hidden min-h-0 border-l bg-white xl:flex ${painelDireitoRecolhido ? 'flex-col items-center' : 'flex-col'}`}>
-            {painelDireitoRecolhido ? (
+          <aside className={`hidden min-h-0 border-l bg-white xl:flex ${conversaInternaAtiva ? 'flex-col' : painelDireitoRecolhido ? 'flex-col items-center' : 'flex-col'}`}>
+            {conversaInternaAtiva ? (
+              <>
+                <div className="border-b p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-11 w-11 place-items-center rounded-full bg-blue-100 text-blue-700">
+                      <Users size={19}/>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <b className="block truncate text-sm text-slate-900">{conversaInternaAtiva.nome || 'Conversa interna'}</b>
+                      <p className="text-xs text-slate-500">
+                        {conversaInternaAtiva.tipo==='grupo'?'Grupo interno':'Conversa privada interna'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <b className="text-xs uppercase tracking-[0.12em] text-slate-500">Participantes</b>
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                      {participantesConversaInterna.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {participantesConversaInterna.map(p=>(
+                      <div key={p.id} className="flex items-center gap-3 rounded-xl border bg-white p-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">
+                          {p.nome.slice(0,1).toUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <b className="block truncate text-sm text-slate-800">{p.nome}</b>
+                          <span className="text-[11px] text-slate-400">{p.id===eu?.id?'Você':'Equipe Atlas'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button type="button" onClick={abrirConversaInterna}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
+                    <Plus size={14}/> Nova conversa interna
+                  </button>
+
+                  <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+                    <Info size={15} className="mb-1"/>
+                    <b>Conversa interna</b>
+                    <p className="mt-1">Estas mensagens ficam somente dentro do Atlas e nunca aparecem para clientes do WhatsApp.</p>
+                  </div>
+                </div>
+              </>
+            ) : painelDireitoRecolhido ? (
               <div className="flex h-full w-full flex-col items-center gap-2 py-3">
                 <button
                   onClick={()=>alternarPainelDireitoRecolhido(false)}
