@@ -508,9 +508,16 @@ export default function WhatsAppAtendimentoPage() {
         setBuscandoContatos(true)
         try {
           const headers = await headersJson()
-          const ids = canalFiltro === 'todos'
-            ? canais.map(c => c.id)
-            : canais.filter(c => c.id === canalFiltro).map(c => c.id)
+          // Busca global: procura o contato em todos os WhatsApps conectados,
+          // independente do filtro/canal que estiver aberto na tela.
+          const canalSelecionado = canalFiltro !== 'todos' ? canalFiltro : ''
+          const principal = canais.find(c => c.principal)?.id || ''
+          const ids = [
+            ...(canalSelecionado ? [canalSelecionado] : []),
+            ...(principal && principal !== canalSelecionado ? [principal] : []),
+            ...canais.map(c => c.id).filter(id => id !== canalSelecionado && id !== principal),
+          ]
+
           const respostas = await Promise.all(ids.map(async canalId => {
             const params = new URLSearchParams({ canalId, busca: q })
             const resp = await fetch(`/api/integracoes/whatsapp/contatos?${params.toString()}`, { headers, cache: 'no-store' })
@@ -519,9 +526,13 @@ export default function WhatsAppAtendimentoPage() {
             return ((json.itens || []) as DiretorioWhatsApp[]).map(item => ({ ...item, canalId }))
           }))
           if (ativo) {
+            // Remove duplicados por telefone/JID. Como a ordem acima prioriza
+            // o canal atual e depois o número principal, o melhor resultado fica.
             const unicos = new Map<string, DiretorioWhatsApp>()
             for (const item of respostas.flat()) {
-              const chave = `${item.canalId || ''}:${item.jid}`
+              const telefone = String(item.telefone || '').replace(/\D/g, '')
+              const jidNormalizado = String(item.jid || '').replace(/^\d+@lid$/, '')
+              const chave = telefone ? `tel:${telefone}` : `jid:${jidNormalizado || item.jid}`
               if (!unicos.has(chave)) unicos.set(chave, item)
             }
             setContatosBusca([...unicos.values()].slice(0, 40))
