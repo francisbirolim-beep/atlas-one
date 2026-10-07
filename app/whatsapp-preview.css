@@ -118,11 +118,11 @@ main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div 
 }
 
 /* Modal Nova conversa interna */
-main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] {
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] {
   background: rgb(15 23 42 / .46) !important;
   backdrop-filter: blur(4px) !important;
 }
-main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div {
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] > div {
   width: min(620px, calc(100vw - 32px)) !important;
   max-width: 620px !important;
   border: 1px solid var(--wa-border) !important;
@@ -131,20 +131,20 @@ main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[
   background: #fff !important;
   box-shadow: 0 30px 90px rgb(15 23 42 / .30) !important;
 }
-main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div > div:first-child {
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] > div > div:first-child {
   padding: 20px 22px !important;
   background: #fff !important;
 }
-main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div > div:nth-child(2) {
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] > div > div:nth-child(2) {
   padding: 20px 22px 22px !important;
   background: #fff !important;
 }
-main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] input {
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] input {
   min-height: 44px !important;
   border-radius: 12px !important;
   border-color: #dbe3ee !important;
 }
-main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] button[class*="bg-blue-600"] {
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] button[class*="bg-blue-600"] {
   min-height: 42px !important;
   border-radius: 11px !important;
   background: var(--wa-blue) !important;
@@ -159,11 +159,11 @@ main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[
   main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] {
     height: calc(100dvh - 64px) !important;
   }
-  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] {
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] {
     align-items: flex-end !important;
     padding: 0 !important;
   }
-  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div {
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div[class*="z-[145]"] > div {
     width: 100% !important;
     max-width: none !important;
     border-radius: 22px 22px 0 0 !important;
