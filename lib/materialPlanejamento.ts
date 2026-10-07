@@ -299,7 +299,7 @@ function materiaisDoOrcamentoWvetro(
         comprimento_corte_mm: comprimentoMm,
         comprimento_barra_mm: grupo.categoria === 'perfil' ? Math.max(0, n(produto?.tamanho_barra_mm, 0)) || null : null,
         origem_calculo: 'receita',
-        status_calculo: quantidade > 0 ? 'manual' : 'pendente_formula',
+        status_calculo: quantidade > 0 ? 'calculado' : 'pendente_formula',
         incluido_manual: false,
         excluido: false,
         justificativa_ajuste: detalhes
