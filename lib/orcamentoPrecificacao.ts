@@ -592,6 +592,32 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
   }
 }
 
+export async function carregarPlanoCorteOrcamento(orcamentoId: string): Promise<PrecificacaoOrcamento | null> {
+  const base = await carregarPrecificacaoOrcamento(orcamentoId)
+  if (!base) return null
+
+  const { data: pacoteFinal } = await supabase
+    .from('pacotes_tecnicos')
+    .select('*')
+    .eq('orcamento_id', orcamentoId)
+    .eq('origem', 'medicao_final')
+    .neq('status', 'substituido')
+    .order('versao', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!pacoteFinal) return base
+
+  const completo = await carregarPacoteCompleto(pacoteFinal.id)
+  return {
+    ...base,
+    pacote: pacoteFinal as PacoteTecnico,
+    materiais: (completo.materiais || []) as MaterialPacote[],
+    barras: completo.barras || [],
+    cortes: completo.cortes || [],
+  }
+}
+
 export async function salvarPoliticaGeral(orcamentoId: string, margem: number, cobrarSobra: boolean) {
   const { error } = await supabase.from('orcamentos').update({
     margem_padrao_pct: Math.max(0, num(margem)),
