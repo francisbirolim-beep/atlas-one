@@ -101,6 +101,26 @@ type WVetroCandidatoKanban = {
   atlas_numero?: number | null
 }
 
+function fluxoWVetro(card: OrcamentoRapido | null | undefined): Record<string, any> {
+  const fluxo = (card as any)?.wvetro_fluxo
+  return fluxo && typeof fluxo === 'object' && !Array.isArray(fluxo) ? fluxo : {}
+}
+
+function numeroWVetroCard(card: OrcamentoRapido | null | undefined): string {
+  const fluxo = fluxoWVetro(card)
+  return String(fluxo.numero || fluxo.numero_wvetro || '').trim()
+}
+
+function ehOrcamentoWVetro(card: OrcamentoRapido | null | undefined): boolean {
+  const fluxo = fluxoWVetro(card)
+  return !!numeroWVetroCard(card) && String(fluxo.origem || '').toLowerCase().includes('wvetro')
+}
+
+function wvetroAguardandoValidacao(card: OrcamentoRapido | null | undefined): boolean {
+  if (!ehOrcamentoWVetro(card)) return false
+  return String(fluxoWVetro(card).validacao_status || 'aguardando').toLowerCase() !== 'validado'
+}
+
 const acabamentoLabelsPdf: Record<string, string> = {
 preto: 'Preto',
 branco: 'Branco',
@@ -254,6 +274,7 @@ const [corAssistencia, setCorAssistencia] = useState('#8b5cf6')
 const [tiposVersao, setTiposVersao] = useState(0)
 const [buscandoWVetro, setBuscandoWVetro] = useState(false)
 const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
+const [validandoWVetro, setValidandoWVetro] = useState(false)
 const [candidatosWVetro, setCandidatosWVetro] = useState<WVetroCandidatoKanban[]>([])
 const [mensagemWVetro, setMensagemWVetro] = useState('')
 
@@ -362,6 +383,10 @@ const cardId = e.dataTransfer.getData('text/plain')
 if (!cardId) return
 const card = cards.find(c => c.id === cardId)
 if (card?.eh_assistencia) return
+if (wvetroAguardandoValidacao(card)) {
+  alert('Este orçamento veio do W.Vetro e precisa ser conferido e validado antes de avançar no Kanban.')
+  return
+}
 const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]?.id))
 const colunaNova = colunas.find(c => c.id === colunaId)
 const agoraIso = new Date().toISOString()
@@ -547,7 +572,7 @@ await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orçamento')
 listarHistorico(cardSelecionado.id).then(setHistorico)
 }
 
-async function apiWVetroKanban(acao: 'buscar' | 'vincular', numeroWvetro?: string) {
+async function apiWVetroKanban(acao: 'buscar' | 'vincular' | 'validar_importacao', numeroWvetro?: string) {
 const token = await tokenAtual()
 if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
 if (!cardSelecionado) throw new Error('Abra um orçamento antes de sincronizar.')
@@ -581,6 +606,28 @@ setMensagemWVetro(json.mensagem || `Orçamento W.Vetro #${numeroWvetro} sincroni
 setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao sincronizar o W.Vetro.')
 } finally {
 setSincronizandoWVetro(false)
+}
+}
+
+async function validarImportacaoWVetro() {
+if (!cardSelecionado || validandoWVetro) return
+setValidandoWVetro(true)
+setMensagemWVetro('')
+try {
+const json = await apiWVetroKanban('validar_importacao')
+const atualizado = json.orcamento as OrcamentoRapido
+if (atualizado?.id) {
+const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
+setEditando(exibicao)
+setCardSelecionado(exibicao)
+setCards(prev => prev.map(c => c.id === exibicao.id ? exibicao : c))
+setHistorico(await listarHistorico(exibicao.id))
+}
+setMensagemWVetro(json.mensagem || 'Orçamento W.Vetro validado e liberado.')
+} catch (e) {
+setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao validar o orçamento W.Vetro.')
+} finally {
+setValidandoWVetro(false)
 }
 }
 
@@ -1209,7 +1256,7 @@ const est = estiloCard(card, col)
 return (
 <div
 key={card.id}
-draggable={!card.eh_assistencia}
+draggable={!card.eh_assistencia && !wvetroAguardandoValidacao(card)}
 onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
 onClick={() => abrirCardOuAssistencia(card)}
 style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
@@ -1292,7 +1339,14 @@ style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}
 {formatarMoedaBRL(card.valor_estimado)}
 </p>
 )}
-{!card.eh_assistencia && (card.orcamento_finalizado_em && card.orcamento_iniciado_em ? (
+{!card.eh_assistencia && ehOrcamentoWVetro(card) && (
+<p className="text-xs font-semibold mt-1" style={{ color: est ? est.texto : (wvetroAguardandoValidacao(card) ? '#b45309' : '#047857') }}>
+{wvetroAguardandoValidacao(card)
+? `W.Vetro #${numeroWVetroCard(card)} · aguardando validação`
+: `W.Vetro #${numeroWVetroCard(card)} · validado`}
+</p>
+)}
+{!card.eh_assistencia && !ehOrcamentoWVetro(card) && (card.orcamento_finalizado_em && card.orcamento_iniciado_em ? (
 <p className="text-xs flex items-center gap-1 mt-1" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}>
 <Clock size={11} /> Levou {formatarDuracao(card.orcamento_iniciado_em, card.orcamento_finalizado_em)}
 </p>
@@ -1379,6 +1433,33 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 </div>
 )}
 </div>
+{ehOrcamentoWVetro(cardSelecionado) && (
+<div className={`rounded-xl border p-3 ${wvetroAguardandoValidacao(cardSelecionado) ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+<div className="flex flex-wrap items-center justify-between gap-2">
+<div>
+<p className={`text-xs font-bold ${wvetroAguardandoValidacao(cardSelecionado) ? 'text-amber-800' : 'text-emerald-800'}`}>
+W.Vetro #{numeroWVetroCard(cardSelecionado)} · {wvetroAguardandoValidacao(cardSelecionado) ? 'Aguardando conferência' : 'Validado'}
+</p>
+<p className="mt-1 text-[11px] text-slate-600">
+{wvetroAguardandoValidacao(cardSelecionado)
+? 'Confira valor, tipologias, perfis, acessórios, vidros e arquivos importados. Depois valide para liberar o avanço no Kanban.'
+: `Conferido por ${String(fluxoWVetro(cardSelecionado).validado_por_nome || 'usuário')} em ${formatarDataBR(fluxoWVetro(cardSelecionado).validado_em)}.`}
+</p>
+</div>
+{wvetroAguardandoValidacao(cardSelecionado) && (
+<button
+type="button"
+onClick={() => void validarImportacaoWVetro()}
+disabled={validandoWVetro || sincronizandoWVetro}
+className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+>
+{validandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+{validandoWVetro ? 'Validando...' : 'Validar importação'}
+</button>
+)}
+</div>
+</div>
+)}
 {cardSelecionado.ia_criado && (
 <div className={`rounded-xl border p-3 ${
 cardSelecionado.ia_validacao_status === 'aguardando'
