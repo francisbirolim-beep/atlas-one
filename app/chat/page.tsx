@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { MessageCircle, Plus, Search, Send, Users, ArrowLeft, ClipboardList, Paperclip, Camera, Mic, Square } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
@@ -10,6 +11,8 @@ type UsuarioLista={id:string;nome:string}
 function chaveDia(data:string|Date){const d=new Date(data);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function diaRotulo(data:string){const d=new Date(data),hoje=new Date(),ontem=new Date();ontem.setDate(hoje.getDate()-1);return chaveDia(d)===chaveDia(hoje)?'Hoje':chaveDia(d)===chaveDia(ontem)?'Ontem':d.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:d.getFullYear()===hoje.getFullYear()?undefined:'numeric'})}
 export default function ChatInternoPage(){
+ const searchParams=useSearchParams()
+ const usuarioInicialId=searchParams.get('usuarioId')||''
  const [eu,setEu]=useState<UsuarioLista|null>(null),[conversas,setConversas]=useState<ChatConversa[]>([]),[naoLidas,setNaoLidas]=useState<Record<string,number>>({}),[ativa,setAtiva]=useState<ChatConversa|null>(null),[mostrarBuscaMensagem,setMostrarBuscaMensagem]=useState(false),[mostrarListaMobile,setMostrarListaMobile]=useState(true),[carregandoMensagens,setCarregandoMensagens]=useState(false)
  const [mensagens,setMensagens]=useState<ChatMensagem[]>([]),[texto,setTexto]=useState(''),[busca,setBusca]=useState(''),[buscaMensagem,setBuscaMensagem]=useState(''),[respondendo,setRespondendo]=useState<ChatMensagem|null>(null),[copiado,setCopiado]=useState<string|null>(null),[enviando,setEnviando]=useState(false),[criando,setCriando]=useState(false),[carregandoConversas,setCarregandoConversas]=useState(true),[erroCarregamento,setErroCarregamento]=useState(false),[erro,setErro]=useState('')
  const [usuarios,setUsuarios]=useState<UsuarioLista[]>([]),[participantesAtivos,setParticipantesAtivos]=useState<UsuarioLista[]>([]),[buscaUsuario,setBuscaUsuario]=useState(''),[novo,setNovo]=useState(false),[nomeGrupo,setNomeGrupo]=useState(''),[selecionados,setSelecionados]=useState<string[]>([])
@@ -28,6 +31,26 @@ export default function ChatInternoPage(){
  async function enviarArquivo(file:File){if(!ativa||enviandoArquivo)return;setErro('');setEnviandoArquivo(true);try{if(file.size>50*1024*1024){setErro('Arquivo maior que 50 MB.');return}const ext=(file.name.split('.').pop()||'bin').replace(/[^a-zA-Z0-9]/g,'');const caminho=`${eu?.id}/${ativa.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`;const {error:up}=await supabase.storage.from('chat-anexos').upload(caminho,file,{contentType:file.type||undefined});if(up){setErro('Não foi possível enviar o arquivo.');return}const {data:url}=supabase.storage.from('chat-anexos').getPublicUrl(caminho);const ok=await enviarMensagem(ativa.id,'',{anexoUrl:url.publicUrl,anexoNome:file.name,mensagemPaiId:respondendo?.id||null});if(!ok){setErro('Arquivo enviado, mas não foi possível registrar a mensagem.');return}setRespondendo(null)}catch{setErro('Não foi possível enviar o arquivo.')}finally{setEnviandoArquivo(false);if(arquivoInput.current)arquivoInput.current.value='';if(cameraInput.current)cameraInput.current.value=''}}
  async function alternarAudio(){if(gravando){gravador.current?.stop();return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});partesAudio.current=[];const mr=new MediaRecorder(stream);gravador.current=mr;mr.ondataavailable=e=>{if(e.data.size)partesAudio.current.push(e.data)};mr.onstop=()=>{stream.getTracks().forEach(t=>t.stop());setGravando(false);const blob=new Blob(partesAudio.current,{type:mr.mimeType||'audio/webm'});void enviarArquivo(new File([blob],`audio-${Date.now()}.webm`,{type:blob.type||'audio/webm'}))};mr.start();setGravando(true)}catch{setErro('Não foi possível acessar o microfone. Verifique a permissão do navegador.')}}
  const usuariosFiltrados=useMemo(()=>{const q=buscaUsuario.toLocaleLowerCase('pt-BR').trim();return usuarios.filter(u=>u.id!==eu?.id&&(!q||u.nome.toLocaleLowerCase('pt-BR').includes(q)))},[usuarios,buscaUsuario,eu?.id]),totalOutrosUsuarios=useMemo(()=>usuarios.filter(u=>u.id!==eu?.id).length,[usuarios,eu?.id])
+ const usuarioInicialProcessado=useRef(false)
+ useEffect(()=>{
+   if(usuarioInicialProcessado.current||!usuarioInicialId||!eu||!usuarios.length)return
+   const destino=usuarios.find(u=>u.id===usuarioInicialId&&u.id!==eu.id)
+   if(!destino){usuarioInicialProcessado.current=true;return}
+   usuarioInicialProcessado.current=true
+   void (async()=>{
+     setCriando(true);setErro('')
+     try{
+       const conversa=await criarConversa(destino.nome,'direta',[destino])
+       if(!conversa){setErro('Não foi possível abrir a conversa interna.');return}
+       setMensagens([]);setRespondendo(null);setAtiva(conversa);setMostrarListaMobile(false)
+       await carregar({selecionarPrimeira:false})
+     }catch{
+       setErro('Não foi possível abrir a conversa interna.')
+     }finally{
+       setCriando(false)
+     }
+   })()
+ },[usuarioInicialId,eu?.id,usuarios.length])
  async function criar(){if(criando||!selecionados.length)return;setCriando(true);setErro('');try{const ps=usuarios.filter(u=>selecionados.includes(u.id));const conversa=await criarConversa(nomeGrupo||ps.map(p=>p.nome).join(', '),ps.length>1?'grupo':'direta',ps);if(!conversa){setErro('Não foi possível criar a conversa. Tente novamente.');return}setNovo(false);setNomeGrupo('');setBuscaUsuario('');setSelecionados([]);setMensagens([]);setRespondendo(null);setErro('');setAtiva(conversa);setMostrarListaMobile(false);await carregar({selecionarPrimeira:false})}catch{setErro('Não foi possível criar a conversa. Tente novamente.')}finally{setCriando(false)}}
  return <main className="min-h-screen bg-slate-100 p-3 md:p-6"><div className="mx-auto max-w-7xl overflow-hidden rounded-2xl border bg-white shadow-sm">
   <header className="flex items-center justify-between border-b px-4 py-3"><div className="flex items-center gap-3"><Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link><div><div className="flex items-center gap-2"><h1 className="font-bold text-slate-900">Chat interno</h1>{totalNaoLidas>0&&<span className="grid min-w-5 place-items-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{totalNaoLidas>99?'99+':totalNaoLidas}</span>}</div><p className="text-xs text-slate-500">Equipe Atlas One</p></div></div><div className="flex gap-2"><Link href="/compartilhar" aria-label="Enviar pedido para o Atlas" className="inline-flex items-center gap-2 rounded-xl border px-2.5 py-2 text-sm font-semibold md:px-3"><ClipboardList size={16}/><span className="hidden sm:inline">Enviar pedido</span></Link><button type="button" disabled={carregandoConversas||totalOutrosUsuarios===0} title={!carregandoConversas&&totalOutrosUsuarios===0?(usuarios.length===0?'Lista de usuários indisponível':'Não há outra pessoa cadastrada para conversar'):undefined} onClick={()=>{setErro('');setNomeGrupo('');setBuscaUsuario('');setSelecionados([]);setNovo(true)}} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-2.5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 md:px-3"><Plus size={16}/><span className="hidden sm:inline">Nova conversa</span></button></div></header>
