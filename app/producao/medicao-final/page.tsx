@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Ruler, Settings, X, Trash2, Search, FileUp, Loader2, FileText, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plus, Ruler, Settings, ShieldCheck, X, Trash2, Search, FileUp, Loader2, FileText, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra, Usuario, TipoEsquadria, Tipologia } from '@/lib/tipos'
 import {
@@ -81,6 +81,7 @@ export default function MedicaoFinalQuadro() {
   const [salvandoLimite, setSalvandoLimite] = useState(false)
 
   const master = usuario?.role === 'master'
+  const aguardandoLiberacao = medicoes.filter(m => m.status_operacional === 'concluido')
 
   const [tipos, setTipos] = useState<Tipologia[]>([])
 
@@ -380,6 +381,45 @@ export default function MedicaoFinalQuadro() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
+        {aguardandoLiberacao.length > 0 && (
+          <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-amber-800">
+                  <ShieldCheck size={18} />
+                  <h2 className="text-sm font-bold">Aguardando liberação para produção</h2>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold">{aguardandoLiberacao.length}</span>
+                </div>
+                <p className="mt-1 text-xs text-amber-800/80">
+                  Medições já enviadas. Abra a obra para revisar, liberar a medida e gerar o plano de corte com as receitas técnicas validadas.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {aguardandoLiberacao.map(m => {
+                const itens = itensPorMedicao[m.id] || []
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => router.push(`/producao/medicao-final/${m.id}`)}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white p-3 text-left transition hover:border-amber-400 hover:shadow-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800">{m.cliente_nome}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {itens.length} peça(s) · enviada {m.concluido_em ? new Date(m.concluido_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'agora'}
+                      </p>
+                    </div>
+                    <ArrowRight size={16} className="shrink-0 text-amber-700" />
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-slate-500">{medicoes.length} medição(ões)</p>
           <div className="flex items-center gap-3">
