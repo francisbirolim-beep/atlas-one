@@ -163,7 +163,8 @@ async function payloadWVetroAoVivo(numero: string, inicio?: string | null, fim?:
 }
 
 function rawTemComposicao(payload: Record<string, any>) {
-  return arr(payload.Itens).some((item: any) =>
+  const itens = arr(payload.Itens).length ? arr(payload.Itens) : arr(payload.itens)
+  return itens.some((item: any) =>
     arr(item?.Perfil).length > 0 ||
     arr(item?.Perfis).length > 0 ||
     arr(item?.Acessorios).length > 0 ||
