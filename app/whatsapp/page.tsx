@@ -582,6 +582,52 @@ export default function WhatsAppAtendimentoPage() {
   useEffect(() => { void carregarConversas() }, [])
 
   useEffect(() => {
+    if (!eu?.id) return
+    void atualizarConversasInternas(eu.id)
+    const timer = setInterval(() => { void atualizarConversasInternas(eu.id) }, 5000)
+    return () => clearInterval(timer)
+  }, [eu?.id])
+
+  useEffect(() => {
+    const conversaId = conversaInternaAtiva?.id
+    if (!conversaId) {
+      setMensagensInternas([])
+      setParticipantesConversaInterna([])
+      return
+    }
+
+    let vivo = true
+    const carregar = async () => {
+      const [mensagens, participantes] = await Promise.all([
+        listarMensagensInternas(conversaId),
+        listarParticipantesInternos(conversaId),
+      ])
+      if (!vivo) return
+      setMensagensInternas(mensagens)
+      setParticipantesConversaInterna(participantes.map(p => ({
+        id: p.usuario_id,
+        nome: p.usuario_nome || 'Usuário',
+      })))
+    }
+
+    void carregar()
+    const canal = supabase
+      .channel(`whatsapp-atlas-interno-${conversaId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens', filter: `conversa_id=eq.${conversaId}` }, payload => {
+        if (!vivo) return
+        const nova = payload.new as ChatMensagem
+        setMensagensInternas(atual => atual.some(m => m.id === nova.id) ? atual : [...atual, nova])
+        void atualizarConversasInternas()
+      })
+      .subscribe()
+
+    return () => {
+      vivo = false
+      void supabase.removeChannel(canal)
+    }
+  }, [conversaInternaAtiva?.id])
+
+  useEffect(() => {
     if (!diretorioAberto || !canalDiretorio) return
     const timer = setTimeout(() => { void carregarDiretorio() }, 250)
     return () => clearTimeout(timer)
@@ -787,9 +833,19 @@ export default function WhatsAppAtendimentoPage() {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [mensagens.length])
 
+  const internasFiltradas = useMemo(() => {
+    const q = busca.toLocaleLowerCase('pt-BR').trim()
+    if (filtro !== 'todas' && filtro !== 'internas') return []
+    return conversasInternas.filter(c => {
+      if (!q) return true
+      return `${c.nome || ''} ${c.ultima_mensagem || ''}`.toLocaleLowerCase('pt-BR').includes(q)
+    })
+  }, [conversasInternas, busca, filtro])
+
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     return conversas.filter(c => {
+      if (filtro === 'internas') return false
       if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (filtro === 'aguardando') {
@@ -1213,7 +1269,8 @@ export default function WhatsAppAtendimentoPage() {
     )
     const chats = doCanal.filter(c => Boolean(c.ultima_mensagem_em))
     return {
-      todas: chats.length,
+      todas: chats.length + conversasInternas.length,
+      internas: conversasInternas.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
       aguardando: chats.filter(c => {
         const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
@@ -1228,7 +1285,7 @@ export default function WhatsAppAtendimentoPage() {
       transferidas: chats.filter(c => Boolean(c.transferida_em)).length,
       finalizadas: chats.filter(c => c.status === 'finalizado').length,
     }
-  }, [conversas, eu?.id, canalFiltro])
+  }, [conversas, conversasInternas.length, eu?.id, canalFiltro])
 
   const acessoCanalAtivo = ativa?.whatsapp_canal_id
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
