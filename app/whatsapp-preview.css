@@ -1,0 +1,172 @@
+/* WhatsApp Atlas — reprodução visual do preview aprovado.
+   Escopo isolado pela presença do botão exclusivo de conversa interna. */
+
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) {
+  --wa-blue: #2563eb;
+  --wa-blue-dark: #1d4ed8;
+  --wa-blue-soft: #eff6ff;
+  --wa-green: #16a34a;
+  --wa-green-soft: #ecfdf5;
+  --wa-border: #e2e8f0;
+  --wa-muted: #64748b;
+  --wa-bg: #f8fafc;
+  --wa-ink: #0f172a;
+  background: #fff !important;
+}
+
+/* Cabeçalho */
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > header {
+  height: 72px !important;
+  padding: 0 24px !important;
+  border-bottom: 1px solid var(--wa-border) !important;
+  background: #fff !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > header h1 {
+  font-size: 17px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.015em !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > header button[title="Iniciar conversa interna com alguém da empresa"] {
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: var(--wa-blue) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px rgb(37 99 235 / .18) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > header button[title="Iniciar conversa interna com alguém da empresa"]:hover {
+  background: var(--wa-blue-dark) !important;
+}
+
+/* Estrutura de três painéis do mockup */
+@media (min-width: 1280px) {
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] {
+    height: calc(100dvh - 72px) !important;
+    grid-template-columns: 360px minmax(0,1fr) 320px !important;
+    background: var(--wa-bg) !important;
+  }
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] {
+    height: calc(100dvh - 72px) !important;
+    grid-template-columns: 360px minmax(0,1fr) !important;
+  }
+}
+
+/* Coluna esquerda */
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > aside:first-child {
+  background: #fff !important;
+  border-right: 1px solid var(--wa-border) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > aside:first-child > div:first-child {
+  padding: 16px !important;
+  border-bottom: 1px solid var(--wa-border) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) input[placeholder="Buscar conversas..."] {
+  min-height: 42px !important;
+  font-size: 13px !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) input[placeholder="Buscar conversas..."]::placeholder {
+  color: #94a3b8 !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) aside:first-child button[class*="rounded-full"] {
+  min-height: 30px !important;
+  padding: 0 11px !important;
+  border-radius: 999px !important;
+}
+
+/* Conversas internas azuis; WhatsApp externo continua verde */
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) aside:first-child div[class*="bg-blue-50/40"] {
+  background: #f8fbff !important;
+  border-color: #dbeafe !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) aside:first-child div[class*="bg-blue-50/40"] > div:first-child {
+  padding: 9px 16px !important;
+}
+
+/* Centro */
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > section {
+  background: var(--wa-bg) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > section > div:first-child {
+  min-height: 68px !important;
+  padding: 12px 18px !important;
+  background: #fff !important;
+  border-bottom: 1px solid var(--wa-border) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > section textarea[placeholder="Mensagem interna para a equipe..."] {
+  min-height: 52px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > section textarea[placeholder="Mensagem interna para a equipe..."]:focus {
+  border-color: #93c5fd !important;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / .10) !important;
+}
+
+/* Painel direito */
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > aside:last-child {
+  background: #fff !important;
+  border-left: 1px solid var(--wa-border) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] > aside:last-child > div:first-child {
+  padding: 16px !important;
+  border-bottom: 1px solid var(--wa-border) !important;
+}
+
+/* Modal Nova conversa interna */
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] {
+  background: rgb(15 23 42 / .46) !important;
+  backdrop-filter: blur(4px) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div {
+  width: min(620px, calc(100vw - 32px)) !important;
+  max-width: 620px !important;
+  border: 1px solid var(--wa-border) !important;
+  border-radius: 22px !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  box-shadow: 0 30px 90px rgb(15 23 42 / .30) !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div > div:first-child {
+  padding: 20px 22px !important;
+  background: #fff !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div > div:nth-child(2) {
+  padding: 20px 22px 22px !important;
+  background: #fff !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] input {
+  min-height: 44px !important;
+  border-radius: 12px !important;
+  border-color: #dbe3ee !important;
+}
+main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] button[class*="bg-blue-600"] {
+  min-height: 42px !important;
+  border-radius: 11px !important;
+  background: var(--wa-blue) !important;
+  box-shadow: 0 7px 18px rgb(37 99 235 / .18) !important;
+}
+
+@media (max-width: 767px) {
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > header {
+    height: 64px !important;
+    padding: 0 12px !important;
+  }
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) > div > div[class*="grid"][class*="100dvh"] {
+    height: calc(100dvh - 64px) !important;
+  }
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  main:has(button[title="Iniciar conversa interna com alguém da empresa"]) ~ div[class*="z-[145]"] > div {
+    width: 100% !important;
+    max-width: none !important;
+    border-radius: 22px 22px 0 0 !important;
+    max-height: 92dvh !important;
+  }
+}
