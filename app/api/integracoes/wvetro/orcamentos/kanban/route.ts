@@ -335,6 +335,50 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    if (acao === 'validar_importacao') {
+      const fluxoAtual = obj(alvo.wvetro_fluxo)
+      const numeroWvetro = txt(fluxoAtual.numero, fluxoAtual.numero_wvetro)
+      const origemWvetro = txt(fluxoAtual.origem).toLowerCase().includes('wvetro')
+      if (!numeroWvetro || !origemWvetro) {
+        return NextResponse.json({ error: 'Este card não é um orçamento importado do W.Vetro.' }, { status: 409 })
+      }
+
+      const agora = new Date().toISOString()
+      const fluxoValidado = {
+        ...fluxoAtual,
+        validacao_status: 'validado',
+        validado_em: agora,
+        validado_por_id: usuario.id,
+        validado_por_nome: usuario.nome || 'Usuário',
+      }
+
+      const { data: atualizado, error: validarErro } = await supabaseAdmin
+        .from('orcamentos')
+        .update({
+          wvetro_fluxo: fluxoValidado,
+          updated_at: agora,
+        })
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('id', alvo.id)
+        .select('*')
+        .single()
+      if (validarErro) throw validarErro
+
+      await inserirHistorico(
+        alvo.id,
+        usuario,
+        'Validou orçamento importado do W.Vetro',
+        `W.Vetro #${numeroWvetro} conferido e liberado para seguir o fluxo comercial.`,
+      )
+
+      return NextResponse.json({
+        ok: true,
+        orcamento: atualizado,
+        numeroWvetro,
+        mensagem: `Orçamento W.Vetro #${numeroWvetro} validado e liberado.`,
+      })
+    }
+
     return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 })
   } catch (e) {
     console.error('Erro na sincronização W.Vetro pelo Kanban:', e)
