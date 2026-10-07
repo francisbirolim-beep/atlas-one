@@ -20,7 +20,7 @@ import {
   listarParticipantes as listarParticipantesInternos,
 } from '@/lib/chatInterno'
 
-type Usuario = { id: string; nome: string; role?: string }
+type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
   id: string
   nome: string
@@ -2699,7 +2699,7 @@ export default function WhatsAppAtendimentoPage() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <b className="block truncate text-sm text-slate-900">{u.nome}</b>
-                            <span className="block text-[11px] text-slate-400">Usuário da empresa</span>
+                            <span className="block text-[11px] text-slate-400">{u.cargo || 'Usuário da empresa'}</span>
                           </span>
                           <span className={`grid h-5 w-5 place-items-center rounded border text-[10px] ${selecionado?'border-blue-600 bg-blue-600 text-white':'border-slate-300'}`}>
                             {selecionado?'✓':''}
