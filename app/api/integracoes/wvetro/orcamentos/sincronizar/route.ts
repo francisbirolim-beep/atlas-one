@@ -165,7 +165,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -188,14 +188,21 @@ async function carregarContexto(empresaId: string) {
     if (n) porNome.set(n, [...(porNome.get(n) || []), c])
   }
   const colunas = (colunasR.data || []) as any[]
-  const coluna = colunas.find(c => norm(c.nome) === 'FAZER ORCAMENTO') || colunas[0] || null
+  // Orçamento vindo do W.Vetro já está elaborado: entra diretamente em
+  // "Orçamento feito" e aguarda somente a conferência/validação comercial.
+  const coluna =
+    colunas.find(c => norm(c.nome) === 'ORCAMENTO FEITO') ||
+    colunas.find(c => norm(c.nome).includes('ORCAMENTO') && norm(c.nome).includes('FEITO')) ||
+    colunas[0] ||
+    null
+  const colunaFazer = colunas.find(c => norm(c.nome) === 'FAZER ORCAMENTO') || null
   const existentes = new Map<string, any>()
   for (const o of orcR.data || []) {
     const fluxo = obj(o.wvetro_fluxo)
     const numero = txt(fluxo?.numero, fluxo?.numero_wvetro)
     if (numero) existentes.set(numero, o)
   }
-  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, existentes }
+  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, existentes }
 }
 
 function enderecoClienteWVetro(p: Record<string, any>) {
@@ -512,6 +519,10 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         validacao_manual_cliente: vinculoManualValidado || null,
         payload_bruto: p,
         mapeamento_versao: 3,
+        validacao_status: 'aguardando',
+        validado_em: null,
+        validado_por_id: null,
+        validado_por_nome: null,
       }
       const existente = ctx.existentes.get(numeroW)
       if (existente) {
@@ -527,6 +538,18 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         }
         const anterior = obj(existente.wvetro_fluxo)
         const mesmoPayload = txt(anterior?.payload_hash) === registro.payloadHash
+        const manterValidacao =
+          mesmoPayload &&
+          txt(anterior?.validacao_status).toLowerCase() === 'validado'
+        const fluxoAtualizado = manterValidacao
+          ? {
+              ...fluxo,
+              validacao_status: 'validado',
+              validado_em: anterior?.validado_em || null,
+              validado_por_id: anterior?.validado_por_id || null,
+              validado_por_nome: anterior?.validado_por_nome || null,
+            }
+          : fluxo
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
         const valorAtual = num(existente.valor_estimado)
         const valorComEscalaIncorreta =
@@ -561,7 +584,13 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           cidade: cidadeOrcamento || existente.cidade || null,
           valor_estimado: valor > 0 ? valor : null,
           updated_at: new Date().toISOString(),
-          wvetro_fluxo: fluxo,
+          wvetro_fluxo: fluxoAtualizado,
+          ...(
+            ctx.coluna?.id &&
+            (!existente.coluna_id || (ctx.colunaFazer?.id && existente.coluna_id === ctx.colunaFazer.id))
+              ? { coluna_id: ctx.coluna.id, coluna_atualizada_em: new Date().toISOString() }
+              : {}
+          ),
           ...(String(existente.margem_padrao_origem || 'sistema') !== 'manual' ? {
             margem_padrao_pct: regraMargem.margem,
             margem_padrao_origem: regraMargem.origem,
