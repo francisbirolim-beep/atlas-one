@@ -44,8 +44,8 @@ function objeto(valor: unknown): Record<string, any> {
     : {}
 }
 
-function dataIso(valor: unknown) {
-  const s = texto(valor)
+function dataIso(...valores: unknown[]) {
+  const s = texto(...valores)
   const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
   return m ? m[1] : null
 }
