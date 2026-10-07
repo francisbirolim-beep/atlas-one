@@ -18,7 +18,7 @@ export interface RegistrarRecebimentoParcelasInput {
 }
 
 export function saldoParcela(conta: ContaReceberCliente360) {
-  return Math.max(0, Number(conta.valor || 0) - Number(conta.valor_pago || 0))
+  return Math.max(0, Number(conta.valor || 0) - Number(conta.valor_pago || 0) - Number(conta.valor_desconto || 0))
 }
 
 export async function registrarRecebimentoPorParcelas(

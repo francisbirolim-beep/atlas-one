@@ -19,7 +19,7 @@ export default function HomeSectorOverview({ dashboard }: Props) {
       supabase.from('obras').select('id,status'),
       supabase.from('medicoes_finais').select('id,status_operacional'),
       supabase.from('producao_itens').select('id,coluna_id'),
-      supabase.from('financeiro_contas_receber').select('valor,valor_pago,status,vencimento'),
+      supabase.from('financeiro_contas_receber').select('valor,valor_pago,valor_desconto,status,vencimento'),
       supabase.from('producao_colunas').select('id,nome,ordem').order('ordem',{ascending:true}),
       supabase.from('setor_kanban_colunas').select('id,nome,ordem').eq('setor_id','engenharia-projeto').order('ordem',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id').eq('setor_id','engenharia-projeto'),
@@ -29,10 +29,10 @@ export default function HomeSectorOverview({ dashboard }: Props) {
       if (!ativo) return
       const statusObra = dashboard === 'engenharia' ? 'engenharia' : dashboard === 'producao' ? 'producao' : dashboard === 'instalacao' ? 'instalacao' : ''
       const abertas = (contas.data || []).filter(c => !['cancelado','pago'].includes(c.status || ''))
-      const receber = abertas.reduce((s,c) => s + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0)), 0)
+      const receber = abertas.reduce((s,c) => s + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0) - Number(c.valor_desconto || 0)), 0)
       const hoje = new Date().toISOString().slice(0,10)
       const vencidas = abertas.filter(c => c.status === 'vencido' || (!!c.vencimento && c.vencimento < hoje))
-      const vencido = vencidas.reduce((s,c) => s + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0)), 0)
+      const vencido = vencidas.reduce((s,c) => s + Math.max(0, Number(c.valor || 0) - Number(c.valor_pago || 0) - Number(c.valor_desconto || 0)), 0)
       setDados({
         obras: statusObra ? (obras.data || []).filter(o => o.status === statusObra).length : (obras.data || []).length,
         medicoes: (medicoes.data || []).filter(m => m.status_operacional !== 'aprovado').length,

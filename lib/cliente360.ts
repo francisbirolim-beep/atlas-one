@@ -37,6 +37,7 @@ export interface ContaReceberCliente360 {
   vencimento?: string | null
   valor: number
   valor_pago?: number | null
+  valor_desconto?: number | null
   status: string
   forma?: string | null
   data_pagamento?: string | null

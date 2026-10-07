@@ -16,7 +16,7 @@ type Obra = {
 type Orcamento = { id:string; numero?:number|null; created_at:string; valor_estimado?:number|null; status?:string|null; tipo_esquadria?:string|null }
 type BalcaoOrcamento = { id:string; numero?:number|null; created_at:string; valor_estimado?:number|null; status?:string|null }
 type Venda = { id:string; numero:number; created_at:string; finalizada_em?:string|null; total:number; status:string }
-type Conta = { id:string; documento?:string|null; parcela:number; total_parcelas:number; vencimento?:string|null; valor:number; valor_pago?:number|null; status:string; forma?:string|null; data_pagamento?:string|null }
+type Conta = { id:string; documento?:string|null; parcela:number; total_parcelas:number; vencimento?:string|null; valor:number; valor_pago?:number|null; valor_desconto?:number|null; status:string; forma?:string|null; data_pagamento?:string|null }
 type Assistencia = { id:string; numero?:string|null; created_at:string; descricao_problema?:string|null; status?:string|null; data_atendimento?:string|null }
 type Medicao = { id:string; created_at:string; orcamento_id?:string|null; status_operacional?:string|null }
 type Alocacao = { id:string; recebimento_id:string; valor:number; tipo:string; created_at:string }
@@ -29,7 +29,7 @@ const STATUS: Record<string,{label:string;cls:string}> = {
 function moeda(v:number|null|undefined){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function dataBR(v?:string|null){if(!v)return '—';const base=v.length===10?`${v}T12:00:00`:v;const d=new Date(base);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
 function statusLabel(v?:string|null){return v?String(v).replace(/_/g,' ').replace(/^./,s=>s.toUpperCase()):'—'}
-function saldo(c:Conta){return Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0))}
+function saldo(c:Conta){return Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0))}
 
 function Kpi({titulo,valor,detalhe}:{titulo:string;valor:string;detalhe?:string}){return <div className="rounded-2xl border bg-white p-4 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{titulo}</p><p className="mt-1 text-xl font-bold text-slate-800">{valor}</p>{detalhe&&<p className="mt-1 text-xs text-slate-500">{detalhe}</p>}</div>}
 function Secao({titulo,children,acao}:{titulo:string;children:React.ReactNode;acao?:React.ReactNode}){return <section className="rounded-2xl border bg-white shadow-sm"><div className="flex items-center justify-between gap-3 border-b px-5 py-4"><h2 className="font-semibold text-slate-800">{titulo}</h2>{acao}</div><div className="p-5">{children}</div></section>}
