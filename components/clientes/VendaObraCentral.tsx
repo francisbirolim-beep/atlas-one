@@ -36,7 +36,7 @@ type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:st
 type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_em?:string|null }
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
-type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null }
+type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null }
 
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
@@ -51,6 +51,8 @@ function numeroEntrada(v:string){
   return Number.isFinite(n)?n:0
 }
 function dataBR(v?:string|null){if(!v)return '—';const d=new Date(v.length===10?`${v}T12:00:00`:v);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
+function dataHoraBR(v?:string|null){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}
+function dataInputLocal(d:Date){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function status(v?:string|null){return v?v.replace(/_/g,' ').replace(/^./,s=>s.toUpperCase()):'—'}
 function pct(parte:number,total:number){return total>0?Math.min(100,Math.max(0,(parte/total)*100)):0}
 function numeroOrcamento(o?:Orcamento|null){return o?.wvetro_fluxo?.numero||o?.numero||'—'}
@@ -135,11 +137,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
     const contaIds=((co.data||[]) as Conta[]).map(x=>x.id)
     if(contaIds.length){
-      const aloc=await supabase.from('financeiro_recebimento_alocacoes').select('recebimento_id,conta_receber_id').in('conta_receber_id',contaIds)
+      const aloc=await supabase.from('financeiro_recebimento_alocacoes').select('recebimento_id,conta_receber_id,tipo,valor').in('conta_receber_id',contaIds)
       const recebimentoIds=[...new Set((aloc.data||[]).map((x:any)=>x.recebimento_id).filter(Boolean))]
       if(recebimentoIds.length){
-        const rr=await supabase.from('financeiro_recebimentos').select('id,data_recebimento,valor,forma,referencia,observacoes,status').in('id',recebimentoIds).order('data_recebimento',{ascending:false})
-        setRecebimentosVenda((rr.data||[]) as RecebimentoVenda[])
+        const rr=await supabase.from('financeiro_recebimentos').select('id,data_recebimento,valor,forma,referencia,observacoes,status,criado_por_nome,created_at').in('id',recebimentoIds).order('data_recebimento',{ascending:false}).order('created_at',{ascending:false})
+        const descontos:Record<string,number>={}
+        ;(aloc.data||[]).filter((x:any)=>x.tipo==='desconto').forEach((x:any)=>{descontos[x.recebimento_id]=(descontos[x.recebimento_id]||0)+Number(x.valor||0)})
+        setRecebimentosVenda(((rr.data||[]) as RecebimentoVenda[]).map(r=>({...r,desconto:descontos[r.id]||0})))
       }else setRecebimentosVenda([])
     }else setRecebimentosVenda([])
 
@@ -374,7 +378,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {painelEtapa==='financeiro'&&<div className="p-4">
           <div className="mb-4 grid gap-3 sm:grid-cols-3"><Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/><Kpi titulo="Recebido" valor={moeda(recebido)}/><Kpi titulo="A receber" valor={moeda(aReceber)} destaque/></div>
-          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-t"><td className="px-3 py-3">{c.documento||'Venda sob medida'}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)))}</td><td>{status(c.status)}</td></tr>)}{!contas.length&&<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma parcela vinculada.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Documento</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{contas.map(c=><tr key={c.id} className="border-t"><td className="px-3 py-3">{c.documento||'Venda sob medida'}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td>{moeda(c.valor_desconto)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)))}</td><td>{status(c.status)}</td></tr>)}{!contas.length&&<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Nenhuma parcela vinculada.</td></tr>}</tbody></table></div>
         </div>}
 
         {painelEtapa==='producao'&&<div className="p-4">
@@ -424,10 +428,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='financeiro'&&<Box titulo="Financeiro desta venda">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 text-sm"><span>Valor da venda <b>{moeda(valorVenda)}</b></span><span>Recebido <b>{moeda(recebido)}</b></span><span>Saldo <b>{moeda(aReceber)}</b></span></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Parcela</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Saldo</th><th>Status</th></tr></thead><tbody>
+          <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Parcela</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Desconto</th><th>Saldo</th><th>Status</th></tr></thead><tbody>
             {contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||'Venda sob medida'}</td><td>{c.parcela||1}/{c.total_parcelas||1}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)))}</td><td>{status(c.status)}</td></tr>)}
-            {!contas.length&&<tr><td colSpan={7} className="py-8 text-center text-slate-400">Nenhuma conta vinculada a esta venda.</td></tr>}
+            {!contas.length&&<tr><td colSpan={8} className="py-8 text-center text-slate-400">Nenhuma conta vinculada a esta venda.</td></tr>}
           </tbody></table></div>
+          <div className="mt-5 border-t pt-4">
+            <h3 className="mb-3 text-sm font-bold text-slate-800">Histórico de recebimentos desta venda</h3>
+            <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-600">Data do recebimento: <b>{dataBR(r.data_recebimento)}</b>{desconto>0?<> · Total baixado: {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Registrado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><span className="text-xs font-semibold text-slate-400">{status(r.status||'registrado')}</span></div></div>})}{!recebimentosVenda.length&&<p className="py-5 text-center text-sm text-slate-400">Nenhum recebimento registrado para esta venda.</p>}</div>
+          </div>
         </Box>}
 
         {aba==='custos'&&<Box titulo="Custos / CMV da obra">
@@ -460,7 +468,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='notas'&&<Box titulo="Notas / Recibos desta venda">
-          <div className="space-y-2">{recebimentosVenda.map(r=><div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b className="text-sm">{moeda(r.valor)} · {r.forma||'Forma não informada'}</b><p className="text-xs text-slate-500">{dataBR(r.data_recebimento)}{r.referencia?` · ${r.referencia}`:''}</p>{r.observacoes&&<p className="mt-1 text-xs text-slate-400">{r.observacoes}</p>}</div><span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">{status(r.status||'confirmado')}</span></div>)}{!recebimentosVenda.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum recibo/recebimento alocado a esta venda ainda.</p>}</div>
+          <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-500">Recebido em {dataBR(r.data_recebimento)}{desconto>0?<> · Total baixado {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Lançado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{status(r.status||'registrado')}</span></div></div>})}{!recebimentosVenda.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum recibo/recebimento alocado a esta venda ainda.</p>}</div>
           <div className="mt-4 rounded-xl border border-dashed p-3 text-xs text-slate-500">Notas fiscais emitidas para a obra serão incluídas aqui quando estiverem vinculadas à venda. Nenhuma nota de outro cliente/obra será misturada nesta tela.</div>
         </Box>}
 
@@ -483,7 +491,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm">Valor recebido<input value={recebimento.valor} onChange={e=>setRecebimento(f=>({...f,valor:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="0,00"/></label>
         <label className="text-sm">Desconto<input value={recebimento.desconto} onChange={e=>setRecebimento(f=>({...f,desconto:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="0,00"/></label>
-        <label className="text-sm">Data<input type="date" value={recebimento.data} onChange={e=>setRecebimento(f=>({...f,data:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
+        <label className="text-sm">Data do recebimento<input type="date" max={dataInputLocal(new Date())} value={recebimento.data} onChange={e=>setRecebimento(f=>({...f,data:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"/><span className="mt-1 block text-[11px] text-slate-400">Use a data em que o dinheiro realmente foi recebido, mesmo que esteja lançando hoje.</span></label>
         <label className="text-sm">Forma<select value={recebimento.forma} onChange={e=>setRecebimento(f=>({...f,forma:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="boleto">Boleto</option><option value="cartao">Cartão</option><option value="transferencia">Transferência</option><option value="cheque">Cheque</option></select></label>
       </div>
       <div className="mt-3 rounded-xl border bg-slate-50 p-3">
