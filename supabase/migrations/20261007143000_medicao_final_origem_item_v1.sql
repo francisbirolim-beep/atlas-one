@@ -69,6 +69,7 @@ security definer
 set search_path = ''
 as $$
 declare
+  v_empresa_id uuid;
   v_orcamento_id uuid;
   v_itens jsonb;
   v_total integer;
@@ -78,11 +79,20 @@ begin
     return new;
   end if;
 
-  select mf.orcamento_id
-    into v_orcamento_id
+  select mf.empresa_id, mf.orcamento_id
+    into v_empresa_id, v_orcamento_id
     from public.medicoes_finais mf
-   where mf.id = new.medicao_id
-     and mf.empresa_id = new.empresa_id;
+   where mf.id = new.medicao_id;
+
+  if v_empresa_id is null then
+    raise exception 'Medição pai inválida ou sem empresa ao vincular item de origem.';
+  end if;
+
+  if new.empresa_id is null then
+    new.empresa_id := v_empresa_id;
+  elsif new.empresa_id is distinct from v_empresa_id then
+    raise exception 'Item da medição pertence a empresa diferente da medição pai.';
+  end if;
 
   if v_orcamento_id is null then
     return new;
@@ -92,7 +102,7 @@ begin
     into v_itens
     from public.orcamentos o
    where o.id = v_orcamento_id
-     and o.empresa_id = new.empresa_id;
+     and o.empresa_id = v_empresa_id;
 
   v_total := jsonb_array_length(coalesce(v_itens, '[]'::jsonb));
   if v_total <= 0 then
