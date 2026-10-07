@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant } from '@/lib/tenantServer'
 import {
+  arquivarConversaWhatsApp,
   assumirConversa,
   definirAcompanhamentoConversa,
+  definirBloqueioContatoWhatsApp,
   finalizarConversa,
   listarAcessosCanaisAtendimento,
   listarConversasAtendimento,
   marcarConversaComoLida,
+  registrarVisualizacaoConversa,
   transferirConversa,
 } from '@/lib/whatsappServer'
 
@@ -23,17 +26,15 @@ export async function GET(req: NextRequest) {
       listarConversasAtendimento(usuario),
       listarAcessosCanaisAtendimento(usuario),
     ])
-    const podeTransferir = usuario.role === 'master' || acessos.some(a => a.transferir)
-    let usuarios: { id: string; nome: string }[] = []
-
-    if (podeTransferir) {
-      const { data } = await supabaseAdmin
-        .from('usuarios')
-        .select('id,nome')
-        .eq('empresa_id', usuario.empresa_id)
-        .order('nome')
-      usuarios = (data || []) as { id: string; nome: string }[]
-    }
+    // A lista de usuários internos serve também para o chat da equipe dentro
+    // do WhatsApp Atlas. Por isso ela deve estar disponível para qualquer
+    // usuário autenticado do mesmo tenant, não apenas para quem transfere atendimento.
+    const { data: usuariosRaw } = await supabaseAdmin
+      .from('usuarios')
+      .select('id,nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .order('nome')
+    const usuarios = (usuariosRaw || []) as { id: string; nome: string }[]
 
     const { data: config } = await supabaseAdmin
       .from('atendimento_configuracoes')
@@ -92,6 +93,8 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'assumir') {
       await assumirConversa(conversaId, usuario)
+    } else if (acao === 'visualizar') {
+      await registrarVisualizacaoConversa(conversaId, usuario)
     } else if (acao === 'marcar_lida') {
       await marcarConversaComoLida(conversaId, usuario)
     } else if (acao === 'acompanhar') {
@@ -107,6 +110,12 @@ export async function POST(req: NextRequest) {
       )
     } else if (acao === 'finalizar') {
       await finalizarConversa(conversaId, usuario)
+    } else if (acao === 'arquivar') {
+      await arquivarConversaWhatsApp(conversaId, usuario)
+    } else if (acao === 'bloquear') {
+      await definirBloqueioContatoWhatsApp(conversaId, true, usuario)
+    } else if (acao === 'desbloquear') {
+      await definirBloqueioContatoWhatsApp(conversaId, false, usuario)
     } else {
       return NextResponse.json({ error: 'Acao invalida.' }, { status: 400 })
     }
