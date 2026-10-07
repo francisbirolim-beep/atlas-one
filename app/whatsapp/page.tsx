@@ -1403,11 +1403,11 @@ export default function WhatsAppAtendimentoPage() {
             <button
               type="button"
               onClick={abrirConversaInterna}
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
               title="Iniciar conversa interna com alguém da empresa"
             >
-              <Users size={16}/>
-              <span className="hidden sm:inline">Conversa interna</span>
+              <Plus size={15}/>
+              <span className="hidden sm:inline">Nova conversa interna</span>
             </button>
             <Link href="/whatsapp/numeros" className="rounded-xl border p-2 hover:bg-slate-50" title="Gerenciar canais WhatsApp">
               <Smartphone size={18}/>
@@ -1427,8 +1427,8 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
-          <aside className={`${ativa ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
+        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${conversaInternaAtiva ? 'xl:grid-cols-[390px_minmax(0,1fr)_300px]' : painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
+          <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
                 <div className="mb-3 md:hidden">
@@ -1737,8 +1737,81 @@ export default function WhatsAppAtendimentoPage() {
             </div>
           </aside>
 
-          <section className={`${ativa ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
-            {!ativa ? (
+          <section className={`${ativa || conversaInternaAtiva ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
+            {conversaInternaAtiva ? (
+              <>
+                <div className="flex min-w-0 items-center gap-3 border-b bg-white px-4 py-3">
+                  <button type="button" onClick={()=>setConversaInternaAtiva(null)}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-white text-slate-700 md:hidden"
+                    aria-label="Voltar para conversas">
+                    <ArrowLeft size={18}/>
+                  </button>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700">
+                    {conversaInternaAtiva.tipo==='grupo'?<Users size={18}/>:String(conversaInternaAtiva.nome||'?').slice(0,1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <b className="truncate text-slate-900">{conversaInternaAtiva.nome || 'Conversa interna'}</b>
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">INTERNA</span>
+                    </div>
+                    <p className="truncate text-xs text-slate-500">
+                      Equipe Atlas · conversa interna · {participantesConversaInterna.map(p=>p.nome).join(', ') || 'carregando participantes'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={abrirConversaInterna}
+                    className="hidden rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 sm:inline-flex">
+                    + Pessoas
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-5">
+                  <div className="mx-auto max-w-3xl space-y-3">
+                    {mensagensInternas.length===0 ? (
+                      <div className="grid min-h-[320px] place-items-center text-center text-sm text-slate-400">
+                        <div>
+                          <MessageCircle className="mx-auto mb-3 text-blue-300" size={34}/>
+                          <p className="font-semibold text-slate-600">Conversa interna da equipe</p>
+                          <p className="mt-1 text-xs">As mensagens ficam somente dentro do Atlas.</p>
+                        </div>
+                      </div>
+                    ) : mensagensInternas.map(m=>{
+                      const minha=m.usuario_id===eu?.id
+                      return (
+                        <div key={m.id} className={`flex ${minha?'justify-end':'justify-start'}`}>
+                          <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${minha?'bg-blue-600 text-white':'border bg-white text-slate-800'}`}>
+                            {!minha && <b className="mb-1 block text-[11px] text-blue-700">{m.usuario_nome || 'Equipe'}</b>}
+                            {m.texto && <p className="whitespace-pre-wrap break-words text-sm">{m.texto}</p>}
+                            {m.anexo_nome && <p className="mt-1 text-xs opacity-75">📎 {m.anexo_nome}</p>}
+                            <p className={`mt-1 text-right text-[10px] ${minha?'text-blue-100':'text-slate-400'}`}>{hora(m.created_at)}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t bg-white p-3">
+                  <div className="mx-auto flex max-w-3xl items-end gap-2">
+                    <textarea
+                      value={textoInterno}
+                      onChange={e=>setTextoInterno(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviarInterno()}}}
+                      rows={2}
+                      placeholder="Mensagem interna para a equipe..."
+                      className="min-h-[54px] max-h-32 flex-1 resize-y rounded-2xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                    <button type="button" disabled={!textoInterno.trim()||enviandoInterno}
+                      onClick={()=>void enviarInterno()}
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                      <Send size={18}/>
+                    </button>
+                  </div>
+                  <p className="mt-2 text-center text-[10px] font-medium text-blue-500">
+                    Conversa interna — não aparece para clientes do WhatsApp.
+                  </p>
+                </div>
+              </>
+            ) : !ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
                 <div><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border-2 border-blue-200 bg-blue-50 text-blue-500"><MessageCircle size={30}/></div><p className="font-semibold text-slate-600">Selecione uma conversa para começar</p></div>
               </div>
