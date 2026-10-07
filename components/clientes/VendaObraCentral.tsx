@@ -33,7 +33,7 @@ type Compra = { id:string; descricao?:string|null; categoria?:string|null; quant
 type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:string|null; quantidade?:number|null; status?:string|null; created_at:string }
 type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_em?:string|null }
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
-type Documento = { id:string; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
+type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
 
 type Aba='visao'|'financeiro'|'custos'|'compras'|'tipologias'|'producao'|'instalacao'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
@@ -95,7 +95,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
       supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,status,created_at').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id,titulo,atualizado_em').eq('orcamento_id',v.orcamento_id),
-      supabase.from('cliente_documentos').select('id,titulo,nome_arquivo,url,created_at,tipo').eq('cliente_id',v.cliente_id).order('created_at',{ascending:false}),
+      Promise.resolve({data:[],error:null} as any),
     ])
 
     if(cr.data)setCliente(cr.data as Cliente)
@@ -103,18 +103,20 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setContas((co.data||[]) as Conta[])
     setOrdens((op.data||[]) as Ordem[])
     setSetorItens((si.data||[]) as SetorItem[])
-    setDocumentos((docs.data||[]) as Documento[])
 
     if(v.obra_id){
-      const [ob,cp]=await Promise.all([
+      const [ob,cp,dc]=await Promise.all([
         supabase.from('obras').select('id,numero,nome,status,previsao_entrega').eq('id',v.obra_id).maybeSingle(),
         supabase.from('compras_necessidades').select('id,descricao,categoria,quantidade,unidade,status,recebido_em,created_at').eq('obra_id',v.obra_id).order('created_at',{ascending:true}),
+        supabase.from('cliente_documentos').select('id,obra_id,titulo,nome_arquivo,url,created_at,tipo').eq('cliente_id',v.cliente_id).eq('obra_id',v.obra_id).order('created_at',{ascending:false}),
       ])
       if(ob.data)setObra(ob.data as Obra)
       setCompras((cp.data||[]) as Compra[])
+      setDocumentos((dc.data||[]) as Documento[])
     }else{
-      const cp=await supabase.from('compras_necessidades').select('id,descricao,categoria,quantidade,unidade,status,recebido_em,created_at').eq('cliente_id',v.cliente_id).is('obra_id',null).order('created_at',{ascending:true})
-      setCompras((cp.data||[]) as Compra[])
+      setObra(null)
+      setCompras([])
+      setDocumentos([])
     }
 
     const colunaIds=[...new Set(((si.data||[]) as SetorItem[]).map(x=>x.coluna_id).filter(Boolean))]
@@ -123,7 +125,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       setSetorColunas(Object.fromEntries(((cols.data||[]) as SetorColuna[]).map(c=>[c.id,c])))
     }else setSetorColunas({})
 
-    const falha=cr.error||or.error||co.error||op.error||si.error||docs.error
+    const falha=cr.error||or.error||co.error||op.error||si.error
     if(falha)setErro(falha.message)
     setCarregando(false)
   }
@@ -276,7 +278,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='documentos'&&<Box titulo="Documentos vinculados ao cliente / obra">
-          <div className="space-y-2">{documentos.filter(d=>!venda.obra_id||(d as any).obra_id===venda.obra_id||true).slice(0,30).map(d=><a key={d.id} href={d.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy"><div><b className="text-sm">{d.titulo}</b><p className="text-xs text-slate-500">{d.nome_arquivo||'Arquivo'} · {dataBR(d.created_at)}</p></div><FileText size={16} className="text-slate-400"/></a>)}{!documentos.length&&<p className="text-sm text-slate-400">Nenhum documento anexado.</p>}</div>
+          <div className="space-y-2">{documentos.slice(0,30).map(d=><a key={d.id} href={d.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy"><div><b className="text-sm">{d.titulo}</b><p className="text-xs text-slate-500">{d.nome_arquivo||'Arquivo'} · {dataBR(d.created_at)}</p></div><FileText size={16} className="text-slate-400"/></a>)}{!documentos.length&&<p className="text-sm text-slate-400">Nenhum documento anexado.</p>}</div>
         </Box>}
 
         {aba==='historico'&&<Box titulo="Histórico da venda">
