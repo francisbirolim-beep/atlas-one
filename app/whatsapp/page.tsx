@@ -6,7 +6,7 @@ import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
-  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus,
+  UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus, Camera, Square,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
@@ -207,6 +207,8 @@ export default function WhatsAppAtendimentoPage() {
   const [participantesConversaInterna, setParticipantesConversaInterna] = useState<Array<{id:string;nome:string}>>([])
   const [textoInterno, setTextoInterno] = useState('')
   const [enviandoInterno, setEnviandoInterno] = useState(false)
+  const [enviandoArquivoInterno, setEnviandoArquivoInterno] = useState(false)
+  const [gravandoInterno, setGravandoInterno] = useState(false)
   const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
   const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
   const [nomeGrupoInterno, setNomeGrupoInterno] = useState('')
@@ -237,6 +239,10 @@ export default function WhatsAppAtendimentoPage() {
   const carregandoConversasRef = useRef(false)
   const recarregarConversasPendenteRef = useRef(false)
   const refreshConversasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const arquivoInternoInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraInternaInputRef = useRef<HTMLInputElement | null>(null)
+  const gravadorInternoRef = useRef<MediaRecorder | null>(null)
+  const partesAudioInternoRef = useRef<Blob[]>([])
 
   useEffect(() => {
     try {
@@ -392,6 +398,74 @@ export default function WhatsAppAtendimentoPage() {
       await atualizarConversasInternas()
     } finally {
       setEnviandoInterno(false)
+    }
+  }
+
+  async function enviarArquivoInterno(file: File) {
+    if (!conversaInternaAtiva || enviandoArquivoInterno) return
+    setErro('')
+    setEnviandoArquivoInterno(true)
+    try {
+      if (file.size > 50 * 1024 * 1024) {
+        setErro('Arquivo maior que 50 MB.')
+        return
+      }
+      const ext = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '')
+      const caminho = `${eu?.id || 'usuario'}/${conversaInternaAtiva.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('chat-anexos')
+        .upload(caminho, file, { contentType: file.type || undefined })
+      if (uploadError) {
+        setErro('Não foi possível enviar o arquivo.')
+        return
+      }
+
+      const { data: url } = supabase.storage.from('chat-anexos').getPublicUrl(caminho)
+      const ok = await enviarMensagemInterna(conversaInternaAtiva.id, '', {
+        anexoUrl: url.publicUrl,
+        anexoNome: file.name,
+      })
+      if (!ok) {
+        setErro('Arquivo enviado, mas não foi possível registrar a mensagem.')
+        return
+      }
+
+      const historico = await listarMensagensInternas(conversaInternaAtiva.id)
+      setMensagensInternas(historico)
+      await atualizarConversasInternas()
+    } catch {
+      setErro('Não foi possível enviar o arquivo.')
+    } finally {
+      setEnviandoArquivoInterno(false)
+      if (arquivoInternoInputRef.current) arquivoInternoInputRef.current.value = ''
+      if (cameraInternaInputRef.current) cameraInternaInputRef.current.value = ''
+    }
+  }
+
+  async function alternarAudioInterno() {
+    if (gravandoInterno) {
+      gravadorInternoRef.current?.stop()
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      partesAudioInternoRef.current = []
+      const mr = new MediaRecorder(stream)
+      gravadorInternoRef.current = mr
+      mr.ondataavailable = e => {
+        if (e.data.size) partesAudioInternoRef.current.push(e.data)
+      }
+      mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop())
+        setGravandoInterno(false)
+        const blob = new Blob(partesAudioInternoRef.current, { type: mr.mimeType || 'audio/webm' })
+        void enviarArquivoInterno(new File([blob], `audio-${Date.now()}.webm`, { type: blob.type || 'audio/webm' }))
+      }
+      mr.start()
+      setGravandoInterno(true)
+    } catch {
+      setErro('Não foi possível acessar o microfone. Verifique a permissão do navegador.')
     }
   }
 
@@ -1790,7 +1864,18 @@ export default function WhatsAppAtendimentoPage() {
                           <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${minha?'bg-blue-600 text-white':'border bg-white text-slate-800'}`}>
                             {!minha && <b className="mb-1 block text-[11px] text-blue-700">{m.usuario_nome || 'Equipe'}</b>}
                             {m.texto && <p className="whitespace-pre-wrap break-words text-sm">{m.texto}</p>}
-                            {m.anexo_nome && <p className="mt-1 text-xs opacity-75">📎 {m.anexo_nome}</p>}
+                            {m.anexo_url && (
+                              /\.(jpg|jpeg|png|webp|heic)$/i.test(m.anexo_nome||'')
+                                ? <a href={m.anexo_url} target="_blank" rel="noopener noreferrer"><img src={m.anexo_url} alt={m.anexo_nome||'Imagem'} className="mt-2 max-h-72 max-w-full rounded-xl object-contain"/></a>
+                                : /\.(mp4|mov)$/i.test(m.anexo_nome||'')
+                                  ? <video src={m.anexo_url} controls playsInline className="mt-2 max-h-72 max-w-full rounded-xl"/>
+                                  : /\.(webm|mp3|m4a|ogg)$/i.test(m.anexo_nome||'')
+                                    ? <audio src={m.anexo_url} controls className="mt-2 max-w-full"/>
+                                    : <a href={m.anexo_url} target="_blank" rel="noopener noreferrer"
+                                        className={`mt-2 block max-w-full truncate rounded-lg border px-2 py-1.5 text-xs font-bold ${minha?'border-blue-300 bg-blue-500/30 text-white':'border-blue-100 bg-blue-50 text-blue-600'}`}>
+                                        📎 {m.anexo_nome||'Abrir anexo'}
+                                      </a>
+                            )}
                             <p className={`mt-1 text-right text-[10px] ${minha?'text-blue-100':'text-slate-400'}`}>{hora(m.created_at)}</p>
                           </div>
                         </div>
@@ -1800,7 +1885,23 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
 
                 <div className="border-t bg-white p-3">
+                  <input ref={arquivoInternoInputRef} type="file" accept="image/*,video/*,audio/*,.pdf"
+                    className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)void enviarArquivoInterno(f)}}/>
+                  <input ref={cameraInternaInputRef} type="file" accept="image/*,video/*" capture="environment"
+                    className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)void enviarArquivoInterno(f)}}/>
                   <div className="mx-auto flex max-w-3xl items-end gap-2">
+                    <button type="button" disabled={enviandoArquivoInterno}
+                      onClick={()=>arquivoInternoInputRef.current?.click()}
+                      aria-label="Anexar foto, vídeo, áudio ou PDF"
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                      <Paperclip size={18}/>
+                    </button>
+                    <button type="button" disabled={enviandoArquivoInterno}
+                      onClick={()=>cameraInternaInputRef.current?.click()}
+                      aria-label="Abrir câmera"
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                      <Camera size={18}/>
+                    </button>
                     <textarea
                       value={textoInterno}
                       onChange={e=>setTextoInterno(e.target.value)}
@@ -1809,14 +1910,28 @@ export default function WhatsAppAtendimentoPage() {
                       placeholder="Mensagem interna para a equipe..."
                       className="min-h-[54px] max-h-32 flex-1 resize-y rounded-2xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
                     />
-                    <button type="button" disabled={!textoInterno.trim()||enviandoInterno}
-                      onClick={()=>void enviarInterno()}
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
-                      <Send size={18}/>
-                    </button>
+                    {textoInterno.trim() ? (
+                      <button type="button" disabled={enviandoInterno}
+                        onClick={()=>void enviarInterno()}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                        <Send size={18}/>
+                      </button>
+                    ) : (
+                      <button type="button" disabled={enviandoArquivoInterno}
+                        onClick={()=>void alternarAudioInterno()}
+                        aria-label={gravandoInterno?'Parar e enviar áudio':'Gravar áudio'}
+                        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-white disabled:opacity-40 ${gravandoInterno?'bg-red-600':'bg-blue-600'}`}>
+                        {gravandoInterno?<Square size={15}/>:<Mic size={18}/>}
+                      </button>
+                    )}
                   </div>
+                  {gravandoInterno && (
+                    <p className="mx-auto mt-1 max-w-3xl text-xs font-semibold text-red-600">
+                      Gravando áudio… toque no botão vermelho para enviar.
+                    </p>
+                  )}
                   <p className="mt-2 text-center text-[10px] font-medium text-blue-500">
-                    Conversa interna — não aparece para clientes do WhatsApp.
+                    Conversa interna — visível apenas aos participantes e ao Master.
                   </p>
                 </div>
               </>
