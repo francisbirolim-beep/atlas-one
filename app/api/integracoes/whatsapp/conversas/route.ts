@@ -31,10 +31,10 @@ export async function GET(req: NextRequest) {
     // usuário autenticado do mesmo tenant, não apenas para quem transfere atendimento.
     const { data: usuariosRaw } = await supabaseAdmin
       .from('usuarios')
-      .select('id,nome')
+      .select('id,nome,role,cargo')
       .eq('empresa_id', usuario.empresa_id)
       .order('nome')
-    const usuarios = (usuariosRaw || []) as { id: string; nome: string }[]
+    const usuarios = (usuariosRaw || []) as { id: string; nome: string; role?: string | null; cargo?: string | null }[]
 
     const { data: config } = await supabaseAdmin
       .from('atendimento_configuracoes')
