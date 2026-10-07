@@ -38,6 +38,7 @@ type ContaVenda = {
   venda_obra_id?: string | null
   valor?: number | null
   valor_pago?: number | null
+  valor_desconto?: number | null
   status?: string | null
 }
 
@@ -92,7 +93,7 @@ export default function VendasCliente360({clienteId}:Props){
         ? supabase.from('obras').select('id,numero,nome,status').in('id',obraIds)
         : Promise.resolve({data:[],error:null} as any),
       vendaIds.length
-        ? supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,status').in('venda_obra_id',vendaIds)
+        ? supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,valor_desconto,status').in('venda_obra_id',vendaIds)
         : Promise.resolve({data:[],error:null} as any),
     ])
 
@@ -107,7 +108,7 @@ export default function VendasCliente360({clienteId}:Props){
 
   const totalVendido=useMemo(()=>vendas.reduce((s,v)=>s+Number(v.valor_venda||orcamentos[v.orcamento_id]?.valor_estimado||0),0),[vendas,orcamentos])
   const totalRecebido=useMemo(()=>contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0),[contas])
-  const totalAberto=useMemo(()=>contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)),0),[contas])
+  const totalAberto=useMemo(()=>contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0),[contas])
 
   if(carregando) return <div className="rounded-2xl border bg-white p-8 text-center text-sm text-slate-500"><Loader2 size={16} className="mx-auto mb-2 animate-spin"/>Carregando vendas...</div>
 
@@ -142,7 +143,7 @@ export default function VendasCliente360({clienteId}:Props){
           const valor=Number(v.valor_venda||o?.valor_estimado||0)
           const contasVenda=contas.filter(c=>c.venda_obra_id===v.id&&c.status!=='cancelado')
           const recebido=contasVenda.reduce((s,c)=>s+Number(c.valor_pago||0),0)
-          const saldo=contasVenda.reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)),0)
+          const saldo=contasVenda.reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
           return <Link key={v.id} href={`/clientes/${clienteId}/vendas/${v.id}`} className="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
