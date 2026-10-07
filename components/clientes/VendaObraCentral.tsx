@@ -7,7 +7,7 @@ import {
   FileText, Loader2, PackageCheck, Receipt, ShoppingCart, Wallet, Wrench, X
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { registrarRecebimentoCliente } from '@/lib/cliente360'
+import { registrarRecebimentoVendaComDesconto } from '@/lib/cliente360Recebimentos'
 
 type Venda = {
   id:string
@@ -42,6 +42,14 @@ type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'produ
 interface Props{clienteId:string;vendaId:string}
 
 function moeda(v?:number|null){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function numeroEntrada(v:string){
+  let s=String(v||'').trim().replace(/[^0-9,.-]/g,'')
+  if(!s)return 0
+  if(s.includes(',')&&s.includes('.'))s=s.lastIndexOf(',')>s.lastIndexOf('.')?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'')
+  else if(s.includes(','))s=s.replace(/\./g,'').replace(',','.')
+  const n=Number(s)
+  return Number.isFinite(n)?n:0
+}
 function dataBR(v?:string|null){if(!v)return '—';const d=new Date(v.length===10?`${v}T12:00:00`:v);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
 function status(v?:string|null){return v?v.replace(/_/g,' ').replace(/^./,s=>s.toUpperCase()):'—'}
 function pct(parte:number,total:number){return total>0?Math.min(100,Math.max(0,(parte/total)*100)):0}
@@ -101,7 +109,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [erro,setErro]=useState('')
   const [modalRecebimento,setModalRecebimento]=useState(false)
   const [salvando,setSalvando]=useState(false)
-  const [recebimento,setRecebimento]=useState({valor:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
+  const [recebimento,setRecebimento]=useState({valor:'',desconto:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
 
   useEffect(()=>{void carregar()},[vendaId,clienteId])
 
@@ -182,7 +190,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const valorVenda=Number(venda?.valor_venda||orcamento?.valor_estimado||0)
   const custoPrevisto=Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
   const recebido=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0)
-  const aReceber=Math.max(0,valorVenda-recebido)
+  const saldoContas=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)),0)
+  const aReceber=contas.length?saldoContas:Math.max(0,valorVenda-recebido)
   const margemPrevista=valorVenda>0&&custoPrevisto>0?((valorVenda-custoPrevisto)/valorVenda)*100:0
   const markup=valorVenda>0&&custoPrevisto>0?(valorVenda/custoPrevisto):0
 
@@ -213,19 +222,27 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   async function registrarRecebimento(){
     if(!venda||!cliente)return
-    const valor=Number(recebimento.valor.replace(',','.'))
-    if(!Number.isFinite(valor)||valor<=0){setErro('Informe um valor recebido válido.');return}
-    if(!venda.obra_id){setErro('Esta venda ainda não tem obra vinculada. Vincule a obra antes de receber diretamente por esta venda.');return}
+    const valor=numeroEntrada(recebimento.valor)
+    const desconto=numeroEntrada(recebimento.desconto)
+    const totalBaixado=valor+desconto
+    if(valor<=0){setErro('Informe um valor recebido válido.');return}
+    if(desconto<0){setErro('O desconto não pode ser negativo.');return}
+    if(totalBaixado>aReceber+0.009){setErro('O valor recebido mais o desconto não pode ultrapassar o saldo da venda.');return}
     setSalvando(true);setErro('')
-    const r=await registrarRecebimentoCliente({
-      clienteId:venda.cliente_id,clienteNome:cliente.nome,obraId:venda.obra_id,
-      valor,dataRecebimento:recebimento.data,forma:recebimento.forma,
-      referencia:recebimento.referencia,observacoes:recebimento.observacoes
+    const r=await registrarRecebimentoVendaComDesconto({
+      vendaObraId:venda.id,
+      clienteId:venda.cliente_id,
+      valorRecebido:valor,
+      desconto,
+      dataRecebimento:recebimento.data,
+      forma:recebimento.forma,
+      referencia:recebimento.referencia,
+      observacoes:recebimento.observacoes,
     })
     setSalvando(false)
     if(!r.ok){setErro(r.error||'Não foi possível registrar o recebimento.');return}
     setModalRecebimento(false)
-    setRecebimento({valor:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
+    setRecebimento({valor:'',desconto:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
     await carregar()
   }
 
@@ -462,17 +479,25 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     </main>
 
     {modalRecebimento&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
-      <div className="flex items-start justify-between gap-3"><div><h2 className="font-bold text-slate-900">Registrar recebimento desta venda</h2><p className="mt-1 text-xs text-slate-500">O lançamento entra no financeiro geral e é alocado à obra desta venda.</p></div><button onClick={()=>setModalRecebimento(false)}><X size={18}/></button></div>
-      {!venda.obra_id&&<div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Esta venda ainda não tem obra vinculada. Para não misturar recebimentos, vincule uma obra antes de receber por aqui.</div>}
+      <div className="flex items-start justify-between gap-3"><div><h2 className="font-bold text-slate-900">Registrar recebimento desta venda</h2><p className="mt-1 text-xs text-slate-500">Pode ser parcial ou total. O valor recebido entra no financeiro geral e o desconto é registrado separadamente como abatimento.</p></div><button onClick={()=>setModalRecebimento(false)}><X size={18}/></button></div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="text-sm">Valor<input value={recebimento.valor} onChange={e=>setRecebimento(f=>({...f,valor:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="0,00"/></label>
+        <label className="text-sm">Valor recebido<input value={recebimento.valor} onChange={e=>setRecebimento(f=>({...f,valor:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="0,00"/></label>
+        <label className="text-sm">Desconto<input value={recebimento.desconto} onChange={e=>setRecebimento(f=>({...f,desconto:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="0,00"/></label>
         <label className="text-sm">Data<input type="date" value={recebimento.data} onChange={e=>setRecebimento(f=>({...f,data:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"/></label>
         <label className="text-sm">Forma<select value={recebimento.forma} onChange={e=>setRecebimento(f=>({...f,forma:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2"><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="boleto">Boleto</option><option value="cartao">Cartão</option><option value="transferencia">Transferência</option><option value="cheque">Cheque</option></select></label>
-        <label className="text-sm">Obra<input readOnly value={obra?.nome||'Sem obra vinculada'} className="mt-1 w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500"/></label>
       </div>
+      <div className="mt-3 rounded-xl border bg-slate-50 p-3">
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div><span className="text-slate-500">Saldo atual</span><b className="mt-1 block text-sm text-slate-900">{moeda(aReceber)}</b></div>
+          <div><span className="text-slate-500">Total baixado</span><b className="mt-1 block text-sm text-slate-900">{moeda(numeroEntrada(recebimento.valor)+numeroEntrada(recebimento.desconto))}</b></div>
+          <div><span className="text-slate-500">Saldo após</span><b className="mt-1 block text-sm text-brand-teal">{moeda(Math.max(0,aReceber-numeroEntrada(recebimento.valor)-numeroEntrada(recebimento.desconto)))}</b></div>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">{numeroEntrada(recebimento.valor)+numeroEntrada(recebimento.desconto)>0&&numeroEntrada(recebimento.valor)+numeroEntrada(recebimento.desconto)<aReceber-0.009?'Recebimento parcial: o saldo restante continuará em aberto.':'O Atlas atualiza automaticamente o saldo desta venda no financeiro.'}</p>
+      </div>
+      <label className="mt-3 block text-sm">Obra<input readOnly value={obra?.nome||'Venda ainda sem obra vinculada'} className="mt-1 w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500"/></label>
       <input value={recebimento.referencia} onChange={e=>setRecebimento(f=>({...f,referencia:e.target.value}))} className="mt-3 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Referência / comprovante"/>
       <textarea value={recebimento.observacoes} onChange={e=>setRecebimento(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/>
-      <div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalRecebimento(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando||!venda.obra_id} onClick={registrarRecebimento} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{salvando?'Registrando...':'Registrar recebimento'}</button></div>
+      <div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalRecebimento(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando||numeroEntrada(recebimento.valor)<=0||numeroEntrada(recebimento.valor)+numeroEntrada(recebimento.desconto)>aReceber+0.009} onClick={registrarRecebimento} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{salvando?'Registrando...':'Registrar recebimento'}</button></div>
     </div></div>}
   </div>
 }

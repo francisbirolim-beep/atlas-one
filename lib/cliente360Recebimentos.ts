@@ -61,3 +61,71 @@ export async function registrarRecebimentoPorParcelas(
     parcelas: Number(resultado.parcelas || alocacoes.length),
   }
 }
+
+
+export interface RegistrarRecebimentoVendaInput {
+  vendaObraId: string
+  clienteId: string
+  valorRecebido: number
+  desconto?: number
+  dataRecebimento: string
+  forma: string
+  referencia?: string
+  observacoes?: string
+}
+
+export async function registrarRecebimentoVendaComDesconto(
+  dados: RegistrarRecebimentoVendaInput,
+): Promise<{
+  ok: boolean
+  recebimentoId?: string
+  valorRecebido?: number
+  desconto?: number
+  totalBaixado?: number
+  saldoAnterior?: number
+  saldoRestante?: number
+  error?: string
+}> {
+  if (!dados.vendaObraId) return { ok: false, error: 'Venda não informada.' }
+  if (!dados.clienteId) return { ok: false, error: 'Cliente não informado.' }
+  if (!Number.isFinite(dados.valorRecebido) || dados.valorRecebido <= 0) {
+    return { ok: false, error: 'Informe um valor recebido válido.' }
+  }
+
+  const desconto = Number.isFinite(dados.desconto) ? Math.max(0, Number(dados.desconto || 0)) : 0
+  const usuario = await usuarioAtual()
+  const { data, error } = await supabase.rpc('registrar_recebimento_venda_com_desconto', {
+    p_venda_obra_id: dados.vendaObraId,
+    p_cliente_id: dados.clienteId,
+    p_valor_recebido: Number(dados.valorRecebido.toFixed(2)),
+    p_desconto: Number(desconto.toFixed(2)),
+    p_data_recebimento: dados.dataRecebimento || new Date().toISOString().slice(0, 10),
+    p_forma: dados.forma || 'pix',
+    p_referencia: dados.referencia?.trim() || null,
+    p_observacoes: dados.observacoes?.trim() || null,
+    p_usuario_id: usuario?.id || null,
+    p_usuario_nome: usuario?.nome || null,
+  })
+
+  if (error) return { ok: false, error: error.message }
+
+  const resultado = (data || {}) as {
+    ok?: boolean
+    recebimento_id?: string
+    valor_recebido?: number
+    desconto?: number
+    total_baixado?: number
+    saldo_anterior?: number
+    saldo_restante?: number
+  }
+
+  return {
+    ok: resultado.ok !== false,
+    recebimentoId: resultado.recebimento_id,
+    valorRecebido: Number(resultado.valor_recebido || 0),
+    desconto: Number(resultado.desconto || 0),
+    totalBaixado: Number(resultado.total_baixado || 0),
+    saldoAnterior: Number(resultado.saldo_anterior || 0),
+    saldoRestante: Number(resultado.saldo_restante || 0),
+  }
+}
