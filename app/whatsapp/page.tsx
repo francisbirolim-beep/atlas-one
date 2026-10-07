@@ -10,6 +10,15 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
+import {
+  type ChatConversa,
+  type ChatMensagem,
+  criarConversa as criarConversaInterna,
+  enviarMensagem as enviarMensagemInterna,
+  listarConversas as listarConversasInternas,
+  listarMensagens as listarMensagensInternas,
+  listarParticipantes as listarParticipantesInternos,
+} from '@/lib/chatInterno'
 
 type Usuario = { id: string; nome: string; role?: string }
 type Canal = {
@@ -162,7 +171,7 @@ export default function WhatsAppAtendimentoPage() {
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<'todas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
+  const [filtro, setFiltro] = useState<'todas' | 'internas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
@@ -191,6 +200,12 @@ export default function WhatsAppAtendimentoPage() {
   const [notaTexto, setNotaTexto] = useState('')
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
   const [conversaInternaAberta, setConversaInternaAberta] = useState(false)
+  const [conversasInternas, setConversasInternas] = useState<ChatConversa[]>([])
+  const [conversaInternaAtiva, setConversaInternaAtiva] = useState<ChatConversa | null>(null)
+  const [mensagensInternas, setMensagensInternas] = useState<ChatMensagem[]>([])
+  const [participantesConversaInterna, setParticipantesConversaInterna] = useState<Array<{id:string;nome:string}>>([])
+  const [textoInterno, setTextoInterno] = useState('')
+  const [enviandoInterno, setEnviandoInterno] = useState(false)
   const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
   const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
   const [nomeGrupoInterno, setNomeGrupoInterno] = useState('')
@@ -304,6 +319,9 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   function selecionarConversa(conversa: Conversa) {
+    setConversaInternaAtiva(null)
+    setMensagensInternas([])
+    setParticipantesConversaInterna([])
     conversaAtivaIdRef.current = conversa.id
     setMensagens([])
     setEtiquetas([])
@@ -326,6 +344,51 @@ export default function WhatsAppAtendimentoPage() {
     })
   }
 
+  async function atualizarConversasInternas(usuarioId?: string) {
+    const id = usuarioId || eu?.id
+    if (!id) return
+    try {
+      const lista = await listarConversasInternas(id)
+      setConversasInternas(lista)
+      setConversaInternaAtiva(atual => atual ? (lista.find(c => c.id === atual.id) || atual) : atual)
+    } catch {}
+  }
+
+  function selecionarConversaInterna(conversa: ChatConversa) {
+    conversaAtivaIdRef.current = null
+    setAtiva(null)
+    setMensagens([])
+    setErro('')
+    setConversaInternaAtiva(conversa)
+  }
+
+  async function enviarInterno() {
+    if (!conversaInternaAtiva || !textoInterno.trim() || enviandoInterno) return
+    const corpo = textoInterno.trim()
+    setTextoInterno('')
+    setEnviandoInterno(true)
+    try {
+      const ok = await enviarMensagemInterna(conversaInternaAtiva.id, corpo)
+      if (!ok) {
+        setTextoInterno(corpo)
+        setErro('Não foi possível enviar a mensagem interna.')
+        return
+      }
+      const agora = new Date().toISOString()
+      setMensagensInternas(atual => [...atual, {
+        id: `local-${Date.now()}`,
+        conversa_id: conversaInternaAtiva.id,
+        usuario_id: eu?.id || null,
+        usuario_nome: eu?.nome || 'Você',
+        texto: corpo,
+        created_at: agora,
+      }])
+      await atualizarConversasInternas()
+    } finally {
+      setEnviandoInterno(false)
+    }
+  }
+
   function abrirConversaInterna() {
     setBuscaUsuarioInterno('')
     setUsuariosInternosSelecionados([])
@@ -333,17 +396,23 @@ export default function WhatsAppAtendimentoPage() {
     setConversaInternaAberta(true)
   }
 
-  function iniciarConversaInternaSelecionada() {
+  async function iniciarConversaInternaSelecionada() {
     const ids = usuariosInternosSelecionados.filter(id => id && id !== eu?.id)
     if (!ids.length) return
-    const params = new URLSearchParams()
-    if (ids.length === 1) {
-      params.set('usuarioId', ids[0])
-    } else {
-      params.set('usuarios', ids.join(','))
-      if (nomeGrupoInterno.trim()) params.set('nome', nomeGrupoInterno.trim())
+    const participantes = usuarios.filter(u => ids.includes(u.id)).map(u => ({ id: u.id, nome: u.nome }))
+    if (!participantes.length) return
+    const tipo = participantes.length > 1 ? 'grupo' : 'direta'
+    const nome = tipo === 'grupo'
+      ? (nomeGrupoInterno.trim() || participantes.map(p => p.nome).join(', '))
+      : participantes[0].nome
+    const conversa = await criarConversaInterna(nome, tipo, participantes)
+    if (!conversa) {
+      setErro('Não foi possível abrir a conversa interna.')
+      return
     }
-    window.location.href = `/chat?${params.toString()}`
+    setConversaInternaAberta(false)
+    selecionarConversaInterna(conversa)
+    await atualizarConversasInternas()
   }
 
   function abrirDiretorio() {
