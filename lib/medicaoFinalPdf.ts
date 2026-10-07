@@ -192,18 +192,40 @@ async function gerarPdfContramarcos(
 
   function cabecalhoTabela() {
     let x = margem
-    const alturaCabecalho = 12
-    doc.setFillColor(15, 23, 42)
-    doc.setDrawColor(15, 23, 42)
-    doc.setTextColor(255, 255, 255)
+    const alturaCabecalho = 14
+    const titulos: string[][] = [
+      ['AMBIENTE'],
+      ['TIPOLOGIA'],
+      ['MEDIDA DO VÃO', 'L x A (mm)'],
+      ['FOLGA', 'L x A (mm)'],
+      ['CORTE / PRODUÇÃO', 'L x A (mm)'],
+      ['QTD.'],
+    ]
+
+    doc.setDrawColor(255, 255, 255)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(6.1)
-    for (const coluna of colunas) {
+
+    for (let i = 0; i < colunas.length; i++) {
+      const coluna = colunas[i]
+      const linhas = titulos[i] || [coluna.titulo]
+
+      doc.setFillColor(15, 23, 42)
       doc.rect(x, y, coluna.largura, alturaCabecalho, 'FD')
-      const linhas = doc.splitTextToSize(coluna.titulo, coluna.largura - 3)
-      doc.text(linhas, x + 1.5, y + 4)
+
+      doc.setTextColor(255, 255, 255)
+      if (linhas.length === 1) {
+        doc.setFontSize(6.2)
+        doc.text(linhas[0], x + coluna.largura / 2, y + 7.8, { align: 'center' })
+      } else {
+        doc.setFontSize(i === 4 ? 5.5 : 5.9)
+        doc.text(linhas[0], x + coluna.largura / 2, y + 5.4, { align: 'center' })
+        doc.setFontSize(5.6)
+        doc.text(linhas[1], x + coluna.largura / 2, y + 10.2, { align: 'center' })
+      }
+
       x += coluna.largura
     }
+
     doc.setTextColor(15, 23, 42)
     y += alturaCabecalho
   }
