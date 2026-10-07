@@ -4,7 +4,7 @@ import { registrarHistorico } from './historico'
 import { usuarioAtual } from './auth'
 import { v4 as uuidv4 } from 'uuid'
 
-export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string; ultima_mensagem?:string|null; ultima_mensagem_em?:string|null }
+export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string; ultima_mensagem?:string|null; ultima_mensagem_em?:string|null; nao_lidas?:number }
 export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|null; usuario_nome?:string|null; texto?:string|null; anexo_url?:string|null; anexo_nome?:string|null; cliente_id?:string|null; orcamento_id?:string|null; mensagem_pai_id?:string|null; created_at:string }
 export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null; ultima_leitura_em?:string|null }
 
@@ -17,7 +17,16 @@ export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> 
   const {data:todosParticipantes}=await supabase.from('chat_participantes').select('conversa_id,usuario_id,usuario_nome').in('conversa_id',ids)
   const nomesDiretos=new Map<string,string>()
   for(const p of todosParticipantes||[]) if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
-  return await Promise.all(conversas.map(async c=>{const {data:m}=await supabase.from('chat_mensagens').select('texto,anexo_nome,anexo_url,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle();return {...c,nome:c.tipo==='direta'?(nomesDiretos.get(c.id)||c.nome):c.nome,ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,ultima_mensagem_em:m?.created_at||null}}))
+  return await Promise.all(conversas.map(async c=>{
+    const [{data:m},{data:participante}] = await Promise.all([
+      supabase.from('chat_mensagens').select('texto,anexo_nome,anexo_url,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+      supabase.from('chat_participantes').select('ultima_leitura_em').eq('conversa_id',c.id).eq('usuario_id',usuarioId).maybeSingle(),
+    ])
+    let naoLidasQuery=supabase.from('chat_mensagens').select('id',{count:'exact',head:true}).eq('conversa_id',c.id).neq('usuario_id',usuarioId)
+    if(participante?.ultima_leitura_em) naoLidasQuery=naoLidasQuery.gt('created_at',participante.ultima_leitura_em)
+    const {count:naoLidas}=await naoLidasQuery
+    return {...c,nome:c.tipo==='direta'?(nomesDiretos.get(c.id)||c.nome):c.nome,ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,ultima_mensagem_em:m?.created_at||null,nao_lidas:naoLidas||0}
+  }))
 }
 
 export async function listarParticipantes(conversaId:string):Promise<ChatParticipante[]> {
