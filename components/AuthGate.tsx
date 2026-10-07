@@ -43,7 +43,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         setAutenticado(true)
       } else {
         setAutenticado(false)
-        if (!rotaPublica) router.replace('/login?motivo=sessao')
+        if (!rotaPublica) window.location.assign('/login?motivo=sessao')
       }
     }, 5000)
 
@@ -91,7 +91,21 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }, [rotaPublica, router])
 
   if (rotaPublica) return <>{children}</>
-  if (checking) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400">Carregando...</div>
+  if (checking) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-6">
+      <div className="max-w-sm text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-brand-navy" />
+        <p className="mt-4 text-sm font-semibold text-slate-600">Abrindo o Atlas...</p>
+        <p className="mt-1 text-xs text-slate-400">Se a sessão demorar para responder, use o acesso abaixo.</p>
+        <a
+          href="/login?motivo=carregamento"
+          className="mt-4 inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-brand-navy shadow-sm"
+        >
+          Entrar novamente
+        </a>
+      </div>
+    </div>
+  )
   if (!autenticado) return null
   if (rotaBalcao) return <BalcaoShell>{children}</BalcaoShell>
   return <AppShell><Cadastro360RouteGuard>{children}</Cadastro360RouteGuard></AppShell>
