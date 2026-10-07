@@ -55,10 +55,12 @@ export default function ContramarcoFlow({
   medicao,
   itensIniciais,
   usuario,
+  embedded = false,
 }: {
   medicao: MedicaoFinal
   itensIniciais: MedicaoItem[]
   usuario: Usuario | null
+  embedded?: boolean
 }) {
   const [itens, setItens] = useState<MedicaoItem[]>(itensIniciais)
   const [tipos, setTipos] = useState<Tipologia[]>([])
@@ -283,32 +285,43 @@ export default function ContramarcoFlow({
   })), [itens, tipos])
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4">
-          <button
-            type="button"
-            onClick={() => {
-              if (tela === 'lista') window.location.href = voltarHref
-              else if (tela === 'medicao') setTela('lista')
-              else setTela('lista')
-            }}
-            className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600"
-          >
-            <ArrowLeft size={19} />
-          </button>
-          <div className="flex flex-1 items-center gap-2">
-            <img src="/logo.png" alt="" className="h-7 w-7 object-contain" />
-            <div className="min-w-0">
-              <p className="truncate text-xs font-bold uppercase tracking-[.12em] text-slate-400">Esquadrifácio</p>
-              <h1 className="truncate text-lg font-black text-slate-900">
-                {tela === 'resumo' ? 'Resumo da medição de contramarcos' : 'Contramarco'}
-              </h1>
+    <div className={embedded ? 'bg-transparent pb-6' : 'min-h-screen bg-slate-50 pb-24'}>
+      {!embedded && (
+        <header className="border-b border-slate-200 bg-white">
+          <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (tela === 'lista') window.location.href = voltarHref
+                else setTela('lista')
+              }}
+              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600"
+            >
+              <ArrowLeft size={19} />
+            </button>
+            <div className="flex flex-1 items-center gap-2">
+              <img src="/logo.png" alt="" className="h-7 w-7 object-contain" />
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold uppercase tracking-[.12em] text-slate-400">Esquadrifácio</p>
+                <h1 className="truncate text-lg font-black text-slate-900">
+                  {tela === 'resumo' ? 'Resumo da medição de contramarcos' : 'Contramarco'}
+                </h1>
+              </div>
             </div>
+            <Menu size={20} className="text-slate-600" />
           </div>
-          <Menu size={20} className="text-slate-600" />
+        </header>
+      )}
+
+      {embedded && (
+        <div className="mx-auto max-w-3xl px-4 pt-4">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[.12em] text-emerald-700">Medição de Contramarco</p>
+            <p className="mt-1 text-sm font-bold text-slate-900">1 largura + 1 altura do vão, com desconto das folgas.</p>
+            <p className="mt-1 text-xs text-slate-600">Este fluxo não usa 3 larguras, 3 alturas, foto da trena ou croqui técnico.</p>
+          </div>
         </div>
-      </header>
+      )}
 
       {tela === 'lista' && (
         <main className="mx-auto max-w-3xl px-4 py-5">
