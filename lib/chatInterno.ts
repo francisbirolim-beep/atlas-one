@@ -9,23 +9,62 @@ export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|n
 export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null; ultima_leitura_em?:string|null }
 
 export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> {
-  const { data: participacoes } = await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id', usuarioId)
-  const ids=(participacoes||[]).map((p:any)=>p.conversa_id)
+  const usuario=await usuarioAtual()
+  const master=usuario?.role==='master'
+
+  let conversas:ChatConversa[]=[]
+  let ids:string[]=[]
+
+  if(master){
+    const {data}=await supabase.from('chat_conversas').select('*').order('updated_at',{ascending:false})
+    conversas=(data||[]) as ChatConversa[]
+    ids=conversas.map(c=>c.id)
+  }else{
+    const { data: participacoes } = await supabase.from('chat_participantes').select('conversa_id').eq('usuario_id', usuarioId)
+    ids=(participacoes||[]).map((p:any)=>p.conversa_id)
+    if(!ids.length) return []
+    const { data }=await supabase.from('chat_conversas').select('*').in('id',ids).order('updated_at',{ascending:false})
+    conversas=(data||[]) as ChatConversa[]
+  }
+
   if(!ids.length) return []
-  const { data }=await supabase.from('chat_conversas').select('*').in('id',ids).order('updated_at',{ascending:false})
-  const conversas=(data||[]) as ChatConversa[]
   const {data:todosParticipantes}=await supabase.from('chat_participantes').select('conversa_id,usuario_id,usuario_nome').in('conversa_id',ids)
   const nomesDiretos=new Map<string,string>()
-  for(const p of todosParticipantes||[]) if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
+  const participantesPorConversa=new Map<string,Array<{usuario_id:string;usuario_nome:string}>>()
+  for(const p of todosParticipantes||[]){
+    const atual=participantesPorConversa.get(p.conversa_id)||[]
+    atual.push({usuario_id:p.usuario_id,usuario_nome:p.usuario_nome||'Usuário'})
+    participantesPorConversa.set(p.conversa_id,atual)
+    if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
+  }
+
   return await Promise.all(conversas.map(async c=>{
     const [{data:m},{data:participante}] = await Promise.all([
       supabase.from('chat_mensagens').select('texto,anexo_nome,anexo_url,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
       supabase.from('chat_participantes').select('ultima_leitura_em').eq('conversa_id',c.id).eq('usuario_id',usuarioId).maybeSingle(),
     ])
-    let naoLidasQuery=supabase.from('chat_mensagens').select('id',{count:'exact',head:true}).eq('conversa_id',c.id).neq('usuario_id',usuarioId)
-    if(participante?.ultima_leitura_em) naoLidasQuery=naoLidasQuery.gt('created_at',participante.ultima_leitura_em)
-    const {count:naoLidas}=await naoLidasQuery
-    return {...c,nome:c.tipo==='direta'?(nomesDiretos.get(c.id)||c.nome):c.nome,ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,ultima_mensagem_em:m?.created_at||null,nao_lidas:naoLidas||0}
+
+    let naoLidas=0
+    if(participante){
+      let q=supabase.from('chat_mensagens').select('id',{count:'exact',head:true}).eq('conversa_id',c.id).neq('usuario_id',usuarioId)
+      if(participante.ultima_leitura_em) q=q.gt('created_at',participante.ultima_leitura_em)
+      const {count}=await q
+      naoLidas=count||0
+    }
+
+    const participantes=participantesPorConversa.get(c.id)||[]
+    const masterForaDaConversa=master&&!participantes.some(p=>p.usuario_id===usuarioId)
+    const nomeDireta=masterForaDaConversa
+      ? participantes.map(p=>p.usuario_nome).filter(Boolean).join(' ↔ ')
+      : (nomesDiretos.get(c.id)||c.nome)
+
+    return {
+      ...c,
+      nome:c.tipo==='direta'?nomeDireta:c.nome,
+      ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,
+      ultima_mensagem_em:m?.created_at||null,
+      nao_lidas:naoLidas,
+    }
   }))
 }
 
