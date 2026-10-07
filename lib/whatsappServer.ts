@@ -134,6 +134,171 @@ async function acessoCanalWhatsApp(
   }
 }
 
+type AcessoGrupo = {
+  grupoId: string | null
+  configurado: boolean
+  nivel: 'sem_acesso' | 'acompanhar' | 'atender' | 'gerenciar' | 'herdado'
+  visualizar: boolean
+  atender: boolean
+  transferir: boolean
+  responsavelPrincipalId: string | null
+  responsavelPrincipalNome: string | null
+  responsavelEfetivoId: string | null
+  responsavelEfetivoNome: string | null
+  delegacaoFimEm: string | null
+  delegacaoAtiva: boolean
+  delegacaoExpiradaDestinoId: string | null
+  podeDelegar: boolean
+}
+
+async function acessoGrupoWhatsApp(
+  conversa: AtendimentoConversa,
+  usuario: UsuarioTenant,
+  acessoCanal?: AcessoCanal,
+): Promise<AcessoGrupo> {
+  const canal = acessoCanal || await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const herdado: AcessoGrupo = {
+    grupoId: null,
+    configurado: false,
+    nivel: 'herdado',
+    visualizar: canal.visualizar,
+    atender: canal.atender,
+    transferir: canal.transferir,
+    responsavelPrincipalId: null,
+    responsavelPrincipalNome: null,
+    responsavelEfetivoId: null,
+    responsavelEfetivoNome: null,
+    delegacaoFimEm: null,
+    delegacaoAtiva: false,
+    delegacaoExpiradaDestinoId: null,
+    podeDelegar: usuario.role === 'master',
+  }
+  if (conversa.whatsapp_chat_tipo !== 'grupo' || !conversa.whatsapp_canal_id || !conversa.whatsapp_chat_jid) {
+    return herdado
+  }
+
+  const { data: grupo } = await supabaseAdmin
+    .from('atendimento_whatsapp_grupos')
+    .select('id')
+    .eq('empresa_id', conversa.empresa_id)
+    .eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+    .eq('grupo_jid', conversa.whatsapp_chat_jid)
+    .eq('ativo', true)
+    .maybeSingle()
+  if (!grupo?.id) return herdado
+
+  const agora = new Date().toISOString()
+  const [{ data: permissoes }, { data: delegacao }, { data: delegacaoExpirada }] = await Promise.all([
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_permissoes')
+      .select('usuario_id,nivel,responsavel_principal')
+      .eq('empresa_id', conversa.empresa_id)
+      .eq('grupo_id', grupo.id),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_delegacoes')
+      .select('id,origem_usuario_id,destino_usuario_id,inicio_em,fim_em')
+      .eq('empresa_id', conversa.empresa_id)
+      .eq('grupo_id', grupo.id)
+      .eq('ativo', true)
+      .lte('inicio_em', agora)
+      .gt('fim_em', agora)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_delegacoes')
+      .select('id,destino_usuario_id,fim_em')
+      .eq('empresa_id', conversa.empresa_id)
+      .eq('grupo_id', grupo.id)
+      .eq('ativo', true)
+      .lte('fim_em', agora)
+      .order('fim_em', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  const principal = (permissoes || []).find((p: any) => p.responsavel_principal === true) || null
+  const regraUsuario = (permissoes || []).find((p: any) => p.usuario_id === usuario.id) || null
+  const configurado = (permissoes || []).length > 0
+  const principalId = principal?.usuario_id || null
+  const efetivoId = delegacao?.destino_usuario_id || principalId
+  const [principalNome, efetivoNome] = await Promise.all([
+    principalId ? nomeUsuario(principalId) : Promise.resolve(null),
+    efetivoId ? nomeUsuario(efetivoId) : Promise.resolve(null),
+  ])
+
+  if (usuario.role === 'master') {
+    return {
+      grupoId: grupo.id,
+      configurado,
+      nivel: 'gerenciar',
+      visualizar: true,
+      atender: true,
+      transferir: true,
+      responsavelPrincipalId: principalId,
+      responsavelPrincipalNome: principalNome,
+      responsavelEfetivoId: efetivoId,
+      responsavelEfetivoNome: efetivoNome,
+      delegacaoFimEm: delegacao?.fim_em || null,
+      delegacaoAtiva: Boolean(delegacao),
+      delegacaoExpiradaDestinoId: delegacaoExpirada?.destino_usuario_id || null,
+      podeDelegar: true,
+    }
+  }
+
+  const atribuicaoPontual = conversa.responsavel_id === usuario.id && conversa.status !== 'finalizado'
+  const substitutoAtivo = delegacao?.destino_usuario_id === usuario.id
+  const nivel = String(regraUsuario?.nivel || (configurado ? 'sem_acesso' : 'herdado')) as AcessoGrupo['nivel']
+
+  let visualizar = false
+  let atender = false
+  let transferir = false
+  if (atribuicaoPontual) {
+    visualizar = true
+    atender = true
+  } else if (substitutoAtivo) {
+    visualizar = true
+    atender = true
+    transferir = true
+  } else if (!configurado) {
+    visualizar = canal.visualizar
+    atender = canal.atender
+    transferir = canal.transferir
+  } else if (nivel === 'acompanhar') {
+    visualizar = true
+  } else if (nivel === 'atender') {
+    visualizar = true
+    atender = true
+  } else if (nivel === 'gerenciar') {
+    visualizar = true
+    atender = true
+    transferir = true
+  }
+
+  if (principalId === usuario.id) {
+    visualizar = true
+    atender = true
+    transferir = true
+  }
+
+  return {
+    grupoId: grupo.id,
+    configurado,
+    nivel,
+    visualizar,
+    atender,
+    transferir,
+    responsavelPrincipalId: principalId,
+    responsavelPrincipalNome: principalNome,
+    responsavelEfetivoId: efetivoId,
+    responsavelEfetivoNome: efetivoNome,
+    delegacaoFimEm: delegacao?.fim_em || null,
+    delegacaoAtiva: Boolean(delegacao),
+    delegacaoExpiradaDestinoId: delegacaoExpirada?.destino_usuario_id || null,
+    podeDelegar: principalId === usuario.id,
+  }
+}
+
 async function usuarioPodeAtenderCanal(
   empresaId: string,
   canalId: string | null | undefined,
@@ -423,7 +588,7 @@ async function direcionarConversaPorMencao(params: {
     .update({
       responsavel_id: destino.id,
       responsavel_nome: destino.nome,
-      status: 'em_atendimento',
+      status: 'aguardando',
       updated_at: agora,
     })
     .eq('id', params.conversa.id)
@@ -437,8 +602,8 @@ async function direcionarConversaPorMencao(params: {
       .update({
         responsavel_id: destino.id,
         responsavel_nome: destino.nome,
-        status: 'em_atendimento',
-        assigned_at: agora,
+        status: 'aguardando',
+        assigned_at: null,
       })
       .eq('id', params.sessaoId)
     if (sessaoError) throw sessaoError
@@ -465,14 +630,15 @@ async function garantirSessao(conversa: AtendimentoConversa) {
     .maybeSingle()
   if (aberta) return aberta
 
+  const emAtendimento = conversa.status === 'em_atendimento'
   const { data } = await supabaseAdmin.from('atendimento_sessoes').insert({
     empresa_id: conversa.empresa_id,
     conversa_id: conversa.id,
-    status: conversa.responsavel_id ? 'em_atendimento' : 'aguardando',
+    status: emAtendimento ? 'em_atendimento' : 'aguardando',
     responsavel_id: conversa.responsavel_id || null,
     responsavel_nome: conversa.responsavel_nome || null,
     setor: conversa.setor || null,
-    assigned_at: conversa.responsavel_id ? new Date().toISOString() : null,
+    assigned_at: emAtendimento ? new Date().toISOString() : null,
   }).select('*').single()
   return data
 }
@@ -527,7 +693,7 @@ async function criarOuAtualizarConversa(params: {
       responsavel_id: responsavelId,
       responsavel_nome: responsavelNome,
       setor: regra?.setor || params.config.setor_padrao || atual.setor || null,
-      status: responsavelId ? 'em_atendimento' : 'aguardando',
+      status: 'aguardando',
       updated_at: new Date().toISOString(),
     }).eq('id', atual.id).select('*').single()
     return data as AtendimentoConversa
@@ -542,7 +708,7 @@ async function criarOuAtualizarConversa(params: {
     telefone,
     contato_nome: params.contatoNome || (cliente as any)?.nome || null,
     cliente_id: (cliente as any)?.id || null,
-    status: responsavelId ? 'em_atendimento' : 'aguardando',
+    status: 'aguardando',
     responsavel_id: responsavelId,
     responsavel_nome: responsavelNome,
     setor: regra?.setor || params.config.setor_padrao || null,
@@ -598,7 +764,7 @@ export async function processarWebhookMeta(payload: any) {
         if (error) throw error
         recebidas += 1
         await supabaseAdmin.from('atendimento_conversas').update({
-          status: conversaRoteada.responsavel_id ? 'em_atendimento' : 'aguardando',
+          status: 'aguardando',
           ultimo_preview: texto,
           nao_lidas: (conversaRoteada.nao_lidas || 0) + 1,
           ultima_mensagem_em: dataMeta || new Date().toISOString(),
@@ -794,7 +960,7 @@ export async function registrarEntradaGateway(
     nao_lidas: (conversaRoteada.nao_lidas || 0) + 1,
     ultima_mensagem_em: agora,
     ultima_entrada_em: agora,
-    status: conversaRoteada.responsavel_id ? 'em_atendimento' : 'aguardando',
+    status: 'aguardando',
     updated_at: new Date().toISOString(),
   }).eq('id', conversa.id)
 
@@ -925,8 +1091,13 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
   if (usuario.role === 'master') return data as AtendimentoConversa
 
   const acesso = await acessoCanalWhatsApp(usuario, data.whatsapp_canal_id)
+  if (data.whatsapp_chat_tipo === 'grupo') {
+    const grupo = await acessoGrupoWhatsApp(data as AtendimentoConversa, usuario, acesso)
+    if (!grupo.visualizar) return null
+    return data as AtendimentoConversa
+  }
   if (!acesso.visualizar) return null
-  if (data.whatsapp_chat_tipo === 'grupo' && acesso.atender) return data as AtendimentoConversa
+  if (data.status === 'finalizado') return data as AtendimentoConversa
   if (data.responsavel_id === usuario.id) return data as AtendimentoConversa
   if (acesso.supervisionar) return data as AtendimentoConversa
   if (incluirFila && !data.responsavel_id && acesso.atender) return data as AtendimentoConversa
@@ -934,7 +1105,14 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
 }
 
 export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
-  const [{ data: canais, error: canaisError }, { data: permissoes, error: permissoesError }] = await Promise.all([
+  const agora = new Date().toISOString()
+  const [
+    { data: canais, error: canaisError },
+    { data: permissoes, error: permissoesError },
+    { data: permissoesGrupo, error: permissoesGrupoError },
+    { data: delegacoes, error: delegacoesError },
+    { data: atribuidas, error: atribuidasError },
+  ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
       .select('id,principal,usuario_id,ativo,gateway_status')
@@ -946,9 +1124,50 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
       .select('canal_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
       .eq('empresa_id', usuario.empresa_id)
       .eq('usuario_id', usuario.id),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_permissoes')
+      .select('grupo_id,nivel')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('usuario_id', usuario.id)
+      .neq('nivel', 'sem_acesso'),
+    supabaseAdmin
+      .from('atendimento_whatsapp_grupo_delegacoes')
+      .select('grupo_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('destino_usuario_id', usuario.id)
+      .eq('ativo', true)
+      .lte('inicio_em', agora)
+      .gt('fim_em', agora),
+    supabaseAdmin
+      .from('atendimento_conversas')
+      .select('whatsapp_canal_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('responsavel_id', usuario.id)
+      .neq('status', 'finalizado'),
   ])
   if (canaisError) throw canaisError
   if (permissoesError) throw permissoesError
+  if (permissoesGrupoError) throw permissoesGrupoError
+  if (delegacoesError) throw delegacoesError
+  if (atribuidasError) throw atribuidasError
+
+  const grupoIds = [...new Set([
+    ...(permissoesGrupo || []).map((p: any) => p.grupo_id),
+    ...(delegacoes || []).map((d: any) => d.grupo_id),
+  ].filter(Boolean))]
+  const canaisGrupo = new Set<string>()
+  if (grupoIds.length) {
+    const { data: grupos, error: gruposError } = await supabaseAdmin
+      .from('atendimento_whatsapp_grupos')
+      .select('id,whatsapp_canal_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .in('id', grupoIds)
+    if (gruposError) throw gruposError
+    for (const grupo of grupos || []) if (grupo.whatsapp_canal_id) canaisGrupo.add(grupo.whatsapp_canal_id)
+  }
+  for (const conversa of atribuidas || []) {
+    if (conversa.whatsapp_canal_id) canaisGrupo.add(conversa.whatsapp_canal_id)
+  }
 
   const porCanal = new Map((permissoes || []).map((p: any) => [p.canal_id, p]))
   return (canais || []).map((canal: any) => {
@@ -956,9 +1175,10 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
     const dono = canal.usuario_id === usuario.id
     const principal = canal.principal === true
     const master = usuario.role === 'master'
+    const acessoPorGrupo = canaisGrupo.has(canal.id)
     return {
       canal_id: canal.id as string,
-      visualizar: master || dono || Boolean(
+      visualizar: master || dono || acessoPorGrupo || Boolean(
         permissao?.pode_visualizar || permissao?.pode_atender ||
         permissao?.pode_transferir || permissao?.pode_supervisionar
       ),
@@ -987,15 +1207,88 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
   if (error) throw error
 
   const acessoPorCanal = new Map(acessos.map(acesso => [acesso.canal_id, acesso]))
-  const permitidas = ((data || []) as AtendimentoConversa[]).filter(conversa => {
-    if (usuario.role === 'master') return true
-    if (!conversa.whatsapp_canal_id) return false
+  const avaliadas = await Promise.all(((data || []) as AtendimentoConversa[]).map(async conversa => {
+    if (!conversa.whatsapp_canal_id) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
     const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id)
-    if (!acesso?.visualizar) return false
-    if (acesso.dono || acesso.supervisionar) return true
-    if (conversa.responsavel_id === usuario.id) return true
-    return !conversa.responsavel_id && acesso.atender
-  })
+    if (!acesso) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
+    if (!acesso.visualizar && usuario.role !== 'master') return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
+
+    // Master já tem acesso total. Não faz consultas extras de permissão/delegação
+    // para cada grupo durante a listagem, evitando centenas de queries e travamento.
+    if (usuario.role === 'master') {
+      return {
+        conversa,
+        permitido: true,
+        grupo: conversa.whatsapp_chat_tipo === 'grupo'
+          ? {
+              grupoId: null,
+              configurado: false,
+              nivel: 'gerenciar',
+              visualizar: true,
+              atender: true,
+              transferir: true,
+              responsavelPrincipalId: null,
+              responsavelPrincipalNome: null,
+              responsavelEfetivoId: conversa.responsavel_id || null,
+              responsavelEfetivoNome: conversa.responsavel_nome || null,
+              delegacaoFimEm: null,
+              delegacaoAtiva: false,
+              delegacaoExpiradaDestinoId: null,
+              podeDelegar: true,
+            } as AcessoGrupo
+          : null,
+      }
+    }
+
+    if (conversa.whatsapp_chat_tipo === 'grupo') {
+      const grupo = await acessoGrupoWhatsApp(conversa, usuario, acesso)
+      if (!grupo.visualizar) return { conversa, permitido: false, grupo }
+
+      // Delegacao vencida volta automaticamente ao responsavel principal.
+      // Transferencias pontuais continuam com o destinatario ate ele finalizar.
+      if (
+        grupo.responsavelEfetivoId &&
+        grupo.delegacaoExpiradaDestinoId &&
+        conversa.status !== 'em_atendimento' &&
+        conversa.responsavel_id === grupo.delegacaoExpiradaDestinoId
+      ) {
+        const agora = new Date().toISOString()
+        await supabaseAdmin.from('atendimento_conversas').update({
+          responsavel_id: grupo.responsavelEfetivoId,
+          responsavel_nome: grupo.responsavelEfetivoNome,
+          updated_at: agora,
+        }).eq('id', conversa.id)
+        if (grupo.grupoId) {
+          await supabaseAdmin.from('atendimento_whatsapp_grupo_delegacoes').update({
+            ativo: false,
+            encerrado_em: agora,
+          })
+            .eq('empresa_id', usuario.empresa_id)
+            .eq('grupo_id', grupo.grupoId)
+            .eq('ativo', true)
+            .lte('fim_em', agora)
+        }
+        conversa = {
+          ...conversa,
+          responsavel_id: grupo.responsavelEfetivoId,
+          responsavel_nome: grupo.responsavelEfetivoNome,
+        }
+      }
+      return { conversa, permitido: true, grupo }
+    }
+
+    if (usuario.role === 'master') return { conversa, permitido: true, grupo: null }
+    if (acesso?.dono || acesso?.supervisionar) return { conversa, permitido: true, grupo: null }
+    if (conversa.responsavel_id === usuario.id) return { conversa, permitido: true, grupo: null }
+    // "Ver canal" inclui o histórico já finalizado do número.
+    // Conversa ativa de outro atendente continua protegida pela permissão "Supervisionar".
+    if (conversa.status === 'finalizado' && acesso?.visualizar) {
+      return { conversa, permitido: true, grupo: null }
+    }
+    return { conversa, permitido: !conversa.responsavel_id && Boolean(acesso?.atender), grupo: null }
+  }))
+  const permitidasComGrupo = avaliadas.filter(item => item.permitido)
+  const permitidas = permitidasComGrupo.map(item => item.conversa)
 
   const ids = permitidas.map(conversa => conversa.id)
   if (!ids.length) return permitidas
@@ -1024,11 +1317,30 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     }
   }
   const acompanhadas = new Set((acompanhamentosResp.data || []).map(item => item.conversa_id))
-  return permitidas.map(conversa => ({
-    ...conversa,
-    transferida_em: ultimaTransferencia.get(conversa.id) || null,
-    acompanhando: acompanhadas.has(conversa.id),
-  }))
+  const grupoPorConversa = new Map(
+    permitidasComGrupo
+      .filter(item => item.grupo)
+      .map(item => [item.conversa.id, item.grupo as AcessoGrupo])
+  )
+  return permitidas.map(conversa => {
+    const grupo = grupoPorConversa.get(conversa.id)
+    return {
+      ...conversa,
+      transferida_em: ultimaTransferencia.get(conversa.id) || null,
+      acompanhando: acompanhadas.has(conversa.id),
+      grupo_id: grupo?.grupoId || null,
+      grupo_nivel_acesso: grupo?.nivel || null,
+      grupo_pode_atender: grupo?.atender ?? null,
+      grupo_pode_transferir: grupo?.transferir ?? null,
+      grupo_pode_delegar: grupo?.podeDelegar ?? null,
+      grupo_responsavel_principal_id: grupo?.responsavelPrincipalId || null,
+      grupo_responsavel_principal_nome: grupo?.responsavelPrincipalNome || null,
+      grupo_responsavel_efetivo_id: grupo?.responsavelEfetivoId || null,
+      grupo_responsavel_efetivo_nome: grupo?.responsavelEfetivoNome || null,
+      grupo_delegacao_fim_em: grupo?.delegacaoFimEm || null,
+      grupo_delegacao_ativa: grupo?.delegacaoAtiva || false,
+    }
+  })
 }
 
 export async function listarDiretorioWhatsApp(
@@ -1037,9 +1349,13 @@ export async function listarDiretorioWhatsApp(
   busca = '',
 ) {
   const acesso = await acessoCanalWhatsApp(usuario, canalId)
-  if (!acesso.visualizar) throw new Error('Você não possui acesso a este canal.')
 
-  const [{ data: contatos, error: contatosError }, { data: grupos, error: gruposError }] = await Promise.all([
+  const [
+    { data: contatos, error: contatosError },
+    { data: grupos, error: gruposError },
+    { data: conversasConhecidas, error: conversasError },
+    { data: bloqueios, error: bloqueiosError },
+  ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_whatsapp_contatos')
       .select('id,whatsapp_canal_id,contato_jid,telefone,nome,nome_verificado,sincronizado_em')
@@ -1054,34 +1370,129 @@ export async function listarDiretorioWhatsApp(
       .eq('whatsapp_canal_id', canalId)
       .eq('ativo', true)
       .limit(1000),
+    supabaseAdmin
+      .from('atendimento_conversas')
+      .select('id,whatsapp_chat_jid,telefone,contato_nome,whatsapp_chat_tipo')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('whatsapp_canal_id', canalId)
+      .eq('canal', 'whatsapp')
+      .eq('whatsapp_chat_tipo', 'contato')
+      .limit(3000),
+    supabaseAdmin
+      .from('atendimento_whatsapp_bloqueios')
+      .select('chat_jid,telefone,ativo,bloqueado_em,bloqueado_por_nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('canal_id', canalId)
+      .eq('ativo', true)
+      .limit(3000),
   ])
   if (contatosError) throw contatosError
   if (gruposError) throw gruposError
+  if (conversasError) throw conversasError
+  if (bloqueiosError) throw bloqueiosError
+
+  const bloqueadosPorJid = new Map((bloqueios || []).map((item: any) => [String(item.chat_jid || ''), item]))
+  const bloqueadosPorTelefone = new Map((bloqueios || []).map((item: any) => [String(item.telefone || '').replace(/\D/g, ''), item]))
+  const statusBloqueio = (jid?: string | null, telefone?: string | null) => {
+    const tel = String(telefone || '').replace(/\D/g, '')
+    return bloqueadosPorJid.get(String(jid || '')) || (tel ? bloqueadosPorTelefone.get(tel) : null) || null
+  }
 
   const q = busca.toLocaleLowerCase('pt-BR').trim()
-  const itens = [
-    ...(contatos || []).map((item: any) => ({
+  const conversaPorJid = new Map<string, any>()
+  const conversaPorTelefone = new Map<string, any>()
+  for (const item of conversasConhecidas || []) {
+    const jid = String((item as any).whatsapp_chat_jid || '')
+    const tel = String((item as any).telefone || '').replace(/\D/g, '')
+    if (jid && !conversaPorJid.has(jid)) conversaPorJid.set(jid, item)
+    if (tel && !conversaPorTelefone.has(tel)) conversaPorTelefone.set(tel, item)
+  }
+  const conversaConhecida = (jid?: string | null, telefone?: string | null) => {
+    const tel = String(telefone || '').replace(/\D/g, '')
+    return conversaPorJid.get(String(jid || '')) || (tel ? conversaPorTelefone.get(tel) : null) || null
+  }
+
+  const contatosSincronizados = (acesso.visualizar ? (contatos || []) : []).map((item: any) => {
+    const bloqueio = statusBloqueio(item.contato_jid, item.telefone)
+    return {
       id: item.id,
       tipo: 'contato' as const,
       jid: item.contato_jid,
       telefone: item.telefone || null,
       nome: item.nome || item.nome_verificado || item.telefone || 'Contato WhatsApp',
       participantes: null,
-    })),
-    ...(grupos || []).map((item: any) => ({
-      id: item.id,
-      tipo: 'grupo' as const,
-      jid: item.grupo_jid,
-      telefone: null,
-      nome: item.nome || 'Grupo WhatsApp',
-      participantes: Number(item.participantes || 0),
-    })),
-  ].filter(item => {
-    if (!q) return true
-    return `${item.nome} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR').includes(q)
-  }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      conversaId: conversaConhecida(item.contato_jid, item.telefone)?.id || null,
+      bloqueado: Boolean(bloqueio),
+      bloqueado_em: bloqueio?.bloqueado_em || null,
+      bloqueado_por_nome: bloqueio?.bloqueado_por_nome || null,
+      _busca: `${item.nome || ''} ${item.nome_verificado || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
+    }
+  })
+  const chavesContatos = new Set(
+    contatosSincronizados.flatMap((item: any) => [
+      item.jid ? `jid:${item.jid}` : '',
+      item.telefone ? `tel:${String(item.telefone).replace(/\D/g, '')}` : '',
+    ]).filter(Boolean),
+  )
+  const contatosPorHistorico = (acesso.visualizar ? (conversasConhecidas || []) : [])
+    .filter((item: any) => {
+      const jidKey = item.whatsapp_chat_jid ? `jid:${item.whatsapp_chat_jid}` : ''
+      const tel = String(item.telefone || '').replace(/\D/g, '')
+      const telKey = tel ? `tel:${tel}` : ''
+      return !chavesContatos.has(jidKey) && !chavesContatos.has(telKey)
+    })
+    .map((item: any) => {
+      const jid = item.whatsapp_chat_jid || `${String(item.telefone || '').replace(/\D/g, '')}@s.whatsapp.net`
+      const bloqueio = statusBloqueio(jid, item.telefone)
+      return {
+        id: `conversa-${item.id}`,
+        tipo: 'contato' as const,
+        jid,
+        telefone: item.telefone || null,
+        nome: item.contato_nome || item.telefone || 'Contato WhatsApp',
+        participantes: null,
+        conversaId: item.id,
+        bloqueado: Boolean(bloqueio),
+        bloqueado_em: bloqueio?.bloqueado_em || null,
+        bloqueado_por_nome: bloqueio?.bloqueado_por_nome || null,
+        _busca: `${item.contato_nome || ''} ${item.telefone || ''}`.toLocaleLowerCase('pt-BR'),
+      }
+    })
 
-  return itens.slice(0, 250)
+  const itens = [
+    ...contatosSincronizados,
+    ...contatosPorHistorico,
+    ...(await Promise.all((grupos || []).map(async (item: any) => {
+      const conversa: AtendimentoConversa = {
+        id: '',
+        empresa_id: usuario.empresa_id,
+        canal: 'whatsapp',
+        telefone: '0',
+        whatsapp_canal_id: canalId,
+        whatsapp_chat_tipo: 'grupo',
+        whatsapp_chat_jid: item.grupo_jid,
+        grupo_nome: item.nome,
+        status: 'finalizado',
+        created_at: '',
+        updated_at: '',
+      }
+      const acessoGrupo = await acessoGrupoWhatsApp(conversa, usuario, acesso)
+      if (!acessoGrupo.visualizar) return null
+      return {
+        id: item.id,
+        tipo: 'grupo' as const,
+        jid: item.grupo_jid,
+        telefone: null,
+        nome: item.nome || 'Grupo WhatsApp',
+        participantes: Number(item.participantes || 0),
+      }
+    }))).filter(Boolean) as any[],
+  ].filter((item: any) => {
+    if (!q) return true
+    return String(item._busca || `${item.nome} ${item.telefone || ''}`).includes(q)
+  }).sort((a: any, b: any) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+  return itens.slice(0, 250).map(({ _busca, ...item }: any) => item)
 }
 
 export async function iniciarConversaWhatsApp(
@@ -1095,7 +1506,6 @@ export async function iniciarConversaWhatsApp(
   },
 ) {
   const acesso = await acessoCanalWhatsApp(usuario, dados.canalId)
-  if (!acesso.atender) throw new Error('Você não possui permissão para iniciar conversa neste canal.')
 
   const { data: canal } = await supabaseAdmin
     .from('atendimento_whatsapp_canais')
@@ -1111,11 +1521,46 @@ export async function iniciarConversaWhatsApp(
   if (!jid) throw new Error('Contato ou grupo inválido.')
   const tipo = dados.tipo === 'grupo' ? 'grupo' : 'contato'
   if (tipo === 'grupo' && !jid.endsWith('@g.us')) throw new Error('Grupo WhatsApp inválido.')
+  let grupoContexto: AcessoGrupo | null = null
+  if (tipo === 'grupo') {
+    const conversaGrupo: AtendimentoConversa = {
+      id: '',
+      empresa_id: usuario.empresa_id,
+      canal: 'whatsapp',
+      telefone: '0',
+      whatsapp_canal_id: dados.canalId,
+      whatsapp_chat_tipo: 'grupo',
+      whatsapp_chat_jid: jid,
+      grupo_nome: dados.nome || null,
+      status: 'finalizado',
+      created_at: '',
+      updated_at: '',
+    }
+    const grupo = await acessoGrupoWhatsApp(conversaGrupo, usuario, acesso)
+    if (!grupo.visualizar) throw new Error('Você não possui acesso a este grupo.')
+    grupoContexto = grupo
+  } else if (!acesso.atender) {
+    throw new Error('Você não possui permissão para iniciar conversa neste canal.')
+  }
 
   const telefone = tipo === 'grupo'
     ? jid.split('@')[0].replace(/\D/g, '')
     : normalizarTelefone(dados.telefone || jid.split('@')[0])
   if (!telefone) throw new Error('Contato sem telefone válido.')
+
+  if (tipo === 'contato') {
+    const { data: bloqueio } = await supabaseAdmin
+      .from('atendimento_whatsapp_bloqueios')
+      .select('id,bloqueado_em,bloqueado_por_nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('canal_id', dados.canalId)
+      .eq('chat_jid', jid)
+      .eq('ativo', true)
+      .maybeSingle()
+    if (bloqueio) {
+      throw new Error(`Este contato está bloqueado neste WhatsApp${bloqueio.bloqueado_por_nome ? ` por ${bloqueio.bloqueado_por_nome}` : ''}. Desbloqueie antes de iniciar uma nova conversa.`)
+    }
+  }
 
   const { data: existente } = await supabaseAdmin
     .from('atendimento_conversas')
@@ -1133,11 +1578,28 @@ export async function iniciarConversaWhatsApp(
     : null
   const nome = String(dados.nome || '').trim() || (cliente as any)?.nome || (tipo === 'grupo' ? 'Grupo WhatsApp' : telefone)
 
-  const responsavel = tipo === 'contato' ? usuario.id : null
-  const responsavelNome = tipo === 'contato' ? usuario.nome : null
-  const status = tipo === 'contato' ? 'em_atendimento' : 'aguardando'
+  const responsavel = tipo === 'contato'
+    ? usuario.id
+    : (grupoContexto?.responsavelEfetivoId || null)
+  const responsavelNome = tipo === 'contato'
+    ? usuario.nome
+    : (grupoContexto?.responsavelEfetivoNome || null)
+  const status = tipo === 'contato' ? 'em_atendimento' : 'finalizado'
 
   if (existente) {
+    const reabrindo = tipo === 'contato' && existente.status === 'finalizado'
+    if (
+      tipo === 'contato' &&
+      !reabrindo &&
+      existente.responsavel_id &&
+      existente.responsavel_id !== usuario.id &&
+      usuario.role !== 'master'
+    ) {
+      throw new Error(`Este contato já está em atendimento por ${existente.responsavel_nome || 'outro atendente'}.`)
+    }
+
+    const assumirAoAbrir = tipo === 'contato' && (reabrindo || !existente.responsavel_id)
+    const agora = new Date().toISOString()
     const { data, error } = await supabaseAdmin
       .from('atendimento_conversas')
       .update({
@@ -1149,16 +1611,48 @@ export async function iniciarConversaWhatsApp(
         grupo_nome: tipo === 'grupo' ? nome : null,
         whatsapp_numero: canal.numero_declarado,
         ocultar_da_caixa: false,
-        responsavel_id: tipo === 'contato' ? (existente.responsavel_id || responsavel) : null,
-        responsavel_nome: tipo === 'contato' ? (existente.responsavel_nome || responsavelNome) : null,
-        status: tipo === 'contato' ? (existente.responsavel_id ? existente.status : status) : 'aguardando',
-        updated_at: new Date().toISOString(),
+        responsavel_id: tipo === 'contato'
+          ? (assumirAoAbrir ? usuario.id : (existente.responsavel_id || responsavel))
+          : (existente.responsavel_id || responsavel),
+        responsavel_nome: tipo === 'contato'
+          ? (assumirAoAbrir ? usuario.nome : (existente.responsavel_nome || responsavelNome))
+          : (existente.responsavel_nome || responsavelNome),
+        status: tipo === 'contato'
+          ? (assumirAoAbrir ? 'em_atendimento' : existente.status)
+          : existente.status,
+        nao_lidas: assumirAoAbrir ? 0 : existente.nao_lidas,
+        updated_at: agora,
       })
       .eq('id', existente.id)
       .select('*')
       .single()
     if (error) throw error
-    if (tipo === 'contato') await garantirSessao(data as AtendimentoConversa)
+
+    if (tipo === 'contato') {
+      const sessao = await garantirSessao(data as AtendimentoConversa)
+      if (assumirAoAbrir && sessao?.id) {
+        await supabaseAdmin.from('atendimento_sessoes').update({
+          responsavel_id: usuario.id,
+          responsavel_nome: usuario.nome,
+          status: 'em_atendimento',
+          assigned_at: sessao.assigned_at || agora,
+        }).eq('id', sessao.id)
+      }
+      if (reabrindo) {
+        await registrarEvento({
+          empresaId: usuario.empresa_id,
+          conversaId: data.id,
+          sessaoId: sessao?.id || null,
+          tipo: 'conversa_reaberta',
+          usuarioId: usuario.id,
+          usuarioNome: usuario.nome,
+          dados: {
+            responsavel_anterior_id: existente.responsavel_id || null,
+            responsavel_anterior_nome: existente.responsavel_nome || null,
+          },
+        })
+      }
+    }
     return data as AtendimentoConversa
   }
 
@@ -1188,12 +1682,44 @@ export async function iniciarConversaWhatsApp(
   return data as AtendimentoConversa
 }
 
+async function idsHistoricoConversa(conversa: AtendimentoConversa) {
+  if (!conversa?.id) return [] as string[]
+
+  let query = supabaseAdmin
+    .from('atendimento_conversas')
+    .select('id')
+    .eq('empresa_id', conversa.empresa_id)
+    .eq('canal', 'whatsapp')
+    .eq('whatsapp_chat_tipo', conversa.whatsapp_chat_tipo || 'contato')
+
+  if (conversa.whatsapp_chat_jid) {
+    query = query.eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
+  } else {
+    query = query.eq('telefone', conversa.telefone)
+  }
+
+  // Mantem separado o historico de numeros diferentes.
+  // Se o mesmo numero foi reconectado em outro registro de canal, o historico acompanha o numero.
+  if (conversa.whatsapp_numero) {
+    query = query.eq('whatsapp_numero', conversa.whatsapp_numero)
+  } else if (conversa.whatsapp_canal_id) {
+    query = query.eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const ids = [...new Set([conversa.id, ...(data || []).map((item: any) => String(item.id || '')).filter(Boolean)])]
+  return ids
+}
+
 export async function listarMensagensAtendimento(conversaId: string, usuario: UsuarioTenant) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) return null
+  const conversaIds = await idsHistoricoConversa(conversa)
   const { data, error } = await supabaseAdmin.from('atendimento_mensagens')
     .select('id,conversa_id,sessao_id,direcao,tipo,texto,media_url,media_id,mime_type,payload,whatsapp_message_id,usuario_id,usuario_nome,created_at')
-    .eq('conversa_id', conversaId)
+    .in('conversa_id', conversaIds.length ? conversaIds : [conversaId])
     .order('created_at', { ascending: true })
   if (error) throw error
 
@@ -1236,9 +1762,12 @@ export async function prepararUploadMidiaAtendimento(
   if (!conversa.whatsapp_canal_id) throw new Error('Esta conversa ainda não possui um número de WhatsApp associado.')
 
   const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
-  if (!acesso.atender) throw new Error('Você não possui permissão para responder por este canal.')
-  if (usuario.role !== 'master' && conversa.responsavel_id && conversa.responsavel_id !== usuario.id) {
-    throw new Error('Este atendimento está com outro atendente.')
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acesso)).atender
+    : acesso.atender
+  if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
+  if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento antes de enviar arquivos.')
   }
 
   return criarUploadAssinadoMidia({
@@ -1287,9 +1816,12 @@ export async function enviarMidiaWhatsApp(
   if (canal.gateway_status !== 'connected') throw new Error('O número WhatsApp desta conversa não está conectado.')
 
   const acesso = await acessoCanalWhatsApp(usuario, canalId)
-  if (!acesso.atender) throw new Error('Você não possui permissão para responder por este canal.')
-  if (usuario.role !== 'master' && conversa.responsavel_id && conversa.responsavel_id !== usuario.id) {
-    throw new Error('Este atendimento está com outro atendente.')
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acesso)).atender
+    : acesso.atender
+  if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
+  if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento antes de responder.')
   }
 
   const tipoGateway = tipoMidiaPorMime(mime, dados.fileName)
@@ -1371,11 +1903,31 @@ export async function enviarMidiaWhatsApp(
   return { queued: true, mensagemId: mensagem.id }
 }
 
-export async function enviarTextoWhatsApp(conversaId: string, texto: string, usuario: UsuarioTenant) {
+export async function enviarTextoWhatsApp(
+  conversaId: string,
+  texto: string,
+  usuario: UsuarioTenant,
+  respostaMensagemId?: string | null,
+) {
   const conversa = await conversaAcessivel(conversaId, usuario, false)
   if (!conversa) throw new Error('Conversa não disponível para este usuário.')
   const corpo = texto.trim()
   if (!corpo) throw new Error('Mensagem vazia.')
+
+  let mensagemRespondida: any = null
+  if (respostaMensagemId) {
+    const conversaIdsHistorico = await idsHistoricoConversa(conversa)
+    const { data: alvo } = await supabaseAdmin
+      .from('atendimento_mensagens')
+      .select('id,direcao,tipo,texto,whatsapp_message_id,payload')
+      .eq('id', respostaMensagemId)
+      .in('conversa_id', conversaIdsHistorico.length ? conversaIdsHistorico : [conversa.id])
+      .eq('empresa_id', usuario.empresa_id)
+      .maybeSingle()
+    if (!alvo?.whatsapp_message_id) throw new Error('A mensagem original ainda não pode ser respondida pelo WhatsApp.')
+    mensagemRespondida = alvo
+  }
+
   const nomeAtendente = String(usuario.nome || 'Equipe Esquadrifácio').trim() || 'Equipe Esquadrifácio'
   const corpoCliente = `${nomeAtendente} diz:\n${corpo}`
 
@@ -1405,22 +1957,31 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     }
 
     const acessoCanal = await acessoCanalWhatsApp(usuario, canalId)
-    if (!acessoCanal.atender) {
-      throw new Error('Você pode acompanhar este canal, mas não possui permissão para responder por ele.')
+    const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+      ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
+      : acessoCanal.atender
+    if (!podeAtender) {
+      throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
     }
-    if (
-      usuario.role !== 'master' &&
-      conversa.responsavel_id &&
-      conversa.responsavel_id !== usuario.id
-    ) {
-      throw new Error('Este atendimento está com outro atendente. Supervisão não permite responder em nome dele.')
+    if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+      throw new Error('Assuma o atendimento antes de responder.')
     }
 
+    const alvoPayload = mensagemRespondida?.payload && typeof mensagemRespondida.payload === 'object'
+      ? mensagemRespondida.payload as Record<string, any>
+      : {}
     const destinoPayload = {
       transporte: 'qr_gateway',
       status: 'pendente',
       chatTipo: conversa.whatsapp_chat_tipo || 'contato',
       chatJid: conversa.whatsapp_chat_tipo === 'grupo' ? conversa.whatsapp_chat_jid || null : null,
+      quotedWhatsappMessageId: mensagemRespondida?.whatsapp_message_id || null,
+      quotedMessageId: mensagemRespondida?.id || null,
+      quotedText: mensagemRespondida?.texto || null,
+      quotedFromMe: mensagemRespondida ? mensagemRespondida.direcao === 'saida' : null,
+      quotedParticipantJid:
+        alvoPayload.participanteJid || alvoPayload.participante_jid ||
+        alvoPayload.participanteJidAlt || alvoPayload.participante_jid_alt || null,
     }
 
     const { data: mensagem, error: mensagemError } = await supabaseAdmin
@@ -1470,7 +2031,11 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       tipo: 'mensagem_enfileirada_qr',
       usuarioId: usuario.id,
       usuarioNome: usuario.nome,
-      dados: { mensagem_id: mensagem.id },
+      dados: {
+        mensagem_id: mensagem.id,
+        resposta_mensagem_id: mensagemRespondida?.id || null,
+        resposta_whatsapp_message_id: mensagemRespondida?.whatsapp_message_id || null,
+      },
     })
 
     return { messageId: null, queued: true }
@@ -1489,6 +2054,9 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
       messaging_product: 'whatsapp',
       to: conversa.telefone,
       type: 'text',
+      ...(mensagemRespondida?.whatsapp_message_id
+        ? { context: { message_id: mensagemRespondida.whatsapp_message_id } }
+        : {}),
       text: { preview_url: false, body: corpoCliente },
     }),
   })
@@ -1507,7 +2075,12 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     usuario_id: usuario.id,
     usuario_nome: usuario.nome,
     provider_timestamp: agora,
-    payload: json,
+    payload: {
+      provider: json,
+      quotedWhatsappMessageId: mensagemRespondida?.whatsapp_message_id || null,
+      quotedMessageId: mensagemRespondida?.id || null,
+      quotedText: mensagemRespondida?.texto || null,
+    },
   })
   if (error) throw error
 
@@ -1527,10 +2100,115 @@ export async function enviarTextoWhatsApp(conversaId: string, texto: string, usu
     tipo: 'mensagem_enviada',
     usuarioId: usuario.id,
     usuarioNome: usuario.nome,
-    dados: { whatsapp_message_id: messageId },
+    dados: {
+      whatsapp_message_id: messageId,
+      resposta_mensagem_id: mensagemRespondida?.id || null,
+      resposta_whatsapp_message_id: mensagemRespondida?.whatsapp_message_id || null,
+    },
   })
 
   return { messageId, queued: false }
+}
+
+export async function reagirMensagemWhatsApp(
+  conversaId: string,
+  mensagemId: string,
+  emoji: string,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, false)
+  if (!conversa) throw new Error('Conversa não disponível para este usuário.')
+  const reacao = String(emoji || '').trim()
+  if (!reacao || reacao.length > 16) throw new Error('Emoji inválido.')
+
+  const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
+    : acessoCanal.atender
+  if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não pode reagir às mensagens.')
+  if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento antes de reagir.')
+  }
+
+  const conversaIdsHistorico = await idsHistoricoConversa(conversa)
+  const { data: alvo } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .select('id,direcao,texto,whatsapp_message_id,payload')
+    .eq('id', mensagemId)
+    .in('conversa_id', conversaIdsHistorico.length ? conversaIdsHistorico : [conversaId])
+    .eq('empresa_id', usuario.empresa_id)
+    .maybeSingle()
+  if (!alvo?.whatsapp_message_id) throw new Error('Esta mensagem ainda não aceita reação.')
+
+  const { data: config } = await supabaseAdmin.from('atendimento_configuracoes')
+    .select('modo_integracao').eq('empresa_id', usuario.empresa_id).eq('ativo', true).maybeSingle()
+  if ((config?.modo_integracao || 'qr') !== 'qr') {
+    throw new Error('Reações pelo Atlas estão disponíveis nos canais conectados por QR.')
+  }
+  if (!conversa.whatsapp_canal_id) throw new Error('Canal WhatsApp não identificado.')
+
+  const alvoPayload = alvo.payload && typeof alvo.payload === 'object' ? alvo.payload as Record<string, any> : {}
+  const agora = new Date().toISOString()
+  const payload = {
+    transporte: 'qr_gateway',
+    status: 'pendente',
+    chatTipo: conversa.whatsapp_chat_tipo || 'contato',
+    chatJid: conversa.whatsapp_chat_tipo === 'grupo' ? conversa.whatsapp_chat_jid || null : null,
+    reactionTargetWhatsappId: alvo.whatsapp_message_id,
+    reactionTargetMessageId: alvo.id,
+    reactionTargetFromMe: alvo.direcao === 'saida',
+    reactionTargetParticipantJid:
+      alvoPayload.participanteJid || alvoPayload.participante_jid ||
+      alvoPayload.participanteJidAlt || alvoPayload.participante_jid_alt || null,
+  }
+
+  const sessao = await garantirSessao(conversa)
+  const { data: mensagem, error: mensagemError } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .insert({
+      empresa_id: usuario.empresa_id,
+      conversa_id: conversa.id,
+      sessao_id: sessao?.id || null,
+      direcao: 'saida',
+      tipo: 'reacao',
+      texto: reacao,
+      usuario_id: usuario.id,
+      usuario_nome: usuario.nome,
+      provider_timestamp: agora,
+      payload,
+    })
+    .select('id')
+    .single()
+  if (mensagemError) throw mensagemError
+
+  const { error: filaError } = await supabaseAdmin.from('atendimento_fila_saida').insert({
+    empresa_id: usuario.empresa_id,
+    conversa_id: conversa.id,
+    mensagem_id: mensagem.id,
+    telefone: conversa.telefone,
+    tipo: 'reaction',
+    texto: reacao,
+    payload,
+    status: 'pendente',
+    whatsapp_canal_id: conversa.whatsapp_canal_id,
+  })
+  if (filaError) throw filaError
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId: conversa.id,
+    sessaoId: sessao?.id || null,
+    tipo: 'mensagem_reagida',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: {
+      mensagem_id: alvo.id,
+      whatsapp_message_id: alvo.whatsapp_message_id,
+      emoji: reacao,
+    },
+  })
+
+  return { queued: true, mensagemId: mensagem.id }
 }
 
 export async function marcarConversaComoLida(conversaId: string, usuario: UsuarioTenant) {
@@ -1543,6 +2221,26 @@ export async function marcarConversaComoLida(conversaId: string, usuario: Usuari
     .eq('id', conversaId)
     .eq('empresa_id', usuario.empresa_id)
   if (error) throw error
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: 'conversa_baixada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: { nao_lidas_antes: Number(conversa.nao_lidas || 0) },
+  })
+}
+
+export async function registrarVisualizacaoConversa(conversaId: string, usuario: UsuarioTenant) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: 'conversa_visualizada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+  })
 }
 
 export async function definirAcompanhamentoConversa(
@@ -1552,6 +2250,10 @@ export async function definirAcompanhamentoConversa(
 ) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não disponível.')
+  const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  if (usuario.role !== 'master' && !acessoCanal.dono && !acessoCanal.supervisionar) {
+    throw new Error('Você não possui permissão para supervisionar este canal.')
+  }
 
   if (acompanhar) {
     const { error } = await supabaseAdmin
@@ -1581,14 +2283,148 @@ export async function definirAcompanhamentoConversa(
   })
 }
 
+export async function arquivarConversaWhatsApp(conversaId: string, usuario: UsuarioTenant) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const podeArquivar =
+    usuario.role === 'master' ||
+    acesso.dono ||
+    acesso.transferir ||
+    conversa.responsavel_id === usuario.id
+  if (!podeArquivar) throw new Error('Você não possui permissão para arquivar esta conversa.')
+
+  const agora = new Date().toISOString()
+  let query = supabaseAdmin
+    .from('atendimento_conversas')
+    .update({ ocultar_da_caixa: true, updated_at: agora })
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('canal', 'whatsapp')
+
+  if (conversa.whatsapp_canal_id) query = query.eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+  if (conversa.whatsapp_chat_jid) query = query.eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
+  else query = query.eq('telefone', conversa.telefone)
+
+  const { error } = await query
+  if (error) throw error
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: 'conversa_arquivada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: { preservou_historico: true },
+  })
+}
+
+export async function definirBloqueioContatoWhatsApp(
+  conversaId: string,
+  bloquear: boolean,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível.')
+  if (conversa.whatsapp_chat_tipo === 'grupo') {
+    throw new Error('Bloqueio por esta ação está disponível apenas para contatos individuais.')
+  }
+  if (!conversa.whatsapp_canal_id || !conversa.whatsapp_chat_jid) {
+    throw new Error('Canal ou contato do WhatsApp não identificado.')
+  }
+
+  const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const podeBloquear = usuario.role === 'master' || acesso.dono || acesso.transferir
+  if (!podeBloquear) {
+    throw new Error('Para bloquear um contato é necessário ter permissão de Transferir neste WhatsApp.')
+  }
+
+  const agora = new Date().toISOString()
+  const telefone = normalizarTelefone(conversa.telefone)
+
+  const { error: bloqueioError } = await supabaseAdmin
+    .from('atendimento_whatsapp_bloqueios')
+    .upsert({
+      empresa_id: usuario.empresa_id,
+      canal_id: conversa.whatsapp_canal_id,
+      chat_jid: conversa.whatsapp_chat_jid,
+      telefone,
+      ativo: bloquear,
+      bloqueado_em: bloquear ? agora : null,
+      bloqueado_por: bloquear ? usuario.id : null,
+      bloqueado_por_nome: bloquear ? usuario.nome : null,
+      desbloqueado_em: bloquear ? null : agora,
+      desbloqueado_por: bloquear ? null : usuario.id,
+      desbloqueado_por_nome: bloquear ? null : usuario.nome,
+      updated_at: agora,
+    }, { onConflict: 'empresa_id,canal_id,chat_jid' })
+  if (bloqueioError) throw bloqueioError
+
+  if (bloquear) {
+    await supabaseAdmin
+      .from('atendimento_conversas')
+      .update({
+        ocultar_da_caixa: true,
+        status: 'finalizado',
+        nao_lidas: 0,
+        updated_at: agora,
+      })
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+      .eq('whatsapp_chat_jid', conversa.whatsapp_chat_jid)
+
+    await supabaseAdmin
+      .from('atendimento_sessoes')
+      .update({ status: 'finalizado', closed_at: agora })
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('conversa_id', conversa.id)
+      .is('closed_at', null)
+  }
+
+  const { error: filaError } = await supabaseAdmin
+    .from('atendimento_fila_saida')
+    .insert({
+      empresa_id: usuario.empresa_id,
+      conversa_id: conversa.id,
+      mensagem_id: null,
+      telefone,
+      tipo: bloquear ? 'block' : 'unblock',
+      texto: null,
+      payload: {
+        transporte: 'qr_gateway',
+        chatJid: conversa.whatsapp_chat_jid,
+        acao: bloquear ? 'block' : 'unblock',
+      },
+      status: 'pendente',
+      whatsapp_canal_id: conversa.whatsapp_canal_id,
+    })
+  if (filaError) throw filaError
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId,
+    tipo: bloquear ? 'contato_bloqueado' : 'contato_desbloqueado',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: {
+      whatsapp_chat_jid: conversa.whatsapp_chat_jid,
+      telefone,
+      preservou_historico: true,
+    },
+  })
+}
+
 export async function assumirConversa(conversaId: string, usuario: UsuarioTenant) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não disponível.')
   const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
-  if (!acessoCanal.atender) {
-    throw new Error('Você não possui permissão para atender por este canal.')
+  const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
+    : acessoCanal.atender
+  if (!podeAtender) {
+    throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para atender.')
   }
-  if (conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
+  const reabrindo = conversa.status === 'finalizado'
+  if (!reabrindo && conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
     throw new Error('Esta conversa já está com outro atendente.')
   }
   const agora = new Date().toISOString()
@@ -1612,9 +2448,13 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
     empresaId: usuario.empresa_id,
     conversaId,
     sessaoId: sessao?.id || null,
-    tipo: 'conversa_assumida',
+    tipo: reabrindo ? 'conversa_reaberta' : 'conversa_assumida',
     usuarioId: usuario.id,
     usuarioNome: usuario.nome,
+    dados: reabrindo ? {
+      responsavel_anterior_id: conversa.responsavel_id || null,
+      responsavel_anterior_nome: conversa.responsavel_nome || null,
+    } : {},
   })
 }
 
@@ -1622,27 +2462,32 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não encontrada.')
   const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
-  if (usuario.role !== 'master' && !acessoCanal.transferir) {
-    throw new Error('Você não possui permissão para transferir atendimentos deste canal.')
+  const podeTransferir = conversa.whatsapp_chat_tipo === 'grupo'
+    ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).transferir
+    : acessoCanal.transferir
+  if (usuario.role !== 'master' && !podeTransferir) {
+    throw new Error('Você não possui permissão para transferir este atendimento.')
   }
   const { data: destino } = await supabaseAdmin.from('usuarios')
     .select('id,nome,role,empresa_id').eq('id', destinoId).maybeSingle()
   if (!destino || destino.empresa_id !== usuario.empresa_id) throw new Error('Usuário de destino inválido.')
-  const destinoPodeAtender = await usuarioPodeAtenderCanal(
-    usuario.empresa_id,
-    conversa.whatsapp_canal_id,
-    destino.id,
-    destino.role,
-  )
-  if (!destinoPodeAtender) {
-    throw new Error('O usuário de destino não possui permissão para atender por este canal.')
+  if (conversa.whatsapp_chat_tipo !== 'grupo') {
+    const destinoPodeAtender = await usuarioPodeAtenderCanal(
+      usuario.empresa_id,
+      conversa.whatsapp_canal_id,
+      destino.id,
+      destino.role,
+    )
+    if (!destinoPodeAtender) {
+      throw new Error('O usuário de destino não possui permissão para atender por este canal.')
+    }
   }
   const agora = new Date().toISOString()
   await supabaseAdmin.from('atendimento_conversas').update({
     responsavel_id: destino.id,
     responsavel_nome: destino.nome,
     setor: setor || conversa.setor || null,
-    status: 'em_atendimento',
+    status: 'aguardando',
     updated_at: agora,
   }).eq('id', conversaId)
   const sessao = await garantirSessao(conversa)
@@ -1651,8 +2496,8 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
       responsavel_id: destino.id,
       responsavel_nome: destino.nome,
       setor: setor || conversa.setor || null,
-      status: 'em_atendimento',
-      assigned_at: agora,
+      status: 'aguardando',
+      assigned_at: null,
     }).eq('id', sessao.id)
   }
   await registrarEvento({
@@ -1664,6 +2509,18 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
     usuarioNome: usuario.nome,
     dados: { destino_id: destino.id, destino_nome: destino.nome, setor: setor || null },
   })
+  await supabaseAdmin.from('notificacoes').insert({
+    empresa_id: usuario.empresa_id,
+    usuario_id: destino.id,
+    categoria: 'chat',
+    tipo: 'whatsapp_transferencia',
+    titulo: 'WhatsApp · atendimento transferido',
+    mensagem: `${usuario.nome} transferiu ${conversa.contato_nome || conversa.grupo_nome || conversa.telefone} para você.`,
+    href: `/whatsapp?conversaId=${conversaId}`,
+    origem_tipo: 'whatsapp_transferencia',
+    origem_id: `${conversaId}:${agora}`,
+    push_status: 'pendente',
+  })
 }
 
 export async function finalizarConversa(conversaId: string, usuario: UsuarioTenant) {
@@ -1673,9 +2530,20 @@ export async function finalizarConversa(conversaId: string, usuario: UsuarioTena
     throw new Error('A supervisão permite acompanhar, mas somente o atendente responsável pode finalizar.')
   }
   const agora = new Date().toISOString()
+  let responsavelDepois = conversa.responsavel_id || null
+  let responsavelNomeDepois = conversa.responsavel_nome || null
+  if (conversa.whatsapp_chat_tipo === 'grupo') {
+    const grupo = await acessoGrupoWhatsApp(conversa, usuario)
+    if (grupo.responsavelEfetivoId) {
+      responsavelDepois = grupo.responsavelEfetivoId
+      responsavelNomeDepois = grupo.responsavelEfetivoNome
+    }
+  }
   await supabaseAdmin.from('atendimento_conversas').update({
     status: 'finalizado',
     nao_lidas: 0,
+    responsavel_id: responsavelDepois,
+    responsavel_nome: responsavelNomeDepois,
     updated_at: agora,
   }).eq('id', conversaId)
   const { data: sessao } = await supabaseAdmin.from('atendimento_sessoes')
