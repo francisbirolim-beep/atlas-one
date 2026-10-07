@@ -603,7 +603,12 @@ export async function gerarPacoteTecnico(
     const corRef = item?.cor || estado.config?.acabamento || orcamento.acabamento || null
     const contramarcoAtual = item?.contramarco || estado.config?.contramarco || orcamento.contramarco
 
-    const diretoWvetro = materiaisDoOrcamentoWvetro(pacote.id, item, indice, produtos, corRef, ordem)
+    // O detalhamento W.Vetro do orçamento é referência comercial e carrega
+    // comprimentos calculados com a medida antiga. Na Medição Final o plano
+    // precisa obrigatoriamente recalcular pelas receitas Atlas validadas.
+    const diretoWvetro = origem === 'medicao_final'
+      ? { linhas: [] as any[], proximaOrdem: ordem }
+      : materiaisDoOrcamentoWvetro(pacote.id, item, indice, produtos, corRef, ordem)
     if (diretoWvetro.linhas.length) {
       materiais.push(...diretoWvetro.linhas)
       ordem = diretoWvetro.proximaOrdem
