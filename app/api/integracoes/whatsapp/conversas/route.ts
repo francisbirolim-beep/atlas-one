@@ -26,19 +26,15 @@ export async function GET(req: NextRequest) {
       listarConversasAtendimento(usuario),
       listarAcessosCanaisAtendimento(usuario),
     ])
-    const podeTransferir = usuario.role === 'master' ||
-      acessos.some(a => a.transferir) ||
-      (conversas as any[]).some(c => c.grupo_pode_transferir || c.grupo_pode_delegar)
-    let usuarios: { id: string; nome: string }[] = []
-
-    if (podeTransferir) {
-      const { data } = await supabaseAdmin
-        .from('usuarios')
-        .select('id,nome')
-        .eq('empresa_id', usuario.empresa_id)
-        .order('nome')
-      usuarios = (data || []) as { id: string; nome: string }[]
-    }
+    // A lista de usuários internos serve também para o chat da equipe dentro
+    // do WhatsApp Atlas. Por isso ela deve estar disponível para qualquer
+    // usuário autenticado do mesmo tenant, não apenas para quem transfere atendimento.
+    const { data: usuariosRaw } = await supabaseAdmin
+      .from('usuarios')
+      .select('id,nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .order('nome')
+    const usuarios = (usuariosRaw || []) as { id: string; nome: string }[]
 
     const { data: config } = await supabaseAdmin
       .from('atendimento_configuracoes')
