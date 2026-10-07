@@ -52,6 +52,7 @@ export interface RecebimentoCliente360 {
   obra_id?: string | null
   data_recebimento: string
   valor: number
+  valor_desconto?: number | null
   forma?: string | null
   referencia?: string | null
   observacoes?: string | null

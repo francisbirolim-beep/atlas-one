@@ -8,7 +8,7 @@ import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
-type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
+type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
 
 function moeda(valor: number) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -46,7 +46,7 @@ export default function ContasReceberPage() {
         .limit(1500),
       supabase
         .from('financeiro_recebimentos')
-        .select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,forma,referencia,observacoes,status,criado_por_nome,created_at')
+        .select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at')
         .neq('status','cancelado')
         .order('data_recebimento', { ascending: false })
         .order('created_at', { ascending: false })
@@ -76,7 +76,7 @@ export default function ContasReceberPage() {
           descontos[a.recebimento_id]=(descontos[a.recebimento_id]||0)+Number(a.valor||0)
         })
       }
-      setRecebimentos(lista.map(r=>({...r,desconto:descontos[r.id]||0})))
+      setRecebimentos(lista.map(r=>({...r,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})))
     }
     setCarregando(false)
   }
