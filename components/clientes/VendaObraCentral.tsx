@@ -36,7 +36,7 @@ type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:st
 type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_em?:string|null }
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
-type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null }
+type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null }
 
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
@@ -51,6 +51,8 @@ function numeroEntrada(v:string){
   return Number.isFinite(n)?n:0
 }
 function dataBR(v?:string|null){if(!v)return '—';const d=new Date(v.length===10?`${v}T12:00:00`:v);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR')}
+function dataHoraBR(v?:string|null){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}
+function dataInputLocal(d:Date){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function status(v?:string|null){return v?v.replace(/_/g,' ').replace(/^./,s=>s.toUpperCase()):'—'}
 function pct(parte:number,total:number){return total>0?Math.min(100,Math.max(0,(parte/total)*100)):0}
 function numeroOrcamento(o?:Orcamento|null){return o?.wvetro_fluxo?.numero||o?.numero||'—'}
@@ -135,11 +137,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
     const contaIds=((co.data||[]) as Conta[]).map(x=>x.id)
     if(contaIds.length){
-      const aloc=await supabase.from('financeiro_recebimento_alocacoes').select('recebimento_id,conta_receber_id').in('conta_receber_id',contaIds)
+      const aloc=await supabase.from('financeiro_recebimento_alocacoes').select('recebimento_id,conta_receber_id,tipo,valor').in('conta_receber_id',contaIds)
       const recebimentoIds=[...new Set((aloc.data||[]).map((x:any)=>x.recebimento_id).filter(Boolean))]
       if(recebimentoIds.length){
-        const rr=await supabase.from('financeiro_recebimentos').select('id,data_recebimento,valor,forma,referencia,observacoes,status').in('id',recebimentoIds).order('data_recebimento',{ascending:false})
-        setRecebimentosVenda((rr.data||[]) as RecebimentoVenda[])
+        const rr=await supabase.from('financeiro_recebimentos').select('id,data_recebimento,valor,forma,referencia,observacoes,status,criado_por_nome,created_at').in('id',recebimentoIds).order('data_recebimento',{ascending:false}).order('created_at',{ascending:false})
+        const descontos:Record<string,number>={}
+        ;(aloc.data||[]).filter((x:any)=>x.tipo==='desconto').forEach((x:any)=>{descontos[x.recebimento_id]=(descontos[x.recebimento_id]||0)+Number(x.valor||0)})
+        setRecebimentosVenda(((rr.data||[]) as RecebimentoVenda[]).map(r=>({...r,desconto:descontos[r.id]||0})))
       }else setRecebimentosVenda([])
     }else setRecebimentosVenda([])
 
