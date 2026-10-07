@@ -30,7 +30,13 @@ export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> 
   if(!ids.length) return []
   const {data:todosParticipantes}=await supabase.from('chat_participantes').select('conversa_id,usuario_id,usuario_nome').in('conversa_id',ids)
   const nomesDiretos=new Map<string,string>()
-  for(const p of todosParticipantes||[]) if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
+  const participantesPorConversa=new Map<string,Array<{usuario_id:string;usuario_nome:string}>>()
+  for(const p of todosParticipantes||[]){
+    const atual=participantesPorConversa.get(p.conversa_id)||[]
+    atual.push({usuario_id:p.usuario_id,usuario_nome:p.usuario_nome||'Usuário'})
+    participantesPorConversa.set(p.conversa_id,atual)
+    if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
+  }
 
   return await Promise.all(conversas.map(async c=>{
     const [{data:m},{data:participante}] = await Promise.all([
@@ -46,9 +52,15 @@ export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> 
       naoLidas=count||0
     }
 
+    const participantes=participantesPorConversa.get(c.id)||[]
+    const masterForaDaConversa=master&&!participantes.some(p=>p.usuario_id===usuarioId)
+    const nomeDireta=masterForaDaConversa
+      ? participantes.map(p=>p.usuario_nome).filter(Boolean).join(' ↔ ')
+      : (nomesDiretos.get(c.id)||c.nome)
+
     return {
       ...c,
-      nome:c.tipo==='direta'?(nomesDiretos.get(c.id)||c.nome):c.nome,
+      nome:c.tipo==='direta'?nomeDireta:c.nome,
       ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,
       ultima_mensagem_em:m?.created_at||null,
       nao_lidas:naoLidas,
