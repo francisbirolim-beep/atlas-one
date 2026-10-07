@@ -1379,7 +1379,7 @@ export default function WhatsAppAtendimentoPage() {
   return (
     <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0">
       <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white">
-        <header className="flex h-16 items-center justify-between border-b bg-white px-4">
+        <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-5">
           <div className="flex items-center gap-3">
             <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
             <div>
@@ -1427,7 +1427,7 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${conversaInternaAtiva ? 'xl:grid-cols-[390px_minmax(0,1fr)_300px]' : painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
+        <div className={`grid h-[calc(100dvh-72px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] ${conversaInternaAtiva ? 'xl:grid-cols-[360px_minmax(0,1fr)_320px]' : painelDireitoRecolhido ? 'xl:grid-cols-[360px_minmax(0,1fr)_52px]' : 'xl:grid-cols-[360px_minmax(0,1fr)_320px]'}`}>
           <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -1454,8 +1454,8 @@ export default function WhatsAppAtendimentoPage() {
               )}
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Conversas</p>
-                  <p className="text-[11px] text-slate-500">Conversas recentes em tempo real</p>
+                  <p className="text-sm font-extrabold text-slate-900">Conversas</p>
+                  <p className="text-[11px] text-slate-500">WhatsApp + conversas internas da equipe</p>
                 </div>
                 <div className="flex items-center gap-1">
                   {canais.length > 1 && (
@@ -1478,8 +1478,8 @@ export default function WhatsAppAtendimentoPage() {
                   placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
               <div className="mt-3 flex items-center justify-between px-0.5">
-                <span className="text-xs font-extrabold text-slate-800">Abertas <span className="text-slate-500">{totais.abertas}</span></span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600"><Tag size={12}/>Filtros</span>
+                <span className="text-xs font-extrabold text-slate-800">Conversas</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">{totais.todas} no total</span>
               </div>
               <div className="mt-2 min-w-0 max-w-full">
                 <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
