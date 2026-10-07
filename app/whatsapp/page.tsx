@@ -10,8 +10,17 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
+import {
+  type ChatConversa,
+  type ChatMensagem,
+  criarConversa as criarConversaInterna,
+  enviarMensagem as enviarMensagemInterna,
+  listarConversas as listarConversasInternas,
+  listarMensagens as listarMensagensInternas,
+  listarParticipantes as listarParticipantesInternos,
+} from '@/lib/chatInterno'
 
-type Usuario = { id: string; nome: string; role?: string }
+type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
   id: string
   nome: string
@@ -162,7 +171,7 @@ export default function WhatsAppAtendimentoPage() {
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<'todas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
+  const [filtro, setFiltro] = useState<'todas' | 'internas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
@@ -191,6 +200,12 @@ export default function WhatsAppAtendimentoPage() {
   const [notaTexto, setNotaTexto] = useState('')
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
   const [conversaInternaAberta, setConversaInternaAberta] = useState(false)
+  const [conversasInternas, setConversasInternas] = useState<ChatConversa[]>([])
+  const [conversaInternaAtiva, setConversaInternaAtiva] = useState<ChatConversa | null>(null)
+  const [mensagensInternas, setMensagensInternas] = useState<ChatMensagem[]>([])
+  const [participantesConversaInterna, setParticipantesConversaInterna] = useState<Array<{id:string;nome:string}>>([])
+  const [textoInterno, setTextoInterno] = useState('')
+  const [enviandoInterno, setEnviandoInterno] = useState(false)
   const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
   const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
   const [nomeGrupoInterno, setNomeGrupoInterno] = useState('')
@@ -304,6 +319,9 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   function selecionarConversa(conversa: Conversa) {
+    setConversaInternaAtiva(null)
+    setMensagensInternas([])
+    setParticipantesConversaInterna([])
     conversaAtivaIdRef.current = conversa.id
     setMensagens([])
     setEtiquetas([])
@@ -326,6 +344,51 @@ export default function WhatsAppAtendimentoPage() {
     })
   }
 
+  async function atualizarConversasInternas(usuarioId?: string) {
+    const id = usuarioId || eu?.id
+    if (!id) return
+    try {
+      const lista = await listarConversasInternas(id)
+      setConversasInternas(lista)
+      setConversaInternaAtiva(atual => atual ? (lista.find(c => c.id === atual.id) || atual) : atual)
+    } catch {}
+  }
+
+  function selecionarConversaInterna(conversa: ChatConversa) {
+    conversaAtivaIdRef.current = null
+    setAtiva(null)
+    setMensagens([])
+    setErro('')
+    setConversaInternaAtiva(conversa)
+  }
+
+  async function enviarInterno() {
+    if (!conversaInternaAtiva || !textoInterno.trim() || enviandoInterno) return
+    const corpo = textoInterno.trim()
+    setTextoInterno('')
+    setEnviandoInterno(true)
+    try {
+      const ok = await enviarMensagemInterna(conversaInternaAtiva.id, corpo)
+      if (!ok) {
+        setTextoInterno(corpo)
+        setErro('Não foi possível enviar a mensagem interna.')
+        return
+      }
+      const agora = new Date().toISOString()
+      setMensagensInternas(atual => [...atual, {
+        id: `local-${Date.now()}`,
+        conversa_id: conversaInternaAtiva.id,
+        usuario_id: eu?.id || null,
+        usuario_nome: eu?.nome || 'Você',
+        texto: corpo,
+        created_at: agora,
+      }])
+      await atualizarConversasInternas()
+    } finally {
+      setEnviandoInterno(false)
+    }
+  }
+
   function abrirConversaInterna() {
     setBuscaUsuarioInterno('')
     setUsuariosInternosSelecionados([])
@@ -333,17 +396,23 @@ export default function WhatsAppAtendimentoPage() {
     setConversaInternaAberta(true)
   }
 
-  function iniciarConversaInternaSelecionada() {
+  async function iniciarConversaInternaSelecionada() {
     const ids = usuariosInternosSelecionados.filter(id => id && id !== eu?.id)
     if (!ids.length) return
-    const params = new URLSearchParams()
-    if (ids.length === 1) {
-      params.set('usuarioId', ids[0])
-    } else {
-      params.set('usuarios', ids.join(','))
-      if (nomeGrupoInterno.trim()) params.set('nome', nomeGrupoInterno.trim())
+    const participantes = usuarios.filter(u => ids.includes(u.id)).map(u => ({ id: u.id, nome: u.nome }))
+    if (!participantes.length) return
+    const tipo = participantes.length > 1 ? 'grupo' : 'direta'
+    const nome = tipo === 'grupo'
+      ? (nomeGrupoInterno.trim() || participantes.map(p => p.nome).join(', '))
+      : participantes[0].nome
+    const conversa = await criarConversaInterna(nome, tipo, participantes)
+    if (!conversa) {
+      setErro('Não foi possível abrir a conversa interna.')
+      return
     }
-    window.location.href = `/chat?${params.toString()}`
+    setConversaInternaAberta(false)
+    selecionarConversaInterna(conversa)
+    await atualizarConversasInternas()
   }
 
   function abrirDiretorio() {
@@ -511,6 +580,52 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   useEffect(() => { void carregarConversas() }, [])
+
+  useEffect(() => {
+    if (!eu?.id) return
+    void atualizarConversasInternas(eu.id)
+    const timer = setInterval(() => { void atualizarConversasInternas(eu.id) }, 5000)
+    return () => clearInterval(timer)
+  }, [eu?.id])
+
+  useEffect(() => {
+    const conversaId = conversaInternaAtiva?.id
+    if (!conversaId) {
+      setMensagensInternas([])
+      setParticipantesConversaInterna([])
+      return
+    }
+
+    let vivo = true
+    const carregar = async () => {
+      const [mensagens, participantes] = await Promise.all([
+        listarMensagensInternas(conversaId),
+        listarParticipantesInternos(conversaId),
+      ])
+      if (!vivo) return
+      setMensagensInternas(mensagens)
+      setParticipantesConversaInterna(participantes.map(p => ({
+        id: p.usuario_id,
+        nome: p.usuario_nome || 'Usuário',
+      })))
+    }
+
+    void carregar()
+    const canal = supabase
+      .channel(`whatsapp-atlas-interno-${conversaId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens', filter: `conversa_id=eq.${conversaId}` }, payload => {
+        if (!vivo) return
+        const nova = payload.new as ChatMensagem
+        setMensagensInternas(atual => atual.some(m => m.id === nova.id) ? atual : [...atual, nova])
+        void atualizarConversasInternas()
+      })
+      .subscribe()
+
+    return () => {
+      vivo = false
+      void supabase.removeChannel(canal)
+    }
+  }, [conversaInternaAtiva?.id])
 
   useEffect(() => {
     if (!diretorioAberto || !canalDiretorio) return
@@ -718,9 +833,19 @@ export default function WhatsAppAtendimentoPage() {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [mensagens.length])
 
+  const internasFiltradas = useMemo(() => {
+    const q = busca.toLocaleLowerCase('pt-BR').trim()
+    if (filtro !== 'todas' && filtro !== 'internas') return []
+    return conversasInternas.filter(c => {
+      if (!q) return true
+      return `${c.nome || ''} ${c.ultima_mensagem || ''}`.toLocaleLowerCase('pt-BR').includes(q)
+    })
+  }, [conversasInternas, busca, filtro])
+
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     return conversas.filter(c => {
+      if (filtro === 'internas') return false
       if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (filtro === 'aguardando') {
@@ -1144,7 +1269,8 @@ export default function WhatsAppAtendimentoPage() {
     )
     const chats = doCanal.filter(c => Boolean(c.ultima_mensagem_em))
     return {
-      todas: chats.length,
+      todas: chats.length + conversasInternas.length,
+      internas: conversasInternas.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
       aguardando: chats.filter(c => {
         const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
@@ -1159,7 +1285,7 @@ export default function WhatsAppAtendimentoPage() {
       transferidas: chats.filter(c => Boolean(c.transferida_em)).length,
       finalizadas: chats.filter(c => c.status === 'finalizado').length,
     }
-  }, [conversas, eu?.id, canalFiltro])
+  }, [conversas, conversasInternas.length, eu?.id, canalFiltro])
 
   const acessoCanalAtivo = ativa?.whatsapp_canal_id
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
@@ -1277,11 +1403,11 @@ export default function WhatsAppAtendimentoPage() {
             <button
               type="button"
               onClick={abrirConversaInterna}
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
               title="Iniciar conversa interna com alguém da empresa"
             >
-              <Users size={16}/>
-              <span className="hidden sm:inline">Conversa interna</span>
+              <Plus size={15}/>
+              <span className="hidden sm:inline">Nova conversa interna</span>
             </button>
             <Link href="/whatsapp/numeros" className="rounded-xl border p-2 hover:bg-slate-50" title="Gerenciar canais WhatsApp">
               <Smartphone size={18}/>
@@ -1301,8 +1427,8 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
-          <aside className={`${ativa ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
+        <div className={`grid h-[calc(100dvh-64px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] ${conversaInternaAtiva ? 'xl:grid-cols-[390px_minmax(0,1fr)_300px]' : painelDireitoRecolhido ? 'xl:grid-cols-[390px_minmax(0,1fr)_48px]' : 'xl:grid-cols-[390px_minmax(0,1fr)_300px]'}`}>
+          <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
                 <div className="mb-3 md:hidden">
@@ -1361,6 +1487,10 @@ export default function WhatsAppAtendimentoPage() {
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
                   Todas {totais.todas}
                 </button>
+                <button onClick={()=>setFiltro('internas')}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='internas'?'border-blue-500 bg-blue-50 text-blue-700':'bg-white text-slate-600'}`}>
+                  Internas {totais.internas}
+                </button>
                 <button onClick={()=>setFiltro('aguardando')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='aguardando'?'border-amber-500 bg-amber-50 text-amber-800':'bg-white text-slate-600'}`}>
                   Aguardando {totais.aguardando}
@@ -1399,11 +1529,41 @@ export default function WhatsAppAtendimentoPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
+              ) : filtradas.length === 0 && internasFiltradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
-              ) : filtradas.map(c => (
+              ) : (
+                <>
+                  {internasFiltradas.length > 0 && (
+                    <div className="border-b border-blue-100 bg-blue-50/40">
+                      <div className="flex items-center justify-between px-4 py-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-600">Conversas internas</span>
+                        <span className="text-[10px] font-semibold text-blue-500">{internasFiltradas.length}</span>
+                      </div>
+                      {internasFiltradas.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={()=>selecionarConversaInterna(c)}
+                          className={`flex w-full items-center gap-3 border-t border-blue-100 px-4 py-3 text-left transition hover:bg-blue-50 ${conversaInternaAtiva?.id===c.id?'bg-blue-100/70':''}`}
+                        >
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-600 font-bold text-white">
+                            {c.tipo==='grupo'?<Users size={17}/>:String(c.nome||'?').slice(0,1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <b className="truncate text-sm text-slate-900">{c.nome || 'Conversa interna'}</b>
+                              <span className="ml-auto shrink-0 text-[10px] text-slate-400">{hora(c.ultima_mensagem_em)}</span>
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-500">{c.ultima_mensagem || (c.tipo==='grupo'?'Grupo interno':'Conversa privada')}</span>
+                            <span className="mt-1 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">Interna</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
                   onClick={()=>selecionarConversa(c)}
                   onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selecionarConversa(c)}}}
@@ -1499,15 +1659,21 @@ export default function WhatsAppAtendimentoPage() {
                   </div>
                 </div>
               ))}
+                </>
+              )}
               {busca.trim().length >= 2 && usuariosInternosBusca.length > 0 && (
                 <div className="border-t border-blue-100 bg-blue-50/30">
                   <div className="flex items-center justify-between px-3 py-2">
                     <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-500">Equipe Atlas · conversa interna</span>
                   </div>
                   {usuariosInternosBusca.map(item => (
-                    <Link
+                    <button
+                      type="button"
                       key={item.id}
-                      href={`/chat?usuarioId=${encodeURIComponent(item.id)}`}
+                      onClick={async()=>{
+                        const conversa=await criarConversaInterna(item.nome,'direta',[{id:item.id,nome:item.nome}])
+                        if(conversa){selecionarConversaInterna(conversa);await atualizarConversasInternas()}
+                      }}
                       className="flex w-full items-center gap-3 border-t border-blue-100 px-3 py-2.5 text-left hover:bg-blue-50"
                     >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
@@ -1518,7 +1684,7 @@ export default function WhatsAppAtendimentoPage() {
                         <p className="truncate text-[11px] text-blue-500">Usuário interno do Atlas</p>
                       </div>
                       <span className="text-[10px] font-semibold text-blue-700">Conversar</span>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               )}
@@ -1571,8 +1737,81 @@ export default function WhatsAppAtendimentoPage() {
             </div>
           </aside>
 
-          <section className={`${ativa ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
-            {!ativa ? (
+          <section className={`${ativa || conversaInternaAtiva ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden bg-white`}>
+            {conversaInternaAtiva ? (
+              <>
+                <div className="flex min-w-0 items-center gap-3 border-b bg-white px-4 py-3">
+                  <button type="button" onClick={()=>setConversaInternaAtiva(null)}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-white text-slate-700 md:hidden"
+                    aria-label="Voltar para conversas">
+                    <ArrowLeft size={18}/>
+                  </button>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700">
+                    {conversaInternaAtiva.tipo==='grupo'?<Users size={18}/>:String(conversaInternaAtiva.nome||'?').slice(0,1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <b className="truncate text-slate-900">{conversaInternaAtiva.nome || 'Conversa interna'}</b>
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">INTERNA</span>
+                    </div>
+                    <p className="truncate text-xs text-slate-500">
+                      Equipe Atlas · conversa interna · {participantesConversaInterna.map(p=>p.nome).join(', ') || 'carregando participantes'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={abrirConversaInterna}
+                    className="hidden rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 sm:inline-flex">
+                    + Pessoas
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-5">
+                  <div className="mx-auto max-w-3xl space-y-3">
+                    {mensagensInternas.length===0 ? (
+                      <div className="grid min-h-[320px] place-items-center text-center text-sm text-slate-400">
+                        <div>
+                          <MessageCircle className="mx-auto mb-3 text-blue-300" size={34}/>
+                          <p className="font-semibold text-slate-600">Conversa interna da equipe</p>
+                          <p className="mt-1 text-xs">As mensagens ficam somente dentro do Atlas.</p>
+                        </div>
+                      </div>
+                    ) : mensagensInternas.map(m=>{
+                      const minha=m.usuario_id===eu?.id
+                      return (
+                        <div key={m.id} className={`flex ${minha?'justify-end':'justify-start'}`}>
+                          <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${minha?'bg-blue-600 text-white':'border bg-white text-slate-800'}`}>
+                            {!minha && <b className="mb-1 block text-[11px] text-blue-700">{m.usuario_nome || 'Equipe'}</b>}
+                            {m.texto && <p className="whitespace-pre-wrap break-words text-sm">{m.texto}</p>}
+                            {m.anexo_nome && <p className="mt-1 text-xs opacity-75">📎 {m.anexo_nome}</p>}
+                            <p className={`mt-1 text-right text-[10px] ${minha?'text-blue-100':'text-slate-400'}`}>{hora(m.created_at)}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t bg-white p-3">
+                  <div className="mx-auto flex max-w-3xl items-end gap-2">
+                    <textarea
+                      value={textoInterno}
+                      onChange={e=>setTextoInterno(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviarInterno()}}}
+                      rows={2}
+                      placeholder="Mensagem interna para a equipe..."
+                      className="min-h-[54px] max-h-32 flex-1 resize-y rounded-2xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                    <button type="button" disabled={!textoInterno.trim()||enviandoInterno}
+                      onClick={()=>void enviarInterno()}
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                      <Send size={18}/>
+                    </button>
+                  </div>
+                  <p className="mt-2 text-center text-[10px] font-medium text-blue-500">
+                    Conversa interna — não aparece para clientes do WhatsApp.
+                  </p>
+                </div>
+              </>
+            ) : !ativa ? (
               <div className="grid h-full place-items-center text-center text-slate-500">
                 <div><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border-2 border-blue-200 bg-blue-50 text-blue-500"><MessageCircle size={30}/></div><p className="font-semibold text-slate-600">Selecione uma conversa para começar</p></div>
               </div>
@@ -2085,8 +2324,57 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className={`hidden min-h-0 border-l bg-white xl:flex ${painelDireitoRecolhido ? 'flex-col items-center' : 'flex-col'}`}>
-            {painelDireitoRecolhido ? (
+          <aside className={`hidden min-h-0 border-l bg-white xl:flex ${conversaInternaAtiva ? 'flex-col' : painelDireitoRecolhido ? 'flex-col items-center' : 'flex-col'}`}>
+            {conversaInternaAtiva ? (
+              <>
+                <div className="border-b p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-11 w-11 place-items-center rounded-full bg-blue-100 text-blue-700">
+                      <Users size={19}/>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <b className="block truncate text-sm text-slate-900">{conversaInternaAtiva.nome || 'Conversa interna'}</b>
+                      <p className="text-xs text-slate-500">
+                        {conversaInternaAtiva.tipo==='grupo'?'Grupo interno':'Conversa privada interna'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <b className="text-xs uppercase tracking-[0.12em] text-slate-500">Participantes</b>
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                      {participantesConversaInterna.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {participantesConversaInterna.map(p=>(
+                      <div key={p.id} className="flex items-center gap-3 rounded-xl border bg-white p-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">
+                          {p.nome.slice(0,1).toUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <b className="block truncate text-sm text-slate-800">{p.nome}</b>
+                          <span className="text-[11px] text-slate-400">{p.id===eu?.id?'Você':'Equipe Atlas'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button type="button" onClick={abrirConversaInterna}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
+                    <Plus size={14}/> Nova conversa interna
+                  </button>
+
+                  <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+                    <Info size={15} className="mb-1"/>
+                    <b>Conversa interna</b>
+                    <p className="mt-1">Estas mensagens ficam somente dentro do Atlas e nunca aparecem para clientes do WhatsApp.</p>
+                  </div>
+                </div>
+              </>
+            ) : painelDireitoRecolhido ? (
               <div className="flex h-full w-full flex-col items-center gap-2 py-3">
                 <button
                   onClick={()=>alternarPainelDireitoRecolhido(false)}
@@ -2411,7 +2699,7 @@ export default function WhatsAppAtendimentoPage() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <b className="block truncate text-sm text-slate-900">{u.nome}</b>
-                            <span className="block text-[11px] text-slate-400">Usuário da empresa</span>
+                            <span className="block text-[11px] text-slate-400">{u.cargo || 'Usuário da empresa'}</span>
                           </span>
                           <span className={`grid h-5 w-5 place-items-center rounded border text-[10px] ${selecionado?'border-blue-600 bg-blue-600 text-white':'border-slate-300'}`}>
                             {selecionado?'✓':''}
