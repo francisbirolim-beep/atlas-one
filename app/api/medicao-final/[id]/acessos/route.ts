@@ -75,7 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: medicao } = await supabaseAdmin
     .from('medicoes_finais')
-    .select('id, status_operacional')
+    .select('id, status_operacional, empresa_id')
     .eq('id', params.id)
     .maybeSingle()
 
@@ -92,6 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .from('medicao_acessos_externos')
     .insert({
       medicao_id: params.id,
+      empresa_id: medicao.empresa_id,
       token_hash: tokenHash,
       nome_convidado: nome,
       telefone_convidado: telefone,
@@ -103,6 +104,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .single()
 
   if (error || !data) {
+    console.error('Erro ao gerar link externo da Medicao Final:', {
+      medicaoId: params.id,
+      empresaId: medicao.empresa_id,
+      codigo: error?.code,
+      mensagem: error?.message,
+    })
     return NextResponse.json({ error: 'Nao foi possivel gerar o link externo.' }, { status: 500 })
   }
 
