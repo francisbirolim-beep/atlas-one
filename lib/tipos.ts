@@ -551,6 +551,8 @@ export interface MedicaoItem {
       updated_at?: string | null
       foto_larguras_url?: string | null
       foto_alturas_url?: string | null
+      referencia_vista?: 'interna' | 'externa' | null
+      cadeirinha?: string | null
       campos_extras: Record<string, string | number>
       medido: boolean
       medido_em?: string | null
