@@ -48,6 +48,60 @@ function obj(v: unknown): Record<string, any> {
   return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}
 }
 
+function snapshotAprendizadoWVetro(o: any, numeroWvetro: string) {
+  return {
+    origem_aprendizado: 'wvetro_importacao',
+    numero_wvetro: numeroWvetro || null,
+    cliente_nome: o?.cliente_nome || null,
+    cliente_whatsapp: o?.cliente_whatsapp || null,
+    cidade: o?.cidade || null,
+    acabamento: o?.acabamento || null,
+    acabamento_outro_texto: o?.acabamento_outro_texto || null,
+    contramarco: o?.contramarco || null,
+    tipo_medida: o?.tipo_medida || null,
+    tipo_esquadria: o?.tipo_esquadria || null,
+    largura_mm: o?.largura_mm ?? null,
+    altura_mm: o?.altura_mm ?? null,
+    quantidade: o?.quantidade ?? null,
+    valor_estimado: o?.valor_estimado ?? null,
+    itens: Array.isArray(o?.itens) ? o.itens : [],
+  }
+}
+
+function diferencasAprendizado(original: Record<string, any>, final: Record<string, any>) {
+  const out: Record<string, { antes: any; depois: any }> = {}
+  for (const chave of Object.keys(final)) {
+    if (chave === 'origem_aprendizado' || chave === 'numero_wvetro') continue
+    if (JSON.stringify(original?.[chave] ?? null) !== JSON.stringify(final?.[chave] ?? null)) {
+      out[chave] = { antes: original?.[chave] ?? null, depois: final?.[chave] ?? null }
+    }
+  }
+  return out
+}
+
+function patchCorrecaoWVetro(raw: any) {
+  const c = obj(raw)
+  const itens = Array.isArray(c.itens) ? c.itens : null
+  return {
+    cliente_nome: c.cliente_nome ?? null,
+    cliente_whatsapp: c.cliente_whatsapp ?? null,
+    cidade: c.cidade ?? null,
+    acabamento: c.acabamento ?? null,
+    acabamento_outro_texto: c.acabamento === 'outro' ? (c.acabamento_outro_texto ?? null) : null,
+    contramarco: c.contramarco ?? null,
+    tipo_medida: c.tipo_medida ?? null,
+    temperatura: c.temperatura ?? null,
+    arquiteto_nome: c.arquiteto_nome ?? null,
+    arquiteto_contato: c.arquiteto_contato ?? null,
+    itens: itens ?? [],
+    valor_estimado: c.valor_estimado ?? null,
+    tipo_esquadria: itens?.[0]?.tipo_esquadria || c.tipo_esquadria || 'outro',
+    largura_mm: itens?.[0]?.largura_mm ?? c.largura_mm ?? null,
+    altura_mm: itens?.[0]?.altura_mm ?? c.altura_mm ?? null,
+    quantidade: itens?.[0]?.quantidade ?? c.quantidade ?? 1,
+  }
+}
+
 function nomeCliente(p: Record<string, any>) {
   return txt(p.PessoaNome, p.ClienteNome, p.NomeCliente, p.RazaoSocial, p.Nome)
 }
@@ -600,7 +654,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (acao === 'validar_importacao') {
+    if (acao === 'validar_importacao' || acao === 'corrigir_importacao') {
       const fluxoAtual = obj(alvo.wvetro_fluxo)
       const numeroWvetro = txt(fluxoAtual.numero, fluxoAtual.numero_wvetro)
       const origemWvetro = txt(fluxoAtual.origem).toLowerCase().includes('wvetro')
@@ -608,10 +662,25 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Este card não é um orçamento importado do W.Vetro.' }, { status: 409 })
       }
 
+      const original = snapshotAprendizadoWVetro(alvo, numeroWvetro)
+      const corrigindo = acao === 'corrigir_importacao'
+      const patchCorrecao = corrigindo ? patchCorrecaoWVetro(body.correcao) : {}
+      const candidatoFinal = corrigindo ? { ...alvo, ...patchCorrecao } : alvo
+      const final = snapshotAprendizadoWVetro(candidatoFinal, numeroWvetro)
+      const diffs = diferencasAprendizado(original, final)
+
+      if (corrigindo && Object.keys(diffs).length === 0) {
+        return NextResponse.json({
+          error: 'Faça ao menos uma correção no orçamento antes de usar “Corrigir e ensinar”.',
+        }, { status: 400 })
+      }
+
       const agora = new Date().toISOString()
       const fluxoValidado = {
         ...fluxoAtual,
         validacao_status: 'validado',
+        validacao_resultado: corrigindo ? 'corrigido' : 'correto',
+        aprendizado_feedback_em: agora,
         validado_em: agora,
         validado_por_id: usuario.id,
         validado_por_nome: usuario.nome || 'Usuário',
@@ -620,6 +689,7 @@ export async function POST(req: NextRequest) {
       const { data: atualizado, error: validarErro } = await supabaseAdmin
         .from('orcamentos')
         .update({
+          ...(corrigindo ? patchCorrecao : {}),
           wvetro_fluxo: fluxoValidado,
           updated_at: agora,
         })
@@ -628,6 +698,21 @@ export async function POST(req: NextRequest) {
         .select('*')
         .single()
       if (validarErro) throw validarErro
+
+      const { error: feedbackErro } = await supabaseAdmin
+        .from('ai_orcamento_feedback')
+        .insert({
+          empresa_id: usuario.empresa_id,
+          orcamento_id: alvo.id,
+          intake_id: null,
+          avaliacao: corrigindo ? 'corrigido' : 'validado',
+          resultado_original: original,
+          resultado_final: snapshotAprendizadoWVetro(atualizado, numeroWvetro),
+          diferencas: corrigindo ? diffs : {},
+          usuario_id: usuario.id,
+          usuario_nome: usuario.nome || null,
+        })
+      if (feedbackErro) throw feedbackErro
 
       const pacoteTecnico = await materializarPacoteTecnicoWVetro(alvo.id, usuario)
         .catch((erro) => ({
@@ -638,10 +723,16 @@ export async function POST(req: NextRequest) {
       await inserirHistorico(
         alvo.id,
         usuario,
-        'Validou orçamento importado do W.Vetro',
+        corrigindo
+          ? 'Corrigiu orçamento W.Vetro e ensinou a IA'
+          : 'Validou orçamento importado do W.Vetro',
         pacoteTecnico.ok
-          ? `W.Vetro #${numeroWvetro} conferido, liberado e com pacote técnico de materiais gerado.`
-          : `W.Vetro #${numeroWvetro} conferido e liberado. Pacote técnico pendente: ${pacoteTecnico.error}`,
+          ? (corrigindo
+              ? `W.Vetro #${numeroWvetro} corrigido, aprendizado supervisionado registrado e pacote técnico gerado.`
+              : `W.Vetro #${numeroWvetro} conferido, aprendizado validado e pacote técnico de materiais gerado.`)
+          : (corrigindo
+              ? `W.Vetro #${numeroWvetro} corrigido e aprendizado registrado. Pacote técnico pendente: ${pacoteTecnico.error}`
+              : `W.Vetro #${numeroWvetro} conferido e aprendizado validado. Pacote técnico pendente: ${pacoteTecnico.error}`),
       )
 
       return NextResponse.json({
@@ -649,9 +740,18 @@ export async function POST(req: NextRequest) {
         orcamento: atualizado,
         numeroWvetro,
         pacoteTecnico,
+        aprendizado: {
+          registrado: true,
+          resultado: corrigindo ? 'corrigido' : 'correto',
+          diferencas: diffs,
+        },
         mensagem: pacoteTecnico.ok
-          ? `Orçamento W.Vetro #${numeroWvetro} validado com materiais técnicos carregados.`
-          : `Orçamento W.Vetro #${numeroWvetro} validado. Materiais ainda precisam ser sincronizados: ${pacoteTecnico.error}`,
+          ? (corrigindo
+              ? `Orçamento W.Vetro #${numeroWvetro} corrigido, validado e usado como aprendizado da IA.`
+              : `Orçamento W.Vetro #${numeroWvetro} está correto, foi validado e registrado como exemplo para a IA.`)
+          : (corrigindo
+              ? `Correção do W.Vetro #${numeroWvetro} aprendida pela IA. Materiais ainda precisam ser sincronizados: ${pacoteTecnico.error}`
+              : `W.Vetro #${numeroWvetro} validado e registrado para aprendizado. Materiais ainda precisam ser sincronizados: ${pacoteTecnico.error}`),
       })
     }
 
