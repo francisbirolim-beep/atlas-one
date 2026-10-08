@@ -26,7 +26,7 @@ function tempoRelativo(iso: string) {
   return `${Math.floor(h / 24)}d`
 }
 
-export default function HomeNotificationBell() {
+export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?: boolean } = {}) {
   const router = useRouter()
   const [aberto, setAberto] = useState(false)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -152,7 +152,7 @@ export default function HomeNotificationBell() {
   }
 
   return (
-    <div className="relative">
+    <div className={toastOnly ? 'relative [&>button:first-child]:hidden' : 'relative'}>
       <button type="button" onClick={() => setAberto(v => !v)} className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50" title="Notificações">
         <Bell size={17}/>
         {naoLidas > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{naoLidas > 99 ? '99+' : naoLidas}</span>}
