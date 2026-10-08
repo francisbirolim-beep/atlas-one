@@ -436,7 +436,10 @@ export async function POST(req: NextRequest) {
           error: 'O orçamento escolhido não foi encontrado nem na consulta recente nem no histórico W.Vetro salvo no Atlas.',
         }, { status: 404 })
       }
-      if (!nomesClientesCompativeis(nomeCandidato, alvo.cliente_nome)) {
+      // Candidatos recentes só entram por nome compatível automático.
+      // No histórico, a lista também admite "mesmo primeiro nome" para a Keila
+      // validar manualmente; o clique "Usar este" é justamente essa confirmação.
+      if (!candidatoHistorico && !nomesClientesCompativeis(nomeCandidato, alvo.cliente_nome)) {
         return NextResponse.json({
           error: `O W.Vetro #${numeroWvetro} pertence a "${nomeCandidato}" e não pode ser vinculado ao cliente "${alvo.cliente_nome}".`,
         }, { status: 409 })
@@ -453,6 +456,38 @@ export async function POST(req: NextRequest) {
         )
         const fonteId = txt(aprovado?.orcamentoAtlasId)
         if (!fonteId) throw new Error('O histórico foi validado, mas o orçamento Atlas de apoio não foi criado.')
+
+        // Tenta enriquecer o snapshot histórico com o payload completo da API
+        // (perfis, acessórios, vidros e variáveis). Se o W.Vetro antigo não
+        // responder, o fallback histórico validado continua disponível.
+        const dataHistorica = txt(candidatoHistorico?.data)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dataHistorica)) {
+          try {
+            const reqSyncHistorico = new NextRequest(
+              new URL('/api/integracoes/wvetro/orcamentos/sincronizar', req.nextUrl.origin),
+              {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  inicio: dataHistorica,
+                  fim: dataHistorica,
+                  forcar: true,
+                  numerosWvetro: [numeroWvetro],
+                  modo: 'vincular_kanban_historico',
+                  clienteAlvoId: alvo.cliente_id,
+                  vinculoManualValidado: true,
+                }),
+              },
+            )
+            const syncHistorico = await sincronizar(reqSyncHistorico, usuario as UsuarioWVetro, 1)
+            if (!syncHistorico.ok) {
+              const detalhe = await syncHistorico.json().catch(() => ({}))
+              console.warn('W.Vetro histórico validado, mas enriquecimento ao vivo falhou:', detalhe)
+            }
+          } catch (e) {
+            console.warn('Falha não bloqueante ao enriquecer W.Vetro histórico:', e)
+          }
+        }
 
         const { data: fonte, error: fonteErro } = await supabaseAdmin
           .from('orcamentos')
