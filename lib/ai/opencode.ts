@@ -381,103 +381,150 @@ async function consultarOpenCodePublicFree(params: {
   )
   const temImagem = anexosImagem.length > 0
 
+  // LongCat 2.5 e MiMo 2.6 são multimodais. Mantemos mais de um modelo
+  // porque a disponibilidade dos gratuitos do OpenCode muda com frequência.
   const modelos = String(
     temImagem
-      ? (process.env.OPENCODE_PUBLIC_FREE_VISION_MODELS || 'mimo-v2.6-flash-free,longcat-2.5-preview-free')
+      ? (process.env.OPENCODE_PUBLIC_FREE_VISION_MODELS ||
+        'longcat-2.5-preview-free,mimo-v2.6-flash-free,fledge-alpha-free,step-5-preview-free')
       : (process.env.OPENCODE_PUBLIC_FREE_MODELS ||
         'mimo-v2.6-flash-free,ling-3.1-flash-free,nemotron-3.5-lightning-free,space-bunny-free')
   )
     .split(',')
     .map(v => v.trim())
     .filter(Boolean)
-    .slice(0, 4)
+    .slice(0, 6)
 
   if (!modelos.length) return null
 
   const tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }> = []
   const endpoint = 'https://opencode.ai/inference/openai/v1/chat/completions'
 
+  const imagens = anexosImagem.map(anexo => ({
+    type: 'image_url',
+    image_url: {
+      url: `data:${String(anexo.mediaType || 'image/jpeg').split(';')[0]};base64,${String(anexo.dados || '').trim()}`,
+    },
+  }))
   const conteudoUsuario: any = temImagem
-    ? [
-        { type: 'text', text: params.prompt },
-        ...anexosImagem.map(anexo => ({
-          type: 'image_url',
-          image_url: {
-            url: `data:${String(anexo.mediaType || 'image/jpeg').split(';')[0]};base64,${String(anexo.dados || '').trim()}`,
-            detail: 'high',
-          },
-        })),
-      ]
+    ? [{ type: 'text', text: params.prompt }, ...imagens]
     : params.prompt
 
+  function respostaTexto(data: any) {
+    const conteudoResposta = data?.choices?.[0]?.message?.content
+    return typeof conteudoResposta === 'string'
+      ? conteudoResposta.trim()
+      : Array.isArray(conteudoResposta)
+        ? conteudoResposta
+            .map((parte: any) => typeof parte?.text === 'string' ? parte.text : '')
+            .filter(Boolean)
+            .join('\n')
+            .trim()
+        : String(data?.choices?.[0]?.text || data?.output_text || '').trim()
+  }
+
   for (const model of modelos) {
-    const controller = new AbortController()
-    const timeoutMs = temImagem ? 35_000 : 18_000
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const resp = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: params.system },
-            { role: 'user', content: conteudoUsuario },
-          ],
-          temperature: 0.1,
-          max_tokens: temImagem ? 1200 : 2200,
-          stream: false,
-        }),
-        signal: controller.signal,
-        cache: 'no-store',
-      })
+    const timeoutMs = temImagem ? 40_000 : 18_000
 
-      const texto = await resp.text()
-      let data: any = {}
-      try { data = texto ? JSON.parse(texto) : {} } catch { data = { text: texto } }
+    // Alguns gateways OpenAI-compatible rejeitam campos opcionais como
+    // image_url.detail ou temperature para modelos multimodais. Primeiro
+    // mandamos o payload mínimo e, em caso de 400, tentamos uma segunda
+    // forma ainda mais simples sem mensagem system separada.
+    const variantes = temImagem
+      ? [
+          {
+            nome: 'multimodal-minimo',
+            body: {
+              model,
+              messages: [
+                { role: 'system', content: params.system },
+                { role: 'user', content: conteudoUsuario },
+              ],
+              max_tokens: 900,
+              stream: false,
+            },
+          },
+          {
+            nome: 'multimodal-compat',
+            body: {
+              model,
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: [params.system, '', params.prompt].filter(Boolean).join('\n') },
+                    ...imagens,
+                  ],
+                },
+              ],
+              max_tokens: 900,
+              stream: false,
+            },
+          },
+        ]
+      : [
+          {
+            nome: 'texto',
+            body: {
+              model,
+              messages: [
+                { role: 'system', content: params.system },
+                { role: 'user', content: conteudoUsuario },
+              ],
+              temperature: 0.1,
+              max_tokens: 2200,
+              stream: false,
+            },
+          },
+        ]
 
-      if (!resp.ok) {
-        const detalhe = String(
-          data?.error?.message || data?.error || data?.message || data?.text || ('OpenCode public HTTP ' + resp.status)
-        ).slice(0, 300)
-        tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe })
-        continue
+    for (const variante of variantes) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(variante.body),
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+
+        const texto = await resp.text()
+        let data: any = {}
+        try { data = texto ? JSON.parse(texto) : {} } catch { data = { text: texto } }
+
+        if (!resp.ok) {
+          const detalhe = String(
+            data?.error?.message || data?.error || data?.message || data?.text || ('OpenCode public HTTP ' + resp.status)
+          ).slice(0, 300)
+          tentativas.push({ rota: 'opencode-public-free:' + model + ':' + variante.nome, ok: false, detalhe })
+          // Só vale tentar a forma compatibilidade se o formato foi rejeitado.
+          if (resp.status !== 400 && resp.status !== 422) break
+          continue
+        }
+
+        const resposta = respostaTexto(data)
+        if (!resposta) {
+          tentativas.push({ rota: 'opencode-public-free:' + model + ':' + variante.nome, ok: false, detalhe: 'Resposta vazia' })
+          continue
+        }
+
+        tentativas.push({ rota: 'opencode-public-free:' + model + ':' + variante.nome, ok: true })
+        return { resposta, modelId: model, tentativas }
+      } catch (e: any) {
+        const detalhe = e?.name === 'AbortError'
+          ? `timeout ${Math.round(timeoutMs / 1000)}s`
+          : String(e?.message || e || 'falha').slice(0, 300)
+        tentativas.push({ rota: 'opencode-public-free:' + model + ':' + variante.nome, ok: false, detalhe })
+      } finally {
+        clearTimeout(timeout)
       }
-
-      const conteudoResposta = data?.choices?.[0]?.message?.content
-      const resposta = typeof conteudoResposta === 'string'
-        ? conteudoResposta.trim()
-        : Array.isArray(conteudoResposta)
-          ? conteudoResposta
-              .map((parte: any) => typeof parte?.text === 'string' ? parte.text : '')
-              .filter(Boolean)
-              .join('\n')
-              .trim()
-          : String(
-              data?.choices?.[0]?.text ||
-              data?.output_text ||
-              ''
-            ).trim()
-
-      if (!resposta) {
-        tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe: 'Resposta vazia' })
-        continue
-      }
-
-      tentativas.push({ rota: 'opencode-public-free:' + model, ok: true })
-      return { resposta, modelId: model, tentativas }
-    } catch (e: any) {
-      const detalhe = e?.name === 'AbortError'
-        ? `timeout ${Math.round(timeoutMs / 1000)}s`
-        : String(e?.message || e || 'falha').slice(0, 300)
-      tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe })
-    } finally {
-      clearTimeout(timeout)
     }
   }
 
   const erro: any = new Error(
-    tentativas.map(t => t.rota + ': ' + (t.ok ? 'ok' : (t.detalhe || 'falhou'))).join(' | ').slice(0, 800)
+    tentativas.map(t => t.rota + ': ' + (t.ok ? 'ok' : (t.detalhe || 'falhou'))).join(' | ').slice(0, 1200)
   )
   erro.tentativas = tentativas
   throw erro
