@@ -383,7 +383,7 @@ async function consultarOpenCodePublicFree(params: {
 
   const modelos = String(
     temImagem
-      ? (process.env.OPENCODE_PUBLIC_FREE_VISION_MODELS || 'mimo-v2.6-flash-free')
+      ? (process.env.OPENCODE_PUBLIC_FREE_VISION_MODELS || 'mimo-v2.6-flash-free,longcat-2.5-preview-free')
       : (process.env.OPENCODE_PUBLIC_FREE_MODELS ||
         'mimo-v2.6-flash-free,ling-3.1-flash-free,nemotron-3.5-lightning-free,space-bunny-free')
   )
