@@ -95,10 +95,14 @@ type WVetroCandidatoKanban = {
   valor: number
   situacao?: string | null
   data?: string | null
-  fonte: 'orcamento' | 'pedido'
+  fonte: 'orcamento' | 'pedido' | 'historico'
   nome_exato: boolean
   atlas_id?: string | null
   atlas_numero?: number | null
+  historico_id?: string | null
+  quantidade_itens?: number | null
+  tipo_correspondencia?: 'nome_exato' | 'primeiro_nome' | string | null
+  status_validacao?: 'pendente' | 'aprovado' | 'rejeitado' | 'outro_cliente' | string | null
 }
 
 function fluxoWVetro(card: OrcamentoRapido | null | undefined): Record<string, any> {
@@ -1929,8 +1933,18 @@ className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg
 {candidatosWVetro.map(c => (
 <div key={c.numero} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5 ${c.nome_exato ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
 <div className="min-w-0">
+<div className="flex flex-wrap items-center gap-1.5">
 <p className="text-xs font-semibold text-slate-700">W.Vetro #{c.numero} · {c.cliente}</p>
-<p className="text-[11px] text-slate-500">{c.data || 'sem data'} · {formatarMoedaBRL(c.valor)}{c.situacao ? ` · situação ${c.situacao}` : ''}{c.atlas_numero ? ` · já importado no Atlas #${c.atlas_numero}` : ''}</p>
+{c.nome_exato ? (
+<span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">NOME EXATO</span>
+) : c.tipo_correspondencia === 'primeiro_nome' ? (
+<span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">MESMO PRIMEIRO NOME</span>
+) : null}
+{c.status_validacao === 'aprovado' && (
+<span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">JÁ VALIDADO</span>
+)}
+</div>
+<p className="text-[11px] text-slate-500">{c.data || 'sem data'} · {formatarMoedaBRL(c.valor)}{c.quantidade_itens ? ` · ${c.quantidade_itens} item(ns)` : ''}{c.situacao ? ` · situação ${c.situacao}` : ''}{c.atlas_numero ? ` · já importado no Atlas #${c.atlas_numero}` : ''}</p>
 </div>
 <button
 type="button"
