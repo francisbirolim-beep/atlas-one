@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { consultarOpenCode, statusOpenCode } from '@/lib/ai/opencode'
+import { consultarOpenCode } from '@/lib/ai/opencode'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -37,15 +37,6 @@ export async function POST(req: NextRequest) {
     const eixo = body?.eixo === 'altura' ? 'altura' : 'largura'
     if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
       return NextResponse.json({ error: 'Foto inválida' }, { status: 400 })
-    }
-
-    const status = await statusOpenCode()
-    if (!status.configurado) {
-      return NextResponse.json({
-        error: 'Foto salva, mas o runtime gratuito de visão ainda não está conectado.',
-        codigo: 'FREE_AI_RUNTIME_MISSING',
-        paidFallbackUsed: false,
-      }, { status: 503 })
     }
 
     const origem = await fetch(imageUrl, { cache: 'no-store' })
