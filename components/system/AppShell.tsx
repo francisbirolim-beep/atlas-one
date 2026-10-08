@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import { medicaoIdDaRota } from '@/lib/medicaoRota'
 import Sidebar from '@/components/Sidebar'
 import AppTopbar from '@/components/system/AppTopbar'
-import HomeNotificationBell from '@/components/system/HomeNotificationBell'
 import HomeDashboard from '@/components/system/HomeDashboard'
 import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
@@ -15,6 +14,7 @@ import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
 import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
+import ChatNotificationToast from '@/components/system/ChatNotificationToast'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -32,7 +32,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
-      {ehWhatsAppAtendimento && <HomeNotificationBell toastOnly />}
       {!ehWhatsAppAtendimento && (
         <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
           <Sidebar />
@@ -41,6 +40,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {!ehWhatsAppAtendimento && <MobileNavigationControls />}
       <div className={`atlas-app-content min-w-0 w-full max-w-full flex-1 overflow-x-hidden ${ehWhatsAppAtendimento ? 'h-screen bg-white overflow-hidden' : 'bg-slate-50 md:h-screen md:overflow-y-auto'}`}>
         {!ehWhatsAppAtendimento && <AppTopbar />}
+        {ehWhatsAppAtendimento && <ChatNotificationToast />}
         <main className={`atlas-app-main atlas-main-surface w-full max-w-full overflow-x-hidden ${ehWhatsAppAtendimento ? 'min-h-screen bg-white pb-0' : 'min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0'} ${ehHome ? 'atlas-home-v2' : ''}`}>
           {ehHome && <HomeDashboard />}
           {!ehWhatsAppAtendimento && <MobileFavorites mostrarAcessoRapido={ehHome} />}
