@@ -577,7 +577,7 @@ async function syncChats(config: any, channel: any, rawChats: any[]) {
   return { total: chats.length, criadas, atualizadas };
 }
 
-async function syncHistoryMessages(config: any, channel: any, rawMessages: any[]) {
+async function syncHistoryMessages(config: any, channel: any, rawMessages: any[], gatewayToken = "") {
   const messages = (Array.isArray(rawMessages) ? rawMessages : [])
     .map((item: any) => {
       const whatsappMessageId = String(item?.whatsappMessageId || "").trim();
@@ -677,9 +677,58 @@ async function syncHistoryMessages(config: any, channel: any, rawMessages: any[]
     })
     .filter(Boolean);
 
+  const insertedByWhatsappId = new Map<string, any>();
   if (rows.length) {
-    const { error: insertError } = await db.from("atendimento_mensagens").insert(rows);
+    const { data: insertedRows, error: insertError } = await db
+      .from("atendimento_mensagens")
+      .insert(rows)
+      .select("id,whatsapp_message_id,conversa_id");
     if (insertError && insertError.code !== "23505") throw insertError;
+    for (const row of insertedRows || []) {
+      const id = String(row.whatsapp_message_id || "");
+      if (id) insertedByWhatsappId.set(id, row);
+    }
+
+    // Mensagens do grupo que chegam via sincronização de histórico também precisam
+    // alimentar a automação de orçamento. Isso cobre reconexões e mensagens enviadas
+    // pelo próprio aparelho, que o gateway local sincroniza como histórico.
+    // Limitamos a recuperação às últimas 72h para não recriar cards antigos.
+    const recoveryCutoffMs = Date.now() - 72 * 60 * 60 * 1000;
+    const recentGroupMessages = messages
+      .filter((msg: any) => {
+        if (msg.chatTipo !== "grupo") return false;
+        const ts = msg.timestamp ? new Date(msg.timestamp).getTime() : NaN;
+        return Number.isFinite(ts) && ts >= recoveryCutoffMs && insertedByWhatsappId.has(msg.whatsappMessageId);
+      })
+      .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    for (const msg of recentGroupMessages) {
+      const inserted = insertedByWhatsappId.get(msg.whatsappMessageId);
+      const conversation = conversationByJid.get(msg.chatJid);
+      if (!inserted || !conversation) continue;
+      await processGroupBudgetIntake(
+        config,
+        channel,
+        conversation,
+        {
+          chatTipo: msg.chatTipo,
+          chatJid: msg.chatJid,
+          participanteJid: msg.participanteJid,
+          participanteTelefone: msg.participanteTelefone,
+          participanteNome: msg.participanteNome,
+          whatsappMessageId: msg.whatsappMessageId,
+          messageType: msg.messageType,
+          texto: msg.texto,
+          timestamp: msg.timestamp,
+          fromMe: msg.fromMe,
+          payload: { ...(msg.payload || {}), historico: true },
+        },
+        inserted.id,
+        msg.texto,
+        msg.timestamp || new Date().toISOString(),
+        gatewayToken,
+      );
+    }
   }
 
   const latestByJid = new Map<string, any>();
@@ -2128,7 +2177,7 @@ Deno.serve(async (req) => {
     }
 
     if (type === "history_messages_sync") {
-      const result = await syncHistoryMessages(config, channel, body.messages || []);
+      const result = await syncHistoryMessages(config, channel, body.messages || [], gatewayToken);
       return reply({ ok: true, ...result });
     }
 
