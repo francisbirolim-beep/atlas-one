@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Bell, CheckCheck, Settings, Volume2, VolumeX } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Bell, CheckCheck, MessageCircle, Settings, Volume2, VolumeX } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
   PREFERENCIAS_PADRAO,
@@ -26,11 +27,38 @@ function tempoRelativo(iso: string) {
 }
 
 export default function HomeNotificationBell() {
+  const router = useRouter()
   const [aberto, setAberto] = useState(false)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [preferencias, setPreferencias] = useState<NotificacaoPreferencias | null>(null)
+  const [toast, setToast] = useState<Notificacao | null>(null)
   const preferenciasRef = useRef<NotificacaoPreferencias | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function categoriaAtiva(n: Notificacao, prefs: NotificacaoPreferencias | null) {
+    const atual = prefs || PREFERENCIAS_PADRAO
+    return n.categoria === 'tarefas' ? atual.tarefas
+      : n.categoria === 'agenda' ? atual.agenda
+      : n.categoria === 'chat' ? atual.chat
+      : atual.operacao
+  }
+
+  function origemToast(n: Notificacao) {
+    const href = n.href || ''
+    if (href.startsWith('/chat')) return 'Conversa interna'
+    if (href.startsWith('/whatsapp')) return 'WhatsApp'
+    return n.categoria === 'chat' ? 'Mensagem' : 'Atlas One'
+  }
+
+  function mostrarToast(n: Notificacao) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(n)
+    toastTimerRef.current = setTimeout(() => {
+      setToast(atual => atual?.id === n.id ? null : atual)
+      toastTimerRef.current = null
+    }, 5000)
+  }
 
   function tocarSom(volume?: number) {
     try {
@@ -70,15 +98,16 @@ export default function HomeNotificationBell() {
       limpar = assinarNovasNotificacoes(u.id, nova => {
         setNotificacoes(prev => [nova, ...prev.filter(n => n.id !== nova.id)].slice(0, 30))
         const atual = preferenciasRef.current
-        if (!atual?.som_ativo) return
-        const categoriaAtiva = nova.categoria === 'tarefas' ? atual.tarefas
-          : nova.categoria === 'agenda' ? atual.agenda
-          : nova.categoria === 'chat' ? atual.chat
-          : atual.operacao
-        if (categoriaAtiva) tocarSom(atual.som_volume)
+        const ativa = categoriaAtiva(nova, atual)
+        if (nova.categoria === 'chat' && ativa) mostrarToast(nova)
+        if (atual?.som_ativo && ativa) tocarSom(atual.som_volume)
       })
     })
     return () => { ativo = false; limpar?.() }
+  }, [])
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
   }, [])
 
   const naoLidas = useMemo(() => notificacoes.filter(n => !n.lida_em).length, [notificacoes])
@@ -90,6 +119,14 @@ export default function HomeNotificationBell() {
       await marcarNotificacaoLida(n.id)
     }
     setAberto(false)
+  }
+
+  async function abrirToast(n: Notificacao) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = null
+    setToast(null)
+    await abrirNotificacao(n)
+    router.push(n.href || '/')
   }
 
   async function marcarTodas() {
@@ -153,6 +190,25 @@ export default function HomeNotificationBell() {
           </Link>
         </div>
       </div>}
+
+      {toast && <button
+        type="button"
+        onClick={() => void abrirToast(toast)}
+        className="fixed right-4 top-4 z-[80] w-[min(92vw,360px)] rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-50 sm:right-6 sm:top-6"
+        aria-live="polite"
+      >
+        <span className="flex items-start gap-3">
+          <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
+            <MessageCircle size={18}/>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-bold uppercase tracking-wide text-blue-600">{origemToast(toast)}</span>
+            <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900">{toast.titulo}</span>
+            {toast.mensagem && <span className="mt-0.5 block truncate text-xs text-slate-500">{toast.mensagem}</span>}
+            <span className="mt-1 block text-[11px] font-semibold text-slate-400">Clique para abrir</span>
+          </span>
+        </span>
+      </button>}
     </div>
   )
 }
