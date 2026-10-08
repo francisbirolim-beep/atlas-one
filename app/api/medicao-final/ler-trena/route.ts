@@ -63,14 +63,14 @@ export async function POST(req: NextRequest) {
     const dados = Buffer.from(await blob.arrayBuffer()).toString('base64')
 
     const regraPosicional = eixo === 'largura'
-      ? 'LARGURA: leia os 3 valores do visor de CIMA PARA BAIXO. 1º valor (mais alto) = BAIXO; 2º = MEIO; 3º valor (mais baixo) = CIMA.'
-      : 'ALTURA: considerando a VISTA EXTERNA da tipologia, leia os 3 valores do visor de CIMA PARA BAIXO. 1º valor (mais alto) = DIREITA; 2º = MEIO; 3º valor (mais baixo) = ESQUERDA.'
+      ? 'LARGURA: leia e retorne os 3 valores na ORDEM VISUAL DO VISOR, DE CIMA PARA BAIXO. No aparelho usado pela Esquadrifácio: 1º valor (mais alto) = CIMA; 2º = MEIO; 3º valor (mais baixo) = BAIXO. O Atlas fará depois o mapeamento para os campos Baixo/Meio/Cima.'
+      : 'ALTURA: considerando a VISTA EXTERNA da tipologia, leia e retorne os 3 valores do visor de CIMA PARA BAIXO. 1º valor = DIREITA; 2º = MEIO; 3º = ESQUERDA.'
 
     const prompt = [
       'Analise a foto do visor de uma trena/medidor laser digital usada em medição de esquadrias.',
       `O objetivo é extrair exatamente as três medidas de ${eixo} mostradas no visor e devolvê-las em milímetros.`,
       regraPosicional,
-      'A ordem é POSICIONAL na tela. Preserve rigorosamente a ordem visual de cima para baixo; NUNCA ordene os números pelo maior ou menor valor.',
+      'A resposta medidas_mm deve preservar rigorosamente a ordem VISUAL de cima para baixo. NUNCA reordene os números pelo maior/menor valor e NUNCA aplique outra inversão por conta própria.',
       'Use as três leituras numéricas principais de distância empilhadas verticalmente no visor. Ignore marca do aparelho, ícones, bateria, unidade e outros textos.',
       'É comum o visor mostrar metros com três casas decimais. Exemplo: 1.789 m = 1789 mm; 2.043 m = 2043 mm.',
       'Ponto ou vírgula podem ser separador decimal. Converta metros ou centímetros para milímetros quando a unidade estiver clara.',
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
       rota: resultado.rota,
       custoEstimado: 0,
       paidFallbackUsed: false,
+      ordemResposta: 'visual_cima_para_baixo',
     })
   } catch (e: any) {
     console.error('Erro ao ler trena por IA gratuita:', e)
