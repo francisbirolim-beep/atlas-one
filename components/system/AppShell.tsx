@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { medicaoIdDaRota } from '@/lib/medicaoRota'
 import Sidebar from '@/components/Sidebar'
 import AppTopbar from '@/components/system/AppTopbar'
+import HomeNotificationBell from '@/components/system/HomeNotificationBell'
 import HomeDashboard from '@/components/system/HomeDashboard'
 import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
@@ -31,6 +32,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
+      {ehWhatsAppAtendimento && <HomeNotificationBell toastOnly />}
       {!ehWhatsAppAtendimento && (
         <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
           <Sidebar />
