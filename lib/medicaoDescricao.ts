@@ -33,6 +33,17 @@ export function identificarItensMedicao(itens: MedicaoItem[], origem: ItemEsquad
       folhas: origemItem?.folhas || item.folhas || null,
       orcamento_largura_mm: origemItem?.largura_mm ?? item.orcamento_largura_mm ?? null,
       orcamento_altura_mm: origemItem?.altura_mm ?? item.orcamento_altura_mm ?? null,
+      // Nunca apaga uma medição de campo. Apenas recupera do orçamento/W.Vetro
+      // o que ainda estiver vazio no item da Medida Final.
+      largura_baixo_mm: item.largura_baixo_mm ?? origemItem?.largura_baixo_mm ?? null,
+      largura_meio_mm: item.largura_meio_mm ?? origemItem?.largura_meio_mm ?? null,
+      largura_cima_mm: item.largura_cima_mm ?? origemItem?.largura_cima_mm ?? null,
+      altura_direita_mm: item.altura_direita_mm ?? origemItem?.altura_direita_mm ?? null,
+      altura_meio_mm: item.altura_meio_mm ?? origemItem?.altura_meio_mm ?? null,
+      altura_esquerda_mm: item.altura_esquerda_mm ?? origemItem?.altura_esquerda_mm ?? null,
+      foto_larguras_url: item.foto_larguras_url || origemItem?.foto_larguras_url || null,
+      foto_alturas_url: item.foto_alturas_url || origemItem?.foto_alturas_url || null,
+      referencia_vista: item.referencia_vista || origemItem?.referencia_vista || null,
     }
   })
 }

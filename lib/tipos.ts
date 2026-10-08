@@ -143,6 +143,8 @@ largura_baixo_mm?: number | null
 // larguras / 3 alturas (mesmo padrão já usado na Medição Final).
 foto_larguras_url?: string | null
       foto_alturas_url?: string | null
+      referencia_vista?: 'interna' | 'externa' | null
+      cadeirinha?: string | null
       // Fase 8: a esquadria pode vir de um Produto já cadastrado (Cadastro >
 // Produtos) em vez de digitada na mão — nome/medidas/preço puxam do
 // produto na hora de selecionar. Snapshot do preco na hora (não muda mais
