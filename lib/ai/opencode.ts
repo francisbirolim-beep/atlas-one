@@ -309,9 +309,21 @@ async function enviar(
 }> {
   const tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }> = []
 
+  const temImagem = anexos.some(a => String(a.mediaType || '').toLowerCase().startsWith('image/') && a.dados)
+  const modeloLocalVisual = /vision|llava|minicpm|qwen[^,]*vl|mimo|longcat/i.test(c.localModelId)
+
   // Circuit breaker: se o Ollama nao estiver rodando, nao atrasamos todas as chamadas
-  // por 5 minutos. Assim o FreeLLMAPI assume imediatamente durante a indisponibilidade local.
-  if (c.tentarLocal && Date.now() >= localBloqueadoAte) {
+  // por 5 minutos. Imagem nunca é enviada para um modelo local sabidamente só-texto
+  // (ex.: llama3.1), porque o gateway rejeita o anexo com HTTP 400.
+  if (temImagem && c.tentarLocal && !modeloLocalVisual) {
+    tentativas.push({
+      rota: 'ollama-local',
+      ok: false,
+      detalhe: `modelo ${c.localModelId} sem visão; tentativa ignorada`,
+    })
+  }
+
+  if (c.tentarLocal && (!temImagem || modeloLocalVisual) && Date.now() >= localBloqueadoAte) {
     try {
       const local = await enviarComModelo(
         c,
@@ -364,24 +376,44 @@ async function consultarOpenCodePublicFree(params: {
   prompt: string
   anexos?: OpenCodeAnexo[]
 }): Promise<{ resposta: string; modelId: string; tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }> } | null> {
-  const temImagem = (params.anexos || []).some(a => String(a.mediaType || '').toLowerCase().startsWith('image/') && a.dados)
-  if (temImagem) return null
+  const anexosImagem = (params.anexos || []).filter(a =>
+    String(a.mediaType || '').toLowerCase().startsWith('image/') && String(a.dados || '').trim()
+  )
+  const temImagem = anexosImagem.length > 0
 
   const modelos = String(
-    process.env.OPENCODE_PUBLIC_FREE_MODELS ||
-    'mimo-v2.6-flash-free,ling-3.1-flash-free,nemotron-3.5-lightning-free,space-bunny-free'
+    temImagem
+      ? (process.env.OPENCODE_PUBLIC_FREE_VISION_MODELS || 'mimo-v2.6-flash-free')
+      : (process.env.OPENCODE_PUBLIC_FREE_MODELS ||
+        'mimo-v2.6-flash-free,ling-3.1-flash-free,nemotron-3.5-lightning-free,space-bunny-free')
   )
     .split(',')
     .map(v => v.trim())
     .filter(Boolean)
     .slice(0, 4)
 
+  if (!modelos.length) return null
+
   const tentativas: Array<{ rota: string; ok: boolean; detalhe?: string }> = []
   const endpoint = 'https://opencode.ai/inference/openai/v1/chat/completions'
 
+  const conteudoUsuario: any = temImagem
+    ? [
+        { type: 'text', text: params.prompt },
+        ...anexosImagem.map(anexo => ({
+          type: 'image_url',
+          image_url: {
+            url: `data:${String(anexo.mediaType || 'image/jpeg').split(';')[0]};base64,${String(anexo.dados || '').trim()}`,
+            detail: 'high',
+          },
+        })),
+      ]
+    : params.prompt
+
   for (const model of modelos) {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 18_000)
+    const timeoutMs = temImagem ? 35_000 : 18_000
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const resp = await fetch(endpoint, {
         method: 'POST',
@@ -390,10 +422,10 @@ async function consultarOpenCodePublicFree(params: {
           model,
           messages: [
             { role: 'system', content: params.system },
-            { role: 'user', content: params.prompt },
+            { role: 'user', content: conteudoUsuario },
           ],
-          temperature: 0.2,
-          max_tokens: 2200,
+          temperature: 0.1,
+          max_tokens: temImagem ? 1200 : 2200,
           stream: false,
         }),
         signal: controller.signal,
@@ -412,12 +444,20 @@ async function consultarOpenCodePublicFree(params: {
         continue
       }
 
-      const resposta = String(
-        data?.choices?.[0]?.message?.content ||
-        data?.choices?.[0]?.text ||
-        data?.output_text ||
-        ''
-      ).trim()
+      const conteudoResposta = data?.choices?.[0]?.message?.content
+      const resposta = typeof conteudoResposta === 'string'
+        ? conteudoResposta.trim()
+        : Array.isArray(conteudoResposta)
+          ? conteudoResposta
+              .map((parte: any) => typeof parte?.text === 'string' ? parte.text : '')
+              .filter(Boolean)
+              .join('\n')
+              .trim()
+          : String(
+              data?.choices?.[0]?.text ||
+              data?.output_text ||
+              ''
+            ).trim()
 
       if (!resposta) {
         tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe: 'Resposta vazia' })
@@ -428,7 +468,7 @@ async function consultarOpenCodePublicFree(params: {
       return { resposta, modelId: model, tentativas }
     } catch (e: any) {
       const detalhe = e?.name === 'AbortError'
-        ? 'timeout 18s'
+        ? `timeout ${Math.round(timeoutMs / 1000)}s`
         : String(e?.message || e || 'falha').slice(0, 300)
       tentativas.push({ rota: 'opencode-public-free:' + model, ok: false, detalhe })
     } finally {
