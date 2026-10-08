@@ -15,7 +15,43 @@ function tokenGateway(req: NextRequest) {
   return req.headers.get('x-atlas-gateway-token')
 }
 
+async function proxySupabaseGateway(req: NextRequest) {
+  if (process.env.WHATSAPP_GATEWAY_EDGE_PROXY === 'false') return null
+
+  const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '')
+  const secretKey = String(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  if (!supabaseUrl || !secretKey) return null
+
+  const destino = new URL(`${supabaseUrl}/functions/v1/whatsapp-gateway`)
+  req.nextUrl.searchParams.forEach((value, key) => destino.searchParams.append(key, value))
+
+  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text()
+  const resposta = await fetch(destino, {
+    method: req.method,
+    headers: {
+      'authorization': `Bearer ${secretKey}`,
+      'apikey': secretKey,
+      'x-atlas-gateway-token': tokenGateway(req) || '',
+      'content-type': req.headers.get('content-type') || 'application/json',
+    },
+    body,
+    cache: 'no-store',
+  })
+
+  const texto = await resposta.text()
+  return new NextResponse(texto, {
+    status: resposta.status,
+    headers: {
+      'content-type': resposta.headers.get('content-type') || 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  })
+}
+
 export async function GET(req: NextRequest) {
+  const proxy = await proxySupabaseGateway(req)
+  if (proxy) return proxy
+
   const config = await autenticarGatewayWhatsApp(tokenGateway(req))
   if (!config) {
     return NextResponse.json({ error: 'Gateway nao autorizado.' }, { status: 401 })
@@ -35,6 +71,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const proxy = await proxySupabaseGateway(req)
+  if (proxy) return proxy
+
   const config = await autenticarGatewayWhatsApp(tokenGateway(req))
   if (!config) {
     return NextResponse.json({ error: 'Gateway nao autorizado.' }, { status: 401 })
