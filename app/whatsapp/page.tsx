@@ -386,15 +386,8 @@ export default function WhatsAppAtendimentoPage() {
         setErro('Não foi possível enviar a mensagem interna.')
         return
       }
-      const agora = new Date().toISOString()
-      setMensagensInternas(atual => [...atual, {
-        id: `local-${Date.now()}`,
-        conversa_id: conversaInternaAtiva.id,
-        usuario_id: eu?.id || null,
-        usuario_nome: eu?.nome || 'Você',
-        texto: corpo,
-        created_at: agora,
-      }])
+      const historico = await listarMensagensInternas(conversaInternaAtiva.id)
+      setMensagensInternas(historico)
       await atualizarConversasInternas()
     } finally {
       setEnviandoInterno(false)
