@@ -576,14 +576,18 @@ await registrarHistorico(cardSelecionado.id, usuario, 'Retomou o orçamento')
 listarHistorico(cardSelecionado.id).then(setHistorico)
 }
 
-async function apiWVetroKanban(acao: 'buscar' | 'vincular' | 'validar_importacao', numeroWvetro?: string) {
+async function apiWVetroKanban(
+acao: 'buscar' | 'vincular' | 'validar_importacao' | 'corrigir_importacao',
+numeroWvetro?: string,
+correcao?: OrcamentoRapido | null,
+) {
 const token = await tokenAtual()
 if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
 if (!cardSelecionado) throw new Error('Abra um orçamento antes de sincronizar.')
 const resp = await fetch('/api/integracoes/wvetro/orcamentos/kanban', {
 method: 'POST',
 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-body: JSON.stringify({ acao, cardId: cardSelecionado.id, numeroWvetro }),
+body: JSON.stringify({ acao, cardId: cardSelecionado.id, numeroWvetro, correcao }),
 })
 const json = await resp.json().catch(() => ({}))
 if (!resp.ok) throw new Error(json?.error || 'Falha ao consultar o W.Vetro.')
@@ -613,12 +617,16 @@ setSincronizandoWVetro(false)
 }
 }
 
-async function validarImportacaoWVetro() {
-if (!cardSelecionado || validandoWVetro) return
+async function validarImportacaoWVetro(modo: 'correto' | 'corrigir') {
+if (!cardSelecionado || !editando || validandoWVetro) return
 setValidandoWVetro(true)
 setMensagemWVetro('')
 try {
-const json = await apiWVetroKanban('validar_importacao')
+const json = await apiWVetroKanban(
+modo === 'corrigir' ? 'corrigir_importacao' : 'validar_importacao',
+undefined,
+modo === 'corrigir' ? editando : null,
+)
 const atualizado = json.orcamento as OrcamentoRapido
 if (atualizado?.id) {
 const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
@@ -627,7 +635,11 @@ setCardSelecionado(exibicao)
 setCards(prev => prev.map(c => c.id === exibicao.id ? exibicao : c))
 setHistorico(await listarHistorico(exibicao.id))
 }
-setMensagemWVetro(json.mensagem || 'Orçamento W.Vetro validado e liberado.')
+setMensagemWVetro(json.mensagem || (
+modo === 'corrigir'
+? 'Correção registrada e usada como aprendizado da IA.'
+: 'Orçamento W.Vetro validado e registrado como exemplo correto.'
+))
 } catch (e) {
 setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao validar o orçamento W.Vetro.')
 } finally {
@@ -1446,20 +1458,32 @@ W.Vetro #{numeroWVetroCard(cardSelecionado)} · {wvetroAguardandoValidacao(cardS
 </p>
 <p className="mt-1 text-[11px] text-slate-600">
 {wvetroAguardandoValidacao(cardSelecionado)
-? 'Confira valor, tipologias, perfis, acessórios, vidros e arquivos importados. Depois valide para liberar o avanço no Kanban.'
-: `Conferido por ${String(fluxoWVetro(cardSelecionado).validado_por_nome || 'usuário')} em ${formatarDataBR(fluxoWVetro(cardSelecionado).validado_em)}.`}
+? 'Confira valor, tipologias, perfis, acessórios, vidros e arquivos importados. Se estiver certo, valide. Se ajustar qualquer informação, use “Corrigir e ensinar” para a IA aprender.'
+: fluxoWVetro(cardSelecionado).validacao_resultado === 'corrigido'
+? `Corrigido e aprendido pela IA por ${String(fluxoWVetro(cardSelecionado).validado_por_nome || 'usuário')} em ${formatarDataBR(fluxoWVetro(cardSelecionado).validado_em)}.`
+: `Conferido e registrado como exemplo correto por ${String(fluxoWVetro(cardSelecionado).validado_por_nome || 'usuário')} em ${formatarDataBR(fluxoWVetro(cardSelecionado).validado_em)}.`}
 </p>
 </div>
 {wvetroAguardandoValidacao(cardSelecionado) && (
+<div className="grid grid-cols-2 gap-2">
 <button
 type="button"
-onClick={() => void validarImportacaoWVetro()}
+onClick={() => void validarImportacaoWVetro('correto')}
 disabled={validandoWVetro || sincronizandoWVetro}
-className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
 >
 {validandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-{validandoWVetro ? 'Validando...' : 'Validar importação'}
+{validandoWVetro ? 'Registrando...' : '✓ Está correto'}
 </button>
+<button
+type="button"
+onClick={() => void validarImportacaoWVetro('corrigir')}
+disabled={validandoWVetro || sincronizandoWVetro}
+className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+>
+{validandoWVetro ? 'Registrando...' : 'Corrigir e ensinar'}
+</button>
+</div>
 )}
 </div>
 </div>
