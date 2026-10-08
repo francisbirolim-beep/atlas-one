@@ -7,6 +7,7 @@ import { sincronizar } from '../sincronizar/route'
 import type { UsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { materializarPacoteTecnicoWVetro } from '@/lib/wvetroPacoteTecnicoServer'
+import { POST as candidatosClienteWVetro } from '../candidatos-cliente/route'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -120,6 +121,123 @@ async function listarRecentes(clienteNome: string) {
   return { inicio: inicioYmd, fim: fimYmd, todos, exatos }
 }
 
+async function consultarCandidatosHistoricos(
+  req: NextRequest,
+  clienteId: string,
+  acao: 'buscar' | 'aprovar' = 'buscar',
+  historicoId?: string,
+) {
+  if (!clienteId) return { candidatos: [] as any[] }
+  const authorization = req.headers.get('authorization') || ''
+  const subReq = new NextRequest(
+    new URL('/api/integracoes/wvetro/orcamentos/candidatos-cliente', req.nextUrl.origin),
+    {
+      method: 'POST',
+      headers: {
+        authorization,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ acao, clienteId, historicoId }),
+    },
+  )
+  const resp = await candidatosClienteWVetro(subReq)
+  const json = await resp.json().catch(() => ({}))
+  if (!resp.ok) {
+    throw new Error(json?.error || 'Falha ao consultar o histórico W.Vetro deste cliente.')
+  }
+  return json as Record<string, any>
+}
+
+function candidatoHistoricoParaKanban(c: any) {
+  return {
+    numero: txt(c?.numeroWvetro),
+    cliente: txt(c?.clienteNomeWvetro) || 'Cliente sem nome',
+    valor: num(c?.valor),
+    situacao: txt(c?.situacao) || null,
+    data: txt(c?.data) || null,
+    fonte: 'historico' as const,
+    nome_exato: c?.tipoCorrespondencia === 'nome_exato',
+    atlas_id: c?.orcamentoAtlasId || null,
+    atlas_numero: null,
+    historico_id: txt(c?.historicoId) || null,
+    quantidade_itens: Number(c?.quantidadeItens || 0),
+    tipo_correspondencia: txt(c?.tipoCorrespondencia) || null,
+    status_validacao: txt(c?.statusValidacao) || 'pendente',
+  }
+}
+
+function valorPreenchido(v: any) {
+  return !(v === null || v === undefined || v === '')
+}
+
+function mesclarItensPreservandoMedicao(alvoItensRaw: any, fonteItensRaw: any) {
+  const alvoItens = Array.isArray(alvoItensRaw) ? alvoItensRaw : []
+  const fonteItens = Array.isArray(fonteItensRaw) ? fonteItensRaw : []
+
+  if (!alvoItens.length) return { itens: fonteItens, divergencia: false }
+  if (!fonteItens.length) return { itens: alvoItens, divergencia: false }
+  if (alvoItens.length !== fonteItens.length) {
+    return { itens: alvoItens, divergencia: true }
+  }
+
+  const camposSempreDoCampo = [
+    'id',
+    'foto_url',
+    'foto_larguras_url',
+    'foto_alturas_url',
+    'largura_baixo_mm',
+    'largura_meio_mm',
+    'largura_cima_mm',
+    'altura_direita_mm',
+    'altura_meio_mm',
+    'altura_esquerda_mm',
+    'tipo_medida',
+  ]
+
+  const camposManuaisQuandoPreenchidos = [
+    'ambiente',
+    'descricao',
+    'observacao_producao',
+    'observacao_tempera',
+    'contramarco',
+    'cor',
+  ]
+
+  const itens = fonteItens.map((fonte: any, indice: number) => {
+    const alvo = alvoItens[indice] || {}
+    const merged: Record<string, any> = { ...(fonte || {}) }
+
+    for (const campo of camposSempreDoCampo) {
+      if (valorPreenchido(alvo?.[campo])) merged[campo] = alvo[campo]
+    }
+    for (const campo of camposManuaisQuandoPreenchidos) {
+      if (valorPreenchido(alvo?.[campo])) merged[campo] = alvo[campo]
+    }
+
+    const fotos = [
+      ...(Array.isArray(fonte?.foto_urls) ? fonte.foto_urls : []),
+      ...(Array.isArray(alvo?.foto_urls) ? alvo.foto_urls : []),
+      alvo?.foto_url,
+      alvo?.foto_larguras_url,
+      alvo?.foto_alturas_url,
+    ].filter(Boolean)
+    merged.foto_urls = Array.from(new Set(fotos))
+    if (alvo?.foto_url) merged.foto_url = alvo.foto_url
+
+    // Medida final coletada em campo sempre tem precedência sobre largura/altura
+    // comerciais do orçamento de origem.
+    if (String(alvo?.tipo_medida || '').toLowerCase() === 'final') {
+      if (valorPreenchido(alvo?.largura_mm)) merged.largura_mm = alvo.largura_mm
+      if (valorPreenchido(alvo?.altura_mm)) merged.altura_mm = alvo.altura_mm
+      merged.tipo_medida = 'final'
+    }
+
+    return merged
+  })
+
+  return { itens, divergencia: false }
+}
+
 async function inserirHistorico(orcamentoId: string, usuario: UsuarioTenant, acao: string, detalhes: string) {
   await supabaseAdmin.from('historico').insert({
     orcamento_id: orcamentoId,
@@ -133,9 +251,10 @@ async function inserirHistorico(orcamentoId: string, usuario: UsuarioTenant, aca
 async function mesclarFonteNoCard(empresaId: string, alvo: any, fonte: any, usuario: UsuarioTenant) {
   const fluxoFonte = obj(fonte.wvetro_fluxo)
   const anexos = juntarAnexos(alvo.anexos, fonte.anexos)
+  const mesclaItens = mesclarItensPreservandoMedicao(alvo.itens, fonte.itens)
   const patch: Record<string, any> = {
-    // Campos técnicos/comerciais que a ação "Sincronizar W.Vetro" explicitamente pediu para atualizar.
-    itens: fonte.itens,
+    // Traz a base técnica do W.Vetro sem apagar fotos e medidas coletadas em campo.
+    itens: mesclaItens.itens,
     tipo_esquadria: fonte.tipo_esquadria,
     largura_mm: fonte.largura_mm,
     altura_mm: fonte.altura_mm,
@@ -149,6 +268,7 @@ async function mesclarFonteNoCard(empresaId: string, alvo: any, fonte: any, usua
       vinculado_manualmente_em: new Date().toISOString(),
       vinculado_manualmente_por_id: usuario.id,
       vinculado_manualmente_por_nome: usuario.nome,
+      itens_preservados_por_divergencia: mesclaItens.divergencia || undefined,
     },
 
     // REGRA DE PRESERVAÇÃO: dados já informados no card não são apagados.
@@ -189,7 +309,7 @@ async function mesclarFonteNoCard(empresaId: string, alvo: any, fonte: any, usua
     if (esconderErro) throw esconderErro
   }
 
-  return atualizado
+  return { atualizado, divergenciaItens: mesclaItens.divergencia }
 }
 
 export async function POST(req: NextRequest) {
@@ -212,10 +332,32 @@ export async function POST(req: NextRequest) {
     if (!alvo) return NextResponse.json({ error: 'Orçamento do Kanban não encontrado.' }, { status: 404 })
 
     if (acao === 'buscar') {
-      const recentes = await listarRecentes(alvo.cliente_nome)
-      const candidatosBase = recentes.todos.filter(c => nomesClientesCompativeis(c.cliente, alvo.cliente_nome)).slice(0, 50)
-      const numeros = candidatosBase.map(c => c.numero)
-      const { data: locais } = numeros.length
+      let recentes: Awaited<ReturnType<typeof listarRecentes>> | null = null
+      let erroApiRecente = ''
+      try {
+        recentes = await listarRecentes(alvo.cliente_nome)
+      } catch (e) {
+        erroApiRecente = e instanceof Error ? e.message : 'API W.Vetro indisponível.'
+      }
+
+      const candidatosRecentes = (recentes?.todos || [])
+        .filter(c => nomesClientesCompativeis(c.cliente, alvo.cliente_nome))
+        .slice(0, 50)
+
+      let candidatosHistoricos: any[] = []
+      if (alvo.cliente_id) {
+        try {
+          const historicoJson = await consultarCandidatosHistoricos(req, alvo.cliente_id, 'buscar')
+          candidatosHistoricos = (historicoJson.candidatos || [])
+            .filter((x: any) => !['rejeitado', 'outro_cliente'].includes(String(x?.statusValidacao || '')))
+            .map(candidatoHistoricoParaKanban)
+        } catch (e) {
+          console.warn('Falha ao complementar candidatos históricos W.Vetro no Kanban:', e)
+        }
+      }
+
+      const numerosRecentes = candidatosRecentes.map(c => c.numero)
+      const { data: locais } = numerosRecentes.length
         ? await supabaseAdmin
             .from('orcamentos')
             .select('id,numero,wvetro_fluxo,modo_entrada')
@@ -226,26 +368,44 @@ export async function POST(req: NextRequest) {
       const localPorNumero = new Map<string, any>()
       for (const o of locais || []) {
         const n = txt(obj(o.wvetro_fluxo).numero)
-        if (n && numeros.includes(n) && o.modo_entrada !== 'wvetro_api_vinculado') localPorNumero.set(n, o)
+        if (n && numerosRecentes.includes(n) && o.modo_entrada !== 'wvetro_api_vinculado') localPorNumero.set(n, o)
       }
 
-      const candidatos = candidatosBase.map(c => ({
-        ...c,
-        nome_exato: norm(c.cliente) === norm(alvo.cliente_nome),
-        atlas_id: localPorNumero.get(c.numero)?.id || null,
-        atlas_numero: localPorNumero.get(c.numero)?.numero || null,
-      }))
+      const porNumero = new Map<string, any>()
+      for (const c of candidatosHistoricos) {
+        if (c.numero) porNumero.set(c.numero, c)
+      }
+      for (const c of candidatosRecentes) {
+        const historico = porNumero.get(c.numero)
+        porNumero.set(c.numero, {
+          ...historico,
+          ...c,
+          fonte: c.fonte,
+          nome_exato: norm(c.cliente) === norm(alvo.cliente_nome),
+          atlas_id: localPorNumero.get(c.numero)?.id || historico?.atlas_id || null,
+          atlas_numero: localPorNumero.get(c.numero)?.numero || historico?.atlas_numero || null,
+          historico_id: historico?.historico_id || null,
+          quantidade_itens: historico?.quantidade_itens || 0,
+          status_validacao: historico?.status_validacao || 'pendente',
+        })
+      }
+
+      const candidatos = Array.from(porNumero.values()).sort((a, b) =>
+        String(b.data || '').localeCompare(String(a.data || ''))
+      )
 
       return NextResponse.json({
         ok: true,
         cliente: alvo.cliente_nome,
-        inicio: recentes.inicio,
-        fim: recentes.fim,
+        inicio: recentes?.inicio || null,
+        fim: recentes?.fim || null,
         candidatos,
-        autoVincularNumero: candidatosBase.length === 1 ? candidatosBase[0].numero : null,
-        mensagem: candidatosBase.length
-          ? `${candidatosBase.length} orçamento(s) do W.Vetro encontrado(s) com nome compatível com este cliente.`
-          : 'Nenhum orçamento W.Vetro com nome compatível foi encontrado nos últimos 7 dias.',
+        autoVincularNumero: null,
+        mensagem: candidatos.length
+          ? `${candidatos.length} orçamento(s) W.Vetro encontrado(s), incluindo o histórico. Escolha o número correto para vincular.`
+          : erroApiRecente
+            ? `Nenhum candidato salvo foi encontrado e a consulta recente do W.Vetro falhou: ${erroApiRecente}`
+            : 'Nenhum orçamento W.Vetro compatível foi encontrado para este cliente.',
       })
     }
 
@@ -253,13 +413,81 @@ export async function POST(req: NextRequest) {
       const numeroWvetro = txt(body.numeroWvetro)
       if (!numeroWvetro) return NextResponse.json({ error: 'Escolha o orçamento W.Vetro.' }, { status: 400 })
 
-      const recentes = await listarRecentes(alvo.cliente_nome)
-      const candidato = recentes.todos.find(c => c.numero === numeroWvetro)
-      if (!candidato) return NextResponse.json({ error: 'O orçamento escolhido não apareceu no W.Vetro nos últimos 7 dias. Sincronize novamente ou confira o período.' }, { status: 404 })
-      if (!nomesClientesCompativeis(candidato.cliente, alvo.cliente_nome)) {
+      let recentes: Awaited<ReturnType<typeof listarRecentes>> | null = null
+      try {
+        recentes = await listarRecentes(alvo.cliente_nome)
+      } catch (e) {
+        console.warn('Consulta recente W.Vetro indisponível; tentando histórico salvo:', e)
+      }
+      const candidatoRecente = (recentes?.todos || []).find(c => c.numero === numeroWvetro) || null
+
+      let candidatoHistorico: any = null
+      if (alvo.cliente_id) {
+        const histJson = await consultarCandidatosHistoricos(req, alvo.cliente_id, 'buscar')
+        candidatoHistorico = (histJson.candidatos || []).find((x: any) =>
+          txt(x?.numeroWvetro) === numeroWvetro &&
+          !['rejeitado', 'outro_cliente'].includes(String(x?.statusValidacao || ''))
+        ) || null
+      }
+
+      const nomeCandidato = candidatoRecente?.cliente || candidatoHistorico?.clienteNomeWvetro || ''
+      if (!candidatoRecente && !candidatoHistorico) {
         return NextResponse.json({
-          error: `O W.Vetro #${numeroWvetro} pertence a "${candidato.cliente}" e não pode ser vinculado ao cliente "${alvo.cliente_nome}".`,
+          error: 'O orçamento escolhido não foi encontrado nem na consulta recente nem no histórico W.Vetro salvo no Atlas.',
+        }, { status: 404 })
+      }
+      if (!nomesClientesCompativeis(nomeCandidato, alvo.cliente_nome)) {
+        return NextResponse.json({
+          error: `O W.Vetro #${numeroWvetro} pertence a "${nomeCandidato}" e não pode ser vinculado ao cliente "${alvo.cliente_nome}".`,
         }, { status: 409 })
+      }
+
+      // Candidato histórico: o clique "Usar este" é a validação humana do nome+número.
+      // Reutiliza a mesma regra segura da Medida Final, inclusive para orçamentos antigos.
+      if (candidatoHistorico?.historicoId && alvo.cliente_id) {
+        const aprovado = await consultarCandidatosHistoricos(
+          req,
+          alvo.cliente_id,
+          'aprovar',
+          String(candidatoHistorico.historicoId),
+        )
+        const fonteId = txt(aprovado?.orcamentoAtlasId)
+        if (!fonteId) throw new Error('O histórico foi validado, mas o orçamento Atlas de apoio não foi criado.')
+
+        const { data: fonte, error: fonteErro } = await supabaseAdmin
+          .from('orcamentos')
+          .select('*')
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('id', fonteId)
+          .maybeSingle()
+        if (fonteErro) throw fonteErro
+        if (!fonte) throw new Error('Orçamento W.Vetro validado não encontrado no Atlas.')
+
+        const resultadoMescla = fonte.id === alvo.id
+          ? { atualizado: fonte, divergenciaItens: false }
+          : await mesclarFonteNoCard(usuario.empresa_id, alvo, fonte, usuario)
+
+        await inserirHistorico(
+          alvo.id,
+          usuario,
+          'Vinculou orçamento histórico do W.Vetro',
+          `W.Vetro #${numeroWvetro} validado manualmente para ${alvo.cliente_nome}. Fotos e medidas de campo do Atlas foram preservadas.`,
+        )
+
+        return NextResponse.json({
+          ok: true,
+          orcamento: resultadoMescla.atualizado,
+          numeroWvetro,
+          ocultadoId: fonte.id !== alvo.id ? fonte.id : null,
+          divergenciaItens: resultadoMescla.divergenciaItens,
+          mensagem: resultadoMescla.divergenciaItens
+            ? `W.Vetro #${numeroWvetro} vinculado. Como a quantidade de itens é diferente, as tipologias atuais do Atlas foram preservadas para conferência.`
+            : `W.Vetro #${numeroWvetro} vinculado. Dados técnicos foram atualizados sem apagar fotos nem medidas de campo.`,
+        })
+      }
+
+      if (!recentes || !candidatoRecente) {
+        return NextResponse.json({ error: 'Não foi possível recuperar o orçamento escolhido na API W.Vetro.' }, { status: 502 })
       }
 
       const { data: existentes } = await supabaseAdmin
@@ -270,8 +498,6 @@ export async function POST(req: NextRequest) {
 
       const ativoExistente = (existentes || []).find((o: any) => o.id !== alvo.id && o.modo_entrada !== 'wvetro_api_vinculado') || null
 
-      // Se ainda não existe outro orçamento Atlas para este número, pré-vincula o próprio card.
-      // Assim a sincronização atualiza ESTE registro e não cria um card duplicado.
       if (!ativoExistente) {
         const fluxoAtual = obj(alvo.wvetro_fluxo)
         const { error: preErro } = await supabaseAdmin
@@ -316,23 +542,26 @@ export async function POST(req: NextRequest) {
 
       const alvoAtual = (aposSync || []).find((o: any) => o.id === alvo.id) || alvo
       const fonteAtual = (aposSync || []).find((o: any) => o.id !== alvo.id && o.modo_entrada !== 'wvetro_api_vinculado') || null
-      const atualizado = fonteAtual
+      const resultadoMescla = fonteAtual
         ? await mesclarFonteNoCard(usuario.empresa_id, alvoAtual, fonteAtual, usuario)
-        : alvoAtual
+        : { atualizado: alvoAtual, divergenciaItens: false }
 
       await inserirHistorico(
         alvo.id,
         usuario,
         'Sincronizou orçamento do W.Vetro',
-        `W.Vetro #${numeroWvetro} vinculado ao card. Dados manuais e anexos existentes foram preservados.`,
+        `W.Vetro #${numeroWvetro} vinculado ao card. Fotos, medidas e anexos existentes foram preservados.`,
       )
 
       return NextResponse.json({
         ok: true,
-        orcamento: atualizado,
+        orcamento: resultadoMescla.atualizado,
         numeroWvetro,
         ocultadoId: fonteAtual?.id || null,
-        mensagem: `Orçamento W.Vetro #${numeroWvetro} sincronizado neste card sem apagar anexos ou dados manuais.`,
+        divergenciaItens: resultadoMescla.divergenciaItens,
+        mensagem: resultadoMescla.divergenciaItens
+          ? `W.Vetro #${numeroWvetro} vinculado, mas os itens têm quantidades diferentes. O Atlas preservou as tipologias atuais para conferência.`
+          : `Orçamento W.Vetro #${numeroWvetro} sincronizado sem apagar fotos nem medidas de campo.`,
       })
     }
 
