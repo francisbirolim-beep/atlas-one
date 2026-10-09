@@ -655,6 +655,40 @@ export async function POST(req: NextRequest) {
 
     await salvarMensagem(conversaId, 'assistant', resposta)
 
+    const estimativaResumo = contexto?.estimativa_orcamento && !contexto.estimativa_orcamento.erro
+      ? {
+          encontrado: Boolean(contexto.estimativa_orcamento.encontrado),
+          quantidade_comparaveis: Number(contexto.estimativa_orcamento.quantidadeComparaveis || 0),
+          confianca: contexto.estimativa_orcamento.confianca || null,
+          confianca_pct: Number(contexto.estimativa_orcamento.confiancaPct || 0),
+          estimativa: contexto.estimativa_orcamento.estimativa ?? null,
+          fonte: 'wvetro_validado',
+        }
+      : null
+
+    const { data: interacao } = await supabaseAdmin
+      .from('ai_interacoes')
+      .insert({
+        empresa_id: usuario.empresa_id,
+        contexto: 'geral',
+        usuario_id: usuario.id,
+        usuario_nome: usuario.nome || null,
+        pergunta: mensagemConsulta || mensagemTexto || 'Analisar anexo',
+        resposta,
+        modelo: providerId + '/' + modelId,
+        contexto_json: {
+          conversa_id: conversaId,
+          origem: 'atlas_ia_geral',
+          provider_id: providerId,
+          model_id: modelId,
+          estimativa_historica: estimativaResumo,
+          possui_anexo: Boolean(anexo),
+        },
+        status: 'ok',
+      })
+      .select('id')
+      .single()
+
     if (atividadeId) {
       await supabaseAdmin.from('ia_agente_atividade').update({
         status: 'concluido',
@@ -676,6 +710,7 @@ export async function POST(req: NextRequest) {
       pendingAction: null,
       messages,
       conversaId,
+      interacaoId: interacao?.id || null,
       provider: providerId,
       modelo: modelId,
       custoEstimado: 0,
