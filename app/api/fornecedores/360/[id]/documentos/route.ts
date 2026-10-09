@@ -64,7 +64,7 @@ async function lerRespostaComLimite(resposta: Response): Promise<Buffer> {
 }
 
 function normalizarCodigo(v: unknown) {
-  return texto(v, 80).toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return texto(v, 80).toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 function normalizarTexto(v: unknown) {
@@ -73,7 +73,7 @@ function normalizarTexto(v: unknown) {
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, ' ')
-    .trim()
+    .trim();
 }
 
 function categoriaPorDescricao(descricao: string) {
@@ -325,7 +325,8 @@ async function reconciliarItens(params: {
   return { total: itens.length, vinculados, criados, revisar }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await autenticarCompras(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 
@@ -350,7 +351,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ documentos: documentos || [], itens: itens || [], vinculos: vinculos || [] })
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await autenticarCompras(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 

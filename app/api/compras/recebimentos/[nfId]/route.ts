@@ -10,7 +10,7 @@ type ItemPayload = { nfItemId?: string; quantidadeRecebida?: number | null; quan
 type Payload = { dataRecebimento?: string; observacoes?: string; itens?: ItemPayload[] }
 function numero(v: unknown, padrao = 0) { const n = Number(v); return Number.isFinite(n) ? n : padrao }
 function texto(v: unknown, max = 1500) { return String(v ?? '').trim().slice(0, max) }
-function nomeSeguro(nome: string) { return (nome.split(/[\\/]/).pop() || 'foto.jpg').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0,120) }
+function nomeSeguro(nome: string) { return (nome.split(/[\\/]/).pop() || 'foto.jpg').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0,120); }
 function statusItem(qtdNf:number, acumulado:number, avariada:number){ if(avariada>0)return'avaria'; if(acumulado<qtdNf)return'falta'; if(acumulado>qtdNf)return'excesso'; return'ok' }
 
 async function carregarBase(nfId:string){
@@ -29,9 +29,13 @@ async function carregarBase(nfId:string){
   return{nf,itens:(itens||[]).map(i=>{const q=numero(i.quantidade);const a=acumulado.get(i.id)||{recebido:0,avariado:0};return{...i,produto:i.produto_id?produtos.get(i.produto_id)||null:null,quantidadeNf:q,jaRecebida:a.recebido,jaAvariada:a.avariado,saldo:Math.max(0,q-a.recebido),statusAcumulado:statusItem(q,a.recebido,a.avariado)}}),recebimentos:(recebimentos||[]).map(r=>({...r,fotos:fotosPorRecebimento.get(r.id)||[]}))}
 }
 
-export async function GET(req:NextRequest,{params}:{params:{nfId:string}}){const usuario=await autenticarCompras(req);if(!usuario)return NextResponse.json({error:'Sessão inválida.'},{status:401});try{const base=await carregarBase(params.nfId);if(!base)return NextResponse.json({error:'NF não encontrada.'},{status:404});return NextResponse.json(base)}catch(e){console.error(e);return NextResponse.json({error:'Não foi possível carregar a conferência.'},{status:500})}}
+export async function GET(req:NextRequest, props:{params: Promise<{nfId:string}>}) {
+  const params = await props.params;
+  const usuario=await autenticarCompras(req);if(!usuario)return NextResponse.json({error:'Sessão inválida.'},{status:401});try{const base=await carregarBase(params.nfId);if(!base)return NextResponse.json({error:'NF não encontrada.'},{status:404});return NextResponse.json(base)}catch(e){console.error(e);return NextResponse.json({error:'Não foi possível carregar a conferência.'},{status:500})}
+}
 
-export async function POST(req:NextRequest,{params}:{params:{nfId:string}}){
+export async function POST(req:NextRequest, props:{params: Promise<{nfId:string}>}) {
+  const params = await props.params;
   const usuario=await autenticarCompras(req);if(!usuario)return NextResponse.json({error:'Sessão inválida.'},{status:401});let recebimentoId:string|null=null;const arquivosGuardados:string[]=[]
   try{
     const base=await carregarBase(params.nfId);if(!base)return NextResponse.json({error:'NF não encontrada.'},{status:404});if(base.nf.status==='cancelada')return NextResponse.json({error:'Não é possível conferir uma NF cancelada.'},{status:409})

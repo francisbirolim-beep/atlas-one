@@ -6,7 +6,8 @@ function presente(valor: unknown) {
   return !(valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0))
 }
 
-export async function POST(_req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 
@@ -14,6 +15,7 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
     .from('medicoes_finais')
     .select('status_operacional')
     .eq('id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
     .maybeSingle()
 
   if (!medicao || !['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
@@ -21,10 +23,10 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
   }
 
   const [itensResp, camposResp, respostasResp, pendenciasResp] = await Promise.all([
-    supabaseAdmin.from('medicao_itens').select('id, tipo_esquadria, descricao, quantidade, medido, campos_extras').eq('medicao_id', acesso.medicao_id),
+    supabaseAdmin.from('medicao_itens').select('id, tipo_esquadria, descricao, quantidade, medido, campos_extras').eq('medicao_id', acesso.medicao_id).eq('empresa_id', acesso.empresa_id),
     supabaseAdmin.from('tipologia_campos_extras').select('tipo_esquadria, chave, nome, obrigatorio, ativo').eq('ativo', true).eq('obrigatorio', true),
-    supabaseAdmin.from('medicao_respostas').select('item_id, campo_chave, valor').eq('medicao_id', acesso.medicao_id),
-    supabaseAdmin.from('medicao_pendencias').select('id', { count: 'exact', head: true }).eq('medicao_id', acesso.medicao_id).eq('status', 'aberta'),
+    supabaseAdmin.from('medicao_respostas').select('item_id, campo_chave, valor').eq('medicao_id', acesso.medicao_id).eq('empresa_id', acesso.empresa_id),
+    supabaseAdmin.from('medicao_pendencias').select('id', { count: 'exact', head: true }).eq('medicao_id', acesso.medicao_id).eq('empresa_id', acesso.empresa_id).eq('status', 'aberta'),
   ])
 
   const itens = itensResp.data || []
@@ -62,6 +64,7 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
     .from('medicoes_finais')
     .update({ status_operacional: 'concluido', concluido_em: new Date().toISOString() })
     .eq('id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
 
   if (error) return NextResponse.json({ error: 'Nao foi possivel concluir a medicao.' }, { status: 500 })
   return NextResponse.json({ ok: true })

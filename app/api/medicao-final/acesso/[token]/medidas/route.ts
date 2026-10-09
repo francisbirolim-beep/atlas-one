@@ -7,7 +7,8 @@ function numeroValido(valor: unknown) {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('medicoes_finais')
     .select('status_operacional')
     .eq('id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
     .maybeSingle()
 
   if (!medicao || !['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
@@ -33,6 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .select('id')
     .eq('id', itemId)
     .eq('medicao_id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
     .maybeSingle()
 
   if (!item) return NextResponse.json({ error: 'Peca nao encontrada nesta medicao.' }, { status: 404 })
@@ -67,6 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     })
     .eq('id', itemId)
     .eq('medicao_id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
 
   if (error) return NextResponse.json({ error: 'Nao foi possivel salvar as medidas.' }, { status: 500 })
   return NextResponse.json({ ok: true })

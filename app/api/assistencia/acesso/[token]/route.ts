@@ -33,7 +33,7 @@ function gpsDoBody(valor: unknown) {
 }
 
 function normalizarNome(valor: string) {
-  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
 async function colunaPorFinalidade(finalidade: 'andamento' | 'resolvido', empresaId: string) {
@@ -59,7 +59,8 @@ async function colunaPorFinalidade(finalidade: 'andamento' | 'resolvido', empres
   }) || colunas[colunas.length - 1]
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const dados = await carregarDadosExternosAssistencia(params.token)
   if (!dados) {
     return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
@@ -67,7 +68,8 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
   return NextResponse.json(dados)
 }
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const acesso = await buscarAcessoValidoAssistencia(params.token)
   if (!acesso) {
     return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })

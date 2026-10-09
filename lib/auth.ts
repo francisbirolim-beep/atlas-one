@@ -96,10 +96,11 @@ export async function redefinirMinhaSenha(novaSenha: string) {
 }
 
 export async function logout() {
-  if (typeof window !== 'undefined') {
-    try { window.localStorage.removeItem(CHAVE_USUARIO_OFFLINE) } catch {}
+  try {
+    await supabase.auth.signOut()
+  } finally {
+    limparUsuarioOffline()
   }
-  await supabase.auth.signOut()
 }
 
 
@@ -117,6 +118,11 @@ export function usuarioCacheLocal(): Usuario | null {
 function salvarUsuarioOffline(usuario: Usuario) {
   if (typeof window === 'undefined') return
   try { window.localStorage.setItem(CHAVE_USUARIO_OFFLINE, JSON.stringify(usuario)) } catch {}
+}
+
+function limparUsuarioOffline() {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.removeItem(CHAVE_USUARIO_OFFLINE) } catch {}
 }
 
 function erroAuthTransitorio(error: any) {

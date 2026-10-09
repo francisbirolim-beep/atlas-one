@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 
@@ -10,6 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('medicoes_finais')
     .select('status_operacional')
     .eq('id', acesso.medicao_id)
+    .eq('empresa_id', acesso.empresa_id)
     .maybeSingle()
 
   if (!medicao || !['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
@@ -27,6 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       .select('id, tipo_esquadria, campos_extras')
       .eq('id', itemId)
       .eq('medicao_id', acesso.medicao_id)
+      .eq('empresa_id', acesso.empresa_id)
       .maybeSingle(),
     supabaseAdmin
       .from('tipologia_campos_extras')
@@ -45,6 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const { error } = await supabaseAdmin
     .from('medicao_respostas')
     .upsert({
+      empresa_id: acesso.empresa_id,
       medicao_id: acesso.medicao_id,
       item_id: item.id,
       campo_id: campo.id,
@@ -62,6 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('medicao_itens')
     .update({ campos_extras: { ...(item.campos_extras || {}), [campo.chave]: valor } })
     .eq('id', item.id)
+    .eq('empresa_id', acesso.empresa_id)
 
   return NextResponse.json({ ok: true })
 }

@@ -23,7 +23,8 @@ function parseJsonSeguro(texto: string): any | null {
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 

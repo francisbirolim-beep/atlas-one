@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
 
-export async function POST(_req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params
   const acesso = await buscarAcessoValidoMedicao(params.token)
   if (!acesso) return NextResponse.json({ error: 'Link invalido, expirado ou revogado.' }, { status: 404 })
 

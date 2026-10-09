@@ -24,12 +24,12 @@ export async function GET(req: NextRequest) {
 
       const { data: perfil } = await supabaseAdmin
             .from('usuarios')
-            .select('nome, role')
+            .select('nome, role, empresa_id')
             .eq('id', userData.user.id)
             .maybeSingle()
 
-      if (!perfil || perfil.role !== 'master') {
-              return NextResponse.json({ error: 'Apenas o usuario master pode fazer backup' }, { status: 403 })
+      if (!perfil || perfil.role !== 'master' || !perfil.empresa_id) {
+              return NextResponse.json({ error: 'Apenas o usuario master da empresa pode fazer backup' }, { status: 403 })
       }
 
       const registro = await salvarBackup('manual', perfil.nome || 'Master')
