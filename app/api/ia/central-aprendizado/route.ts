@@ -709,7 +709,20 @@ export async function GET(req:NextRequest){
     let qc=supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(3000);if(entradaId)qc=qc.eq('entrada_id',entradaId);if(['pendente','aprovado','rejeitado','corrigido','aplicado'].includes(status))qc=qc.eq('status',status)
     const {data:candidatos,error:e2}=await qc;if(e2)throw e2
     const cs=await Promise.all((candidatos||[]).map(async(c:any)=>({...c,pode_validar:await podeValidar(u,c)})))
-    return NextResponse.json({entradas:await Promise.all((entradas||[]).map(assinar)),candidatos:cs,totais:{pendentes:cs.filter(c=>['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length,aplicados:cs.filter(c=>c.status==='aplicado').length,rejeitados:cs.filter(c=>c.status==='rejeitado').length}})
+    const es=entradas||[]
+    return NextResponse.json({
+      entradas:await Promise.all(es.map(assinar)),
+      candidatos:cs,
+      totais:{
+        pendentes:cs.filter(c=>['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length,
+        aplicados:cs.filter(c=>c.status==='aplicado').length,
+        rejeitados:cs.filter(c=>c.status==='rejeitado').length,
+        entradasAguardando:es.filter((e:any)=>e.status==='aguardando_validacao').length,
+        entradasAnalisando:es.filter((e:any)=>e.status==='analisando').length,
+        entradasConcluidas:es.filter((e:any)=>e.status==='concluido').length,
+        errosHistoricos:es.filter((e:any)=>e.status==='erro').length,
+      }
+    })
   }catch(e:any){return NextResponse.json({error:e?.message||'Erro ao carregar Central.'},{status:500})}
 }
 
