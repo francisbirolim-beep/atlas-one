@@ -14,7 +14,8 @@ export async function listarColunasSetor(setorId: string): Promise<SetorKanbanCo
 }
 
 async function criarColunaPadraoSetor(setorId: string): Promise<SetorKanbanColuna[]> {
-  const { data, error } = await supabase.from('setor_kanban_colunas').insert({ setor_id: setorId, nome: COLUNA_PADRAO, ordem: 0 }).select()
+  const nomePadrao = setorId === 'producao' ? 'Liberar Produção' : COLUNA_PADRAO
+  const { data, error } = await supabase.from('setor_kanban_colunas').insert({ setor_id: setorId, nome: nomePadrao, ordem: 0 }).select()
   if (error || !data) return []
   return data as SetorKanbanColuna[]
 }
