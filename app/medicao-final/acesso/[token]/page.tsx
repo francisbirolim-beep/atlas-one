@@ -201,6 +201,17 @@ export default function AcessoExternoMedicaoPage() {
     setEnviandoFoto(false)
   }
 
+  async function enviarParcial() {
+    if (!window.confirm('Enviar o que ja foi medido como Medicao Parcial? As pecas restantes continuarao em aberto.')) return
+    setSalvando(true); setMensagem('')
+    const resp = await fetch(`/api/medicao-final/acesso/${token}/parcial`, { method: 'POST' })
+    const json = await resp.json().catch(() => ({}))
+    setSalvando(false)
+    if (!resp.ok) return setMensagem(json.error || 'Nao foi possivel enviar a medicao parcial.')
+    setMensagem(json.mensagem || 'Medicao parcial enviada. As pecas restantes continuam em aberto.')
+    await carregar()
+  }
+
   async function concluir() {
     if (!window.confirm('Concluir a Medicao Final e enviar para revisao interna?')) return
     setSalvando(true); setMensagem('')
@@ -247,14 +258,30 @@ export default function AcessoExternoMedicaoPage() {
           )}
           {concluido && <p className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"><CheckCircle2 size={17} /> Medicao concluida. Aguardando revisao interna.</p>}
           {iniciado && !concluido && (
-            <button
-              type="button"
-              onClick={() => void concluir()}
-              disabled={salvando}
-              className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {salvando ? 'Processando...' : 'Finalizar e enviar Medicao Final'}
-            </button>
+            <div className="mt-4">
+              {totalMedidas < dados.itens.length ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void enviarParcial()}
+                    disabled={salvando || totalMedidas === 0}
+                    className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                  >
+                    {salvando ? 'Processando...' : `Enviar medicao parcial (${totalMedidas}/${dados.itens.length})`}
+                  </button>
+                  {totalMedidas === 0 && <p className="mt-1.5 text-center text-[11px] text-slate-500">Salve pelo menos uma peça antes de enviar uma medição parcial.</p>}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void concluir()}
+                  disabled={salvando}
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {salvando ? 'Processando...' : 'Finalizar e enviar Medicao Final'}
+                </button>
+              )}
+            </div>
           )}
         </section>
 
@@ -317,11 +344,25 @@ export default function AcessoExternoMedicaoPage() {
               <div><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-slate-700">Fotos da peca</h3><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600"><Camera size={14} /> {enviandoFoto ? 'Enviando...' : 'Adicionar'}<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFoto(e.target.files[0])} /></label></div>{fotosItem.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{fotosItem.map(f => <img key={f.id} src={f.url} alt={f.legenda || 'Foto da medicao'} className="h-24 w-full rounded-lg object-cover" />)}</div>}</div>
             </section>}
 
-            <div className="sticky bottom-3 z-20 rounded-2xl border border-emerald-200 bg-white/95 p-2 shadow-lg backdrop-blur">
-              <button onClick={() => void concluir()} disabled={salvando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {salvando ? 'Processando...' : 'Finalizar e enviar Medicao Final'}
-              </button>
-              <p className="mt-1 text-center text-[10px] text-slate-500">Se ainda faltar alguma peça ou checklist, o Atlas informa exatamente o que precisa ser concluído.</p>
+            <div className={`sticky bottom-3 z-20 rounded-2xl border bg-white/95 p-2 shadow-lg backdrop-blur ${totalMedidas < dados.itens.length ? 'border-amber-200' : 'border-emerald-200'}`}>
+              {totalMedidas < dados.itens.length ? (
+                <button
+                  onClick={() => void enviarParcial()}
+                  disabled={salvando || totalMedidas === 0}
+                  className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                >
+                  {salvando ? 'Processando...' : `Enviar medicao parcial (${totalMedidas}/${dados.itens.length})`}
+                </button>
+              ) : (
+                <button onClick={() => void concluir()} disabled={salvando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
+                  {salvando ? 'Processando...' : 'Finalizar e enviar Medicao Final'}
+                </button>
+              )}
+              <p className="mt-1 text-center text-[10px] text-slate-500">
+                {totalMedidas < dados.itens.length
+                  ? 'O que ja foi medido sera preservado e o restante continuara em aberto.'
+                  : 'Todas as peças foram medidas. Envie a Medição Final para revisão interna.'}
+              </p>
             </div>
           </>
         )}
