@@ -186,19 +186,23 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
             <div className="rounded-lg bg-blue-50 px-2 py-2 text-center"><p className="text-lg font-bold text-blue-700">{emAndamento}</p><p className="text-[10px] font-medium text-blue-700">Em andamento</p></div>
             <div className="rounded-lg bg-slate-100 px-2 py-2 text-center"><p className="text-lg font-bold text-slate-700">{pendentes}</p><p className="text-[10px] font-medium text-slate-600">Pendentes</p></div>
           </div>
-          <details className="mt-auto pt-4"><summary className="cursor-pointer text-xs font-semibold text-slate-500">Ações e histórico</summary><div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
-              <History size={14} /> Histórico
-            </button>
-            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+          <div className="mt-auto pt-4">
+            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
               {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-              {parcial ? 'Retomar medição' : 'Salvar parcial'}
+              {parcial ? 'Retomar medição' : 'Salvar medição parcial'}
             </button>
+            {!iniciada && <p className="mt-1.5 text-[10px] text-slate-500">Inicie a medição antes de salvar como parcial.</p>}
           </div>
-          {mostrarHistorico && <div className="mt-2 space-y-2">{[...eventos].reverse().map(evento => <p key={evento.id} className="text-xs text-slate-600">{rotuloEvento(evento)} · {formatarData(evento.data)} · {evento.usuario || "—"}</p>)}</div>}
+          <details className="pt-3"><summary className="cursor-pointer text-xs font-semibold text-slate-500">Histórico da medição</summary>
+            <div className="mt-2">
+              <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+                <History size={14} /> {mostrarHistorico ? 'Ocultar histórico' : 'Ver histórico'}
+              </button>
+            </div>
+            {mostrarHistorico && <div className="mt-2 space-y-2">{[...eventos].reverse().map(evento => <p key={evento.id} className="text-xs text-slate-600">{rotuloEvento(evento)} · {formatarData(evento.data)} · {evento.usuario || "—"}</p>)}</div>}
+          </details>
           {mensagem && <p role="status" className="mt-2 text-xs text-emerald-700">{mensagem}</p>}
           {erro && <p role="alert" className="mt-2 text-xs text-red-700">{erro}</p>}
-          </details>
         </div>
       </section>
     )
