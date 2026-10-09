@@ -14,7 +14,6 @@ import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
 import MedicaoConferenciaPanel from '@/components/system/MedicaoConferenciaPanel'
 import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
-import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
 import ChatNotificationToast from '@/components/system/ChatNotificationToast'
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -45,7 +44,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <main className={`atlas-app-main atlas-main-surface w-full max-w-full overflow-x-hidden ${ehWhatsAppAtendimento ? 'min-h-screen bg-white pb-0' : 'min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0'} ${ehHome ? 'atlas-home-v2' : ''}`}>
           {ehHome && <HomeDashboard />}
           {!ehWhatsAppAtendimento && <MobileFavorites mostrarAcessoRapido={ehHome} />}
-          {ehProducao && <ProducaoEtapasBar />}
 
           {medicaoFinalId && (
             <div key={medicaoFinalId} className="atlas-medicao-tools">
