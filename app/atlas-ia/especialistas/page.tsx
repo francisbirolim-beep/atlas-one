@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Camera, CheckCircle2, ExternalLink, FileText, Loader2, MessageCircle, Mic, Paperclip, Send, ShieldCheck, Sparkles, Square, ThumbsUp, X } from 'lucide-react'
+import { ArrowLeft, Bot, Camera, CheckCircle2, ExternalLink, FileText, Loader2, MessageCircle, Mic, Paperclip, PencilLine, Send, ShieldCheck, Sparkles, Square, ThumbsUp, X } from 'lucide-react'
 import Link from 'next/link'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { listarPermissoesUsuario } from '@/lib/setores'
@@ -71,6 +71,7 @@ export default function AtlasEspecialistasPage() {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
   const [avaliados, setAvaliados] = useState<Record<string, boolean>>({})
+  const [feedbackStatus, setFeedbackStatus] = useState<Record<string, 'aprovado' | 'corrigido'>>({})
   const [anexo, setAnexo] = useState<Anexo | null>(null)
   const [processandoAnexo, setProcessandoAnexo] = useState(false)
   const [vozSuportada, setVozSuportada] = useState(false)
@@ -812,9 +813,42 @@ export default function AtlasEspecialistasPage() {
         },
         body: JSON.stringify({ interacaoId, avaliacao: 'aprovado' }),
       })
-      if (resp.ok) setAvaliados(prev => ({ ...prev, [interacaoId]: true }))
+      if (resp.ok) {
+        setAvaliados(prev => ({ ...prev, [interacaoId]: true }))
+        setFeedbackStatus(prev => ({ ...prev, [interacaoId]: 'aprovado' }))
+      }
     } catch {
       // Feedback não deve bloquear a conversa.
+    }
+  }
+
+  async function corrigirResposta(interacaoId: string, respostaAtual: string) {
+    const correcao = window.prompt(
+      'Escreva como a resposta correta deveria ficar. Essa correção será usada para ensinar este especialista.',
+      respostaAtual,
+    )
+    if (!correcao || !correcao.trim() || correcao.trim() === respostaAtual.trim()) return
+
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch('/api/ia/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + (token || ''),
+        },
+        body: JSON.stringify({
+          interacaoId,
+          avaliacao: 'corrigido',
+          correcao: correcao.trim(),
+        }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(json?.error || 'Não foi possível registrar a correção.')
+      setAvaliados(prev => ({ ...prev, [interacaoId]: true }))
+      setFeedbackStatus(prev => ({ ...prev, [interacaoId]: 'corrigido' }))
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível ensinar esta correção à IA.')
     }
   }
 
@@ -945,14 +979,24 @@ export default function AtlasEspecialistasPage() {
                       <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2">
                         <BotaoOuvirResposta texto={b.texto}/>
                         {b.interacaoId && (
-                          <button
-                            onClick={() => aprovar(b.interacaoId!)}
-                            disabled={Boolean(avaliados[b.interacaoId])}
-                            className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-emerald-700 disabled:text-emerald-700"
-                          >
-                            {avaliados[b.interacaoId] ? <CheckCircle2 size={14}/> : <ThumbsUp size={14}/>}
-                            {avaliados[b.interacaoId] ? 'Resposta aprovada' : 'Aprovar resposta'}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => aprovar(b.interacaoId!)}
+                              disabled={Boolean(avaliados[b.interacaoId])}
+                              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-emerald-700 disabled:text-emerald-700"
+                            >
+                              {feedbackStatus[b.interacaoId] === 'aprovado' ? <CheckCircle2 size={14}/> : <ThumbsUp size={14}/>}
+                              {feedbackStatus[b.interacaoId] === 'aprovado' ? 'Resposta aprovada' : feedbackStatus[b.interacaoId] === 'corrigido' ? 'Correção aprendida' : 'Está correto'}
+                            </button>
+                            {!avaliados[b.interacaoId] && (
+                              <button
+                                onClick={() => void corrigirResposta(b.interacaoId!, b.texto)}
+                                className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-700"
+                              >
+                                <PencilLine size={14}/> Corrigir e ensinar
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
