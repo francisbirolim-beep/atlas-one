@@ -147,6 +147,7 @@ function folhasDoItem(item: any) {
     item?.folhas,
     item?.numero_folhas,
     item?.qtd_folhas,
+    item?.variaveis?.numero_folhas,
     item?.variaveis?.folhas,
     item?.variaveis?.Folhas,
   ]
@@ -726,9 +727,9 @@ export async function gerarPacoteTecnico(
     const vidro = formula.vidro && typeof formula.vidro === 'object' ? formula.vidro : null
     if (vidro?.formula_largura && vidro?.formula_altura) {
       try {
-        const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura)
-        const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura)
-        const qtdVidro = Math.max(1, n(vidro.quantidade, 1)) * qtdItem
+        const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined)
+        const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined)
+        const qtdVidro = Math.max(1, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : n(vidro.quantidade, 1)) * qtdItem
         const areaVidroM2 = (larguraVidro / 1000) * (alturaVidro / 1000) * qtdVidro
         const emOrcamento = origem === 'orcamento_simulacao'
         materiais.push({
