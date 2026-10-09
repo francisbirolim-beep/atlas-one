@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight, FileDown } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { Clock3, History, Loader2, PauseCircle, PlayCircle, Search, ChevronRight, FileDown, Trash2 } from 'lucide-react'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import { listarPermissoesUsuario, listarSetores } from '@/lib/setores'
 import { carregarChecklistMedicaoV2, statusItemChecklistV2 } from '@/lib/medicaoChecklistV2'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
@@ -83,6 +85,8 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   const [busca, setBusca] = useState('')
   const [filtroAmbiente, setFiltroAmbiente] = useState('todos')
   const [filtroTipologia, setFiltroTipologia] = useState('todas')
+  const [podeRemoverItem, setPodeRemoverItem] = useState(false)
+  const [removendoId, setRemovendoId] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     const [estado, checklist] = await Promise.all([
@@ -119,8 +123,33 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   }, [medicaoId])
 
   useEffect(() => {
-    usuarioAtual().then(setUsuario)
+    let ativo = true
+    void usuarioAtual().then(async usr => {
+      if (!ativo) return
+      setUsuario(usr)
+      if (!usr) {
+        setPodeRemoverItem(false)
+        return
+      }
+      if (usr.role === 'master') {
+        setPodeRemoverItem(true)
+        return
+      }
+      const [setores, permissoes, config] = await Promise.all([
+        listarSetores(),
+        listarPermissoesUsuario(usr.id),
+        lerAcessoUsuarioConfig(usr),
+      ])
+      if (!ativo) return
+      const setor = setores.find(s => s.rota === '/producao/medicao-final')
+      const nivelSetor = setor ? permissoes[setor.id] : 'oculto'
+      setPodeRemoverItem(
+        nivelSetor === 'edicao' &&
+        config.acoes?.['producao.medida_final.remover_item'] === 'edicao'
+      )
+    })
     void carregar()
+    return () => { ativo = false }
   }, [carregar])
 
   useEffect(() => {
@@ -150,6 +179,46 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
       (filtroTipologia === 'todas' || peca.tipologia === filtroTipologia)
     )
   }, [pecas, busca, filtroAmbiente, filtroTipologia])
+
+  async function removerPeca(peca: PecaResumo) {
+    if (!podeRemoverItem || removendoId || peca.medido || peca.iniciado) return
+    const motivo = window.prompt(
+      `Por que “${peca.tipologia}” deve ser removido desta Medição Final?\n\nExemplo: item não foi vendido.`,
+      'Item não foi vendido',
+    )?.trim() || ''
+    if (motivo.length < 3) return
+    if (!window.confirm(
+      `Remover “${peca.tipologia}” desta Medição Final?\n\nO orçamento/venda original não será apagado. O motivo e o item serão preservados no histórico.`,
+    )) return
+
+    setRemovendoId(peca.id)
+    setMensagem('')
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch(`/api/medicao-final/${medicaoId}/itens/${peca.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ motivo }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setErro(json?.error || 'Não foi possível remover o item da Medição Final.')
+        return
+      }
+      setMensagem(json?.mensagem || 'Item removido da Medição Final.')
+      await carregar()
+      window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+    } catch (e) {
+      console.error('Erro ao remover item da Medição Final:', e)
+      setErro('Não foi possível remover o item da Medição Final.')
+    } finally {
+      setRemovendoId(null)
+    }
+  }
 
   async function alternarParcial() {
     if (processando) return
@@ -287,17 +356,36 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
               <div className="hidden min-w-[860px] grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:grid"><span>#</span><span>Tipologia</span><span>Ambiente</span><span className="text-center">Quantidade</span><span>Status</span><span>Medido por / atualização</span><span /></div>
               {pecasFiltradas.map((peca) => {
                 const status = peca.medido ? 'Concluída' : peca.iniciado ? 'Em andamento' : 'Pendente'
+                const podeRemoverPeca = podeRemoverItem && !peca.medido && !peca.iniciado
                 return (
-                  <button key={peca.id} type="button" onClick={() => onSelecionarPeca?.(peca.id)} className="grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 border-b border-slate-100 px-3 py-3 text-left transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px]">
-                    <span className="text-xs font-bold text-slate-500">{String(pecas.findIndex(p => p.id === peca.id) + 1).padStart(2, '0')}</span>
-                    <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : ''}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
-                    <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
-                    <span className="hidden text-center text-xs text-slate-600 md:block">{peca.quantidade}</span>
-                    <span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold md:inline-flex ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
-                    <span className="hidden text-xs text-slate-500 md:block">{peca.medidoPor ? <><span className="font-medium text-slate-700">{peca.medidoPor}</span>{peca.atualizadoEm && <span className="block text-[10px] text-slate-400">{formatarData(peca.atualizadoEm)}</span>}</> : '—'}</span>
-                    <span className={`rounded-full px-2 py-1 text-[10px] font-semibold md:hidden ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
-                    <ChevronRight size={16} className="hidden text-slate-400 md:block" />
-                  </button>
+                  <div key={peca.id} className="relative border-b border-slate-100 last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => onSelecionarPeca?.(peca.id)}
+                      className={`grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 px-3 py-3 text-left transition hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] ${podeRemoverPeca ? 'pr-14 md:pr-14' : ''}`}
+                    >
+                      <span className="text-xs font-bold text-slate-500">{String(pecas.findIndex(p => p.id === peca.id) + 1).padStart(2, '0')}</span>
+                      <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : ''}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                      <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
+                      <span className="hidden text-center text-xs text-slate-600 md:block">{peca.quantidade}</span>
+                      <span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold md:inline-flex ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
+                      <span className="hidden text-xs text-slate-500 md:block">{peca.medidoPor ? <><span className="font-medium text-slate-700">{peca.medidoPor}</span>{peca.atualizadoEm && <span className="block text-[10px] text-slate-400">{formatarData(peca.atualizadoEm)}</span>}</> : '—'}</span>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold md:hidden ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
+                      <ChevronRight size={16} className="hidden text-slate-400 md:block" />
+                    </button>
+                    {podeRemoverPeca && (
+                      <button
+                        type="button"
+                        title="Remover item da Medição Final"
+                        aria-label={`Remover ${peca.tipologia} da Medição Final`}
+                        disabled={Boolean(removendoId)}
+                        onClick={e => { e.stopPropagation(); void removerPeca(peca) }}
+                        className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-lg border border-red-200 bg-white p-2 text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {removendoId === peca.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                      </button>
+                    )}
+                  </div>
                 )
               })}
               {pecasFiltradas.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">Nenhuma tipologia encontrada com estes filtros.</p>}
