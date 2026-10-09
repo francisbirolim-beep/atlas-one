@@ -340,8 +340,6 @@ export async function GET(req: NextRequest) {
   const feedbackIa = feedbackIaResp.data || []
   const memoriasEspecialistas = memoriasEspecialistasResp.data || []
   const conhecimentoSetor = conhecimentoSetorResp.data || []
-  const interacaoPorId = new Map(interacoes.map((i: any) => [i.id, i]))
-
   const coberturaEspecialistas = AI_ESPECIALISTAS.map(especialista => {
     const contexto = 'especialista:' + especialista.modulo
     const interacoesModulo = interacoes.filter((i: any) => String(i.contexto || '') === contexto)
