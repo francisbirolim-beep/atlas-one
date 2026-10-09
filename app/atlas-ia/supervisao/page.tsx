@@ -9,7 +9,7 @@ type AgenteApi={nome:string;execucoes30d:number;custo30d:number;ultimaAtividadeE
 type Uso={agente_nome:string|null;setor_id:string|null;created_at:string;sucesso:boolean}
 type OperacaoAgente={trabalhando:boolean;monitorando?:boolean;atividade:string;ultimaAtividadeEm:string|null;aguardandoValidacao?:number;correcoes30d?:number;modo?:string|null}
 type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>;runtimeGratis?:any}
-type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number}}
+type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number;entradasAguardando?:number;entradasAnalisando?:number;entradasConcluidas?:number;errosHistoricos?:number}}
 
 const ROLES=[
   {id:'whatsapp',nome:'IA WhatsApp',funcao:'Atendimento e triagem',termos:['whatsapp','comercial','atendimento'],cor:'#16a34a',emoji:'💬'},
@@ -100,8 +100,26 @@ export default function SupervisaoIAPage(){
         <Card icon={<Bot size={16}/>} label="Execuções hoje" valor={num(dados?.resumoHoje?.execucoes||0)} sub={(dados?.resumoHoje?.sucessos||0)+' concluídas'}/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo hoje" valor={usd(dados?.resumoHoje?.custoEstimado||0)} sub="estimativa"/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo 30 dias" valor={usd(dados?.resumo?.custoEstimado||0)} sub="histórico; política atual = zero-custo"/>
-        <Card icon={<GraduationCap size={16}/>} label="Aguardando validação" valor={num(apr?.totais.pendentes||0)} sub="aprendizado"/>
+        <Card icon={<GraduationCap size={16}/>} label="Aguardando validação" valor={num(apr?.totais.pendentes||0)} sub="itens reais para conferir"/>
         <Card icon={<TriangleAlert size={16}/>} label="Erros hoje" valor={num(dados?.resumoHoje?.erros||0)} sub="execuções com falha"/>
+      </section>
+
+      <section className="mb-5 rounded-3xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-black">Saúde do aprendizado</h2>
+            <p className="mt-1 text-xs text-slate-500">Separa o que ainda precisa de validação das falhas antigas preservadas para auditoria.</p>
+          </div>
+          <Link href="/atlas-ia/aprendizado?aba=validacoes" className="rounded-xl border bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Abrir validações</Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Mini l="Itens pendentes" v={num(apr?.totais.pendentes||0)}/>
+          <Mini l="Aplicados" v={num(apr?.totais.aplicados||0)}/>
+          <Mini l="Entradas aguardando" v={num(apr?.totais.entradasAguardando||0)}/>
+          <Mini l="Entradas concluídas" v={num(apr?.totais.entradasConcluidas||0)}/>
+          <Mini l="Falhas históricas" v={num(apr?.totais.errosHistoricos||0)}/>
+        </div>
+        {(apr?.totais.errosHistoricos||0)>0&&<p className="mt-3 text-[11px] text-slate-500">Falha histórica não significa que a IA está com erro agora. O Atlas mantém tentativas antigas para rastreabilidade; o trabalho atual é medido pelos itens pendentes e entradas em análise/validação.</p>}
       </section>
 
       <section className="mb-5 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm">
