@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileSpreadsheet, LockKeyhole, Package, Play, Plus, Ruler, X, CheckCircle2, ClipboardCheck, UserRound } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
-import { listarColunasSetor, listarItensSetor, moverItemSetor } from '@/lib/setorKanban'
+import { ArrowLeft, FileSpreadsheet, FileText, Loader2, LockKeyhole, Package, Play, Plus, Ruler, X, CheckCircle2, ClipboardCheck, ShieldCheck, UserRound } from 'lucide-react'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { criarColunaSetor, listarColunasSetor, listarItensSetor, moverItemSetor } from '@/lib/setorKanban'
 import type { SetorKanbanColuna, SetorKanbanItem, Usuario } from '@/lib/tipos'
+import { aprovarMedicaoFinal } from '@/lib/medicaoFinalV2'
+import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
+import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { gerarPacoteMedicaoFinal } from '@/lib/materialPlanejamento'
 import {
   atualizarOrdemProducao,
   criarOrdemProducaoManual,
@@ -13,10 +17,13 @@ import {
   listarObrasProducao,
   listarOrdensProducao,
   listarVendasProducao,
+  listarMedicoesFinaisProducao,
+  marcarCardLiberadoProducao,
   type ClienteProducao,
   type ObraProducao,
   type OrdemProducao,
   type VendaProducao,
+  type MedicaoFinalProducao,
 } from '@/lib/ordensProducao'
 
 function statusLabel(status: OrdemProducao['status']) {
@@ -40,6 +47,9 @@ export default function Producao() {
   const [selecionado, setSelecionado] = useState<SetorKanbanItem | null>(null)
   const [novaAberta, setNovaAberta] = useState(false)
   const [erro, setErro] = useState('')
+  const [mensagem, setMensagem] = useState('')
+  const [medicoes, setMedicoes] = useState<MedicaoFinalProducao[]>([])
+  const [liberandoId, setLiberandoId] = useState<string | null>(null)
 
   const [modo, setModo] = useState<'avulsa' | 'vinculada'>('avulsa')
   const [clienteId, setClienteId] = useState('')
@@ -56,10 +66,35 @@ export default function Producao() {
 
   async function carregar() {
     setCarregando(true)
-    const [u, cols, its, ops, cls] = await Promise.all([
-      usuarioAtual(), listarColunasSetor('producao'), listarItensSetor('producao'), listarOrdensProducao(), listarClientesProducao(),
+    const u = await usuarioAtual()
+    if (u) {
+      try {
+        const token = await tokenAtual()
+        if (token) {
+          await fetch('/api/producao/medicoes-finais/sincronizar', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        }
+      } catch (e) {
+        console.warn('Não foi possível sincronizar a fila da Produção nesta carga:', e)
+      }
+    }
+
+    const [cols, its, ops, cls, meds] = await Promise.all([
+      listarColunasSetor('producao'),
+      listarItensSetor('producao'),
+      listarOrdensProducao(),
+      listarClientesProducao(),
+      listarMedicoesFinaisProducao(),
     ])
-    setUsuario(u); setColunas(cols); setCards(its); setOrdens(ops); setClientes(cls); setCarregando(false)
+    setUsuario(u)
+    setColunas(cols)
+    setCards(its)
+    setOrdens(ops)
+    setClientes(cls)
+    setMedicoes(meds)
+    setCarregando(false)
   }
 
   useEffect(() => { void carregar() }, [])
@@ -80,6 +115,21 @@ export default function Producao() {
     return mapa
   }, [ordens])
 
+  const medicaoPorOrcamento = useMemo(() => {
+    const mapa = new Map<string, MedicaoFinalProducao>()
+    medicoes.forEach(m => {
+      if (m.orcamento_id && !mapa.has(m.orcamento_id)) mapa.set(m.orcamento_id, m)
+    })
+    return mapa
+  }, [medicoes])
+
+  function medicaoDoCard(card: SetorKanbanItem | null) {
+    if (!card) return null
+    if (card.orcamento_id) return medicaoPorOrcamento.get(card.orcamento_id) || null
+    const marker = String(card.descricao || '').match(/\[medicao:([^\]]+)\]/)?.[1]
+    return marker ? medicoes.find(m => m.id === marker) || null : null
+  }
+
   function cardsDaColuna(id: string) { return cards.filter(c => c.coluna_id === id) }
 
   async function moverCard(e: React.DragEvent, colunaId: string) {
@@ -90,6 +140,92 @@ export default function Producao() {
     setCards(prev => prev.map(c => c.id === id ? { ...c, coluna_id: colunaId } : c))
     const ok = await moverItemSetor(id, colunaId)
     if (!ok) setCards(anterior)
+  }
+
+  async function criarEtapa() {
+    const nome = window.prompt('Nome da nova etapa da Produção:')?.trim() || ''
+    if (!nome) return
+    setErro('')
+    const criada = await criarColunaSetor('producao', nome)
+    if (!criada) {
+      setErro('Não foi possível criar a nova etapa da Produção.')
+      return
+    }
+    setColunas(prev => [...prev, criada].sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)))
+  }
+
+  async function abrirRelatorioMedicao(medicaoId: string) {
+    setErro('')
+    const [medicao, itens] = await Promise.all([
+      buscarMedicao(medicaoId),
+      listarItensMedicao(medicaoId),
+    ])
+    if (!medicao) {
+      setErro('Não foi possível carregar a Medição Final para gerar o relatório.')
+      return
+    }
+    await gerarPdfMedicaoFinal(medicao, itens)
+  }
+
+  async function liberarProducao(card: SetorKanbanItem) {
+    const medicao = medicaoDoCard(card)
+    if (!medicao) {
+      setErro('Este card ainda não possui uma Medição Final vinculada.')
+      return
+    }
+    if (liberandoId) return
+
+    setErro('')
+    setMensagem('')
+    if (!window.confirm(
+      'Liberar esta Medição Final para Produção?\n\nO Atlas aprovará a medição, liberará os fluxos pós-medição e gerará o pacote técnico/plano de corte com as medidas finais.',
+    )) return
+
+    setLiberandoId(card.id)
+    try {
+      if (medicao.status_operacional !== 'aprovado') {
+        if (medicao.status_operacional !== 'concluido') {
+          setErro('A Medição Final precisa estar concluída antes de liberar a Produção.')
+          return
+        }
+        const aprovado = await aprovarMedicaoFinal(medicao.id, usuario)
+        if (!aprovado.ok) {
+          setErro(aprovado.mensagem || 'Não foi possível aprovar a Medição Final.')
+          return
+        }
+      }
+
+      if (card.orcamento_id) {
+        const pacote = await gerarPacoteMedicaoFinal(card.orcamento_id, usuario)
+        if (!pacote.ok) {
+          setErro(`Medição aprovada, mas o plano de corte ficou pendente: ${pacote.error}`)
+          await carregar()
+          return
+        }
+      }
+
+      const colunaAtual = colunas.find(c => c.id === card.coluna_id)
+      const proxima = colunas
+        .filter(c => Number(c.ordem || 0) > Number(colunaAtual?.ordem || 0))
+        .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))[0] || null
+
+      const marcado = await marcarCardLiberadoProducao(card.id, proxima?.id || null, usuario)
+      if (!marcado.ok) {
+        setErro(marcado.error || 'A medição foi aprovada, mas não foi possível atualizar o Kanban.')
+        await carregar()
+        return
+      }
+
+      setMensagem(
+        proxima
+          ? `Produção liberada. O card avançou para “${proxima.nome}”. Vidros/MEE foram liberados pela aprovação e o plano final foi gerado.`
+          : 'Produção liberada. Vidros/MEE foram liberados pela aprovação e o plano final foi gerado.',
+      )
+      setSelecionado(null)
+      await carregar()
+    } finally {
+      setLiberandoId(null)
+    }
   }
 
   async function avancarOrdem(ordem: OrdemProducao) {
@@ -126,6 +262,7 @@ export default function Producao() {
   if (carregando) return <div className="min-h-screen grid place-items-center text-slate-400">Carregando Produção...</div>
 
   const ordensSelecionadas = selecionado ? (ordensPorCard.get(selecionado.id) || []) : []
+  const medicaoSelecionada = medicaoDoCard(selecionado)
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -135,8 +272,9 @@ export default function Producao() {
             <Link href="/setores" className="p-2 rounded-xl hover:bg-slate-100 text-slate-500"><ArrowLeft size={18}/></Link>
             <div><h1 className="text-lg font-bold text-brand-navy">Produção</h1><p className="text-xs text-slate-500">Cliente → Obra → Venda → Ordem de Produção → Plano de Corte</p></div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href="/producao/plano-corte" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><FileSpreadsheet size={16}/> Plano de Corte</Link>
+            <button onClick={() => void criarEtapa()} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700"><Plus size={16}/> Nova etapa</button>
             <button onClick={() => setNovaAberta(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium"><Plus size={16}/> Nova produção</button>
           </div>
         </div>
@@ -144,8 +282,9 @@ export default function Producao() {
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         {erro && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
+        {mensagem && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{mensagem}</div>}
         <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-slate-700">
-          A Produção pode nascer automaticamente do <b>Projeto conferido</b> ou ser criada manualmente. Contramarco e esquadria são ordens separadas: o contramarco pode ser liberado antes; a esquadria pode ficar bloqueada aguardando Medição Final e materiais.
+          A <b>Medição Final enviada</b> entra automaticamente em <b>Liberar Produção</b>. Abra o card, confira/imprima o relatório e só então libere o plano final e os fluxos pós-medição. Use <b>+ Nova etapa</b> para acrescentar novas fases ao Kanban.
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-5">
@@ -157,11 +296,13 @@ export default function Producao() {
                   const ops = ordensPorCard.get(card.id) || []
                   const bloqueadas = ops.filter(o => o.bloqueada && o.status !== 'cancelada').length
                   const prontas = ops.filter(o => o.status === 'concluida').length
+                  const medicao = medicaoDoCard(card)
                   return (
                     <button key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => setSelecionado(card)} className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:shadow-md transition">
-                      <div className="flex items-start gap-2"><Package size={15} className="mt-0.5 text-brand-navy"/><div className="min-w-0 flex-1"><p className="font-medium text-sm text-slate-800 truncate">{card.titulo}</p><p className="text-[11px] text-slate-400 mt-0.5">{ops.length} ordem(ns) · {prontas} concluída(s)</p></div></div>
-                      {bloqueadas > 0 && <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
-                      {card.responsavel_nome && <p className="mt-2 text-[11px] text-slate-400">Responsável: {card.responsavel_nome}</p>}
+                      <div className="flex items-start gap-2"><Package size={15} className="mt-0.5 text-brand-navy"/><div className="min-w-0 flex-1"><p className="font-medium text-sm text-slate-800 truncate">{card.titulo}</p><p className="text-[11px] text-slate-400 mt-0.5">{medicao?.orcamento_numero ? `Orçamento #${medicao.orcamento_numero} · ` : ''}{ops.length} ordem(ns)</p></div></div>
+                      {medicao && <div className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
+                      {bloqueadas > 0 && <div className="mt-2 ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
+                      {prontas > 0 && <p className="mt-2 text-[11px] text-slate-400">{prontas} ordem(ns) concluída(s)</p>}
                     </button>
                   )
                 })}
@@ -179,7 +320,42 @@ export default function Producao() {
               <button onClick={() => setSelecionado(null)} className="p-1 text-slate-400"><X size={18}/></button>
             </div>
             <div className="p-5 space-y-3">
-              {ordensSelecionadas.length === 0 && <p className="text-sm text-slate-400">Este card ainda não possui ordens vinculadas.</p>}
+              {medicaoSelecionada && (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-600">Conferência da Medição Final</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{medicaoSelecionada.cliente_nome}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {medicaoSelecionada.orcamento_numero ? `Orçamento #${medicaoSelecionada.orcamento_numero} · ` : ''}
+                        {medicaoSelecionada.status_operacional === 'aprovado' ? 'Produção liberada' : 'Aguardando liberação da Produção'}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${medicaoSelecionada.status_operacional === 'aprovado' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                      {medicaoSelecionada.status_operacional === 'aprovado' ? 'Liberada' : 'Conferir'}
+                    </span>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link href={`/producao/medicao-final/${medicaoSelecionada.id}`} className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800"><Ruler size={14}/> Abrir Medição Final</Link>
+                    <button onClick={() => void abrirRelatorioMedicao(medicaoSelecionada.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"><FileText size={14}/> Relatório PDF</button>
+                    {selecionado?.orcamento_id && medicaoSelecionada.status_operacional === 'aprovado' && (
+                      <Link href={`/orcamento/${selecionado.orcamento_id}/plano-corte`} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"><FileSpreadsheet size={14}/> Plano de corte final</Link>
+                    )}
+                    {medicaoSelecionada.status_operacional !== 'aprovado' && (
+                      <button
+                        onClick={() => selecionado && void liberarProducao(selecionado)}
+                        disabled={liberandoId === selecionado?.id}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                      >
+                        {liberandoId === selecionado?.id ? <Loader2 size={14} className="animate-spin"/> : <ShieldCheck size={14}/>}
+                        {liberandoId === selecionado?.id ? 'Liberando...' : 'Liberar Produção'}
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-slate-500">Ao liberar, o Atlas aprova a Medição Final, dispara os fluxos de Vidros/MEE e gera o pacote técnico usando as menores medidas finais registradas.</p>
+                </div>
+              )}
+              {ordensSelecionadas.length === 0 && <p className="text-sm text-slate-400">As ordens de produção aparecerão aqui quando os gates técnicos e de materiais forem liberados.</p>}
               {ordensSelecionadas.map(o => (
                 <div key={o.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
