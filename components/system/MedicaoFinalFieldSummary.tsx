@@ -110,7 +110,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     : resumo.totalPecas === 0
       ? 'Esta medição não possui peças.'
       : resumo.percentual < 100
-        ? `Faltam ${Math.max(0, resumo.totalPecas - resumo.pecasMedidas)} peça(s) para concluir.`
+        ? `Faltam ${Math.max(0, resumo.totalPecas - resumo.pecasMedidas)} peça(s) para concluir. Se a visita terminou agora, use “Enviar Medição Parcial para Conferência” após salvar pelo menos uma peça.`
         : resumo.itensAgrupados.length > 0
           ? 'Separe as unidades agrupadas antes de concluir.'
           : pendenciasAbertas.length > 0
