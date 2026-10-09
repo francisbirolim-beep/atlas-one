@@ -42,6 +42,8 @@ export default function AcessoExternoMedicaoPage() {
   const [valores, setValores] = useState<Record<string, string>>({})
   const [mensagem, setMensagem] = useState('')
   const [enviandoFoto, setEnviandoFoto] = useState(false)
+  const [enviandoTrena, setEnviandoTrena] = useState<'largura' | 'altura' | null>(null)
+  const [fotosTrena, setFotosTrena] = useState<{ largura: string; altura: string }>({ largura: '', altura: '' })
 
   const carregar = useCallback(async () => {
     if (!token) return
@@ -80,6 +82,10 @@ export default function AcessoExternoMedicaoPage() {
       altura_esquerda_mm: item.altura_esquerda_mm != null ? String(item.altura_esquerda_mm) : '',
     })
     setReferenciaVista(item.referencia_vista || '')
+    setFotosTrena({
+      largura: item.foto_larguras_url || '',
+      altura: item.foto_alturas_url || '',
+    })
     const novos: Record<string, string> = {}
     for (const campo of campos) {
       const resposta = dados.respostas.find(r => r.item_id === item.id && r.campo_chave === campo.chave)
@@ -97,6 +103,43 @@ export default function AcessoExternoMedicaoPage() {
     if (!resp.ok) return setMensagem(json.error || 'Nao foi possivel iniciar.')
     setMensagem('Medicao iniciada.')
     await carregar()
+  }
+
+  async function enviarFotoTrena(eixo: 'largura' | 'altura', file: File) {
+    if (!item || enviandoTrena) return
+    setEnviandoTrena(eixo)
+    setMensagem('')
+    const form = new FormData()
+    form.append('file', file)
+    form.append('itemId', item.id)
+    form.append('eixo', eixo)
+
+    const resp = await fetch(`/api/medicao-final/acesso/${token}/trena`, {
+      method: 'POST',
+      body: form,
+    })
+    const json = await resp.json().catch(() => ({}))
+    setEnviandoTrena(null)
+
+    if (json?.fotoUrl) {
+      setFotosTrena(prev => ({ ...prev, [eixo]: json.fotoUrl }))
+    }
+
+    if (!resp.ok || json?.leituraOk === false) {
+      setMensagem(json.error || 'Foto salva, mas nao foi possivel preencher as medidas automaticamente.')
+      return
+    }
+
+    const campos = json?.campos || {}
+    setMedidas(prev => {
+      const proximo = { ...prev }
+      for (const [campo, valor] of Object.entries(campos)) {
+        if (Number(valor) > 0) proximo[campo] = String(Math.round(Number(valor)))
+      }
+      return proximo
+    })
+    const confianca = Math.round((Number(json?.confianca) || 0) * 100)
+    setMensagem(`${eixo === 'largura' ? 'Larguras' : 'Alturas'} preenchidas automaticamente${confianca ? ` (confiança ${confianca}%)` : ''}. Confira os valores e salve a peça.`)
   }
 
   async function salvarMedidas() {
@@ -203,6 +246,16 @@ export default function AcessoExternoMedicaoPage() {
             </button>
           )}
           {concluido && <p className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"><CheckCircle2 size={17} /> Medicao concluida. Aguardando revisao interna.</p>}
+          {iniciado && !concluido && (
+            <button
+              type="button"
+              onClick={() => void concluir()}
+              disabled={salvando}
+              className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {salvando ? 'Processando...' : 'Finalizar e enviar Medicao Final'}
+            </button>
+          )}
         </section>
 
         {iniciado && !concluido && (
@@ -218,6 +271,30 @@ export default function AcessoExternoMedicaoPage() {
 
               <div>
                 <div className="mb-2 flex items-center gap-2"><Ruler size={16} className="text-slate-500" /><h3 className="text-sm font-semibold text-slate-700">Medidas finais em milimetros</h3></div>
+                <p className="mb-3 text-xs text-slate-500">Fotografe o visor da trena/medidor laser. O Atlas tenta preencher as 3 medidas automaticamente; confira antes de salvar.</p>
+                <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                  {(['largura', 'altura'] as const).map(eixo => {
+                    const foto = fotosTrena[eixo]
+                    return (
+                      <label key={eixo} className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50 p-2">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase text-slate-700">{eixo}</span>
+                          <span className="text-[10px] text-slate-500">Foto da trena</span>
+                        </div>
+                        {foto ? (
+                          <img src={foto} alt={`Foto da trena - ${eixo}`} className="h-32 w-full rounded-lg object-cover" />
+                        ) : (
+                          <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-200 bg-white text-xs text-slate-500">
+                            {enviandoTrena === eixo ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+                            <span>{enviandoTrena === eixo ? 'Lendo foto...' : 'Adicionar foto'}</span>
+                          </div>
+                        )}
+                        <p className="mt-1.5 text-center text-[10px] font-semibold text-slate-500">{foto ? 'Clique para trocar e ler novamente' : 'A leitura tenta preencher automaticamente'}</p>
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFotoTrena(eixo, e.target.files[0])} />
+                      </label>
+                    )
+                  })}
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   {['largura_baixo_mm','largura_meio_mm','largura_cima_mm'].map((chave, idx) => <label key={chave} className="text-[11px] text-slate-500">{['Larg. baixo','Larg. meio','Larg. cima'][idx]}<input type="number" value={medidas[chave] || ''} onChange={e => setMedidas(p => ({ ...p, [chave]: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" /></label>)}
                 </div>
@@ -240,7 +317,12 @@ export default function AcessoExternoMedicaoPage() {
               <div><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-slate-700">Fotos da peca</h3><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600"><Camera size={14} /> {enviandoFoto ? 'Enviando...' : 'Adicionar'}<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && void enviarFoto(e.target.files[0])} /></label></div>{fotosItem.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{fotosItem.map(f => <img key={f.id} src={f.url} alt={f.legenda || 'Foto da medicao'} className="h-24 w-full rounded-lg object-cover" />)}</div>}</div>
             </section>}
 
-            <button onClick={() => void concluir()} disabled={salvando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Concluir Medicao Final</button>
+            <div className="sticky bottom-3 z-20 rounded-2xl border border-emerald-200 bg-white/95 p-2 shadow-lg backdrop-blur">
+              <button onClick={() => void concluir()} disabled={salvando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
+                {salvando ? 'Processando...' : 'Finalizar e enviar Medicao Final'}
+              </button>
+              <p className="mt-1 text-center text-[10px] text-slate-500">Se ainda faltar alguma peça ou checklist, o Atlas informa exatamente o que precisa ser concluído.</p>
+            </div>
           </>
         )}
 
