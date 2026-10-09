@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Brain, Bug, Eye, FileText, HeartHandshake, History, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, Brain, Bug, CheckCircle2, Eye, FileText, HeartHandshake, History, ImageIcon, Lightbulb, Loader2, MessageSquarePlus, Paperclip, PencilLine, Send, ShieldCheck, Sparkles, ThumbsUp } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -20,6 +20,7 @@ type Bolha = {
   audio?: string
   transcricao?: string
   modo?: string
+  interacaoId?: string | null
 }
 type Anexo = { nome: string; mediaType: string; tipo: 'imagem' | 'pdf' | 'texto'; dados: string }
 type ImagemPendente = { prompt: string; usd: number; model: string; quality: string; size: string }
@@ -45,6 +46,7 @@ export default function AtlasIAPage() {
   const [relatoSugerido, setRelatoSugerido] = useState<RelatoSugerido | null>(null)
   const [registrandoMelhoria, setRegistrandoMelhoria] = useState(false)
   const [mensagemMelhoria, setMensagemMelhoria] = useState('')
+  const [feedbackStatus, setFeedbackStatus] = useState<Record<string, 'aprovado' | 'corrigido'>>({})
   const [conversaLivreId, setConversaLivreId] = useState<string | null>(null)
   const [criandoConversa, setCriandoConversa] = useState(false)
   const [novaConversaPendente, setNovaConversaPendente] = useState(false)
@@ -152,6 +154,32 @@ export default function AtlasIAPage() {
       return
     }
     void registrarRelato({ texto, anexo }, true)
+  }
+
+  async function registrarFeedbackIA(interacaoId: string, avaliacao: 'aprovado' | 'corrigido', respostaAtual?: string) {
+    let correcao = ''
+    if (avaliacao === 'corrigido') {
+      const texto = window.prompt(
+        'Escreva como a resposta correta deveria ficar. O Atlas vai usar essa correção como aprendizado validado.',
+        respostaAtual || '',
+      )
+      if (!texto || !texto.trim() || texto.trim() === String(respostaAtual || '').trim()) return
+      correcao = texto.trim()
+    }
+
+    try {
+      const token = await tokenAtual()
+      const r = await fetch('/api/ia/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+        body: JSON.stringify({ interacaoId, avaliacao, correcao }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || 'Não foi possível registrar o aprendizado.')
+      setFeedbackStatus(prev => ({ ...prev, [interacaoId]: avaliacao }))
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível registrar o aprendizado.')
+    }
   }
 
   async function carregarConversas() {
@@ -414,6 +442,7 @@ export default function AtlasIAPage() {
           papel: 'assistant',
           texto: j.text,
           modo: 'Conversa livre',
+          interacaoId: j.interacaoId || null,
         }])
       } else {
         const r = await fetch('/api/ia/especialista', {
@@ -436,6 +465,7 @@ export default function AtlasIAPage() {
           papel: 'assistant',
           texto: String(j.resposta),
           modo: especialistaAtual?.nome || 'Especialista Atlas',
+          interacaoId: j.interacaoId || null,
         }])
       }
     } catch (e: any) {
@@ -584,7 +614,31 @@ export default function AtlasIAPage() {
                 {b.audio && <audio src={b.audio} controls className="mb-2 w-64 max-w-full"/>}
                 <div>{b.texto}</div>
                 {b.transcricao && <div className="mt-2 border-t border-white/20 pt-2 text-xs opacity-75">Transcrição: {b.transcricao}</div>}
-                {b.papel === 'assistant' && <div className="mt-2 border-t pt-1.5"><BotaoOuvirResposta texto={b.texto}/></div>}
+                {b.papel === 'assistant' && <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-1.5">
+                  <BotaoOuvirResposta texto={b.texto}/>
+                  {b.interacaoId && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={Boolean(feedbackStatus[b.interacaoId])}
+                        onClick={() => void registrarFeedbackIA(b.interacaoId!, 'aprovado')}
+                        className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-700 disabled:text-emerald-700"
+                      >
+                        {feedbackStatus[b.interacaoId] === 'aprovado' ? <CheckCircle2 size={13}/> : <ThumbsUp size={13}/>}
+                        {feedbackStatus[b.interacaoId] === 'aprovado' ? 'Resposta aprovada' : feedbackStatus[b.interacaoId] === 'corrigido' ? 'Correção aprendida' : 'Está correto'}
+                      </button>
+                      {!feedbackStatus[b.interacaoId] && (
+                        <button
+                          type="button"
+                          onClick={() => void registrarFeedbackIA(b.interacaoId!, 'corrigido', b.texto)}
+                          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-blue-700"
+                        >
+                          <PencilLine size={13}/> Corrigir e ensinar
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>}
               </div>
             </div>)}
             {imagemPendente && <div className="flex justify-start"><div className="max-w-[92%] rounded-2xl border bg-white p-4 text-sm shadow-sm">
