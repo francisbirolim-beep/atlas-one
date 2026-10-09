@@ -8,7 +8,8 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 type AgenteApi={nome:string;execucoes30d:number;custo30d:number;ultimaAtividadeEm:string|null;provider:string|null;modelo:string|null;setor:string|null}
 type Uso={agente_nome:string|null;setor_id:string|null;created_at:string;sucesso:boolean}
 type OperacaoAgente={trabalhando:boolean;monitorando?:boolean;atividade:string;ultimaAtividadeEm:string|null;aguardandoValidacao?:number;correcoes30d?:number;modo?:string|null}
-type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>;runtimeGratis?:any}
+type CoberturaEspecialista={modulo:string;nome:string;objetivo:string;interacoes30d:number;respostasAprovadas:number;respostasCorrigidas:number;respostasRejeitadas:number;memoriasAtivas:number;conhecimentosValidados:number;cobertura:number;nivel:'boa'|'em_aprendizado'|'inicial'|'sem_uso';ultimaInteracaoEm:string|null}
+type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>;runtimeGratis?:any;coberturaEspecialistas?:CoberturaEspecialista[]}
 type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number;entradasAguardando?:number;entradasAnalisando?:number;entradasConcluidas?:number;errosHistoricos?:number}}
 
 const ROLES=[
@@ -120,6 +121,33 @@ export default function SupervisaoIAPage(){
           <Mini l="Falhas históricas" v={num(apr?.totais.errosHistoricos||0)}/>
         </div>
         {(apr?.totais.errosHistoricos||0)>0&&<p className="mt-3 text-[11px] text-slate-500">Falha histórica não significa que a IA está com erro agora. O Atlas mantém tentativas antigas para rastreabilidade; o trabalho atual é medido pelos itens pendentes e entradas em análise/validação.</p>}
+      </section>
+
+      <section className="mb-5 rounded-3xl border bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="font-black">Cobertura de aprendizado dos especialistas</h2>
+          <p className="mt-1 text-xs text-slate-500">Mede uso real, respostas validadas/corrigidas e conhecimento humano aprovado. Não é nota de inteligência nem precisão.</p>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {(dados?.coberturaEspecialistas||[]).map(e=>{
+            const rotulo=e.nivel==='boa'?'boa cobertura':e.nivel==='em_aprendizado'?'em aprendizado':e.nivel==='inicial'?'inicial':'ainda sem uso'
+            const classe=e.nivel==='boa'?'border-emerald-200 bg-emerald-50/50':e.nivel==='em_aprendizado'?'border-blue-200 bg-blue-50/40':e.nivel==='inicial'?'border-amber-200 bg-amber-50/40':'border-slate-200 bg-slate-50'
+            return <div key={e.modulo} className={'rounded-2xl border p-4 '+classe}>
+              <div className="flex items-start justify-between gap-2">
+                <div><b className="text-sm">{e.nome}</b><p className="mt-0.5 text-[11px] text-slate-500">{rotulo}</p></div>
+                <span className="rounded-full border bg-white px-2 py-1 text-xs font-black">{e.cobertura}%</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-slate-700" style={{width:Math.max(3,e.cobertura)+'%'}}/></div>
+              <div className="mt-3 grid grid-cols-2 gap-1 text-[10px] text-slate-600">
+                <span>{e.interacoes30d} conversa(s)</span>
+                <span>{e.respostasAprovadas+e.respostasCorrigidas} validada(s)</span>
+                <span>{e.memoriasAtivas} memória(s)</span>
+                <span>{e.conhecimentosValidados} conhecimento(s)</span>
+              </div>
+            </div>
+          })}
+        </div>
+        <p className="mt-3 text-[11px] text-slate-500">A cobertura sobe com uso e validação humana. O Atlas não cria regra oficial só para aumentar essa porcentagem.</p>
       </section>
 
       <section className="mb-5 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm">
