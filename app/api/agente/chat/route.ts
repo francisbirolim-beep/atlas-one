@@ -10,6 +10,7 @@ import {
 } from '@/lib/agente'
 import { consultarOpenCode, type OpenCodeAnexo } from '@/lib/ai/opencode'
 import { registrarUsoIA } from '@/lib/ai/auditoria'
+import { detectarConsultaEstimativaOrcamento, estimarOrcamentoHistorico, formatarEstimativaOrcamento } from '@/lib/ai/orcamentoEstimativaServer'
 import { compararListasItens, extrairItensComparacao, extrairTextoDeAnexo } from '@/lib/ai/documentoComparador'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -187,7 +188,7 @@ async function montarContextoAtlas(texto: string, usuario: any) {
   const contagemCadastro = await contarCadastroTecnico(texto, usuario)
   if (contagemCadastro) contexto.contagem_cadastro_tecnico = contagemCadastro
 
-  if (/orcamento|orcamentos|venda|vendas/.test(t)) {
+  if (/orcamento|orcamentos|venda|vendas|preco|preço|valor|quanto custa|quanto fica/.test(t)) {
     const r: any = await executarFerramenta(
       'buscar_orcamentos',
       { limite: 50 },
@@ -196,19 +197,37 @@ async function montarContextoAtlas(texto: string, usuario: any) {
       usuario.nome,
       usuario.empresa_id,
     )
-    const lista = Array.isArray(r?.orcamentos) ? r.orcamentos : []
-    const enriquecida = lista.map((o: any) => ({
-      ...o,
-      data_local: o.created_at ? dataLocalISO(o.created_at) : null,
-      horario_local: o.created_at ? horarioLocal(o.created_at) : null,
-    }))
-    const hoje = enriquecida.filter((o: any) => o.data_local === contexto.data_hoje)
-    contexto.orcamentos_recentes = enriquecida
-    contexto.orcamentos_hoje = {
-      quantidade: hoje.length,
-      valor_total: hoje.reduce((s: number, o: any) => s + Number(o.valor_estimado || 0), 0),
-      itens: hoje,
+
+    if (r?.erro) {
+      contexto.orcamentos = { erro: r.erro }
+    } else {
+      const lista = Array.isArray(r?.orcamentos) ? r.orcamentos : []
+      const enriquecida = lista.map((o: any) => ({
+        ...o,
+        data_local: o.created_at ? dataLocalISO(o.created_at) : null,
+        horario_local: o.created_at ? horarioLocal(o.created_at) : null,
+      }))
+      const hoje = enriquecida.filter((o: any) => o.data_local === contexto.data_hoje)
+      contexto.orcamentos_recentes = enriquecida
+      contexto.orcamentos_hoje = {
+        quantidade: hoje.length,
+        valor_total: hoje.reduce((s: number, o: any) => s + Number(o.valor_estimado || 0), 0),
+        itens: hoje,
+      }
     }
+  }
+
+  const pedidoEstimativa = detectarConsultaEstimativaOrcamento(texto)
+  if (pedidoEstimativa.solicitado) {
+    const permitido = await usuarioPodeUsarFerramenta(
+      'buscar_orcamentos',
+      String(usuario?.id || ''),
+      String(usuario?.role || ''),
+      String(usuario?.empresa_id || ''),
+    )
+    contexto.estimativa_orcamento = permitido
+      ? await estimarOrcamentoHistorico({ empresaId: usuario.empresa_id, pergunta: texto })
+      : { erro: 'Acesso negado: este usuário não possui permissão para consultar valores de orçamentos.' }
   }
 
   if (/cliente|clientes/.test(t)) {
@@ -306,6 +325,21 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
 
   if (/^(obrigado|obrigada|valeu|vlw|show|perfeito|ok|certo)[!?. ]*$/.test(t)) {
     return 'Disponha. Pode mandar a próxima consulta.'
+  }
+
+  const estimativa = contexto?.estimativa_orcamento
+  if (estimativa) {
+    if (estimativa.erro) {
+      return 'Esta é uma consulta interna de valores de orçamento, mas seu usuário não possui permissão para visualizar esses dados.'
+    }
+    return formatarEstimativaOrcamento(estimativa)
+  }
+
+  const orcamentosErro = contexto?.orcamentos?.erro
+  if (orcamentosErro && /orcamento|orcamentos|venda|vendas|preco|preço|valor/.test(t)) {
+    return String(orcamentosErro).toLowerCase().includes('acesso negado')
+      ? 'Esta é uma consulta interna de Orçamentos, mas seu usuário não possui permissão para visualizar esses dados.'
+      : 'Não consegui consultar os orçamentos agora: ' + String(orcamentosErro)
   }
 
   const contagemCadastro = contexto?.contagem_cadastro_tecnico
