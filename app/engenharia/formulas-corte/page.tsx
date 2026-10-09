@@ -159,7 +159,7 @@ export default function FormulasCortePage() {
     setGeradoEm('')
   }, [definicao?.id])
 
-  const folhas = extrairFolhas(definicao?.tipologia?.label || '')
+  const folhas = Number(opcoes.numero_folhas) || extrairFolhas(definicao?.tipologia?.label || '')
   const contramarco = valorVariavel(definicao, opcoes, /contramarco/i)
   const nomeEmpresa = empresa?.nomeFantasia?.trim() || empresa?.nome?.trim() || 'Atlas One'
   const corEmpresa = corHexValida(empresa?.corPrincipal) ? empresa!.corPrincipal! : '#0f172a'
@@ -331,7 +331,12 @@ export default function FormulasCortePage() {
               <h2 className="mb-4 mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500">Produto e medidas</h2>
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="text-sm font-medium text-slate-700">Projeto / configuração<input value={projeto} onChange={e => setProjeto(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
-                <label className="text-sm font-medium text-slate-700 md:col-span-2">Tipologia<select value={selecionadaId} onChange={e => setSelecionadaId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">{definicoes.map(item => <option key={item.id} value={item.id}>{item.tipologia?.label || item.tipologia_id}</option>)}</select></label>
+                <label className="text-sm font-medium text-slate-700 md:col-span-2">Tipologia
+                  <select value={selecionadaId} onChange={e => setSelecionadaId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+                    {definicoes.map(item => <option key={item.id} value={item.id}>{item.tipologia?.label || item.tipologia_id}</option>)}
+                  </select>
+                  {definicao?.status === 'validada' && <span className="mt-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">✓ Validado</span>}
+                </label>
                 <label className="text-sm font-medium text-slate-700">Quantidade<input type="number" min="1" value={quantidade} onChange={e => setQuantidade(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Largura final (mm)<input type="number" min="1" value={largura} onChange={e => setLargura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Altura final (mm)<input type="number" min="1" value={altura} onChange={e => setAltura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
