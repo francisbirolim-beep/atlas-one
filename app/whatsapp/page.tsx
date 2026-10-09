@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
-  ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
+  BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus, Camera, Square,
 } from 'lucide-react'
@@ -20,6 +20,7 @@ import {
   listarParticipantes as listarParticipantesInternos,
   marcarConversaComoLida,
 } from '@/lib/chatInterno'
+import { ativarPushNesteDispositivo, statusPushNesteDispositivo } from '@/lib/notificacoes'
 
 type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
@@ -208,6 +209,9 @@ export default function WhatsAppAtendimentoPage() {
   const [textoInterno, setTextoInterno] = useState('')
   const [enviandoInterno, setEnviandoInterno] = useState(false)
   const [enviandoArquivoInterno, setEnviandoArquivoInterno] = useState(false)
+  const [pushDisponivel, setPushDisponivel] = useState(false)
+  const [pushInscrito, setPushInscrito] = useState(true)
+  const [ativandoPush, setAtivandoPush] = useState(false)
   const [gravandoInterno, setGravandoInterno] = useState(false)
   const [buscaUsuarioInterno, setBuscaUsuarioInterno] = useState('')
   const [usuariosInternosSelecionados, setUsuariosInternosSelecionados] = useState<string[]>([])
@@ -250,6 +254,32 @@ export default function WhatsAppAtendimentoPage() {
       setPainelDireitoRecolhido(salvo === null ? false : salvo === '1')
     } catch {}
   }, [])
+
+  useEffect(() => {
+    let vivo = true
+    statusPushNesteDispositivo().then(status => {
+      if (!vivo) return
+      setPushDisponivel(status.suportado && status.permissao !== 'denied')
+      setPushInscrito(status.inscrito && status.dispositivosAtivos > 0)
+    }).catch(() => undefined)
+    return () => { vivo = false }
+  }, [])
+
+  async function ativarNotificacoesDesktop() {
+    if (ativandoPush) return
+    setAtivandoPush(true)
+    setErro('')
+    try {
+      const resultado = await ativarPushNesteDispositivo()
+      if (!resultado.ok) {
+        setErro(resultado.error || 'Não foi possível ativar as notificações neste computador.')
+        return
+      }
+      setPushInscrito(true)
+    } finally {
+      setAtivandoPush(false)
+    }
+  }
 
   function alternarPainelDireitoRecolhido(valor?: boolean) {
     setPainelDireitoRecolhido(atual => {
@@ -1508,6 +1538,18 @@ export default function WhatsAppAtendimentoPage() {
             <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 sm:inline-flex">
               {canaisConectados === 1 ? '1 canal conectado' : `${canaisConectados} canais conectados`}
             </span>
+            {pushDisponivel && !pushInscrito && (
+              <button
+                type="button"
+                onClick={() => void ativarNotificacoesDesktop()}
+                disabled={ativandoPush}
+                className="hidden items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60 sm:inline-flex"
+                title="Ativar notificações deste computador"
+              >
+                <BellRing size={15}/>
+                {ativandoPush ? 'Ativando...' : 'Ativar notificações'}
+              </button>
+            )}
             <button
               type="button"
               onClick={abrirConversaInterna}
