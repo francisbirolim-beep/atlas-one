@@ -371,7 +371,7 @@ async function enviar(
   }
 }
 
-async function consultarOpenCodePublicFree(params: {
+export async function consultarOpenCodePublicFree(params: {
   system: string
   prompt: string
   anexos?: OpenCodeAnexo[]
