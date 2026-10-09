@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ImageIcon, Search, X } from 'lucide-react'
 import { listarTipologias } from '@/lib/tipologias'
+import { listarFormulasCorteAtivas } from '@/lib/engenhariaFormulasCorte'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import type { SelecaoEsquadriaOrcamento, StatusConfiguracaoOrcamento } from './SeletorEsquadriaInteligenteV3'
@@ -61,6 +62,7 @@ function folhasDaTipologia(t: Tipologia | null) {
 export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props) {
   const [tipologias, setTipologias] = useState<Tipologia[]>([])
   const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
+  const [tipologiasValidadas, setTipologiasValidadas] = useState<Set<string>>(new Set())
   const [carregando, setCarregando] = useState(true)
   const [buscaTipologia, setBuscaTipologia] = useState('')
   const [buscaLinha, setBuscaLinha] = useState(value.linhaNome || '')
@@ -79,11 +81,12 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       return () => { ativo = false }
     }
 
-    Promise.all([listarTipologias(), listarLinhasTecnicas()])
-      .then(([ts, ls]) => {
+    Promise.all([listarTipologias(), listarLinhasTecnicas(), listarFormulasCorteAtivas()])
+      .then(([ts, ls, formulas]) => {
         if (!ativo) return
         setTipologias(ts.filter((t: any) => t.ativo !== false))
         setLinhas(ls.filter(l => l.ativo))
+        setTipologiasValidadas(new Set(formulas.filter(f => f.status === 'validada').map(f => f.tipologia_id)))
         setCarregando(false)
       })
       .catch(() => {
@@ -380,7 +383,9 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       </div>
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-        <label className="mb-1 block text-xs font-semibold text-slate-700">5. Escolher tipologia / projeto</label>
+        <label className="mb-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">5. Escolher tipologia / projeto
+          {value.tipologiaId && tipologiasValidadas.has(value.tipologiaId) && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Validado</span>}
+        </label>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
@@ -407,7 +412,9 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-slate-800">{t.label}</span>
+                      <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">{t.label}
+                        {tipologiasValidadas.has(t.id) && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Validado</span>}
+                      </span>
                       <span className="mt-0.5 block text-[11px] text-slate-500">{(t as any).categoria || 'Tipologia'}</span>
                       <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{linhaResultado?.nome || 'Linha não vinculada'}</span>
                     </span>
@@ -474,6 +481,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
                           </span>
                           <span className="block p-3">
                             <span className="block text-xs font-bold leading-snug text-slate-800">{t.label}</span>
+                            {tipologiasValidadas.has(t.id) && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Validado</span>}
                             <span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-400">{(t as any).categoria || 'Projeto'}</span>
                             {selecionada && <span className="mt-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">SELECIONADO</span>}
                           </span>
