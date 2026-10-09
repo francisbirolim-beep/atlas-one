@@ -1,7 +1,13 @@
 import Link from 'next/link'
 import { Building2, FileText, History, PackageSearch, ReceiptText, ShoppingCart, WalletCards } from 'lucide-react'
 
-export default function Fornecedor360Layout({ children, params }: { children: React.ReactNode; params: { id: string } }) {
+export default async function Fornecedor360Layout(props: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const base = `/fornecedores/${params.id}`
   const links = [
     { href: base, label: 'Visão geral', icon: Building2 },

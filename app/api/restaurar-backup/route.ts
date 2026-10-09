@@ -17,12 +17,28 @@ export async function POST(req: NextRequest) {
 
       const { data: perfil } = await supabaseAdmin
             .from('usuarios')
-            .select('nome, role')
+            .select('nome, role, empresa_id')
             .eq('id', userData.user.id)
             .maybeSingle()
 
-      if (!perfil || perfil.role !== 'master') {
-              return NextResponse.json({ error: 'Apenas o usuario master pode restaurar um backup' }, { status: 403 })
+      if (!perfil || perfil.role !== 'master' || !perfil.empresa_id) {
+              return NextResponse.json({ error: 'Apenas o usuario master da empresa pode restaurar um backup' }, { status: 403 })
+      }
+
+      // O snapshot legado inclui tabelas globais (ex.: setores) e foi criado quando
+      // o Atlas possuia uma unica empresa. Se surgir um segundo tenant, bloquear a
+      // restauracao destrutiva ate o formato de backup ser migrado para snapshots
+      // integralmente isolados por empresa.
+      const { count: empresasAtivas, error: empresasErr } = await supabaseAdmin
+            .from('empresas')
+            .select('id', { count: 'exact', head: true })
+      if (empresasErr) {
+              return NextResponse.json({ error: 'Nao foi possivel validar o isolamento do backup' }, { status: 500 })
+      }
+      if ((empresasAtivas || 0) > 1) {
+              return NextResponse.json({
+                    error: 'Restauracao bloqueada por seguranca: existem multiplas empresas no Atlas.'
+              }, { status: 409 })
       }
 
       const body = await req.json()
@@ -33,8 +49,9 @@ export async function POST(req: NextRequest) {
 
       const { data: backup, error: backupErr } = await supabaseAdmin
             .from('backups')
-            .select('id, tabelas')
+            .select('id, tabelas, empresa_id')
             .eq('id', backupId)
+            .eq('empresa_id', perfil.empresa_id)
             .maybeSingle()
 
       if (backupErr || !backup) {

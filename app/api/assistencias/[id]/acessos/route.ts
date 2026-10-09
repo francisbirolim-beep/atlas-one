@@ -67,7 +67,8 @@ async function validarEscopo(usuario: UsuarioAcesso, assistenciaId: string) {
   return null
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
   const bloqueio = await validarEscopo(usuario, params.id)
@@ -84,7 +85,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ acessos: data || [] })
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
   const bloqueio = await validarEscopo(usuario, params.id)
@@ -127,7 +129,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   })
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
   const bloqueio = await validarEscopo(usuario, params.id)

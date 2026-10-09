@@ -20,7 +20,8 @@ async function autorizar(req: NextRequest, medicaoId: string, editar: boolean) {
   return { usuario, medicao }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!UUID.test(params.id)) return NextResponse.json({ error: 'Medição inválida.' }, { status: 400 })
   const acesso = await autorizar(req, params.id, false)
   if (!acesso) return NextResponse.json({ error: 'Sem acesso à medição.' }, { status: 403 })
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ historico: data || [] })
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!UUID.test(params.id)) return NextResponse.json({ error: 'Medição inválida.' }, { status: 400 })
   const acesso = await autorizar(req, params.id, true)
   if (!acesso) return NextResponse.json({ error: 'Sem permissão para corrigir fotos desta medição.' }, { status: 403 })

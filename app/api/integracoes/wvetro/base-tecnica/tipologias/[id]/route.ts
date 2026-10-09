@@ -8,8 +8,9 @@ export const dynamic = 'force-dynamic'
 // Endpoint só de leitura, escopo de UMA referência de tipologia. Não altera nada
 // da carga histórica (execuções/pendências/cursor/retry) — nem escreve em nenhuma tabela.
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!await autenticarMasterWVetro(req)) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  if (!(await autenticarMasterWVetro(req))) return NextResponse.json({ error: 'Área restrita ao Master.' }, { status: 403 })
 
   const { id } = params
   if (!id) return NextResponse.json({ error: 'Id não informado.' }, { status: 400 })

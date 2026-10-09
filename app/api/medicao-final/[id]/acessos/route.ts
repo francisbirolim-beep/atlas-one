@@ -43,7 +43,8 @@ async function nivelAcessoMedicao(usuario: UsuarioAcesso): Promise<'oculto' | 'c
   return (permissao?.nivel as 'oculto' | 'consulta' | 'edicao' | undefined) || 'oculto'
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
   const nivel = await nivelAcessoMedicao(usuario)
@@ -59,10 +60,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ acessos: data || [], podeEditar: nivel === 'edicao' })
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
-  if (await nivelAcessoMedicao(usuario) !== 'edicao') {
+  if ((await nivelAcessoMedicao(usuario)) !== 'edicao') {
     return NextResponse.json({ error: 'Voce nao tem permissao de edicao para gerar links de Medicao Final.' }, { status: 403 })
   }
 
@@ -109,10 +111,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ acesso: data, url: `${req.nextUrl.origin}/medicao-final/acesso/${token}` })
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
-  if (await nivelAcessoMedicao(usuario) !== 'edicao') {
+  if ((await nivelAcessoMedicao(usuario)) !== 'edicao') {
     return NextResponse.json({ error: 'Voce nao tem permissao de edicao para revogar links de Medicao Final.' }, { status: 403 })
   }
 

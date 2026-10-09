@@ -27,7 +27,7 @@ function linhasNormalizadas(texto: string) {
   return (texto || '')
     .split(/\r?\n/)
     .map(linha => linha.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 function candidatoNomeObra(valor: string) {
@@ -84,8 +84,8 @@ function encontrarPdfWVetro(anexos: unknown): AnexoStorage | null {
   const lista = anexos as AnexoStorage[]
   return lista.find(anexo => {
     const texto = `${anexo.titulo || ''} ${anexo.nome || ''}`
-    return /w\.?vetro/i.test(texto) && anexoTemArquivo(anexo)
-  }) || lista.find(anexo => anexoEhPdf(anexo) && anexoTemArquivo(anexo)) || null
+    return /w\.?vetro/i.test(texto) && anexoTemArquivo(anexo);
+  }) || lista.find(anexo => anexoEhPdf(anexo) && anexoTemArquivo(anexo)) || null;
 }
 
 async function lerNomeObraDoPdf(anexos: unknown) {
@@ -105,7 +105,8 @@ async function lerNomeObraDoPdf(anexos: unknown) {
   }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const usuario = await usuarioAutenticado(req)
   if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
 
