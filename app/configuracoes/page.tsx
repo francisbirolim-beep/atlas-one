@@ -107,8 +107,8 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
   const [novoAgenteNome, setNovoAgenteNome] = useState('')
   const [novoAgenteEscopo, setNovoAgenteEscopo] = useState<'setor' | 'master'>('setor')
   const [novoAgenteSetorId, setNovoAgenteSetorId] = useState('')
-  const [novoAgenteProvider, setNovoAgenteProvider] = useState('anthropic')
-  const [novoAgenteModelo, setNovoAgenteModelo] = useState('claude-sonnet-5')
+  const [novoAgenteProvider, setNovoAgenteProvider] = useState('ollama')
+  const [novoAgenteModelo, setNovoAgenteModelo] = useState('llama3.1')
   const [novoAgenteTemperatura, setNovoAgenteTemperatura] = useState('1')
   const [criandoAgenteIA, setCriandoAgenteIA] = useState(false)
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
@@ -151,7 +151,7 @@ const [apagandoSetor, setApagandoSetor] = useState<string | null>(null)
       escopo: novoAgenteEscopo,
       setor_id: novoAgenteEscopo === 'setor' ? (novoAgenteSetorId || null) : null,
       provider: novoAgenteProvider,
-      modelo: novoAgenteModelo.trim() || 'claude-sonnet-5',
+      modelo: novoAgenteModelo.trim() || 'llama3.1',
       temperatura: Number(novoAgenteTemperatura) || 1,
       ativo: true,
     })
@@ -1548,17 +1548,17 @@ async function salvarSla(colunaId: string) {
                 onChange={(e) => setNovoAgenteProvider(e.target.value)}
                 className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
               >
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="openai">OpenAI (em breve)</option>
-                <option value="gemini">Gemini (em breve)</option>
-                <option value="ollama">Ollama (em breve)</option>
-                <option value="openrouter">OpenRouter (em breve)</option>
+                <option value="ollama">Ollama local · custo zero</option>
+                <option value="anthropic" disabled>Anthropic (bloqueado pela política zero custo)</option>
+                <option value="openai" disabled>OpenAI (bloqueado pela política zero custo)</option>
+                <option value="gemini" disabled>Gemini (bloqueado pela política zero custo)</option>
+                <option value="openrouter" disabled>OpenRouter (bloqueado pela política zero custo)</option>
               </select>
               <input
                 type="text"
                 value={novoAgenteModelo}
                 onChange={(e) => setNovoAgenteModelo(e.target.value)}
-                placeholder="Modelo (ex: claude-sonnet-5)"
+                placeholder="Modelo local (ex: llama3.1)"
                 className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
               />
               <input

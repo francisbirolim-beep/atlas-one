@@ -643,8 +643,8 @@ export default function AtlasIAPage() {
             </div>)}
             {imagemPendente && <div className="flex justify-start"><div className="max-w-[92%] rounded-2xl border bg-white p-4 text-sm shadow-sm">
               <div className="mb-2 flex items-center gap-2 font-semibold"><ImageIcon size={18}/> Gerar imagem</div>
-              <p className="text-slate-600">Esta ação usa geração de imagem paga. Estimativa: <b>US$ {imagemPendente.usd.toFixed(3)}</b> para {imagemPendente.size}, qualidade {imagemPendente.quality}. O custo real pode variar.</p>
-              <div className="mt-3 flex gap-2"><button onClick={gerarImagem} className="rounded-xl bg-[#182444] px-4 py-2 font-semibold text-white">Pode gerar</button><button onClick={() => setImagemPendente(null)} className="rounded-xl border px-4 py-2">Cancelar</button></div>
+              <p className="text-slate-600">A geração usa o runtime local do Atlas, sem API paga e com custo variável alvo de <b>US$ 0</b>. Modelo: {imagemPendente.model || 'Stable Diffusion local'} · {imagemPendente.size || '1024x1024'}.</p>
+              <div className="mt-3 flex gap-2"><button onClick={gerarImagem} className="rounded-xl bg-[#182444] px-4 py-2 font-semibold text-white">Gerar sem custo</button><button onClick={() => setImagemPendente(null)} className="rounded-xl border px-4 py-2">Cancelar</button></div>
             </div></div>}
             {relatoSugerido && <div className="flex justify-start"><div className="max-w-[92%] rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm shadow-sm">
               <div className="flex items-center gap-2 font-semibold text-amber-900"><Bug size={17}/> Isso parece um defeito ou melhoria do Atlas</div>
