@@ -3,6 +3,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { statusOpenCode } from '@/lib/ai/opencode'
 import { statusRuntimesGratis } from '@/lib/ai/runtimeEndpoints'
+import { AI_ESPECIALISTAS } from '@/lib/ai/specialists'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -45,6 +46,9 @@ export async function GET(req: NextRequest) {
     atividadeAgentesResp,
     whatsappIaConfigResp,
     orcamentoFeedbackResp,
+    feedbackIaResp,
+    memoriasEspecialistasResp,
+    conhecimentoSetorResp,
   ] = await Promise.all([
     supabaseAdmin
       .from('usuarios')
@@ -129,6 +133,25 @@ export async function GET(req: NextRequest) {
       .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(200),
+    supabaseAdmin
+      .from('ai_feedback')
+      .select('interacao_id,avaliacao,created_at')
+      .eq('empresa_id', empresaId)
+      .order('created_at', { ascending: false })
+      .limit(600),
+    supabaseAdmin
+      .from('ai_memorias')
+      .select('escopo,ativo,updated_at')
+      .eq('empresa_id', empresaId)
+      .eq('ativo', true)
+      .like('escopo', 'especialista:%')
+      .limit(600),
+    supabaseAdmin
+      .from('ai_conhecimento_setor')
+      .select('modulo,status,updated_at')
+      .eq('empresa_id', empresaId)
+      .eq('status', 'validado')
+      .limit(1000),
   ])
 
   const usuarios = usuariosResp.data || []
@@ -314,6 +337,46 @@ export async function GET(req: NextRequest) {
     },
   }
 
+  const feedbackIa = feedbackIaResp.data || []
+  const memoriasEspecialistas = memoriasEspecialistasResp.data || []
+  const conhecimentoSetor = conhecimentoSetorResp.data || []
+  const interacaoPorId = new Map(interacoes.map((i: any) => [i.id, i]))
+
+  const coberturaEspecialistas = AI_ESPECIALISTAS.map(especialista => {
+    const contexto = 'especialista:' + especialista.modulo
+    const interacoesModulo = interacoes.filter((i: any) => String(i.contexto || '') === contexto)
+    const idsModulo = new Set(interacoesModulo.map((i: any) => i.id))
+    const feedbackModulo = feedbackIa.filter((f: any) => idsModulo.has(f.interacao_id))
+    const memorias = memoriasEspecialistas.filter((m: any) => String(m.escopo || '') === contexto).length
+    const conhecimentos = conhecimentoSetor.filter((k: any) => String(k.modulo || '') === especialista.modulo).length
+    const aprovadas = feedbackModulo.filter((f: any) => String(f.avaliacao || '') === 'aprovado').length
+    const corrigidas = feedbackModulo.filter((f: any) => String(f.avaliacao || '') === 'corrigido').length
+    const rejeitadas = feedbackModulo.filter((f: any) => String(f.avaliacao || '') === 'rejeitado').length
+
+    const pontosUso = Math.min(30, interacoesModulo.length * 3)
+    const pontosFeedback = Math.min(30, aprovadas * 4 + corrigidas * 6)
+    const pontosConhecimento = Math.min(40, memorias * 8 + conhecimentos * 6)
+    const cobertura = Math.min(100, pontosUso + pontosFeedback + pontosConhecimento)
+    const nivel = cobertura >= 70 ? 'boa'
+      : cobertura >= 35 ? 'em_aprendizado'
+        : interacoesModulo.length > 0 ? 'inicial' : 'sem_uso'
+
+    return {
+      modulo: especialista.modulo,
+      nome: especialista.nome,
+      objetivo: especialista.objetivo,
+      interacoes30d: interacoesModulo.length,
+      respostasAprovadas: aprovadas,
+      respostasCorrigidas: corrigidas,
+      respostasRejeitadas: rejeitadas,
+      memoriasAtivas: memorias,
+      conhecimentosValidados: conhecimentos,
+      cobertura,
+      nivel,
+      ultimaInteracaoEm: interacoesModulo[0]?.created_at || null,
+    }
+  })
+
   const [runtimeGratis, openCodeGratis] = await Promise.all([
     statusRuntimesGratis(),
     statusOpenCode(),
@@ -345,6 +408,7 @@ export async function GET(req: NextRequest) {
       tokensSaida: usoHoje.reduce((s: number, x: any) => s + Number(x.tokens_saida || 0), 0),
     },
     agentes,
+    coberturaEspecialistas,
     usoRecentes: uso.slice(0, 120).map((x: any) => ({
       id: x.id,
       agente_nome: x.agente_nome,
