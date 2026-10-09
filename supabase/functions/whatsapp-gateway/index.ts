@@ -1791,13 +1791,38 @@ async function processGroupBudgetIntake(
     .maybeSingle()
   if (!group) return null
 
-  const { data: automation } = await db.from("atendimento_whatsapp_grupo_automacoes")
+  let { data: automation } = await db.from("atendimento_whatsapp_grupo_automacoes")
     .select("*")
     .eq("empresa_id", config.empresa_id)
     .eq("grupo_id", group.id)
     .eq("tipo", "orcamento")
     .eq("ativo", true)
     .maybeSingle()
+
+  if (!automation) {
+    const { data: siblingGroups } = await db.from("atendimento_whatsapp_grupos")
+      .select("id")
+      .eq("empresa_id", config.empresa_id)
+      .eq("grupo_jid", groupJid)
+      .eq("ativo", true)
+
+    const siblingIds = (siblingGroups || [])
+      .map((item: any) => item.id)
+      .filter((id: unknown) => id && id !== group.id)
+
+    if (siblingIds.length) {
+      const { data: siblingAutomation } = await db.from("atendimento_whatsapp_grupo_automacoes")
+        .select("*")
+        .eq("empresa_id", config.empresa_id)
+        .eq("tipo", "orcamento")
+        .eq("ativo", true)
+        .in("grupo_id", siblingIds)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      automation = siblingAutomation || null
+    }
+  }
   if (!automation) return null
 
   const participantJid = String(body.participanteJid || body.participanteTelefone || "desconhecido")
