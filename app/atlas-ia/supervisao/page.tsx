@@ -8,9 +8,9 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 type AgenteApi={nome:string;execucoes30d:number;custo30d:number;ultimaAtividadeEm:string|null;provider:string|null;modelo:string|null;setor:string|null}
 type Uso={agente_nome:string|null;setor_id:string|null;created_at:string;sucesso:boolean}
 type OperacaoAgente={trabalhando:boolean;monitorando?:boolean;atividade:string;ultimaAtividadeEm:string|null;aguardandoValidacao?:number;correcoes30d?:number;modo?:string|null}
-type CoberturaEspecialista={modulo:string;nome:string;objetivo:string;interacoes30d:number;respostasAprovadas:number;respostasCorrigidas:number;respostasRejeitadas:number;memoriasAtivas:number;conhecimentosValidados:number;cobertura:number;nivel:'boa'|'em_aprendizado'|'inicial'|'sem_uso';ultimaInteracaoEm:string|null}
-type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>;runtimeGratis?:any;coberturaEspecialistas?:CoberturaEspecialista[]}
-type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number;entradasAguardando?:number;entradasAnalisando?:number;entradasConcluidas?:number;errosHistoricos?:number}}
+type AtividadeRecente={id:string;agente_id?:string|null;agente_nome?:string|null;contexto?:string|null;tarefa?:string|null;status?:string|null;iniciou_em?:string|null;atualizou_em?:string|null;finalizou_em?:string|null}
+type Dados={resumo:{custoEstimado:number};resumoHoje:{execucoes:number;sucessos:number;erros:number;custoEstimado:number};agentes:AgenteApi[];usoRecentes:Uso[];atividadesRecentes?:AtividadeRecente[];operacaoAgora?:Partial<Record<string,OperacaoAgente>>;runtimeGratis?:any}
+type Aprendizado={totais:{pendentes:number;aplicados:number;rejeitados:number}}
 
 const ROLES=[
   {id:'whatsapp',nome:'IA WhatsApp',funcao:'Atendimento e triagem',termos:['whatsapp','comercial','atendimento'],cor:'#16a34a',emoji:'💬'},
@@ -62,9 +62,16 @@ export default function SupervisaoIAPage(){
     const mins=min(ultima)
     let estado=operacional?.trabalhando?'trabalhando':operacional?.monitorando?'monitorando':mins<=4?'trabalhando':mins<=20?'observando':'disponível'
     let atividade=operacional?.atividade||(estado==='trabalhando'?'Processando uma tarefa agora':estado==='monitorando'?'Monitorando e aprendendo continuamente':estado==='observando'?'Acompanhando atividade recente':'Aguardando nova tarefa')
+    let fonte=operacional
+      ? 'Status vindo da operação real do Atlas'
+      : uso
+        ? 'Status inferido pelo último log real de execução'
+        : base
+          ? 'Status inferido pelo histórico real de 30 dias'
+          : 'Sem evento real recente; animação em espera'
     if(r.id==='orcamento'&&(operacional?.aguardandoValidacao||0)>0&&estado==='disponível')estado='monitorando'
-    if(r.id==='catalogo'&&(apr?.totais.pendentes||0)>0&&!operacional?.trabalhando){atividade='Acompanhando '+(apr?.totais.pendentes||0)+' validação(ões) pendente(s)';if(estado==='disponível')estado='observando'}
-    return {...r,estado,atividade,ultima,exec:Number(base?.execucoes30d||0),custo:Number(base?.custo30d||0),provider:base?.provider||'—',modelo:base?.modelo||'—'}
+    if(r.id==='catalogo'&&(apr?.totais.pendentes||0)>0&&!operacional?.trabalhando){atividade='Acompanhando '+(apr?.totais.pendentes||0)+' validação(ões) pendente(s)';fonte='Status vindo da Central de Aprendizado';if(estado==='disponível')estado='observando'}
+    return {...r,estado,atividade,fonte,ultima,exec:Number(base?.execucoes30d||0),custo:Number(base?.custo30d||0),provider:base?.provider||'—',modelo:base?.modelo||'—'}
   }),[dados,apr])
   const ativosEspecialistas=agentes.filter(a=>a.id!=='supervisor'&&a.estado==='trabalhando').length
   const monitorandoContinuo=agentes.filter(a=>a.id!=='supervisor'&&a.estado==='monitorando').length
@@ -78,6 +85,7 @@ export default function SupervisaoIAPage(){
     }else{
       supervisor.estado=ativosEspecialistas?'trabalhando':'observando'
       supervisor.atividade=ativosEspecialistas?'Supervisionando '+ativosEspecialistas+' agente(s) em atividade':'Monitorando a operação da IA'
+      supervisor.fonte=ativosEspecialistas?'Status derivado dos agentes ativos':'Status de supervisão contínua'
     }
   }
   const ativos=ativosEspecialistas+(supervisor?.estado==='trabalhando'?1:0)
@@ -101,53 +109,8 @@ export default function SupervisaoIAPage(){
         <Card icon={<Bot size={16}/>} label="Execuções hoje" valor={num(dados?.resumoHoje?.execucoes||0)} sub={(dados?.resumoHoje?.sucessos||0)+' concluídas'}/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo hoje" valor={usd(dados?.resumoHoje?.custoEstimado||0)} sub="estimativa"/>
         <Card icon={<CircleDollarSign size={16}/>} label="Custo 30 dias" valor={usd(dados?.resumo?.custoEstimado||0)} sub="histórico; política atual = zero-custo"/>
-        <Card icon={<GraduationCap size={16}/>} label="Aguardando validação" valor={num(apr?.totais.pendentes||0)} sub="itens reais para conferir"/>
+        <Card icon={<GraduationCap size={16}/>} label="Aguardando validação" valor={num(apr?.totais.pendentes||0)} sub="aprendizado"/>
         <Card icon={<TriangleAlert size={16}/>} label="Erros hoje" valor={num(dados?.resumoHoje?.erros||0)} sub="execuções com falha"/>
-      </section>
-
-      <section className="mb-5 rounded-3xl border bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-black">Saúde do aprendizado</h2>
-            <p className="mt-1 text-xs text-slate-500">Separa o que ainda precisa de validação das falhas antigas preservadas para auditoria.</p>
-          </div>
-          <Link href="/atlas-ia/aprendizado?aba=validacoes" className="rounded-xl border bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Abrir validações</Link>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Mini l="Itens pendentes" v={num(apr?.totais.pendentes||0)}/>
-          <Mini l="Aplicados" v={num(apr?.totais.aplicados||0)}/>
-          <Mini l="Entradas aguardando" v={num(apr?.totais.entradasAguardando||0)}/>
-          <Mini l="Entradas concluídas" v={num(apr?.totais.entradasConcluidas||0)}/>
-          <Mini l="Falhas históricas" v={num(apr?.totais.errosHistoricos||0)}/>
-        </div>
-        {(apr?.totais.errosHistoricos||0)>0&&<p className="mt-3 text-[11px] text-slate-500">Falha histórica não significa que a IA está com erro agora. O Atlas mantém tentativas antigas para rastreabilidade; o trabalho atual é medido pelos itens pendentes e entradas em análise/validação.</p>}
-      </section>
-
-      <section className="mb-5 rounded-3xl border bg-white p-5 shadow-sm">
-        <div>
-          <h2 className="font-black">Cobertura de aprendizado dos especialistas</h2>
-          <p className="mt-1 text-xs text-slate-500">Mede uso real, respostas validadas/corrigidas e conhecimento humano aprovado. Não é nota de inteligência nem precisão.</p>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {(dados?.coberturaEspecialistas||[]).map(e=>{
-            const rotulo=e.nivel==='boa'?'boa cobertura':e.nivel==='em_aprendizado'?'em aprendizado':e.nivel==='inicial'?'inicial':'ainda sem uso'
-            const classe=e.nivel==='boa'?'border-emerald-200 bg-emerald-50/50':e.nivel==='em_aprendizado'?'border-blue-200 bg-blue-50/40':e.nivel==='inicial'?'border-amber-200 bg-amber-50/40':'border-slate-200 bg-slate-50'
-            return <div key={e.modulo} className={'rounded-2xl border p-4 '+classe}>
-              <div className="flex items-start justify-between gap-2">
-                <div><b className="text-sm">{e.nome}</b><p className="mt-0.5 text-[11px] text-slate-500">{rotulo}</p></div>
-                <span className="rounded-full border bg-white px-2 py-1 text-xs font-black">{e.cobertura}%</span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-slate-700" style={{width:Math.max(3,e.cobertura)+'%'}}/></div>
-              <div className="mt-3 grid grid-cols-2 gap-1 text-[10px] text-slate-600">
-                <span>{e.interacoes30d} conversa(s)</span>
-                <span>{e.respostasAprovadas+e.respostasCorrigidas} validada(s)</span>
-                <span>{e.memoriasAtivas} memória(s)</span>
-                <span>{e.conhecimentosValidados} conhecimento(s)</span>
-              </div>
-            </div>
-          })}
-        </div>
-        <p className="mt-3 text-[11px] text-slate-500">A cobertura sobe com uso e validação humana. O Atlas não cria regra oficial só para aumentar essa porcentagem.</p>
       </section>
 
       <section className="mb-5 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm">
@@ -171,7 +134,7 @@ export default function SupervisaoIAPage(){
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
           <div>
             <h2 className="font-black">Escritório vivo dos agentes</h2>
-            <p className="text-xs text-slate-500">Os bonequinhos caminham até as mesas conforme o setor consultado e mostram o que estão fazendo.</p>
+            <p className="text-xs text-slate-500">Os bonequinhos representam o estado real lido no Atlas; o trajeto é uma animação visual, e a fonte do status aparece no detalhe do agente.</p>
           </div>
           <button onClick={()=>setMovimentoAtivo(v=>!v)} className="rounded-xl border bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
             {movimentoAtivo?'Pausar movimento':'Continuar movimento'}
@@ -244,9 +207,27 @@ export default function SupervisaoIAPage(){
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <div className="flex items-start gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl text-2xl text-white" style={{background:escolhido.cor}}>{escolhido.emoji}</div><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black">{escolhido.nome}</h3><span className="rounded-full border bg-slate-50 px-2 py-1 text-[11px] font-bold">{escolhido.estado}</span></div><p className="text-sm text-slate-500">{escolhido.funcao}</p><div className="mt-3 rounded-xl bg-slate-50 p-3"><small className="font-bold uppercase text-slate-400">Atividade atual</small><p className="font-semibold">{escolhido.atividade}</p></div></div></div>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4"><Mini l="Execuções 30d" v={num(escolhido.exec)}/><Mini l="Custo 30d" v={usd(escolhido.custo)}/><Mini l="Provider" v={escolhido.provider}/><Mini l="Modelo" v={escolhido.modelo}/></div>
+          <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800"><b>Fonte do movimento:</b> {escolhido.fonte}</div>
           <p className="mt-3 text-xs text-slate-400">Última atividade: {data(escolhido.ultima)}</p>
         </div>
-        <div className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="font-black">Supervisão e validação</h3><p className="mt-1 text-xs text-slate-500">Acesse os controles ligados à operação dos agentes.</p><div className="mt-4 space-y-2"><Link href="/atlas-ia/aprendizado" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><GraduationCap/><span><b className="block text-sm">Central de Aprendizado</b><small className="text-slate-500">{apr?.totais.pendentes||0} pendente(s)</small></span></Link><Link href="/administracao/ia" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><ShieldCheck/><span><b className="block text-sm">Controle Master da IA</b><small className="text-slate-500">Custos, permissões e auditoria</small></span></Link></div></div>
+        <div className="space-y-4">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="font-black">Supervisão e validação</h3><p className="mt-1 text-xs text-slate-500">Acesse os controles ligados à operação dos agentes.</p><div className="mt-4 space-y-2"><Link href="/atlas-ia/aprendizado" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><GraduationCap/><span><b className="block text-sm">Central de Aprendizado</b><small className="text-slate-500">{apr?.totais.pendentes||0} pendente(s)</small></span></Link><Link href="/administracao/ia" className="flex items-center gap-3 rounded-xl border p-3 hover:bg-slate-50"><ShieldCheck/><span><b className="block text-sm">Controle Master da IA</b><small className="text-slate-500">Custos, permissões e auditoria</small></span></Link></div></div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="font-black">Atividades reais recentes</h3>
+            <p className="mt-1 text-xs text-slate-500">Eventos gravados na tabela de atividade dos agentes. Isso é o rastro real por trás da animação.</p>
+            <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+              {(dados?.atividadesRecentes||[]).slice(0,8).map(item=><div key={item.id} className="rounded-xl border bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <b className="truncate text-xs text-slate-900">{item.agente_nome||item.agente_id||'Agente IA'}</b>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500">{item.status||'—'}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-slate-600">{item.tarefa||item.contexto||'Atividade registrada'}</p>
+                <p className="mt-1 text-[10px] text-slate-400">{data(item.atualizou_em||item.finalizou_em||item.iniciou_em)}</p>
+              </div>)}
+              {!(dados?.atividadesRecentes||[]).length&&<div className="rounded-xl border border-dashed p-4 text-center text-xs text-slate-400">Nenhuma atividade real recente registrada nos últimos minutos.</div>}
+            </div>
+          </div>
+        </div>
       </section>
       <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa estado operacional: trabalhando, monitorando/aprendendo, observando ou disponível. WhatsApp e Orçamentista permanecem ativos em monitoramento contínuo enquanto suas automações estiverem ligadas.</p>
     </div>
