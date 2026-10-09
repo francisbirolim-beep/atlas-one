@@ -7,6 +7,8 @@ import { especialistaDoModulo } from '@/lib/ai/specialists'
 import { montarContextoAtlasGlobal } from '@/lib/ai/contextoAtlasGlobal'
 import type { AIModulo } from '@/lib/ai/types'
 import { formatarFontesParaPrompt, pesquisarPublicamente, podePesquisarPublicamente, respostaIndicaFaltaDeDado, type ResultadoPesquisaPublica } from '@/lib/ai/pesquisaPublica'
+import { detectarConsultaEstimativaOrcamento, estimarOrcamentoHistorico, formatarEstimativaOrcamento } from '@/lib/ai/orcamentoEstimativaServer'
+import { registrarUsoIA } from '@/lib/ai/auditoria'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -558,6 +560,69 @@ export async function POST(req: NextRequest) {
     await auditarAcesso(usuario, modulo, acesso, perguntaRegistrada)
     if (!acesso.permitido) {
       return NextResponse.json({ error: 'Você não possui acesso a estes dados no Atlas IA.' }, { status: 403 })
+    }
+
+    const pedidoEstimativa = detectarConsultaEstimativaOrcamento(pergunta)
+    if (modulo === 'orcamento' && pedidoEstimativa.solicitado) {
+      const inicioEstimativa = Date.now()
+      const estimativa = await estimarOrcamentoHistorico({
+        empresaId: usuario.empresa_id,
+        pergunta,
+      })
+
+      if (estimativa) {
+        const respostaEstimativa = formatarEstimativaOrcamento(estimativa)
+        const { data: interacao } = await supabaseAdmin
+          .from('ai_interacoes')
+          .insert({
+            empresa_id: usuario.empresa_id,
+            contexto: contextoId(modulo),
+            usuario_id: usuario.id,
+            usuario_nome: usuario.nome || null,
+            pergunta: perguntaRegistrada,
+            resposta: respostaEstimativa,
+            modelo: 'atlas-interno/estimativa-historica-wvetro',
+            contexto_json: {
+              modulo,
+              especialista: especialista.nome,
+              estimativa_historica: estimativa,
+              fonte: 'wvetro_validado',
+              regra: 'consulta_estatistica_nao_substitui_mee',
+            },
+            status: 'ok',
+          })
+          .select('id')
+          .single()
+
+        await registrarUsoIA({
+          agenteId: null,
+          agenteNome: 'Atlas Orçamentista - estimativa histórica',
+          usuarioId: usuario.id,
+          usuarioNome: usuario.nome,
+          empresa: 'Atlas One',
+          setorId: 'orcamentos',
+          provider: 'atlas-interno',
+          modelo: 'estimativa-historica-wvetro',
+          passos: 0,
+          sucesso: true,
+          custoEstimado: 0,
+          duracaoMs: Date.now() - inicioEstimativa,
+          fallbackPolicy: 'validated_history_only',
+        })
+
+        return NextResponse.json({
+          resposta: respostaEstimativa,
+          interacaoId: interacao?.id || null,
+          sessionId: null,
+          modelo: 'atlas-interno/estimativa-historica-wvetro',
+          modulo,
+          especialista: especialista.nome,
+          somenteSugestao: true,
+          estimativaHistorica: estimativa,
+          fontesPublicas: [],
+          pesquisaPublica: null,
+        })
+      }
     }
 
     const status = await statusOpenCode()
