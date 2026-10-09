@@ -9,7 +9,6 @@ import {
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
-  aprovarMedicaoFinal,
   carregarOperacaoMedicaoV2,
   carregarResumoMedicaoV2,
   concluirMedicaoFinal,
@@ -45,7 +44,7 @@ const STATUS: Record<StatusOperacionalMedicao, { label: string; classe: string }
   liberado: { label: 'Liberado para medir', classe: 'border-sky-200 bg-sky-50 text-sky-700' },
   em_medicao: { label: 'Em medição', classe: 'border-blue-200 bg-blue-50 text-blue-700' },
   com_pendencia: { label: 'Com pendência', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
-  concluido: { label: 'Concluído — aguardando aprovação', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  concluido: { label: 'Enviado — aguardando Liberar Produção', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
   aprovado: { label: 'Aprovado', classe: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
 }
 
@@ -439,15 +438,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               </button>
             )}
 
-            {operacao?.status_operacional === 'concluido' && master && (
-              <button
-                type="button"
-                disabled={processando}
-                onClick={() => void executar(() => aprovarMedicaoFinal(medicaoId, usuario), 'Medição aprovada. Pronta para seguir ao próximo setor.')}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+            {operacao?.status_operacional === 'concluido' && (
+              <Link
+                href="/producao"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
               >
-                <ShieldCheck size={14} /> Aprovar medição
-              </button>
+                <ShieldCheck size={14} /> Abrir Liberar Produção
+              </Link>
             )}
 
             <button
@@ -465,7 +462,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700">Revisão antes do envio</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">Confira a Medição Final antes de enviar definitivamente.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">Confira a Medição Final antes de enviar para a Produção.</p>
                 <p className="mt-1 text-xs text-slate-600">{resumo.pecasMedidas}/{resumo.totalPecas} peças concluídas · {resumo.percentual}% da obra · {resumo.medidores.length || 1} medidor(es).</p>
                 <p className="mt-1 text-[11px] text-slate-500">Você ainda pode voltar para a lista e revisar medidas, checklist e fotos de cada tipologia.</p>
               </div>
