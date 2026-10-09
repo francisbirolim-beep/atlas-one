@@ -219,16 +219,101 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
 
   const { data: estado } = await supabase.rpc('fn_venda_estado_atual_v1', { p_venda_obra_id: venda.id })
   const atual: any = estado || {}
+  const itensVenda = Array.isArray(atual?.itens_snapshot) ? atual.itens_snapshot : (venda.itens_snapshot || [])
+  const configVenda = atual?.config_snapshot || venda.config_snapshot || {}
+
+  if (origem === 'medicao_final') {
+    const { data: medicao } = await supabase
+      .from('medicoes_finais')
+      .select('id,status_operacional,aprovado_em')
+      .eq('orcamento_id', orcamento.id)
+      .eq('tipo_medicao', 'tipologia')
+      .eq('status_operacional', 'aprovado')
+      .order('aprovado_em', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!medicao?.id) {
+      return {
+        venda,
+        itens: [],
+        config: configVenda,
+        cliente_id: venda.cliente_id || orcamento.cliente_id,
+        obra_id: venda.obra_id || orcamento.obra_id,
+        custo_previsto: venda.custo_previsto,
+      }
+    }
+
+    const { data: itensMedicao } = await supabase
+      .from('medicao_itens')
+      .select('id,ordem,descricao,ambiente,quantidade,medido,status_medicao,contramarco,producao_largura_mm,producao_altura_mm,largura_baixo_mm,largura_meio_mm,largura_cima_mm,altura_direita_mm,altura_meio_mm,altura_esquerda_mm')
+      .eq('medicao_id', medicao.id)
+      .eq('medido', true)
+      .order('ordem', { ascending: true })
+
+    const listaMedida = Array.isArray(itensMedicao) ? itensMedicao : []
+    const usaBlocosDeOrdem = listaMedida.some((item: any) => Number(item?.ordem || 0) >= 100)
+
+    const menorPositiva = (valores: unknown[]) => {
+      const validos = valores.map(Number).filter(v => Number.isFinite(v) && v > 0)
+      return validos.length ? Math.min(...validos) : 0
+    }
+
+    const itensFinais = listaMedida.flatMap((med: any) => {
+      const ordem = Math.max(0, Math.floor(Number(med?.ordem || 0)))
+      const indice = usaBlocosDeOrdem ? Math.floor(ordem / 100) : ordem
+      const base = itensVenda[indice]
+      if (!base) return []
+
+      const largura = Number(med?.producao_largura_mm) > 0
+        ? Number(med.producao_largura_mm)
+        : menorPositiva([med?.largura_baixo_mm, med?.largura_meio_mm, med?.largura_cima_mm])
+      const altura = Number(med?.producao_altura_mm) > 0
+        ? Number(med.producao_altura_mm)
+        : menorPositiva([med?.altura_direita_mm, med?.altura_meio_mm, med?.altura_esquerda_mm])
+
+      if (largura <= 0 || altura <= 0) return []
+
+      return [{
+        ...base,
+        ambiente: med?.ambiente || base?.ambiente || null,
+        descricao: med?.descricao || base?.descricao || null,
+        contramarco: med?.contramarco || base?.contramarco || null,
+        largura_mm: largura,
+        altura_mm: altura,
+        quantidade: 1,
+        medicao_final: {
+          medicao_id: medicao.id,
+          medicao_item_id: med.id,
+          largura_mm: largura,
+          altura_mm: altura,
+          larguras_mm: [med?.largura_baixo_mm, med?.largura_meio_mm, med?.largura_cima_mm],
+          alturas_mm: [med?.altura_direita_mm, med?.altura_meio_mm, med?.altura_esquerda_mm],
+          aprovado_em: medicao.aprovado_em || null,
+        },
+      }]
+    })
+
+    return {
+      venda,
+      itens: itensFinais,
+      config: configVenda,
+      cliente_id: venda.cliente_id || orcamento.cliente_id,
+      obra_id: venda.obra_id || orcamento.obra_id,
+      custo_previsto: venda.custo_previsto,
+    }
+  }
+
   return {
     venda,
-    itens: Array.isArray(atual?.itens_snapshot) ? atual.itens_snapshot : (venda.itens_snapshot || []),
-    config: atual?.config_snapshot || venda.config_snapshot || {},
+    itens: itensVenda,
+    config: configVenda,
     cliente_id: venda.cliente_id || orcamento.cliente_id,
     obra_id: venda.obra_id || orcamento.obra_id,
     custo_previsto: venda.custo_previsto,
   }
 }
-
 
 function candidatosCodigoWvetro(raw: any) {
   const codigo = String(raw?.Codigo || raw?.codigo || '').trim()
@@ -501,7 +586,12 @@ export async function gerarPacoteTecnico(
     const corRef = item?.cor || estado.config?.acabamento || orcamento.acabamento || null
     const contramarcoAtual = item?.contramarco || estado.config?.contramarco || orcamento.contramarco
 
-    const diretoWvetro = materiaisDoOrcamentoWvetro(pacote.id, item, indice, produtos, corRef, ordem)
+    // Na Medição Final, a composição W.Vetro histórica não pode carregar
+    // comprimentos calculados com a medida comercial antiga. Recalcula pelas
+    // fórmulas técnicas validadas usando as medidas finais do campo.
+    const diretoWvetro = origem === 'medicao_final'
+      ? { linhas: [] as any[], proximaOrdem: ordem }
+      : materiaisDoOrcamentoWvetro(pacote.id, item, indice, produtos, corRef, ordem)
     if (diretoWvetro.linhas.length) {
       materiais.push(...diretoWvetro.linhas)
       ordem = diretoWvetro.proximaOrdem
@@ -681,6 +771,27 @@ export async function gerarPacoteTecnico(
   await recalcularAproveitamentoPacote(pacote.id, [])
   await supabase.from('pacotes_tecnicos').update({ status: 'calculado' }).eq('id', pacote.id)
   return { ok: true, pacote: { ...pacote, status: 'calculado' } }
+}
+
+export async function gerarPacoteMedicaoFinal(
+  orcamentoId: string,
+  usuario: Usuario | null,
+): Promise<{ ok: true; pacote: PacoteTecnico } | { ok: false; error: string }> {
+  const gerado = await gerarPacoteTecnico(orcamentoId, 'medicao_final', usuario, {
+    perdaCorteMm: 0,
+    minimoSobraReaproveitavelMm: 300,
+  })
+  if (!gerado.ok) return gerado
+
+  await supabase
+    .from('pacotes_tecnicos')
+    .update({ status: 'substituido' })
+    .eq('orcamento_id', orcamentoId)
+    .eq('origem', 'medicao_final')
+    .neq('id', gerado.pacote.id)
+    .neq('status', 'substituido')
+
+  return gerado
 }
 
 export async function listarPacotesDaObra(obraId: string): Promise<PacoteTecnico[]> {
