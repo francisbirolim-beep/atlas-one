@@ -281,9 +281,9 @@ export default function EditorTecnicoPage() {
         : null
       if (formulaL && formulaH) {
         setVidroTeste({
-          largura: calcularFormulaCorteIsolada(formulaL, L, H),
-          altura: calcularFormulaCorteIsolada(formulaH, L, H),
-          quantidade: Number(rascunho.vidro.quantidade || 1),
+          largura: calcularFormulaCorteIsolada(formulaL, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined),
+          altura: calcularFormulaCorteIsolada(formulaH, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined),
+          quantidade: Number(opcoes.numero_folhas || rascunho.vidro.quantidade || 1),
         })
       } else setVidroTeste(null)
     } catch (e) {
