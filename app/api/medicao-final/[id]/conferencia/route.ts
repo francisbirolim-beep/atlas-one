@@ -328,35 +328,50 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         return NextResponse.json({ error: 'Nao existem posicoes concluidas aguardando envio.' }, { status: 409 })
       }
 
-      await criarSnapshot(id, usuario, prontas.length === itens.length ? 'Envio para conferencia' : 'Envio parcial para conferencia')
-      const { data: colunaFinalizada } = await supabaseAdmin
-        .from('medicao_colunas')
-        .select('id')
-        .eq('empresa_id', usuario.empresa_id)
-        .ilike('nome', '%finalizada%')
-        .order('ordem', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const parcial = prontas.length < itens.length
+      await criarSnapshot(id, usuario, parcial ? 'Envio parcial para conferencia' : 'Envio para conferencia')
 
-      const { error } = await supabaseAdmin
-        .from('medicoes_finais')
-        .update({
-          status_operacional: 'aguardando_conferencia',
-          coluna_id: colunaFinalizada?.id || undefined,
-          coluna_atualizada_em: colunaFinalizada?.id ? new Date().toISOString() : undefined,
-        })
-        .eq('id', id)
-        .eq('empresa_id', usuario.empresa_id)
+      if (!parcial) {
+        const { data: colunaFinalizada } = await supabaseAdmin
+          .from('medicao_colunas')
+          .select('id')
+          .eq('empresa_id', usuario.empresa_id)
+          .ilike('nome', '%finalizada%')
+          .order('ordem', { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-      if (error) throw error
-      await supabaseAdmin
+        const { error } = await supabaseAdmin
+          .from('medicoes_finais')
+          .update({
+            status_operacional: 'aguardando_conferencia',
+            coluna_id: colunaFinalizada?.id || undefined,
+            coluna_atualizada_em: colunaFinalizada?.id ? new Date().toISOString() : undefined,
+          })
+          .eq('id', id)
+          .eq('empresa_id', usuario.empresa_id)
+
+        if (error) throw error
+      }
+
+      const idsProntas = prontas.map(item => item.id)
+      const { error: itensError } = await supabaseAdmin
         .from('medicao_itens')
         .update({ status_medicao: 'aguardando_conferencia', updated_at: new Date().toISOString() })
+        .in('id', idsProntas)
         .eq('medicao_id', id)
-        .eq('medido', true)
         .eq('status_medicao', 'concluida')
 
-      return NextResponse.json({ ok: true, action, enviados: prontas.length, pendentes: itens.length - prontas.length })
+      if (itensError) throw itensError
+
+      return NextResponse.json({
+        ok: true,
+        action,
+        parcial,
+        enviados: prontas.length,
+        pendentes: itens.length - prontas.length,
+        statusOperacionalPreservado: parcial,
+      })
     }
 
     const itemId = String(body?.itemId || '')

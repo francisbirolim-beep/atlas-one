@@ -11,6 +11,7 @@ import MobileNavigationControls from '@/components/system/MobileNavigationContro
 import MedicaoIdentificationBar from '@/components/system/MedicaoIdentificationBar'
 import MedicaoFinalFieldSummary from '@/components/system/MedicaoFinalFieldSummary'
 import MedicaoPecasPanel from '@/components/system/MedicaoPecasPanel'
+import MedicaoConferenciaPanel from '@/components/system/MedicaoConferenciaPanel'
 import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import ProducaoEtapasBar from '@/components/system/ProducaoEtapasBar'
@@ -59,6 +60,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 <MedicaoExternalAccessPanel medicaoId={medicaoFinalId} embedded />
               </div>
               <MedicaoPecasPanel key={medicaoFinalId} medicaoId={medicaoFinalId} />
+              <MedicaoConferenciaPanel medicaoId={medicaoFinalId} />
             </div>
           )}
 

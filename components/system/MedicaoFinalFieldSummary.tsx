@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, CircleDot, ClipboardCheck, Layers3, Loader2,
   Play, Plus, Ruler, ShieldCheck, UserRound, Wrench, XCircle,
 } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
   aprovarMedicaoFinal,
@@ -31,6 +31,9 @@ const RESUMO_VAZIO: ResumoMedicaoV2 = {
   totalLinhas: 0,
   totalPecas: 0,
   pecasMedidas: 0,
+  pecasProntasEnvio: 0,
+  pecasEmConferencia: 0,
+  pecasAprovadas: 0,
   percentual: 0,
   medidores: [],
   itensAgrupados: [],
@@ -132,6 +135,43 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     else {
       setMensagem(sucesso)
       void carregar()
+    }
+  }
+
+  async function enviarParcialParaConferencia() {
+    if (processando || resumo.pecasProntasEnvio <= 0) return
+    if (!window.confirm(
+      `Enviar ${resumo.pecasProntasEnvio} peça(s) concluída(s) para conferência?\n\nAs peças restantes continuarão abertas para medição.`,
+    )) return
+
+    limparRetorno()
+    setProcessando(true)
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch(`/api/medicao-final/${medicaoId}/conferencia`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ action: 'enviar' }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setErro(json?.error || 'Não foi possível enviar a medição parcial para conferência.')
+        return
+      }
+
+      const enviados = Number(json?.enviados || resumo.pecasProntasEnvio)
+      const pendentes = Number(json?.pendentes || Math.max(0, resumo.totalPecas - resumo.pecasMedidas))
+      setMensagem(`Medição parcial enviada: ${enviados} peça(s) para conferência · ${pendentes} peça(s) permanecem abertas.`)
+      await carregar()
+      window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+    } catch (e) {
+      console.error('Erro ao enviar medição parcial para conferência:', e)
+      setErro('Não foi possível enviar a medição parcial para conferência.')
+    } finally {
+      setProcessando(false)
     }
   }
 
@@ -243,7 +283,17 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500"><UserRound size={13} /> Responsável: <span className="font-semibold text-slate-700">{responsavelExibicao}</span></p>
           </div>
           {['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-2">
+              {resumo.pecasProntasEnvio > 0 && resumo.percentual < 100 && !fluxoVendaBloqueado && (
+                <button
+                  type="button"
+                  disabled={processando}
+                  onClick={() => void enviarParcialParaConferencia()}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  <ClipboardCheck size={14} /> Enviar medição parcial ({resumo.pecasProntasEnvio})
+                </button>
+              )}
               <button
                 type="button"
                 disabled={!podeConcluir}
@@ -252,7 +302,10 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               >
                 <CheckCircle2 size={14} /> Concluir medição
               </button>
-              {!podeConcluir && motivoNaoConcluir && <p className="mt-1.5 text-[10px] leading-4 text-slate-500">{motivoNaoConcluir}</p>}
+              {resumo.pecasEmConferencia > 0 && (
+                <p className="text-[10px] font-medium leading-4 text-amber-700">{resumo.pecasEmConferencia} peça(s) aguardando conferência.</p>
+              )}
+              {!podeConcluir && motivoNaoConcluir && <p className="text-[10px] leading-4 text-slate-500">{motivoNaoConcluir}</p>}
             </div>
           )}
           <button type="button" onClick={() => setOperacoesAbertas(true)} className="mt-2 self-start text-xs font-semibold text-slate-500">Gerenciar execução</button>
@@ -359,6 +412,18 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
               >
                 <Play size={14} /> {operacao?.iniciado_em ? 'Continuar medição' : 'Iniciar medição final'}
+              </button>
+            )}
+
+            {['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') &&
+              resumo.pecasProntasEnvio > 0 && resumo.percentual < 100 && !fluxoVendaBloqueado && (
+              <button
+                type="button"
+                disabled={processando}
+                onClick={() => void enviarParcialParaConferencia()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                <ClipboardCheck size={14} /> Enviar medição parcial ({resumo.pecasProntasEnvio})
               </button>
             )}
 
