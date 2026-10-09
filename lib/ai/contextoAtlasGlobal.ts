@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 import { AI_ESPECIALISTAS } from '@/lib/ai/specialists'
 import type { AIModulo } from '@/lib/ai/types'
+import { detectarConsultaEstimativaOrcamento, estimarOrcamentoHistorico } from '@/lib/ai/orcamentoEstimativaServer'
 
 export type EscopoAtlas = 'nenhum' | 'proprio' | 'setor' | 'empresa'
 
@@ -799,6 +800,14 @@ export async function montarContextoAtlasGlobal(params: {
 
   if (perguntaPedeHistoricoWvetro(pergunta) || amplo) {
     add('historico_wvetro', contextoHistoricoWvetro(usuario, acessos, termos, podeCustos))
+  }
+
+  const pedidoEstimativa = detectarConsultaEstimativaOrcamento(pergunta)
+  if (pedidoEstimativa.solicitado && acessos.orcamento?.permitido) {
+    add('estimativa_orcamento_historica', estimarOrcamentoHistorico({
+      empresaId: usuario.empresa_id,
+      pergunta,
+    }))
   }
 
   add('pessoal', contextoPessoal(usuario, pergunta, termos))
