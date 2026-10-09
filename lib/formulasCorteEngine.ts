@@ -243,10 +243,16 @@ function contextoBase(largura: number, altura: number): Record<string, number> {
   }
 }
 
-export function calcularFormulaCorteIsolada(formula: string, largura: number, altura: number): number {
+export function calcularFormulaCorteIsolada(formula: string, largura: number, altura: number, numeroFolhas?: number): number {
   if (!Number.isFinite(largura) || largura <= 0) throw new FormulaCorteError('Largura invalida')
   if (!Number.isFinite(altura) || altura <= 0) throw new FormulaCorteError('Altura invalida')
-  return avaliarFormula(formula, contextoBase(largura, altura))
+  const contexto = contextoBase(largura, altura)
+  if (numeroFolhas !== undefined) {
+    if (!Number.isInteger(numeroFolhas) || numeroFolhas < 2 || numeroFolhas > 6) throw new FormulaCorteError('Número de folhas inválido.')
+    contexto.Folhas = numeroFolhas
+    contexto.Encontros = numeroFolhas - 1
+  }
+  return avaliarFormula(formula, contexto)
 }
 
 export function condicaoBate(quando: Record<string, string[]>, opcoes: OpcoesEscolhidas): boolean {
@@ -311,6 +317,23 @@ function enriquecerResultado(
   }
 }
 
+// Regra técnica Esquadrifácio: travessas e baguetes horizontais ligados ao
+// mesmo vão sempre recebem comprimento inteiro arredondado para cima.
+// O padrão do WVetro não prevalece quando faz truncamento.
+function avaliarComprimentoPeca(peca: PecaFormula, codigo: string, formula: string, contexto: Record<string, number>): number {
+  const identificacao = `${codigo} ${peca.grupo || ''} ${peca.descricao || ''}`
+  const arredondarParaCima = /\btravessa(s)?\b/i.test(identificacao)
+    || /\bbaguete horizontal\b/i.test(identificacao)
+    || /\bSU053\b|\bSU225\b/i.test(codigo)
+
+  if (!arredondarParaCima) return avaliarFormula(formula, contexto)
+
+  // Algumas receitas antigas aplicavam FLOOR/ROUND ao resultado final.
+  // Substituí-los pela regra nova evita perder a fração antes do CEIL.
+  const formulaSemArredondamentoAntigo = formula.trim().replace(/^(FLOOR|ROUND)\(/i, 'CEIL(')
+  return Math.ceil(avaliarFormula(formulaSemArredondamentoAntigo, contexto))
+}
+
 function tentarResolverPeca(
   peca: PecaFormula,
   contexto: Record<string, number>,
@@ -322,7 +345,7 @@ function tentarResolverPeca(
 
   try {
     if (peca.codigo && peca.formula) {
-      const tamanho = avaliarFormula(formulaComCondicoes(peca, opcoes), contexto)
+      const tamanho = avaliarComprimentoPeca(peca, peca.codigo, formulaComCondicoes(peca, opcoes), contexto)
       contexto[peca.codigo] = tamanho
       return [enriquecerResultado(peca, {
         codigo: peca.codigo,
@@ -338,7 +361,7 @@ function tentarResolverPeca(
         resultados.push(enriquecerResultado(peca, {
           codigo: peca.codigo,
           descricao: peca.descricao,
-          tamanho: avaliarFormula(peca.formula_L, contexto),
+          tamanho: avaliarComprimentoPeca(peca, peca.codigo, peca.formula_L, contexto),
           eixo: 'L',
         }, contexto))
       }
@@ -346,7 +369,7 @@ function tentarResolverPeca(
         resultados.push(enriquecerResultado(peca, {
           codigo: peca.codigo,
           descricao: peca.descricao,
-          tamanho: avaliarFormula(peca.formula_H, contexto),
+          tamanho: avaliarComprimentoPeca(peca, peca.codigo, peca.formula_H, contexto),
           eixo: 'H',
         }, contexto))
       }
@@ -361,7 +384,7 @@ function tentarResolverPeca(
           `Nao foi encontrado codigo de perfil para o grupo "${peca.grupo}" com combinacao "${chaveCombinada}"`
         )
       }
-      const tamanho = avaliarFormula(formulaComCondicoes(peca, opcoes), contexto)
+      const tamanho = avaliarComprimentoPeca(peca, codigoResolvido, formulaComCondicoes(peca, opcoes), contexto)
       contexto[codigoResolvido] = tamanho
       // Mantém também um alias estável pelo nome do grupo. Assim fórmulas
       // posteriores (especialmente acessórios) podem depender do comprimento
@@ -384,7 +407,7 @@ function tentarResolverPeca(
           `Nao ha formula para o grupo "${peca.grupo}" com a opcao "${valorEscolhido ?? ''}"`
         )
       }
-      const tamanho = avaliarFormula(formula, contexto)
+      const tamanho = avaliarComprimentoPeca(peca, peca.grupo, formula, contexto)
       return [enriquecerResultado(peca, {
         codigo: peca.grupo,
         descricao: peca.descricao,
@@ -429,6 +452,16 @@ export function calcularFormulasCorte(
   validarOpcoes(def, opcoes)
 
   const contexto = contextoBase(largura, altura)
+  // A tipologia unica de correr usa numero_folhas como variavel da arvore.
+  // Receitas legadas sem esta variavel continuam com seu comportamento atual.
+  if (def.variaveis.some(v => v.chave === 'numero_folhas')) {
+    const folhas = Number(opcoes.numero_folhas)
+    if (!Number.isInteger(folhas) || folhas < 2 || folhas > 6) {
+      throw new FormulaCorteError('Porta sequencial Suprema: escolha de 2 a 6 folhas.')
+    }
+    contexto.Folhas = folhas
+    contexto.Encontros = folhas - 1
+  }
   const resultados: ResultadoPeca[] = []
   let pendentes = [...def.pecas]
 
