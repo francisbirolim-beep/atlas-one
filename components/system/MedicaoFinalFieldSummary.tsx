@@ -105,6 +105,17 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
   const pendenciasAbertas = pendencias.filter(p => p.status === 'aberta')
   const fluxoVendaBloqueado = Boolean(operacao?.orcamento_id) && operacao?.fluxo_venda_ativo === false
   const podeConcluir = resumo.totalPecas > 0 && resumo.percentual === 100 && resumo.itensAgrupados.length === 0 && pendenciasAbertas.length === 0 && !fluxoVendaBloqueado
+  const motivoNaoConcluir = fluxoVendaBloqueado
+    ? 'Confirme a venda antes de concluir.'
+    : resumo.totalPecas === 0
+      ? 'Esta medição não possui peças.'
+      : resumo.percentual < 100
+        ? `Faltam ${Math.max(0, resumo.totalPecas - resumo.pecasMedidas)} peça(s) para concluir.`
+        : resumo.itensAgrupados.length > 0
+          ? 'Separe as unidades agrupadas antes de concluir.'
+          : pendenciasAbertas.length > 0
+            ? 'Resolva as pendências abertas antes de concluir.'
+            : ''
 
   function limparRetorno() {
     setMensagem('')
@@ -231,6 +242,19 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           <div className="mt-auto pt-4">
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500"><UserRound size={13} /> Responsável: <span className="font-semibold text-slate-700">{responsavelExibicao}</span></p>
           </div>
+          {['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') && (
+            <div className="mt-3">
+              <button
+                type="button"
+                disabled={!podeConcluir}
+                onClick={() => setOperacoesAbertas(true)}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+              >
+                <CheckCircle2 size={14} /> Concluir medição
+              </button>
+              {!podeConcluir && motivoNaoConcluir && <p className="mt-1.5 text-[10px] leading-4 text-slate-500">{motivoNaoConcluir}</p>}
+            </div>
+          )}
           <button type="button" onClick={() => setOperacoesAbertas(true)} className="mt-2 self-start text-xs font-semibold text-slate-500">Gerenciar execução</button>
         </div>
       </section>
