@@ -108,7 +108,7 @@ export function usuarioCacheLocal(): Usuario | null {
   if (typeof window === 'undefined') return null
   try {
     const bruto = window.localStorage.getItem(CHAVE_USUARIO_OFFLINE)
-    return bruto ? JSON.parse(bruto) as Usuario : null
+    return bruto ? JSON.parse(bruto) as Usuario
   } catch {
     return null
   }
@@ -132,6 +132,12 @@ function erroAuthTransitorio(error: any) {
     || mensagem.includes('timeout')
 }
 
+function tokenAindaPodeSerUsado(session: any) {
+  if (!session?.access_token) return false
+  const expiraEmMs = Number(session?.expires_at || 0) * 1000
+  return !expiraEmMs || expiraEmMs > Date.now()
+}
+
 export async function sessaoAtualValida() {
   let sessionLocal: any = null
   try {
@@ -146,8 +152,7 @@ export async function sessaoAtualValida() {
       const { data, error } = await supabase.auth.refreshSession({ refresh_token: session.refresh_token })
       if (!error && data.session?.access_token) return data.session
       if (erroAuthTransitorio(error) && session.access_token) {
-        const expirouHa = expiraEmMs ? Date.now() - expiraEmMs : 0
-        if (!expiraEmMs || expirouHa < 15 * 60_000) return session
+        if (tokenAindaPodeSerUsado(session)) return session
       }
     }
 
@@ -155,15 +160,13 @@ export async function sessaoAtualValida() {
     const { data, error } = await supabase.auth.refreshSession()
     if (!error && data.session?.access_token) return data.session
     if (erroAuthTransitorio(error) && sessionLocal?.access_token) {
-      const expiraEmMs = Number(sessionLocal.expires_at || 0) * 1000
-      const expirouHa = expiraEmMs ? Date.now() - expiraEmMs : 0
-      if (!expiraEmMs || expirouHa < 15 * 60_000) return sessionLocal
+      if (tokenAindaPodeSerUsado(sessionLocal)) return sessionLocal
     }
     return null
   } catch {
     // Em falha transitória de rede, não força logout imediato de uma sessão
-    // que já existia localmente. O backend continua validando o JWT normalmente.
-    if (sessionLocal?.access_token) return sessionLocal
+    // que já existia localmente, desde que o JWT ainda seja aceito pelo backend.
+    if (tokenAindaPodeSerUsado(sessionLocal)) return sessionLocal
     return null
   }
 }
