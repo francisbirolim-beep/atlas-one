@@ -296,7 +296,7 @@ async function montarContextoAtlas(texto: string, usuario: any) {
     )
   }
 
-  if (/producao|instalacao|obra|medicao|engenharia|procedimento|regra interna/.test(t)) {
+  if (/producao|instalacao|obra|medicao|engenharia|procedimento|regra interna|orcamento|comercial|cliente|compras|estoque|financeir|qualidade|assistencia|pos venda|rh|marketing/.test(t)) {
     contexto.conhecimento_interno = await executarFerramenta(
       'buscar_conhecimento_especialistas',
       { busca: texto, limite: 10 },
@@ -358,6 +358,20 @@ function respostaDiretaSemModelo(texto: string, contexto: any, usuario?: any): s
       return 'Temos ' + new Intl.NumberFormat('pt-BR').format(total) + ' ' + rotulo + ' cadastrados no banco de dados do Atlas, todos ativos.'
     }
     return 'Temos ' + new Intl.NumberFormat('pt-BR').format(total) + ' ' + rotulo + ' cadastrados no banco de dados do Atlas. Destes, ' + new Intl.NumberFormat('pt-BR').format(ativos) + ' estão ativos.'
+  }
+
+  const clientes = contexto?.clientes
+  if (/cliente|clientes/.test(t) && clientes?.erro) {
+    return String(clientes.erro).toLowerCase().includes('acesso negado')
+      ? 'Esta é uma consulta interna de Clientes/CRM, mas seu usuário não possui permissão para visualizar esses dados.'
+      : 'Não consegui consultar os clientes agora: ' + String(clientes.erro)
+  }
+
+  const assistencias = contexto?.assistencias
+  if (/assistencia|manutencao|pos venda/.test(t) && assistencias?.erro) {
+    return String(assistencias.erro).toLowerCase().includes('acesso negado')
+      ? 'Esta é uma consulta interna de Assistência/Pós-venda, mas seu usuário não possui permissão para visualizar esses dados.'
+      : 'Não consegui consultar as assistências agora: ' + String(assistencias.erro)
   }
 
   const financeiro = contexto?.financeiro
@@ -566,6 +580,7 @@ export async function POST(req: NextRequest) {
         'Para dados internos, use SOMENTE o CONTEXTO ATLAS fornecido. Nunca invente valores, nomes, datas, status ou quantidades.',
         'Os valores monetários no contexto já vêm do banco do Atlas. Não divida, multiplique ou reinterprete casas decimais.',
         'Quando o contexto trouxer resumo calculado pelo Atlas, trate esse resumo como fonte principal.',
+        'Quando houver conhecimento_interno validado, use-o como regra operacional prioritária do setor, sem extrapolar além do texto aprovado.',
         'Se um dado interno não estiver presente ou vier com erro de permissão, informe isso claramente.',
         'Não afirme que criou, alterou, excluiu ou aprovou registros. Ações no Atlas exigem confirmação específica pela interface.',
         'Este fluxo usa OpenCode + FreeLLMAPI e NÃO pode fazer fallback para Anthropic, OpenAI ou qualquer provedor pago.',
