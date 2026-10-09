@@ -240,6 +240,7 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('producao.medida_final.preencher','Preencher medida final','Registrar medidas, fotos e campos.'),
     a('producao.medida_final.editar','Editar medida final','Corrigir dados ainda liberados.'),
     a('producao.medida_final.aprovar','Aprovar medida final','Confirmar e liberar para produção.'),
+    a('producao.medida_final.remover_item','Remover item da Medição Final','Remover da medição um item não medido, com motivo e histórico.'),
     a('producao.medida_final.links','Gerar link externo','Criar/revogar acesso externo de medição.'),
   ]),
   m('qualidade','qualidade','Qualidade','Inspeções e controle de qualidade.','producao',[
