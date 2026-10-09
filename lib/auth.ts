@@ -108,7 +108,7 @@ export function usuarioCacheLocal(): Usuario | null {
   if (typeof window === 'undefined') return null
   try {
     const bruto = window.localStorage.getItem(CHAVE_USUARIO_OFFLINE)
-    return bruto ? JSON.parse(bruto) as Usuario
+    return bruto ? JSON.parse(bruto) as Usuario : null
   } catch {
     return null
   }
