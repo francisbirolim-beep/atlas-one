@@ -46,6 +46,7 @@ async function criarSnapshot(medicaoId: string, usuario: any, motivo: string) {
     .from('medicao_revisoes')
     .insert({
       medicao_id: medicaoId,
+      empresa_id: usuario.empresa_id,
       versao,
       motivo,
       snapshot: { medicao, itens: itens || [] },
@@ -458,6 +459,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         .from('medicao_pendencias')
         .insert({
           medicao_id: id,
+          empresa_id: usuario.empresa_id,
           item_id: itemId,
           categoria: 'remedicao',
           descricao: motivo,
@@ -473,8 +475,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     return NextResponse.json({ error: 'Acao de conferencia invalida.' }, { status: 400 })
-  } catch (error) {
-    console.error('Erro na conferencia da Medicao Final:', error)
+  } catch (error: any) {
+    console.error('Erro na conferencia da Medicao Final:', {
+      mensagem: error?.message || String(error),
+      codigo: error?.code || null,
+      detalhe: error?.details || null,
+    })
     return NextResponse.json({ error: 'Erro interno ao processar a conferencia.' }, { status: 500 })
   }
 }
