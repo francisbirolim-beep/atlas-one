@@ -61,6 +61,45 @@ function dataIso(v: unknown) {
 }
 function arr(v: unknown): any[] { return Array.isArray(v) ? v : [] }
 
+function acharPdfWVetro(valor: unknown, profundidade = 0): string | null {
+  if (profundidade > 8 || valor == null) return null
+  if (typeof valor === 'string') {
+    const s = valor.trim()
+    if (/^https?:\/\//i.test(s) && /(?:\.pdf(?:$|[?#])|pdf)/i.test(s)) return s
+    return null
+  }
+  if (Array.isArray(valor)) {
+    for (const item of valor) {
+      const achado = acharPdfWVetro(item, profundidade + 1)
+      if (achado) return achado
+    }
+    return null
+  }
+  if (typeof valor !== 'object') return null
+  for (const [chave, item] of Object.entries(valor as Record<string, unknown>)) {
+    if (typeof item === 'string') {
+      const s = item.trim()
+      if (/^https?:\/\//i.test(s) && (/pdf/i.test(chave) || /\.pdf(?:$|[?#])/i.test(s))) return s
+    }
+    const achado = acharPdfWVetro(item, profundidade + 1)
+    if (achado) return achado
+  }
+  return null
+}
+
+function anexosComPdfWVetro(anexosAtuais: unknown, payload: unknown, numeroWvetro: string) {
+  const atuais = Array.isArray(anexosAtuais) ? [...anexosAtuais] : []
+  const pdfUrl = acharPdfWVetro(payload)
+  if (!pdfUrl) return atuais
+  const jaExiste = atuais.some((a: any) => String(a?.url || '').trim() === pdfUrl || /pdf original w\.?vetro/i.test(String(a?.titulo || '')))
+  if (jaExiste) return atuais
+  return [...atuais, {
+    titulo: 'PDF original W.Vetro',
+    nome: `orcamento-wvetro-${numeroWvetro}.pdf`,
+    url: pdfUrl,
+  }]
+}
+
 type RefTipologia = {
   id: string
   linha_raw: string
@@ -165,7 +204,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -551,6 +590,8 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
             }
           : fluxo
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
+        const anexosAtualizados = anexosComPdfWVetro(existente.anexos, p, numeroW)
+        const precisaAtualizarPdf = anexosAtualizados.length !== arr(existente.anexos).length
         const valorAtual = num(existente.valor_estimado)
         const valorComEscalaIncorreta =
           valor > 0 &&
@@ -563,14 +604,15 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           Number(anterior?.mapeamento_versao || 0) < 2 ||
           valorAtual <= 0 ||
           valorComEscalaIncorreta
-        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento && !forcar) {
+        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento && !precisaAtualizarPdf && !forcar) {
           semAlteracao += 1
           resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'sem_alteracao', cliente: nome, itens: itens.length })
           continue
         }
         // REGRA DE PRESERVAÇÃO: a sincronização W.Vetro atualiza somente os campos
-        // que pertencem ao orçamento técnico/comercial importado. Anexos, fotos,
-        // observações, histórico e demais dados manuais do card NÃO entram neste patch.
+        // que pertencem ao orçamento técnico/comercial importado. Fotos, observações,
+        // histórico e demais dados manuais do card NÃO entram neste patch. Nos anexos,
+        // apenas acrescentamos o PDF original do W.Vetro sem remover anexos existentes.
         const patch: any = {
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
@@ -585,6 +627,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           valor_estimado: valor > 0 ? valor : null,
           updated_at: new Date().toISOString(),
           wvetro_fluxo: fluxoAtualizado,
+          anexos: anexosAtualizados,
           ...(
             ctx.coluna?.id &&
             (!existente.coluna_id || (ctx.colunaFazer?.id && existente.coluna_id === ctx.colunaFazer.id))
@@ -626,7 +669,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           contramarco: null,
           itens,
           fotos_urls: [],
-          anexos: [],
+          anexos: anexosComPdfWVetro([], p, numeroW),
           tipo_medida: 'comum',
           revisao_grupo_id: id,
           coluna_id: ctx.coluna?.id || null,
@@ -637,7 +680,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           wvetro_fluxo: fluxo,
         })
         if (error) throw error
-        ctx.existentes.set(numeroW, { id, cliente_id: cliente?.id || null, obra_id: null, wvetro_fluxo: fluxo })
+        ctx.existentes.set(numeroW, { id, cliente_id: cliente?.id || null, obra_id: null, anexos: anexosComPdfWVetro([], p, numeroW), wvetro_fluxo: fluxo })
         criados += 1
         resultados.push({ id, numeroWvetro: numeroW, acao: 'criado', cliente: nome, itens: itens.length })
       }
