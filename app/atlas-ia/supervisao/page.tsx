@@ -134,7 +134,7 @@ export default function SupervisaoIAPage(){
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
           <div>
             <h2 className="font-black">Escritório vivo dos agentes</h2>
-            <p className="text-xs text-slate-500">Os bonequinhos representam o estado real lido no Atlas; o trajeto é uma animação visual, e a fonte do status aparece no detalhe do agente.</p>
+            <p className="text-xs text-slate-500">Os bonequinhos usam o estado real lido no Atlas: quem está trabalhando anda; quem está parado volta para a própria mesa.</p>
           </div>
           <button onClick={()=>setMovimentoAtivo(v=>!v)} className="rounded-xl border bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
             {movimentoAtivo?'Pausar movimento':'Continuar movimento'}
@@ -173,8 +173,8 @@ export default function SupervisaoIAPage(){
 
             {agentes.map((a,i)=>{
               const movimento=a.id==='supervisor'
-                ? (a.estado==='trabalhando'?'agent-patrol supervisor-working':'agent-watch')
-                : a.estado==='trabalhando'?'agent-working':a.estado==='monitorando'?'agent-learning':a.estado==='observando'?'agent-watch':'agent-idle'
+                ? (a.estado==='trabalhando'?'agent-patrol supervisor-working':'agent-at-desk')
+                : a.estado==='trabalhando'?'agent-working':'agent-at-desk'
               const pessoa=['🧑‍💼','🧑‍💻','👩‍💻','🧑‍🔧','👩‍💼','🧑‍💼'][i]||'🧑‍💻'
               return <button key={a.id} onClick={()=>setSel(a.id)} className={'office-agent office-agent-'+(i+1)+' '+movimento+' '+(sel===a.id?'agent-selected':'')}>
                 <span className="activity-bubble"><i className={'dot '+a.estado}/>{a.atividade}</span>
@@ -229,7 +229,7 @@ export default function SupervisaoIAPage(){
           </div>
         </div>
       </section>
-      <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa estado operacional: trabalhando, monitorando/aprendendo, observando ou disponível. WhatsApp e Orçamentista permanecem ativos em monitoramento contínuo enquanto suas automações estiverem ligadas.</p>
+      <p className="mt-4 text-[11px] text-slate-400">Custos são estimativas registradas pelo Atlas. Providers locais podem aparecer como custo zero. Atualização automática em segundo plano, com frequência reduzida para não pesar na navegação. Movimento representa atividade real em andamento: trabalhando anda; monitorando, observando ou disponível ficam posicionados na própria mesa.</p>
     </div>
     <style jsx>{`
       .atlas-office{
@@ -264,14 +264,15 @@ export default function SupervisaoIAPage(){
       .dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;background:#94a3b8}.dot.trabalhando{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}.dot.monitorando{background:#8b5cf6;box-shadow:0 0 0 3px #8b5cf633}.dot.observando{background:#3b82f6}
       .walker{position:relative;height:58px;width:62px;display:grid;place-items:center}.person-emoji{position:relative;z-index:2;font-size:36px;filter:drop-shadow(0 3px 2px #0f172426)}.carried-file{position:absolute;right:2px;top:21px;z-index:3;font-size:15px;transform:rotate(9deg)}.step-shadow{position:absolute;left:13px;right:13px;bottom:2px;height:7px;border-radius:50%;background:#0f172a1c;filter:blur(1px)}
       .agent-name{border:1px solid #e2e8f0;border-radius:999px;background:#fff;padding:3px 7px;font-size:8px;font-weight:900;color:#334155;white-space:nowrap}.agent-selected .agent-name{border-color:#334155;box-shadow:0 0 0 2px #cbd5e1}
-      .agent-working{animation:walkToDesk 7s ease-in-out infinite}.agent-working .walker{animation:stepBob .48s ease-in-out infinite}.agent-working .carried-file{animation:fileSwing .5s ease-in-out infinite}
-      .agent-learning{animation:walkToDesk 10s ease-in-out infinite}.agent-learning .walker{animation:stepBob .8s ease-in-out infinite}.agent-watch{animation:smallPatrol 8s ease-in-out infinite}.agent-idle .walker{animation:breathe 3.2s ease-in-out infinite}
+      .agent-at-desk{transform:translate(var(--tx),var(--ty))}
+      .agent-at-desk .walker{animation:breathe 3.2s ease-in-out infinite}
+      .agent-working{animation:walkFromDesk 7s ease-in-out infinite}.agent-working .walker{animation:stepBob .48s ease-in-out infinite}.agent-working .carried-file{animation:fileSwing .5s ease-in-out infinite}
       .agent-patrol{animation:supervisorPatrol 12s ease-in-out infinite}.agent-patrol .walker{animation:stepBob .6s ease-in-out infinite}.supervisor-working .activity-bubble{background:#4c1d95}
       .office-legend{position:absolute;right:14px;bottom:10px;display:flex;gap:9px;align-items:center;border:1px solid #e2e8f0;background:#ffffffd9;border-radius:999px;padding:5px 8px;font-size:7px;color:#64748b;font-weight:800}.legend-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:3px}.working-dot{background:#22c55e}.learning-dot{background:#8b5cf6}.watch-dot{background:#3b82f6}
       .office-paused *{animation-play-state:paused!important}
-      @keyframes walkToDesk{0%,14%,100%{transform:translate(0,0)}38%,65%{transform:translate(var(--tx),var(--ty))}76%{transform:translate(calc(var(--tx)*.75),calc(var(--ty)*.75))}88%{transform:translate(calc(var(--tx)*.3),calc(var(--ty)*.3))}}
+      @keyframes walkFromDesk{0%,18%,100%{transform:translate(var(--tx),var(--ty))}42%,68%{transform:translate(0,0)}80%{transform:translate(calc(var(--tx)*.35),calc(var(--ty)*.35))}90%{transform:translate(calc(var(--tx)*.75),calc(var(--ty)*.75))}}
       @keyframes stepBob{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-5px) rotate(1deg)}}@keyframes fileSwing{0%,100%{transform:rotate(8deg)}50%{transform:rotate(-8deg)}}@keyframes smallPatrol{0%,100%{transform:translate(0,0)}30%{transform:translate(22px,-10px)}58%{transform:translate(-18px,10px)}80%{transform:translate(10px,16px)}}@keyframes breathe{50%{transform:translateY(-2px)}}@keyframes supervisorPatrol{0%,100%{transform:translate(0,0)}20%{transform:translate(-160px,-95px)}42%{transform:translate(110px,-100px)}64%{transform:translate(130px,115px)}82%{transform:translate(-140px,105px)}}@keyframes centralPulse{0%,100%{transform:scale(.98);opacity:.15}50%{transform:scale(1.05);opacity:.35}}
-      @media(prefers-reduced-motion:reduce){.agent-working,.agent-learning,.agent-watch,.agent-idle .walker,.agent-patrol,.agent-working .walker,.agent-working .carried-file,.agent-learning .walker,.central-pulse{animation:none}}
+      @media(prefers-reduced-motion:reduce){.agent-working,.agent-at-desk .walker,.agent-patrol,.agent-working .walker,.agent-working .carried-file,.central-pulse{animation:none}}
     `}</style>
   </main>
 }
