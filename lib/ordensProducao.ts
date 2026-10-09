@@ -33,6 +33,20 @@ export type ClienteProducao = { id: string; nome: string }
 export type ObraProducao = { id: string; cliente_id: string; nome: string; status: string }
 export type VendaProducao = { id: string; numero: number; cliente_id: string; obra_id?: string | null; orcamento_id: string }
 
+export type MedicaoFinalProducao = {
+  id: string
+  orcamento_id: string | null
+  cliente_id: string | null
+  cliente_nome: string
+  obra_id: string | null
+  status_operacional: string
+  concluido_em: string | null
+  aprovado_em: string | null
+  aprovado_por_nome: string | null
+  created_at: string
+  orcamento_numero?: number | null
+}
+
 function mapOrdem(row: any): OrdemProducao {
   return {
     ...row,
@@ -89,6 +103,45 @@ export async function listarObrasProducao(clienteId: string): Promise<ObraProduc
     .eq('cliente_id', clienteId)
     .order('created_at', { ascending: false })
   return (data || []) as ObraProducao[]
+}
+
+export async function listarMedicoesFinaisProducao(): Promise<MedicaoFinalProducao[]> {
+  const { data, error } = await supabase
+    .from('medicoes_finais')
+    .select('id,orcamento_id,cliente_id,cliente_nome,obra_id,status_operacional,concluido_em,aprovado_em,aprovado_por_nome,created_at,orcamentos(numero)')
+    .eq('tipo_medicao', 'tipologia')
+    .in('status_operacional', ['concluido', 'aguardando_conferencia', 'aprovado'])
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Erro ao listar Medições Finais para Produção:', error)
+    return []
+  }
+
+  return (data || []).map((row: any) => ({
+    ...row,
+    orcamento_numero: row.orcamentos?.numero || null,
+  })) as MedicaoFinalProducao[]
+}
+
+export async function marcarCardLiberadoProducao(
+  cardId: string,
+  colunaDestinoId: string | null,
+  usuario: { id: string; nome: string } | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const agora = new Date().toISOString()
+  const patch: Record<string, any> = {
+    liberado_producao_em: agora,
+    liberado_producao_por_id: usuario?.id || null,
+    liberado_producao_por_nome: usuario?.nome || null,
+    atualizado_em: agora,
+    atualizado_por_id: usuario?.id || null,
+    atualizado_por_nome: usuario?.nome || null,
+  }
+  if (colunaDestinoId) patch.coluna_id = colunaDestinoId
+
+  const { error } = await supabase.from('setor_kanban_itens').update(patch).eq('id', cardId)
+  return error ? { ok: false, error: error.message } : { ok: true }
 }
 
 export async function listarVendasProducao(clienteId: string, obraId?: string | null): Promise<VendaProducao[]> {
