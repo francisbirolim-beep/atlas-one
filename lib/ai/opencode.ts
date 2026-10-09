@@ -261,7 +261,7 @@ function montarParts(prompt: string, anexos: OpenCodeAnexo[]) {
     if (!mediaType.startsWith('image/') || !dados) continue
     parts.push({
       type: 'file',
-      mediaType,
+      mime: mediaType,
       filename: String(anexo.nome || 'imagem').slice(0, 180),
       url: `data:${mediaType};base64,${dados}`,
     })
