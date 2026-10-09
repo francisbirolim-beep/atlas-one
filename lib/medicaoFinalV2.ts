@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { tokenAtual } from './auth'
 import type { MedicaoItem, Usuario } from './tipos'
 import { carregarChecklistMedicaoV2, statusItemChecklistV2, validarChecklistObrigatorioV2 } from './medicaoChecklistV2'
 import { verificarFluxoVendaOrcamento } from './medicaoFinal'
@@ -298,7 +299,24 @@ export async function concluirMedicaoFinal(
     console.error('Erro ao concluir Medicao Final:', error)
     return { ok: false, mensagem: 'Nao foi possivel concluir a medicao.' }
   }
-  return { ok: true }
+
+  try {
+    const token = await tokenAtual()
+    if (token) {
+      const resp = await fetch('/api/producao/medicoes-finais/sincronizar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => ({}))
+        console.warn('Medição concluída, mas a fila de Produção ficará para a sincronização da tela:', json?.error || resp.statusText)
+      }
+    }
+  } catch (erro) {
+    console.warn('Medição concluída, mas não foi possível sincronizar a fila de Produção imediatamente:', erro)
+  }
+
+  return { ok: true, mensagem: 'Medição Final enviada para Liberar Produção.' }
 }
 
 export async function aprovarMedicaoFinal(
