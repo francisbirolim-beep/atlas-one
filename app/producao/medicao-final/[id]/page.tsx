@@ -246,7 +246,9 @@ export default function DetalheMedicaoFinal() {
     setVaoAltura(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
     setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
     setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
-    setReferenciaVista(item.referencia_vista || '')
+    const textoVista = `${item.tipo_esquadria || ''} ${item.tipo_outro_texto || ''} ${item.descricao || ''}`.toLocaleLowerCase('pt-BR')
+    const vistaPadrao = /mosquiteir|portinhola|alçap|alcap/.test(textoVista) ? 'externa' : 'interna'
+    setReferenciaVista(item.referencia_vista || (ehContramarco ? '' : vistaPadrao))
     setContramarco(ehContramarco ? 'sim' : (item.contramarco || ''))
     setCadeirinha(item.cadeirinha || '')
     setObservacoesMedicao(item.observacoes_medicao || '')
@@ -281,20 +283,23 @@ export default function DetalheMedicaoFinal() {
       }
 
       const medidas = Array.isArray(json?.medidas_mm) ? json.medidas_mm.map(Number).filter((v: number) => Number.isFinite(v) && v > 0) : []
-      if (medidas.length === 0) {
-        setStatus('Foto salva. A IA não encontrou uma medida legível; preencha manualmente.')
+      if (medidas.length !== 3) {
+        setStatus(`Foto salva. A IA encontrou ${medidas.length} de 3 medidas. Nenhum campo foi alterado para evitar troca de posição.`)
         return
       }
 
       if (eixo === 'largura') {
-        if (medidas[0] != null) setLarguraBaixo(String(medidas[0]))
-        if (medidas[1] != null) setLarguraMeio(String(medidas[1]))
-        if (medidas[2] != null) setLarguraCima(String(medidas[2]))
+        // A foto retorna a ordem visual do visor de cima para baixo:
+        // Cima -> Meio -> Baixo. Os campos do Atlas são Baixo -> Meio -> Cima.
+        setLarguraBaixo(String(medidas[2]))
+        setLarguraMeio(String(medidas[1]))
+        setLarguraCima(String(medidas[0]))
         setModoLargura('digitar')
       } else {
-        if (medidas[0] != null) setAlturaDireita(String(medidas[0]))
-        if (medidas[1] != null) setAlturaMeio(String(medidas[1]))
-        if (medidas[2] != null) setAlturaEsquerda(String(medidas[2]))
+        // Altura mantém a ordem validada: Direita -> Meio -> Esquerda.
+        setAlturaDireita(String(medidas[0]))
+        setAlturaMeio(String(medidas[1]))
+        setAlturaEsquerda(String(medidas[2]))
         setModoAltura('digitar')
       }
 
@@ -728,10 +733,16 @@ export default function DetalheMedicaoFinal() {
               disabled={processandoConferencia}
               className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
             >
-              {processandoConferencia ? 'Enviando...' : 'Enviar Medidas Finais para Conferência'}
+              {processandoConferencia
+                ? 'Enviando...'
+                : medidos < itens.length
+                  ? `Enviar Medição Parcial para Conferência (${medidos}/${itens.length})`
+                  : 'Finalizar e Enviar Medição Final para Conferência'}
             </button>
             <p className="mt-1 text-center text-[11px] text-slate-400">
-              Envia somente as posições concluídas. O que ainda não foi medido permanece pendente para a próxima visita.
+              {medidos < itens.length
+                ? 'Envia somente as posições concluídas. O que ainda não foi medido permanece pendente para a próxima visita.'
+                : 'Todas as posições estão medidas. Este envio encerra a medição em campo e segue para conferência.'}
             </p>
           </div>
         )}
