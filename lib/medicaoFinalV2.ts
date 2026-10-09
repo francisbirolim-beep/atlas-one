@@ -7,6 +7,9 @@ export type ResumoMedicaoV2 = {
   totalLinhas: number
   totalPecas: number
   pecasMedidas: number
+  pecasProntasEnvio: number
+  pecasEmConferencia: number
+  pecasAprovadas: number
   percentual: number
   medidores: string[]
   itensAgrupados: MedicaoItem[]
@@ -83,6 +86,9 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
     totalLinhas: itens.length,
     totalPecas,
     pecasMedidas,
+    pecasProntasEnvio: itens.filter(item => item.medido && item.status_medicao === 'concluida').length,
+    pecasEmConferencia: itens.filter(item => item.status_medicao === 'aguardando_conferencia').length,
+    pecasAprovadas: itens.filter(item => item.status_medicao === 'aprovada').length,
     percentual: totalPecas > 0 ? Math.round((pecasMedidas / totalPecas) * 100) : 0,
     medidores,
     itensAgrupados: itens.filter(item => (item.quantidade || 1) > 1),
