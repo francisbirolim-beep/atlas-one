@@ -300,8 +300,8 @@ export default function AbrirMedidaFinalCliente() {
     }
 
     const fluxo = await verificarFluxoVendaOrcamento(escolhido)
-    if (!fluxo.ativo) {
-      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(escolhido)}&origem=medicao-final`)
+    if (!fluxo.ativo && !fluxo.wvetroVendidoValidado) {
+      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(escolhido)}&origem=medicao-final&tipo=${encodeURIComponent(tipo)}`)
       return
     }
 
