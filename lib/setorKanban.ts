@@ -67,7 +67,7 @@ export async function criarItemSetor(colunaId: string, titulo: string, descricao
   return data as SetorKanbanItem
 }
 
-export async function moverItemSetor(id: string, novaColunaId: string): Promise<boolean> {
+export async function moverItemSetor(id: string, novaColunaId: string, onError?: (mensagem:string)=>void): Promise<boolean> {
   const [{ data: destino }, { data: card }, usuario] = await Promise.all([
     supabase.from('setor_kanban_colunas').select('nome,setor_id').eq('id', novaColunaId).maybeSingle(),
     supabase.from('setor_kanban_itens').select('orcamento_id').eq('id', id).maybeSingle(),
@@ -171,6 +171,10 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
     atualizado_por_id: usuario?.id || null,
     atualizado_por_nome: usuario?.nome || null,
   }).eq('id', id)
+  if (error) {
+    console.error('Falha ao mover o card:', error)
+    onError?.(error.message || 'O Atlas não conseguiu atualizar o card.')
+  }
   return !error
 }
 
