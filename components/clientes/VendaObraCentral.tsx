@@ -352,11 +352,42 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const valorVenda=Number(venda?.valor_venda||orcamento?.valor_estimado||0)
   const custoPrevisto=Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
+  function custoCompraReal(item:Compra){
+    const dados=dadosCompra(item)
+    if(dados.valor&&dados.valor>0)return dados.valor
+    const cot=cotacaoPorNecessidade[item.id]
+    const qtd=Number(item.quantidade||0)
+    const unit=Number(cot?.preco_unitario||0)
+    const frete=Number(cot?.frete||0)
+    return unit>0?unit*qtd+frete:0
+  }
+  const custosPorCategoria=useMemo(()=>{
+    const base:{perfil:{previsto:number;realizado:number;itens:number};vidro:{previsto:number;realizado:number;itens:number};acessorios:{previsto:number;realizado:number;itens:number};outros:{previsto:number;realizado:number;itens:number}}={
+      perfil:{previsto:0,realizado:0,itens:0},vidro:{previsto:0,realizado:0,itens:0},acessorios:{previsto:0,realizado:0,itens:0},outros:{previsto:0,realizado:0,itens:0}
+    }
+    materiaisTecnicos.forEach(m=>{
+      const cat=categoriaMaterialTecnico(m.categoria)
+      const qtd=Number(m.quantidade_ajustada??m.quantidade_tecnica??0)
+      base[cat].previsto+=Number(m.custo_wvetro||0)*Math.max(qtd,1)
+      base[cat].itens+=1
+    })
+    compras.forEach(item=>{
+      const cat=categoriaMaterial(item.categoria)
+      const valor=custoCompraReal(item)
+      if(valor>0&&compraEfetivada(item.status))base[cat].realizado+=valor
+    })
+    return base
+  },[materiaisTecnicos,compras,cotacoesCompras])
+  const custoPrevistoTecnico=Object.values(custosPorCategoria).reduce((s,c)=>s+c.previsto,0)
+  const custoPrevistoBase=custoPrevisto>0?custoPrevisto:custoPrevistoTecnico
+  const custoRealizado=Object.values(custosPorCategoria).reduce((s,c)=>s+c.realizado,0)
+  const margemReal=valorVenda>0&&custoRealizado>0?((valorVenda-custoRealizado)/valorVenda)*100:0
+  const cmvReal=valorVenda>0&&custoRealizado>0?(custoRealizado/valorVenda)*100:0
   const recebido=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0)
   const saldoContas=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
   const aReceber=contas.length?saldoContas:Math.max(0,valorVenda-recebido)
-  const margemPrevista=valorVenda>0&&custoPrevisto>0?((valorVenda-custoPrevisto)/valorVenda)*100:0
-  const markup=valorVenda>0&&custoPrevisto>0?(valorVenda/custoPrevisto):0
+  const margemPrevista=valorVenda>0&&custoPrevistoBase>0?((valorVenda-custoPrevistoBase)/valorVenda)*100:0
+  const markup=valorVenda>0&&custoPrevistoBase>0?(valorVenda/custoPrevistoBase):0
 
   const comprasEfetivadas=compras.filter(c=>compraEfetivada(c.status)).length
   const comprasRecebidas=compras.filter(c=>c.recebido_em||String(c.status||'').toLowerCase()==='recebido').length
@@ -772,9 +803,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
-        <Kpi titulo="Custo previsto" valor={custoPrevisto>0?moeda(custoPrevisto):'—'}/>
-        <Kpi titulo="Custo realizado" valor="—" detalhe="Será alimentado pelas entradas reais"/>
-        <Kpi titulo="Margem prevista" valor={custoPrevisto>0?`${margemPrevista.toFixed(1)}%`:'—'}/>
+        <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
+        <Kpi titulo="Custo realizado" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% CMV real':'Aguardando compras com valor'}/>
+        <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
       </div>
 
@@ -926,8 +957,37 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='custos'&&<Box titulo="Custos / CMV da obra">
-          <div className="grid gap-3 md:grid-cols-4"><Kpi titulo="Custo previsto" valor={custoPrevisto>0?moeda(custoPrevisto):'—'}/><Kpi titulo="Custo realizado" valor="—" detalhe="Próxima etapa: entradas reais por categoria"/><Kpi titulo="Margem prevista" valor={custoPrevisto>0?`${margemPrevista.toFixed(1)}%`:'—'}/><Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/></div>
-          <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">A estrutura já está separada nesta venda. Na próxima etapa, Perfil, Vidro, Acessórios, Mão de obra, Instalação, Frete e Outros serão alimentados com previsto x realizado e custo por tipologia.</div>
+          <div className="grid gap-3 md:grid-cols-6">
+            <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
+            <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
+            <Kpi titulo="Custo realizado" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% CMV real':'Aguardando compras com valor'}/>
+            <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
+            <Kpi titulo="Margem real" valor={custoRealizado>0?margemReal.toFixed(1)+'%':'—'} destaque={custoRealizado>0}/>
+            <Kpi titulo="Markup" valor={markup>0?markup.toFixed(2)+'x':'—'}/>
+          </div>
+          <div className="mt-5 overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <tr><th className="px-3 py-2.5">Categoria</th><th className="px-3 py-2.5">Itens</th><th className="px-3 py-2.5">Previsto técnico</th><th className="px-3 py-2.5">Realizado compras</th><th className="px-3 py-2.5">Diferença</th><th className="px-3 py-2.5">Status</th></tr>
+              </thead>
+              <tbody>
+                {(['perfil','vidro','acessorios','outros'] as const).map(cat=>{
+                  const c=custosPorCategoria[cat]
+                  const dif=c.realizado-c.previsto
+                  const temReal=c.realizado>0
+                  return <tr key={cat} className="border-t">
+                    <td className="px-3 py-3 font-bold text-slate-800">{rotuloCategoria(cat)}</td>
+                    <td className="px-3 py-3 text-slate-600">{c.itens}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-700">{c.previsto>0?moeda(c.previsto):'—'}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-700">{temReal?moeda(c.realizado):'—'}</td>
+                    <td className={'px-3 py-3 font-bold '+(dif>0?'text-amber-700':dif<0?'text-emerald-700':'text-slate-600')}>{temReal&&c.previsto>0?moeda(dif):'—'}</td>
+                    <td className="px-3 py-3"><span className={'rounded-full px-2 py-1 text-xs font-bold '+(temReal?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-600')}>{temReal?'Com valor real':'Aguardando compra com valor'}</span></td>
+                  </tr>
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">O custo realizado usa primeiro o valor total extraído/validado do pedido/PDF. Quando não houver valor no pedido, usa cotação selecionada: preço unitário x quantidade + frete.</p>
         </Box>}
 
         {aba==='compras'&&<Box titulo="Compras desta obra">
