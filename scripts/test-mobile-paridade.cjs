@@ -37,6 +37,9 @@ test('Grid e campos limitados à largura disponível', css.includes('.atlas-app-
 test('Campos de login utilizáveis em iPhone', login.includes('text-base sm:text-sm') && read('app/redefinir-senha/page.tsx').includes('text-base sm:text-sm'))
 test('Campo de busca do menu não força zoom', nav.includes('pl-9 pr-3 text-base sm:text-sm'))
 test('Menu mobile fecha ao mudar de rota', nav.includes('setMenuAberto(false)') && nav.includes('}, [pathname])'))
+test('Barra de continuar no orçamento não fica atrás da navegação', read('components/orcamento/NovoOrcamentoHub.tsx').includes('bottom-[calc(4.9rem+env(safe-area-inset-bottom))]'))
+test('Medição mantém quantidade e responsável no celular', read('components/system/MedicaoParcialPanel.tsx').includes('Qtd: {peca.quantidade}') && read('components/system/MedicaoParcialPanel.tsx').includes('{peca.medidoPor ?'))
+
 test('Regras comerciais não foram alteradas pelo módulo de navegação', guides.includes('EVENTO_ABRIR_MENU_MOBILE') && !whatsapp.includes('dangerouslySetInnerHTML'))
 
 function count(dir, ext) {
