@@ -40,6 +40,10 @@ type Candidato = {
   status: string
   destino_id?: string | null
   pode_validar: boolean
+  foto_cadastro?: string | null
+  codigo_verificavel?: boolean
+  codigo_ambiguo?: boolean
+  produto_cadastro?: {id:string;codigo:string;nome:string;categoria:string}|null
   validado_por_nome?: string | null
   validado_em?: string | null
 }
@@ -375,6 +379,9 @@ export default function CentralAprendizadoPage(){
           const origem=entradaDo(c.entrada_id)
           const abertoAgora=aberto===c.id
           const imagemProduto=imagemProdutoCandidato(c)
+          const precisaImagem=c.tipo==='produto'&&!imagemProduto
+          const precisaCodigo=c.tipo==='produto'&&(!c.codigo_verificavel||c.codigo_ambiguo)
+          const podeAprovar=c.tipo!=='produto'||(!precisaImagem&&!precisaCodigo)
           return <article key={c.id} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <button onClick={()=>editarInicial(c)} className="w-full p-4 text-left hover:bg-slate-50">
               <div className="flex items-start justify-between gap-3">
@@ -386,13 +393,18 @@ export default function CentralAprendizadoPage(){
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">confiança {pct(c.confianca)}</span>
                   </div>
                   <h3 className="font-semibold">{c.titulo}</h3>
+                  {c.tipo==='produto'&&<div className="mt-1 text-xs font-semibold text-slate-700">Código: {String(c.dados?.codigo||'não informado')}</div>}
+                  {c.tipo==='produto'&&precisaCodigo&&<p className="mt-1 text-xs text-amber-700">Código não identificado com segurança; corrija antes de validar.</p>}
+                  {c.tipo==='produto'&&precisaImagem&&<p className="mt-1 text-xs text-amber-700">Sem imagem vinculada: confira a foto ou anexe um desenho.</p>}
+                  {c.tipo==='produto'&&c.foto_cadastro&&<p className="mt-1 text-[11px] text-emerald-700">Foto existente encontrada por código exato no Atlas/WVetro</p>}
                   <p className="mt-1 text-xs text-slate-400">Origem: {origem?.titulo||'Material'} · enviado por {origem?.criado_por_nome||'usuário'}</p>
                   {c.deduplicacao?.produto_existente&&<p className="mt-2 text-sm text-emerald-700"><b>Já existe no Atlas:</b> {c.deduplicacao.produto_existente.codigo||''} {c.deduplicacao.produto_existente.nome}</p>}
                   {(c.deduplicacao?.ambiguos||[]).length>0&&<p className="mt-2 text-sm text-amber-700"><b>Atenção:</b> encontrei mais de um possível item parecido. Revise antes de aprovar.</p>}
                   {(c.deduplicacao?.conflitos||[]).length>0&&<div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900"><b>Divergências encontradas:</b>{(c.deduplicacao.conflitos||[]).map((x:any,i:number)=><div key={i}>{x.campo}: Atlas <b>{String(x.atlas??'—')}</b> × catálogo <b>{String(x.catalogo??'—')}</b></div>)}</div>}
                 </div>
-                {c.tipo==='produto'&&imagemProduto&&<div className="hidden h-20 w-28 shrink-0 overflow-hidden rounded-xl border bg-white sm:block">
-                  <img src={imagemProduto} alt={String(c.dados?.descricao||c.dados?.codigo||'Produto')} className="h-full w-full object-contain"/>
+                {c.tipo==='produto'&&<div className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white">
+                  {imagemProduto?<img src={imagemProduto} alt={String(c.dados?.codigo||'Produto')} className="h-full w-full object-contain"/>
+                  :<span className="text-center text-[11px] text-slate-400">Sem imagem</span>}
                 </div>}
                 {abertoAgora?<ChevronUp size={18}/>:<ChevronDown size={18}/>}
               </div>
@@ -400,7 +412,7 @@ export default function CentralAprendizadoPage(){
 
             {c.pode_validar?<div className="flex flex-wrap items-center gap-2 border-t bg-white px-4 py-3">
               <span className="mr-1 text-xs font-bold uppercase tracking-wide text-slate-400">Decisão</span>
-              <button disabled={salvando===c.id} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
+              <button disabled={salvando===c.id||!podeAprovar} title={!podeAprovar?'Confirme código e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
               <button disabled={salvando===c.id} onClick={()=>editarInicial(c)} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Eye size={15}/>Revisar / corrigir</button>
               <button disabled={salvando===c.id} onClick={()=>void acao(c,'rejeitar')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-semibold text-red-700 disabled:opacity-40"><XCircle size={15}/>Não validar</button>
             </div>:<div className="border-t bg-slate-50 px-4 py-3 text-xs text-slate-600"><ShieldCheck size={15} className="mr-1 inline"/>Somente Master ou responsável com edição no setor pode validar este aprendizado.</div>}
@@ -604,11 +616,12 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
 function imagemProdutoCandidato(c:Candidato){
   const direto=String(c.dados?.imagem_item_url||c.dados?.imagem_url||c.dados?.foto_url||'').trim()
   if(direto)return direto
+  if(c.foto_cadastro)return c.foto_cadastro
   const existente=c.deduplicacao?.produto_existente||{}
   const doExistente=String(existente.imagem_item_url||existente.imagem_url||existente.foto_url||'').trim()
   if(doExistente)return doExistente
   const codigo=String(c.dados?.codigo||existente.codigo||'').trim().toUpperCase()
-  if(/^SU\d{3}$/i.test(codigo))return `/perfis/plano-corte/${codigo}.png`
+  // Não inferir imagem por convenção de nome do arquivo: somente registros comprovados.
   return ''
 }
 
@@ -624,12 +637,34 @@ function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidat
   const fonteUrl=entrada?.fonte_url||''
   const codigo=String(candidato.dados?.codigo||'')
   const descricao=String(candidato.dados?.descricao||candidato.titulo||'Produto')
+  const [anexando,setAnexando]=useState(false)
+  const [erroAnexo,setErroAnexo]=useState('')
+  async function anexarImagem(file:File|null){
+    if(!file)return
+    if(!/^image\/(png|jpeg|webp)$/.test(file.type)||file.size>3*1024*1024||file.size===0){
+      setErroAnexo('Utilize PNG, JPG ou WebP de até 3 MB.')
+      return
+    }
+    setAnexando(true);setErroAnexo('')
+    try{
+      const url=await new Promise<string>((resolve,reject)=>{
+        const reader=new FileReader()
+        reader.onload=()=>resolve(String(reader.result||''))
+        reader.onerror=()=>reject(new Error('Erro ao ler a imagem.'))
+        reader.readAsDataURL(file)
+      })
+      await onSalvar(url)
+    }catch(e:any){setErroAnexo(e?.message||'Não foi possível anexar imagem.')}
+    finally{setAnexando(false)}
+  }
 
   return <div className="rounded-2xl border bg-white p-3">
     <div className="mb-2 flex items-center justify-between gap-2">
       <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500"><Eye size={14}/>Imagem para validar</div>
       {fonteUrl&&pagina>0&&<a href={fonteUrl+'#page='+pagina+'&zoom=page-width'} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Abrir catálogo</a>}
     </div>
+    <div className="mb-2 text-xs font-semibold text-slate-700">Código {codigo||'não informado'} · {descricao}</div>
+    {candidato.foto_cadastro&&<p className="mb-2 text-[11px] font-semibold text-emerald-700">Imagem existente do produto localizado pelo código exato.</p>}
     {imagem?<img src={imagem} alt={descricao||codigo} className="max-h-72 w-full rounded-xl border bg-white object-contain"/>
     :pagina>0&&fonteUrl?<ImagemPerfilCatalogo fonteUrl={fonteUrl} pagina={pagina} codigo={codigo} descricao={descricao} onSalvar={onSalvar}/>
     :<div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-slate-50 p-5 text-center text-sm text-slate-500">
@@ -639,6 +674,11 @@ function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidat
         <p className="mt-1 text-xs leading-5">Para validar perfil ou acessório com segurança, envie o catálogo/foto ou gere o recorte do PDF antes de aprovar.</p>
       </div>
     </div>}
+    <label className={'mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 '+(anexando?'pointer-events-none opacity-60':'')}>
+      <Upload size={15}/>{anexando?'Anexando...':imagem?'Substituir imagem deste candidato':'Anexar foto/desenho deste código'}
+      <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={anexando} onChange={e=>{void anexarImagem(e.target.files?.[0]||null);e.target.value=''}}/>
+    </label>
+    {erroAnexo&&<p className="mt-2 text-xs text-red-700">{erroAnexo}</p>}
   </div>
 }
 
@@ -647,11 +687,13 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
   const [erroImagem,setErroImagem]=useState('')
   const [carregandoImagem,setCarregandoImagem]=useState(true)
   const [salvandoImagem,setSalvandoImagem]=useState(false)
+  const [codigoEncontrado,setCodigoEncontrado]=useState(false)
+  const [imagemConfirmada,setImagemConfirmada]=useState(false)
 
   useEffect(()=>{
     let cancelado=false
     async function gerar(){
-      setCarregandoImagem(true);setErroImagem('')
+      setCarregandoImagem(true);setErroImagem('');setCodigoEncontrado(false);setImagemConfirmada(false)
       try{
         const pdfModuleUrl='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs'
         const pdfjs:any=await import(/* webpackIgnore: true */ pdfModuleUrl)
@@ -667,7 +709,8 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
           return {str:String(i.str),x:Number(t[4]||0),y:Number(t[5]||0),w:Number(i.width||0)*scale,h:Math.max(10,Number(i.height||0)*scale)}
         })
         const alvo=normalizarCodigoImagem(codigo)
-        let target=itens.find((i:any)=>normalizarCodigoImagem(i.str)===alvo)
+        const exatos=itens.filter((i:any)=>normalizarCodigoImagem(i.str)===alvo)
+        let target=exatos.length===1?exatos[0]:null
         if(!target&&alvo){
           for(let i=0;i<itens.length&&!target;i++){
             let combinado=''
@@ -728,10 +771,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
         octx.drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height)
         const data=out.toDataURL('image/jpeg',0.9)
         if(cancelado)return
-        setImagem(data);setCarregandoImagem(false)
-        setSalvandoImagem(true)
-        try{await onSalvar(data)}catch{}
-        if(!cancelado)setSalvandoImagem(false)
+        setImagem(data);setCodigoEncontrado(exatos.length===1&&Boolean(target));setCarregandoImagem(false)
         try{await doc.destroy()}catch{}
       }catch(e:any){
         if(cancelado)return
@@ -745,7 +785,16 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
 
   if(carregandoImagem)return <div className="grid min-h-56 place-items-center rounded-xl border bg-white p-6 text-center text-sm text-slate-500"><div><Loader2 className="mx-auto mb-2 animate-spin" size={24}/><b>Gerando desenho do perfil...</b><p className="mt-1 text-xs text-slate-400">Página {pagina} · código {codigo}</p></div></div>
   if(erroImagem)return <div className="grid min-h-56 place-items-center rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800"><div><Eye className="mx-auto mb-2" size={22}/><b>Não consegui recortar automaticamente.</b><p className="mt-1 text-xs">{erroImagem}</p><a href={fonteUrl+'#page='+pagina} target="_blank" rel="noreferrer" className="mt-3 inline-block font-semibold text-blue-700">Abrir página {pagina}</a></div></div>
-  return <div className="relative"><img src={imagem} alt={descricao||codigo} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>{salvandoImagem&&<div className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-slate-500 shadow">Salvando imagem...</div>}</div>
+  return <div className="space-y-2">
+    <img src={imagem} alt={'Prévia do catálogo para '+(codigo||descricao)} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
+    {!codigoEncontrado
+      ?<p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Código não localizado de forma única no texto do PDF. O recorte não será vinculado automaticamente.</p>
+      :imagemConfirmada
+        ?<p className="rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800">Imagem do código {codigo} confirmada e vinculada.</p>
+        :<button type="button" disabled={salvandoImagem} onClick={async()=>{setSalvandoImagem(true);try{await onSalvar(imagem);setImagemConfirmada(true)}catch(e:any){setErroImagem(e?.message||'Falha ao salvar imagem')}finally{setSalvandoImagem(false)}}} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
+          {salvandoImagem?'Salvando...':'Confirmar: este desenho corresponde ao código '+codigo}
+        </button>}
+  </div>
 }
 
 function InfoItem({rotulo,valor}:{rotulo:string;valor:any}){
