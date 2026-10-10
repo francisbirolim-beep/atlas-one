@@ -1,5 +1,3 @@
-[Reading 102 lines from start (total: 102 lines, 0 remaining)]
-
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -102,5 +100,3 @@ export default function VendaNotasRecibos({
     </section>
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
