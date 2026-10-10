@@ -51,7 +51,9 @@ export function extrairPrevisaoWVetro(bruto:unknown):ResumoCmv{
  if(categorias.acessorio===null)categorias.acessorio=numero(resumo.OrcamentoValorVlrCustoAcessorio)
  if(categorias.vidro===null)categorias.vidro=numero(resumo.OrcamentoValorVlrCustoVidro)
  const menor=totalValores.length>=2?Math.min(...totalValores):null
- if(categorias.sobra===null && menor!==null && historico!==null && historico>menor){
+ if(categorias.sobra===null && menor!==null && historico!==null && historico>=menor){
+   // A diferença entre os totais históricos representa a sobra no quadro Conferir Valores.
+   // Quando os dois totais são iguais, a sobra conhecida é R$ 0,00.
    categorias.sobra=Math.round((historico-menor)*100)/100
  }
  if(categorias.sobra===null){
@@ -71,5 +73,6 @@ export function extrairPrevisaoWVetro(bruto:unknown):ResumoCmv{
  const soma=completo?Math.round(Object.values(categorias).reduce<number>((s,v)=>s+(v??0),0)*100)/100:null
  const quantidade=Object.values(categorias).filter(v=>v!==null).length
  const aviso=quantidade===0?'O W.Vetro informou o total histórico, mas ainda não forneceu o detalhamento por categoria.':!completo?'O detalhamento W.Vetro ainda está incompleto.':historico!==null&&soma!==null&&Math.abs(historico-soma)>0.03?'Total histórico W.Vetro diferente da soma das categorias.':null
- return {categorias,total:historico??soma,fonte:quantidade?'conferir_valores':historico!==null?'resumo_wvetro':'indisponivel',aviso:historico===null&&quantidade===0?'Resumo W.Vetro indisponível.':aviso}
+ const fonte=quantidade===0?(historico!==null?'resumo_wvetro':'indisponivel'):(Object.keys(resumo).length?'resumo_obra_wvetro':'conferir_valores')
+ return {categorias,total:historico??soma,fonte,aviso:historico===null&&quantidade===0?'Resumo W.Vetro indisponível.':aviso}
 }
