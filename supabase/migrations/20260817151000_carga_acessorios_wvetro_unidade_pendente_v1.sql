@@ -12,8 +12,7 @@
 --
 -- Nenhum fator de conversão é inferido.
 
-begin;
-
+begin
 create temporary table _carga_acessorios_wvetro_unidade_pendente (
   codigo_origem_raw text not null,
   descricao_fonte text not null,
@@ -27,8 +26,7 @@ create temporary table _carga_acessorios_wvetro_unidade_pendente (
   motivos_fonte text,
   qtde_embalagem numeric,
   ativo_fonte text
-) on commit drop;
-
+) on commit drop
 insert into _carga_acessorios_wvetro_unidade_pendente (
   codigo_origem_raw,
   descricao_fonte,
@@ -178,8 +176,7 @@ insert into _carga_acessorios_wvetro_unidade_pendente (
   ('SPHG-013', 'GUARNIÇÃO INTERNA CUNHA 11 X 4,6 MM - EPDM PRETO', 'MT', '76042920', 'GERAL', 'PRETO', 'LINHA EXCLUSIVA', 'LINHA_GERAL', 'ATENCAO', 'LINHA_GERAL', 0, 'Sim'),
   ('TAM011', 'TAMPA PARA CORRIMÃO CG072 / D143', 'BR', '76101000', 'GERAL', '15', 'LINHA EXCLUSIVA', 'LINHA_GERAL, COR_NUMERICA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA', 0, 'Sim'),
   ('TF', 'TRILHO DE FERRO PARA PORTÃO DE CORRER', 'MT', '76042920', 'GERAL', '15', 'LINHA EXCLUSIVA', 'LINHA_GERAL, COR_NUMERICA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA', 0, 'Sim'),
-  ('TPA-250', 'TAMPA LATERAL DA CAIXA ( EXL-88515 / EXL-515 )', 'PR', '76042920', 'GERAL', '15', 'LINHA EXCLUSIVA', 'LINHA_GERAL, COR_NUMERICA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA', 0, 'Sim');
-
+  ('TPA-250', 'TAMPA LATERAL DA CAIXA ( EXL-88515 / EXL-515 )', 'PR', '76042920', 'GERAL', '15', 'LINHA EXCLUSIVA', 'LINHA_GERAL, COR_NUMERICA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA', 0, 'Sim')
 -- Guardas: se a fonte/escopo ou a base mudaram, abortar em vez de inventar/duplicar.
 do $$
 declare
@@ -262,8 +259,7 @@ begin
   if v_colisoes <> 0 then
     raise exception 'Base mudou desde a reconciliação: % código(s) desta carga já existem em produtos', v_colisoes;
   end if;
-end $$;
-
+end $$
 insert into public.produtos (
   nome,
   categoria,
@@ -332,8 +328,7 @@ select
     else 'pendente'
   end as ncm_status
 from _carga_acessorios_wvetro_unidade_pendente c
-order by regexp_replace(upper(trim(c.codigo_origem_raw)), '\s+', ' ', 'g');
-
+order by regexp_replace(upper(trim(c.codigo_origem_raw)), '\s+', ' ', 'g')
 do $$
 declare
   v_inseridos integer;
@@ -365,6 +360,5 @@ begin
   if v_unidade_preenchida <> 0 then
     raise exception 'Pós-carga encontrou % item(ns) com unidade operacional preenchida indevidamente', v_unidade_preenchida;
   end if;
-end $$;
-
-commit;
+end $$
+commit

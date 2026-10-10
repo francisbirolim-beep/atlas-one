@@ -1,5 +1,8 @@
--- Segunda passagem para custos preenchidos pelo histórico em estado anterior.
--- Só corrige custo que ainda coincide exatamente com alguma evidência W.Vetro.
+
+-- Segunda passagem: alguns custos de perfil haviam sido preenchidos pelo histórico
+-- em um estado anterior; depois os agregados min/max/último mudaram.
+-- Corrige somente quando o custo operacional atual ainda aparece exatamente
+-- em alguma evidência histórica W.Vetro (por tipologia ou referência global).
 
 with cfg as (
   select

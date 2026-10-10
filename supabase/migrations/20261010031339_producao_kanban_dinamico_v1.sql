@@ -21,8 +21,6 @@ language plpgsql
 set search_path to 'public'
 as $function$
 begin
-  -- A posição do card representa a etapa operacional configurada pelo usuário.
-  -- O status técnico continua sendo validado dentro de ordens_producao.
   return new;
 end;
 $function$;
@@ -38,8 +36,6 @@ declare
   v_user uuid := coalesce(new.criado_por_id, old.criado_por_id);
   v_user_nome text := coalesce(new.criado_por_nome, old.criado_por_nome, 'Automação Produção');
 begin
-  -- Mudanças de status da OP não reposicionam o card do Kanban.
-  -- Mantém-se o gate de instalação, que depende do estado técnico real.
   if v_orc is not null then
     perform public.fn_tentar_liberar_instalacao_v1(v_orc, v_user, v_user_nome);
   end if;

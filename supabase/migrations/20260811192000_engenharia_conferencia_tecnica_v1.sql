@@ -11,11 +11,9 @@ create table if not exists public.engenharia_conferencias (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (medicao_item_id)
-);
-
+)
 create index if not exists engenharia_conferencias_status_idx
-  on public.engenharia_conferencias(status);
-
+  on public.engenharia_conferencias(status)
 create or replace function public.fn_engenharia_conferencia_touch()
 returns trigger
 language plpgsql
@@ -29,13 +27,11 @@ begin
   end if;
   return new;
 end;
-$$;
-
-drop trigger if exists trg_engenharia_conferencia_touch on public.engenharia_conferencias;
+$$
+drop trigger if exists trg_engenharia_conferencia_touch on public.engenharia_conferencias
 create trigger trg_engenharia_conferencia_touch
 before update on public.engenharia_conferencias
-for each row execute function public.fn_engenharia_conferencia_touch();
-
+for each row execute function public.fn_engenharia_conferencia_touch()
 create or replace function public.fn_bloquear_liberacao_engenharia_incompleta()
 returns trigger
 language plpgsql
@@ -91,9 +87,8 @@ begin
 
   return new;
 end;
-$$;
-
-drop trigger if exists trg_bloquear_liberacao_engenharia_incompleta on public.setor_kanban_itens;
+$$
+drop trigger if exists trg_bloquear_liberacao_engenharia_incompleta on public.setor_kanban_itens
 create trigger trg_bloquear_liberacao_engenharia_incompleta
 before update of coluna_id on public.setor_kanban_itens
-for each row execute function public.fn_bloquear_liberacao_engenharia_incompleta();
+for each row execute function public.fn_bloquear_liberacao_engenharia_incompleta()

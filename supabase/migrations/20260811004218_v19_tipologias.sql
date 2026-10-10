@@ -23,4 +23,3 @@ insert into tipologias (chave, label, categoria, ordem) values
   ('box', 'Box', 'janela', 9),
   ('outro', 'Outro', 'janela', 10)
 on conflict (chave) do nothing;
-;

@@ -16,14 +16,11 @@
 -- - composição é variável declarativa e inicialmente opcional
 --   (obrigatorio = false), conforme decisão validada pelo usuário.
 
-begin;
-
+begin
 alter table public.engenharia_variaveis_preset
-  add column if not exists imagem_url text;
-
+  add column if not exists imagem_url text
 comment on column public.engenharia_variaveis_preset.imagem_url is
-  'URL do desenho técnico/foto da configuração, exibido no card do seletor de orçamento.';
-
+  'URL do desenho técnico/foto da configuração, exibido no card do seletor de orçamento.'
 insert into public.engenharia_variaveis (chave, label, ordem) values
   ('composicao_folha_1', 'Composição da folha 1', 101),
   ('composicao_folha_2', 'Composição da folha 2', 102),
@@ -31,8 +28,7 @@ insert into public.engenharia_variaveis (chave, label, ordem) values
   ('composicao_folha_4', 'Composição da folha 4', 104),
   ('composicao_folha_5', 'Composição da folha 5', 105),
   ('composicao_folha_6', 'Composição da folha 6', 106)
-on conflict (chave) do nothing;
-
+on conflict (chave) do nothing
 insert into public.engenharia_variavel_opcoes (variavel_id, chave, label, ordem)
 select v.id, o.chave, o.label, o.ordem
 from public.engenharia_variaveis v
@@ -57,8 +53,7 @@ join (values
   ('composicao_folha_6', 'tela', 'Tela', 3)
 ) as o(variavel_chave, chave, label, ordem)
   on o.variavel_chave = v.chave
-on conflict (variavel_id, chave) do nothing;
-
+on conflict (variavel_id, chave) do nothing
 with alvo(tipologia_chave, max_folhas) as (
   values
     ('l_suprema_janela_de_correr_02_folhas', 2),
@@ -86,8 +81,7 @@ select
 from alvo a
 join public.tipologias t on t.chave = a.tipologia_chave
 join composicoes c on c.posicao <= a.max_folhas
-on conflict (tipologia_id, variavel_id) do nothing;
-
+on conflict (tipologia_id, variavel_id) do nothing
 do $$
 declare
   v_variaveis int;
@@ -142,6 +136,5 @@ begin
   if v_vinculos < 15 then
     raise exception 'Gate falhou: esperado >=15 vinculos de composicao, encontrado %', v_vinculos;
   end if;
-end $$;
-
-commit;
+end $$
+commit

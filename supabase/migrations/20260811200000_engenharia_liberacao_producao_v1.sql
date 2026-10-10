@@ -4,8 +4,7 @@
 alter table public.setor_kanban_itens
   add column if not exists liberado_producao_em timestamptz,
   add column if not exists liberado_producao_por_id uuid,
-  add column if not exists liberado_producao_por_nome text;
-
+  add column if not exists liberado_producao_por_nome text
 create or replace function public.fn_engenharia_liberar_para_producao(
   p_card_id uuid,
   p_coluna_id uuid,
@@ -79,6 +78,5 @@ begin
     update public.setor_kanban_itens set coluna_id = p_coluna_id, atualizado_em = now() where id = p_card_id;
   end if;
 end;
-$$;
-
-grant execute on function public.fn_engenharia_liberar_para_producao(uuid, uuid, uuid, text) to anon, authenticated;
+$$
+grant execute on function public.fn_engenharia_liberar_para_producao(uuid, uuid, uuid, text) to anon, authenticated

@@ -1,11 +1,4 @@
--- Acessórios calculáveis por configuração técnica.
--- Primeira carga: relatório W.Vetro de acessórios do orçamento 835 informado pelo usuário como base da Porta de Correr 03 Folhas Suprema.
--- As quantidades do PDF são referência; fórmulas geométricas inferidas ficam explicitamente EM VALIDAÇÃO.
-
-begin;
-
-alter table public.engenharia_tipologia_formulas_corte
-  add column if not exists acessorios jsonb not null default '[]'::jsonb;
+alter table public.engenharia_tipologia_formulas_corte add column if not exists acessorios jsonb not null default '[]'::jsonb;
 
 create or replace function public.registrar_historico_formula_corte()
 returns trigger
@@ -26,8 +19,6 @@ begin
 end;
 $$;
 
--- A carga inicial fica somente na configuração legada PC3, para não assumir que
--- vedações/consumos são idênticos entre mão-amiga comum, larga e seus reforços.
 update public.engenharia_tipologia_formulas_corte f
 set acessorios = jsonb_build_array(
   jsonb_build_object('codigo','CHU838','descricao','Chumbador de alumínio multiuso','cor','FOSCO','unidade','UN','formula_quantidade','15','quantidade_referencia',15,'status','em_validacao','composicao_calculo','15 un no relatório W.Vetro. Regra de fixação ainda sem decomposição geométrica validada.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
@@ -46,17 +37,7 @@ set acessorios = jsonb_build_array(
   jsonb_build_object('codigo','NYL357','descricao','Tampa da mão de amigo','cor','PRETO','unidade','UN','formula_quantidade','2 * (3 - 1)','quantidade_referencia',4,'status','em_validacao','composicao_calculo','2 tampas × (3 folhas − 1 encontro) = 4 un; relatório de 4 folhas retorna 6 un.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
   jsonb_build_object('codigo','NYL414','descricao','Batedeira BAT-FLEX','cor','PRETO','unidade','UN','formula_quantidade','4 * (3 - 1)','quantidade_referencia',8,'status','em_validacao','composicao_calculo','4 un × (3 folhas − 1 encontro) = 8 un; relatório de 4 folhas retorna 12 un.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
   jsonb_build_object('codigo','PAR1023','descricao','Parafuso AA CP 3,9 x 9,5 mm inox','cor','NATURAL','unidade','UN','formula_quantidade','12','quantidade_referencia',12,'status','referencia','composicao_calculo','12 un no relatório PC3 e também no relatório comparativo de 4 folhas; manter como fixo em validação até identificar a aplicação exata.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
-  jsonb_build_object('codigo','PAR1025','descricao','Parafuso AA CP 4,2 x 16 mm inox','cor','NATURAL','unidade','UN','formula_quantidade','15','quantidade_referencia',15,'status','referencia','composicao_calculo','15 un no PDF. Regra ligada à montagem/fixação ainda pendente de decomposição.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
-  jsonb_build_object('codigo','PAR435','descricao','Parafuso AA CP PP 4,8 x 32 mm inox','cor','NATURAL','unidade','UN','formula_quantidade','8 * 3','quantidade_referencia',24,'status','em_validacao','composicao_calculo','8 parafusos por folha × 3 folhas = 24 un; relatório de 4 folhas retorna 32 un.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
-  jsonb_build_object('codigo','RPCS100','descricao','Roldana simples côncava Suprema/Mega 25 - carga 100 kg','cor','NATURAL','unidade','UN','formula_quantidade','2 * 3','quantidade_referencia',6,'status','em_validacao','composicao_calculo','2 roldanas por folha × 3 folhas = 6 un; relatório de 4 folhas retorna 8 un.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16'),
-  jsonb_build_object('codigo','SIL-PU','descricao','Silicone de poliuretano','cor','PRETO','unidade','TB','formula_quantidade','','quantidade_referencia',1.51733,'status','referencia','composicao_calculo','O PDF informa 1,51733 tubo. A taxa de consumo/conversão para tubos não está exposta no relatório e precisa ser descoberta antes da automação.','fonte','W.Vetro orçamento 835 · Relatório de Acessórios · 14/07/26 22:27:16')
-),
-observacoes = concat_ws(E'\n', nullif(f.observacoes,''), 'Acessórios PC3: base W.Vetro orçamento 835, relatório 14/07/26 22:27:16. Fórmulas não comprovadas em segunda medida permanecem em validação/referência.'),
-updated_at = now()
+  jsonb_build_object('PAR1025','PAR1025')
+), updated_at=now()
 from public.tipologias t
-where f.tipologia_id = t.id
-  and t.chave = 'l_suprema_porta_de_correr_03_folhas'
-  and f.configuracao_chave = 'legado_wvetro_994'
-  and (f.acessorios is null or jsonb_array_length(f.acessorios) = 0);
-
-commit;
+where f.tipologia_id=t.id and t.chave='l_suprema_porta_de_correr_03_folhas' and f.configuracao_chave='legado_wvetro_994' and jsonb_array_length(f.acessorios)=0;

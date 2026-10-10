@@ -1,6 +1,3 @@
--- Reconcilia de forma idempotente os quatro últimos itens da carga PC3.
--- Em ambientes novos, remove/reinsere os mesmos itens sem duplicar.
-
 with alvo as (
   select f.id,
          coalesce((

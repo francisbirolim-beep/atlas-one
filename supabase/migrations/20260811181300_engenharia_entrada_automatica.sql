@@ -129,11 +129,10 @@ begin
 
   return new;
 end;
-$$;
-
-drop trigger if exists trg_medicao_aprovada_para_engenharia on public.medicoes_finais;
+$$
+drop trigger if exists trg_medicao_aprovada_para_engenharia on public.medicoes_finais
 create trigger trg_medicao_aprovada_para_engenharia
 after update of status_operacional on public.medicoes_finais
 for each row
 when (new.status_operacional = 'aprovado')
-execute function public.fn_medicao_aprovada_para_engenharia();
+execute function public.fn_medicao_aprovada_para_engenharia()

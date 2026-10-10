@@ -66,4 +66,4 @@ begin
     insert into public.setor_kanban_colunas (setor_id, nome, ordem)
     values (v_setor_id, 'Liberado para produção', 3);
   end if;
-end $$;
+end $$

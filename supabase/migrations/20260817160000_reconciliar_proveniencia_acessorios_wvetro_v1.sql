@@ -16,8 +16,7 @@
 -- A migration aborta se os IDs/códigos/unidades Atlas não coincidirem com o
 -- snapshot reconciliado, evitando aplicar proveniência sobre registros alterados.
 
-begin;
-
+begin
 create temporary table _reconciliacao_acessorios_wvetro_existentes (
   codigo_origem_raw text not null,
   descricao_fonte text not null,
@@ -35,8 +34,7 @@ create temporary table _reconciliacao_acessorios_wvetro_existentes (
   atlas_unidade_esperada text not null,
   qtde_embalagem numeric,
   ativo_fonte text
-) on commit drop;
-
+) on commit drop
 insert into _reconciliacao_acessorios_wvetro_existentes (
   codigo_origem_raw,
   descricao_fonte,
@@ -443,8 +441,7 @@ insert into _reconciliacao_acessorios_wvetro_existentes (
   ('VED-NKO-0382', 'VEDAÇÃO SUPERIOR DO MARCO', 'UN', '76042920', 'GERAL', '15', 'LINHA EXCLUSIVA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA', 'EXISTENTE_IGUAL', NULL, 'LINHA_GERAL, COR_NUMERICA', '0c698573-c464-4e3d-b938-f2dae413566b', 'UN', 0, 'Sim'),
   ('VED-NKO-0395', 'CAIXA DE DRENO ', 'UN', '76042920', 'GERAL', '15', 'LINHA EXCLUSIVA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA, DESCRICAO_REPETIDA', 'EXISTENTE_IGUAL', NULL, 'LINHA_GERAL, COR_NUMERICA', '607cbaac-413c-4674-ace4-92aa1e51974f', 'UN', 0, 'Sim'),
   ('VEDGUI200', 'VEDAÇÃO MONTANTE MEGA 20', 'UN', '76042920', 'GERAL', '15', 'LINHA EXCLUSIVA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA', 'EXISTENTE_IGUAL', NULL, 'LINHA_GERAL, COR_NUMERICA', '0f04fd72-f333-4ba2-bca2-dcdc1153b498', 'UN', 0, 'Sim'),
-  ('VHB-4972', 'FITA DUPLA FACE 3M 25 X 2 MM ( VIDRO GLAZING )', 'MT', '76042920', 'PELE DE VIDRO II - PV2', 'NATURAL', '15', 'OK', NULL, 'EXISTENTE_DIVERGENTE', 'UNIDADE', NULL, '50b3b799-a023-4bf0-855d-6f0c3467edb0', 'UN', 0, 'Sim');
-
+  ('VHB-4972', 'FITA DUPLA FACE 3M 25 X 2 MM ( VIDRO GLAZING )', 'MT', '76042920', 'PELE DE VIDRO II - PV2', 'NATURAL', '15', 'OK', NULL, 'EXISTENTE_DIVERGENTE', 'UNIDADE', NULL, '50b3b799-a023-4bf0-855d-6f0c3467edb0', 'UN', 0, 'Sim')
 -- Guardas de escopo + snapshot Atlas.
 do $$
 declare
@@ -582,8 +579,7 @@ begin
   if v_unidade_drift <> 0 then
     raise exception 'Snapshot Atlas mudou: % unidade(s) operacionais diferem da reconciliação; nenhuma será sobrescrita', v_unidade_drift;
   end if;
-end $$;
-
+end $$
 -- Snapshot temporário dos campos que esta migration promete não modificar.
 create temporary table _atlas_operacional_antes on commit drop as
 select
@@ -600,8 +596,7 @@ select
   p.cor_id,
   p.id_externo_wvetro
 from public.produtos p
-join _reconciliacao_acessorios_wvetro_existentes c on c.atlas_id = p.id;
-
+join _reconciliacao_acessorios_wvetro_existentes c on c.atlas_id = p.id
 -- Enriquecimento exclusivamente de proveniência.
 update public.produtos p
 set
@@ -639,8 +634,7 @@ set
   end,
   updated_at = now()
 from _reconciliacao_acessorios_wvetro_existentes c
-where p.id = c.atlas_id;
-
+where p.id = c.atlas_id
 -- Pós-checks: proveniência completa e zero alteração nos campos protegidos.
 do $$
 declare
@@ -708,6 +702,5 @@ begin
   if v_iguais_preservados <> 296 then
     raise exception 'Esperava confirmar 296 unidades iguais; confirmou %', v_iguais_preservados;
   end if;
-end $$;
-
-commit;
+end $$
+commit

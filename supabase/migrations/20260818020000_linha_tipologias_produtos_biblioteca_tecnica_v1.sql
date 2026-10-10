@@ -32,8 +32,7 @@
 --     FACHADA ATLANTA 1)
 --   linha_produtos:   +8  (SUPREMA 2, GOLD 1, PELE DE VIDRO / FACHADA ATLANTA 5)
 
-begin;
-
+begin
 insert into linha_tipologias (linha_id, tipologia_id)
 select lt.id, t.id
 from tipologias t
@@ -47,8 +46,7 @@ join linhas_tecnicas lt on (
     or upper(x.linha_token) = any (select upper(a) from unnest(lt.apelidos) as a)
   )
 )
-on conflict (linha_id, tipologia_id) do nothing;
-
+on conflict (linha_id, tipologia_id) do nothing
 insert into linha_produtos (linha_id, produto_id)
 select lt.id, p.id
 from produtos p
@@ -59,8 +57,7 @@ join linhas_tecnicas lt on (
     or upper(p.dados_origem ->> 'linha_raw') = any (select upper(a) from unnest(lt.apelidos) as a)
   )
 )
-on conflict (linha_id, produto_id) do nothing;
-
+on conflict (linha_id, produto_id) do nothing
 -- Pos-checks: garantem o estado minimo esperado. Usam limiares (>=) para nao
 -- quebrar em reexecucao idempotente nem se novas linhas/tipologias/produtos
 -- legitimos forem cadastrados depois com o mesmo padrao.
@@ -140,6 +137,5 @@ begin
   if v_atlanta_produtos < 5 then
     raise exception 'Gate falhou: esperado >=5 produtos vinculados a PELE DE VIDRO / FACHADA ATLANTA, encontrado %', v_atlanta_produtos;
   end if;
-end $$;
-
-commit;
+end $$
+commit

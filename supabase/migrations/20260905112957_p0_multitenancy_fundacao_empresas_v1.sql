@@ -63,10 +63,12 @@ alter table public.produtos alter column empresa_id set default private.current_
 alter table public.fornecedores alter column empresa_id set default private.current_empresa_id();
 alter table public.unidades_operacionais alter column empresa_id set default private.current_empresa_id();
 
+-- Empresas: apenas leitura da própria empresa por usuário autenticado.
 drop policy if exists "empresa_select_propria" on public.empresas;
 create policy "empresa_select_propria" on public.empresas for select to authenticated
 using (id = (select private.current_empresa_id()));
 
+-- Remove policies amplas das raízes.
 drop policy if exists "acesso_total_temporario" on public.usuarios;
 drop policy if exists "acesso_total_temporario" on public.clientes;
 drop policy if exists "acesso_total_temporario" on public.orcamentos;
@@ -77,37 +79,79 @@ drop policy if exists "obras_insert_total" on public.obras;
 drop policy if exists "obras_update_total" on public.obras;
 drop policy if exists "obras_delete_total" on public.obras;
 
-create policy "usuarios_select_empresa" on public.usuarios for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "usuarios_insert_empresa" on public.usuarios for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "usuarios_update_empresa" on public.usuarios for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "usuarios_delete_empresa" on public.usuarios for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Usuários: usuários autenticados só enxergam e operam dentro da própria empresa.
+create policy "usuarios_select_empresa" on public.usuarios for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "usuarios_insert_empresa" on public.usuarios for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "usuarios_update_empresa" on public.usuarios for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "usuarios_delete_empresa" on public.usuarios for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));
 
-create policy "clientes_select_empresa" on public.clientes for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "clientes_insert_empresa" on public.clientes for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "clientes_update_empresa" on public.clientes for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "clientes_delete_empresa" on public.clientes for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Clientes.
+create policy "clientes_select_empresa" on public.clientes for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "clientes_insert_empresa" on public.clientes for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "clientes_update_empresa" on public.clientes for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "clientes_delete_empresa" on public.clientes for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));
 
-create policy "obras_select_empresa" on public.obras for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "obras_insert_empresa" on public.obras for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "obras_update_empresa" on public.obras for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "obras_delete_empresa" on public.obras for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Obras.
+create policy "obras_select_empresa" on public.obras for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "obras_insert_empresa" on public.obras for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "obras_update_empresa" on public.obras for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "obras_delete_empresa" on public.obras for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));
 
-create policy "orcamentos_select_empresa" on public.orcamentos for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "orcamentos_insert_empresa" on public.orcamentos for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "orcamentos_update_empresa" on public.orcamentos for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "orcamentos_delete_empresa" on public.orcamentos for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Orçamentos.
+create policy "orcamentos_select_empresa" on public.orcamentos for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "orcamentos_insert_empresa" on public.orcamentos for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "orcamentos_update_empresa" on public.orcamentos for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "orcamentos_delete_empresa" on public.orcamentos for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));
 
-create policy "produtos_select_empresa" on public.produtos for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "produtos_insert_empresa" on public.produtos for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "produtos_update_empresa" on public.produtos for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "produtos_delete_empresa" on public.produtos for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Produtos.
+create policy "produtos_select_empresa" on public.produtos for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "produtos_insert_empresa" on public.produtos for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "produtos_update_empresa" on public.produtos for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "produtos_delete_empresa" on public.produtos for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));
 
-create policy "fornecedores_select_empresa" on public.fornecedores for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "fornecedores_insert_empresa" on public.fornecedores for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "fornecedores_update_empresa" on public.fornecedores for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "fornecedores_delete_empresa" on public.fornecedores for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Fornecedores.
+create policy "fornecedores_select_empresa" on public.fornecedores for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "fornecedores_insert_empresa" on public.fornecedores for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "fornecedores_update_empresa" on public.fornecedores for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "fornecedores_delete_empresa" on public.fornecedores for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));
 
-create policy "unidades_select_empresa" on public.unidades_operacionais for select to authenticated using (empresa_id = (select private.current_empresa_id()));
-create policy "unidades_insert_empresa" on public.unidades_operacionais for insert to authenticated with check (empresa_id = (select private.current_empresa_id()));
-create policy "unidades_update_empresa" on public.unidades_operacionais for update to authenticated using (empresa_id = (select private.current_empresa_id())) with check (empresa_id = (select private.current_empresa_id()));
-create policy "unidades_delete_empresa" on public.unidades_operacionais for delete to authenticated using (empresa_id = (select private.current_empresa_id()));
+-- Unidades operacionais.
+create policy "unidades_select_empresa" on public.unidades_operacionais for select to authenticated
+using (empresa_id = (select private.current_empresa_id()));
+create policy "unidades_insert_empresa" on public.unidades_operacionais for insert to authenticated
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "unidades_update_empresa" on public.unidades_operacionais for update to authenticated
+using (empresa_id = (select private.current_empresa_id()))
+with check (empresa_id = (select private.current_empresa_id()));
+create policy "unidades_delete_empresa" on public.unidades_operacionais for delete to authenticated
+using (empresa_id = (select private.current_empresa_id()));

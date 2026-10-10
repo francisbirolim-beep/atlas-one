@@ -13,8 +13,7 @@ alter table public.tarefas
   add column if not exists solicitante_id uuid references public.usuarios(id) on delete set null,
   add column if not exists solicitante_nome text,
   add column if not exists atribuida_em timestamptz,
-  add column if not exists prioridade text not null default 'normal';
-
+  add column if not exists prioridade text not null default 'normal'
 do $$
 begin
   if not exists (
@@ -26,28 +25,23 @@ begin
       add constraint tarefas_prioridade_check
       check (prioridade in ('baixa', 'normal', 'alta', 'urgente'));
   end if;
-end $$;
-
+end $$
 create index if not exists tarefas_usuario_data_aberta_idx
   on public.tarefas(usuario_id, data_hora)
-  where concluida_em is null;
-
+  where concluida_em is null
 create index if not exists tarefas_solicitante_idx
   on public.tarefas(solicitante_id, created_at desc)
-  where solicitante_id is not null;
-
+  where solicitante_id is not null
 -- A política temporária permitia acesso total entre usuários. A partir desta
 -- migration, o browser só opera tarefas/colunas do próprio usuário. A API
 -- server-side usa service role para atribuição cross-user.
-drop policy if exists "acesso_total_temporario" on public.tarefas;
-drop policy if exists "tarefas_select_proprias" on public.tarefas;
-drop policy if exists "tarefas_insert_proprias" on public.tarefas;
-drop policy if exists "tarefas_update_proprias" on public.tarefas;
-drop policy if exists "tarefas_delete_proprias" on public.tarefas;
-
+drop policy if exists "acesso_total_temporario" on public.tarefas
+drop policy if exists "tarefas_select_proprias" on public.tarefas
+drop policy if exists "tarefas_insert_proprias" on public.tarefas
+drop policy if exists "tarefas_update_proprias" on public.tarefas
+drop policy if exists "tarefas_delete_proprias" on public.tarefas
 create policy "tarefas_select_proprias" on public.tarefas
-  for select using (usuario_id = auth.uid());
-
+  for select using (usuario_id = auth.uid())
 create policy "tarefas_insert_proprias" on public.tarefas
   for insert with check (
     usuario_id = auth.uid()
@@ -56,8 +50,7 @@ create policy "tarefas_insert_proprias" on public.tarefas
       select 1 from public.tarefa_colunas c
       where c.id = coluna_id and c.usuario_id = auth.uid()
     )
-  );
-
+  )
 create policy "tarefas_update_proprias" on public.tarefas
   for update using (usuario_id = auth.uid())
   with check (
@@ -66,26 +59,22 @@ create policy "tarefas_update_proprias" on public.tarefas
       select 1 from public.tarefa_colunas c
       where c.id = coluna_id and c.usuario_id = auth.uid()
     )
-  );
-
+  )
 create policy "tarefas_delete_proprias" on public.tarefas
-  for delete using (usuario_id = auth.uid());
-
-drop policy if exists "acesso_total_temporario" on public.tarefa_colunas;
-drop policy if exists "tarefa_colunas_select_proprias" on public.tarefa_colunas;
-drop policy if exists "tarefa_colunas_insert_proprias" on public.tarefa_colunas;
-drop policy if exists "tarefa_colunas_update_proprias" on public.tarefa_colunas;
-drop policy if exists "tarefa_colunas_delete_proprias" on public.tarefa_colunas;
-
+  for delete using (usuario_id = auth.uid())
+drop policy if exists "acesso_total_temporario" on public.tarefa_colunas
+drop policy if exists "tarefa_colunas_select_proprias" on public.tarefa_colunas
+drop policy if exists "tarefa_colunas_insert_proprias" on public.tarefa_colunas
+drop policy if exists "tarefa_colunas_update_proprias" on public.tarefa_colunas
+drop policy if exists "tarefa_colunas_delete_proprias" on public.tarefa_colunas
 create policy "tarefa_colunas_select_proprias" on public.tarefa_colunas
-  for select using (usuario_id = auth.uid());
+  for select using (usuario_id = auth.uid())
 create policy "tarefa_colunas_insert_proprias" on public.tarefa_colunas
-  for insert with check (usuario_id = auth.uid());
+  for insert with check (usuario_id = auth.uid())
 create policy "tarefa_colunas_update_proprias" on public.tarefa_colunas
-  for update using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
+  for update using (usuario_id = auth.uid()) with check (usuario_id = auth.uid())
 create policy "tarefa_colunas_delete_proprias" on public.tarefa_colunas
-  for delete using (usuario_id = auth.uid());
-
+  for delete using (usuario_id = auth.uid())
 -- Metadados de atribuição não podem ser adulterados pelo dono da tarefa via
 -- browser depois da criação. Service role continua apta a operações administrativas.
 create or replace function public.proteger_metadados_atribuicao_tarefa()
@@ -105,13 +94,11 @@ begin
   end if;
   return new;
 end;
-$$;
-
-drop trigger if exists trg_proteger_metadados_atribuicao_tarefa on public.tarefas;
+$$
+drop trigger if exists trg_proteger_metadados_atribuicao_tarefa on public.tarefas
 create trigger trg_proteger_metadados_atribuicao_tarefa
 before update on public.tarefas
-for each row execute function public.proteger_metadados_atribuicao_tarefa();
-
+for each row execute function public.proteger_metadados_atribuicao_tarefa()
 create table if not exists public.notificacoes (
   id uuid primary key default gen_random_uuid(),
   usuario_id uuid not null references public.usuarios(id) on delete cascade,
@@ -127,28 +114,25 @@ create table if not exists public.notificacoes (
   lida_em timestamptz,
   created_at timestamptz not null default now(),
   constraint notificacoes_categoria_check check (categoria in ('tarefas','agenda','chat','operacao'))
-);
-
+)
 create index if not exists notificacoes_usuario_data_idx
-  on public.notificacoes(usuario_id, created_at desc);
+  on public.notificacoes(usuario_id, created_at desc)
 create index if not exists notificacoes_usuario_nao_lida_idx
   on public.notificacoes(usuario_id, created_at desc)
-  where lida_em is null;
+  where lida_em is null
 create unique index if not exists notificacoes_origem_dedupe_idx
   on public.notificacoes(usuario_id, origem_tipo, origem_id)
-  where origem_tipo is not null and origem_id is not null;
-
-alter table public.notificacoes enable row level security;
-drop policy if exists "notificacoes_select_proprias" on public.notificacoes;
-drop policy if exists "notificacoes_update_proprias" on public.notificacoes;
-drop policy if exists "notificacoes_delete_proprias" on public.notificacoes;
+  where origem_tipo is not null and origem_id is not null
+alter table public.notificacoes enable row level security
+drop policy if exists "notificacoes_select_proprias" on public.notificacoes
+drop policy if exists "notificacoes_update_proprias" on public.notificacoes
+drop policy if exists "notificacoes_delete_proprias" on public.notificacoes
 create policy "notificacoes_select_proprias" on public.notificacoes
-  for select using (usuario_id = auth.uid());
+  for select using (usuario_id = auth.uid())
 create policy "notificacoes_update_proprias" on public.notificacoes
-  for update using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
+  for update using (usuario_id = auth.uid()) with check (usuario_id = auth.uid())
 create policy "notificacoes_delete_proprias" on public.notificacoes
-  for delete using (usuario_id = auth.uid());
-
+  for delete using (usuario_id = auth.uid())
 create table if not exists public.notificacao_preferencias (
   usuario_id uuid primary key references public.usuarios(id) on delete cascade,
   som_ativo boolean not null default false,
@@ -159,19 +143,17 @@ create table if not exists public.notificacao_preferencias (
   operacao boolean not null default true,
   updated_at timestamptz not null default now(),
   constraint notificacao_preferencias_volume_check check (som_volume >= 0 and som_volume <= 1)
-);
-
-alter table public.notificacao_preferencias enable row level security;
-drop policy if exists "notificacao_preferencias_select_proprias" on public.notificacao_preferencias;
-drop policy if exists "notificacao_preferencias_insert_proprias" on public.notificacao_preferencias;
-drop policy if exists "notificacao_preferencias_update_proprias" on public.notificacao_preferencias;
+)
+alter table public.notificacao_preferencias enable row level security
+drop policy if exists "notificacao_preferencias_select_proprias" on public.notificacao_preferencias
+drop policy if exists "notificacao_preferencias_insert_proprias" on public.notificacao_preferencias
+drop policy if exists "notificacao_preferencias_update_proprias" on public.notificacao_preferencias
 create policy "notificacao_preferencias_select_proprias" on public.notificacao_preferencias
-  for select using (usuario_id = auth.uid());
+  for select using (usuario_id = auth.uid())
 create policy "notificacao_preferencias_insert_proprias" on public.notificacao_preferencias
-  for insert with check (usuario_id = auth.uid());
+  for insert with check (usuario_id = auth.uid())
 create policy "notificacao_preferencias_update_proprias" on public.notificacao_preferencias
-  for update using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
-
+  for update using (usuario_id = auth.uid()) with check (usuario_id = auth.uid())
 create or replace function public.notificar_tarefa_atribuida()
 returns trigger
 language plpgsql
@@ -198,13 +180,11 @@ begin
   end if;
   return new;
 end;
-$$;
-
-drop trigger if exists trg_notificar_tarefa_atribuida on public.tarefas;
+$$
+drop trigger if exists trg_notificar_tarefa_atribuida on public.tarefas
 create trigger trg_notificar_tarefa_atribuida
 after insert on public.tarefas
-for each row execute function public.notificar_tarefa_atribuida();
-
+for each row execute function public.notificar_tarefa_atribuida()
 create or replace function public.notificar_convite_evento()
 returns trigger
 language plpgsql
@@ -238,13 +218,11 @@ begin
   ) on conflict (usuario_id, origem_tipo, origem_id) where origem_tipo is not null and origem_id is not null do nothing;
   return new;
 end;
-$$;
-
-drop trigger if exists trg_notificar_convite_evento on public.evento_convidados;
+$$
+drop trigger if exists trg_notificar_convite_evento on public.evento_convidados
 create trigger trg_notificar_convite_evento
 after insert on public.evento_convidados
-for each row execute function public.notificar_convite_evento();
-
+for each row execute function public.notificar_convite_evento()
 -- Realtime para alertas instantâneos no sino. Evita erro se já estiver publicado.
 do $$
 begin
@@ -256,4 +234,4 @@ begin
   ) then
     alter publication supabase_realtime add table public.notificacoes;
   end if;
-end $$;
+end $$

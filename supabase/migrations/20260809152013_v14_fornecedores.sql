@@ -27,4 +27,3 @@ begin
     create policy "acesso_total_temporario" on fornecedores for all using (true) with check (true);
   end if;
 end $$;
-;

@@ -87,4 +87,3 @@ where not exists (select 1 from tipologia_campos_extras);
 insert into configuracoes_gerais (chave, valor)
 select 'medicao_alerta_diferenca_mm', '100'
 where not exists (select 1 from configuracoes_gerais where chave = 'medicao_alerta_diferenca_mm');
-;

@@ -18,8 +18,7 @@
 -- - não cria presets novos;
 -- - não altera produto, receita, preço, fórmula ou imagem.
 
-begin;
-
+begin
 do $$
 declare
   v_janela_03 uuid;
@@ -105,8 +104,7 @@ begin
   if v_outros <> 0 then
     raise exception 'Gate falhou: existem % presets com os mesmos códigos em outra tipologia', v_outros;
   end if;
-end $$;
-
+end $$
 -- Corrige identidade do projeto e elimina somente a estrutura inferida incorretamente.
 with tipologia_correta as (
   select id
@@ -152,8 +150,7 @@ set
   updated_at = now()
 from alvos a
 cross join tipologia_correta tc
-where p.id = a.id;
-
+where p.id = a.id
 -- Remove apenas os vínculos de composição adicionados às janelas Suprema sem
 -- evidência suficiente no print que originou esta frente. Variáveis/opções globais
 -- permanecem intactas para futuro uso após modelagem correta.
@@ -167,8 +164,7 @@ where etv.tipologia_id = t.id
     'l_suprema_janela_de_correr_04_folhas',
     'l_suprema_janela_de_correr_06_folhas'
   )
-  and v.chave ~ '^composicao_folha_[1-6]$';
-
+  and v.chave ~ '^composicao_folha_[1-6]$'
 -- Pós-checks: abortam a transação se o estado final não for exatamente o esperado.
 do $$
 declare
@@ -235,6 +231,5 @@ begin
   if v_vinculos_janela <> 0 then
     raise exception 'Pós-check falhou: ainda existem % vínculos composicao_folha_N nas janelas Suprema alvo', v_vinculos_janela;
   end if;
-end $$;
-
-commit;
+end $$
+commit

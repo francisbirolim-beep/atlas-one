@@ -62,5 +62,8 @@ jobs:
       - name: Supabase applied migration history integrity
         run: npm run test:supabase-history
 
+      - name: Supabase SQL source and archived differences integrity
+        run: npm run test:supabase-applied
+
       - name: Build
         run: npm run build

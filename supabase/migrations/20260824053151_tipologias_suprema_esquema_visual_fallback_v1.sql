@@ -1,15 +1,3 @@
--- Fallback visual para tipologias da Linha Suprema que ainda nao possuem foto real.
---
--- O objetivo e evitar cards vazios no Orcamento enquanto as imagens originais
--- do W.Vetro nao forem sincronizadas. O SVG e apenas um esquema frontal Atlas,
--- gerado a partir do nome da tipologia. Nao representa validacao de receita.
---
--- Regra de seguranca:
--- - nunca sobrescreve foto_url existente;
--- - preserva a Porta de Correr 03 Folhas, que ja possui imagens validadas no codigo;
--- - uma futura sincronizacao de imagem real deve poder substituir somente estes
---   fallbacks data:image/svg+xml;base64, sem sobrescrever foto Atlas real.
-
 with suprema as (
   select t.id,t.label,
          greatest(1,least(9,coalesce(((regexp_match(t.label,'([0-9]{1,2})\s*Folh','i'))[1])::int,1))) as folhas,

@@ -37,8 +37,7 @@
 -- `Tamanho` da fonte é gravado SOMENTE em tamanho_barra_mm_origem.
 -- Não inferir que 6 significa 6000 mm e não corrigir 60000 automaticamente.
 
-begin;
-
+begin
 create temporary table _perfil_wvetro_excecoes (
   codigo_norm text primary key,
   codigo_raw_override text,
@@ -49,8 +48,7 @@ create temporary table _perfil_wvetro_excecoes (
   cod_barras_raw_override text,
   fabricante_raw_override text,
   ncm_raw_override text
-) on commit drop;
-
+) on commit drop
 insert into _perfil_wvetro_excecoes (
   codigo_norm,
   codigo_raw_override,
@@ -313,8 +311,7 @@ insert into _perfil_wvetro_excecoes (
   ('VZP-4358', NULL, NULL, 5800, NULL, NULL, NULL, NULL, NULL),
   ('VZP-4558', NULL, NULL, 5800, NULL, NULL, NULL, NULL, NULL),
   ('Y-335', NULL, NULL, NULL, 100, NULL, NULL, NULL, NULL),
-  ('Y-355', NULL, NULL, NULL, 100, NULL, NULL, NULL, NULL);
-
+  ('Y-355', NULL, NULL, NULL, 100, NULL, NULL, NULL, NULL)
 -- Gate 1: o snapshot vivo precisa continuar exatamente igual ao auditado.
 do $$
 declare
@@ -373,8 +370,7 @@ begin
   if v_excecoes_orfas <> 0 then
     raise exception 'Há % exceção(ões) sem perfil correspondente no snapshot Atlas', v_excecoes_orfas;
   end if;
-end $$;
-
+end $$
 -- Reconstrói os 1.307 dados crus da fonte a partir do snapshot auditado +
 -- exceções explícitas. Nenhum desses campos modifica o valor operacional.
 create temporary table _reconciliacao_perfis_wvetro on commit drop as
@@ -445,8 +441,7 @@ select
 from public.produtos p
 left join _perfil_wvetro_excecoes e
   on e.codigo_norm = upper(trim(p.codigo))
-where p.categoria = 'perfil';
-
+where p.categoria = 'perfil'
 -- Gate 2: a fonte reconstruída precisa ser exatamente a fonte auditada.
 do $$
 declare
@@ -606,8 +601,7 @@ begin
   if v_fab_16 <> 68 then
     raise exception 'Esperava exatamente 68 fabricantes=16 não promovidos; encontrou %', v_fab_16;
   end if;
-end $$;
-
+end $$
 -- Congela todas as colunas que esta migration promete NÃO modificar.
 -- Exclui somente os campos de proveniência alterados e updated_at.
 create temporary table _atlas_perfis_protegidos_antes on commit drop as
@@ -626,8 +620,7 @@ select
       ]::text[]
   ) as protegido
 from public.produtos p
-join _reconciliacao_perfis_wvetro c on c.atlas_id = p.id;
-
+join _reconciliacao_perfis_wvetro c on c.atlas_id = p.id
 -- Enriquecimento EXCLUSIVAMENTE de proveniência.
 update public.produtos p
 set
@@ -664,8 +657,7 @@ set
   ),
   updated_at = now()
 from _reconciliacao_perfis_wvetro c
-where p.id = c.atlas_id;
-
+where p.id = c.atlas_id
 -- Pós-checks: proveniência completa e zero alteração fora do permitido.
 do $$
 declare
@@ -746,6 +738,5 @@ begin
   if v_fabricante_16_promovido <> 0 then
     raise exception 'Fabricante=16 foi promovido indevidamente em % perfil(is)', v_fabricante_16_promovido;
   end if;
-end $$;
-
-commit;
+end $$
+commit
