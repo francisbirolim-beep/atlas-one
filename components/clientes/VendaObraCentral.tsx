@@ -70,6 +70,11 @@ type AnalisePdfCompra = {
   documentoId?:string|null
 }
 
+type LoteCotacao = {
+  id:string;venda_obra_id:string;pacote_id:string;categoria:'perfil'|'acessorios'|'vidro'|'outros'
+  status:string;quantidade_itens:number;versao:number;itens:Array<{material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number}>
+  gerado_por_nome?:string|null;created_at:string;updated_at:string
+}
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
 
@@ -182,6 +187,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [contas,setContas]=useState<Conta[]>([])
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
   const [compras,setCompras]=useState<Compra[]>([])
+  const [lotesCotacao,setLotesCotacao]=useState<LoteCotacao[]>([])
+  const [emitindoCotacao,setEmitindoCotacao]=useState(false)
   const [produtosCompras,setProdutosCompras]=useState<Record<string,ProdutoCompra>>({})
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
   const [fornecedoresCompras,setFornecedoresCompras]=useState<Record<string,FornecedorCompra>>({})
@@ -254,6 +261,18 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const vr=await supabase.from('vendas_obras').select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,confirmado_por_nome,itens_snapshot').eq('id',vendaId).eq('cliente_id',clienteId).maybeSingle()
     if(vr.error||!vr.data){setErro('Venda não encontrada para este cliente.');setCarregando(false);return}
     const v=vr.data as Venda; setVenda(v)
+    // Cada lote é uma solicitação de cotação por categoria, independente de compra aprovada.
+    try{
+      const token=await tokenAtual()
+      if(token){
+        const resp=await fetch('/api/vendas/cotacoes-lotes?vendaId='+encodeURIComponent(v.id),
+          {headers:{Authorization:'Bearer '+token},cache:'no-store'})
+        if(resp.ok){
+          const json=await resp.json()
+          setLotesCotacao((json.lotes||[]) as LoteCotacao[])
+        }
+      }
+    }catch{/* Mantém a venda acessível quando a consulta de cotação estiver indisponível. */}
 
     const [cr,or,co,op,si,ii]=await Promise.all([
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
@@ -447,6 +466,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     return base
   },[compras])
   const listaCategoria=comprasPorCategoria[categoriaAberta]
+  const loteCategoria=lotesCotacao.find(l=>l.categoria===categoriaAberta&&l.pacote_id===pacoteTecnicoId)
+  const lotesAtivos=lotesCotacao.filter(l=>l.pacote_id===pacoteTecnicoId&&l.status!=='cancelado')
   const materiaisPorProduto=useMemo(()=>{
     const mapa:Record<string,MaterialTecnico>={}
     materiaisTecnicos.forEach(item=>{if(item.produto_id&&!mapa[item.produto_id])mapa[item.produto_id]=item})
@@ -542,7 +563,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const matches=[...obs.matchAll(/Fornecedor:\s*([^\n]+)/gi)]
     return matches.length?matches[matches.length-1][1].trim():'—'
   }
-  const materiaisTabela=filtroSituacaoMaterial==='todos'?materiaisCategoria:materiaisCategoria.filter(m=>colunaMaterial(m)===filtroSituacaoMaterial)
+  // Materiais é a lista técnica editável; etapas de compra ficam somente na aba Compras.
+  const materiaisTabela=materiaisCategoria
   const idsMateriaisTabela=materiaisTabela.map(m=>m.id)
   const todosMateriaisTabelaSelecionados=idsMateriaisTabela.length>0&&idsMateriaisTabela.every(id=>selecionadosMateriais.includes(id))
 
@@ -569,6 +591,35 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setAnalisePdfCompra(null)
     setSelecionadosPdfCompra([])
   },[categoriaMaterialAberta])
+
+  async function emitirCotacaoCategoria(){
+    if(!venda||!pacoteTecnicoId)return
+    const categoria=categoriaMaterialAberta
+    const existentes=lotesAtivos.find(l=>l.categoria===categoria)
+    if(existentes&&!window.confirm('Já existe uma lista de cotação de '+rotuloCategoria(categoria).toLowerCase()+'. Gerar nova versão preservando a anterior no histórico?'))return
+    if(!existentes&&!window.confirm('Validou os materiais de '+rotuloCategoria(categoria).toLowerCase()+'? A lista será enviada para a coluna Em cotação de Compras, sem confirmar pedido ou recebimento.'))return
+    setEmitindoCotacao(true);setErro('');setMensagemMateriais('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente.')
+      const res=await fetch('/api/vendas/cotacoes-lotes',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({
+          vendaId:venda.id,categoria,
+          materialIds:selecionadosMateriais.filter(id=>materiaisCategoria.some(m=>m.id===id)),
+          reemitir:Boolean(existentes),
+        }),
+      })
+      const json=await res.json().catch(()=>({}))
+      if(!res.ok)throw new Error(json.error||'Não foi possível emitir a lista de cotação.')
+      await carregar()
+      setCategoriaAberta(categoria)
+      setAba('compras')
+      setMensagemMateriais('Lista de '+rotuloCategoria(categoria).toLowerCase()+' gerada. Abra o card em Compras para imprimir ou salvar PDF.')
+      setSelecionadosMateriais([])
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao emitir cotação.')}
+    finally{setEmitindoCotacao(false)}
+  }
 
   async function atualizarStatusNecessidades(necessidadeIds:string[],statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',extras?:{fornecedorNome?:string;documentoNome?:string;documentoUrl?:string;origem?:string;pedidoNumero?:string;valorTotal?:number|null;prazoEntrega?:string;previsaoEntrega?:string;observacoesPedido?:string},materialIds:string[]=[]){
     if(!venda||(!necessidadeIds.length&&!materialIds.length))return false
@@ -1235,13 +1286,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
         {aba==='materiais'&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
-          const colunas=[
-            ['faltas','Falta comprar','border-red-200','bg-red-50/60','text-red-700',kanbanMateriais.faltas],
-            ['cotacao','Em cotação','border-blue-200','bg-blue-50/60','text-blue-700',kanbanMateriais.cotacao],
-            ['comprado','Comprado','border-emerald-200','bg-emerald-50/60','text-emerald-700',kanbanMateriais.comprado],
-            ['entrega','Aguardando chegar','border-amber-200','bg-amber-50/70','text-amber-700',kanbanMateriais.entrega],
-            ['recebido','Recebido','border-teal-200','bg-teal-50/60','text-teal-700',kanbanMateriais.recebido],
-          ] as const
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
           return <Box titulo="Materiais técnicos desta venda">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
