@@ -33,7 +33,10 @@ export type PecaFormula = {
   composicao_desconto?: string
 }
 
+export type FolgasEncaixe = { largura_mm: number; altura_mm: number }
+
 export type TipologiaFormulasCorte = {
+  folgas?: FolgasEncaixe
   tipologia_id: string
   variaveis: VariavelTipologia[]
   pecas: PecaFormula[]
@@ -232,21 +235,24 @@ function avaliarFormula(formula: string, contexto: Record<string, number>): numb
   return resultado
 }
 
-function contextoBase(largura: number, altura: number): Record<string, number> {
+function contextoBase(largura: number, altura: number, folgas?: FolgasEncaixe): Record<string, number> {
+  const folgaL = folgas?.largura_mm ?? 4
+  const folgaH = folgas?.altura_mm ?? 4
+  if (![folgaL, folgaH].every(v => Number.isFinite(v) && v >= 0 && v <= 100)) throw new FormulaCorteError('Folga de encaixe invalida')
   return {
     Largura: largura,
     Altura: altura,
     // LF/HF representam a medida final de fabricacao apos a folga total de
     // encaixe de 4 mm validada para estas receitas Suprema.
-    LF: largura - 4,
-    HF: altura - 4,
+    LF: largura - folgaL,
+    HF: altura - folgaH,
   }
 }
 
-export function calcularFormulaCorteIsolada(formula: string, largura: number, altura: number, numeroFolhas?: number): number {
+export function calcularFormulaCorteIsolada(formula: string, largura: number, altura: number, numeroFolhas?: number, folgas?: FolgasEncaixe): number {
   if (!Number.isFinite(largura) || largura <= 0) throw new FormulaCorteError('Largura invalida')
   if (!Number.isFinite(altura) || altura <= 0) throw new FormulaCorteError('Altura invalida')
-  const contexto = contextoBase(largura, altura)
+  const contexto = contextoBase(largura, altura, folgas)
   if (numeroFolhas !== undefined) {
     if (!Number.isInteger(numeroFolhas) || numeroFolhas < 2 || numeroFolhas > 6) throw new FormulaCorteError('Número de folhas inválido.')
     contexto.Folhas = numeroFolhas
@@ -451,7 +457,7 @@ export function calcularFormulasCorte(
 
   validarOpcoes(def, opcoes)
 
-  const contexto = contextoBase(largura, altura)
+  const contexto = contextoBase(largura, altura, def.folgas)
   // A tipologia unica de correr usa numero_folhas como variavel da arvore.
   // Receitas legadas sem esta variavel continuam com seu comportamento atual.
   if (def.variaveis.some(v => v.chave === 'numero_folhas')) {
