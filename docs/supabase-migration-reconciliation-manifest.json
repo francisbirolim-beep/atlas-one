@@ -1,0 +1,1258 @@
+{
+  "purpose": "Compare local source against applied SQL; never assume same version means identical SQL",
+  "date": "2026-10-10",
+  "database_migration_count": 314,
+  "local_before": 302,
+  "recovered_exact_applied_versions": 56,
+  "archived_unverified_local_versions": 44,
+  "same_version_originals": 258,
+  "same_version_exact_hash": 45,
+  "same_version_whitespace_insensitive": 171,
+  "same_version_meaningfully_different": 87,
+  "local_after": 314,
+  "recovered": [
+    {
+      "version": "20261002010636",
+      "name": "whatsapp_grupos_automacao_orcamento_v1",
+      "md5": "b06e731512b7bcdbbbc49537e5667ac5"
+    },
+    {
+      "version": "20261002010642",
+      "name": "whatsapp_caixa_limpa_contatos_v1",
+      "md5": "1d9621a07b75e3b13e501724139c5183"
+    },
+    {
+      "version": "20261002011111",
+      "name": "whatsapp_contatos_backfill_conversas_v1",
+      "md5": "3927615f9db79eee68006312f98f08de"
+    },
+    {
+      "version": "20261002013816",
+      "name": "wvetro_clone_orcamento_pc4_video_v1",
+      "md5": "d7636c0a2021d9a1305d33184f710dd7"
+    },
+    {
+      "version": "20261002014520",
+      "name": "ai_runtime_endpoints",
+      "md5": "61ff2e32ff87ca672878e1596f001d64"
+    },
+    {
+      "version": "20261002101306",
+      "name": "ai_runtime_endpoints",
+      "md5": "387b033347e3b19276112c440eef48e7"
+    },
+    {
+      "version": "20261002104837",
+      "name": "whatsapp_permissoes_principal_v2",
+      "md5": "a95cc3558a00da7a62353409a9e9cf8e"
+    },
+    {
+      "version": "20261002120846",
+      "name": "whatsapp_acompanhamento_leitura_v1",
+      "md5": "cd768849e94b74df2ed6cb3480b76919"
+    },
+    {
+      "version": "20261002182822",
+      "name": "bem_estar_colaborador_v1",
+      "md5": "5b6e05eb9b0119af6c9a90fed6d858d4"
+    },
+    {
+      "version": "20261002195341",
+      "name": "whatsapp_orcamento_pacote_controle_v2",
+      "md5": "2599fe773aed982534825c0c69f52a04"
+    },
+    {
+      "version": "20261002195408",
+      "name": "wvetro_mapear_tipologias_referencia_pendentes_v1",
+      "md5": "2fffbc14a1ef9a935dab677b085c978c"
+    },
+    {
+      "version": "20261002212751",
+      "name": "comunicacao_usuarios_chat_auditoria_v1",
+      "md5": "2e92abc4d89c38212c8ce7befa4dbe62"
+    },
+    {
+      "version": "20261002212933",
+      "name": "chat_rpc_restringir_anon_v1",
+      "md5": "5141ac7767fc22eed1a75652f913217c"
+    },
+    {
+      "version": "20261002224829",
+      "name": "chat_permissoes_execucao_v2",
+      "md5": "d087bbd379c9fcbf2a6c31b50de58a91"
+    },
+    {
+      "version": "20261002225745",
+      "name": "atlas_ia_audios_privados_v1",
+      "md5": "89aceb47e530b6418aac27ce4ae06722"
+    },
+    {
+      "version": "20261003012327",
+      "name": "atlas_melhorias_v1",
+      "md5": "b5296edc2cf2739ea9776f7b09c71a8c"
+    },
+    {
+      "version": "20261003012435",
+      "name": "atlas_melhorias_hardening_v1",
+      "md5": "735305f2a0ac076b8d7609e119ecb76c"
+    },
+    {
+      "version": "20261003015546",
+      "name": "melhorias_atlas_v1_compat2",
+      "md5": "9c21385f18ee8127f93602f6e41feeab"
+    },
+    {
+      "version": "20261003114353",
+      "name": "enable_wvetro_sync_scheduler_extensions",
+      "md5": "26014b9d8148b119082a8641d65f9c8a"
+    },
+    {
+      "version": "20261004174006",
+      "name": "orcamento_margem_markup_v1",
+      "md5": "de53d07ea43b92776a66e304fbac8072"
+    },
+    {
+      "version": "20261004205750",
+      "name": "cadastro_pendencias_clientes_v1",
+      "md5": "016465f08a9e9e3b3e88e2e18cac4c26"
+    },
+    {
+      "version": "20261004224402",
+      "name": "index_orcamentos_margem_regra_cidade",
+      "md5": "15a8fe77b4691a4c6f0cc95d996e3d63"
+    },
+    {
+      "version": "20261004225536",
+      "name": "whatsapp_ia_aprendizado_v1",
+      "md5": "4ce6e9f9ff52326c82acbfe0578addc2"
+    },
+    {
+      "version": "20261004230609",
+      "name": "usuario_perfil_funcional_v1",
+      "md5": "83b3ae24c6cdcb94c174edb2fea35656"
+    },
+    {
+      "version": "20261005014349",
+      "name": "produtos_codigo_unico_por_empresa",
+      "md5": "398c89a8eca31ef8d494fd8c4340476e"
+    },
+    {
+      "version": "20261005175908",
+      "name": "whatsapp_orcamento_pacote_1min_v3",
+      "md5": "b7f367a7476ad0e22499b6392d6872a0"
+    },
+    {
+      "version": "20261005185842",
+      "name": "whatsapp_orcamento_ia_validacao_v1",
+      "md5": "c420a8601dc10a0d01c742184e3e8adb"
+    },
+    {
+      "version": "20261005230011",
+      "name": "ia_agente_atividade_realtime",
+      "md5": "65c460db5403699f0973b01047f59120"
+    },
+    {
+      "version": "20261006121614",
+      "name": "whatsapp_grupo_permissoes_v1",
+      "md5": "91ba68cc3060066d562651f69b54cf16"
+    },
+    {
+      "version": "20261006122151",
+      "name": "whatsapp_grupo_delegacoes_v1",
+      "md5": "b5ba9ac1bab78bfe5709c0bba6c7b64b"
+    },
+    {
+      "version": "20261006164348",
+      "name": "whatsapp_bloqueios_v1",
+      "md5": "d82c8d7f857b553b7eae7d1d5aa77ae4"
+    },
+    {
+      "version": "20261006164501",
+      "name": "whatsapp_bloqueios_ajuste",
+      "md5": "1697e6792b664961c0ef5ca608dfc6b3"
+    },
+    {
+      "version": "20261006172641",
+      "name": "whatsapp_grupo_membros_v1",
+      "md5": "943c8d8eba46ab7d30015209a66fadee"
+    },
+    {
+      "version": "20261006180514",
+      "name": "wvetro_validacao_candidatos_cliente_v1",
+      "md5": "5c8c768d354b8ab1eee5f9defa382d44"
+    },
+    {
+      "version": "20261006233328",
+      "name": "medicao_contramarco_dimensoes",
+      "md5": "daddc417bee0c6e6f3f07fecc1cdc30a"
+    },
+    {
+      "version": "20261006235146",
+      "name": "medicao_item_ambiente",
+      "md5": "ba712cf3e12a23faf9e5da783081f6e3"
+    },
+    {
+      "version": "20261007010742",
+      "name": "medicao_item_medidas_orcamento",
+      "md5": "9b0e3f0c70edb6a72eb8fef0c93dd1cc"
+    },
+    {
+      "version": "20261007154905",
+      "name": "chat_interno_listagem_realtime_fix_v1",
+      "md5": "df22e638c869c32ba4c3638573826eb6"
+    },
+    {
+      "version": "20261007162428",
+      "name": "chat_interno_realtime_participantes_v1",
+      "md5": "212a611eb2835770c5991a53f44406bd"
+    },
+    {
+      "version": "20261007171430",
+      "name": "chat_interno_privacidade_master_v1",
+      "md5": "9f212d5c938371f7c221458681cd3ed2"
+    },
+    {
+      "version": "20261007171830",
+      "name": "chat_interno_master_leitura_v1",
+      "md5": "bd6d56c3240c019058a086d81f73269d"
+    },
+    {
+      "version": "20261007173629",
+      "name": "recebimento_venda_parcial_desconto_v1",
+      "md5": "176f824e799946e7377a94425b56e012"
+    },
+    {
+      "version": "20261007202528",
+      "name": "desconto_unificado_financeiro_v1",
+      "md5": "353140a019a1c6ae3b9a41da2f8d7363"
+    },
+    {
+      "version": "20261007212347",
+      "name": "wvetro_pacote_material_origem_v1",
+      "md5": "ef0b24b75b01d8caf2ddf84e99e44974"
+    },
+    {
+      "version": "20261008171957",
+      "name": "chat_interno_notificacoes_v1",
+      "md5": "bf730bb8d5d81946080d806a40edc82b"
+    },
+    {
+      "version": "20261009135252",
+      "name": "restrict_trigger_function_execute",
+      "md5": "c5861644d9fd672572b44b8ab7e06c63"
+    },
+    {
+      "version": "20261009135321",
+      "name": "restrict_trigger_function_execute",
+      "md5": "c5861644d9fd672572b44b8ab7e06c63"
+    },
+    {
+      "version": "20261009135623",
+      "name": "harden_chat_tenant_guard",
+      "md5": "1bf67e1c19971cdd994a0f6db8fc6813"
+    },
+    {
+      "version": "20261009135821",
+      "name": "restrict_legacy_finance_rpc",
+      "md5": "bd86f7cf2a17444fbf8de0f339891c22"
+    },
+    {
+      "version": "20261010140645",
+      "name": "venda_instalacao_controle_v1",
+      "md5": "50dd13ce6817cacbb2b23e4febd2e36b"
+    },
+    {
+      "version": "20261010140914",
+      "name": "haver_venda_backend_seguro_v1",
+      "md5": "835297a02f8ae8078ef5ea142766f1bf"
+    },
+    {
+      "version": "20261010141047",
+      "name": "cliente_documentos_venda_v1",
+      "md5": "a191910f99a8c28b1983dd9778763bfc"
+    },
+    {
+      "version": "20261010151255",
+      "name": "venda_instalacao_itens_v1",
+      "md5": "608412a2175552bd7e4375aa80559365"
+    },
+    {
+      "version": "20261010151343",
+      "name": "financeiro_haver_venda_v1",
+      "md5": "154112d9ad6b6440af3e8f40bde0ae58"
+    },
+    {
+      "version": "20261010162444",
+      "name": "venda_cmv_lancamentos_v1",
+      "md5": "b9a46954163553a50119266028ebc2a9"
+    },
+    {
+      "version": "20261010183753",
+      "name": "financeiro_plano_contas_gerencial_v1_20261010",
+      "md5": "73947ebbdbea62cbe1cb167e6b782f99"
+    }
+  ],
+  "archived": [
+    {
+      "file": "20261001221755_central_notificacoes_push_v1.sql",
+      "sha256": "c58a779b4c7529ed461e09f94996ea21328403d1ae78df2a5c3fd20bfdd4e9de"
+    },
+    {
+      "file": "20261002004425_whatsapp_grupos_automacao_orcamento_v1.sql",
+      "sha256": "fd013fe5094ce9395d151ec06ed4843ca14fe6d594232ab391a593309fa18be6"
+    },
+    {
+      "file": "20261006143000_whatsapp_grupo_membros_v1.sql",
+      "sha256": "6badd403a8e59ba53bba47b5d5a24bce5906ac8d2ac7abebb95025e9535e6abf"
+    },
+    {
+      "file": "20261010122500_financeiro_haver_venda_v1.sql",
+      "sha256": "8256d558755986a2640506d7f64c035d6b04395a2e778946231df77fd8f1d75f"
+    },
+    {
+      "file": "20261002121000_whatsapp_acompanhamento_leitura_v1.sql",
+      "sha256": "becab0e097d8ddf371aa459ab9597dd3cb22dcbce6e9b40eda3e9875a746d753"
+    },
+    {
+      "file": "20261005014000_produtos_codigo_unico_por_empresa.sql",
+      "sha256": "434bd6ee101d666e8fb3940ebab5e6800f32d79968ad2e249207813f70caf01e"
+    },
+    {
+      "file": "20261005160500_whatsapp_orcamento_ia_validacao_v1.sql",
+      "sha256": "1f758960c19d93ba4e7d1834672211792b6f1312a71c592a9af28fbb0d730bb6"
+    },
+    {
+      "file": "20261007154900_chat_interno_realtime_participantes_v1.sql",
+      "sha256": "9df6573d88a208f0c9227337f90778e30317deb0228de805762b0736a85a6ef2"
+    },
+    {
+      "file": "20261010043500_material_status_compra_kanban_v1.sql",
+      "sha256": "a42d784b6403bde12ae88f50c4cf4b65de1618d931fed86c48b598aca128b5d6"
+    },
+    {
+      "file": "20261001214856_whatsapp_midia_storage_v1.sql",
+      "sha256": "8fe1c80122591fa77a06bb5b957d62af6ce104eb22bd5550cd1393d9fa2ec7a9"
+    },
+    {
+      "file": "20261005003000_usuario_perfil_funcional_v1.sql",
+      "sha256": "1402f6f3dd97fd0b17c2583c16d972c70e00fafeb787965465765d947815b117"
+    },
+    {
+      "file": "20261005195800_ia_agente_atividade_realtime.sql",
+      "sha256": "1de5047a09f4b53bef5605fff982dad56935344912685596ae1c7a1dc6d1869a"
+    },
+    {
+      "file": "20261004210000_cadastro_pendencias_clientes_v1.sql",
+      "sha256": "925f44d548b8499e928d163976b98056f7aebfdf50e86286bedb6d6af5f3226a"
+    },
+    {
+      "file": "20261008123000_chat_interno_notificacoes_v1.sql",
+      "sha256": "ba006491eaeff9be25390518796e4294d906d5262f8e10a65be4ba912b91aa06"
+    },
+    {
+      "file": "20261006203500_medicao_contramarco_dimensoes.sql",
+      "sha256": "33bed67b328775140f55c4be010da4d0cdac76800c6b051fff2a4c880ad212e9"
+    },
+    {
+      "file": "20261006150500_wvetro_validacao_candidatos_cliente_v1.sql",
+      "sha256": "ac39bf7dad87fc7d2554ec603195ec02eab58ba29ec36f3ba286a1176d408e81"
+    },
+    {
+      "file": "20261007171500_chat_interno_privacidade_master_v1.sql",
+      "sha256": "84ab11ab0f1c451d37be9e06702bd9ccee571fd0a86de556651ff47fc41a636a"
+    },
+    {
+      "file": "20260930195214_whatsapp_multicanal_v1.sql",
+      "sha256": "5680e637d8e158f8b8831edd5565ba05fecc56d03105a9b0f666f6051a0ecbef"
+    },
+    {
+      "file": "20260930192500_whatsapp_qr_gateway_v1.sql",
+      "sha256": "bda416640fac0d6b5585961f65e7009be0ddfed488a455b18583a6046364677e"
+    },
+    {
+      "file": "20260930183202_whatsapp_atendimento_indices_v1.sql",
+      "sha256": "4408343571fe11de3398a74f3dd25e59fa1524d7a1fc0096f101bfc41ad68526"
+    },
+    {
+      "file": "20261002114436_ai_runtime_endpoints_v1.sql",
+      "sha256": "47095e9bc0b0e9c70c31c1e85dc6fd30eec09f1e88f84e4886b197f515701035"
+    },
+    {
+      "file": "20261002181000_wvetro_mapear_tipologias_referencia_pendentes_v1.sql",
+      "sha256": "12d4e0821f015eab605621f5b3a651e273b35282e93e017b1d3e97a1b3038d97"
+    },
+    {
+      "file": "20261006131500_whatsapp_grupo_permissoes_v1.sql",
+      "sha256": "85eb5c1d4d8e542b504a343e283e6df51f1363407286725dfd08b389be08cbbb"
+    },
+    {
+      "file": "20261006135200_whatsapp_bloqueios_ajuste.sql",
+      "sha256": "d21dc646228105157770e4742642977513ad6defa2b63ee7f50e9f3e83a2ca52"
+    },
+    {
+      "file": "20261002193000_atlas_ia_audios_privados_v1.sql",
+      "sha256": "67bb7605628943865472b244a144abaf5be4a8c7a6ccd4b273e60b62853c17ef"
+    },
+    {
+      "file": "20261006134500_whatsapp_bloqueios_v1.sql",
+      "sha256": "639ab0de0c80e2fbf1f62900d428fd11c37958e7b7230eb79201c2bf044ef9ce"
+    },
+    {
+      "file": "20261002100658_ai_runtime_endpoints.sql",
+      "sha256": "cbff373032b24373969cbc9f6eb22fd22e0f4fbf1b140489c82637da522c597f"
+    },
+    {
+      "file": "20261010133000_venda_cmv_lancamentos_v1.sql",
+      "sha256": "8d554aa5f230bce1694b666e5a0127926333bbdd678cf7bb476a87bf265071fb"
+    },
+    {
+      "file": "20261007213000_wvetro_pacote_material_origem_v1.sql",
+      "sha256": "b6fe76eb1b100353ba88fd7c92a991a739978d7449a5c1e0c76511ff77518b7f"
+    },
+    {
+      "file": "20261003120500_wvetro_scheduler_extensions_v1.sql",
+      "sha256": "408d75b302c0e91d1855519f87c242f942b667211ed8c1e99eb4ffc33d5e0c3b"
+    },
+    {
+      "file": "20261010121500_venda_instalacao_itens_v1.sql",
+      "sha256": "02e803b1089aeb553c0be0f4a9d0fce055d75302346b3e57a35ba76697bb070b"
+    },
+    {
+      "file": "20261010185000_financeiro_plano_contas_gerencial_v1.sql",
+      "sha256": "993d4e3b33bf888f83600d0021b3138bdc086e1efc83d0a1e415ce8f6bb6e0c3"
+    },
+    {
+      "file": "20260930200138_whatsapp_canais_hierarquia_v2.sql",
+      "sha256": "70f9ed8b27d2865083497b7125deec55c2800c0e3c8a312fb282d3d6f210dbe6"
+    },
+    {
+      "file": "20261004145000_orcamento_margem_markup_v1.sql",
+      "sha256": "1a09bedd75fd76bb447f3f03f841cc357b31d216b08bf819502d308070e3c429"
+    },
+    {
+      "file": "20261002172715_bem_estar_colaborador_v1.sql",
+      "sha256": "6761390f2c00ac37e927ab8261f32047968099f6a0dd6d61ed89dc3b0b9e3fcc"
+    },
+    {
+      "file": "20261005150000_whatsapp_orcamento_pacote_1min_v3.sql",
+      "sha256": "8d11cd4e7d4ac35710717e451d2b1318f7c8ae9a454e236c7876d99fb14a7e30"
+    },
+    {
+      "file": "20261002231200_wvetro_vincular_tipologias_linhas_v1.sql",
+      "sha256": "6676731b0d7b21f4feca1b8444c356d31c42bcfd10cbdd1ca5e38576e205aff9"
+    },
+    {
+      "file": "20261007020000_medicao_item_medidas_orcamento.sql",
+      "sha256": "189704e8c6160db1bc6213095e260ec4118e4563d416b6b9ae6d2eba1228e50e"
+    },
+    {
+      "file": "20261002103800_whatsapp_permissoes_principal_v2.sql",
+      "sha256": "17a5626c9b803d4f25c270e01ec315ceff1287c2948929f12a9a135246c56648"
+    },
+    {
+      "file": "20261007154800_chat_interno_listagem_realtime_fix_v1.sql",
+      "sha256": "6c3e202bc9a2c3b071b3f6abad60ae25da653b05150020ef4f8321fb3603593d"
+    },
+    {
+      "file": "20261006134500_whatsapp_grupo_delegacoes_v1.sql",
+      "sha256": "0b85d6c8e0e6f2e929055ac8141536c895492d8523ad125c8131bd9ccd6043a9"
+    },
+    {
+      "file": "20261006205000_medicao_item_ambiente.sql",
+      "sha256": "4febcc73b788d7fc0b2f32671432792679a692ecfd6cab0c89b316c4a602183b"
+    },
+    {
+      "file": "20260930180502_whatsapp_atendimento_integracao_v2.sql",
+      "sha256": "964e203893fb5e0a4e75a13a48e3e9a30a068e828c460475db6df7e9f35ebc73"
+    },
+    {
+      "file": "20261004224708_whatsapp_ia_aprendizado_v1.sql",
+      "sha256": "d2a215cb2b425dbb092fd6566d60d2933be5be962271cbcd68272a97449ee4dc"
+    }
+  ],
+  "same_version_differences": [
+    {
+      "version": "20260809230712",
+      "local_file": "20260809230712_v17_automacao_setor.sql",
+      "remote_name": "v17_automacao_setor",
+      "local_md5": "3009cfd55bacc37a9bffc16af99cfba2",
+      "remote_md5": "216e73f17e368b4c05a7fa3585e494d3",
+      "local_length": 689,
+      "remote_length": 687
+    },
+    {
+      "version": "20261006172605",
+      "local_file": "20261006172605_corrigir_custo_perfis_wvetro_historico_antigo_v1.sql",
+      "remote_name": "corrigir_custo_perfis_wvetro_historico_antigo_v1",
+      "local_md5": "61354c2ae68c2703805c8a005b9b0a12",
+      "remote_md5": "f9edb1e658c6839f43311bd113ebf1ab",
+      "local_length": 2045,
+      "remote_length": 2197
+    },
+    {
+      "version": "20260905173247",
+      "local_file": "20260905173247_p0_precificacao_tenant_v1.sql",
+      "remote_name": "p0_precificacao_tenant_v1",
+      "local_md5": "54c9218ca9ceb033d387046536600187",
+      "remote_md5": "ff84ed990f84e3ba5c7bce43a3a4ae38",
+      "local_length": 2811,
+      "remote_length": 3172
+    },
+    {
+      "version": "20260819062000",
+      "local_file": "20260819062000_corrigir_pc3_suprema_cadastro_v1.sql",
+      "remote_name": "corrigir_pc3_suprema_cadastro_v1",
+      "local_md5": "f1034fa50c455a10fbabfde99ae22051",
+      "remote_md5": "ad54478b42b4bbd2c36c1ba5752b5c78",
+      "local_length": 10338,
+      "remote_length": 10326
+    },
+    {
+      "version": "20260823005739",
+      "local_file": "20260823005739_acessorios_pc2_pc4_wvetro.sql",
+      "remote_name": "acessorios_pc2_pc4_wvetro",
+      "local_md5": "c306bfa5a98bc233f08ea7499d7618b4",
+      "remote_md5": "f96865cd7281d15f00d597abe39b4321",
+      "local_length": 20740,
+      "remote_length": 20013
+    },
+    {
+      "version": "20260824012830",
+      "local_file": "20260824012830_wvetro_referencia_completa_v1.sql",
+      "remote_name": "wvetro_referencia_completa_v1",
+      "local_md5": "0e7b677f313f8053068628f891a58e19",
+      "remote_md5": "81c2ab4feeb7a72fee5f1204f5de2a25",
+      "local_length": 11048,
+      "remote_length": 9488
+    },
+    {
+      "version": "20260905212201",
+      "local_file": "20260905212201_p0_generic_tenant_fk_guards_v1.sql",
+      "remote_name": "p0_generic_tenant_fk_guards_v1",
+      "local_md5": "c24ed3534198b7f4f81a916ce23ba914",
+      "remote_md5": "a9025a1b6580ad665d25437da2dc118d",
+      "local_length": 2764,
+      "remote_length": 2852
+    },
+    {
+      "version": "20260825174254",
+      "local_file": "20260825174254_balcao_cancelamento_devolucao_v1.sql",
+      "remote_name": "balcao_cancelamento_devolucao_v1",
+      "local_md5": "91ed5dad68a7f2abcc6032ae1d3835ea",
+      "remote_md5": "08c7bc7d1e7d6c4befaaabe21ce822ab",
+      "local_length": 16328,
+      "remote_length": 15457
+    },
+    {
+      "version": "20260811181300",
+      "local_file": "20260811181300_engenharia_entrada_automatica.sql",
+      "remote_name": "engenharia_entrada_automatica",
+      "local_md5": "7a02bfc4ddeac50468d4bd0023a60e70",
+      "remote_md5": "9cef1df16733da4227f15287660cb64f",
+      "local_length": 4389,
+      "remote_length": 4384
+    },
+    {
+      "version": "20260902193714",
+      "local_file": "20260902193714_wvetro_referencias_tipologias_dimensoes_v1.sql",
+      "remote_name": "wvetro_referencias_tipologias_dimensoes_v1",
+      "local_md5": "7bd4861023b33d1202eebc54b05be860",
+      "remote_md5": "04d5702b4283e6b733acfbcf5f06b567",
+      "local_length": 1965,
+      "remote_length": 1570
+    },
+    {
+      "version": "20260809202332",
+      "local_file": "20260809202332_v13_medicao_final.sql",
+      "remote_name": "v13_medicao_final",
+      "local_md5": "b1f890a825cc78670aa529f4bd85be5f",
+      "remote_md5": "83e89f02655140d05c66d679730a9586",
+      "local_length": 3498,
+      "remote_length": 3496
+    },
+    {
+      "version": "20260905113917",
+      "local_file": "20260905113917_p0_multitenancy_cadastro_historico_v1.sql",
+      "remote_name": "p0_multitenancy_cadastro_historico_v1",
+      "local_md5": "5f4f33693015aae65594b82705334096",
+      "remote_md5": "d6d1eccb9d441cd4b4c07507754ec1b1",
+      "local_length": 946,
+      "remote_length": 873
+    },
+    {
+      "version": "20260818013000",
+      "local_file": "20260818013000_colaboracao_notificacoes_v1.sql",
+      "remote_name": "colaboracao_notificacoes_v1",
+      "local_md5": "d965612c7b7a6180c1fba727ce9965ac",
+      "remote_md5": "707f06df8d8369abb8389e9286655ec5",
+      "local_length": 10382,
+      "remote_length": 10308
+    },
+    {
+      "version": "20260824012851",
+      "local_file": "20260824012851_wvetro_staging_tipologias_componentes_v1.sql",
+      "remote_name": "wvetro_staging_tipologias_componentes_v1",
+      "local_md5": "7a44f9be56718b4c5d05603f8145e5bb",
+      "remote_md5": "38dab04c127fb9491ebe988e261f04b5",
+      "local_length": 3293,
+      "remote_length": 2947
+    },
+    {
+      "version": "20261010031339",
+      "local_file": "20261010031339_producao_kanban_dinamico_v1.sql",
+      "remote_name": "producao_kanban_dinamico_v1",
+      "local_md5": "73dea09b025099458bda8cf70e79f7ad",
+      "remote_md5": "d7d286f34a7fda05795d7f973e07b95d",
+      "local_length": 1765,
+      "remote_length": 1473
+    },
+    {
+      "version": "20260818210500",
+      "local_file": "20260818210500_configuracoes_composicao_folhas_imagem_v1.sql",
+      "remote_name": "configuracoes_composicao_folhas_imagem_v1",
+      "local_md5": "3984ed6c2123c1f8c1211c71e37c304d",
+      "remote_md5": "fcbe2a580d7e136d7c0cdde20bd37c84",
+      "local_length": 5360,
+      "remote_length": 5344
+    },
+    {
+      "version": "20260905115344",
+      "local_file": "20260905115344_p0_tenant_integridade_compras_financeiro_v1.sql",
+      "remote_name": "p0_tenant_integridade_compras_financeiro_v1",
+      "local_md5": "4e504e8ba1ceb35365fab506fda1f99d",
+      "remote_md5": "8e80d1af6f2ed577dfb97c95c69b7235",
+      "local_length": 12058,
+      "remote_length": 12069
+    },
+    {
+      "version": "20260823225827",
+      "local_file": "20260823225827_estoque_multiunidade_enderecamento.sql",
+      "remote_name": "estoque_multiunidade_enderecamento",
+      "local_md5": "35312654ec813bfc40f792a3e39b3f1b",
+      "remote_md5": "66f7f2cc318d7e96f00889d53a9d0143",
+      "local_length": 16081,
+      "remote_length": 16237
+    },
+    {
+      "version": "20260824094309",
+      "local_file": "20260824094309_remover_croquis_automaticos_tipologias_v1.sql",
+      "remote_name": "remover_croquis_automaticos_tipologias_v1",
+      "local_md5": "7c69af6e0bcb85fc5901132388a0f0cb",
+      "remote_md5": "7d2c5515679c171b4d6bac9addbc32b2",
+      "local_length": 762,
+      "remote_length": 292
+    },
+    {
+      "version": "20260904135007",
+      "local_file": "20260904135007_produtos_status_pendente_catalogo_fornecedor.sql",
+      "remote_name": "produtos_status_pendente_catalogo_fornecedor",
+      "local_md5": "d7608912c875ec4e646a27e5cbad272f",
+      "remote_md5": "9f55c874e6f5617c4f319dd10e41d7c3",
+      "local_length": 470,
+      "remote_length": 274
+    },
+    {
+      "version": "20260826140437",
+      "local_file": "20260826140437_balcao_orcamentos_separado_v1.sql",
+      "remote_name": "balcao_orcamentos_separado_v1",
+      "local_md5": "e003513bd56d8aeb16c54cb696467dc4",
+      "remote_md5": "69fb224f7cd157bc4d5eb54fa26f565d",
+      "local_length": 2903,
+      "remote_length": 2964
+    },
+    {
+      "version": "20260822234852",
+      "local_file": "20260822234852_corrigir_carga_acessorios_pc3.sql",
+      "remote_name": "corrigir_carga_acessorios_pc3",
+      "local_md5": "3a29a78e810699f72a78cf8abe57a714",
+      "remote_md5": "051d4d4e17c47eba8692d2c8fe3b89e2",
+      "local_length": 2397,
+      "remote_length": 2253
+    },
+    {
+      "version": "20260824012908",
+      "local_file": "20260824012908_wvetro_snapshots_api_v1.sql",
+      "remote_name": "wvetro_snapshots_api_v1",
+      "local_md5": "8e23b0567c7f6984c975e77c8bc0a6a9",
+      "remote_md5": "b71ef910ce008644e231bfe2f61f732f",
+      "local_length": 2365,
+      "remote_length": 2230
+    },
+    {
+      "version": "20260826233029",
+      "local_file": "20260826233029_workflow_evitar_notificacao_duplicada_v1.sql",
+      "remote_name": "workflow_evitar_notificacao_duplicada_v1",
+      "local_md5": "5d0b2eabaa5b169b7831853e9b1f4c8b",
+      "remote_md5": "5934ca062fb8f504e57e8a445f0ab62a",
+      "local_length": 6554,
+      "remote_length": 6768
+    },
+    {
+      "version": "20260811004218",
+      "local_file": "20260811004218_v19_tipologias.sql",
+      "remote_name": "v19_tipologias",
+      "local_md5": "e24ce106c95e22c806864283022b075f",
+      "remote_md5": "88ff133b68ccb45ae69a45c77acddc50",
+      "local_length": 1019,
+      "remote_length": 1017
+    },
+    {
+      "version": "20260811200000",
+      "local_file": "20260811200000_engenharia_liberacao_producao_v1.sql",
+      "remote_name": "engenharia_liberacao_producao_v1",
+      "local_md5": "12e47c23456ee510725127c4d4ce1458",
+      "remote_md5": "659104ba1baf3c22a6e963250409ea94",
+      "local_length": 3898,
+      "remote_length": 3892
+    },
+    {
+      "version": "20260823161555",
+      "local_file": "20260823161555_compras_conferencia_recebimento.sql",
+      "remote_name": "compras_conferencia_recebimento",
+      "local_md5": "346ac7c4a3977d2b70b2dd3e703e18a4",
+      "remote_md5": "63b9652c3d761393c27d277391953b4a",
+      "local_length": 3156,
+      "remote_length": 3051
+    },
+    {
+      "version": "20260823155025",
+      "local_file": "20260823155025_compras_nfe_entrada.sql",
+      "remote_name": "compras_nfe_entrada",
+      "local_md5": "eaec48cdb2cd3f9979a022cc69cb92f3",
+      "remote_md5": "0bab71efebf7638ea7036533379c3d80",
+      "local_length": 2902,
+      "remote_length": 2665
+    },
+    {
+      "version": "20260831150000",
+      "local_file": "20260831150000_fornecedores_360_pedido_minimo_v1.sql",
+      "remote_name": "fornecedores_360_pedido_minimo_v1",
+      "local_md5": "34b94f9baa78c48a1e826010711ae98f",
+      "remote_md5": "048b627f200f9315244f090da79c22a6",
+      "local_length": 356,
+      "remote_length": 352
+    },
+    {
+      "version": "20261005184700",
+      "local_file": "20261005184700_medida_final_tipo_fluxo.sql",
+      "remote_name": "medida_final_tipo_fluxo",
+      "local_md5": "803110ac2ade2678361ae75e021c47a3",
+      "remote_md5": "65fc52f837381661440572e544af6302",
+      "local_length": 983,
+      "remote_length": 779
+    },
+    {
+      "version": "20260809170455",
+      "local_file": "20260809170455_v15_produtos_expandido.sql",
+      "remote_name": "v15_produtos_expandido",
+      "local_md5": "dc0c96c61495f5132b2bc6bb297e5cf5",
+      "remote_md5": "614b42dde8f9e53888c4846dcaf014e8",
+      "local_length": 969,
+      "remote_length": 967
+    },
+    {
+      "version": "20260823225929",
+      "local_file": "20260823225929_estoque_view_security.sql",
+      "remote_name": "estoque_view_security",
+      "local_md5": "c1f48fcd1dc5b025d09db05b1def0d65",
+      "remote_md5": "417048a4fe71674b6663ae8c7cd2c8d7",
+      "local_length": 156,
+      "remote_length": 77
+    },
+    {
+      "version": "20260809152013",
+      "local_file": "20260809152013_v14_fornecedores.sql",
+      "remote_name": "v14_fornecedores",
+      "local_md5": "e74a523e865031fb84e72ffa96228e71",
+      "remote_md5": "8940269a6bf53631bbf9d3bb7224dcbd",
+      "local_length": 869,
+      "remote_length": 867
+    },
+    {
+      "version": "20260821214247",
+      "local_file": "20260821214247_assistencia_link_tecnico.sql",
+      "remote_name": "assistencia_link_tecnico",
+      "local_md5": "03ad5b8ec31b865b84d7bd7bf22bc86c",
+      "remote_md5": "20830d022ff407fa1a1d708a9c19524d",
+      "local_length": 1561,
+      "remote_length": 1244
+    },
+    {
+      "version": "20261006173155",
+      "local_file": "20261006173155_proteger_margem_balcao_perfil_wvetro_nao_validado_v1.sql",
+      "remote_name": "proteger_margem_balcao_perfil_wvetro_nao_validado_v1",
+      "local_md5": "3e5c80fb9b88a784aa8c29156f1127c3",
+      "remote_md5": "9ddf1bae2d8f1330c6b02b4d3261984b",
+      "local_length": 2918,
+      "remote_length": 3092
+    },
+    {
+      "version": "20260824053151",
+      "local_file": "20260824053151_tipologias_suprema_esquema_visual_fallback_v1.sql",
+      "remote_name": "tipologias_suprema_esquema_visual_fallback_v1",
+      "local_md5": "9c6cda9d44303d717c5347d04d773be2",
+      "remote_md5": "b3e7a7be9d6afc268d9e63d21500db5c",
+      "local_length": 3996,
+      "remote_length": 3357
+    },
+    {
+      "version": "20260816160000",
+      "local_file": "20260816160000_cor_pintura_v1.sql",
+      "remote_name": "cor_pintura_v1",
+      "local_md5": "1ee571f00ff24e855756cf9d3b6d8389",
+      "remote_md5": "bbfff7981149c1878b589c6b7069cac6",
+      "local_length": 634,
+      "remote_length": 628
+    },
+    {
+      "version": "20260811192000",
+      "local_file": "20260811192000_engenharia_conferencia_tecnica_v1.sql",
+      "remote_name": "engenharia_conferencia_tecnica_v1",
+      "local_md5": "b2c0b564441ac246de55ad7b3f1a868f",
+      "remote_md5": "efcdf9245e1e6694d13531b6f2690cd1",
+      "local_length": 3195,
+      "remote_length": 3181
+    },
+    {
+      "version": "20260809014430",
+      "local_file": "20260809014430_adicionar_colunas_faltantes_clientes.sql",
+      "remote_name": "adicionar_colunas_faltantes_clientes",
+      "local_md5": "04c9a3666d7ae900784534b8e31fe671",
+      "remote_md5": "3ee97d05c3f1758ee4d330a9b9407ee3",
+      "local_length": 263,
+      "remote_length": 261
+    },
+    {
+      "version": "20260822184149",
+      "local_file": "20260822184149_engenharia_editor_formulas_suprema.sql",
+      "remote_name": "engenharia_editor_formulas_suprema",
+      "local_md5": "1c1fc064fb1c6b3dd85e3587653a54f8",
+      "remote_md5": "9b77eed63ad938b684977a9ebbd78b1a",
+      "local_length": 15871,
+      "remote_length": 15367
+    },
+    {
+      "version": "20261006172359",
+      "local_file": "20261006172359_corrigir_custo_perfis_wvetro_e_margem_balcao_v1.sql",
+      "remote_name": "corrigir_custo_perfis_wvetro_e_margem_balcao_v1",
+      "local_md5": "56c2fdaf1f08cd38e2b0d61923f40f86",
+      "remote_md5": "3056f6d41c21d4079ac9ecb87dde81ab",
+      "local_length": 4022,
+      "remote_length": 4045
+    },
+    {
+      "version": "20260810224501",
+      "local_file": "20260810224501_v18_campos_extras_obrigatorio.sql",
+      "remote_name": "v18_campos_extras_obrigatorio",
+      "local_md5": "ef7fecafa4b38ca1cf2cdc06277b88eb",
+      "remote_md5": "f357cc511b8591616920d2435802e9e1",
+      "local_length": 106,
+      "remote_length": 104
+    },
+    {
+      "version": "20260831113359",
+      "local_file": "20260831113359_compras_360_vinculo_cliente_obra_v1.sql",
+      "remote_name": "compras_360_vinculo_cliente_obra_v1",
+      "local_md5": "e0efdc72bcaaa8ef497bc9aed21f1005",
+      "remote_md5": "f6a432a4086a64da0f48d940b8ad38f8",
+      "local_length": 1175,
+      "remote_length": 1162
+    },
+    {
+      "version": "20260823233928",
+      "local_file": "20260823233928_pdv_balcao_v1.sql",
+      "remote_name": "pdv_balcao_v1",
+      "local_md5": "2fdc764a00d3f307b392e406103aa542",
+      "remote_md5": "9ec5f241f51dfc982d12299be5dba8b1",
+      "local_length": 14167,
+      "remote_length": 13478
+    },
+    {
+      "version": "20260824022150",
+      "local_file": "20260824022150_wvetro_variaveis_orcamento_v1.sql",
+      "remote_name": "wvetro_variaveis_orcamento_v1",
+      "local_md5": "d3f48dc17d67c87c67ff53e9cc2e3596",
+      "remote_md5": "00d52ccfec71492d5736bd23bc9c37d2",
+      "local_length": 3521,
+      "remote_length": 8805
+    },
+    {
+      "version": "20260822184439",
+      "local_file": "20260822184439_formula_legacy_status.sql",
+      "remote_name": "formula_legacy_status",
+      "local_md5": "cdc0328710a8bd5d935049846c8f60ab",
+      "remote_md5": "587b0f02c3400fb173e9721dfd5a99c1",
+      "local_length": 407,
+      "remote_length": 185
+    },
+    {
+      "version": "20260824022234",
+      "local_file": "20260824022234_wvetro_variaveis_folhas_normalizacao_v1.sql",
+      "remote_name": "wvetro_variaveis_folhas_normalizacao_v1",
+      "local_md5": "559e8065143236cc84b9e5a880662eb4",
+      "remote_md5": "20ed67c4e7d40a4ba2a1b53caa0673e2",
+      "local_length": 6397,
+      "remote_length": 6261
+    },
+    {
+      "version": "20260809202423",
+      "local_file": "20260809202423_v16_medicao_gera_flag_e_rls.sql",
+      "remote_name": "v16_medicao_gera_flag_e_rls",
+      "local_md5": "194724d0e09e2630ba66ea05cbf25809",
+      "remote_md5": "fd389dc859ea275e790557e483f05651",
+      "local_length": 2040,
+      "remote_length": 2038
+    },
+    {
+      "version": "20260816210000",
+      "local_file": "20260816210000_produtos_identidade_tecnica_v1.sql",
+      "remote_name": "produtos_identidade_tecnica_v1",
+      "local_md5": "402fd1dd8cb4984c85905fc16ff06c2d",
+      "remote_md5": "3739ecf5c17dd9257e04504d2675123f",
+      "local_length": 12399,
+      "remote_length": 12332
+    },
+    {
+      "version": "20260817141000",
+      "local_file": "20260817141000_carga_acessorios_wvetro_un_v1.sql",
+      "remote_name": "carga_acessorios_wvetro_un_v1",
+      "local_md5": "2e2f986b36de509b042999f5df1a982e",
+      "remote_md5": "8ca3ab5f089f2f448df98daf02ea331e",
+      "local_length": 124833,
+      "remote_length": 124819
+    },
+    {
+      "version": "20260823230444",
+      "local_file": "20260823230444_estoque_multiunidade_indices.sql",
+      "remote_name": "estoque_multiunidade_indices",
+      "local_md5": "842a254a3484d9afa60ce0ffeb7b34fa",
+      "remote_md5": "3c03293036f922d91d7c2fe4bf06f6f3",
+      "local_length": 2540,
+      "remote_length": 2405
+    },
+    {
+      "version": "20260822193959",
+      "local_file": "20260822193959_tipologias_ativo_editor_linhas.sql",
+      "remote_name": "tipologias_ativo_editor_linhas",
+      "local_md5": "727d26f5db8e771b920563a3add048a9",
+      "remote_md5": "9b84859fa47bc1045ca010c069848c4c",
+      "local_length": 888,
+      "remote_length": 496
+    },
+    {
+      "version": "20260903165834",
+      "local_file": "20260903165834_linhas_tecnicas_cadastro_progressivo_v1.sql",
+      "remote_name": "linhas_tecnicas_cadastro_progressivo_v1",
+      "local_md5": "4d17cfb4f873ef27f4202456b648a1bb",
+      "remote_md5": "27e987cf0a096f372307ddbbda8f19b8",
+      "local_length": 246,
+      "remote_length": 987
+    },
+    {
+      "version": "20260812161000",
+      "local_file": "20260812161000_clientes_apelido_busca_v1.sql",
+      "remote_name": "clientes_apelido_busca_v1",
+      "local_md5": "99c04bab8967b3681be92453ae4519b6",
+      "remote_md5": "6b7f510c1e5466211c9ea3091f8c5fb2",
+      "local_length": 199,
+      "remote_length": 195
+    },
+    {
+      "version": "20260817203000",
+      "local_file": "20260817203000_configuracoes_validadas_orcamento_v1.sql",
+      "remote_name": "configuracoes_validadas_orcamento_v1",
+      "local_md5": "35acd78a47d54aafbca3642f730aba2f",
+      "remote_md5": "376153838d7b3dc3e778be5a4c463237",
+      "local_length": 2355,
+      "remote_length": 2341
+    },
+    {
+      "version": "20260831190000",
+      "local_file": "20260831190000_compras_360_convite_fornecedores_v1.sql",
+      "remote_name": "compras_360_convite_fornecedores_v1",
+      "local_md5": "50904adaa579c1d441606d810103a297",
+      "remote_md5": "ff05df33e19d05d65ce8f1e61e996bb1",
+      "local_length": 180,
+      "remote_length": 178
+    },
+    {
+      "version": "20260823184307",
+      "local_file": "20260823184307_produtos_precificacao_balcao.sql",
+      "remote_name": "produtos_precificacao_balcao",
+      "local_md5": "b7443d82a9c0a9af5531bb4a80f197dc",
+      "remote_md5": "f679b5ac5f7fffa12289da283c6d707b",
+      "local_length": 2462,
+      "remote_length": 2251
+    },
+    {
+      "version": "20260812000000",
+      "local_file": "20260812000000_engenharia_receitas_tipologia_v1.sql",
+      "remote_name": "engenharia_receitas_tipologia_v1",
+      "local_md5": "29b1dc5da8d609a7e731db8c35c47fde",
+      "remote_md5": "649cbe2b834123d1e908d64235643419",
+      "local_length": 2411,
+      "remote_length": 2393
+    },
+    {
+      "version": "20260811183500",
+      "local_file": "20260811183500_engenharia_modulo_v1.sql",
+      "remote_name": "engenharia_modulo_v1",
+      "local_md5": "683ee04600e5b2e72eab6b0e3cb1defc",
+      "remote_md5": "4df63c1859d4f45e2bbfd7c9db6ea3fd",
+      "local_length": 2052,
+      "remote_length": 2050
+    },
+    {
+      "version": "20260816190000",
+      "local_file": "20260816190000_cor_adicional_kg_v1.sql",
+      "remote_name": "cor_adicional_kg_v1",
+      "local_md5": "2571310297fab2b2e80f0bcbecd5fdd9",
+      "remote_md5": "cd790ce165adb04985196bcae2bf23a2",
+      "local_length": 3743,
+      "remote_length": 3734
+    },
+    {
+      "version": "20260815223000",
+      "local_file": "20260815223000_receitas_por_produto_v1.sql",
+      "remote_name": "receitas_por_produto_v1",
+      "local_md5": "0edb7a51c19840d2ba3d9197126ce85b",
+      "remote_md5": "7077d2dc37f305b0a78066a9018b4732",
+      "local_length": 1445,
+      "remote_length": 1433
+    },
+    {
+      "version": "20260821220855",
+      "local_file": "20260821220855_assistencia_gps_tempo_execucao.sql",
+      "remote_name": "assistencia_gps_tempo_execucao",
+      "local_md5": "74ae3d25e9fd879ef48d5feae17b19f5",
+      "remote_md5": "b8d7e7394a7afc088c7bedc6150d3f56",
+      "local_length": 1892,
+      "remote_length": 1723
+    },
+    {
+      "version": "20260823181223",
+      "local_file": "20260823181223_compras_fiscal_estoque_financeiro.sql",
+      "remote_name": "compras_fiscal_estoque_financeiro",
+      "local_md5": "a8343851899369f90c881a65559019b2",
+      "remote_md5": "fe8339a147ed1c9773bfe235b35871a3",
+      "local_length": 10287,
+      "remote_length": 9990
+    },
+    {
+      "version": "20260813062000",
+      "local_file": "20260813062000_linhas_tecnicas_v1.sql",
+      "remote_name": "linhas_tecnicas_v1",
+      "local_md5": "40688ea201c66916cc40dee2236931c7",
+      "remote_md5": "ca1b0e8c3e274fc7b24be1c950d07ac5",
+      "local_length": 1916,
+      "remote_length": 1900
+    },
+    {
+      "version": "20260809003838",
+      "local_file": "20260809003838_criar_tabela_produtos.sql",
+      "remote_name": "criar_tabela_produtos",
+      "local_md5": "c755ecd4d64acc2e641ce8edc919361e",
+      "remote_md5": "c04c9eb5b2ae61cb8ae0153e92656688",
+      "local_length": 643,
+      "remote_length": 641
+    },
+    {
+      "version": "20260817151000",
+      "local_file": "20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql",
+      "remote_name": "carga_acessorios_wvetro_unidade_pendente_v1",
+      "local_md5": "70fad164c2db12fe2becccbdd955359b",
+      "remote_md5": "735053fb38fe057cc68258e77ef73b4e",
+      "local_length": 32203,
+      "remote_length": 32189
+    },
+    {
+      "version": "20260817170000",
+      "local_file": "20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql",
+      "remote_name": "reconciliar_proveniencia_perfis_wvetro_v1",
+      "local_md5": "a1a2fda8796d8f23c8cb222858e37ed1",
+      "remote_md5": "b98aeb1435642f1061048be0adb91490",
+      "local_length": 34961,
+      "remote_length": 34941
+    },
+    {
+      "version": "20260823234124",
+      "local_file": "20260823234124_pdv_balcao_multiunidade.sql",
+      "remote_name": "pdv_balcao_multiunidade",
+      "local_md5": "4845c1fff366b31e426d987b103eb65e",
+      "remote_md5": "31d84516bd2c1cbbe875ad6659775072",
+      "local_length": 15149,
+      "remote_length": 14147
+    },
+    {
+      "version": "20260823234024",
+      "local_file": "20260823234024_pdv_balcao_vencimentos.sql",
+      "remote_name": "pdv_balcao_vencimentos",
+      "local_md5": "4d4f588867500b6beae7abe36424e517",
+      "remote_md5": "9735ee0cd7322f31f2324f20a82c90b6",
+      "local_length": 7984,
+      "remote_length": 8142
+    },
+    {
+      "version": "20260812010000",
+      "local_file": "20260812010000_ia_memoria_comercial_v1.sql",
+      "remote_name": "ia_memoria_comercial_v1",
+      "local_md5": "76bb88fcd63aabb82476333d4f5fc338",
+      "remote_md5": "1617adce023ac6ca165b9df276b5052f",
+      "local_length": 2626,
+      "remote_length": 2605
+    },
+    {
+      "version": "20260903165648",
+      "local_file": "20260903165648_linhas_cadastro_progressivo_v1.sql",
+      "remote_name": "linhas_cadastro_progressivo_v1",
+      "local_md5": "4d17cfb4f873ef27f4202456b648a1bb",
+      "remote_md5": "369424bba5bcbae91deb29e5b6118eb6",
+      "local_length": 246,
+      "remote_length": 1526
+    },
+    {
+      "version": "20260816150000",
+      "local_file": "20260816150000_engenharia_variantes_v1.sql",
+      "remote_name": "engenharia_variantes_v1",
+      "local_md5": "f29485c8f28aeed4f0c0933a2db9af44",
+      "remote_md5": "364fcd4d22acf3d7fe3319c986408ee2",
+      "local_length": 6378,
+      "remote_length": 6339
+    },
+    {
+      "version": "20260817160000",
+      "local_file": "20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql",
+      "remote_name": "reconciliar_proveniencia_acessorios_wvetro_v1",
+      "local_md5": "f77b5e22ce208ea9efe15c540fc8f509",
+      "remote_md5": "9b1e08cad250b8f5d53bf44ebb1a26e7",
+      "local_length": 109987,
+      "remote_length": 109971
+    },
+    {
+      "version": "20260905173541",
+      "local_file": "20260905173541_p0_planos_corte_tenant_v1.sql",
+      "remote_name": "p0_planos_corte_tenant_v1",
+      "local_md5": "805c1ebc6eed15acc7576dd28bb5415d",
+      "remote_md5": "348098dcc1cb970ed5ed4c1abff9327e",
+      "local_length": 7921,
+      "remote_length": 8059
+    },
+    {
+      "version": "20260816130000",
+      "local_file": "20260816130000_linhas_cores_precificacao_v1.sql",
+      "remote_name": "linhas_cores_precificacao_v1",
+      "local_md5": "b8682c4c227c6ec542e3eb3ad50333e9",
+      "remote_md5": "2c5d19b8da2e967e108b678fceeb8797",
+      "local_length": 1862,
+      "remote_length": 1838
+    },
+    {
+      "version": "20260817150000",
+      "local_file": "20260817150000_produtos_unidade_operacional_pendente_v1.sql",
+      "remote_name": "produtos_unidade_operacional_pendente_v1",
+      "local_md5": "31d7f76e29ad98efa192e7bdbc77e7bf",
+      "remote_md5": "085bae709dc21f0a7691170ae27f8806",
+      "local_length": 367,
+      "remote_length": 359
+    },
+    {
+      "version": "20260810203706",
+      "local_file": "20260810203706_v17_campos_extras_geral.sql",
+      "remote_name": "v17_campos_extras_geral",
+      "local_md5": "05150fede2a3e1dd838ce07cc18b4110",
+      "remote_md5": "30e0ca2ace5d43a0b5db7a0c0b1d12cf",
+      "local_length": 80,
+      "remote_length": 78
+    },
+    {
+      "version": "20260905173700",
+      "local_file": "20260905173700_p0_automacoes_setor_tenant_v1.sql",
+      "remote_name": "p0_automacoes_setor_tenant_v1",
+      "local_md5": "e275d5c7c6a72a0666b19f6da05ab6aa",
+      "remote_md5": "f8fe431479f9f42e080a2c53d519d7c4",
+      "local_length": 2705,
+      "remote_length": 2713
+    },
+    {
+      "version": "20260823005257",
+      "local_file": "20260823005257_editor_acessorios_tipologia.sql",
+      "remote_name": "editor_acessorios_tipologia",
+      "local_md5": "30042bc9d685582a2d13dda2c02151c0",
+      "remote_md5": "3c98525b2b2fee121b9d231d217dea3d",
+      "local_length": 1130,
+      "remote_length": 15367
+    },
+    {
+      "version": "20260811110000",
+      "local_file": "20260811110000_medicao_final_v2.sql",
+      "remote_name": "medicao_final_v2",
+      "local_md5": "9e997ab32f5a4f5b139f76c1cf0e4ef4",
+      "remote_md5": "d6d5746f5f4f5659369e7e934196745b",
+      "local_length": 6073,
+      "remote_length": 6036
+    },
+    {
+      "version": "20260826232740",
+      "local_file": "20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql",
+      "remote_name": "workflow_automacoes_responsaveis_notificacoes_v1",
+      "local_md5": "638c61cc0a89ea0b993a7b77c669dc7b",
+      "remote_md5": "69f677ea095ea597ece28c8ba2568467",
+      "local_length": 31574,
+      "remote_length": 33411
+    },
+    {
+      "version": "20260809014438",
+      "local_file": "20260809014438_orcamento_balcao.sql",
+      "remote_name": "orcamento_balcao",
+      "local_md5": "b0f7c4d1d860f2dbb243936f5cc3c9e4",
+      "remote_md5": "9beb227b91e06a44db97384c1d50ff9d",
+      "local_length": 314,
+      "remote_length": 312
+    },
+    {
+      "version": "20260818020000",
+      "local_file": "20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql",
+      "remote_name": "linha_tipologias_produtos_biblioteca_tecnica_v1",
+      "local_md5": "9c70177883506da2d7dd5244d24eac72",
+      "remote_md5": "281e983d0dbce229cb02f6e1ea805086",
+      "local_length": 5704,
+      "remote_length": 5694
+    },
+    {
+      "version": "20260815100000",
+      "local_file": "20260815100000_plano_corte_producao_v1.sql",
+      "remote_name": "plano_corte_producao_v1",
+      "local_md5": "010f501281ea7126c982fa4eaa9d7834",
+      "remote_md5": "92aa6a38d406fda5c767ad583bfb3f30",
+      "local_length": 2653,
+      "remote_length": 2636
+    },
+    {
+      "version": "20260905162022",
+      "local_file": "20260905162022_p0_legados_globais_bootstrap_gate_v1.sql",
+      "remote_name": "p0_legados_globais_bootstrap_gate_v1",
+      "local_md5": "d568ae3eac6bac49bd4c386d5022865b",
+      "remote_md5": "ec9eeac64f7d028df0470732d85ae93e",
+      "local_length": 3719,
+      "remote_length": 4115
+    },
+    {
+      "version": "20260905112957",
+      "local_file": "20260905112957_p0_multitenancy_fundacao_empresas_v1.sql",
+      "remote_name": "p0_multitenancy_fundacao_empresas_v1",
+      "local_md5": "de5de65c62b0bfeb464959ca3af95c7f",
+      "remote_md5": "53b4527958e47ece7d9b6eaf6bda3780",
+      "local_length": 9316,
+      "remote_length": 9602
+    },
+    {
+      "version": "20260822234812",
+      "local_file": "20260822234812_engenharia_acessorios_pc3_formulas.sql",
+      "remote_name": "engenharia_acessorios_pc3_formulas",
+      "local_md5": "05bf3f7982538820372ec8167cf6f239",
+      "remote_md5": "330729f8a506d6dc8ac7b6c32cb3ad89",
+      "local_length": 9911,
+      "remote_length": 7637
+    }
+  ]
+}

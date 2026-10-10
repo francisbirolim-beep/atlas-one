@@ -59,5 +59,8 @@ jobs:
       - name: Sale-to-work atomic association guard
         run: npm run test:venda-obra
 
+      - name: Supabase applied migration history integrity
+        run: npm run test:supabase-history
+
       - name: Build
         run: npm run build
