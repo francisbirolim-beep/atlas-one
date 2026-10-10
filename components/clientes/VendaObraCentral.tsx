@@ -198,8 +198,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     if(contaIds.length){
       const aloc=await supabase.from('financeiro_recebimento_alocacoes').select('recebimento_id,conta_receber_id,tipo,valor').in('conta_receber_id',contaIds)
       const descontosConta:Record<string,number>={}
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]      ;(aloc.data||[]).filter((x:any)=>x.tipo==='desconto'&&x.conta_receber_id).forEach((x:any)=>{descontosConta[x.conta_receber_id]=(descontosConta[x.conta_receber_id]||0)+Number(x.valor||0)})
+      ;(aloc.data||[]).filter((x:any)=>x.tipo==='desconto'&&x.conta_receber_id).forEach((x:any)=>{descontosConta[x.conta_receber_id]=(descontosConta[x.conta_receber_id]||0)+Number(x.valor||0)})
       setContas(contasBase.map(c=>({...c,valor_desconto:Math.max(Number(c.valor_desconto||0),descontosConta[c.id]||0)})))
       const recebimentoIds=[...new Set((aloc.data||[]).map((x:any)=>x.recebimento_id).filter(Boolean))]
       if(recebimentoIds.length){
@@ -399,8 +398,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
       const chamar=async(body:Record<string,unknown>)=>{
         const resp=await fetch('/api/vendas/reconstruir-fluxo',{
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]          method:'POST',
+          method:'POST',
           headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
           body:JSON.stringify({vendaId:venda.id,...body}),
         })
@@ -600,8 +598,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                   ['Venda','Confirmada',true],
                   ['Engenharia / projeto',setorPorNome['engenharia-projeto']?.nome||'Aguardando',!!setorPorNome['engenharia-projeto']],
                   ['Compras',compras.length?`${comprasRecebidas}/${compras.length} recebidas`:'Aguardando',compras.length>0],
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]                  ['Produção',setorPorNome.producao?.nome||'Aguardando',!!setorPorNome.producao||ordens.length>0],
+                  ['Produção',setorPorNome.producao?.nome||'Aguardando',!!setorPorNome.producao||ordens.length>0],
                   ['Instalação',colunaInstalacao?.nome||'Aguardando',!!colunaInstalacao],
                 ].map(([nome,det,ativo]:any)=><div key={nome} className="flex items-center gap-3 rounded-xl border p-3"><span className={`flex h-8 w-8 items-center justify-center rounded-full ${ativo?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-400'}`}>{ativo?<CheckCircle2 size={17}/>:<ClipboardList size={17}/>}</span><div><b className="text-sm text-slate-800">{nome}</b><p className="text-xs text-slate-500">{det}</p></div></div>)}
               </div>
@@ -720,7 +717,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </div>
           <p className="mt-3 text-[11px] text-slate-500">Regra: Perfis e Acessórios devem exibir código, descrição e imagem técnica. Quando a imagem estiver ausente, o Atlas sinaliza o cadastro pendente sem bloquear o acompanhamento da compra.</p>
         </Box>}
-
         {aba==='materiais'&&<Box titulo="Materiais técnicos desta venda">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
             <div><b className="text-sm text-slate-800">Pacote técnico da venda</b><p className="mt-1 text-xs text-slate-500">{pacoteTecnicoId?'Perfis, acessórios e vidros do W.Vetro + ajustes validados no Atlas.':'Ainda não existe pacote técnico. O Atlas tenta localizar e carregar o W.Vetro automaticamente.'}</p>{mensagemMateriais&&<p className="mt-1 text-[11px] text-blue-700">{mensagemMateriais}</p>}</div>
@@ -801,11 +797,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       </div>
       <label className="mt-3 block text-sm">Obra<input readOnly value={obra?.nome||'Venda ainda sem obra vinculada'} className="mt-1 w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500"/></label>
       <input value={recebimento.referencia} onChange={e=>setRecebimento(f=>({...f,referencia:e.target.value}))} className="mt-3 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Referência / comprovante"/>
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]      <textarea value={recebimento.observacoes} onChange={e=>setRecebimento(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/>
+      <textarea value={recebimento.observacoes} onChange={e=>setRecebimento(f=>({...f,observacoes:e.target.value}))} className="mt-3 w-full rounded-lg border p-3 text-sm" rows={3} placeholder="Observações"/>
       <div className="mt-4 flex justify-end gap-2"><button onClick={()=>setModalRecebimento(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando||numeroEntrada(recebimento.valor)<=0||numeroEntrada(recebimento.valor)+numeroEntrada(recebimento.desconto)>aReceber+0.009} onClick={registrarRecebimento} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{salvando?'Registrando...':'Registrar recebimento'}</button></div>
     </div></div>}
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
