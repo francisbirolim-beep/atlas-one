@@ -291,6 +291,7 @@ async function listarCandidatos(usuario: any, cliente: any) {
       valor: Number(h.valor_total || 0),
       situacao: h.situacao_wvetro,
       quantidadeItens: Array.isArray(h.itens) ? h.itens.length : 0,
+      itens: Array.isArray(h.itens) ? h.itens : [],
       tipoCorrespondencia: candidatoPorNome(cliente.nome, h.cliente_nome_origem || ''),
       statusValidacao: rejeitado ? 'rejeitado' : aprovado ? 'aprovado' : vinculadoOutro ? 'outro_cliente' : 'pendente',
       validadoPor: validacao?.validado_por_nome || null,

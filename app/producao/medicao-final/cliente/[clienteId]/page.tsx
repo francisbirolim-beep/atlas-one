@@ -36,6 +36,20 @@ type OrcamentoResumo = {
   wvetro_fluxo?: { origem?: string | null; numero?: string | null; cliente_nome_wvetro?: string | null } | null
 }
 
+type CandidatoItemWVetro = {
+  id?: string | null
+  nome?: string | null
+  linha?: string | null
+  modelo?: string | null
+  codigo?: string | null
+  largura?: string | number | null
+  altura?: string | number | null
+  ambiente?: string | null
+  quantidade?: string | number | null
+  valor_total?: string | number | null
+  valor_total_alterado?: string | number | null
+}
+
 type CandidatoWVetro = {
   historicoId: string
   numeroWvetro: string
@@ -45,6 +59,7 @@ type CandidatoWVetro = {
   valor?: number | null
   situacao?: string | null
   quantidadeItens?: number
+  itens?: CandidatoItemWVetro[]
   tipoCorrespondencia?: 'nome_exato' | 'primeiro_nome' | null
   statusValidacao: 'pendente' | 'aprovado' | 'rejeitado' | 'outro_cliente'
   validadoPor?: string | null
@@ -81,6 +96,16 @@ function tipoLabel(tipo?: TipoMedicaoFinal | null) {
   return tipo === 'contramarco' ? 'Contramarco' : 'Tipologia / fabricação de peça'
 }
 
+function valorBR(v?: string | number | null) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v > 0 ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
+  let s = String(v ?? '').trim().replace(/[^0-9,.-]/g, '')
+  if (!s) return '—'
+  if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '')
+  else if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.')
+  const n = Number(s)
+  return Number.isFinite(n) && n > 0 ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
+}
+
 export default function AbrirMedidaFinalCliente() {
   const params = useParams()
   const router = useRouter()
@@ -97,6 +122,7 @@ export default function AbrirMedidaFinalCliente() {
   const [tipo, setTipo] = useState<TipoMedicaoFinal | null>(null)
   const [orcamentoId, setOrcamentoId] = useState('')
   const [orcamentoAbertoId, setOrcamentoAbertoId] = useState('')
+  const [candidatoAbertoId, setCandidatoAbertoId] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [criando, setCriando] = useState(false)
   const [erro, setErro] = useState('')
@@ -177,6 +203,7 @@ export default function AbrirMedidaFinalCliente() {
     setTipo(novoTipo)
     setOrcamentoId('')
     setOrcamentoAbertoId('')
+    setCandidatoAbertoId('')
   }
 
   function itensDoOrcamento(o: OrcamentoResumo) {
@@ -268,6 +295,38 @@ export default function AbrirMedidaFinalCliente() {
     }
   }
 
+  async function usarCandidatoWVetro(candidato: CandidatoWVetro) {
+    if (candidatoOcupado || criando) return
+    setCandidatoOcupado(candidato.historicoId)
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const resposta = await fetch('/api/integracoes/wvetro/orcamentos/candidatos-cliente', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ clienteId, acao: 'aprovar', historicoId: candidato.historicoId }),
+      })
+      const json = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) throw new Error(json?.error || 'Não foi possível preparar este orçamento W.Vetro para a Medida Final.')
+      const id = String(json?.orcamentoAtlasId || candidato.orcamentoAtlasId || '').trim()
+      if (!id) throw new Error('O orçamento foi validado, mas o Atlas não conseguiu criar o vínculo operacional.')
+      setCandidatosWVetro(Array.isArray(json?.candidatos) ? json.candidatos : [])
+      setMensagemSync(`W.Vetro #${candidato.numeroWvetro} selecionado para a Medida Final.`)
+      setCandidatoAbertoId('')
+      setOrcamentoId(id)
+      await continuarOuCriar(id)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível usar este orçamento W.Vetro na Medida Final.')
+    } finally {
+      setCandidatoOcupado('')
+    }
+  }
+
   async function iniciarSemOrcamento() {
     if (!tipo || criando) return
     const existente = medicoes.find(m => !m.orcamento_id && (m.tipo_medicao || 'tipologia') === tipo)
@@ -322,6 +381,7 @@ export default function AbrirMedidaFinalCliente() {
   }
 
   const orcamentoVisualizado = orcamentosAtuais.find(o => o.id === orcamentoAbertoId) || null
+  const candidatoVisualizado = candidatosVisiveis.find(c => c.historicoId === candidatoAbertoId) || null
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -406,10 +466,10 @@ export default function AbrirMedidaFinalCliente() {
           </section>
         )}
 
-        {tipo && !orcamentoVisualizado && (
+        {tipo && !orcamentoVisualizado && !candidatoVisualizado && (
           <section>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <button onClick={() => { setTipo(null); setOrcamentoId(''); setOrcamentoAbertoId('') }} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500">
+              <button onClick={() => { setTipo(null); setOrcamentoId(''); setOrcamentoAbertoId(''); setCandidatoAbertoId('') }} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500">
                 <ChevronLeft size={17} /> Voltar
               </button>
               <button
@@ -441,11 +501,12 @@ export default function AbrirMedidaFinalCliente() {
                     return (
                       <div key={candidato.historicoId} className="rounded-xl border border-violet-100 bg-white p-3">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
+                          <button type="button" onClick={() => setCandidatoAbertoId(candidato.historicoId)} className="min-w-0 flex-1 text-left">
                             <p className="text-sm font-black text-slate-900">W.Vetro #{candidato.numeroWvetro}</p>
                             <p className="truncate text-xs font-semibold text-slate-600">{candidato.clienteNomeWvetro || 'Nome não informado'}</p>
-                            <p className="mt-1 text-[11px] text-slate-400">{dataBR(candidato.data)}{candidato.quantidadeItens ? ` · ${candidato.quantidadeItens} item(ns)` : ''}</p>
-                          </div>
+                            <p className="mt-1 text-[11px] text-slate-400">{dataBR(candidato.data)}{candidato.quantidadeItens ? ` · ${candidato.quantidadeItens} item(ns)` : ''}{candidato.valor ? ` · ${valorBR(candidato.valor)}` : ''}</p>
+                            <p className="mt-1 text-[11px] font-black text-blue-700">Ver orçamento e itens ›</p>
+                          </button>
                           {aprovado ? (
                             <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">VALIDADO</span>
                           ) : bloqueado ? (
@@ -511,8 +572,8 @@ export default function AbrirMedidaFinalCliente() {
 
               {orcamentosAtuais.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
-                  <p className="text-sm font-black text-slate-800">Nenhum orçamento disponível no Atlas.</p>
-                  <p className="mt-1 text-xs text-slate-500">Sincronize o W.Vetro ou inicie a medição sem orçamento.</p>
+                  <p className="text-sm font-black text-slate-800">Nenhum orçamento operacional selecionado ainda.</p>
+                  <p className="mt-1 text-xs text-slate-500">Abra um orçamento W.Vetro acima, confira os itens e escolha qual será usado na Medida Final.</p>
                 </div>
               )}
             </div>
@@ -528,6 +589,84 @@ export default function AbrirMedidaFinalCliente() {
             <p className="mt-2 text-center text-[11px] text-amber-700">
               Medição sem orçamento é avulsa e não libera Engenharia, Compras ou Produção automaticamente.
             </p>
+          </section>
+        )}
+
+        {tipo && candidatoVisualizado && !orcamentoVisualizado && (
+          <section>
+            <button onClick={() => setCandidatoAbertoId('')} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-slate-500">
+              <ChevronLeft size={17} /> Voltar aos orçamentos
+            </button>
+
+            <div className="mb-4 rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-black text-slate-900">W.Vetro #{candidatoVisualizado.numeroWvetro}</h2>
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${candidatoVisualizado.statusValidacao === 'aprovado' ? 'bg-emerald-100 text-emerald-700' : candidatoVisualizado.statusValidacao === 'outro_cliente' ? 'bg-amber-100 text-amber-700' : 'bg-violet-100 text-violet-700'}`}>
+                      {candidatoVisualizado.statusValidacao === 'aprovado' ? 'VALIDADO' : candidatoVisualizado.statusValidacao === 'outro_cliente' ? 'OUTRO CLIENTE' : 'AGUARDANDO VALIDAÇÃO'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-slate-700">{candidatoVisualizado.clienteNomeWvetro || 'Nome não informado'}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {dataBR(candidatoVisualizado.data)}
+                    {candidatoVisualizado.situacao ? ` · ${statusLabel(candidatoVisualizado.situacao)}` : ''}
+                    {candidatoVisualizado.quantidadeItens ? ` · ${candidatoVisualizado.quantidadeItens} item(ns)` : ''}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-[.1em] text-slate-400">Valor do orçamento</p>
+                  <p className="mt-1 text-lg font-black text-slate-900">{valorBR(candidatoVisualizado.valor)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {(candidatoVisualizado.itens || []).map((item, idx) => {
+                const nome = item.modelo || item.nome || item.codigo || `Item ${idx + 1}`
+                const temMedida = item.largura || item.altura
+                const valorItem = item.valor_total_alterado || item.valor_total
+                return (
+                  <div key={item.id || idx} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-black text-slate-500">{idx + 1}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black text-slate-900">{item.ambiente || 'Sem ambiente'}</p>
+                      <p className="truncate text-xs text-slate-600">{nome}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        {temMedida ? `${item.largura || '—'} × ${item.altura || '—'} mm` : 'Medida não informada'}
+                        {item.linha ? ` · Linha ${item.linha}` : ''}
+                        {item.codigo ? ` · Cód. ${item.codigo}` : ''}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs font-bold text-slate-600">{item.quantidade || 1} un</p>
+                      {valorItem ? <p className="mt-1 text-[11px] font-bold text-slate-500">{valorBR(valorItem)}</p> : null}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {(candidatoVisualizado.itens || []).length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-500">
+                  O W.Vetro não devolveu os itens detalhados deste orçamento.
+                </div>
+              )}
+            </div>
+
+            {candidatoVisualizado.statusValidacao === 'outro_cliente' ? (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                Este orçamento já está vinculado a outro cliente e não pode ser usado nesta Medida Final.
+              </div>
+            ) : (
+              <button
+                onClick={() => void usarCandidatoWVetro(candidatoVisualizado)}
+                disabled={!!candidatoOcupado || criando}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-black text-white shadow-sm disabled:opacity-50"
+              >
+                {(candidatoOcupado === candidatoVisualizado.historicoId || criando) && <Loader2 size={16} className="animate-spin" />}
+                {candidatoVisualizado.statusValidacao === 'aprovado' ? 'Usar este orçamento na Medida Final' : 'Validar e usar este orçamento na Medida Final'}
+              </button>
+            )}
           </section>
         )}
 
