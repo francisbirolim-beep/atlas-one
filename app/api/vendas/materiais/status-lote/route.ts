@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
     const fornecedorNome = texto(body.fornecedorNome, 250)
     const documentoNome = texto(body.documentoNome, 250)
     const documentoUrl = texto(body.documentoUrl, 1500)
+    const pedidoNumero = texto(body.pedidoNumero, 120)
+    const prazoEntrega = texto(body.prazoEntrega, 120)
+    const previsaoEntrega = texto(body.previsaoEntrega, 30)
+    const valorTotalRaw = body.valorTotal === null || body.valorTotal === undefined || body.valorTotal === '' ? null : Number(body.valorTotal)
+    const valorTotal = Number.isFinite(valorTotalRaw as number) ? valorTotalRaw as number : null
     const origem = texto(body.origem, 80) || 'ajuste_manual_materiais'
     const agora = new Date().toISOString()
 
@@ -117,6 +122,10 @@ export async function POST(req: NextRequest) {
           fornecedorNome ? `Fornecedor: ${fornecedorNome}` : '',
           documentoNome ? `Documento: ${documentoNome}` : '',
           documentoUrl ? `Documento URL: ${documentoUrl}` : '',
+          pedidoNumero ? `Pedido: ${pedidoNumero}` : '',
+          valorTotal !== null ? `Valor total: ${valorTotal}` : '',
+          prazoEntrega ? `Prazo: ${prazoEntrega}` : '',
+          previsaoEntrega ? `Previsão: ${previsaoEntrega}` : '',
         ].filter(Boolean)
         const atualizacao:Record<string,unknown> = {
           status,
