@@ -1,6 +1,6 @@
 const fs=require('node:fs')
 const assert=require('node:assert/strict')
-const sql=fs.readFileSync('supabase/migrations/20261010202500_instalacao_encerramento_seguro_v2.sql','utf8')
+const sql=fs.readFileSync('supabase/migrations/20261010192717_instalacao_encerramento_seguro_v2.sql','utf8')
 const board=fs.readFileSync('app/setor/[slug]/page.tsx','utf8')
 const move=fs.readFileSync('lib/setorKanban.ts','utf8')
 const partes=sql.split('create or replace function ')

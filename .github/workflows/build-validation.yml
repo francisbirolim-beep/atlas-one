@@ -56,5 +56,8 @@ jobs:
       - name: Safe work closure and installation guard
         run: npm run test:encerramento-obra
 
+      - name: Sale-to-work atomic association guard
+        run: npm run test:venda-obra
+
       - name: Build
         run: npm run build
