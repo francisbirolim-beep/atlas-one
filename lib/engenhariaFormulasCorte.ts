@@ -145,6 +145,45 @@ export async function listarTodasFormulasCorte(): Promise<RegistroFormulaCorte[]
   return ((data || []) as unknown as FormulaBanco[]).map(normalizar)
 }
 
+/**
+ * Abre uma versão independente para homologação, nunca edita a receita ativa.
+ * O banco mantém os snapshots de versões anteriores no histórico.
+ */
+export async function criarVersaoTesteFormulaCorte(
+  origem: RegistroFormulaCorte
+): Promise<RegistroFormulaCorte | null> {
+  const chave = 'simulacao_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
+  const { data, error } = await supabase
+    .from('engenharia_tipologia_formulas_corte')
+    .insert({
+      tipologia_id: origem.tipologia_id,
+      configuracao_chave: chave,
+      configuracao_label: origem.configuracao_label + ' · Revisão técnica',
+      variaveis: origem.variaveis,
+      pecas: origem.pecas,
+      vidro: origem.vidro,
+      acessorios: origem.acessorios,
+      metadados_editor: {
+        ...(origem.metadados_editor || {}),
+        folgas: origem.folgas || { largura_mm: 4, altura_mm: 4 },
+        origem_formula_id: origem.id,
+        origem_formula_versao: origem.versao,
+        criada_como: 'bancada_simulacao',
+      },
+      observacoes: origem.observacoes,
+      status: 'em_validacao',
+      ativo: false,
+      versao: 1,
+    })
+    .select(CAMPOS)
+    .single()
+  if (error) {
+    console.error('Não foi possível criar uma revisão segura da receita:', error)
+    return null
+  }
+  return normalizar(data as unknown as FormulaBanco)
+}
+
 export async function salvarFormulaCorte(
   id: string,
   dados: {
