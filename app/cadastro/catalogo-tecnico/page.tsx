@@ -199,6 +199,7 @@ export default function CatalogoTecnicoPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/cadastro/catalogo-tecnico/importar-imagens" className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"><Images size={15}/>Importar desenhos em lote</Link>
             <Link href="/cadastro/produtos" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Plus size={15}/>Cadastrar item</Link>
             <Link href="/cadastro/historico" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white"><History size={15}/>Histórico</Link>
           </div>
