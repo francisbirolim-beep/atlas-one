@@ -1,5 +1,5 @@
 import type { AcessorioFormulaCorte } from '@/lib/engenhariaFormulasCorte'
-import { condicaoBate, type OpcoesEscolhidas } from '@/lib/formulasCorteEngine'
+import { condicaoBate, type FolgasEncaixe, type OpcoesEscolhidas } from '@/lib/formulasCorteEngine'
 
 export type ResultadoAcessorioFormula = {
   index: number
@@ -126,13 +126,14 @@ export function calcularAcessoriosTecnicos(
   altura: number,
   folhas: number,
   perfis: Array<{ codigo: string; tamanho: number; grupo?: string }>,
-  opcoes: OpcoesEscolhidas = {}
+  opcoes: OpcoesEscolhidas = {},
+  folgas?: FolgasEncaixe
 ): ResultadoAcessorioFormula[] {
   const contexto: Record<string, number> = {
     Largura: largura,
     Altura: altura,
-    LF: largura - 4,
-    HF: altura - 4,
+    LF: largura - (folgas?.largura_mm ?? 4),
+    HF: altura - (folgas?.altura_mm ?? 4),
     Folhas: Math.max(1, folhas || 1),
     Encontros: Math.max(0, (folhas || 1) - 1),
   }
