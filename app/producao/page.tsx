@@ -373,32 +373,32 @@ export default function Producao() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-[1600px] mx-auto px-3 sm:px-4 py-5">
         {erro && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
         {mensagem && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{mensagem}</div>}
         <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-slate-700">
           A <b>Medição Final enviada</b> entra automaticamente na primeira etapa: <b>{colunas[0]?.nome || 'Liberar Produção'}</b>. O quadro é livre: edite nome e descrição de cada etapa, arraste os processos entre as colunas e use <b>+ Nova etapa</b> para ampliar o fluxo quando precisar.
         </div>
 
-        <div className="flex items-stretch gap-4 overflow-x-auto pb-5">
+        <div className="flex items-start gap-3 overflow-x-auto pb-4">
           {colunas.map((col, indice) => {
             const visual = visualEtapa(indice)
             const lista = cardsDaColuna(col.id)
             return (
-              <section key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => moverCard(e, col.id)} className={`w-[19rem] shrink-0 overflow-hidden rounded-2xl border shadow-sm ${visual.caixa}`}>
-                <div className={`border-b px-4 py-3 ${visual.topo}`}>
-                  <div className="flex items-start justify-between gap-2">
+              <section key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => moverCard(e, col.id)} className={`w-[15rem] shrink-0 overflow-hidden rounded-xl border shadow-sm ${visual.caixa}`}>
+                <div className={`border-b px-3 py-2.5 ${visual.topo}`}>
+                  <div className="flex items-start justify-between gap-1.5">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h2 className={`truncate text-sm font-bold ${visual.titulo}`}>{col.nome}</h2>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${visual.contador}`}>{lista.length}</span>
+                        <h2 className={`truncate text-[13px] font-bold ${visual.titulo}`}>{col.nome}</h2>
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${visual.contador}`}>{lista.length}</span>
                       </div>
-                      <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-500">{descricaoEtapa(col, indice)}</p>
+                      <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-slate-500" title={descricaoEtapa(col, indice)}>{descricaoEtapa(col, indice)}</p>
                     </div>
-                    <button type="button" onClick={() => abrirEditarEtapa(col)} className="shrink-0 rounded-lg border border-white/70 bg-white/80 p-1.5 text-slate-500 shadow-sm hover:text-brand-navy" title="Editar nome e descrição da etapa"><Pencil size={14}/></button>
+                    <button type="button" onClick={() => abrirEditarEtapa(col)} className="shrink-0 rounded-md border border-white/70 bg-white/80 p-1 text-slate-500 shadow-sm hover:text-brand-navy" title="Editar nome e descrição da etapa"><Pencil size={14}/></button>
                   </div>
                 </div>
-                <div className="min-h-40 space-y-2 p-3">
+                <div className="min-h-28 space-y-1.5 p-2">
                   {lista.map(card => {
                     const ops = ordensPorCard.get(card.id) || []
                     const bloqueadas = ops.filter(o => o.bloqueada && o.status !== 'cancelada').length
@@ -406,26 +406,26 @@ export default function Producao() {
                     const medicao = medicaoDoCard(card)
                     const descricao = descricaoVisivel(card)
                     return (
-                      <button key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => abrirCard(card)} className="w-full rounded-xl border border-white/80 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                        <div className="flex items-start gap-2"><Package size={15} className="mt-0.5 text-brand-navy"/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{card.titulo}</p><p className="mt-0.5 text-[11px] text-slate-400">{medicao?.orcamento_numero ? `Orçamento #${medicao.orcamento_numero} · ` : ''}{ops.length} ordem(ns)</p></div></div>
-                        {descricao && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{descricao}</p>}
-                        {medicao && <div className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
-                        {bloqueadas > 0 && <div className="ml-1 mt-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
-                        {prontas > 0 && <p className="mt-2 text-[11px] text-slate-400">{prontas} ordem(ns) concluída(s)</p>}
+                      <button key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => abrirCard(card)} className="w-full rounded-lg border border-white/80 bg-white px-2.5 py-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                        <div className="flex items-start gap-1.5"><Package size={13} className="mt-0.5 shrink-0 text-brand-navy"/><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-semibold leading-4 text-slate-800">{card.titulo}</p><p className="mt-0.5 truncate text-[10px] leading-4 text-slate-400">{medicao?.orcamento_numero ? `Orçamento #${medicao.orcamento_numero} · ` : ''}{ops.length} ordem(ns)</p></div></div>
+                        {descricao && <p className="mt-1 line-clamp-1 text-[10px] leading-4 text-slate-500">{descricao}</p>}
+                        {medicao && <div className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
+                        {bloqueadas > 0 && <div className="ml-1 mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
+                        {prontas > 0 && <p className="mt-1.5 text-[9px] text-slate-400">{prontas} ordem(ns) concluída(s)</p>}
                       </button>
                     )
                   })}
-                  {lista.length === 0 && <div className="grid min-h-24 place-items-center rounded-xl border border-dashed border-slate-300/80 bg-white/40 px-4 text-center text-[11px] text-slate-400">Arraste um processo para esta etapa.</div>}
+                  {lista.length === 0 && <div className="grid min-h-16 place-items-center rounded-lg border border-dashed border-slate-300/80 bg-white/40 px-3 text-center text-[10px] text-slate-400">Arraste um processo para esta etapa.</div>}
                 </div>
               </section>
             )
           })}
 
-          <button type="button" onClick={abrirNovaEtapa} className="group grid min-h-[15rem] w-[17rem] shrink-0 place-items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 p-6 text-center transition hover:border-brand-navy/40 hover:bg-white">
+          <button type="button" onClick={abrirNovaEtapa} className="group grid min-h-[10rem] w-[15rem] shrink-0 place-items-center rounded-xl border-2 border-dashed border-slate-300 bg-white/70 p-4 text-center transition hover:border-brand-navy/40 hover:bg-white">
             <span>
-              <span className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-brand-navyLight group-hover:text-brand-navy"><Plus size={20}/></span>
-              <span className="mt-3 block text-sm font-bold text-slate-700">Adicionar etapa</span>
-              <span className="mt-1 block text-[11px] leading-4 text-slate-400">Crie outra coluna para adaptar o fluxo da Produção.</span>
+              <span className="mx-auto grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-brand-navyLight group-hover:text-brand-navy"><Plus size={17}/></span>
+              <span className="mt-2 block text-[12px] font-bold text-slate-700">Adicionar etapa</span>
+              <span className="mt-1 block text-[10px] leading-4 text-slate-400">Crie outra coluna para adaptar o fluxo da Produção.</span>
             </span>
           </button>
         </div>
