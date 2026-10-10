@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileSpreadsheet, FileText, Loader2, LockKeyhole, Package, Play, Plus, Ruler, X, CheckCircle2, ClipboardCheck, ShieldCheck, UserRound } from 'lucide-react'
+import { ArrowLeft, FileSpreadsheet, FileText, Loader2, LockKeyhole, Package, Pencil, Play, Plus, Ruler, X, CheckCircle2, ClipboardCheck, ShieldCheck, UserRound } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
-import { criarColunaSetor, listarColunasSetor, listarItensSetor, moverItemSetor } from '@/lib/setorKanban'
+import { criarColunaSetor, editarItemSetor, listarColunasSetor, listarItensSetor, moverItemSetor, renomearColunaSetor } from '@/lib/setorKanban'
 import type { SetorKanbanColuna, SetorKanbanItem, Usuario } from '@/lib/tipos'
 import { aprovarMedicaoFinal } from '@/lib/medicaoFinalV2'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
@@ -50,6 +50,10 @@ export default function Producao() {
   const [mensagem, setMensagem] = useState('')
   const [medicoes, setMedicoes] = useState<MedicaoFinalProducao[]>([])
   const [liberandoId, setLiberandoId] = useState<string | null>(null)
+  const [editandoCard, setEditandoCard] = useState(false)
+  const [tituloCard, setTituloCard] = useState('')
+  const [descricaoCard, setDescricaoCard] = useState('')
+  const [salvandoCard, setSalvandoCard] = useState(false)
 
   const [modo, setModo] = useState<'avulsa' | 'vinculada'>('avulsa')
   const [clienteId, setClienteId] = useState('')
@@ -131,6 +135,59 @@ export default function Producao() {
   }
 
   function cardsDaColuna(id: string) { return cards.filter(c => c.coluna_id === id) }
+
+  function descricaoVisivel(card: SetorKanbanItem) {
+    return String(card.descricao || '').replace(/\s*\[medicao:[^\]]+\]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  }
+
+  function abrirCard(card: SetorKanbanItem) {
+    setSelecionado(card)
+    setEditandoCard(false)
+    setTituloCard(card.titulo)
+    setDescricaoCard(descricaoVisivel(card))
+  }
+
+  async function editarEtapa(col: SetorKanbanColuna) {
+    const novoNome = window.prompt('Nome desta etapa da Produção:', col.nome)?.trim() || ''
+    if (!novoNome || novoNome === col.nome) return
+    setErro('')
+    const ok = await renomearColunaSetor(col.id, novoNome)
+    if (!ok) {
+      setErro('Não foi possível renomear esta etapa da Produção.')
+      return
+    }
+    setColunas(prev => prev.map(item => item.id === col.id ? { ...item, nome: novoNome } : item))
+  }
+
+  async function salvarEdicaoCard() {
+    if (!selecionado) return
+    const novoTitulo = tituloCard.trim()
+    if (!novoTitulo) {
+      setErro('Informe o nome do card.')
+      return
+    }
+
+    setSalvandoCard(true)
+    setErro('')
+    const marcador = String(selecionado.descricao || '').match(/\[medicao:[^\]]+\]/)?.[0] || ''
+    const novaDescricao = [descricaoCard.trim(), marcador].filter(Boolean).join(' ')
+    const ok = await editarItemSetor(selecionado.id, {
+      titulo: novoTitulo,
+      descricao: novaDescricao || null,
+    })
+    setSalvandoCard(false)
+
+    if (!ok) {
+      setErro('Não foi possível salvar as alterações do card.')
+      return
+    }
+
+    const atualizado = { ...selecionado, titulo: novoTitulo, descricao: novaDescricao || null }
+    setCards(prev => prev.map(card => card.id === atualizado.id ? atualizado : card))
+    setSelecionado(atualizado)
+    setEditandoCard(false)
+    setMensagem('Card atualizado.')
+  }
 
   async function moverCard(e: React.DragEvent, colunaId: string) {
     e.preventDefault()
@@ -284,22 +341,32 @@ export default function Producao() {
         {erro && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
         {mensagem && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{mensagem}</div>}
         <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-slate-700">
-          A <b>Medição Final enviada</b> entra automaticamente em <b>Liberar Produção</b>. Abra o card, confira/imprima o relatório e só então libere o plano final e os fluxos pós-medição. Use <b>+ Nova etapa</b> para acrescentar novas fases ao Kanban.
+          A <b>Medição Final enviada</b> entra automaticamente em <b>Liberar Produção</b>. Abra o card, confira/imprima o relatório e só então libere o plano final e os fluxos pós-medição. Use o <b>lápis</b> para renomear etapas e <b>+ Nova etapa</b> para acrescentar novas colunas ao Kanban.
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-5">
           {colunas.map(col => (
             <section key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => moverCard(e, col.id)} className="w-80 shrink-0 rounded-2xl bg-slate-100 p-3">
-              <div className="flex items-center justify-between px-1 mb-3"><h2 className="text-sm font-semibold text-slate-700">{col.nome}</h2><span className="text-xs text-slate-400">{cardsDaColuna(col.id).length}</span></div>
+              <div className="flex items-center justify-between gap-2 px-1 mb-3">
+                <div className="min-w-0 flex items-center gap-2">
+                  <h2 className="truncate text-sm font-semibold text-slate-700">{col.nome}</h2>
+                  <span className="text-xs text-slate-400">{cardsDaColuna(col.id).length}</span>
+                </div>
+                <button onClick={() => void editarEtapa(col)} title="Editar nome da etapa" className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-brand-navy transition">
+                  <Pencil size={13}/>
+                </button>
+              </div>
               <div className="space-y-2 min-h-24">
                 {cardsDaColuna(col.id).map(card => {
                   const ops = ordensPorCard.get(card.id) || []
                   const bloqueadas = ops.filter(o => o.bloqueada && o.status !== 'cancelada').length
                   const prontas = ops.filter(o => o.status === 'concluida').length
                   const medicao = medicaoDoCard(card)
+                  const descricao = descricaoVisivel(card)
                   return (
-                    <button key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => setSelecionado(card)} className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:shadow-md transition">
+                    <button key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => abrirCard(card)} className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:shadow-md transition">
                       <div className="flex items-start gap-2"><Package size={15} className="mt-0.5 text-brand-navy"/><div className="min-w-0 flex-1"><p className="font-medium text-sm text-slate-800 truncate">{card.titulo}</p><p className="text-[11px] text-slate-400 mt-0.5">{medicao?.orcamento_numero ? `Orçamento #${medicao.orcamento_numero} · ` : ''}{ops.length} ordem(ns)</p></div></div>
+                      {descricao && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{descricao}</p>}
                       {medicao && <div className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
                       {bloqueadas > 0 && <div className="mt-2 ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
                       {prontas > 0 && <p className="mt-2 text-[11px] text-slate-400">{prontas} ordem(ns) concluída(s)</p>}
@@ -309,6 +376,11 @@ export default function Producao() {
               </div>
             </section>
           ))}
+          <button onClick={() => void criarEtapa()} className="w-80 shrink-0 min-h-28 rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 p-4 text-slate-400 hover:border-brand-navy/40 hover:bg-white hover:text-brand-navy transition flex flex-col items-center justify-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-full border border-current"><Plus size={17}/></span>
+            <span className="text-sm font-semibold">Adicionar etapa</span>
+            <span className="text-[11px] font-normal">Crie a próxima coluna quando precisar</span>
+          </button>
         </div>
       </main>
 
@@ -317,9 +389,43 @@ export default function Producao() {
           <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-start justify-between gap-3">
               <div><h3 className="font-bold text-slate-900">{selecionado.titulo}</h3><p className="text-xs text-slate-500 mt-0.5">Ordens desta obra/produção</p></div>
-              <button onClick={() => setSelecionado(null)} className="p-1 text-slate-400"><X size={18}/></button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (!editandoCard) {
+                      setTituloCard(selecionado.titulo)
+                      setDescricaoCard(descricaoVisivel(selecionado))
+                    }
+                    setEditandoCard(prev => !prev)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  <Pencil size={13}/> {editandoCard ? 'Cancelar' : 'Editar card'}
+                </button>
+                <button onClick={() => setSelecionado(null)} className="p-1 text-slate-400"><X size={18}/></button>
+              </div>
             </div>
             <div className="p-5 space-y-3">
+              {editandoCard && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Editar card</p>
+                  <div className="mt-3 space-y-3">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Nome</span>
+                      <input value={tituloCard} onChange={e => setTituloCard(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Descrição</span>
+                      <textarea value={descricaoCard} onChange={e => setDescricaoCard(e.target.value)} rows={3} placeholder="Ex.: conferir medição, separar vidro, gerar plano..." className="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800" />
+                    </label>
+                    <div className="flex justify-end">
+                      <button onClick={() => void salvarEdicaoCard()} disabled={salvandoCard || !tituloCard.trim()} className="rounded-xl bg-brand-navy px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
+                        {salvandoCard ? 'Salvando...' : 'Salvar alterações'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {medicaoSelecionada && (
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
