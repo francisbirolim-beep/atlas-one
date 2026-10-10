@@ -465,6 +465,31 @@ export function calcularFormulasCorte(
     if (!Number.isInteger(folhas) || folhas < 2 || folhas > 6) {
       throw new FormulaCorteError('Porta sequencial Suprema: escolha de 2 a 6 folhas.')
     }
+    // A receita homologada de 2 a 6 folhas cobre a versão sequencial
+    // mão-amiga comum sem reforço, todas móveis e trilho de embutir.
+    // Nunca calcular outra variante com a lista de perfis errada.
+    if (def.tipologia_id === '6fded962-78f7-40c5-8da7-2134b2ed98c1') {
+      const variantesAprovadas: Record<string, string[]> = {
+        montagem: ['todas_moveis'],
+        montante_mao_amigo: ['comum_sem_reforco', 'perfil_comum_sem_reforco'],
+        montante_mao_de_amigo: ['comum_sem_reforco', 'perfil_comum_sem_reforco'],
+        montante_lateral_movel: ['largo_reforco_aba', 'perfil_largo_com_reforco_de_aba'],
+        trilho: ['embutir', 'trilho_de_embutir'],
+        perfil_soleira: ['embutir', 'trilho_de_embutir'],
+        perfil_contramarco: ['sem_contramarco', 'nenhum', 'nao'],
+        arremate: ['sem_arremate', 'nao', 'nenhum'],
+        usa_travessa: ['nao'],
+        baguete: ['quadrado'],
+      }
+      for (const [chave, permitidas] of Object.entries(variantesAprovadas)) {
+        const valor = (opcoes[chave] || '').trim().toLowerCase()
+        if (valor && !permitidas.includes(valor)) {
+          throw new FormulaCorteError(
+            'Configuração de ' + chave + ' (' + valor + ') ainda não homologada nesta porta sequencial. Selecione a variante correta da Engenharia.'
+          )
+        }
+      }
+    }
     contexto.Folhas = folhas
     contexto.Encontros = folhas - 1
   }
