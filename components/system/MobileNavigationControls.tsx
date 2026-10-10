@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
+  BarChart3,
   Columns3,
   Eye,
   Home,
@@ -153,7 +154,7 @@ export default function MobileNavigationControls() {
     const filtradas = termo
       ? guiasPermitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : guiasPermitidas
-    return agruparGuias(filtradas)
+    return agruparGuias(filtradas.filter(guia => guia.href !== '/relatorios'))
   }, [guiasPermitidas, termo])
 
   const hrefsGuias = useMemo(() => new Set(GUIAS.map(guia => guia.href)), [])
@@ -180,6 +181,7 @@ export default function MobileNavigationControls() {
   }, [termo, usuario?.role])
 
   // Mesmo acesso à IA da barra lateral do computador.
+  const relatoriosCombina = !termo || correspondePesquisaAtlas(termo, 'Relatórios', 'Geral', '/relatorios')
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
   const supervisaoIaCombina = usuario?.role === 'master' &&
     (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
@@ -298,6 +300,11 @@ export default function MobileNavigationControls() {
 
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
               <div className="space-y-5">
+                {relatoriosCombina && (
+                  <Link href="/relatorios" onClick={fecharMenu} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${ativo('/relatorios') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}>
+                    <BarChart3 size={19}/> Relatórios
+                  </Link>
+                )}
                 {(iaCombina || supervisaoIaCombina) && (
                   <section aria-label="Inteligência Artificial">
                     <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">

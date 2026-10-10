@@ -11,6 +11,7 @@ import type { Usuario } from '@/lib/tipos'
 import HomeNotificationBell from '@/components/system/HomeNotificationBell'
 
 const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
+  { prefixo: '/relatorios', titulo: 'Central de Relatórios', grupo: 'Gestão' },
   { prefixo: '/financeiro/contas-receber', titulo: 'Contas a Receber', grupo: 'Financeiro' },
   { prefixo: '/financeiro/contas-pagar', titulo: 'Contas a Pagar', grupo: 'Financeiro' },
   { prefixo: '/balcao/caixa', titulo: 'Caixa', grupo: 'Financeiro' },
@@ -39,6 +40,7 @@ const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
 
 const PAGINAS: { id: string; titulo: string; subtitulo: string; href: string; termos: string[] }[] = [
   { id: 'pagina-inicio', titulo: 'Início', subtitulo: 'Painel de Gestão', href: '/', termos: ['inicio', 'painel', 'home', 'dashboard'] },
+  { id: 'pagina-relatorios', titulo: 'Relatórios', subtitulo: 'Página · Relatórios por setor', href: '/relatorios', termos: ['relatorios','relatório','relatórios','cmv','custo previsto','custo realizado'] },
   { id: 'pagina-clientes', titulo: 'Clientes', subtitulo: 'Página · Clientes', href: '/clientes', termos: ['clientes', 'cliente'] },
   { id: 'pagina-orcamentos', titulo: 'Orçamentos', subtitulo: 'Página · Pesquisar orçamentos', href: '/orcamento/pesquisar', termos: ['orcamento', 'orcamentos', 'orçamento'] },
   { id: 'pagina-kanban', titulo: 'Kanban', subtitulo: 'Página · Funil comercial', href: '/kanban', termos: ['kanban', 'funil'] },

@@ -9,6 +9,7 @@ import {
   PackageSearch,
   ReceiptText,
   Ruler,
+  BarChart3,
   Settings,
   ShoppingCart,
   Store,
@@ -30,6 +31,7 @@ export type Guia = {
 export const GUIAS: Guia[] = [
   { href: '/', label: 'Início', icon: Home, grupo: 'Geral' },
   { href: '/balcao', label: 'Venda Balcão', icon: Store, grupo: 'Geral' },
+  { href: '/relatorios', label: 'Relatórios', icon: BarChart3, grupo: 'Geral' },
 
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
