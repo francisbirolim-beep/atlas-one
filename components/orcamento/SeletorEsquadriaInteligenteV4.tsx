@@ -520,7 +520,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs text-emerald-800">O desenho e a receita mudam automaticamente de 2 a 6 folhas. Todas móveis; sentido definitivo de abertura conforme projeto e instalação.</p>
+          <p className="mt-2 text-xs text-emerald-800">O desenho e a receita mudam automaticamente de 2 a 6 folhas. Receita validada apenas para mão-amiga comum sem reforço, montante lateral SU280, trilho de embutir e todas móveis; as variantes especiais permanecem disponíveis em seus cadastros. Sentido definitivo de abertura conforme projeto.</p>
         </section>
       )}
 
