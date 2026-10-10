@@ -44,7 +44,64 @@ export async function GET(req:NextRequest) {
     }
     const {data,error}=await consulta.order('created_at',{ascending:true})
     if(error)throw error
-    return NextResponse.json({ok:true,lotes:data||[]},{headers:{'Cache-Control':'no-store'}})
+    const lotes = data || []
+    // Contexto e desenhos são acrescentados somente ao PDF individual,
+    // preservando o contrato de listagem de cards usado pelos demais módulos.
+    if (!loteId || !lotes.length) {
+      return NextResponse.json({ok:true,lotes},{headers:{'Cache-Control':'no-store'}})
+    }
+    const lote = lotes[0]
+    const itens = (Array.isArray(lote.itens) ? lote.itens : []) as Array<{
+      codigo?:string|null;produto_id?:string|null;descricao?:string;[key:string]:unknown
+    }>
+    const codigos = Array.from(new Set(itens.map(i => String(i.codigo||'').trim()).filter(Boolean)))
+    const produtoIds = Array.from(new Set(itens.map(i => String(i.produto_id||'').trim()).filter(id => uuid.test(id))))
+    const [clienteResp,obraResp,orcResp,prodCodResp,prodIdResp] = await Promise.all([
+      venda.cliente_id
+        ? supabaseAdmin.from('clientes').select('nome,cidade').eq('id',venda.cliente_id).eq('empresa_id',usuario.empresa_id).maybeSingle()
+        : Promise.resolve({data:null,error:null}),
+      venda.obra_id
+        ? supabaseAdmin.from('obras').select('nome,cidade,numero').eq('id',venda.obra_id).eq('empresa_id',usuario.empresa_id).maybeSingle()
+        : Promise.resolve({data:null,error:null}),
+      venda.orcamento_id
+        ? supabaseAdmin.from('orcamentos').select('numero,cliente_nome,obra_nome,obra_cidade,cidade,criado_por_nome').eq('id',venda.orcamento_id).eq('empresa_id',usuario.empresa_id).maybeSingle()
+        : Promise.resolve({data:null,error:null}),
+      codigos.length
+        ? supabaseAdmin.from('produtos').select('id,codigo,foto_url').eq('empresa_id',usuario.empresa_id).in('codigo',codigos).limit(1000)
+        : Promise.resolve({data:[],error:null}),
+      produtoIds.length
+        ? supabaseAdmin.from('produtos').select('id,codigo,foto_url').eq('empresa_id',usuario.empresa_id).in('id',produtoIds).limit(1000)
+        : Promise.resolve({data:[],error:null}),
+    ])
+    for (const res of [clienteResp,obraResp,orcResp,prodCodResp,prodIdResp]) {
+      if (res.error) throw res.error
+    }
+    const normalizar = (v:unknown) => String(v||'').trim().toLocaleUpperCase('pt-BR')
+    const produtos = [...(prodIdResp.data||[]),...(prodCodResp.data||[])]
+    const porId = new Map(produtos.map(p=>[p.id,p]))
+    const porCodigo = new Map(produtos.map(p=>[normalizar(p.codigo),p]))
+    const imagemValida=(v:unknown):string|null=>{
+      if(typeof v!=='string'||!v.trim())return null
+      try {const u=new URL(v.trim()); return u.protocol==='https:'?u.href:null} catch{return null}
+    }
+    const itensComDesenho=itens.map(item=>{
+      const codigo=normalizar(item.codigo)
+      const peloId=item.produto_id?porId.get(item.produto_id):null
+      const produto=(peloId&&normalizar(peloId.codigo)===codigo?peloId:null)||porCodigo.get(codigo)
+      return {...item,imagem_url:produto?imagemValida(produto.foto_url):null}
+    })
+    return NextResponse.json({
+      ok:true,
+      lotes:[{...lote,itens:itensComDesenho}],
+      contexto:{
+        cliente:clienteResp.data?.nome||orcResp.data?.cliente_nome||null,
+        obra:obraResp.data?.nome||orcResp.data?.obra_nome||null,
+        cidade:obraResp.data?.cidade||orcResp.data?.obra_cidade||clienteResp.data?.cidade||orcResp.data?.cidade||null,
+        numero_obra:obraResp.data?.numero||null,
+        numero_orcamento:orcResp.data?.numero||null,
+        responsavel:lote.gerado_por_nome||null
+      }
+    },{headers:{'Cache-Control':'private, no-store'}})
   }catch(e){
     console.error('[Venda][LotesCotacao][GET]',e)
     return erro('Não foi possível consultar as listas de cotação.',500)
