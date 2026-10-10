@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
       const prompt = [
         'Analise este PDF de compra e compare SOMENTE com os materiais permitidos da venda.',
         'Retorne APENAS JSON válido, sem markdown, no formato:',
-        '{"fornecedor":{"nome":"","cnpj":""},"itens":[{"material_id":"","necessidade_id":"","codigo":"","descricao_documento":"","quantidade_documento":0,"unidade":"","valor_unitario":null,"confianca":0.0,"observacao":""}],"pendencias":[{"texto":"","motivo":""}]}',
+        '{"fornecedor":{"nome":"","cnpj":""},"pedido":{"numero":"","valor_total":null,"prazo_entrega":"","previsao_entrega":"","observacoes":""},"itens":[{"material_id":"","necessidade_id":"","codigo":"","descricao_documento":"","quantidade_documento":0,"unidade":"","valor_unitario":null,"confianca":0.0,"observacao":""}],"pendencias":[{"texto":"","motivo":""}]}',
         'Regras: use apenas material_id e necessidade_id fornecidos abaixo; não invente IDs; confiança de 0 a 1; se houver dúvida deixe em pendencias; não considere cabeçalho como item.',
         'MATERIAIS PERMITIDOS:',
         JSON.stringify(catalogo.slice(0,300)),
@@ -206,6 +206,14 @@ export async function POST(req: NextRequest) {
         : { id:null, nome:texto(ia.fornecedor.nome,250), cnpj:texto(ia.fornecedor.cnpj,30)||null, origem:'ia_texto' }
     }
 
+    const pedido = ia?.pedido && typeof ia.pedido === 'object' ? {
+      numero: texto(ia.pedido.numero, 120) || null,
+      valor_total: numero(ia.pedido.valor_total),
+      prazo_entrega: texto(ia.pedido.prazo_entrega, 120) || null,
+      previsao_entrega: texto(ia.pedido.previsao_entrega, 30) || null,
+      observacoes: texto(ia.pedido.observacoes, 500) || null,
+    } : null
+
     const pendencias = [
       ...(Array.isArray(ia?.pendencias) ? ia.pendencias.map((p:any)=>({texto:texto(p?.texto,500),motivo:texto(p?.motivo,500)})).filter((p:any)=>p.texto||p.motivo) : []),
       ...identificados.filter(x=>x.validacao==='pendente_validacao').map(x=>({texto:`${x.codigo || 'Sem código'} · ${x.descricao}`,motivo:x.observacao || 'Conferência manual necessária.'})),
@@ -218,6 +226,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       arquivo: { nome: arquivo.name, tamanho: arquivo.size, paginas: parsed.numpages || null },
       fornecedor,
+      pedido,
       itens: identificados,
       sugeridos,
       pendencias,
