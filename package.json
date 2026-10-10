@@ -17,6 +17,7 @@
     "test:venda-fluxo": "node scripts/test-venda-fluxo-resumo.cjs",
     "test:producao-medicao": "node scripts/test-producao-vinculo-medicao.cjs",
     "test:liberacao-op": "node scripts/test-liberacao-segura-op.cjs",
+    "test:venda-instalacao": "node scripts/test-venda-instalacao-producao.cjs",
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },
