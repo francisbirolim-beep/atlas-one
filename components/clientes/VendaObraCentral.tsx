@@ -42,6 +42,7 @@ type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
 type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null }
 type MaterialTecnico = { id:string; produto_id?:string|null; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; status_calculo?:string|null; status_compra?:string|null; status_compra_atualizado_em?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null; custo_wvetro?:number|null; venda_wvetro?:number|null; wvetro_dados?:Record<string,any>|null }
+type SeparacaoMaterial = { id:string; material_id?:string|null; produto_id?:string|null; tipo_origem?:string|null; quantidade?:number|null; comprimento_disponivel_mm?:number|null; comprimento_utilizado_mm?:number|null; status?:string|null; observacoes?:string|null }
 type ProdutoMaterial = { id:string; codigo?:string|null; nome?:string|null; unidade?:string|null; tamanho_barra_mm?:number|null; foto_url?:string|null; categoria?:string|null }
 type ItemPdfCompra = { material_id:string; necessidade_id:string; codigo?:string; descricao:string; quantidade_necessaria?:number; quantidade_documento?:number|null; unidade?:string; unidade_documento?:string; valor_unitario?:number|null; confianca:number; observacao?:string; origem?:string; validacao:'sugerido_comprado'|'pendente_validacao' }
 type DadosPedidoCompra = { numero?:string|null; valor_total?:number|null; prazo_entrega?:string|null; previsao_entrega?:string|null; observacoes?:string|null }
@@ -179,6 +180,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
+  const [separacoesMateriais,setSeparacoesMateriais]=useState<SeparacaoMaterial[]>([])
   const [produtosMateriais,setProdutosMateriais]=useState<Record<string,ProdutoMaterial>>({})
   const [categoriaMaterialAberta,setCategoriaMaterialAberta]=useState<'perfil'|'acessorios'|'vidro'|'outros'>('perfil')
   const [ocupadoMateriais,setOcupadoMateriais]=useState(false)
@@ -241,9 +243,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const pacoteResp=await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id',v.orcamento_id).neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
     if(pacoteResp.data?.id){
       setPacoteTecnicoId(pacoteResp.data.id)
-      const mt=await supabase.from('pacote_tecnico_materiais').select('id,produto_id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,status_calculo,status_compra,status_compra_atualizado_em,incluido_manual,justificativa_ajuste,custo_wvetro,venda_wvetro,wvetro_dados').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem')
+      const [mt,sep]=await Promise.all([
+        supabase.from('pacote_tecnico_materiais').select('id,produto_id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,status_calculo,status_compra,status_compra_atualizado_em,incluido_manual,justificativa_ajuste,custo_wvetro,venda_wvetro,wvetro_dados').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem'),
+        supabase.from('pacote_tecnico_separacoes').select('id,material_id,produto_id,tipo_origem,quantidade,comprimento_disponivel_mm,comprimento_utilizado_mm,status,observacoes').eq('pacote_id',pacoteResp.data.id).neq('status','cancelado'),
+      ])
       const materiais=(mt.data||[]) as MaterialTecnico[]
       setMateriaisTecnicos(materiais)
+      setSeparacoesMateriais((sep.data||[]) as SeparacaoMaterial[])
       const materialProdutoIds=[...new Set(materiais.map(m=>m.produto_id).filter(Boolean))] as string[]
       if(materialProdutoIds.length){
         const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').in('id',materialProdutoIds)
@@ -252,6 +258,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     }else{
       setPacoteTecnicoId(null)
       setMateriaisTecnicos([])
+      setSeparacoesMateriais([])
       setProdutosMateriais({})
     }
 
@@ -453,6 +460,20 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     return base
   },[materiaisTecnicos])
   const materiaisCategoria=materiaisPorCategoria[categoriaMaterialAberta]
+  const separacoesPorMaterial=useMemo(()=>{
+    const mapa:Record<string,SeparacaoMaterial[]>={}
+    separacoesMateriais.forEach(s=>{if(s.material_id)(mapa[s.material_id] ||= []).push(s)})
+    return mapa
+  },[separacoesMateriais])
+  function quantidadeSobraMaterial(m:MaterialTecnico){
+    return (separacoesPorMaterial[m.id]||[]).filter(s=>s.tipo_origem==='sobra_estoque').reduce((s,x)=>s+Number(x.quantidade||0),0)
+  }
+  function quantidadeComprarMaterial(m:MaterialTecnico){
+    const qtd=Number(m.quantidade_ajustada??m.quantidade_tecnica??0)
+    return Math.max(0,qtd-quantidadeSobraMaterial(m))
+  }
+  const totalSobraCategoria=useMemo(()=>materiaisCategoria.reduce((s,m)=>s+quantidadeSobraMaterial(m),0),[materiaisCategoria,separacoesPorMaterial])
+  const totalComprarCategoria=useMemo(()=>materiaisCategoria.reduce((s,m)=>s+quantidadeComprarMaterial(m),0),[materiaisCategoria,separacoesPorMaterial])
   function compraRelacionadaMaterial(m:MaterialTecnico){
     const descricao=String(m.descricao||'').trim().toLocaleLowerCase('pt-BR')
     return compras.find(c=>
@@ -1140,6 +1161,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
                 <p className="mt-1 text-xs text-slate-500">Clique em Perfil, Acessório, Vidro ou Outros para visualizar somente os itens daquela categoria, alterar, substituir, incluir ou excluir.</p>
                 {mensagemMateriais&&<p className="mt-1 text-[11px] font-semibold text-blue-700">{mensagemMateriais}</p>}
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">Ainda comprar: {totalComprarCategoria.toLocaleString('pt-BR')}</span></div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <input ref={inputPdfCompraRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={e=>void analisarPdfCompra(e.target.files?.[0]||null)}/>
@@ -1226,15 +1248,17 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-xl border">
-              <table className="w-full min-w-[1420px] text-sm">
-                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Situação</th><th>Fornecedor</th><th>Ações</th></tr></thead>
+              <table className="w-full min-w-[1560px] text-sm">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Sobra usada</th><th>A comprar</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Situação</th><th>Fornecedor</th><th>Ações</th></tr></thead>
                 <tbody>
-                  {materiaisTabela.map(m=>{const img=imagemMaterial(m);const col=colunaMaterial(m);const situacao=col==='faltas'?'Falta comprar':col==='cotacao'?'Em cotação':col==='comprado'?'Comprado':col==='entrega'?'Aguardando chegar':'Recebido';const badge=col==='recebido'?'bg-emerald-100 text-emerald-700':col==='comprado'?'bg-teal-100 text-teal-700':col==='entrega'?'bg-amber-100 text-amber-700':col==='cotacao'?'bg-blue-100 text-blue-700':'bg-red-100 text-red-700';const compra=compraRelacionadaMaterial(m);return <tr key={m.id} className="border-t align-middle">
+                  {materiaisTabela.map(m=>{const img=imagemMaterial(m);const col=colunaMaterial(m);const situacao=col==='faltas'?'Falta comprar':col==='cotacao'?'Em cotação':col==='comprado'?'Comprado':col==='entrega'?'Aguardando chegar':'Recebido';const badge=col==='recebido'?'bg-emerald-100 text-emerald-700':col==='comprado'?'bg-teal-100 text-teal-700':col==='entrega'?'bg-amber-100 text-amber-700':col==='cotacao'?'bg-blue-100 text-blue-700':'bg-red-100 text-red-700';const compra=compraRelacionadaMaterial(m);const sobra=quantidadeSobraMaterial(m);const comprar=quantidadeComprarMaterial(m);return <tr key={m.id} className="border-t align-middle">
                     <td className="px-3 py-3"><input type="checkbox" aria-label={`Selecionar ${m.codigo||m.descricao}`} checked={selecionadosMateriais.includes(m.id)} onChange={()=>alternarSelecaoMaterial(m.id)} className="h-4 w-4 cursor-pointer"/></td>
                     <td className="px-3 py-2"><div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-1"/>:<ImageIcon size={17} className="text-slate-300"/>}</div></td>
                     <td className="px-3 py-3 font-mono text-xs font-bold text-slate-800">{m.codigo||'—'}</td>
                     <td className="px-3 py-3"><b className="text-slate-800">{m.descricao}</b>{m.justificativa_ajuste&&<div className="mt-1 max-w-[330px] text-[10px] text-slate-400">{m.justificativa_ajuste}</div>}</td>
                     <td className="px-3 py-3 font-bold text-slate-800">{Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')}</td>
+                    <td className="px-3 py-3 font-bold text-emerald-700">{sobra>0?sobra.toLocaleString('pt-BR'):'—'}</td>
+                    <td className={'px-3 py-3 font-bold '+(comprar>0?'text-amber-700':'text-emerald-700')}>{comprar.toLocaleString('pt-BR')}</td>
                     <td className="px-3 py-3 text-slate-600">{m.unidade||'UN'}</td>
                     <td className="px-3 py-3 text-slate-600">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:m.comprimento_barra_mm?`Barra ${Math.round(Number(m.comprimento_barra_mm))} mm`:'—'}</td>
                     <td className="px-3 py-3 text-slate-600">{m.cor_ref||'—'}</td>
@@ -1242,7 +1266,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <td className="px-3 py-3 text-xs font-semibold text-slate-600">{fornecedorCompraMaterial(m)}</td>
                     <td className="px-3 py-3"><div className="flex items-center gap-1.5">{col!=='comprado'&&col!=='entrega'&&col!=='recebido'&&<button disabled={ocupadoMateriais} onClick={()=>void confirmarCompradoMaterial(m)} title="Confirmar que este material foi comprado" className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"><CheckCircle2 size={13}/></button>}<button disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="grid h-8 w-8 place-items-center rounded-lg border text-blue-700 hover:bg-blue-50 disabled:opacity-40"><Pencil size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="grid h-8 w-8 place-items-center rounded-lg border text-violet-700 hover:bg-violet-50 disabled:opacity-40"><Replace size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="grid h-8 w-8 place-items-center rounded-lg border text-red-600 hover:bg-red-50 disabled:opacity-40"><Trash2 size={13}/></button></div></td>
                   </tr>})}
-                  {!materiaisTabela.length&&<tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
+                  {!materiaisTabela.length&&<tr><td colSpan={13} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
                 </tbody>
               </table>
             </div>
