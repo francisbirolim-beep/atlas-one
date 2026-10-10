@@ -15,6 +15,7 @@
     "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts",
     "test:venda-cmv": "node scripts/test-venda-cmv-regras.cjs",
     "test:venda-fluxo": "node scripts/test-venda-fluxo-resumo.cjs",
+    "test:producao-medicao": "node scripts/test-producao-vinculo-medicao.cjs",
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },
