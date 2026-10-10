@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
   BarChart3,
+  BookOpen,
   Columns3,
   Eye,
   Home,
@@ -154,7 +155,7 @@ export default function MobileNavigationControls() {
     const filtradas = termo
       ? guiasPermitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : guiasPermitidas
-    return agruparGuias(filtradas.filter(guia => guia.href !== '/relatorios'))
+    return agruparGuias(filtradas.filter(guia => guia.href !== '/relatorios' && guia.href !== '/consultoria'))
   }, [guiasPermitidas, termo])
 
   const hrefsGuias = useMemo(() => new Set(GUIAS.map(guia => guia.href)), [])
@@ -182,6 +183,7 @@ export default function MobileNavigationControls() {
 
   // Mesmo acesso à IA da barra lateral do computador.
   const relatoriosCombina = !termo || correspondePesquisaAtlas(termo, 'Relatórios', 'Geral', '/relatorios')
+  const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Consultoria', 'Relatórios', '/consultoria'))
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
   const supervisaoIaCombina = usuario?.role === 'master' &&
     (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
@@ -303,6 +305,11 @@ export default function MobileNavigationControls() {
                 {relatoriosCombina && (
                   <Link href="/relatorios" onClick={fecharMenu} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${ativo('/relatorios') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}>
                     <BarChart3 size={19}/> Relatórios
+                  </Link>
+                )}
+                {consultoriaCombina && (
+                  <Link href="/consultoria" onClick={fecharMenu} className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${ativo('/consultoria') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}>
+                    <BookOpen size={19}/> Consultoria
                   </Link>
                 )}
                 {(iaCombina || supervisaoIaCombina) && (
