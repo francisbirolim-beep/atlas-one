@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Beaker, BookOpen, Check, Loader2, Plus, Save, Trash2, Wrench } from 'lucide-react'
+import { ArrowLeft, Beaker, BookOpen, Check, ClipboardCopy, FileDown, Loader2, Plus, Save, Trash2, Wrench } from 'lucide-react'
 import {
   calcularFormulaCorteIsolada,
   calcularFormulasCorte,
@@ -14,9 +14,11 @@ import {
 import {
   listarTodasFormulasCorte,
   salvarFormulaCorte,
+  criarVersaoTesteFormulaCorte,
   type RegistroFormulaCorte,
   type StatusFormulaCorte,
 } from '@/lib/engenhariaFormulasCorte'
+import { calcularAcessoriosTecnicos, type ResultadoAcessorioFormula } from '@/lib/formulasAcessoriosEngine'
 import { listarProdutosTecnicos } from '@/lib/engenhariaReceitas'
 import {
   alternarLinhaTecnica,
@@ -69,6 +71,9 @@ export default function EditorTecnicoPage() {
   const [altura, setAltura] = useState('2100')
   const [opcoes, setOpcoes] = useState<Record<string, string>>({})
   const [resultados, setResultados] = useState<ResultadoPeca[]>([])
+  const [resultadosAcessorios, setResultadosAcessorios] = useState<ResultadoAcessorioFormula[]>([])
+  const [duplicando, setDuplicando] = useState(false)
+  const [testeRealizado, setTesteRealizado] = useState(false)
   const [vidroTeste, setVidroTeste] = useState<{ largura: number; altura: number; quantidade: number } | null>(null)
 
   useEffect(() => {
@@ -141,11 +146,20 @@ export default function EditorTecnicoPage() {
     setMensagem('')
     setErro('')
     setResultados([])
+    setResultadosAcessorios([])
+    setTesteRealizado(false)
     setVidroTeste(null)
     const defaults: Record<string, string> = {}
     for (const variavel of selecionada?.variaveis || []) defaults[variavel.chave] = variavel.opcoes[0] || ''
     setOpcoes(defaults)
   }, [selecionada?.id])
+
+  useEffect(() => {
+    setResultados([])
+    setResultadosAcessorios([])
+    setTesteRealizado(false)
+    setVidroTeste(null)
+  }, [rascunho, largura, altura, opcoes])
 
   const perfis = useMemo(
     () => produtos.filter(p => p.categoria === 'perfil' && p.codigo),
@@ -236,6 +250,33 @@ export default function EditorTecnicoPage() {
     setRascunho(prev => prev ? { ...prev, acessorios: prev.acessorios.filter((_, i) => i !== index) } : prev)
   }
 
+  function atualizarVariavel(index: number, patch: Partial<RegistroFormulaCorte['variaveis'][number]>) {
+    setRascunho(prev => prev ? {
+      ...prev, variaveis: prev.variaveis.map((v,i) => i===index ? { ...v, ...patch } : v),
+    } : prev)
+  }
+  function adicionarVariavel() {
+    setRascunho(prev => prev ? { ...prev, variaveis: [...prev.variaveis, { chave: '', label: '', opcoes: [] }] } : prev)
+  }
+  function removerVariavel(index: number) {
+    setRascunho(prev => prev ? { ...prev, variaveis: prev.variaveis.filter((_,i)=>i!==index) } : prev)
+  }
+  function definirDescricao(chave: 'descricao_interna' | 'descricao_orcamento', valor: string) {
+    setRascunho(prev => prev ? { ...prev, metadados_editor: { ...prev.metadados_editor, [chave]: valor } } : prev)
+  }
+  async function criarVersaoTeste() {
+    if (!selecionada || duplicando) return
+    setDuplicando(true)
+    setErro('')
+    const nova = await criarVersaoTesteFormulaCorte(rascunho || selecionada)
+    if (nova) {
+      setRegistros(prev => [...prev,nova])
+      setSelecionadaId(nova.id)
+      setMensagem('Versão para teste criada. Original preservado. Simule antes de validar.')
+    } else setErro('Não foi possível criar versão de teste. Original não alterado.')
+    setDuplicando(false)
+  }
+
   function removerPeca(index: number) {
     setRascunho(prev => prev ? { ...prev, pecas: prev.pecas.filter((_, i) => i !== index) } : prev)
   }
@@ -256,6 +297,23 @@ export default function EditorTecnicoPage() {
 
   async function salvar() {
     if (!rascunho) return
+    if (selecionada?.status === 'validada' && selecionada.id === rascunho.id) {
+      setErro('Receita homologada protegida: crie uma versão de teste antes de alterar e salvar.')
+      return
+    }
+    if (rascunho.variaveis.some(v => !v.chave.trim() || !v.label.trim())) {
+      setErro('Preencha nome e chave de todas as variáveis antes de salvar.')
+      return
+    }
+    if (new Set(rascunho.variaveis.map(v => v.chave.trim())).size !== rascunho.variaveis.length) {
+      setErro('Há variáveis com a mesma chave.')
+      return
+    }
+    if (rascunho.status === 'validada' && (!testeRealizado || resultados.length === 0 ||
+      resultadosAcessorios.some(a => a.erro || (a.ativo !== false && a.valor === null)))) {
+      setErro('Antes de validar, execute uma simulação atualizada e corrija todas as fórmulas pendentes de acessórios.')
+      return
+    }
     setSalvando(true)
     setMensagem('')
     setErro('')
@@ -291,6 +349,12 @@ export default function EditorTecnicoPage() {
       const H = Number(altura)
       const calculados = calcularFormulasCorte(rascunho, L, H, opcoes)
       setResultados(calculados)
+      setResultadosAcessorios(calcularAcessoriosTecnicos(
+        rascunho.acessorios, L, H, Number(opcoes.numero_folhas || opcoes.folhas || 2),
+        calculados.map(p => ({ codigo: p.codigo, tamanho: p.tamanho, grupo: p.grupo })),
+        opcoes, rascunho.folgas
+      ))
+      setTesteRealizado(true)
       const formulaL = rascunho.vidro.formula_largura
         ? resolverFormulaCondicional(rascunho.vidro.formula_largura, rascunho.vidro.condicoes_largura, opcoes)
         : null
@@ -306,10 +370,14 @@ export default function EditorTecnicoPage() {
       } else setVidroTeste(null)
     } catch (e) {
       setResultados([])
+      setResultadosAcessorios([])
+      setTesteRealizado(false)
       setVidroTeste(null)
       setErro(e instanceof FormulaCorteError || e instanceof Error ? e.message : 'Erro ao testar fórmula.')
     }
   }
+
+  const receitaAtivaProtegida = Boolean(selecionada?.status === 'validada' && selecionada.id === rascunho?.id)
 
   if (carregando) {
     return <div className="grid min-h-[60vh] place-items-center text-slate-500"><Loader2 className="animate-spin" /></div>
@@ -317,6 +385,13 @@ export default function EditorTecnicoPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-7">
+      <style>{`@media print {
+        body * { visibility: hidden !important; }
+        #relatorio-simulacao, #relatorio-simulacao * { visibility: visible !important; }
+        #relatorio-simulacao { position: absolute !important; left: 0; top: 0; width: 100%; border: 0; box-shadow: none; }
+        .nao-imprimir { display: none !important; }
+        @page { size: A4 portrait; margin: 12mm; }
+      }`}</style>
       <datalist id="catalogo-perfis-atlas">
         {perfis.map(p => <option key={p.id} value={p.codigo || ''}>{p.nome}</option>)}
       </datalist>
@@ -328,8 +403,8 @@ export default function EditorTecnicoPage() {
             <div className="flex items-center gap-3">
               <Wrench className="text-emerald-600" />
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Editor técnico de tipologias</h1>
-                <p className="text-sm text-slate-500">Escolha a linha, escolha a tipologia e depois ajuste perfis, fórmulas, quantidades e vidro.</p>
+                <h1 className="text-2xl font-bold text-slate-900">Bancada de Engenharia · Simulação de Corte</h1>
+                <p className="text-sm text-slate-500">Escolha linha → tipologia → receita. Abra a árvore, simule perfis, acessórios e vidros, revise e valide sem alterar a original.</p>
               </div>
             </div>
           </div>
@@ -381,7 +456,7 @@ export default function EditorTecnicoPage() {
 
             {avisoCatalogo && <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-800">{avisoCatalogo}</div>}
 
-            <div className="mb-2 mt-5 border-t border-slate-200 pt-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Configurações da tipologia</div>
+            <div className="mb-2 mt-5 border-t border-slate-200 pt-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">3. Receitas técnicas e versões</div>
             <div className="max-h-[42vh] space-y-2 overflow-auto pr-1">
               {registrosDaTipologia.map(item => (
                 <button key={item.id} type="button" onClick={() => setSelecionadaId(item.id)} className={`w-full rounded-xl border p-3 text-left transition ${selecionadaId === item.id ? 'border-emerald-300 bg-emerald-50' : 'border-slate-100 hover:bg-slate-50'}`}>
@@ -395,6 +470,19 @@ export default function EditorTecnicoPage() {
               {tipologiaSelecionada && registrosDaTipologia.length === 0 && <p className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">Esta tipologia ainda não possui configuração de fórmula cadastrada.</p>}
               {!tipologiaSelecionada && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Escolha uma tipologia para ver suas configurações.</p>}
             </div>
+            {rascunho && <nav aria-label="Árvore da receita técnica" className="mt-4 border-t border-slate-200 pt-4">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Árvore da tipologia</p>
+              <div className="grid gap-1 text-xs font-semibold">
+                {[
+                  ['bloco-descricoes', '01 · Descrições e status'],
+                  ['bloco-variaveis', '02 · Variáveis e montagem'],
+                  ['bloco-perfis', '03 · Perfis e fórmulas'],
+                  ['bloco-vidro', '04 · Vidros e folgas'],
+                  ['bloco-acessorios', '05 · Acessórios'],
+                  ['bloco-simulacao', '06 · Simulação de corte'],
+                ].map(([id,text])=><a key={id} href={'#'+id} className="rounded-lg px-3 py-2 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">{text} ↗</a>)}
+              </div>
+            </nav>}
           </aside>
 
           {!rascunho ? (
@@ -407,14 +495,22 @@ export default function EditorTecnicoPage() {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Cadastro inativo:</strong> esta fórmula pode continuar sendo editada e testada, mas não será oferecida nos fluxos ativos enquanto a linha e a tipologia não estiverem liberadas.</div>
               )}
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              {receitaAtivaProtegida && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                <strong>Receita homologada protegida.</strong> Você pode simular com outros valores, mas para salvar alterações precisa criar uma revisão independente. A versão em uso não será sobrescrita.
+              </div>}
+              <div id="bloco-descricoes" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">Configuração fixa</div>
                     <h2 className="mt-1 text-xl font-bold text-slate-900">{tipologiaSelecionada?.label || rascunho.tipologia?.label?.split(' — ')[0]}</h2>
                     <p className="mt-1 text-xs text-slate-400">{linhaSelecionada?.nome || 'Linha não identificada'} · Chave: {rascunho.configuracao_chave} · Versão {rascunho.versao}</p>
                   </div>
-                  <button type="button" disabled={salvando} onClick={salvar} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{salvando ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar alterações</button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" disabled={duplicando} onClick={() => void criarVersaoTeste()} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-60">
+                      <ClipboardCopy size={16}/>{duplicando ? 'Criando...' : 'Criar versão de teste'}
+                    </button>
+                    <button type="button" disabled={salvando || receitaAtivaProtegida} onClick={() => void salvar()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{salvando ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Salvar revisão</button>
+                  </div>
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -431,13 +527,48 @@ export default function EditorTecnicoPage() {
                   </label>
                   <p className="text-xs text-sky-800 md:col-span-2">Essas folgas são descontadas do vão antes das fórmulas (LF e HF). A regra padrão de 4 mm fica preservada nas receitas antigas.</p>
                 </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">Descrição interna da Engenharia
+                    <textarea value={String(rascunho.metadados_editor?.descricao_interna || '')} onChange={e => definirDescricao('descricao_interna',e.target.value)} rows={3} placeholder="Ex.: Suprema, mão-amiga comum, 2 a 6 folhas, montar com..." className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Apenas referência técnica interna; não aparece para o cliente.</span>
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">Descrição para o orçamento do cliente
+                    <textarea value={String(rascunho.metadados_editor?.descricao_orcamento || '')} onChange={e => definirDescricao('descricao_orcamento',e.target.value)} rows={3} placeholder="Ex.: Porta de correr sequencial Suprema, folhas móveis, acabamento..." className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Esta descrição será usada como nome comercial da configuração no orçamento; o cliente não recebe códigos de perfis.</span>
+                  </label>
+                </div>
                 <label className="mt-4 block text-sm font-medium text-slate-700">Observações técnicas<textarea value={rascunho.observacoes || ''} onChange={e => setRascunho({ ...rascunho, observacoes: e.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
 
                 <label className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><input type="checkbox" checked={rascunho.ativo} disabled={rascunho.status !== 'validada'} onChange={e => setRascunho({ ...rascunho, ativo: e.target.checked })} className="h-4 w-4" /><span><strong>Liberar esta configuração no Plano de Corte</strong><br/><span className="text-xs text-slate-500">A configuração precisa estar Validada. Linha e tipologia também precisam estar liberadas.</span></span></label>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Perfis e fórmulas</h3><p className="text-xs text-slate-500">LF = largura − 4 mm · HF = altura − 4 mm · CEIL() sempre arredonda para cima.</p></div><button type="button" onClick={adicionarPeca} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"><Plus size={15}/> Adicionar perfil</button></div>
+              <div id="bloco-variaveis" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><h3 className="font-bold text-slate-900">Árvore de variáveis da tipologia</h3>
+                    <p className="text-xs text-slate-500">Quantidade de folhas, montagem, trilho, mão-amiga, reforços e demais opções. As regras por variante ficam nas fórmulas dos perfis e acessórios.</p>
+                  </div>
+                  <button type="button" onClick={adicionarVariavel} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold"><Plus size={15}/> Nova variável</button>
+                </div>
+                {rascunho.variaveis.length === 0 && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Sem variáveis adicionais nesta receita. Você pode cadastrar uma árvore de escolhas.</p>}
+                <div className="mt-4 space-y-3">
+                  {rascunho.variaveis.map((item,index)=><div key={index} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-12">
+                    <label className="text-xs font-semibold text-slate-600 md:col-span-3">Chave técnica
+                      <input value={item.chave} onChange={e=>atualizarVariavel(index,{chave:e.target.value.trim().replace(/\s/g,'_')})} placeholder="numero_folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs"/>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600 md:col-span-3">Nome da variável
+                      <input value={item.label} onChange={e=>atualizarVariavel(index,{label:e.target.value})} placeholder="Quantidade de folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600 md:col-span-5">Opções (separadas por vírgula)
+                      <input value={item.opcoes.join(', ')} onChange={e=>atualizarVariavel(index,{opcoes:e.target.value.split(',').map(v=>v.trim()).filter(Boolean)})} placeholder="2, 3, 4, 5, 6" className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/>
+                    </label>
+                    <button type="button" onClick={()=>removerVariavel(index)} className="mt-5 grid h-9 place-items-center rounded-lg text-red-600 hover:bg-red-50" title="Remover variável"><Trash2 size={16}/></button>
+                  </div>)}
+                </div>
+                <p className="mt-3 text-xs text-amber-700">Antes de remover uma variável, revise as fórmulas que dependem dela. A simulação avisa se houver referências sem valor.</p>
+              </div>
+
+              <div id="bloco-perfis" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Perfis e fórmulas</h3><p className="text-xs text-slate-500">LF = largura menos folga cadastrada · HF = altura menos folga cadastrada · travessas sempre arredondadas para cima.</p></div><button type="button" onClick={adicionarPeca} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"><Plus size={15}/> Adicionar perfil</button></div>
 
                 <div className="space-y-3">
                   {rascunho.pecas.map((peca, index) => {
@@ -446,7 +577,7 @@ export default function EditorTecnicoPage() {
                       <div key={`${index}-${peca.codigo || peca.grupo || 'peca'}`} className="rounded-xl border border-slate-200 p-4">
                         {avancada && <div className="mb-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Regra legada avançada ({peca.grupo}). Ela é preservada, mas o código não pode ser trocado neste editor simples.</div>}
                         <div className="grid gap-3 md:grid-cols-12">
-                          <label className="text-xs font-semibold text-slate-500 md:col-span-2">Código do perfil<input list="catalogo-perfis-atlas" disabled={avancada} value={peca.codigo || peca.grupo || ''} onChange={e => atualizarPeca(index, { codigo: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm disabled:bg-slate-100" /></label>
+                          <label className="text-xs font-semibold text-slate-500 md:col-span-2">Código do perfil (trocar = substituir)<input list="catalogo-perfis-atlas" disabled={avancada} value={peca.codigo || peca.grupo || ''} onChange={e => atualizarPeca(index, { codigo: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm disabled:bg-slate-100" /></label>
                           <label className="text-xs font-semibold text-slate-500 md:col-span-4">Descrição<input value={peca.descricao || ''} onChange={e => atualizarPeca(index, { descricao: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                           <label className="text-xs font-semibold text-slate-500 md:col-span-3">Fórmula<input value={peca.formula || ''} onChange={e => atualizarPeca(index, { formula: e.target.value })} placeholder="Ex.: CEIL((LF - 181) / 2)" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                           <label className="text-xs font-semibold text-slate-500 md:col-span-1">Qtd.<input type="number" min="0" value={peca.quantidade ?? ''} onChange={e => atualizarPeca(index, { quantidade: e.target.value === '' ? undefined : Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
@@ -475,7 +606,7 @@ export default function EditorTecnicoPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div id="bloco-vidro" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 className="font-bold text-slate-900">Vidro</h3><p className="mt-1 text-xs text-slate-500">A fórmula do vidro fica separada da folga de encaixe da esquadria.</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="text-xs font-semibold text-slate-500">Largura do vidro<input value={rascunho.vidro.formula_largura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_largura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
@@ -487,7 +618,7 @@ export default function EditorTecnicoPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div id="bloco-acessorios" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><h3 className="font-bold text-slate-900">Acessórios e consumíveis da receita</h3>
                     <p className="text-xs text-slate-500">Código, quantidade, status e condições por número de folhas. Salvar mantém essas alterações junto à fórmula técnica.</p>
@@ -496,7 +627,7 @@ export default function EditorTecnicoPage() {
                 </div>
                 <div className="mt-4 space-y-2">
                   {rascunho.acessorios.map((item, index) => <div key={`${item.codigo}-${index}`} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-12">
-                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-2">Código
+                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-2">Código (trocar = substituir)
                       <input value={item.codigo} onChange={e => atualizarAcessorio(index, { codigo: e.target.value.toUpperCase() })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" />
                     </label>
                     <label className="text-[11px] font-semibold text-slate-500 md:col-span-3">Descrição
@@ -518,8 +649,9 @@ export default function EditorTecnicoPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+              <div id="bloco-simulacao" className="scroll-mt-24 rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-2"><Beaker size={18} className="text-emerald-600"/><h3 className="font-bold text-slate-900">Testar antes de salvar / liberar</h3></div>
+                <p className="mt-2 text-xs text-slate-500">O teste usa os dados mostrados na tela, inclusive alterações ainda não salvas. Nada é enviado para produção.</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-4">
                   <label className="text-xs font-semibold text-slate-500">Largura (mm)<input type="number" value={largura} onChange={e => setLargura(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                   <label className="text-xs font-semibold text-slate-500">Altura (mm)<input type="number" value={altura} onChange={e => setAltura(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
@@ -530,7 +662,47 @@ export default function EditorTecnicoPage() {
                 {erro && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
                 {mensagem && <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><Check size={15}/>{mensagem}</div>}
 
-                {resultados.length > 0 && <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-3">Código</th><th className="p-3">Descrição</th><th className="p-3">Eixo</th><th className="p-3 text-right">Corte</th><th className="p-3 text-right">Qtd.</th><th className="p-3">Origem do desconto</th></tr></thead><tbody>{resultados.map((r, i) => <tr key={`${r.codigo}-${r.eixo}-${i}`} className="border-t border-slate-100"><td className="p-3 font-semibold">{r.codigo}</td><td className="p-3">{r.descricao || '—'}</td><td className="p-3">{r.eixo || '—'}</td><td className="p-3 text-right font-mono font-semibold">{medida(r.tamanho)} mm</td><td className="p-3 text-right">{r.quantidade ?? '—'}</td><td className="p-3 text-xs text-slate-500">{r.composicao_desconto || '—'}</td></tr>)}</tbody></table></div>}
+                {testeRealizado && resultados.length > 0 && <div id="relatorio-simulacao" className="mt-5 rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Simulação técnica — não é ordem de produção</p>
+                      <h4 className="mt-1 font-bold text-slate-900">{String(rascunho.metadados_editor?.descricao_interna || tipologiaSelecionada?.label || rascunho.configuracao_label)}</h4>
+                      <p className="text-xs text-slate-500">Vão: {largura} × {altura} mm · Folga: {rascunho.folgas?.largura_mm ?? 4} / {rascunho.folgas?.altura_mm ?? 4} mm · Configuração: {rascunho.configuracao_label} · v{rascunho.versao}</p>
+                    </div>
+                    <button type="button" onClick={() => window.print()} className="nao-imprimir inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"><FileDown size={15}/> Imprimir / salvar PDF</button>
+                  </div>
+                  {(rascunho.variaveis.some(v=>v.chave==='numero_folhas') || /\b0?[2-6] folhas/i.test(tipologiaSelecionada?.label || '')) && (() => {
+                    const qtd = Number(opcoes.numero_folhas || (tipologiaSelecionada?.label || '').match(/\b0?([2-6]) folhas/i)?.[1] || 2)
+                    return <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="mb-2 text-xs font-semibold text-slate-600">Croqui esquemático · {qtd} folhas / {qtd} planos</p>
+                      <div className="flex h-20 max-w-md gap-0.5 border-4 border-slate-700 bg-white p-1">
+                        {Array.from({length:qtd},(_,i)=><div key={i} className="relative min-w-0 flex-1 border-2 border-slate-500 bg-sky-50"><span className="absolute inset-0 grid place-items-center text-lg text-slate-700">←</span><span className="absolute bottom-0.5 left-1 text-[9px]">{i+1}</span></div>)}
+                      </div>
+                      <p className="mt-1 text-[10px] text-slate-500">Representação da quantidade de folhas; sentido de abertura definitivo conforme projeto.</p>
+                    </div>
+                  })()}
+                  <h4 className="text-sm font-bold text-slate-900">Perfis — lista de corte</h4>
+                  <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-3">Código</th><th className="p-3">Descrição</th><th className="p-3">Eixo</th><th className="p-3 text-right">Corte</th><th className="p-3 text-right">Qtd.</th><th className="p-3">Origem do desconto</th></tr></thead><tbody>{resultados.map((r, i) => <tr key={`${r.codigo}-${r.eixo}-${i}`} className="border-t border-slate-100"><td className="p-3 font-semibold">{r.codigo}</td><td className="p-3">{r.descricao || '—'}</td><td className="p-3">{r.eixo || '—'}</td><td className="p-3 text-right font-mono font-semibold">{medida(r.tamanho)} mm</td><td className="p-3 text-right">{r.quantidade ?? '—'}</td><td className="p-3 text-xs text-slate-500">{r.composicao_desconto || '—'}</td></tr>)}</tbody></table></div>
+
+                <h4 className="mt-5 text-sm font-bold text-slate-900">Acessórios e consumíveis</h4>
+                <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full text-xs"><thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-2">Código</th><th className="p-2">Descrição</th><th className="p-2">Fórmula / origem</th><th className="p-2 text-right">Consumo</th><th className="p-2">Situação</th></tr></thead>
+                    <tbody>{resultadosAcessorios.map((res,i)=>{
+                      if(res.ativo===false) return null
+                      const item=rascunho.acessorios[i]
+                      return <tr key={i} className="border-t border-slate-100"><td className="p-2 font-semibold">{item.codigo}</td><td className="p-2">{item.descricao || '—'}</td><td className="p-2 font-mono">{res.calculo}</td><td className="p-2 text-right font-semibold">{res.valor===null ? (item.quantidade_referencia ?? 'A validar') : medida(res.valor)} {item.unidade || 'UN'}</td><td className={res.erro ? 'p-2 text-red-700' : res.valor===null ? 'p-2 text-amber-700' : 'p-2 text-emerald-700'}>{res.erro || (res.valor===null ? 'Somente referência' : 'Calculado')}</td></tr>
+                    })}</tbody>
+                  </table>
+                </div>
+                {vidroTeste && <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">
+                  <h4 className="font-bold text-slate-900">Vidro — corte</h4>
+                  <p>{vidroTeste.quantidade} peças × {medida(vidroTeste.largura)} × {medida(vidroTeste.altura)} mm</p>
+                  <p className="mt-1 text-xs text-slate-600">Fórmula largura: {rascunho.vidro.formula_largura || '—'} · altura: {rascunho.vidro.formula_altura || '—'} · quantidade: {rascunho.vidro.formula_quantidade || rascunho.vidro.quantidade || '—'}</p>
+                </div>}
+                <div className="mt-3 text-xs text-slate-600">
+                  <strong>Descrição no orçamento:</strong> {String(rascunho.metadados_editor?.descricao_orcamento || rascunho.configuracao_label)}
+                </div>
+                {resultadosAcessorios.some(a=>a.erro || (a.ativo!==false && a.valor===null)) && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Há acessórios com fórmula pendente ou inválida. Corrija antes de homologar a revisão; simulações não liberam compra nem produção.</div>}
+                </div>}
 
                 {resultados.length > 0 && rascunho.variaveis.some(v => v.chave === 'numero_folhas') && (() => {
                   const qtd = Number(opcoes.numero_folhas)
@@ -546,10 +718,10 @@ export default function EditorTecnicoPage() {
                     <p className="mt-2 text-xs text-emerald-800">Regra da Esquadrifácio: toda travessa arredonda para cima. A compensação de 19 mm acompanha o aumento de folhas; marcos e acessórios são definidos na receita pela quantidade escolhida.</p>
                   </div>
                 })()}
-                {vidroTeste && <div className="mt-4 rounded-xl bg-sky-50 p-4 text-sm text-sky-900"><strong>Vidro:</strong> {vidroTeste.quantidade} peça(s) de <strong>{medida(vidroTeste.largura)} × {medida(vidroTeste.altura)} mm</strong></div>}
+
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-100 p-4 text-sm text-slate-600"><strong>Acessórios, reforços e outros componentes:</strong> continuam em <Link href="/engenharia/receitas" className="font-semibold text-emerald-700 underline">Receitas Técnicas</Link>. Este editor altera os perfis e fórmulas do Plano de Corte; a receita técnica mantém acessórios e variantes da tipologia.</div>
+
             </section>
           )}
         </div>
