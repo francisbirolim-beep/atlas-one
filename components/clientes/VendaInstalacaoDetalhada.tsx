@@ -38,7 +38,7 @@ function statusLabel(v:string){return v==='instalado'?'Instalado':v==='em_instal
 function badge(v:string){return v==='instalado'?'bg-emerald-100 text-emerald-700':v==='em_instalacao'?'bg-blue-100 text-blue-700':v==='pendencia'?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}
 
 export default function VendaInstalacaoDetalhada({
-  vendaId,obraId,clienteId,orcamentoId,itens,statusGeral,
+  vendaId,obraId,clienteId,orcamentoId,itens,statusGeral,onAtualizar,
 }:{
   vendaId:string
   obraId?:string|null
@@ -46,6 +46,7 @@ export default function VendaInstalacaoDetalhada({
   orcamentoId:string
   itens:any[]
   statusGeral?:string|null
+  onAtualizar?:()=>void
 }){
   const [lista,setLista]=useState<InstalacaoItem[]>([])
   const [docs,setDocs]=useState<Doc[]>([])
@@ -85,11 +86,14 @@ export default function VendaInstalacaoDetalhada({
       item_ref:refItem(item,idx),ambiente:ambiente(item,idx),descricao:descricao(item),
       quantidade:Math.max(0,Number(item?.quantidade||1)),quantidade_instalada:0,status:'pendente',
     })).filter(x=>!existentes.has(x.item_ref))
+    let inseridos=false
     if(novos.length){
       const ins=await supabase.from('venda_instalacao_itens').insert(novos)
       if(ins.error){setErro('Não foi possível preparar os itens de instalação: '+ins.error.message)}
+      else inseridos=true
     }
     await carregar()
+    if(inseridos)onAtualizar?.()
   }
 
   async function patch(id:string,patch:Record<string,any>){
@@ -99,6 +103,7 @@ export default function VendaInstalacaoDetalhada({
     setSalvandoId(null)
     if(r.error){setErro(r.error.message);return false}
     setLista(atual=>atual.map(x=>x.id===id?{...x,...patch}:x))
+    onAtualizar?.()
     return true
   }
 
