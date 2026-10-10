@@ -754,11 +754,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       const recalc=await recalcularAproveitamentoPacote(pacoteTecnicoId,sobraIds)
       if(!recalc.ok)setMensagemMateriais(`${mensagem} A lista técnica foi salva, mas o recálculo de compra precisa de conferência: ${recalc.error||'erro no recálculo'}.`)
       else{
-        const token=await tokenAtual()
-        if(token&&venda){
-          await fetch('/api/vendas/reconstruir-fluxo',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({vendaId:venda.id,acao:'materializar_compras'})}).catch(()=>null)
-        }
-        setMensagemMateriais(mensagem)
+        // Alterar a lista técnica não emite uma compra. O usuário precisa
+        // validar a categoria e gerar explicitamente sua lista de cotação.
+        setMensagemMateriais(mensagem+(lotesCotacao.length?' Confira se precisa reemitir alguma cotação já gerada.':''))
       }
     }else setMensagemMateriais(mensagem)
     await carregar()
@@ -945,9 +943,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         pacoteId=gerado.pacote.id
       }
 
-      const compras=await chamar({acao:'materializar_compras'})
+      // A criação do pacote técnico não deve antecipar a compra:
+      // o comprador receberá cards apenas após validar e emitir a cotação.
       setMensagemFluxo(
-        `${preparado.mensagem} Pacote técnico ${pacoteId?'gerado/conferível':'preparado'}; ${compras.compras?.totalLinhas||0} linha(s) sincronizadas com Compras. As ordens de Produção foram criadas bloqueadas para respeitar Medição Final e liberação de materiais.`
+        `${preparado.mensagem} Pacote técnico ${pacoteId?'gerado/conferível':'preparado'}. Confira Materiais e clique em Validar e gerar cotação por categoria. As ordens de Produção permanecem sujeitas à Medição Final e à liberação técnica.`
       )
       await carregar()
     }catch(e){
@@ -1327,9 +1326,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
               <div>
                 <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
-                <p className="mt-1 text-xs text-slate-500">Clique em Perfil, Acessório, Vidro ou Outros para visualizar somente os itens daquela categoria, alterar, substituir, incluir ou excluir.</p>
+                <p className="mt-1 text-xs text-slate-500">Confira código, descrição, quantidade, medidas e sobras. Inclua, substitua ou exclua materiais antes de gerar a lista de cotação por categoria.</p>
                 {mensagemMateriais&&<p className="mt-1 text-[11px] font-semibold text-blue-700">{mensagemMateriais}</p>}
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">Ainda comprar: {totalComprarCategoria.toLocaleString('pt-BR')}</span></div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">A cotar: {totalComprarCategoria.toLocaleString('pt-BR')}</span>{lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)&&<span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-700">Cotação emitida · confira alterações antes de reemitir</span>}</div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={()=>void sincronizarMateriaisWVetro(false)} disabled={sincronizandoMateriais||ocupadoMateriais} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{sincronizandoMateriais?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoMateriais?'Sincronizando...':'Sincronizar W.Vetro'}</button>
