@@ -13,6 +13,7 @@
     "vercel:prod": "bash scripts/vercel-prod.sh",
     "release:check": "bash scripts/release-check.sh preview",
     "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts",
+    "test:cotacao-ia": "node scripts/test-cotacao-analise.cjs",
     "test:venda-cmv": "node scripts/test-venda-cmv-regras.cjs",
     "test:venda-fluxo": "node scripts/test-venda-fluxo-resumo.cjs",
     "test:producao-medicao": "node scripts/test-producao-vinculo-medicao.cjs",
