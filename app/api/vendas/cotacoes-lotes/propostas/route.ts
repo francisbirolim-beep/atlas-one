@@ -8,6 +8,7 @@ import { conferirProposta, normalizarCodigo, type SolicitadoCotacao, type Extrai
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
+export const maxDuration=60
 const bucket='compras-cotacoes'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const erro=(msg:string,status=400)=>NextResponse.json({error:msg},{status})
