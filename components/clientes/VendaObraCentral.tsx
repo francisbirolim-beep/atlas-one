@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Factory,
-  FileText, ImageIcon, Loader2, PackageCheck, Receipt, RefreshCw, ShoppingCart, Wallet, Wrench, X
+  Boxes, FileDown, FileText, ImageIcon, Loader2, PackageCheck, Pencil, Plus, Receipt, RefreshCw, Replace, ShoppingCart, Trash2, Wallet, Wrench, X
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { registrarRecebimentoVendaComDesconto } from '@/lib/cliente360Recebimentos'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
-import { gerarPacoteTecnico } from '@/lib/materialPlanejamento'
+import { adicionarMaterialManual, ajustarMaterial, excluirMaterialDoPacote, gerarPacoteTecnico, recalcularAproveitamentoPacote } from '@/lib/materialPlanejamento'
 
 type Venda = {
   id:string
@@ -32,7 +32,6 @@ type Orcamento = {
 }
 type Conta = { id:string; venda_obra_id?:string|null; valor?:number|null; valor_pago?:number|null; valor_desconto?:number|null; status?:string|null; vencimento?:string|null; documento?:string|null; parcela?:number|null; total_parcelas?:number|null }
 type Compra = { id:string; produto_id?:string|null; descricao?:string|null; categoria?:string|null; quantidade?:number|null; unidade?:string|null; status?:string|null; recebido_em?:string|null; created_at:string }
-type ProdutoCompra = { id:string; codigo?:string|null; nome?:string|null; foto_url?:string|null; categoria?:string|null }
 type CotacaoCompra = { id:string; necessidade_id:string; fornecedor_id?:string|null; preco_unitario?:number|null; frete?:number|null; prazo_dias?:number|null; previsao_entrega?:string|null; selecionada?:boolean|null }
 type FornecedorCompra = { id:string; nome:string }
 type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:string|null; quantidade?:number|null; status?:string|null; created_at:string }
@@ -40,7 +39,8 @@ type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
 type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null }
-type MaterialTecnico = { id:string; produto_id?:string|null; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null; custo_wvetro?:number|null; venda_wvetro?:number|null; wvetro_dados?:Record<string,any>|null }
+type MaterialTecnico = { id:string; produto_id?:string|null; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; status_calculo?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null; custo_wvetro?:number|null; venda_wvetro?:number|null; wvetro_dados?:Record<string,any>|null }
+type ProdutoMaterial = { id:string; codigo?:string|null; nome?:string|null; unidade?:string|null; tamanho_barra_mm?:number|null; foto_url?:string|null; categoria?:string|null }
 
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
@@ -75,31 +75,17 @@ function progressoItens(lista:Compra[], predicado:(item:Compra)=>boolean){
 function rotuloCategoria(cat:'perfil'|'vidro'|'acessorios'|'outros'){
   return cat==='perfil'?'Perfil':cat==='vidro'?'Vidro':cat==='acessorios'?'Acessórios':'Outros'
 }
-function temaCategoria(cat:'perfil'|'vidro'|'acessorios'|'outros'){
-  if(cat==='perfil')return {borda:'border-blue-300',fundo:'bg-blue-50/50',texto:'text-blue-700',barra:'bg-blue-600'}
-  if(cat==='acessorios')return {borda:'border-violet-300',fundo:'bg-violet-50/50',texto:'text-violet-700',barra:'bg-violet-600'}
-  if(cat==='vidro')return {borda:'border-cyan-300',fundo:'bg-cyan-50/50',texto:'text-cyan-700',barra:'bg-cyan-600'}
-  return {borda:'border-amber-300',fundo:'bg-amber-50/50',texto:'text-amber-700',barra:'bg-amber-500'}
+function categoriaMaterialTecnico(v?:string|null):'perfil'|'vidro'|'acessorios'|'outros'{
+  const s=String(v||'').toLowerCase()
+  if(s==='perfil'||s==='contramarco')return 'perfil'
+  if(s==='acessorio')return 'acessorios'
+  if(s==='vidro')return 'vidro'
+  return 'outros'
 }
-function imagemWvetroMaterial(material?:MaterialTecnico|null){
-  const d=material?.wvetro_dados||{}
+function imagemWvetroMaterial(m?:MaterialTecnico|null){
+  const d=m?.wvetro_dados||{}
   const candidatos=[d.imagem_atlas_url,d.imagemAtlasUrl,d.imagem_url,d.image_url,d.foto_url,d.fotoUrl]
-  return candidatos.find((v:any)=>typeof v==='string'&&v.trim())||null
-}
-function ItemCompraVisual({codigo,descricao,imagem,imagemObrigatoria}:{codigo?:string|null;descricao:string;imagem?:string|null;imagemObrigatoria:boolean}){
-  return <div className="flex min-w-[250px] items-center gap-3">
-    <div className={`grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border bg-white ${!imagem&&imagemObrigatoria?'border-amber-300':'border-slate-200'}`}>
-      {imagem?<img src={imagem} alt={descricao} className="h-full w-full object-contain p-1"/>:<ImageIcon size={18} className={imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
-    </div>
-    <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-600">{codigo||'Sem código'}</span>
-        {!imagem&&imagemObrigatoria&&<span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Imagem pendente</span>}
-      </div>
-      <b className="mt-1 block text-sm text-slate-800">{descricao}</b>
-      {!imagem&&imagemObrigatoria&&<p className="mt-0.5 text-[10px] text-amber-700">Cadastrar imagem no produto técnico.</p>}
-    </div>
-  </div>
+  return candidatos.find((x:any)=>typeof x==='string'&&x.trim())||null
 }
 
 function Kpi({titulo,valor,detalhe,destaque}:{titulo:string;valor:string;detalhe?:string;destaque?:boolean}){
@@ -127,7 +113,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
   const [compras,setCompras]=useState<Compra[]>([])
-  const [produtosCompras,setProdutosCompras]=useState<Record<string,ProdutoCompra>>({})
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
   const [fornecedoresCompras,setFornecedoresCompras]=useState<Record<string,FornecedorCompra>>({})
   const [ordens,setOrdens]=useState<Ordem[]>([])
@@ -136,6 +121,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
+  const [produtosMateriais,setProdutosMateriais]=useState<Record<string,ProdutoMaterial>>({})
+  const [categoriaMaterialAberta,setCategoriaMaterialAberta]=useState<'perfil'|'acessorios'|'vidro'|'outros'>('perfil')
+  const [ocupadoMateriais,setOcupadoMateriais]=useState(false)
   const [pacoteTecnicoId,setPacoteTecnicoId]=useState<string|null>(null)
   const [sincronizandoMateriais,setSincronizandoMateriais]=useState(false)
   const [mensagemMateriais,setMensagemMateriais]=useState('')
@@ -186,11 +174,18 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const pacoteResp=await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id',v.orcamento_id).neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
     if(pacoteResp.data?.id){
       setPacoteTecnicoId(pacoteResp.data.id)
-      const mt=await supabase.from('pacote_tecnico_materiais').select('id,produto_id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,incluido_manual,justificativa_ajuste,custo_wvetro,venda_wvetro,wvetro_dados').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem')
-      setMateriaisTecnicos((mt.data||[]) as MaterialTecnico[])
+      const mt=await supabase.from('pacote_tecnico_materiais').select('id,produto_id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,status_calculo,incluido_manual,justificativa_ajuste,custo_wvetro,venda_wvetro,wvetro_dados').eq('pacote_id',pacoteResp.data.id).eq('excluido',false).order('categoria').order('ordem')
+      const materiais=(mt.data||[]) as MaterialTecnico[]
+      setMateriaisTecnicos(materiais)
+      const produtoIds=[...new Set(materiais.map(m=>m.produto_id).filter(Boolean))] as string[]
+      if(produtoIds.length){
+        const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').in('id',produtoIds)
+        setProdutosMateriais(Object.fromEntries(((pr.data||[]) as ProdutoMaterial[]).map(p=>[p.id,p])))
+      }else setProdutosMateriais({})
     }else{
       setPacoteTecnicoId(null)
       setMateriaisTecnicos([])
+      setProdutosMateriais({})
     }
 
     const contasBase=((co.data||[]) as Conta[])
@@ -220,12 +215,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       setCompras(comprasObra)
       setDocumentos((dc.data||[]) as Documento[])
 
-      const produtoIds=[...new Set(comprasObra.map(item=>item.produto_id).filter(Boolean))] as string[]
-      if(produtoIds.length){
-        const produtos=await supabase.from('produtos').select('id,codigo,nome,foto_url,categoria').in('id',produtoIds)
-        setProdutosCompras(Object.fromEntries(((produtos.data||[]) as ProdutoCompra[]).map(item=>[item.id,item])))
-      }else setProdutosCompras({})
-
       const necessidadeIds=comprasObra.map(item=>item.id)
       if(necessidadeIds.length){
         const cot=await supabase.from('compras_cotacoes').select('id,necessidade_id,fornecedor_id,preco_unitario,frete,prazo_dias,previsao_entrega,selecionada').in('necessidade_id',necessidadeIds).eq('selecionada',true)
@@ -243,7 +232,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     }else{
       setObra(null)
       setCompras([])
-      setProdutosCompras({})
       setCotacoesCompras([])
       setFornecedoresCompras({})
       setDocumentos([])
@@ -310,49 +298,34 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     return base
   },[compras])
   const listaCategoria=comprasPorCategoria[categoriaAberta]
-  const materiaisPorProduto=useMemo(()=>{
-    const mapa:Record<string,MaterialTecnico>={}
-    materiaisTecnicos.forEach(item=>{if(item.produto_id&&!mapa[item.produto_id])mapa[item.produto_id]=item})
-    return mapa
-  },[materiaisTecnicos])
-  const materiaisPorDescricao=useMemo(()=>{
-    const mapa:Record<string,MaterialTecnico>={}
-    materiaisTecnicos.forEach(item=>{const chave=String(item.descricao||'').trim().toLocaleLowerCase('pt-BR');if(chave&&!mapa[chave])mapa[chave]=item})
-    return mapa
-  },[materiaisTecnicos])
-  function visualCompra(item:Compra){
-    const produto=item.produto_id?produtosCompras[item.produto_id]:undefined
-    const chave=String(item.descricao||'').trim().toLocaleLowerCase('pt-BR')
-    const material=(item.produto_id?materiaisPorProduto[item.produto_id]:undefined)||materiaisPorDescricao[chave]
-    const categoria=categoriaMaterial(item.categoria||produto?.categoria||material?.categoria)
-    return {
-      categoria,
-      codigo:produto?.codigo||material?.codigo||null,
-      descricao:item.descricao||produto?.nome||material?.descricao||rotuloCategoria(categoria),
-      imagem:produto?.foto_url||imagemWvetroMaterial(material),
-      imagemObrigatoria:categoria==='perfil'||categoria==='acessorios',
-    }
-  }
-  const comprasKanban=useMemo(()=>{
-    const base:{faltas:Compra[];cotacao:Compra[];comprado:Compra[];entrega:Compra[];recebido:Compra[]}={faltas:[],cotacao:[],comprado:[],entrega:[],recebido:[]}
-    listaCategoria.forEach(item=>{
-      const st=String(item.status||'').toLowerCase()
-      if(item.recebido_em||st==='recebido')base.recebido.push(item)
-      else if(st==='aguardando_entrega')base.entrega.push(item)
-      else if(st==='aprovado'||st==='pedido_emitido')base.comprado.push(item)
-      else if(st==='cotacao')base.cotacao.push(item)
-      else base.faltas.push(item)
-    })
+  const materiaisPorCategoria=useMemo(()=>{
+    const base:{perfil:MaterialTecnico[];acessorios:MaterialTecnico[];vidro:MaterialTecnico[];outros:MaterialTecnico[]}={perfil:[],acessorios:[],vidro:[],outros:[]}
+    materiaisTecnicos.forEach(m=>base[categoriaMaterialTecnico(m.categoria)].push(m))
     return base
-  },[listaCategoria])
-  const totalImagensPendentes=useMemo(()=>compras.filter(item=>{
-    const produto=item.produto_id?produtosCompras[item.produto_id]:undefined
-    const chave=String(item.descricao||'').trim().toLocaleLowerCase('pt-BR')
-    const material=(item.produto_id?materiaisPorProduto[item.produto_id]:undefined)||materiaisPorDescricao[chave]
-    const categoria=categoriaMaterial(item.categoria||produto?.categoria||material?.categoria)
-    const imagem=produto?.foto_url||imagemWvetroMaterial(material)
-    return (categoria==='perfil'||categoria==='acessorios')&&!imagem
-  }).length,[compras,produtosCompras,materiaisPorProduto,materiaisPorDescricao])
+  },[materiaisTecnicos])
+  const materiaisCategoria=materiaisPorCategoria[categoriaMaterialAberta]
+  function compraRelacionadaMaterial(m:MaterialTecnico){
+    const descricao=String(m.descricao||'').trim().toLocaleLowerCase('pt-BR')
+    return compras.find(c=>
+      (m.produto_id&&c.produto_id===m.produto_id)||
+      (descricao&&String(c.descricao||'').trim().toLocaleLowerCase('pt-BR')===descricao)
+    )||null
+  }
+  function colunaMaterial(m:MaterialTecnico):'faltas'|'cotacao'|'comprado'|'entrega'|'recebido'{
+    const c=compraRelacionadaMaterial(m)
+    const st=String(c?.status||'').toLowerCase()
+    if(c?.recebido_em||st==='recebido')return 'recebido'
+    if(st==='aguardando_entrega')return 'entrega'
+    if(st==='aprovado'||st==='pedido_emitido')return 'comprado'
+    if(st==='cotacao')return 'cotacao'
+    return 'faltas'
+  }
+  const kanbanMateriais=useMemo(()=>{
+    const base:{faltas:MaterialTecnico[];cotacao:MaterialTecnico[];comprado:MaterialTecnico[];entrega:MaterialTecnico[];recebido:MaterialTecnico[]}={faltas:[],cotacao:[],comprado:[],entrega:[],recebido:[]}
+    materiaisCategoria.forEach(m=>base[colunaMaterial(m)].push(m))
+    return base
+  },[materiaisCategoria,compras])
+  function imagemMaterial(m:MaterialTecnico){return (m.produto_id?produtosMateriais[m.produto_id]?.foto_url:null)||imagemWvetroMaterial(m)}
 
   const setorPorNome=useMemo(()=>{
     const r:Record<string,SetorColuna>={}
@@ -363,6 +336,103 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const colunaInstalacao=setorPorNome.instalacao
   const progressoInstalacao=colunaInstalacao?.nome.toLowerCase().includes('conclu')?100:colunaInstalacao?.nome.toLowerCase().includes('em instala')?60:colunaInstalacao?.nome.toLowerCase().includes('agendada')?30:colunaInstalacao?10:0
   const itens=(Array.isArray(orcamento?.itens)?orcamento?.itens:Array.isArray(venda?.itens_snapshot)?venda?.itens_snapshot:[])||[]
+
+  async function atualizarFluxoMateriais(mensagem:string){
+    if(pacoteTecnicoId){
+      const sep=await supabase.from('pacote_tecnico_separacoes').select('sobra_estoque_id,status').eq('pacote_id',pacoteTecnicoId).neq('status','cancelado')
+      const sobraIds=[...new Set((sep.data||[]).map((x:any)=>x.sobra_estoque_id).filter(Boolean))] as string[]
+      const recalc=await recalcularAproveitamentoPacote(pacoteTecnicoId,sobraIds)
+      if(!recalc.ok)setMensagemMateriais(`${mensagem} A lista técnica foi salva, mas o recálculo de compra precisa de conferência: ${recalc.error||'erro no recálculo'}.`)
+      else{
+        const token=await tokenAtual()
+        if(token&&venda){
+          await fetch('/api/vendas/reconstruir-fluxo',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({vendaId:venda.id,acao:'materializar_compras'})}).catch(()=>null)
+        }
+        setMensagemMateriais(mensagem)
+      }
+    }else setMensagemMateriais(mensagem)
+    await carregar()
+  }
+
+  async function editarMaterialCentral(m:MaterialTecnico){
+    const qtdAtual=Number(m.quantidade_ajustada??m.quantidade_tecnica??0)
+    const quantidade=window.prompt(`Quantidade de ${m.codigo||m.descricao}:`,String(qtdAtual).replace('.',','))
+    if(quantidade==null)return
+    const descricao=window.prompt(categoriaMaterialTecnico(m.categoria)==='vidro'?'Descrição / medida do vidro:':'Descrição do material:',m.descricao)
+    if(descricao==null||!descricao.trim())return
+    let corte=m.comprimento_corte_mm??null
+    if(categoriaMaterialTecnico(m.categoria)==='perfil'){
+      const valorCorte=window.prompt('Medida / corte em mm (deixe vazio quando não se aplicar):',corte?String(corte):'')
+      if(valorCorte==null)return
+      corte=valorCorte.trim()?numeroEntrada(valorCorte):null
+    }
+    const motivo=window.prompt('Motivo da alteração:','Ajuste após conferência da obra')||''
+    if(motivo.trim().length<3)return
+    setOcupadoMateriais(true);setErro('')
+    const r=await ajustarMaterial(m.id,{quantidade_ajustada:Math.max(0,numeroEntrada(quantidade)),descricao:descricao.trim(),comprimento_corte_mm:corte,justificativa_ajuste:motivo})
+    setOcupadoMateriais(false)
+    if(!r.ok){setErro(r.error||'Não foi possível alterar o material.');return}
+    await atualizarFluxoMateriais(`${m.codigo||m.descricao} atualizado. Compras recalculadas com a nova necessidade.`)
+  }
+
+  async function substituirMaterialCentral(m:MaterialTecnico){
+    const codigo=window.prompt(`Código do material que substituirá ${m.codigo||m.descricao}:`,'')?.trim()
+    if(!codigo)return
+    const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').ilike('codigo',codigo).limit(5)
+    const produto=((pr.data||[]) as ProdutoMaterial[]).find(p=>String(p.codigo||'').toLocaleLowerCase('pt-BR')===codigo.toLocaleLowerCase('pt-BR'))
+    if(!produto){setErro(`Não encontrei o código ${codigo} no cadastro de produtos.`);return}
+    const catNova=categoriaMaterial(produto.categoria)
+    const catAtual=categoriaMaterialTecnico(m.categoria)
+    if(catAtual!=='outros'&&catNova!==catAtual){setErro(`O código ${produto.codigo} pertence a outra categoria. Faça a troca dentro da categoria correta.`);return}
+    const motivo=window.prompt('Motivo da substituição:','Substituição validada para esta obra')||''
+    if(motivo.trim().length<3)return
+    setOcupadoMateriais(true);setErro('')
+    const r=await ajustarMaterial(m.id,{produto_id:produto.id,codigo:produto.codigo||null,descricao:produto.nome||produto.codigo||m.descricao,comprimento_barra_mm:produto.tamanho_barra_mm||m.comprimento_barra_mm||null,justificativa_ajuste:`Substituído ${m.codigo||m.descricao} por ${produto.codigo||produto.nome}. ${motivo}`})
+    setOcupadoMateriais(false)
+    if(!r.ok){setErro(r.error||'Não foi possível substituir o material.');return}
+    await atualizarFluxoMateriais(`${m.codigo||m.descricao} substituído por ${produto.codigo||produto.nome}. Histórico preservado.`)
+  }
+
+  async function excluirMaterialCentral(m:MaterialTecnico){
+    if(!window.confirm(`Excluir ${m.codigo||m.descricao} desta venda?`))return
+    const motivo=window.prompt('Motivo da exclusão:','Material retirado após conferência')||''
+    if(motivo.trim().length<3)return
+    setOcupadoMateriais(true);setErro('')
+    const r=await excluirMaterialDoPacote(m.id,motivo)
+    setOcupadoMateriais(false)
+    if(!r.ok){setErro(r.error||'Não foi possível excluir o material.');return}
+    await atualizarFluxoMateriais(`${m.codigo||m.descricao} retirado desta venda e lista de compras recalculada.`)
+  }
+
+  async function adicionarMaterialCentral(){
+    if(!pacoteTecnicoId){setErro('Esta venda ainda não possui pacote técnico.');return}
+    const codigo=window.prompt('Código do material (opcional):','')?.trim()||''
+    let produto:ProdutoMaterial|null=null
+    if(codigo){
+      const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').ilike('codigo',codigo).limit(5)
+      produto=(((pr.data||[]) as ProdutoMaterial[]).find(p=>String(p.codigo||'').toLocaleLowerCase('pt-BR')===codigo.toLocaleLowerCase('pt-BR')))||null
+      if(!produto&&!window.confirm(`O código ${codigo} não está cadastrado. Deseja incluir este material manualmente nesta venda?`))return
+    }
+    const descricao=window.prompt(categoriaMaterialAberta==='vidro'?'Descrição e medida do vidro:':'Descrição do material:',produto?.nome||'')?.trim()
+    if(!descricao)return
+    const quantidade=window.prompt('Quantidade:','1')
+    if(quantidade==null)return
+    const cor=window.prompt('Cor / acabamento (opcional):','')?.trim()||null
+    let corte:number|null=null
+    if(categoriaMaterialAberta==='perfil'){
+      const valor=window.prompt('Medida / corte em mm (opcional):','')
+      if(valor==null)return
+      corte=valor.trim()?numeroEntrada(valor):null
+    }
+    const motivo=window.prompt('Motivo da inclusão:','Material acrescentado após conferência')||''
+    if(motivo.trim().length<3)return
+    const categoriaBanco=categoriaMaterialAberta==='acessorios'?'acessorio':categoriaMaterialAberta==='outros'?'outro':categoriaMaterialAberta
+    setOcupadoMateriais(true);setErro('')
+    const r=await adicionarMaterialManual(pacoteTecnicoId,{categoria:categoriaBanco as any,produto_id:produto?.id||null,codigo:produto?.codigo||codigo||null,descricao,unidade:produto?.unidade||'UN',cor_ref:cor,quantidade:Math.max(0,numeroEntrada(quantidade)),comprimento_corte_mm:corte,comprimento_barra_mm:produto?.tamanho_barra_mm||null,justificativa:motivo})
+    setOcupadoMateriais(false)
+    if(!r.ok){setErro(r.error||'Não foi possível adicionar o material.');return}
+    await atualizarFluxoMateriais(`${produto?.codigo||codigo||descricao} incluído nesta venda e conectado à lista de compras.`)
+  }
 
   async function registrarRecebimento(){
     if(!venda||!cliente)return
@@ -631,121 +701,88 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">A estrutura já está separada nesta venda. Na próxima etapa, Perfil, Vidro, Acessórios, Mão de obra, Instalação, Frete e Outros serão alimentados com previsto x realizado e custo por tipologia.</div>
         </Box>}
 
-        {aba==='compras'&&<Box titulo="Compras desta obra">
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <b className="text-sm text-slate-900">Acompanhamento de compras por categoria</b>
-              <p className="mt-1 text-xs text-slate-500">Selecione Perfis, Acessórios, Vidros ou Outros para ver o percentual comprado, o que já foi pedido e o que ainda falta.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm">{Math.round(progressoCompras)}% comprado</span>
-              <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm">{comprasEfetivadas}/{compras.length||0} itens</span>
-              {totalImagensPendentes>0&&<Link href="/cadastro/produtos" className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">{totalImagensPendentes} imagem(ns) pendente(s)</Link>}
-            </div>
-          </div>
+        {aba==='compras'&&<Box titulo="Compras e materiais desta obra">
+          <div className="space-y-2">{compras.map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b className="text-sm">{c.descricao||c.categoria||'Material'}</b><p className="text-xs text-slate-500">{c.quantidade||0} {c.unidade||''} · {c.categoria||'Sem categoria'} · lançado em {dataBR(c.created_at)}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${c.recebido_em||finalizada(c.status)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{c.recebido_em?'Recebido':status(c.status)}</span></div>)}{!compras.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhuma compra/material vinculado à obra ainda.</p>}</div>
+        </Box>}
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {(['perfil','acessorios','vidro','outros'] as const).map(cat=>{
-              const lista=comprasPorCategoria[cat]
-              const comprados=lista.filter(item=>compraEfetivada(item.status)).length
-              const recebidos=lista.filter(item=>Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido').length
-              const progresso=progressoItens(lista,item=>compraEfetivada(item.status))
-              const tema=temaCategoria(cat)
-              return <button key={cat} type="button" onClick={()=>setCategoriaAberta(cat)} className={'rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm '+(categoriaAberta===cat?tema.borda+' '+tema.fundo+' ring-2 ring-slate-100':'border-slate-200 bg-white')}>
-                <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-900">{rotuloCategoria(cat)}</b><span className={'text-lg font-black '+tema.texto}>{Math.round(progresso)}%</span></div>
-                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100"><div className={'h-full rounded-full '+tema.barra} style={{width:String(progresso)+'%'}}/></div>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500"><span>{comprados}/{lista.length} comprados</span><span>{recebidos} recebidos</span></div>
-              </button>
-            })}
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div><b className="text-sm text-slate-900">Kanban de {rotuloCategoria(categoriaAberta).toLowerCase()}</b><p className="text-[11px] text-slate-500">O item muda de coluna conforme a situação da compra.</p></div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{listaCategoria.length} item(ns)</span>
+        {aba==='materiais'&&(()=>{
+          const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
+          const colunas=[
+            ['faltas','Falta comprar','border-red-200','bg-red-50/60','text-red-700',kanbanMateriais.faltas],
+            ['cotacao','Em cotação','border-blue-200','bg-blue-50/60','text-blue-700',kanbanMateriais.cotacao],
+            ['comprado','Comprado','border-emerald-200','bg-emerald-50/60','text-emerald-700',kanbanMateriais.comprado],
+            ['entrega','Aguardando chegar','border-amber-200','bg-amber-50/70','text-amber-700',kanbanMateriais.entrega],
+            ['recebido','Recebido','border-teal-200','bg-teal-50/60','text-teal-700',kanbanMateriais.recebido],
+          ] as const
+          const rotulo=rotuloCategoria(categoriaMaterialAberta)
+          return <Box titulo="Materiais técnicos desta venda">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+              <div>
+                <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
+                <p className="mt-1 text-xs text-slate-500">Clique em Perfil, Acessório, Vidro ou Outros para visualizar somente os itens daquela categoria, alterar, substituir, incluir ou excluir.</p>
+                {mensagemMateriais&&<p className="mt-1 text-[11px] font-semibold text-blue-700">{mensagemMateriais}</p>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={()=>void sincronizarMateriaisWVetro(false)} disabled={sincronizandoMateriais||ocupadoMateriais} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{sincronizandoMateriais?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoMateriais?'Sincronizando...':'Sincronizar W.Vetro'}</button>
+                {obra?.id&&<Link href={`/obras/${obra.id}/materiais`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><Boxes size={13}/>Editor completo</Link>}
+              </div>
             </div>
-            <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-5">
+
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {([
-                ['faltas','Falta comprar','border-slate-300','bg-slate-50',comprasKanban.faltas],
-                ['cotacao','Em cotação','border-blue-300','bg-blue-50/50',comprasKanban.cotacao],
-                ['comprado','Comprado','border-violet-300','bg-violet-50/50',comprasKanban.comprado],
-                ['entrega','Aguardando chegar','border-amber-300','bg-amber-50/50',comprasKanban.entrega],
-                ['recebido','Recebido','border-emerald-300','bg-emerald-50/50',comprasKanban.recebido],
-              ] as const).map(([id,titulo,borda,fundo,itensColuna])=><div key={id} className={'rounded-xl border-t-4 p-3 '+borda+' '+fundo}>
-                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length}</span></div>
-                <div className="space-y-2">
-                  {itensColuna.slice(0,4).map(item=>{const visual=visualCompra(item);return <div key={item.id} className="flex items-center gap-2 rounded-lg border border-white/80 bg-white p-2 shadow-sm">
-                    <div className={'grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border '+(!visual.imagem&&visual.imagemObrigatoria?'border-amber-300':'border-slate-200')}>
-                      {visual.imagem?<img src={visual.imagem} alt={visual.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className={!visual.imagem&&visual.imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
-                    </div>
-                    <div className="min-w-0"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div></div>
+                ['perfil','Perfil',materiaisPorCategoria.perfil.length,Boxes],
+                ['acessorios','Acessório',materiaisPorCategoria.acessorios.length,PackageCheck],
+                ['vidro','Vidro',materiaisPorCategoria.vidro.length,FileText],
+                ['outros','Outros',materiaisPorCategoria.outros.length,ClipboardList],
+              ] as const).map(([id,label,total,Icon])=><button key={id} type="button" onClick={()=>setCategoriaMaterialAberta(id)} className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${categoriaMaterialAberta===id?'border-blue-600 bg-blue-600 text-white shadow-sm':'border-slate-200 bg-white text-slate-700 hover:border-blue-300'}`}>
+                <span className={`grid h-9 w-9 place-items-center rounded-lg ${categoriaMaterialAberta===id?'bg-white/15':'bg-slate-100'}`}><Icon size={17}/></span>
+                <div><b className="text-sm">{label} ({total} itens)</b><p className={`mt-0.5 text-[11px] ${categoriaMaterialAberta===id?'text-blue-100':'text-slate-400'}`}>Ver somente {label.toLowerCase()}</p></div>
+              </button>)}
+            </div>
+
+            <div className="mt-4 grid items-start gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {colunas.map(([id,titulo,borda,fundo,texto,itensColuna])=><div key={id} className={`overflow-hidden rounded-xl border ${borda} ${fundo}`}>
+                <div className="flex items-center justify-between border-b border-white/80 px-3 py-2.5"><b className={`text-xs ${texto}`}>{titulo} ({itensColuna.length})</b><ChevronRight size={13} className={texto}/></div>
+                <div className="space-y-2 p-2.5">
+                  {itensColuna.slice(0,4).map(m=>{const img=imagemMaterial(m);return <div key={m.id} className="flex items-center gap-2 rounded-lg border border-white bg-white p-2 shadow-sm">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className="text-slate-300"/>}</div>
+                    <div className="min-w-0"><div className="font-mono text-[10px] font-bold text-slate-700">{m.codigo||'Sem código'}</div><div className="truncate text-[11px] text-slate-600">{m.descricao}</div><div className="text-[10px] text-slate-400">Qtd. {Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')} {m.unidade}</div></div>
                   </div>})}
-                  {itensColuna.length>4&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/70 px-2 py-2 text-center text-[10px] font-semibold text-slate-500">+ {itensColuna.length-4} item(ns)</div>}
-                  {!itensColuna.length&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
+                  {itensColuna.length>4&&<div className="rounded-lg border border-dashed bg-white/70 px-2 py-2 text-center text-[10px] font-bold text-blue-600">Ver todos ({itensColuna.length})</div>}
+                  {!itensColuna.length&&<div className="rounded-lg border border-dashed bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
                 </div>
               </div>)}
             </div>
-          </div>
 
-          <div className="mt-5 overflow-x-auto rounded-xl border">
-            <table className="w-full min-w-[1080px] text-sm">
-              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <tr><th className="px-3 py-2.5">Código / material</th><th className="px-3 py-2.5">Necessário</th><th className="px-3 py-2.5">Comprado</th><th className="px-3 py-2.5">Falta comprar</th><th className="px-3 py-2.5">Fornecedor</th><th className="px-3 py-2.5">Previsão</th><th className="px-3 py-2.5">Status</th></tr>
-              </thead>
-              <tbody>
-                {listaCategoria.map(item=>{
-                  const visual=visualCompra(item)
-                  const cot=cotacaoPorNecessidade[item.id]
-                  const fornecedor=cot?.fornecedor_id?fornecedoresCompras[cot.fornecedor_id]?.nome:null
-                  const comprado=compraEfetivada(item.status)
-                  const recebidoItem=Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido'
-                  const qtd=Number(item.quantidade||0)
-                  const unidade=item.unidade||''
-                  return <tr key={item.id} className="border-t align-middle">
-                    <td className="px-3 py-3"><ItemCompraVisual codigo={visual.codigo} descricao={visual.descricao} imagem={visual.imagem} imagemObrigatoria={visual.imagemObrigatoria}/></td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">{qtd.toLocaleString('pt-BR')} {unidade}</td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">{(comprado?qtd:0).toLocaleString('pt-BR')} {unidade}</td>
-                    <td className={'px-3 py-3 font-bold '+(comprado?'text-emerald-700':'text-amber-700')}>{(comprado?0:qtd).toLocaleString('pt-BR')} {unidade}</td>
-                    <td className="px-3 py-3 text-slate-600">{fornecedor||'—'}</td>
-                    <td className="px-3 py-3 text-slate-600">{dataBR(cot?.previsao_entrega)}</td>
-                    <td className="px-3 py-3"><span className={'rounded-full px-2 py-1 text-xs font-bold '+(recebidoItem?'bg-emerald-100 text-emerald-700':comprado?'bg-violet-100 text-violet-700':String(item.status||'').toLowerCase()==='cotacao'?'bg-blue-100 text-blue-700':'bg-slate-100 text-slate-600')}>{recebidoItem?'Recebido':status(item.status)}</span></td>
-                  </tr>
-                })}
-                {!listaCategoria.length&&<tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-3 text-[11px] text-slate-500">Regra: Perfis e Acessórios devem exibir código, descrição e imagem técnica. Quando a imagem estiver ausente, o Atlas sinaliza o cadastro pendente sem bloquear o acompanhamento da compra.</p>
-        </Box>}
-        {aba==='materiais'&&<Box titulo="Materiais técnicos desta venda">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
-            <div><b className="text-sm text-slate-800">Pacote técnico da venda</b><p className="mt-1 text-xs text-slate-500">{pacoteTecnicoId?'Perfis, acessórios e vidros do W.Vetro + ajustes validados no Atlas.':'Ainda não existe pacote técnico. O Atlas tenta localizar e carregar o W.Vetro automaticamente.'}</p>{mensagemMateriais&&<p className="mt-1 text-[11px] text-blue-700">{mensagemMateriais}</p>}</div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={()=>void sincronizarMateriaisWVetro(false)} disabled={sincronizandoMateriais} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{sincronizandoMateriais?<Loader2 size={13} className="animate-spin"/>:<PackageCheck size={13}/>} {sincronizandoMateriais?'Sincronizando...':'Sincronizar W.Vetro'}</button>
-            {obra?.id&&<>
-              <Link href={`/obras/${obra.id}/materiais`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Conferir / editar materiais</Link>
-              <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=perfis`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Perfis</Link>
-              <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=acessorios`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Acessórios</Link>
-              <Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=vidros`} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileText size={13}/>PDF Vidros</Link>
-            </>}
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <div><h3 className="font-bold text-slate-900">Lista completa de materiais - {rotulo}</h3><p className="text-xs text-slate-500">Mostrando somente {rotulo.toLowerCase()}. Alterações ficam registradas e a necessidade de compra é recalculada.</p></div>
+              <div className="flex flex-wrap gap-2">
+                {obra?.id&&grupoPdf&&<Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=${grupoPdf}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileDown size={13}/>Gerar lista de {rotulo.toLowerCase()}</Link>}
+                <button type="button" disabled={ocupadoMateriais||!pacoteTecnicoId} onClick={()=>void adicionarMaterialCentral()} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<Plus size={13}/>}Adicionar material</button>
+              </div>
             </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ['Perfis',materiaisTecnicos.filter(m=>['perfil','contramarco'].includes(String(m.categoria))).length],
-              ['Acessórios',materiaisTecnicos.filter(m=>String(m.categoria)==='acessorio').length],
-              ['Vidros',materiaisTecnicos.filter(m=>String(m.categoria)==='vidro').length],
-              ['Outros',materiaisTecnicos.filter(m=>!['perfil','contramarco','acessorio','vidro'].includes(String(m.categoria))).length],
-            ].map(([nome,total]:any)=><div key={nome} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">{nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{total}</p><p className="mt-1 text-xs text-slate-500">linha(s) no pacote técnico</p></div>)}
-          </div>
-          <div className="mt-4 overflow-x-auto rounded-xl border">
-            <table className="w-full min-w-[1150px] text-sm"><thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5">Categoria</th><th>Código / material</th><th>Qtd. técnica</th><th>Qtd. validada</th><th>Corte</th><th>Custo W.Vetro</th><th>Venda W.Vetro</th><th>Origem</th><th>Ajuste</th></tr></thead><tbody>
-              {materiaisTecnicos.map(m=><tr key={m.id} className="border-t"><td className="px-3 py-3 font-semibold">{m.categoria==='acessorio'?'Acessório':m.categoria==='vidro'?'Vidro':m.categoria==='contramarco'?'Contramarco':m.categoria==='perfil'?'Perfil':'Outro'}</td><td className="px-3 py-3"><b>{m.codigo||'—'}</b>{m.codigo?' · ':''}{m.descricao}{m.cor_ref?<div className="text-[11px] text-slate-400">Cor: {m.cor_ref}</div>:null}</td><td className="px-3 py-3">{Number(m.quantidade_tecnica||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3 font-bold">{Number(m.quantidade_ajustada||0).toLocaleString('pt-BR')} {m.unidade}</td><td className="px-3 py-3">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:'—'}</td><td className="px-3 py-3">{m.custo_wvetro!=null?moeda(m.custo_wvetro):'—'}</td><td className="px-3 py-3">{m.venda_wvetro!=null?moeda(m.venda_wvetro):'—'}</td><td className="px-3 py-3">{m.incluido_manual?'Ajuste Atlas':m.wvetro_dados&&Object.keys(m.wvetro_dados).length?'W.Vetro':'Técnico'}</td><td className="px-3 py-3 text-xs text-slate-500">{m.justificativa_ajuste||'—'}</td></tr>)}
-              {!materiaisTecnicos.length&&<tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Nenhum material técnico carregado. Clique em “Sincronizar W.Vetro” para buscar a composição completa desta venda.</td></tr>}
-            </tbody></table>
-          </div>
-          <p className="mt-3 text-xs text-slate-500">Para adicionar um perfil extra, trocar um perfil ou retirar um item, use “Conferir / editar materiais”. A alteração fica registrada com justificativa e os PDFs passam a refletir a versão validada.</p>
-        </Box>}
+
+            <div className="mt-3 overflow-x-auto rounded-xl border">
+              <table className="w-full min-w-[1180px] text-sm">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5">Imagem</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Situação</th><th>Ações</th></tr></thead>
+                <tbody>
+                  {materiaisCategoria.map(m=>{const img=imagemMaterial(m);const col=colunaMaterial(m);const situacao=col==='faltas'?'Falta comprar':col==='cotacao'?'Em cotação':col==='comprado'?'Comprado':col==='entrega'?'Aguardando chegar':'Recebido';const badge=col==='recebido'?'bg-emerald-100 text-emerald-700':col==='comprado'?'bg-teal-100 text-teal-700':col==='entrega'?'bg-amber-100 text-amber-700':col==='cotacao'?'bg-blue-100 text-blue-700':'bg-red-100 text-red-700';return <tr key={m.id} className="border-t align-middle">
+                    <td className="px-3 py-2"><div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-1"/>:<ImageIcon size={17} className="text-slate-300"/>}</div></td>
+                    <td className="px-3 py-3 font-mono text-xs font-bold text-slate-800">{m.codigo||'—'}</td>
+                    <td className="px-3 py-3"><b className="text-slate-800">{m.descricao}</b>{m.justificativa_ajuste&&<div className="mt-1 max-w-[330px] text-[10px] text-slate-400">{m.justificativa_ajuste}</div>}</td>
+                    <td className="px-3 py-3 font-bold text-slate-800">{Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')}</td>
+                    <td className="px-3 py-3 text-slate-600">{m.unidade||'UN'}</td>
+                    <td className="px-3 py-3 text-slate-600">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:m.comprimento_barra_mm?`Barra ${Math.round(Number(m.comprimento_barra_mm))} mm`:'—'}</td>
+                    <td className="px-3 py-3 text-slate-600">{m.cor_ref||'—'}</td>
+                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${badge}`}>{situacao}</span></td>
+                    <td className="px-3 py-3"><div className="flex items-center gap-1.5"><button disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="grid h-8 w-8 place-items-center rounded-lg border text-blue-700 hover:bg-blue-50 disabled:opacity-40"><Pencil size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="grid h-8 w-8 place-items-center rounded-lg border text-violet-700 hover:bg-violet-50 disabled:opacity-40"><Replace size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="grid h-8 w-8 place-items-center rounded-lg border text-red-600 hover:bg-red-50 disabled:opacity-40"><Trash2 size={13}/></button></div></td>
+                  </tr>})}
+                  {!materiaisCategoria.length&&<tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} nesta venda. Use “Adicionar material” ou sincronize com o W.Vetro.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </Box>
+        })()}
 
         {aba==='tipologias'&&<Box titulo="Tipologias vendidas">
           <div className="grid gap-3 md:grid-cols-2">{itens.map((item:any,idx:number)=><div key={item.id||idx} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">Item {idx+1}</p><b className="mt-1 block text-slate-800">{item.ambiente||item.descricao||item.configuracao_nome||item.tipo_esquadria||'Tipologia'}</b><p className="mt-1 text-xs text-slate-500">{item.descricao||item.tipo_outro_texto||''}</p><p className="mt-2 text-xs text-slate-500">Qtd {item.quantidade||1}{item.largura_mm&&item.altura_mm?` · ${item.largura_mm} x ${item.altura_mm} mm`:''}</p></div>)}{!itens.length&&<p className="text-sm text-slate-400">O orçamento desta venda ainda não possui itens estruturados.</p>}</div>
