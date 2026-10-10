@@ -379,11 +379,11 @@ async function fornecedorExistente(empresaId:string,f:any){
 async function produtoExistente(empresaId:string,fornecedorId:string|null,codigo:string,descricao:string){
   const c=cod(codigo)
   if(fornecedorId&&c){
-    const {data}=await supabaseAdmin.from('produto_fornecedores').select('produto_id,codigo_fornecedor,produtos(id,nome,codigo,categoria,unidade,peso_kg_m,tamanho_barra_mm)').eq('empresa_id',empresaId).eq('fornecedor_id',fornecedorId).eq('ativo',true).limit(5000)
+    const {data}=await supabaseAdmin.from('produto_fornecedores').select('produto_id,codigo_fornecedor,produtos(id,nome,codigo,categoria,unidade,peso_kg_m,tamanho_barra_mm,foto_url)').eq('empresa_id',empresaId).eq('fornecedor_id',fornecedorId).eq('ativo',true).limit(5000)
     const x=(data||[]).find((i:any)=>cod(i.codigo_fornecedor)===c)
     if(x)return {produto:(x as any).produtos,metodo:'codigo_fornecedor',confianca:1}
   }
-  const {data}=await supabaseAdmin.from('produtos').select('id,nome,codigo,codigo_origem,categoria,unidade,peso_kg_m,tamanho_barra_mm,status_validacao').eq('empresa_id',empresaId).limit(10000)
+  const {data}=await supabaseAdmin.from('produtos').select('id,nome,codigo,codigo_origem,categoria,unidade,peso_kg_m,tamanho_barra_mm,status_validacao,foto_url').eq('empresa_id',empresaId).limit(10000)
   if(c){
     const xs=(data||[]).filter((p:any)=>[p.codigo,p.codigo_origem].some(v=>cod(v)===c))
     if(xs.length===1)return {produto:xs[0],metodo:'codigo_atlas',confianca:.98}
@@ -452,9 +452,9 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
   let vinculosCatalogo:any[]=[]
   if(ehCatalogo){
     const [rp,rv]=await Promise.all([
-      supabaseAdmin.from('produtos').select('id,nome,codigo,codigo_origem,categoria,unidade,peso_kg_m,tamanho_barra_mm,status_validacao').eq('empresa_id',usuario.empresa_id).limit(12000),
+      supabaseAdmin.from('produtos').select('id,nome,codigo,codigo_origem,categoria,unidade,peso_kg_m,tamanho_barra_mm,status_validacao,foto_url').eq('empresa_id',usuario.empresa_id).limit(12000),
       fornecedor?.id
-        ?supabaseAdmin.from('produto_fornecedores').select('produto_id,codigo_fornecedor,produtos(id,nome,codigo,categoria,unidade,peso_kg_m,tamanho_barra_mm)').eq('empresa_id',usuario.empresa_id).eq('fornecedor_id',fornecedor.id).eq('ativo',true).limit(12000)
+        ?supabaseAdmin.from('produto_fornecedores').select('produto_id,codigo_fornecedor,produtos(id,nome,codigo,categoria,unidade,peso_kg_m,tamanho_barra_mm,foto_url)').eq('empresa_id',usuario.empresa_id).eq('fornecedor_id',fornecedor.id).eq('ativo',true).limit(12000)
         :Promise.resolve({data:[] as any[]}),
     ])
     produtosCatalogo=rp.data||[]
@@ -609,7 +609,17 @@ function motivoPendenciaCatalogo(c:any){
   if(c.tipo==='produto'){
     if(c.acao_sugerida==='revisar_ambiguidade')return 'Encontrei mais de um produto possível para o mesmo item.'
     if(!txt(c.dados?.codigo,120))return 'O catálogo não trouxe código suficiente para vincular este item.'
+    if(!ehCodigoCatalogo(c.dados?.codigo))return 'Código com formato incompatível com os códigos técnicos. Corrija antes de aplicar.'
     if(conflitosProdutoCatalogo(c).length)return 'O catálogo diverge de dados técnicos já cadastrados no Atlas.'
+    const existente=c.deduplicacao?.produto_existente
+    const fotoCadastro=Boolean(existente && cod(existente.codigo)===cod(c.dados?.codigo)
+      && String(existente.categoria||'')===String(c.dados?.categoria||'')
+      && txt(existente.foto_url))
+    const fotoConfirmada=Boolean(txt(c.dados?.imagem_item_url)
+      && c.dados?.imagem_confirmada===true
+      && cod(c.dados?.imagem_codigo_validado)===cod(c.dados?.codigo))
+    if(!fotoCadastro&&!fotoConfirmada)return 'Imagem técnica não confirmada para este código. O cadastro ficará pendente para validação.'
+
     if(Number(c.confianca??0)<.72)return 'A leitura deste item ficou com confiança baixa.'
     return null
   }
@@ -708,7 +718,39 @@ export async function GET(req:NextRequest){
     const {data:entradas,error:e1}=await q;if(e1)throw e1
     let qc=supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(3000);if(entradaId)qc=qc.eq('entrada_id',entradaId);if(['pendente','aprovado','rejeitado','corrigido','aplicado'].includes(status))qc=qc.eq('status',status)
     const {data:candidatos,error:e2}=await qc;if(e2)throw e2
-    const cs=await Promise.all((candidatos||[]).map(async(c:any)=>({...c,pode_validar:await podeValidar(u,c)})))
+    // Comparação estrita de código e categoria: nenhuma imagem é inferida por nome parecido.
+    // Consulta em lotes para evitar URL demasiadamente grande no PostgREST.
+    const codigos=[...new Set((candidatos||[])
+      .filter((c:any)=>c.tipo==='produto' && ['pendente','corrigido','aprovado','aplicado'].includes(c.status))
+      .map((c:any)=>txt(c.dados?.codigo,120).toUpperCase())
+      .filter((codigo:string)=>Boolean(codigo)&&ehCodigoCatalogo(codigo)))];
+    const fotosPorCodigo=new Map<string,any[]>()
+    for(let i=0;i<codigos.length;i+=100){
+      const lote=codigos.slice(i,i+100)
+      const {data:cadastro,error:erroFotos}=await supabaseAdmin.from('produtos')
+        .select('id,codigo,nome,categoria,foto_url')
+        .eq('empresa_id',u.empresa_id).in('codigo',lote).limit(500)
+      if(erroFotos)throw erroFotos
+      for(const produto of cadastro||[]){
+        const codigo=txt(produto.codigo,120).toUpperCase()
+        fotosPorCodigo.set(codigo,[...(fotosPorCodigo.get(codigo)||[]),produto])
+      }
+    }
+    const cs=await Promise.all((candidatos||[]).map(async(c:any)=>{
+      const codigo=txt(c.dados?.codigo,120).toUpperCase()
+      const categoria=txt(c.dados?.categoria,80).toLowerCase()
+      const correspondencias=(fotosPorCodigo.get(codigo)||[])
+        .filter(p=>categoria!=='outro'&&String(p.categoria||'').toLowerCase()===categoria)
+      const unico=correspondencias.length===1?correspondencias[0]:null
+      return {
+        ...c,
+        pode_validar:await podeValidar(u,c),
+        codigo_verificavel:c.tipo==='produto'?Boolean(ehCodigoCatalogo(codigo)):true,
+        foto_cadastro:unico?.foto_url||null,
+        produto_cadastro:unico?{id:unico.id,codigo:unico.codigo,nome:unico.nome,categoria:unico.categoria}:null,
+        codigo_ambiguo:correspondencias.length>1,
+      }
+    }))
     const es=entradas||[]
     return NextResponse.json({
       entradas:await Promise.all(es.map(assinar)),
@@ -809,14 +851,25 @@ export async function PATCH(req:NextRequest){
       if(up)throw new Error(up.message)
       const {data:pub}=supabaseAdmin.storage.from('fotos').getPublicUrl(path)
       const url=pub.publicUrl
-      const dados={...(c.dados||{}),imagem_item_url:url,imagem_catalogo_pagina:num(c?.dados?.pagina_catalogo)}
+      const dados={...(c.dados||{}),imagem_item_url:url,imagem_catalogo_pagina:num(c?.dados?.pagina_catalogo),
+        imagem_confirmada:true,imagem_codigo_validado:txt(c.dados?.codigo,120),imagem_origem:'revisada_na_central'}
       const {data:atualizado,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
         .eq('empresa_id',u.empresa_id).eq('id',id).select('*').single()
       if(ce)throw ce
       if(c.destino_id){
-        const {error:pe}=await supabaseAdmin.from('produtos').update({foto_url:url,updated_at:new Date().toISOString()})
-          .eq('empresa_id',u.empresa_id).eq('id',c.destino_id)
-        if(pe)throw pe
+        // Nunca sobrescrever foto de um produto já catalogado, nem copiar imagem
+        // para produto com código/categoria divergentes da fonte em validação.
+        const {data:produto,error:peBusca}=await supabaseAdmin.from('produtos')
+          .select('codigo,categoria,foto_url').eq('empresa_id',u.empresa_id).eq('id',c.destino_id).maybeSingle()
+        if(peBusca)throw peBusca
+        if(produto && cod(produto.codigo)===cod(c.dados?.codigo)
+          && String(produto.categoria||'')===String(c.dados?.categoria||'')
+          && !txt(produto.foto_url)){
+          const {error:pe}=await supabaseAdmin.from('produtos')
+            .update({foto_url:url,updated_at:new Date().toISOString()})
+            .eq('empresa_id',u.empresa_id).eq('id',c.destino_id).is('foto_url',null)
+          if(pe)throw pe
+        }
       }
       await log(u,'catalogo_imagem_item_salva',entrada.id,id,{destino_id:c.destino_id||null,pagina:num(c?.dados?.pagina_catalogo)})
       return NextResponse.json({candidato:{...atualizado,pode_validar:true},imagem_url:url})
@@ -908,6 +961,29 @@ export async function PATCH(req:NextRequest){
     }
     if(acao==='aprovar'){
       if(!['pendente','corrigido','aprovado'].includes(String(c.status)))return NextResponse.json({error:'Item já concluído.'},{status:409})
+      if(c.tipo==='produto'){
+        const candidatoDados=b?.dados&&typeof b.dados==='object'?b.dados:c.dados||{}
+        const codigo=txt(candidatoDados.codigo,120)
+        if(!ehCodigoCatalogo(codigo))return NextResponse.json({
+          error:'Código não reconhecido como referência técnica. Confira e corrija no catálogo antes de validar.',
+        },{status:422})
+        const categoria=txt(candidatoDados.categoria,60)
+        let fotoValida=Boolean(txt(c.dados?.imagem_item_url)
+          && c.dados?.imagem_confirmada === true
+          && cod(c.dados?.imagem_codigo_validado) === cod(codigo))
+        if(!fotoValida){
+          const {data:existentes,error:erroFoto}=await supabaseAdmin.from('produtos')
+            .select('id,codigo,categoria,foto_url').eq('empresa_id',u.empresa_id)
+            .ilike('codigo',codigo).limit(5)
+          if(erroFoto)throw erroFoto
+          const unicos=(existentes||[]).filter(p=>cod(p.codigo)===cod(codigo)
+            && String(p.categoria||'')===categoria)
+          fotoValida=unicos.length===1&&Boolean(txt(unicos[0].foto_url))
+        }
+        if(!fotoValida)return NextResponse.json({
+          error:'Para validar este produto, confirme o código e vincule primeiro a foto ou desenho correto. Sem imagem verificada, ele permanece pendente.',
+        },{status:422})
+      }
       await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aprovado',validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id)
       const candidatoAplicar={...c,dados:b?.dados&&typeof b.dados==='object'?b.dados:c.dados}
       const destino=await aplicar(u,candidatoAplicar,entrada)
