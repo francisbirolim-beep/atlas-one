@@ -1154,5 +1154,3 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     </div></div>}
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
