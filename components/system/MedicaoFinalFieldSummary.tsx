@@ -44,7 +44,7 @@ const STATUS: Record<StatusOperacionalMedicao, { label: string; classe: string }
   liberado: { label: 'Liberado para medir', classe: 'border-sky-200 bg-sky-50 text-sky-700' },
   em_medicao: { label: 'Em medição', classe: 'border-blue-200 bg-blue-50 text-blue-700' },
   com_pendencia: { label: 'Com pendência', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
-  concluido: { label: 'Enviado — aguardando Liberar Produção', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  concluido: { label: 'Enviado — aguardando liberação da Produção', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
   aprovado: { label: 'Aprovado', classe: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
 }
 
