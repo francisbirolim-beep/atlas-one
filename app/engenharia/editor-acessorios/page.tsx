@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
 import { ArrowLeft, Beaker, Check, ChevronDown, Loader2, PackageOpen, Pencil, Plus, RefreshCw, Save, Trash2, Wrench } from 'lucide-react'
 import { calcularFormulasCorte, FormulaCorteError } from '@/lib/formulasCorteEngine'
 import { calcularAcessoriosTecnicos, FormulaAcessorioError, type ResultadoAcessorioFormula } from '@/lib/formulasAcessoriosEngine'
@@ -12,7 +13,7 @@ import {
   type RegistroFormulaCorte,
   type StatusFormulaAcessorio,
 } from '@/lib/engenhariaFormulasCorte'
-import { listarProdutosTecnicos } from '@/lib/engenhariaReceitas'
+import { listarProdutos } from '@/lib/produtos'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import { listarTipologias, type TipologiaTecnica } from '@/lib/tipologias'
 import type { Produto } from '@/lib/tipos'
@@ -62,7 +63,7 @@ export default function EditorAcessoriosPage() {
     async function carregar() {
       setCarregando(true)
       const [formulas, catalogo, linhasTecnicas, tipologiasTecnicas] = await Promise.all([
-        listarTodasFormulasCorte(), listarProdutosTecnicos(), listarLinhasTecnicas(), listarTipologias(true),
+        listarTodasFormulasCorte(), listarProdutos(), listarLinhasTecnicas(), listarTipologias(true),
       ])
       setRegistros(formulas); setProdutos(catalogo); setLinhas(linhasTecnicas); setTipologias(tipologiasTecnicas)
 
@@ -92,7 +93,9 @@ export default function EditorAcessoriosPage() {
   const tipologiaSelecionada = useMemo(() => tipologias.find(t => t.id === tipologiaId) || null, [tipologias, tipologiaId])
   const configuracoes = useMemo(() => registros.filter(r => r.tipologia_id === tipologiaId), [registros, tipologiaId])
   const selecionada = useMemo(() => registros.find(r => r.id === configuracaoId) || null, [registros, configuracaoId])
-  const acessoriosCatalogo = useMemo(() => produtos.filter(p => p.categoria === 'acessorio' && p.codigo), [produtos])
+  const acessoriosCatalogo = useMemo(() => produtos.filter(p => p.categoria === 'acessorio' && p.codigo && p.ativo !== false && Boolean(p.unidade)), [produtos])
+  const buscarAcessorio = (codigo: string) => produtos.find(p => p.categoria === 'acessorio' && p.codigo?.trim().toUpperCase() === codigo.trim().toUpperCase()) || null
+  const atualizarImagem = (id: string, fotoUrl: string) => setProdutos(anteriores => anteriores.map(p => p.id === id ? { ...p, foto_url: fotoUrl } : p))
   const folhas = extrairFolhas(tipologiaSelecionada?.label || selecionada?.tipologia?.label || '')
 
   useEffect(() => {
@@ -202,13 +205,18 @@ export default function EditorAcessoriosPage() {
           <div className="space-y-3">{rascunho.acessorios.map((item, index) => {
             const aberto = acessorioAberto === index
             const substituindo = substituindoIndex === index
+            const produtoItem = buscarAcessorio(item.codigo || '')
             return <article key={`${index}-${item.codigo}`} className={`overflow-hidden rounded-xl border ${aberto ? 'border-orange-300 shadow-sm' : 'border-slate-200'}`}>
               <button type="button" onClick={() => { setAcessorioAberto(aberto ? null : index); setSubstituindoIndex(null) }} className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-slate-50">
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white">{item.codigo || 'SEM CÓDIGO'}</span><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusClass(item.status)}`}>{STATUS_ACESSORIO.find(s => s.value === (item.status || 'referencia'))?.label}</span></div><div className="mt-1 truncate text-sm font-semibold text-slate-800">{item.descricao || 'Acessório sem descrição'}</div><div className="mt-0.5 text-xs text-slate-500">{item.quantidade_referencia ?? '—'} {item.unidade || ''} · {item.cor || 'SEM COR'}</div></div>
+                <div className="flex min-w-0 items-center gap-3"><ImagemProdutoTecnico codigo={item.codigo} produto={produtoItem} pequeno /><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white">{item.codigo || 'SEM CÓDIGO'}</span><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusClass(item.status)}`}>{STATUS_ACESSORIO.find(s => s.value === (item.status || 'referencia'))?.label}</span></div><div className="mt-1 truncate text-sm font-semibold text-slate-800">{item.descricao || 'Acessório sem descrição'}</div><div className="mt-0.5 text-xs text-slate-500">{item.quantidade_referencia ?? '—'} {item.unidade || ''} · {item.cor || 'SEM COR'}</div></div></div>
                 <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${aberto ? 'rotate-180' : ''}`}/>
               </button>
 
               {aberto && <div className="border-t border-slate-100 bg-white p-4">
+                <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <ImagemProdutoTecnico codigo={item.codigo} produto={produtoItem} permitirEdicao onAtualizar={atualizarImagem}/>
+                  <div className="min-w-0 text-sm text-slate-700"><strong>{item.codigo || 'Sem código'}</strong><p>{item.descricao}</p><p className="mt-1 text-xs text-slate-500">A foto pertence ao cadastro central do produto. Substituí-la não altera a fórmula técnica.</p></div>
+                </div>
                 <div className="mb-4 flex flex-wrap gap-2">
                   <button type="button" onClick={() => setSubstituindoIndex(index)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${substituindo ? 'border-orange-300 bg-orange-50 text-orange-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}><RefreshCw size={14}/> Substituir</button>
                   <button type="button" onClick={() => setSubstituindoIndex(null)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={14}/> Alterar</button>
@@ -243,7 +251,7 @@ export default function EditorAcessoriosPage() {
           {resultados.length > 0 && <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-3">Código</th><th className="p-3">Fórmula</th><th className="p-3">Cálculo neste teste</th><th className="p-3 text-right">Calculado</th><th className="p-3 text-right">Referência</th><th className="p-3">Conferência</th></tr></thead><tbody>{resultados.map(r => {
             const item = rascunho.acessorios[r.index]; const ref = item?.quantidade_referencia
             const bate = r.valor !== null && ref !== undefined && Math.abs(r.valor - ref) < 0.0001
-            return <tr key={`${r.index}-${item?.codigo}`} className="border-t border-slate-100"><td className="p-3"><strong>{item?.codigo}</strong><div className="text-xs text-slate-500">{item?.descricao}</div></td><td className="p-3 font-mono text-xs">{item?.formula_quantidade || 'sem fórmula'}</td><td className="p-3 font-mono text-xs">{r.calculo}</td><td className="p-3 text-right font-semibold">{r.erro ? <span className="text-red-600">Erro</span> : r.valor === null ? '—' : `${formatarNumero(r.valor)} ${item?.unidade || ''}`}</td><td className="p-3 text-right">{ref === undefined ? '—' : `${formatarNumero(ref)} ${item?.unidade || ''}`}</td><td className="p-3">{r.erro ? <span className="text-xs text-red-600">{r.erro}</span> : r.valor === null ? <span className="text-xs text-sky-700">Somente referência</span> : bate ? <span className="text-xs font-semibold text-emerald-700">Bate</span> : <span className="text-xs font-semibold text-amber-700">Diferente</span>}</td></tr>
+            return <tr key={`${r.index}-${item?.codigo}`} className="border-t border-slate-100"><td className="p-3"><div className="flex items-center gap-2"><ImagemProdutoTecnico codigo={item?.codigo || ''} produto={buscarAcessorio(item?.codigo || '')} pequeno/><div><strong>{item?.codigo}</strong><div className="text-xs text-slate-500">{item?.descricao}</div></div></div></td><td className="p-3 font-mono text-xs">{item?.formula_quantidade || 'sem fórmula'}</td><td className="p-3 font-mono text-xs">{r.calculo}</td><td className="p-3 text-right font-semibold">{r.erro ? <span className="text-red-600">Erro</span> : r.valor === null ? '—' : `${formatarNumero(r.valor)} ${item?.unidade || ''}`}</td><td className="p-3 text-right">{ref === undefined ? '—' : `${formatarNumero(ref)} ${item?.unidade || ''}`}</td><td className="p-3">{r.erro ? <span className="text-xs text-red-600">{r.erro}</span> : r.valor === null ? <span className="text-xs text-sky-700">Somente referência</span> : bate ? <span className="text-xs font-semibold text-emerald-700">Bate</span> : <span className="text-xs font-semibold text-amber-700">Diferente</span>}</td></tr>
           })}</tbody></table></div>}
         </div>
       </section>}

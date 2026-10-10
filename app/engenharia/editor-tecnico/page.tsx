@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
 import { ArrowLeft, Beaker, BookOpen, Check, ClipboardCopy, FileDown, Loader2, Plus, Save, Trash2, Wrench } from 'lucide-react'
 import {
   calcularFormulaCorteIsolada,
@@ -19,7 +20,7 @@ import {
   type StatusFormulaCorte,
 } from '@/lib/engenhariaFormulasCorte'
 import { calcularAcessoriosTecnicos, type ResultadoAcessorioFormula } from '@/lib/formulasAcessoriosEngine'
-import { listarProdutosTecnicos } from '@/lib/engenhariaReceitas'
+import { listarProdutos } from '@/lib/produtos'
 import {
   alternarLinhaTecnica,
   listarLinhasTecnicas,
@@ -100,7 +101,7 @@ export default function EditorTecnicoPage() {
       setCarregando(true)
       const [formulas, catalogo, linhasTecnicas, tipologiasTecnicas] = await Promise.all([
         listarTodasFormulasCorte(),
-        listarProdutosTecnicos(),
+        listarProdutos(),
         listarLinhasTecnicas(),
         listarTipologias(true),
       ])
@@ -181,9 +182,12 @@ export default function EditorTecnicoPage() {
   }, [rascunho, largura, altura, opcoes])
 
   const perfis = useMemo(
-    () => produtos.filter(p => p.categoria === 'perfil' && p.codigo),
+    () => produtos.filter(p => p.categoria === 'perfil' && p.codigo && p.ativo !== false && Boolean(p.unidade)),
     [produtos]
   )
+
+  const buscarPerfil = (codigo: string) => produtos.find(p => p.categoria === 'perfil' && p.codigo?.trim().toUpperCase() === codigo.trim().toUpperCase()) || null
+  const atualizarImagem = (id: string, fotoUrl: string) => setProdutos(anteriores => anteriores.map(p => p.id === id ? { ...p, foto_url: fotoUrl } : p))
 
   function escolherConfiguracaoDaTipologia(id: string) {
     const preferida = registros.find(item => item.tipologia_id === id && item.ativo && item.status === 'validada')
@@ -604,8 +608,13 @@ export default function EditorTecnicoPage() {
                 <div className="space-y-3">
                   {rascunho.pecas.map((peca, index) => {
                     const avancada = !peca.codigo && Boolean(peca.grupo)
+                    const produtoItem = buscarPerfil(peca.codigo || '')
                     return (
                       <div key={`${index}-${peca.codigo || peca.grupo || 'peca'}`} className="rounded-xl border border-slate-200 p-4">
+                        <div className="mb-4 flex flex-wrap items-center gap-4">
+                          <ImagemProdutoTecnico codigo={peca.codigo || ''} produto={produtoItem} permitirEdicao onAtualizar={atualizarImagem} />
+                          <div className="text-sm"><span className="font-mono font-semibold text-slate-800">{peca.codigo || peca.grupo || 'Sem código'}</span><p className="text-slate-600">{peca.descricao || 'Perfil sem descrição'}</p><p className="mt-1 text-xs text-slate-400">Foto do cadastro técnico central; a fórmula não é modificada.</p></div>
+                        </div>
                         {avancada && <div className="mb-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Regra legada avançada ({peca.grupo}). Ela é preservada, mas o código não pode ser trocado neste editor simples.</div>}
                         <div className="grid gap-3 md:grid-cols-12">
                           <label className="text-xs font-semibold text-slate-500 md:col-span-2">Código do perfil (trocar = substituir)<input list="catalogo-perfis-atlas" disabled={avancada} value={peca.codigo || peca.grupo || ''} onChange={e => atualizarPeca(index, { codigo: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm disabled:bg-slate-100" /></label>
@@ -712,7 +721,7 @@ export default function EditorTecnicoPage() {
                     </div>
                   })()}
                   <h4 className="text-sm font-bold text-slate-900">Perfis — lista de corte</h4>
-                  <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-3">Código</th><th className="p-3">Descrição</th><th className="p-3">Eixo</th><th className="p-3 text-right">Corte</th><th className="p-3 text-right">Qtd.</th><th className="p-3">Origem do desconto</th></tr></thead><tbody>{resultados.map((r, i) => <tr key={`${r.codigo}-${r.eixo}-${i}`} className="border-t border-slate-100"><td className="p-3 font-semibold">{r.codigo}</td><td className="p-3">{r.descricao || '—'}</td><td className="p-3">{r.eixo || '—'}</td><td className="p-3 text-right font-mono font-semibold">{medida(r.tamanho)} mm</td><td className="p-3 text-right">{r.quantidade ?? '—'}</td><td className="p-3 text-xs text-slate-500">{r.composicao_desconto || '—'}</td></tr>)}</tbody></table></div>
+                  <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-3">Código</th><th className="p-3">Descrição</th><th className="p-3">Eixo</th><th className="p-3 text-right">Corte</th><th className="p-3 text-right">Qtd.</th><th className="p-3">Origem do desconto</th></tr></thead><tbody>{resultados.map((r, i) => <tr key={`${r.codigo}-${r.eixo}-${i}`} className="border-t border-slate-100"><td className="p-3 font-semibold"><div className="flex items-center gap-2"><ImagemProdutoTecnico codigo={r.codigo} produto={buscarPerfil(r.codigo)} pequeno/><span>{r.codigo}</span></div></td><td className="p-3">{r.descricao || '—'}</td><td className="p-3">{r.eixo || '—'}</td><td className="p-3 text-right font-mono font-semibold">{medida(r.tamanho)} mm</td><td className="p-3 text-right">{r.quantidade ?? '—'}</td><td className="p-3 text-xs text-slate-500">{r.composicao_desconto || '—'}</td></tr>)}</tbody></table></div>
 
                 <h4 className="mt-5 text-sm font-bold text-slate-900">Acessórios e consumíveis</h4>
                 <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200">
