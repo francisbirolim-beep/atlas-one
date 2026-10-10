@@ -98,6 +98,7 @@ export type SeparacaoPacote = {
 type FormulaRow = {
   id?: string
   tipologia_id: string
+  metadados_editor?: { folgas?: { largura_mm: number; altura_mm: number } } | null
   configuracao_label?: string | null
   versao?: number | null
   variaveis: TipologiaFormulasCorte['variaveis']
@@ -147,6 +148,7 @@ function folhasDoItem(item: any) {
     item?.folhas,
     item?.numero_folhas,
     item?.qtd_folhas,
+    item?.variaveis?.numero_folhas,
     item?.variaveis?.folhas,
     item?.variaveis?.Folhas,
   ]
@@ -501,7 +503,7 @@ export async function gerarPacoteTecnico(
   const formulas = tipologiaIds.length > 0
     ? await supabase
         .from('engenharia_tipologia_formulas_corte')
-        .select('id,tipologia_id,configuracao_label,versao,variaveis,pecas,acessorios,vidro,status,ativo')
+        .select('id,tipologia_id,configuracao_label,versao,variaveis,pecas,acessorios,vidro,metadados_editor,status,ativo')
         .in('tipologia_id', tipologiaIds)
         .order('versao', { ascending: false })
     : { data: [] as any[] }
@@ -621,6 +623,7 @@ export async function gerarPacoteTecnico(
         tipologia_id: formula.tipologia_id,
         variaveis: Array.isArray(formula.variaveis) ? formula.variaveis : [],
         pecas: Array.isArray(formula.pecas) ? formula.pecas : [],
+        folgas: formula.metadados_editor?.folgas,
       }, largura, altura, (item?.variaveis || {}) as Record<string, string>)
 
       resultadosPerfis = resultados.map(peca => ({
@@ -670,6 +673,7 @@ export async function gerarPacoteTecnico(
         folhasDoItem(item),
         resultadosPerfis,
         (item?.variaveis || {}) as Record<string, string>,
+        formula.metadados_editor?.folgas,
       )
 
       for (let acessorioIndice = 0; acessorioIndice < acessorios.length; acessorioIndice += 1) {
@@ -726,9 +730,11 @@ export async function gerarPacoteTecnico(
     const vidro = formula.vidro && typeof formula.vidro === 'object' ? formula.vidro : null
     if (vidro?.formula_largura && vidro?.formula_altura) {
       try {
-        const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura)
-        const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura)
-        const qtdVidro = Math.max(1, n(vidro.quantidade, 1)) * qtdItem
+        const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined, formula.metadados_editor?.folgas)
+        const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined, formula.metadados_editor?.folgas)
+        const qtdPanos = vidro.formula_quantidade ? calcularFormulaCorteIsolada(String(vidro.formula_quantidade), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined, formula.metadados_editor?.folgas) : formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : n(vidro.quantidade, 1)
+        if (!Number.isInteger(qtdPanos) || qtdPanos < 1) throw new Error('Quantidade de vidros inválida na receita técnica')
+        const qtdVidro = qtdPanos * qtdItem
         const areaVidroM2 = (larguraVidro / 1000) * (alturaVidro / 1000) * qtdVidro
         const emOrcamento = origem === 'orcamento_simulacao'
         materiais.push({

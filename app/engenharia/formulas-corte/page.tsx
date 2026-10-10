@@ -69,14 +69,14 @@ function valorVariavel(registro: RegistroFormulaCorte | null, opcoes: Record<str
   return variavel ? rotuloOpcao(opcoes[variavel.chave] || '—') : '—'
 }
 
-function MiniTipologia({ folhas }: { folhas: number }) {
+function MiniTipologia({ folhas, sequencial = false }: { folhas: number; sequencial?: boolean }) {
   const qtd = Math.max(1, Math.min(folhas || 1, 9))
   return (
     <div className="atlas-tipologia-desenho mx-auto flex h-[54px] w-full max-w-[116px] items-stretch border-2 border-slate-500 bg-slate-100 p-1">
       {Array.from({ length: qtd }).map((_, index) => (
         <div key={index} className="relative flex-1 border border-slate-400 bg-sky-50">
           <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-slate-500">
-            {qtd > 1 ? (index < qtd / 2 ? '→' : '←') : '↔'}
+            {sequencial ? '←' : qtd > 1 ? (index < qtd / 2 ? '→' : '←') : '↔'}
           </span>
         </div>
       ))}
@@ -159,7 +159,8 @@ export default function FormulasCortePage() {
     setGeradoEm('')
   }, [definicao?.id])
 
-  const folhas = extrairFolhas(definicao?.tipologia?.label || '')
+  const folhas = Number(opcoes.numero_folhas) || extrairFolhas(definicao?.tipologia?.label || '')
+  const sequencialSuprema = definicao?.tipologia?.chave === 'porta_correr_sequencial_suprema'
   const contramarco = valorVariavel(definicao, opcoes, /contramarco/i)
   const nomeEmpresa = empresa?.nomeFantasia?.trim() || empresa?.nome?.trim() || 'Atlas One'
   const corEmpresa = corHexValida(empresa?.corPrincipal) ? empresa!.corPrincipal! : '#0f172a'
@@ -199,7 +200,8 @@ export default function FormulasCortePage() {
         Number(altura),
         folhas,
         linhas.map(item => ({ codigo: item.codigo, tamanho: item.tamanho })),
-        opcoes
+        opcoes,
+        definicao.folgas
       )
       setLinhasPlano(linhas)
       setResultadosAcessorios(acessorios)
@@ -331,13 +333,19 @@ export default function FormulasCortePage() {
               <h2 className="mb-4 mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500">Produto e medidas</h2>
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="text-sm font-medium text-slate-700">Projeto / configuração<input value={projeto} onChange={e => setProjeto(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
-                <label className="text-sm font-medium text-slate-700 md:col-span-2">Tipologia<select value={selecionadaId} onChange={e => setSelecionadaId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">{definicoes.map(item => <option key={item.id} value={item.id}>{item.tipologia?.label || item.tipologia_id}</option>)}</select></label>
+                <label className="text-sm font-medium text-slate-700 md:col-span-2">Tipologia
+                  <select value={selecionadaId} onChange={e => setSelecionadaId(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+                    {definicoes.map(item => <option key={item.id} value={item.id}>{item.tipologia?.label || item.tipologia_id}</option>)}
+                  </select>
+                  {definicao?.status === 'validada' && <span className="mt-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">✓ Validado</span>}
+                </label>
                 <label className="text-sm font-medium text-slate-700">Quantidade<input type="number" min="1" value={quantidade} onChange={e => setQuantidade(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Largura final (mm)<input type="number" min="1" value={largura} onChange={e => setLargura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Altura final (mm)<input type="number" min="1" value={altura} onChange={e => setAltura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Cor do perfil<select value={corPerfil} onChange={e => setCorPerfil(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">{CORES_PADRAO.map(cor => <option key={cor}>{cor}</option>)}</select></label>
                 <label className="text-sm font-medium text-slate-700">Cor do acessório<select value={corAcessorio} onChange={e => setCorAcessorio(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">{CORES_PADRAO.map(cor => <option key={cor}>{cor}</option>)}</select></label>
                 <label className="text-sm font-medium text-slate-700 md:col-span-2">Vidro / composição<select value={vidro} onChange={e => setVidro(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">{vidrosDisponiveis.map(opcao => <option key={opcao} value={opcao}>{opcao}</option>)}</select></label>
+                {sequencialSuprema && <div className="md:col-span-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900"><strong>Regra homologada Esquadrifácio:</strong> encaixe −{definicao?.folgas?.largura_mm ?? 4} mm (largura), −{definicao?.folgas?.altura_mm ?? 4} mm (altura); travessas sempre arredondadas para cima; vidro = travessa −6 mm × (HF −163 mm). O cálculo automático do vidro independe das folgas manuais abaixo.</div>}
                 <label className="text-sm font-medium text-slate-700">Folga vidro largura (mm)<input type="number" min="0" step="0.5" value={folgaVidroLargura} onChange={e => setFolgaVidroLargura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700">Folga vidro altura (mm)<input type="number" min="0" step="0.5" value={folgaVidroAltura} onChange={e => setFolgaVidroAltura(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
                 <label className="text-sm font-medium text-slate-700 md:col-span-4">Observações de produção<textarea value={observacaoProducao} onChange={e => setObservacaoProducao(e.target.value)} rows={2} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
@@ -407,7 +415,7 @@ export default function FormulasCortePage() {
 
                   <div className="grid grid-cols-[34mm_1fr] border-b border-slate-300">
                     <div className="flex items-center justify-center border-r border-slate-300 p-2">
-                      <MiniTipologia folhas={folhas} />
+                      <MiniTipologia folhas={folhas} sequencial={definicao.tipologia?.chave === 'porta_correr_sequencial_suprema'} />
                     </div>
                     <div className="grid grid-cols-[1.65fr_1fr]">
                       <div className="atlas-sheet-cell border-b border-r border-slate-200 px-3 py-2">
@@ -495,6 +503,7 @@ export default function FormulasCortePage() {
                         <tbody>
                           {definicao.acessorios.length > 0 ? definicao.acessorios.map((item, index) => {
                             const resultado = resultadosAcessorios[index]
+                            if (resultado?.ativo === false) return null
                             const produto = produtosPorCodigo.get(item.codigo.toUpperCase())
                             const quantidadeFinal = resultado?.valor ?? item.quantidade_referencia
                             return (

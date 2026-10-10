@@ -221,6 +221,21 @@ export default function EditorTecnicoPage() {
     })
   }
 
+  function atualizarAcessorio(index: number, patch: Partial<RegistroFormulaCorte['acessorios'][number]>) {
+    setRascunho(prev => prev ? {
+      ...prev,
+      acessorios: prev.acessorios.map((item, i) => i === index ? { ...item, ...patch } : item),
+    } : prev)
+  }
+
+  function adicionarAcessorio() {
+    setRascunho(prev => prev ? { ...prev, acessorios: [...prev.acessorios, { codigo: '', descricao: '', formula_quantidade: '', status: 'em_validacao' }] } : prev)
+  }
+
+  function removerAcessorio(index: number) {
+    setRascunho(prev => prev ? { ...prev, acessorios: prev.acessorios.filter((_, i) => i !== index) } : prev)
+  }
+
   function removerPeca(index: number) {
     setRascunho(prev => prev ? { ...prev, pecas: prev.pecas.filter((_, i) => i !== index) } : prev)
   }
@@ -251,6 +266,9 @@ export default function EditorTecnicoPage() {
       vidro: rascunho.vidro,
       status: rascunho.status,
       ativo: rascunho.ativo,
+      folgas: rascunho.folgas,
+      metadados_editor: rascunho.metadados_editor,
+      acessorios: rascunho.acessorios,
       observacoes: rascunho.observacoes,
     })
     if (!salvo) {
@@ -281,9 +299,9 @@ export default function EditorTecnicoPage() {
         : null
       if (formulaL && formulaH) {
         setVidroTeste({
-          largura: calcularFormulaCorteIsolada(formulaL, L, H),
-          altura: calcularFormulaCorteIsolada(formulaH, L, H),
-          quantidade: Number(rascunho.vidro.quantidade || 1),
+          largura: calcularFormulaCorteIsolada(formulaL, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas),
+          altura: calcularFormulaCorteIsolada(formulaH, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas),
+          quantidade: rascunho.vidro.formula_quantidade ? calcularFormulaCorteIsolada(rascunho.vidro.formula_quantidade, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas) : Number(opcoes.numero_folhas || rascunho.vidro.quantidade || 1),
         })
       } else setVidroTeste(null)
     } catch (e) {
@@ -404,6 +422,15 @@ export default function EditorTecnicoPage() {
                   <label className="text-sm font-medium text-slate-700">Status<select value={rascunho.status} onChange={e => setRascunho({ ...rascunho, status: e.target.value as StatusFormulaCorte, ativo: e.target.value === 'validada' ? rascunho.ativo : false })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">{STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
                 </div>
 
+                <div className="mt-4 grid gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3 md:grid-cols-2">
+                  <label className="text-xs font-semibold text-sky-800">Folga encaixe largura (mm)
+                    <input type="number" min="0" max="100" step="0.5" value={rascunho.folgas?.largura_mm ?? 4} onChange={e => setRascunho({ ...rascunho, folgas: { largura_mm: Number(e.target.value), altura_mm: rascunho.folgas?.altura_mm ?? 4 } })} className="mt-1 w-full rounded-lg border border-sky-200 bg-white p-2 text-sm" />
+                  </label>
+                  <label className="text-xs font-semibold text-sky-800">Folga encaixe altura (mm)
+                    <input type="number" min="0" max="100" step="0.5" value={rascunho.folgas?.altura_mm ?? 4} onChange={e => setRascunho({ ...rascunho, folgas: { largura_mm: rascunho.folgas?.largura_mm ?? 4, altura_mm: Number(e.target.value) } })} className="mt-1 w-full rounded-lg border border-sky-200 bg-white p-2 text-sm" />
+                  </label>
+                  <p className="text-xs text-sky-800 md:col-span-2">Essas folgas são descontadas do vão antes das fórmulas (LF e HF). A regra padrão de 4 mm fica preservada nas receitas antigas.</p>
+                </div>
                 <label className="mt-4 block text-sm font-medium text-slate-700">Observações técnicas<textarea value={rascunho.observacoes || ''} onChange={e => setRascunho({ ...rascunho, observacoes: e.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" /></label>
 
                 <label className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><input type="checkbox" checked={rascunho.ativo} disabled={rascunho.status !== 'validada'} onChange={e => setRascunho({ ...rascunho, ativo: e.target.checked })} className="h-4 w-4" /><span><strong>Liberar esta configuração no Plano de Corte</strong><br/><span className="text-xs text-slate-500">A configuração precisa estar Validada. Linha e tipologia também precisam estar liberadas.</span></span></label>
@@ -427,6 +454,20 @@ export default function EditorTecnicoPage() {
                           <button type="button" onClick={() => removerPeca(index)} className="mt-5 grid h-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 md:col-span-1"><Trash2 size={16}/></button>
                         </div>
                         {(peca.formula_L || peca.formula_H) && <div className="mt-3 grid gap-3 md:grid-cols-2"><label className="text-xs font-semibold text-slate-500">Fórmula L<input value={peca.formula_L || ''} onChange={e => atualizarPeca(index, { formula_L: e.target.value || undefined })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label><label className="text-xs font-semibold text-slate-500">Fórmula H<input value={peca.formula_H || ''} onChange={e => atualizarPeca(index, { formula_H: e.target.value || undefined })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label></div>}
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <label className="text-xs font-semibold text-slate-500">Fórmula da quantidade
+                            <input value={peca.formula_quantidade || ''} onChange={e => atualizarPeca(index, { formula_quantidade: e.target.value || undefined })} placeholder="Ex.: Folhas ou 2 * Folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" />
+                          </label>
+                          {peca.condicao_ativa?.numero_folhas && <label className="text-xs font-semibold text-slate-500">Somente para quantidades de folhas (separadas por vírgula)
+                            <input value={peca.condicao_ativa.numero_folhas.join(', ')} onChange={e => atualizarPeca(index, { condicao_ativa: { ...peca.condicao_ativa, numero_folhas: e.target.value.split(',').map(v => v.trim()).filter(Boolean) } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" />
+                          </label>}
+                        </div>
+                        {peca.mapa_codigo && <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:grid-cols-5">
+                          {Object.entries(peca.mapa_codigo).map(([folhas, codigo]) => <label key={folhas} className="text-xs font-semibold text-amber-900">{folhas} folhas
+                            <input value={codigo} onChange={e => atualizarPeca(index, { mapa_codigo: { ...peca.mapa_codigo, [folhas]: e.target.value.toUpperCase() } })} className="mt-1 w-full rounded-lg border border-amber-200 bg-white p-2 font-mono text-xs" />
+                          </label>)}
+                          <p className="text-[11px] text-amber-800 sm:col-span-5">Código do marco selecionado automaticamente pelo número de planos. Pode ser revisto por folha sem duplicar tipologias.</p>
+                        </div>}
                         <label className="mt-3 block text-xs font-semibold text-slate-500">Composição / origem do desconto<input value={peca.composicao_desconto || ''} onChange={e => atualizarPeca(index, { composicao_desconto: e.target.value })} placeholder="Ex.: 181 = ..." className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                       </div>
                     )
@@ -440,8 +481,40 @@ export default function EditorTecnicoPage() {
                   <label className="text-xs font-semibold text-slate-500">Largura do vidro<input value={rascunho.vidro.formula_largura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_largura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                   <label className="text-xs font-semibold text-slate-500">Altura do vidro<input value={rascunho.vidro.formula_altura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_altura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                   <label className="text-xs font-semibold text-slate-500">Quantidade<input type="number" min="1" value={rascunho.vidro.quantidade || 1} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, quantidade: Number(e.target.value) || 1 } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+                  <label className="text-xs font-semibold text-slate-500">Fórmula de quantidade de vidros<input value={rascunho.vidro.formula_quantidade || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_quantidade: e.target.value } })} placeholder="Ex.: Folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                   <label className="text-xs font-semibold text-slate-500 md:col-span-3">Composição da largura<input value={rascunho.vidro.composicao_largura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, composicao_largura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                   <label className="text-xs font-semibold text-slate-500 md:col-span-3">Composição da altura<input value={rascunho.vidro.composicao_altura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, composicao_altura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><h3 className="font-bold text-slate-900">Acessórios e consumíveis da receita</h3>
+                    <p className="text-xs text-slate-500">Código, quantidade, status e condições por número de folhas. Salvar mantém essas alterações junto à fórmula técnica.</p>
+                  </div>
+                  <button type="button" onClick={adicionarAcessorio} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold"><Plus size={15} /> Adicionar acessório</button>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {rascunho.acessorios.map((item, index) => <div key={`${item.codigo}-${index}`} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-12">
+                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-2">Código
+                      <input value={item.codigo} onChange={e => atualizarAcessorio(index, { codigo: e.target.value.toUpperCase() })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" />
+                    </label>
+                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-3">Descrição
+                      <input value={item.descricao || ''} onChange={e => atualizarAcessorio(index, { descricao: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" />
+                    </label>
+                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-3">Fórmula de quantidade
+                      <input value={item.formula_quantidade || ''} onChange={e => atualizarAcessorio(index, { formula_quantidade: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" />
+                    </label>
+                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-2">Aplica às folhas (vazio = todas)
+                      <input value={item.condicao_ativa?.numero_folhas?.join(', ') || ''} onChange={e => atualizarAcessorio(index, { condicao_ativa: e.target.value.trim() ? { ...item.condicao_ativa, numero_folhas: e.target.value.split(',').map(v => v.trim()).filter(Boolean) } : undefined })} placeholder="2, 3, 4" className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" />
+                    </label>
+                    <label className="text-[11px] font-semibold text-slate-500 md:col-span-1">Status
+                      <select value={item.status || 'em_validacao'} onChange={e => atualizarAcessorio(index, { status: e.target.value as 'referencia' | 'em_validacao' | 'validada' })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">
+                        <option value="referencia">Referência</option><option value="em_validacao">Revisão</option><option value="validada">Validada</option>
+                      </select>
+                    </label>
+                    <button type="button" title="Remover acessório da receita" onClick={() => removerAcessorio(index)} className="mt-5 grid h-9 place-items-center rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={16}/></button>
+                  </div>)}
                 </div>
               </div>
 
@@ -459,6 +532,20 @@ export default function EditorTecnicoPage() {
 
                 {resultados.length > 0 && <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-3">Código</th><th className="p-3">Descrição</th><th className="p-3">Eixo</th><th className="p-3 text-right">Corte</th><th className="p-3 text-right">Qtd.</th><th className="p-3">Origem do desconto</th></tr></thead><tbody>{resultados.map((r, i) => <tr key={`${r.codigo}-${r.eixo}-${i}`} className="border-t border-slate-100"><td className="p-3 font-semibold">{r.codigo}</td><td className="p-3">{r.descricao || '—'}</td><td className="p-3">{r.eixo || '—'}</td><td className="p-3 text-right font-mono font-semibold">{medida(r.tamanho)} mm</td><td className="p-3 text-right">{r.quantidade ?? '—'}</td><td className="p-3 text-xs text-slate-500">{r.composicao_desconto || '—'}</td></tr>)}</tbody></table></div>}
 
+                {resultados.length > 0 && rascunho.variaveis.some(v => v.chave === 'numero_folhas') && (() => {
+                  const qtd = Number(opcoes.numero_folhas)
+                  const larguraFinal = Number(largura) - (rascunho.folgas?.largura_mm ?? 4)
+                  const alturaFinal = Number(altura) - (rascunho.folgas?.altura_mm ?? 4)
+                  const desconto = 162 + 19 * (qtd - 2)
+                  const travessa = Math.ceil((larguraFinal - desconto) / qtd)
+                  return <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                    <strong>Como chegou no cálculo — {qtd} folhas sequenciais</strong>
+                    <p className="mt-2">Largura útil (LF): {medida(Number(largura))} − {rascunho.folgas?.largura_mm ?? 4} = <strong>{medida(larguraFinal)} mm</strong>. Altura útil (HF): {medida(Number(altura))} − {rascunho.folgas?.altura_mm ?? 4} = <strong>{medida(alturaFinal)} mm</strong>.</p>
+                    <p className="mt-1">Travessa: CEIL((LF − 162 − 19 × ({qtd} − 2)) ÷ {qtd}) = CEIL(({medida(larguraFinal)} − {desconto}) ÷ {qtd}) = <strong>{medida(travessa)} mm</strong>.</p>
+                    <p className="mt-1">Vidro: largura {medida(travessa)} − 6 = <strong>{medida(travessa - 6)} mm</strong>; altura HF − 163 = <strong>{medida(alturaFinal - 163)} mm</strong>. Quantidade = {qtd} vidros.</p>
+                    <p className="mt-2 text-xs text-emerald-800">Regra da Esquadrifácio: toda travessa arredonda para cima. A compensação de 19 mm acompanha o aumento de folhas; marcos e acessórios são definidos na receita pela quantidade escolhida.</p>
+                  </div>
+                })()}
                 {vidroTeste && <div className="mt-4 rounded-xl bg-sky-50 p-4 text-sm text-sky-900"><strong>Vidro:</strong> {vidroTeste.quantidade} peça(s) de <strong>{medida(vidroTeste.largura)} × {medida(vidroTeste.altura)} mm</strong></div>}
               </div>
 

@@ -25,6 +25,7 @@ export type ResultadoVidroPlano = {
 }
 
 const TIPOLOGIA_PC3_SUPREMA = 'dce9da1d-7e03-4c1c-ad1b-2f101b51a52e'
+const TIPOLOGIA_SEQUENCIAL_SUPREMA = '6fded962-78f7-40c5-8da7-2134b2ed98c1'
 
 function normalizar(valor: string | null | undefined) {
   return String(valor || '')
@@ -106,6 +107,31 @@ export function gerarVidroPlanoCorte(params: {
 }): ResultadoVidroPlano {
   const vidro = params.vidro.trim()
   if (!vidro) return { linha: null, aviso: 'Selecione ou informe o vidro para gerar a lista de vidros.' }
+  // A porta sequencial usa regra da Esquadrifácio já conferida no WVetro:
+  // vidro = travessa arredondada para cima - 6mm; altura = baguete H + 18mm.
+  // Diferente da PC3 histórica, não depende de folga manual do operador.
+  if (params.tipologiaId === TIPOLOGIA_SEQUENCIAL_SUPREMA) {
+    const horizontal = linhaBaguete(params.linhasPlano, 'L')
+    const vertical = linhaBaguete(params.linhasPlano, 'H')
+    if (!horizontal || !vertical) return { linha: null, aviso: 'Baguetes SU102 incompletos para calcular o vidro da porta sequencial.' }
+    const panos = quantidadeVidrosPorEsquadria(horizontal, vertical)
+    if (!panos || panos < 2 || panos > 6) return { linha: null, aviso: 'Número de vidros fora de 2 a 6 folhas.' }
+    const larguraCorte = horizontal.tamanho - 6
+    const alturaCorte = vertical.tamanho + 18
+    if (larguraCorte <= 0 || alturaCorte <= 0) return { linha: null, aviso: 'Medida do vidro inválida.' }
+    return { linha: {
+      vidro,
+      largura_base_mm: horizontal.tamanho,
+      altura_base_mm: vertical.tamanho + 18,
+      folga_largura_mm: 6,
+      folga_altura_mm: 0,
+      largura_corte_mm: larguraCorte,
+      altura_corte_mm: alturaCorte,
+      quantidade: panos * Math.max(1, Math.floor(params.quantidadeEsquadrias || 1)),
+      referencia_tecnica: 'Suprema sequencial: travessa - 6 mm / baguete vertical + 18 mm',
+    }, aviso: null }
+  }
+
   if (params.folgaLarguraMm == null || params.folgaAlturaMm == null) {
     return { linha: null, aviso: 'Escolha a folga do vidro na largura e na altura.' }
   }
