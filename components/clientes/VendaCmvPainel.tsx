@@ -66,7 +66,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   {dados&&<div className="space-y-4">
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <Card titulo="Custo previsto W.Vetro" valor={previstoFmt(p?.total??null)} nota={dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}/>
-    <Card titulo="Custo realizado lançado" valor={moedas(realizado)} nota="Inclui compras e material consumido do estoque"/>
+    <Card titulo="Custo realizado registrado" valor={moedas(realizado)} nota="Inclui compras registradas e consumo de estoque; evite registrar a mesma compra duas vezes"/>
     <Card titulo="Diferença até agora" valor={p?.total==null?'—':moedas(p.total-realizado)} nota="Não representa economia final enquanto faltarem lançamentos"/>
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
    </div>
@@ -116,7 +116,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
     <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
     <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
    </div>
-   <p className="mt-3 text-xs text-slate-500">Material reaproveitado deve ser registrado como estoque, pelo custo do material consumido: não houve compra nova, mas houve consumo de estoque no CMV.</p>
+   <p className="mt-3 text-xs text-slate-500">Material reaproveitado deve ser registrado como estoque pelo custo consumido. Compras já vinculadas à obra podem entrar automaticamente no realizado; não lance novamente a mesma nota sem conferir, para evitar duplicidade no CMV.</p>
    <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':'Registrar custo'}</button></div>
   </form>}
  </div>
