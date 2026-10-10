@@ -301,7 +301,7 @@ export default function EditorTecnicoPage() {
         setVidroTeste({
           largura: calcularFormulaCorteIsolada(formulaL, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas),
           altura: calcularFormulaCorteIsolada(formulaH, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas),
-          quantidade: Number(opcoes.numero_folhas || rascunho.vidro.quantidade || 1),
+          quantidade: rascunho.vidro.formula_quantidade ? calcularFormulaCorteIsolada(rascunho.vidro.formula_quantidade, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas) : Number(opcoes.numero_folhas || rascunho.vidro.quantidade || 1),
         })
       } else setVidroTeste(null)
     } catch (e) {
@@ -481,6 +481,7 @@ export default function EditorTecnicoPage() {
                   <label className="text-xs font-semibold text-slate-500">Largura do vidro<input value={rascunho.vidro.formula_largura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_largura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                   <label className="text-xs font-semibold text-slate-500">Altura do vidro<input value={rascunho.vidro.formula_altura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_altura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                   <label className="text-xs font-semibold text-slate-500">Quantidade<input type="number" min="1" value={rascunho.vidro.quantidade || 1} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, quantidade: Number(e.target.value) || 1 } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+                  <label className="text-xs font-semibold text-slate-500">Fórmula de quantidade de vidros<input value={rascunho.vidro.formula_quantidade || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, formula_quantidade: e.target.value } })} placeholder="Ex.: Folhas" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs" /></label>
                   <label className="text-xs font-semibold text-slate-500 md:col-span-3">Composição da largura<input value={rascunho.vidro.composicao_largura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, composicao_largura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                   <label className="text-xs font-semibold text-slate-500 md:col-span-3">Composição da altura<input value={rascunho.vidro.composicao_altura || ''} onChange={e => setRascunho({ ...rascunho, vidro: { ...rascunho.vidro, composicao_altura: e.target.value } })} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
                 </div>
