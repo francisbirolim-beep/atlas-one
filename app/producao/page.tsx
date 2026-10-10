@@ -96,10 +96,11 @@ export default function Producao() {
       try {
         const token = await tokenAtual()
         if (token) {
-          await fetch('/api/producao/medicoes-finais/sincronizar', {
+          const resposta = await fetch('/api/producao/medicoes-finais/sincronizar', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
           })
+          if (!resposta.ok) setErro('Não foi possível atualizar a fila de Medições Finais. Abra uma medição concluída e use “Reenviar para Produção”.')
         }
       } catch (e) {
         console.warn('Não foi possível sincronizar a fila da Produção nesta carga:', e)
@@ -150,9 +151,11 @@ export default function Producao() {
 
   function medicaoDoCard(card: SetorKanbanItem | null) {
     if (!card) return null
-    if (card.orcamento_id) return medicaoPorOrcamento.get(card.orcamento_id) || null
+    // Quando há várias medições para o orçamento, respeitar primeiro o vínculo exato do card.
     const marker = String(card.descricao || '').match(/\[medicao:([^\]]+)\]/)?.[1]
-    return marker ? medicoes.find(m => m.id === marker) || null : null
+    const vinculada = marker ? medicoes.find(m => m.id === marker) : null
+    if (vinculada) return vinculada
+    return card.orcamento_id ? medicaoPorOrcamento.get(card.orcamento_id) || null : null
   }
 
   function cardsDaColuna(id: string) { return cards.filter(c => c.coluna_id === id) }
