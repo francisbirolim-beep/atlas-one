@@ -18,6 +18,7 @@ import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
 import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
 import { avaliarFluxoVenda, type InstalacaoResumo } from '@/lib/vendaFluxoResumo'
+import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
 
 type Venda = {
@@ -1050,7 +1051,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               <p className="text-xs text-slate-500">{fluxoVenda.quantidadeInstalada} de {fluxoVenda.totalPecas} peça(s) instaladas; checklist e pendências conferidos individualmente na aba Instalação.</p>
             </div></div></div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">{itens.map((item:any,idx:number)=>{
-            const ref=String(item?.item_ref||item?.id||item?.ref||item?.uuid||idx+1)
+            const ref=refItemProducaoInstalacao(item,idx)
             const reg=instalacoes.find(i=>i.item_ref===ref)
             return <div key={ref} className="flex items-center justify-between rounded-xl border p-3">
               <div><b className="text-sm">{item.ambiente||item.descricao||item.configuracao_nome||'Tipologia '+(idx+1)}</b>
