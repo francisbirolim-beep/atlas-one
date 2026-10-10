@@ -20,17 +20,30 @@ async function criarColunaPadraoSetor(setorId: string): Promise<SetorKanbanColun
   return data as SetorKanbanColuna[]
 }
 
-export async function criarColunaSetor(setorId: string, nome: string): Promise<SetorKanbanColuna | null> {
+export async function criarColunaSetor(setorId: string, nome: string, descricao?: string | null): Promise<SetorKanbanColuna | null> {
   const { data: colunas } = await supabase.from('setor_kanban_colunas').select('ordem').eq('setor_id', setorId).order('ordem', { ascending: false }).limit(1)
   const proximaOrdem = colunas && colunas.length > 0 ? colunas[0].ordem + 1 : 0
-  const { data, error } = await supabase.from('setor_kanban_colunas').insert({ setor_id: setorId, nome, ordem: proximaOrdem }).select().single()
+  const { data, error } = await supabase.from('setor_kanban_colunas').insert({
+    setor_id: setorId,
+    nome,
+    descricao: descricao?.trim() || null,
+    ordem: proximaOrdem,
+  }).select().single()
+  if (error) return null
+  return data as SetorKanbanColuna
+}
+
+export async function editarColunaSetor(id: string, campos: { nome?: string; descricao?: string | null }): Promise<SetorKanbanColuna | null> {
+  const patch: { nome?: string; descricao?: string | null } = {}
+  if (typeof campos.nome === 'string') patch.nome = campos.nome.trim()
+  if ('descricao' in campos) patch.descricao = campos.descricao?.trim() || null
+  const { data, error } = await supabase.from('setor_kanban_colunas').update(patch).eq('id', id).select().single()
   if (error) return null
   return data as SetorKanbanColuna
 }
 
 export async function renomearColunaSetor(id: string, nome: string): Promise<boolean> {
-  const { error } = await supabase.from('setor_kanban_colunas').update({ nome }).eq('id', id)
-  return !error
+  return Boolean(await editarColunaSetor(id, { nome }))
 }
 
 export async function excluirColunaSetor(id: string, colunaDestinoId: string): Promise<boolean> {
