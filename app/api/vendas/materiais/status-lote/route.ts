@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
     const pedidoNumero = texto(body.pedidoNumero, 120)
     const prazoEntrega = texto(body.prazoEntrega, 120)
     const previsaoEntrega = texto(body.previsaoEntrega, 30)
+    const observacoesPedido = texto(body.observacoesPedido, 1000)
     const valorTotalRaw = body.valorTotal === null || body.valorTotal === undefined || body.valorTotal === '' ? null : Number(body.valorTotal)
     const valorTotal = Number.isFinite(valorTotalRaw as number) ? valorTotalRaw as number : null
     const origem = texto(body.origem, 80) || 'ajuste_manual_materiais'
@@ -126,6 +127,7 @@ export async function POST(req: NextRequest) {
           valorTotal !== null ? `Valor total: ${valorTotal}` : '',
           prazoEntrega ? `Prazo: ${prazoEntrega}` : '',
           previsaoEntrega ? `Previsão: ${previsaoEntrega}` : '',
+          observacoesPedido ? `Observação compra: ${observacoesPedido}` : '',
         ].filter(Boolean)
         const atualizacao:Record<string,unknown> = {
           status,
