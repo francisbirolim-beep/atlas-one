@@ -10,6 +10,7 @@ import { aprovarMedicaoFinal } from '@/lib/medicaoFinalV2'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import { gerarPacoteMedicaoFinal } from '@/lib/materialPlanejamento'
+import { vincularCardAMedicao, temMarcadorMedicaoDoCard } from '@/lib/producaoMedicaoCard'
 import {
   atualizarOrdemProducao,
   criarOrdemProducaoManual,
@@ -140,19 +141,8 @@ export default function Producao() {
     return mapa
   }, [ordens])
 
-  const medicaoPorOrcamento = useMemo(() => {
-    const mapa = new Map<string, MedicaoFinalProducao>()
-    medicoes.forEach(m => {
-      if (m.orcamento_id && !mapa.has(m.orcamento_id)) mapa.set(m.orcamento_id, m)
-    })
-    return mapa
-  }, [medicoes])
-
   function medicaoDoCard(card: SetorKanbanItem | null) {
-    if (!card) return null
-    if (card.orcamento_id) return medicaoPorOrcamento.get(card.orcamento_id) || null
-    const marker = String(card.descricao || '').match(/\[medicao:([^\]]+)\]/)?.[1]
-    return marker ? medicoes.find(m => m.id === marker) || null : null
+    return vincularCardAMedicao(card, medicoes)
   }
 
   function cardsDaColuna(id: string) { return cards.filter(c => c.coluna_id === id) }
@@ -249,6 +239,10 @@ export default function Producao() {
     const destinoNome = String(destino.nome || '').toLowerCase()
     const destinoEhLiberacao = destinoNome.includes('liberad') && destinoNome.includes('produ')
     const medicao = medicaoDoCard(card)
+    if (destinoEhLiberacao && temMarcadorMedicaoDoCard(card) && !medicao) {
+      setErro('A medição vinculada a este card não foi encontrada. Confira o identificador antes de liberar a Produção.')
+      return
+    }
 
     // No Kanban da Produção, arrastar para "Liberado para Produção" precisa
     // executar a liberação real (aprovação da Medição Final + pacote técnico),
