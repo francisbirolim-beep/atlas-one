@@ -47,5 +47,8 @@ jobs:
       - name: Production card measurement mapping
         run: npm run test:producao-medicao
 
+      - name: Safe production order release
+        run: npm run test:liberacao-op
+
       - name: Build
         run: npm run build
