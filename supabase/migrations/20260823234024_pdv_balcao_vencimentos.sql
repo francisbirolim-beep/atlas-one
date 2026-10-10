@@ -60,9 +60,9 @@ begin
     if v_prod.preco_minimo is not null and v_preco < v_prod.preco_minimo and not p_permitir_abaixo_minimo then
       raise exception 'Preço abaixo do mínimo permitido para %.', v_prod.nome;
     end if;
-    select * into v_saldo from public.estoque_saldos where produto_id=v_prod.id for update;
+    select * into v_saldo from public.estoque_saldos where produto_id=v_prod.id order by quantidade-quantidade_reservada desc limit 1 for update;
     if v_saldo.produto_id is null then raise exception 'Produto % ainda não possui saldo de estoque.', v_prod.nome; end if;
-    if v_saldo.quantidade < v_qtd then raise exception 'Estoque insuficiente para %. Disponível: %.', v_prod.nome, v_saldo.quantidade; end if;
+    if v_saldo.quantidade-v_saldo.quantidade_reservada < v_qtd then raise exception 'Estoque insuficiente para %. Disponível: %.', v_prod.nome, v_saldo.quantidade-v_saldo.quantidade_reservada; end if;
     v_subtotal := v_subtotal + (v_qtd * v_preco);
   end loop;
 
@@ -89,7 +89,7 @@ begin
     v_qtd := (v_item->>'quantidade')::numeric;
     v_preco := (v_item->>'precoUnitario')::numeric;
     select id,codigo,nome,unidade,custo,preco,preco_minimo into v_prod from public.produtos where id=(v_item->>'produtoId')::uuid;
-    select * into v_saldo from public.estoque_saldos where produto_id=v_prod.id for update;
+    select * into v_saldo from public.estoque_saldos where produto_id=v_prod.id order by quantidade-quantidade_reservada desc limit 1 for update;
     v_custo := coalesce(v_saldo.custo_medio,v_prod.custo,0);
     v_margem := case when v_preco > 0 then round(((v_preco-v_custo)/v_preco*100)::numeric,4) else null end;
 
@@ -98,7 +98,7 @@ begin
 
     update public.estoque_saldos set quantidade=quantidade-v_qtd,
       valor_estoque=greatest(0,(quantidade-v_qtd)*coalesce(custo_medio,0)), updated_at=now()
-      where produto_id=v_prod.id;
+      where id=v_saldo.id;
     insert into public.estoque_movimentos(produto_id,tipo,quantidade,unidade,custo_unitario,valor_total,origem_tipo,origem_id,observacoes,criado_por_id,criado_por_nome)
     values(v_prod.id,'saida',v_qtd,coalesce(v_saldo.unidade,v_prod.unidade),v_custo,v_qtd*v_custo,'venda_balcao',v_venda_id,'Venda balcão #'||v_numero,p_usuario_id,p_usuario_nome);
     update public.produtos set ultimo_preco_vendido=v_preco, ultimo_preco_vendido_em=now(), updated_at=now() where id=v_prod.id;

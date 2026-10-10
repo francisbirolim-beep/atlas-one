@@ -15,6 +15,7 @@ begin
     into v_parent_empresa
     using v_fk;
 
+  -- A FK nativa tratará pai inexistente. Para pais tenant-owned, empresa_id é NOT NULL.
   if v_parent_empresa is null then return new; end if;
 
   if new.empresa_id is null then

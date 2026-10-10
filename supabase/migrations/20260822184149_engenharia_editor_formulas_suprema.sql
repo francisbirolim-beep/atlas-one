@@ -67,8 +67,6 @@ create trigger trg_historico_formula_corte
 before update on public.engenharia_tipologia_formulas_corte
 for each row execute function public.registrar_historico_formula_corte();
 
--- Tipologias 8 e 9 folhas ainda não existiam no catálogo. Entram como base técnica,
--- sem associação automática a linha comercial nesta migration.
 insert into public.tipologias (chave, label, categoria, ordem)
 select 'l_suprema_porta_de_correr_08_folhas', 'Porta De Correr 08 Folhas (L. Suprema)', 'porta', 91
 where not exists (select 1 from public.tipologias where chave = 'l_suprema_porta_de_correr_08_folhas');
@@ -77,8 +75,6 @@ insert into public.tipologias (chave, label, categoria, ordem)
 select 'l_suprema_porta_de_correr_09_folhas', 'Porta De Correr 09 Folhas (L. Suprema)', 'porta', 92
 where not exists (select 1 from public.tipologias where chave = 'l_suprema_porta_de_correr_09_folhas');
 
--- A fórmula usa LF/HF como largura/altura final menos 4 mm de folga total.
--- CEIL é interpretado pelo motor do Atlas e implementa a regra: qualquer decimal arredonda para cima.
 do $$
 declare
   r record;
@@ -89,7 +85,6 @@ declare
   status_cfg text;
   ativo_cfg boolean;
 begin
-  -- Mão-amiga comum/estreita sem reforço: base 162 e +18 mm por folha adicional (2F a 6F).
   for r in
     select * from (values
       ('l_suprema_porta_de_correr_02_folhas', 2),
@@ -163,7 +158,6 @@ begin
       updated_at = now();
   end loop;
 
-  -- Mão-amiga larga sem reforço: base 181 e +41 mm por folha adicional (2F a 9F).
   for r in
     select * from (values
       ('l_suprema_porta_de_correr_02_folhas', 2),

@@ -42,7 +42,6 @@ create table if not exists public.estoque_enderecos (
   unique(local_id,codigo)
 );
 
--- Uma única unidade/local padrão mantém a operação atual simples.
 insert into public.unidades_operacionais(codigo,nome,tipo,cidade)
 select 'MATRIZ','Matriz / Esquadrifácio','matriz','José Bonifácio'
 where not exists(select 1 from public.unidades_operacionais where codigo='MATRIZ');
@@ -53,7 +52,6 @@ from public.unidades_operacionais u
 where u.codigo='MATRIZ'
   and not exists(select 1 from public.estoque_locais l where l.unidade_id=u.id and l.codigo='GERAL');
 
--- Evolui o saldo antigo de 1 linha por produto para N linhas por produto/local/endereço.
 alter table public.estoque_saldos add column if not exists id uuid default gen_random_uuid();
 alter table public.estoque_saldos add column if not exists local_id uuid references public.estoque_locais(id) on delete restrict;
 alter table public.estoque_saldos add column if not exists endereco_id uuid references public.estoque_enderecos(id) on delete restrict;
@@ -130,7 +128,6 @@ create table if not exists public.estoque_transferencia_itens (
 );
 create index if not exists idx_transferencias_status on public.estoque_transferencias(status,created_at desc);
 
--- Consulta de rede: físico, reservado e disponível por unidade/local/endereço.
 create or replace view public.estoque_disponibilidade_rede as
 select
   s.produto_id,
@@ -155,7 +152,6 @@ join public.estoque_locais l on l.id=s.local_id
 join public.unidades_operacionais u on u.id=l.unidade_id
 left join public.estoque_enderecos e on e.id=s.endereco_id;
 
--- Reserva atômica: impede prometer a mesma quantidade para dois clientes.
 create or replace function public.reservar_estoque_local(
   p_produto_id uuid,
   p_local_id uuid,
@@ -174,21 +170,38 @@ set search_path=public
 as $$
 declare
   s record;
-  v_disponivel numeric;
+  v_disponivel_total numeric;
+  v_restante numeric;
+  v_alocar numeric;
   v_reserva_id uuid;
+  v_ids jsonb := '[]'::jsonb;
 begin
   if p_quantidade is null or p_quantidade <= 0 then raise exception 'Quantidade inválida'; end if;
-  select * into s from public.estoque_saldos
-   where produto_id=p_produto_id and local_id=p_local_id
-   order by quantidade-quantidade_reservada desc limit 1 for update;
-  if s.id is null then return jsonb_build_object('ok',false,'motivo','sem_saldo_local'); end if;
-  v_disponivel := greatest(0,s.quantidade-s.quantidade_reservada);
-  if v_disponivel < p_quantidade then return jsonb_build_object('ok',false,'motivo','saldo_insuficiente','disponivel',v_disponivel); end if;
-  insert into public.estoque_reservas(produto_id,local_id,endereco_id,quantidade,origem_tipo,origem_id,cliente_id,observacoes,reservado_ate,criado_por_id,criado_por_nome)
-  values(p_produto_id,p_local_id,s.endereco_id,p_quantidade,p_origem_tipo,p_origem_id,p_cliente_id,p_observacoes,p_reservado_ate,p_usuario_id,p_usuario_nome)
-  returning id into v_reserva_id;
-  update public.estoque_saldos set quantidade_reservada=quantidade_reservada+p_quantidade,updated_at=now() where id=s.id;
-  return jsonb_build_object('ok',true,'reserva_id',v_reserva_id,'disponivel_apos',v_disponivel-p_quantidade);
+  select coalesce(sum(greatest(0,quantidade-quantidade_reservada)),0) into v_disponivel_total
+  from public.estoque_saldos where produto_id=p_produto_id and local_id=p_local_id;
+  if v_disponivel_total < p_quantidade then
+    return jsonb_build_object('ok',false,'motivo','saldo_insuficiente','disponivel',v_disponivel_total);
+  end if;
+  v_restante:=p_quantidade;
+  for s in
+    select * from public.estoque_saldos
+    where produto_id=p_produto_id and local_id=p_local_id and quantidade>quantidade_reservada
+    order by (quantidade-quantidade_reservada) desc,id
+    for update
+  loop
+    exit when v_restante<=0;
+    v_alocar:=least(v_restante,greatest(0,s.quantidade-s.quantidade_reservada));
+    if v_alocar>0 then
+      insert into public.estoque_reservas(produto_id,local_id,endereco_id,quantidade,origem_tipo,origem_id,cliente_id,observacoes,reservado_ate,criado_por_id,criado_por_nome)
+      values(p_produto_id,p_local_id,s.endereco_id,v_alocar,p_origem_tipo,p_origem_id,p_cliente_id,p_observacoes,p_reservado_ate,p_usuario_id,p_usuario_nome)
+      returning id into v_reserva_id;
+      v_ids:=v_ids||jsonb_build_array(v_reserva_id);
+      update public.estoque_saldos set quantidade_reservada=quantidade_reservada+v_alocar,updated_at=now() where id=s.id;
+      v_restante:=v_restante-v_alocar;
+    end if;
+  end loop;
+  if v_restante>0 then raise exception 'Falha concorrente ao reservar estoque'; end if;
+  return jsonb_build_object('ok',true,'reserva_ids',v_ids,'quantidade',p_quantidade,'disponivel_apos',v_disponivel_total-p_quantidade);
 end;
 $$;
 
@@ -213,7 +226,6 @@ begin
 end;
 $$;
 
--- Recebimento de NF continua entrando no local padrão até o usuário escolher outro local.
 create or replace function public.aplicar_estoque_recebimento(
   p_recebimento_item_id uuid,
   p_usuario_id uuid,

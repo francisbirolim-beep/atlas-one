@@ -12,8 +12,7 @@ create table if not exists public.engenharia_variaveis (
   label text not null,
   ordem integer not null default 0,
   created_at timestamptz not null default now()
-);
-
+)
 create table if not exists public.engenharia_variavel_opcoes (
   id uuid primary key default gen_random_uuid(),
   variavel_id uuid not null references public.engenharia_variaveis(id) on delete cascade,
@@ -22,8 +21,7 @@ create table if not exists public.engenharia_variavel_opcoes (
   ordem integer not null default 0,
   created_at timestamptz not null default now(),
   unique (variavel_id, chave)
-);
-
+)
 create table if not exists public.engenharia_tipologia_variaveis (
   id uuid primary key default gen_random_uuid(),
   tipologia_id uuid not null references public.tipologias(id) on delete cascade,
@@ -32,8 +30,7 @@ create table if not exists public.engenharia_tipologia_variaveis (
   obrigatorio boolean not null default false,
   created_at timestamptz not null default now(),
   unique (tipologia_id, variavel_id)
-);
-
+)
 create table if not exists public.engenharia_componente_variantes (
   id uuid primary key default gen_random_uuid(),
   componente_id uuid not null references public.engenharia_receita_componentes(id) on delete cascade,
@@ -48,11 +45,9 @@ create table if not exists public.engenharia_componente_variantes (
   ordem integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
+)
 create index if not exists engenharia_componente_variantes_componente_idx
-  on public.engenharia_componente_variantes(componente_id, ativo, ordem);
-
+  on public.engenharia_componente_variantes(componente_id, ativo, ordem)
 create table if not exists public.engenharia_variaveis_preset (
   id uuid primary key default gen_random_uuid(),
   tipologia_id uuid not null references public.tipologias(id) on delete cascade,
@@ -64,33 +59,25 @@ create table if not exists public.engenharia_variaveis_preset (
   criado_por_nome text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
+)
 create index if not exists engenharia_variaveis_preset_tipologia_idx
-  on public.engenharia_variaveis_preset(tipologia_id, produto_id);
-
+  on public.engenharia_variaveis_preset(tipologia_id, produto_id)
 -- RLS: mesmo padrao permissivo temporario ja usado no projeto (ver DECISIONS.md).
-alter table public.engenharia_variaveis enable row level security;
-alter table public.engenharia_variavel_opcoes enable row level security;
-alter table public.engenharia_tipologia_variaveis enable row level security;
-alter table public.engenharia_componente_variantes enable row level security;
-alter table public.engenharia_variaveis_preset enable row level security;
-
-drop policy if exists "acesso_total_temporario" on public.engenharia_variaveis;
-create policy "acesso_total_temporario" on public.engenharia_variaveis for all using (true) with check (true);
-
-drop policy if exists "acesso_total_temporario" on public.engenharia_variavel_opcoes;
-create policy "acesso_total_temporario" on public.engenharia_variavel_opcoes for all using (true) with check (true);
-
-drop policy if exists "acesso_total_temporario" on public.engenharia_tipologia_variaveis;
-create policy "acesso_total_temporario" on public.engenharia_tipologia_variaveis for all using (true) with check (true);
-
-drop policy if exists "acesso_total_temporario" on public.engenharia_componente_variantes;
-create policy "acesso_total_temporario" on public.engenharia_componente_variantes for all using (true) with check (true);
-
-drop policy if exists "acesso_total_temporario" on public.engenharia_variaveis_preset;
-create policy "acesso_total_temporario" on public.engenharia_variaveis_preset for all using (true) with check (true);
-
+alter table public.engenharia_variaveis enable row level security
+alter table public.engenharia_variavel_opcoes enable row level security
+alter table public.engenharia_tipologia_variaveis enable row level security
+alter table public.engenharia_componente_variantes enable row level security
+alter table public.engenharia_variaveis_preset enable row level security
+drop policy if exists "acesso_total_temporario" on public.engenharia_variaveis
+create policy "acesso_total_temporario" on public.engenharia_variaveis for all using (true) with check (true)
+drop policy if exists "acesso_total_temporario" on public.engenharia_variavel_opcoes
+create policy "acesso_total_temporario" on public.engenharia_variavel_opcoes for all using (true) with check (true)
+drop policy if exists "acesso_total_temporario" on public.engenharia_tipologia_variaveis
+create policy "acesso_total_temporario" on public.engenharia_tipologia_variaveis for all using (true) with check (true)
+drop policy if exists "acesso_total_temporario" on public.engenharia_componente_variantes
+create policy "acesso_total_temporario" on public.engenharia_componente_variantes for all using (true) with check (true)
+drop policy if exists "acesso_total_temporario" on public.engenharia_variaveis_preset
+create policy "acesso_total_temporario" on public.engenharia_variaveis_preset for all using (true) with check (true)
 -- Seed: mesmas chaves que ja existiam como texto livre em planos_corte.variaveis,
 -- agora como catalogo estruturado com opcoes. Master pode editar/adicionar
 -- variaveis, opcoes e vinculos pela tela Engenharia > Receitas tecnicas.
@@ -105,8 +92,7 @@ insert into public.engenharia_variaveis (chave, label, ordem) values
   ('reforco', 'Reforço', 8),
   ('roldana', 'Roldana', 9),
   ('folhas', 'Número de folhas', 10)
-on conflict (chave) do nothing;
-
+on conflict (chave) do nothing
 insert into public.engenharia_variavel_opcoes (variavel_id, chave, label, ordem)
 select v.id, o.chave, o.label, o.ordem
 from public.engenharia_variaveis v
@@ -134,4 +120,4 @@ join (values
   ('folhas', '3', '3 folhas', 2),
   ('folhas', '4', '4 folhas', 3)
 ) as o(variavel_chave, chave, label, ordem) on o.variavel_chave = v.chave
-on conflict (variavel_id, chave) do nothing;
+on conflict (variavel_id, chave) do nothing

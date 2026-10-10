@@ -53,7 +53,6 @@ alter table public.compras_recebimentos enable row level security;
 alter table public.compras_recebimento_itens enable row level security;
 alter table public.compras_recebimento_fotos enable row level security;
 
--- O módulo opera por rotas server-side com service role. Não há policies diretas ao client nesta fase.
 do $$
 begin
   insert into storage.buckets (id, name, public)

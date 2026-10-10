@@ -1,0 +1,17 @@
+-- Migration histórica aplicada no Supabase em 2026-08-23.
+--
+-- A versão remota original foi uma carga intermediária de acessórios para PC2, PC3 e PC4
+-- na configuração `mao_amiga_larga_sem_reforco`, usando o primeiro formato JSON do editor.
+--
+-- Não reaplicar a carga antiga em ambientes novos:
+-- 1. a coluna `engenharia_tipologia_formulas_corte.acessorios` já é criada pela migration
+--    `20260822234812_engenharia_acessorios_pc3_formulas`;
+-- 2. todo o conteúdo PC2/PC3/PC4 desta carga intermediária é substituído logo em seguida pela
+--    migration `20260823005739_acessorios_pc2_pc4_wvetro`, que grava o formato normalizado atual
+--    (`formula_quantidade`, `quantidade_referencia`, `status`, `composicao_calculo`, `fonte`);
+-- 3. executar novamente o formato intermediário entre essas versões não acrescenta estado final
+--    e aumenta o risco de manter dois schemas JSON concorrentes no histórico de reconstrução.
+--
+-- Este arquivo existe intencionalmente como marcador de compatibilidade para que a sequência de
+-- versões do repositório permaneça alinhada ao histórico real de migrations do Supabase.
+select 1;

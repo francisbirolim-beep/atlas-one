@@ -1,0 +1,892 @@
+{
+  "date": "2026-10-10",
+  "context": "Reconcile same-version content against SQL recorded in Supabase history; no database DDL or data write",
+  "applied_version_count_at_audit": 315,
+  "previous_historical_versions": 314,
+  "old_version_content_mismatches": 87,
+  "replaced_with_sql_from_remote_statements": 87,
+  "original_versions_archived": 87,
+  "active_versions_after": 316,
+  "white_space_only_variations_remaining_from_original_audit": 126,
+  "note": "Remaining 126 same-version files had identical fingerprint when all whitespace was removed, but were not modified in this pass.",
+  "entries": [
+    {
+      "version": "20260809230712",
+      "active_file": "supabase/migrations/20260809230712_v17_automacao_setor.sql",
+      "applied_md5": "216e73f17e368b4c05a7fa3585e494d3",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809230712_v17_automacao_setor.sql",
+      "original_sha256": "461f5322caa85b42885d1411d1e4a8f91d8ec34aaa30cc582e225a0e5f3a4cf5",
+      "original_blob_sha": "413a42e163945bfd74a3b265e941ff2ad69f9cd0",
+      "applied_length": 687,
+      "original_length": 689
+    },
+    {
+      "version": "20261006172605",
+      "active_file": "supabase/migrations/20261006172605_corrigir_custo_perfis_wvetro_historico_antigo_v1.sql",
+      "applied_md5": "f9edb1e658c6839f43311bd113ebf1ab",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20261006172605_corrigir_custo_perfis_wvetro_historico_antigo_v1.sql",
+      "original_sha256": "7f7e12185fcf09adf0edb0b596d7616a3e3a34c036b89626013caa0e5fa0f3ab",
+      "original_blob_sha": "bf578b41626cc78910c427fc563f9e2cec616f65",
+      "applied_length": 2204,
+      "original_length": 2050
+    },
+    {
+      "version": "20260905173247",
+      "active_file": "supabase/migrations/20260905173247_p0_precificacao_tenant_v1.sql",
+      "applied_md5": "ff84ed990f84e3ba5c7bce43a3a4ae38",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905173247_p0_precificacao_tenant_v1.sql",
+      "original_sha256": "6d06851155104a58106e5055c755dc11cfb2b9294fa02178dbd0f569276ab986",
+      "original_blob_sha": "0e20c87ab8dc911b81ddb097b2e86f59faaa6b41",
+      "applied_length": 3172,
+      "original_length": 2811
+    },
+    {
+      "version": "20260819062000",
+      "active_file": "supabase/migrations/20260819062000_corrigir_pc3_suprema_cadastro_v1.sql",
+      "applied_md5": "ad54478b42b4bbd2c36c1ba5752b5c78",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260819062000_corrigir_pc3_suprema_cadastro_v1.sql",
+      "original_sha256": "de41fe590fb72b942541289ac416c9d5aefe76a9537c173605c215a8f4994acc",
+      "original_blob_sha": "1c1ea57a872d888c3091dcc3cf6e598a93045435",
+      "applied_length": 10396,
+      "original_length": 10408
+    },
+    {
+      "version": "20260823005739",
+      "active_file": "supabase/migrations/20260823005739_acessorios_pc2_pc4_wvetro.sql",
+      "applied_md5": "f96865cd7281d15f00d597abe39b4321",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823005739_acessorios_pc2_pc4_wvetro.sql",
+      "original_sha256": "6ff152ef0bb8be49ac00af9872818253aae262a7c968deb1bcf2dec51cd8b093",
+      "original_blob_sha": "9816640bc9a12f54ae8914a9a2d9c353318a4f11",
+      "applied_length": 20204,
+      "original_length": 20941
+    },
+    {
+      "version": "20260824012830",
+      "active_file": "supabase/migrations/20260824012830_wvetro_referencia_completa_v1.sql",
+      "applied_md5": "81c2ab4feeb7a72fee5f1204f5de2a25",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824012830_wvetro_referencia_completa_v1.sql",
+      "original_sha256": "7abfc0d3349e2c2317c3682bd9f3472e898f8c141850df2b303335cecc6fe7b3",
+      "original_blob_sha": "b285b78945020261d7c466d304273d121cea7dc6",
+      "applied_length": 9500,
+      "original_length": 11091
+    },
+    {
+      "version": "20260905212201",
+      "active_file": "supabase/migrations/20260905212201_p0_generic_tenant_fk_guards_v1.sql",
+      "applied_md5": "a9025a1b6580ad665d25437da2dc118d",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905212201_p0_generic_tenant_fk_guards_v1.sql",
+      "original_sha256": "ef67e6caf574f808a31d71f16a9392470c9116b4b31974b03ff77f135f4abd6a",
+      "original_blob_sha": "34ad9ccaf2dd3c469b98ac92467fd29006d0bb3e",
+      "applied_length": 2854,
+      "original_length": 2764
+    },
+    {
+      "version": "20260825174254",
+      "active_file": "supabase/migrations/20260825174254_balcao_cancelamento_devolucao_v1.sql",
+      "applied_md5": "08c7bc7d1e7d6c4befaaabe21ce822ab",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260825174254_balcao_cancelamento_devolucao_v1.sql",
+      "original_sha256": "f88d6488043f1996a1802c28a28e66ed0b0a047bff2738296a3d40f7e2eaf53a",
+      "original_blob_sha": "37af3dad5bfbb5b922044aafad83e4a837b0b450",
+      "applied_length": 15496,
+      "original_length": 16378
+    },
+    {
+      "version": "20260811181300",
+      "active_file": "supabase/migrations/20260811181300_engenharia_entrada_automatica.sql",
+      "applied_md5": "9cef1df16733da4227f15287660cb64f",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260811181300_engenharia_entrada_automatica.sql",
+      "original_sha256": "20e6cfbd3b8045c32c92e47d609c652641e51dc840a281e7e4c90ece0ae07b50",
+      "original_blob_sha": "bd8680d826d93bf7baa668afa2dcc67fe621a54f",
+      "applied_length": 4410,
+      "original_length": 4415
+    },
+    {
+      "version": "20260902193714",
+      "active_file": "supabase/migrations/20260902193714_wvetro_referencias_tipologias_dimensoes_v1.sql",
+      "applied_md5": "04d5702b4283e6b733acfbcf5f06b567",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260902193714_wvetro_referencias_tipologias_dimensoes_v1.sql",
+      "original_sha256": "c999693b73de5dca8fda4ef4e6b2c8887459590201da4c018af38b786d75e33f",
+      "original_blob_sha": "dffe5a635d83672fa2fa439e237ae2adfd05dc3d",
+      "applied_length": 1589,
+      "original_length": 1998
+    },
+    {
+      "version": "20260809202332",
+      "active_file": "supabase/migrations/20260809202332_v13_medicao_final.sql",
+      "applied_md5": "83e89f02655140d05c66d679730a9586",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809202332_v13_medicao_final.sql",
+      "original_sha256": "22f4e62984d86f8863d587e3df2078e724a60a436c0fbcab14b23aa8ae3d3c71",
+      "original_blob_sha": "17f36a5f57a39f3b95792af4a9beb812d74eb919",
+      "applied_length": 3496,
+      "original_length": 3498
+    },
+    {
+      "version": "20260905113917",
+      "active_file": "supabase/migrations/20260905113917_p0_multitenancy_cadastro_historico_v1.sql",
+      "applied_md5": "d6d1eccb9d441cd4b4c07507754ec1b1",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905113917_p0_multitenancy_cadastro_historico_v1.sql",
+      "original_sha256": "0620a5757a8859f96c5905379b3189ec51aa09b26db9270a03d89f3bbbf0c34a",
+      "original_blob_sha": "b668fbb19a46bf72c7a10848489bc31932da6252",
+      "applied_length": 873,
+      "original_length": 950
+    },
+    {
+      "version": "20260818013000",
+      "active_file": "supabase/migrations/20260818013000_colaboracao_notificacoes_v1.sql",
+      "applied_md5": "707f06df8d8369abb8389e9286655ec5",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260818013000_colaboracao_notificacoes_v1.sql",
+      "original_sha256": "aaa6460f83f32f963c251c3fd8564caafc79f3ddcb36a1fc02b2cf8ce9961536",
+      "original_blob_sha": "9533bfb862988ee8d5182df85a2f4e9e4f1e4b30",
+      "applied_length": 10350,
+      "original_length": 10424
+    },
+    {
+      "version": "20260824012851",
+      "active_file": "supabase/migrations/20260824012851_wvetro_staging_tipologias_componentes_v1.sql",
+      "applied_md5": "38dab04c127fb9491ebe988e261f04b5",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824012851_wvetro_staging_tipologias_componentes_v1.sql",
+      "original_sha256": "719a00a9626a0add57d6a859ffc3f50b342dfbb5016fdb9c88b02a2b175eea60",
+      "original_blob_sha": "c0937d23d3e94f4e982f06e956be0c11cddd2289",
+      "applied_length": 2947,
+      "original_length": 3300
+    },
+    {
+      "version": "20261010031339",
+      "active_file": "supabase/migrations/20261010031339_producao_kanban_dinamico_v1.sql",
+      "applied_md5": "d7d286f34a7fda05795d7f973e07b95d",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20261010031339_producao_kanban_dinamico_v1.sql",
+      "original_sha256": "a3c6c30d5a4685dfa16683a8a383a38d6a81abe1f878f5224c4b9be7bea80621",
+      "original_blob_sha": "d27a5ff15b8e380362b14b1e8cd46d49ec40c824",
+      "applied_length": 1502,
+      "original_length": 1804
+    },
+    {
+      "version": "20260818210500",
+      "active_file": "supabase/migrations/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql",
+      "applied_md5": "fcbe2a580d7e136d7c0cdde20bd37c84",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260818210500_configuracoes_composicao_folhas_imagem_v1.sql",
+      "original_sha256": "0b24144d7193d116eadac492279f1b00da57c40e9827ff4169707b609d3e06f8",
+      "original_blob_sha": "fb20ef01f36954663d00bddb30bad5b3d6d1c1a3",
+      "applied_length": 5387,
+      "original_length": 5403
+    },
+    {
+      "version": "20260905115344",
+      "active_file": "supabase/migrations/20260905115344_p0_tenant_integridade_compras_financeiro_v1.sql",
+      "applied_md5": "8e80d1af6f2ed577dfb97c95c69b7235",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905115344_p0_tenant_integridade_compras_financeiro_v1.sql",
+      "original_sha256": "8678215226d7b9bfb8eef0a21fc09eba8ba5ca07f4ff337d1404c5c0506403d7",
+      "original_blob_sha": "2976c106c554e53af389e61bcb2bc7d4ae17dd89",
+      "applied_length": 12086,
+      "original_length": 12075
+    },
+    {
+      "version": "20260823225827",
+      "active_file": "supabase/migrations/20260823225827_estoque_multiunidade_enderecamento.sql",
+      "applied_md5": "66f7f2cc318d7e96f00889d53a9d0143",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823225827_estoque_multiunidade_enderecamento.sql",
+      "original_sha256": "eda2ef74d1b8d10500f7208ce71ecf486ad3b093a895ad3417b6f39ffad4afb5",
+      "original_blob_sha": "c7cb5eddc602b7d4ff9170d619a4986132a0b492",
+      "applied_length": 16254,
+      "original_length": 16111
+    },
+    {
+      "version": "20260824094309",
+      "active_file": "supabase/migrations/20260824094309_remover_croquis_automaticos_tipologias_v1.sql",
+      "applied_md5": "7d2c5515679c171b4d6bac9addbc32b2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824094309_remover_croquis_automaticos_tipologias_v1.sql",
+      "original_sha256": "1dde2f6628e41f293842dffb4389ee6cc75d6d333f95ac8edfceae7cb70dcce3",
+      "original_blob_sha": "43017dff07d1815a1e15e3db88e98d07f1993c5a",
+      "applied_length": 292,
+      "original_length": 762
+    },
+    {
+      "version": "20260904135007",
+      "active_file": "supabase/migrations/20260904135007_produtos_status_pendente_catalogo_fornecedor.sql",
+      "applied_md5": "9f55c874e6f5617c4f319dd10e41d7c3",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260904135007_produtos_status_pendente_catalogo_fornecedor.sql",
+      "original_sha256": "018b1b90b78d572477388f17760dac9ba118907d55e27066f2acc3a41570d2e1",
+      "original_blob_sha": "1077ea12c7f9382c0c18ba369d895012b6e9b870",
+      "applied_length": 274,
+      "original_length": 478
+    },
+    {
+      "version": "20260826140437",
+      "active_file": "supabase/migrations/20260826140437_balcao_orcamentos_separado_v1.sql",
+      "applied_md5": "69fb224f7cd157bc4d5eb54fa26f565d",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260826140437_balcao_orcamentos_separado_v1.sql",
+      "original_sha256": "f8b293d35fa01fd18fb0bd5e11c9d66d1e316194dc1caced1e135d52a1f5914a",
+      "original_blob_sha": "e8105b22852e42d4c01bfd32e1d61aa91991b9a9",
+      "applied_length": 2966,
+      "original_length": 2903
+    },
+    {
+      "version": "20260822234852",
+      "active_file": "supabase/migrations/20260822234852_corrigir_carga_acessorios_pc3.sql",
+      "applied_md5": "051d4d4e17c47eba8692d2c8fe3b89e2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260822234852_corrigir_carga_acessorios_pc3.sql",
+      "original_sha256": "5bec9ebb5232c077503d422c9b0e316b5e84aa66a3398b1f6daa26cf1a083b53",
+      "original_blob_sha": "360ccbcac49d2910c6576258e99ab2a750527215",
+      "applied_length": 2289,
+      "original_length": 2434
+    },
+    {
+      "version": "20260824012908",
+      "active_file": "supabase/migrations/20260824012908_wvetro_snapshots_api_v1.sql",
+      "applied_md5": "b71ef910ce008644e231bfe2f61f732f",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824012908_wvetro_snapshots_api_v1.sql",
+      "original_sha256": "440340a3b8b069a53f18388fe5e271417e62914175d2483db576f555a397b4c9",
+      "original_blob_sha": "82dc8c386826c30a832bcf8ce3aef8b693334aab",
+      "applied_length": 2230,
+      "original_length": 2367
+    },
+    {
+      "version": "20260826233029",
+      "active_file": "supabase/migrations/20260826233029_workflow_evitar_notificacao_duplicada_v1.sql",
+      "applied_md5": "5934ca062fb8f504e57e8a445f0ab62a",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260826233029_workflow_evitar_notificacao_duplicada_v1.sql",
+      "original_sha256": "0fd9ac76dc2fcf16e4da214201cafe7c474243ec2f7958a5685a35b04fc4c7be",
+      "original_blob_sha": "99815a3673ba238957564bf7f7956b25f1032c5f",
+      "applied_length": 6778,
+      "original_length": 6560
+    },
+    {
+      "version": "20260811004218",
+      "active_file": "supabase/migrations/20260811004218_v19_tipologias.sql",
+      "applied_md5": "88ff133b68ccb45ae69a45c77acddc50",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260811004218_v19_tipologias.sql",
+      "original_sha256": "5a61284ef30b9892a1962d4d0bcf1004f280c477ddca00cb0939adc16e86ebb5",
+      "original_blob_sha": "0229ceda88e8616a0a3de1af2dc3df9b87994587",
+      "applied_length": 1018,
+      "original_length": 1020
+    },
+    {
+      "version": "20260811200000",
+      "active_file": "supabase/migrations/20260811200000_engenharia_liberacao_producao_v1.sql",
+      "applied_md5": "659104ba1baf3c22a6e963250409ea94",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260811200000_engenharia_liberacao_producao_v1.sql",
+      "original_sha256": "445ce45f12379e2c034d3f6451c3568877d7dfc7f51453c4345e9f7ab70a9b80",
+      "original_blob_sha": "185b441dbdea98b5afebacfd52a5cd6fc798392a",
+      "applied_length": 3894,
+      "original_length": 3900
+    },
+    {
+      "version": "20260823161555",
+      "active_file": "supabase/migrations/20260823161555_compras_conferencia_recebimento.sql",
+      "applied_md5": "63b9652c3d761393c27d277391953b4a",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823161555_compras_conferencia_recebimento.sql",
+      "original_sha256": "0ca7236460c2ffacb76af4a160c0ae8f1e9f4f6243e1e100ceb08ca7eed6144d",
+      "original_blob_sha": "6bd113e9fcadb22952eb11872d15244f7f65d965",
+      "applied_length": 3058,
+      "original_length": 3166
+    },
+    {
+      "version": "20260823155025",
+      "active_file": "supabase/migrations/20260823155025_compras_nfe_entrada.sql",
+      "applied_md5": "0bab71efebf7638ea7036533379c3d80",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823155025_compras_nfe_entrada.sql",
+      "original_sha256": "9b7aa1417d88982de13c2c888343398e42bf7078b0070d433bb689a87e384118",
+      "original_blob_sha": "6ee921901f7896169974a28a917628d18e3ad93d",
+      "applied_length": 2665,
+      "original_length": 2908
+    },
+    {
+      "version": "20260831150000",
+      "active_file": "supabase/migrations/20260831150000_fornecedores_360_pedido_minimo_v1.sql",
+      "applied_md5": "048b627f200f9315244f090da79c22a6",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260831150000_fornecedores_360_pedido_minimo_v1.sql",
+      "original_sha256": "45c11468f9434cbd0923d4901e63c18a337c03b10de703373f78fa4cbc3e6ad1",
+      "original_blob_sha": "70e325b2a774a91a28b83aaee71f16337b732e50",
+      "applied_length": 353,
+      "original_length": 357
+    },
+    {
+      "version": "20261005184700",
+      "active_file": "supabase/migrations/20261005184700_medida_final_tipo_fluxo.sql",
+      "applied_md5": "65fc52f837381661440572e544af6302",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20261005184700_medida_final_tipo_fluxo.sql",
+      "original_sha256": "b0a9014d1b291e26af692c97da740344ccd72b08b4f5f5fc4446540b14a196f9",
+      "original_blob_sha": "4679b14414246a647a75dbac3feee4c1596b38cb",
+      "applied_length": 779,
+      "original_length": 990
+    },
+    {
+      "version": "20260809170455",
+      "active_file": "supabase/migrations/20260809170455_v15_produtos_expandido.sql",
+      "applied_md5": "614b42dde8f9e53888c4846dcaf014e8",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809170455_v15_produtos_expandido.sql",
+      "original_sha256": "726483d648d0c0d31f44a53057e81aae7d6022b1c08698a1f891fb06c703d366",
+      "original_blob_sha": "73fcce8295f408c6eaab9f928d5f1fa26e32c4b9",
+      "applied_length": 967,
+      "original_length": 969
+    },
+    {
+      "version": "20260823225929",
+      "active_file": "supabase/migrations/20260823225929_estoque_view_security.sql",
+      "applied_md5": "417048a4fe71674b6663ae8c7cd2c8d7",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823225929_estoque_view_security.sql",
+      "original_sha256": "a9c207f035fea43484cb88a18afe34fb71f590baf394ecab103eee78e2336541",
+      "original_blob_sha": "a71555dbde3b71b75aa2ad08be454affebd1124d",
+      "applied_length": 77,
+      "original_length": 158
+    },
+    {
+      "version": "20260809152013",
+      "active_file": "supabase/migrations/20260809152013_v14_fornecedores.sql",
+      "applied_md5": "8940269a6bf53631bbf9d3bb7224dcbd",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809152013_v14_fornecedores.sql",
+      "original_sha256": "10383b2ebabdcd7ce442fd597b02bf0169ff06a67271cc2aca981fd1b1afaeda",
+      "original_blob_sha": "bc0ac479c36c826f2205e2ebc571826059d2ff56",
+      "applied_length": 868,
+      "original_length": 870
+    },
+    {
+      "version": "20260821214247",
+      "active_file": "supabase/migrations/20260821214247_assistencia_link_tecnico.sql",
+      "applied_md5": "20830d022ff407fa1a1d708a9c19524d",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260821214247_assistencia_link_tecnico.sql",
+      "original_sha256": "effec7afa62af992ad4868345211ea6a2f098f416fe2c40522c09432b075f570",
+      "original_blob_sha": "a6d5ff33e1115578e18d0f9d231ccd89d4c75456",
+      "applied_length": 1244,
+      "original_length": 1568
+    },
+    {
+      "version": "20261006173155",
+      "active_file": "supabase/migrations/20261006173155_proteger_margem_balcao_perfil_wvetro_nao_validado_v1.sql",
+      "applied_md5": "9ddf1bae2d8f1330c6b02b4d3261984b",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20261006173155_proteger_margem_balcao_perfil_wvetro_nao_validado_v1.sql",
+      "original_sha256": "44d45f98409dd2867062b75fa7cdd9074fb79234baf49823568964d7953fd210",
+      "original_blob_sha": "e570bdf17cee2958587d30fa56cd54e9507da2a7",
+      "applied_length": 3100,
+      "original_length": 2924
+    },
+    {
+      "version": "20260824053151",
+      "active_file": "supabase/migrations/20260824053151_tipologias_suprema_esquema_visual_fallback_v1.sql",
+      "applied_md5": "b3e7a7be9d6afc268d9e63d21500db5c",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824053151_tipologias_suprema_esquema_visual_fallback_v1.sql",
+      "original_sha256": "13f1b27377bef3661ed9890b6d90400ac5b86c27401c955147fde3631d1c2795",
+      "original_blob_sha": "24a9b755b8e4774acc350c90d9544da1d22b43e5",
+      "applied_length": 3357,
+      "original_length": 3996
+    },
+    {
+      "version": "20260816160000",
+      "active_file": "supabase/migrations/20260816160000_cor_pintura_v1.sql",
+      "applied_md5": "bbfff7981149c1878b589c6b7069cac6",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260816160000_cor_pintura_v1.sql",
+      "original_sha256": "098a4ea97774e3dba4218c39813d4561214f7bb6c64326e82e8f233ad3d81e65",
+      "original_blob_sha": "ae2cf33002f009b88d55231f1be6f3dcfb6c7c75",
+      "applied_length": 628,
+      "original_length": 634
+    },
+    {
+      "version": "20260811192000",
+      "active_file": "supabase/migrations/20260811192000_engenharia_conferencia_tecnica_v1.sql",
+      "applied_md5": "efcdf9245e1e6694d13531b6f2690cd1",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260811192000_engenharia_conferencia_tecnica_v1.sql",
+      "original_sha256": "e8177acec50b8b0a29f632bca3701f4bfb82a4575ac4edfd277b2be730e41d6f",
+      "original_blob_sha": "c5c4ba40ebad33a9c4c7effb9294ec1ce1eee09d",
+      "applied_length": 3183,
+      "original_length": 3197
+    },
+    {
+      "version": "20260809014430",
+      "active_file": "supabase/migrations/20260809014430_adicionar_colunas_faltantes_clientes.sql",
+      "applied_md5": "3ee97d05c3f1758ee4d330a9b9407ee3",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809014430_adicionar_colunas_faltantes_clientes.sql",
+      "original_sha256": "86a15ca506f3ee5fcd2271e867bb781be10e668a454a15c81c36c892bab70491",
+      "original_blob_sha": "7bb87659cf92abc3c047d5c47d468fe1e6163bb5",
+      "applied_length": 261,
+      "original_length": 263
+    },
+    {
+      "version": "20260822184149",
+      "active_file": "supabase/migrations/20260822184149_engenharia_editor_formulas_suprema.sql",
+      "applied_md5": "9b77eed63ad938b684977a9ebbd78b1a",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260822184149_engenharia_editor_formulas_suprema.sql",
+      "original_sha256": "c3d241a63b1ad7045b050817e012469cdca19e11c7d2dd8926d429e60ddf4705",
+      "original_blob_sha": "0de5b38bb1699a9e5cecc17e5925f2c8c03fb120",
+      "applied_length": 15509,
+      "original_length": 16025
+    },
+    {
+      "version": "20261006172359",
+      "active_file": "supabase/migrations/20261006172359_corrigir_custo_perfis_wvetro_e_margem_balcao_v1.sql",
+      "applied_md5": "3056f6d41c21d4079ac9ecb87dde81ab",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20261006172359_corrigir_custo_perfis_wvetro_e_margem_balcao_v1.sql",
+      "original_sha256": "47c9857dca68298abe08154e83c5b3227396b93cd7210e30bc38ad6a3bc41020",
+      "original_blob_sha": "0139bca50dd75fade3707443c8a34d812b0262bf",
+      "applied_length": 4054,
+      "original_length": 4030
+    },
+    {
+      "version": "20260810224501",
+      "active_file": "supabase/migrations/20260810224501_v18_campos_extras_obrigatorio.sql",
+      "applied_md5": "f357cc511b8591616920d2435802e9e1",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260810224501_v18_campos_extras_obrigatorio.sql",
+      "original_sha256": "fc336eb05f4e6c89eedce21c60b32253ad9871224e266340ff740fc5f7c22ff7",
+      "original_blob_sha": "9f542496229cc61e552c417a43fa9a1873d573c2",
+      "applied_length": 104,
+      "original_length": 106
+    },
+    {
+      "version": "20260831113359",
+      "active_file": "supabase/migrations/20260831113359_compras_360_vinculo_cliente_obra_v1.sql",
+      "applied_md5": "f6a432a4086a64da0f48d940b8ad38f8",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260831113359_compras_360_vinculo_cliente_obra_v1.sql",
+      "original_sha256": "da30ca1cb723b722ff250189935af5ccd3d6f7db5daf9caf2db19f4aa74ed425",
+      "original_blob_sha": "f589206b5391728f77421c38ab46878556b1064d",
+      "applied_length": 1162,
+      "original_length": 1175
+    },
+    {
+      "version": "20260823233928",
+      "active_file": "supabase/migrations/20260823233928_pdv_balcao_v1.sql",
+      "applied_md5": "9ec5f241f51dfc982d12299be5dba8b1",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823233928_pdv_balcao_v1.sql",
+      "original_sha256": "322057aafaa5382ef28866ddd87de392ac53ee23d9dd08dc71abd68b450ab76a",
+      "original_blob_sha": "7e9a7dccd6a2af8d3915900c42ed6709f2e7df5d",
+      "applied_length": 13509,
+      "original_length": 14205
+    },
+    {
+      "version": "20260824022150",
+      "active_file": "supabase/migrations/20260824022150_wvetro_variaveis_orcamento_v1.sql",
+      "applied_md5": "00d52ccfec71492d5736bd23bc9c37d2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824022150_wvetro_variaveis_orcamento_v1.sql",
+      "original_sha256": "ebc031a08b932f5762b544fc111b9fc4aacf9f7be0dad3f19e81cd388e65a096",
+      "original_blob_sha": "ec17c2c0ac44c150dcf2d6c51a501de62dcbcc74",
+      "applied_length": 8815,
+      "original_length": 3529
+    },
+    {
+      "version": "20260822184439",
+      "active_file": "supabase/migrations/20260822184439_formula_legacy_status.sql",
+      "applied_md5": "587b0f02c3400fb173e9721dfd5a99c1",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260822184439_formula_legacy_status.sql",
+      "original_sha256": "820515b66d63995e7fd05b62643659630b01245dff79be62554a766bbceba577",
+      "original_blob_sha": "73124394f2dfe6b7169019eb5018f0c326a011be",
+      "applied_length": 185,
+      "original_length": 412
+    },
+    {
+      "version": "20260824022234",
+      "active_file": "supabase/migrations/20260824022234_wvetro_variaveis_folhas_normalizacao_v1.sql",
+      "applied_md5": "20ed67c4e7d40a4ba2a1b53caa0673e2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260824022234_wvetro_variaveis_folhas_normalizacao_v1.sql",
+      "original_sha256": "628c1763077d2be49f7ed0161d7811477798ced1807f77f3bd8e578e2510c780",
+      "original_blob_sha": "ccf40deaf13f946ff62c46744bde35076d8d40c3",
+      "applied_length": 6279,
+      "original_length": 6417
+    },
+    {
+      "version": "20260809202423",
+      "active_file": "supabase/migrations/20260809202423_v16_medicao_gera_flag_e_rls.sql",
+      "applied_md5": "fd389dc859ea275e790557e483f05651",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809202423_v16_medicao_gera_flag_e_rls.sql",
+      "original_sha256": "eb8d0cbe44a78bdb5d72aa469dc8cbc0de7744d86024e50017d31c1df2f01494",
+      "original_blob_sha": "ab132a312c19ef33b2d94c39a7aa8316f8de4c0f",
+      "applied_length": 2038,
+      "original_length": 2040
+    },
+    {
+      "version": "20260816210000",
+      "active_file": "supabase/migrations/20260816210000_produtos_identidade_tecnica_v1.sql",
+      "applied_md5": "3739ecf5c17dd9257e04504d2675123f",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260816210000_produtos_identidade_tecnica_v1.sql",
+      "original_sha256": "07f8cb76ea1d998608472a963acad7915e976d7660c29ba92c02c2e8da612e3d",
+      "original_blob_sha": "6264489625fa142089bd4be4743a75c352625f41",
+      "applied_length": 12341,
+      "original_length": 12408
+    },
+    {
+      "version": "20260817141000",
+      "active_file": "supabase/migrations/20260817141000_carga_acessorios_wvetro_un_v1.sql",
+      "applied_md5": "8ca3ab5f089f2f448df98daf02ea331e",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260817141000_carga_acessorios_wvetro_un_v1.sql",
+      "original_sha256": "4a0c3339107695d8e6a777ea2c7374696b0021c8da45aaa177a66a652f90ed63",
+      "original_blob_sha": "906e784b04c18620a4318d4be2d3d5bf47665059",
+      "applied_length": 125168,
+      "original_length": 125182
+    },
+    {
+      "version": "20260823230444",
+      "active_file": "supabase/migrations/20260823230444_estoque_multiunidade_indices.sql",
+      "applied_md5": "3c03293036f922d91d7c2fe4bf06f6f3",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823230444_estoque_multiunidade_indices.sql",
+      "original_sha256": "9c34e6e5bce0565e95fd2b99d6228ae18ce999e24a74e5c9d1555a29b2fcc28a",
+      "original_blob_sha": "d76494c65bfaa9e52962ec590238da4f4c8d4759",
+      "applied_length": 2405,
+      "original_length": 2543
+    },
+    {
+      "version": "20260822193959",
+      "active_file": "supabase/migrations/20260822193959_tipologias_ativo_editor_linhas.sql",
+      "applied_md5": "9b84859fa47bc1045ca010c069848c4c",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260822193959_tipologias_ativo_editor_linhas.sql",
+      "original_sha256": "d6f0b5e1222dd9cc2ebcf8eb8a7482c6aeb8af69e3a280a7df4be94c7f0d2525",
+      "original_blob_sha": "4b703417b505f2a66c2d6a6a0ac5ae736158aca8",
+      "applied_length": 496,
+      "original_length": 897
+    },
+    {
+      "version": "20260903165834",
+      "active_file": "supabase/migrations/20260903165834_linhas_tecnicas_cadastro_progressivo_v1.sql",
+      "applied_md5": "27e987cf0a096f372307ddbbda8f19b8",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260903165834_linhas_tecnicas_cadastro_progressivo_v1.sql",
+      "original_sha256": "6477c03bfaa2ccde550a575cb42bbca0869a8f75422d0bbf9f4a9911e2bc62bd",
+      "original_blob_sha": "f66bf689cec59be047c52f159120dfbf52933fc6",
+      "applied_length": 989,
+      "original_length": 255
+    },
+    {
+      "version": "20260812161000",
+      "active_file": "supabase/migrations/20260812161000_clientes_apelido_busca_v1.sql",
+      "applied_md5": "6b7f510c1e5466211c9ea3091f8c5fb2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260812161000_clientes_apelido_busca_v1.sql",
+      "original_sha256": "1a2dd4cea60c401a63933603af1afbd745dec5550c244c9c5775d1a8ed8699d1",
+      "original_blob_sha": "7a8fa233087fce22085740e1bcda2eb52b2b7140",
+      "applied_length": 195,
+      "original_length": 199
+    },
+    {
+      "version": "20260817203000",
+      "active_file": "supabase/migrations/20260817203000_configuracoes_validadas_orcamento_v1.sql",
+      "applied_md5": "376153838d7b3dc3e778be5a4c463237",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260817203000_configuracoes_validadas_orcamento_v1.sql",
+      "original_sha256": "79e2b65f95a906a6f06f9847214b9be78c4da132365c1678bc5f13e79ffcf23e",
+      "original_blob_sha": "8277079478b9871be64b861858524bd7b3a97cc1",
+      "applied_length": 2341,
+      "original_length": 2355
+    },
+    {
+      "version": "20260831190000",
+      "active_file": "supabase/migrations/20260831190000_compras_360_convite_fornecedores_v1.sql",
+      "applied_md5": "ff05df33e19d05d65ce8f1e61e996bb1",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260831190000_compras_360_convite_fornecedores_v1.sql",
+      "original_sha256": "c89f44242ae8c6464a9128ab48352bec344a6c2974ce1a61e973906f72a9426f",
+      "original_blob_sha": "b5aae10a4ea7f23191aa9aab2de48e87708b2219",
+      "applied_length": 182,
+      "original_length": 184
+    },
+    {
+      "version": "20260823184307",
+      "active_file": "supabase/migrations/20260823184307_produtos_precificacao_balcao.sql",
+      "applied_md5": "f679b5ac5f7fffa12289da283c6d707b",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823184307_produtos_precificacao_balcao.sql",
+      "original_sha256": "c5bb40eb3986f1088aebb5a23ba277678dd3aeb56aceb693e5fad217abfd6b92",
+      "original_blob_sha": "50e8d4271079c3ec2c229ae1bafab878c6d04e03",
+      "applied_length": 2279,
+      "original_length": 2492
+    },
+    {
+      "version": "20260812000000",
+      "active_file": "supabase/migrations/20260812000000_engenharia_receitas_tipologia_v1.sql",
+      "applied_md5": "649cbe2b834123d1e908d64235643419",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260812000000_engenharia_receitas_tipologia_v1.sql",
+      "original_sha256": "3174eb318f5977b129ade4c7b4d980be622937da01c95ba4742b2a64e91fbda9",
+      "original_blob_sha": "dc559ba06f877417a92b070e8fcb49e31ad9dd4c",
+      "applied_length": 2393,
+      "original_length": 2411
+    },
+    {
+      "version": "20260811183500",
+      "active_file": "supabase/migrations/20260811183500_engenharia_modulo_v1.sql",
+      "applied_md5": "4df63c1859d4f45e2bbfd7c9db6ea3fd",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260811183500_engenharia_modulo_v1.sql",
+      "original_sha256": "f51a8a94022496bf29afc35af47eab6b3873c17d90d8f54226f4c97cd6232b3c",
+      "original_blob_sha": "0fae3df5add50cd9d814aba6bab77bb5a488c759",
+      "applied_length": 2059,
+      "original_length": 2061
+    },
+    {
+      "version": "20260816190000",
+      "active_file": "supabase/migrations/20260816190000_cor_adicional_kg_v1.sql",
+      "applied_md5": "cd790ce165adb04985196bcae2bf23a2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260816190000_cor_adicional_kg_v1.sql",
+      "original_sha256": "07fbb0bae5cf5ff71c342c23fcfd4d4da04c611239d11043f0fa11d4202c9ab3",
+      "original_blob_sha": "7195d4bf75f255355eecaf21ab1249279f76b126",
+      "applied_length": 3736,
+      "original_length": 3745
+    },
+    {
+      "version": "20260815223000",
+      "active_file": "supabase/migrations/20260815223000_receitas_por_produto_v1.sql",
+      "applied_md5": "7077d2dc37f305b0a78066a9018b4732",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260815223000_receitas_por_produto_v1.sql",
+      "original_sha256": "f0b9b6f7ae30828cd97493f240adee7fbcb8ffedd496ffef45e47b8e58d0a22e",
+      "original_blob_sha": "2a1f1559a84b373b030c68663221e97cd0e58033",
+      "applied_length": 1435,
+      "original_length": 1447
+    },
+    {
+      "version": "20260821220855",
+      "active_file": "supabase/migrations/20260821220855_assistencia_gps_tempo_execucao.sql",
+      "applied_md5": "b8d7e7394a7afc088c7bedc6150d3f56",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260821220855_assistencia_gps_tempo_execucao.sql",
+      "original_sha256": "55a751f2020c740401afbea61d96c35da4fdfb916c718f581e011bea7ac32cff",
+      "original_blob_sha": "466ac26fea6137fc17807418c9138d9a2b398354",
+      "applied_length": 1723,
+      "original_length": 1900
+    },
+    {
+      "version": "20260823181223",
+      "active_file": "supabase/migrations/20260823181223_compras_fiscal_estoque_financeiro.sql",
+      "applied_md5": "fe8339a147ed1c9773bfe235b35871a3",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823181223_compras_fiscal_estoque_financeiro.sql",
+      "original_sha256": "a19416fc7f70ae4b0fe5539ac4963a7c1181b489ef074cd4e3d83e228c2c20aa",
+      "original_blob_sha": "b1a1f2ea5dbd1b9d76225db8b07a09242b3d6527",
+      "applied_length": 9991,
+      "original_length": 10296
+    },
+    {
+      "version": "20260813062000",
+      "active_file": "supabase/migrations/20260813062000_linhas_tecnicas_v1.sql",
+      "applied_md5": "ca1b0e8c3e274fc7b24be1c950d07ac5",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260813062000_linhas_tecnicas_v1.sql",
+      "original_sha256": "109f39fab2edb003b3d84ca3ebe7897fa18b9aa64f1f9f25412921c7b9168e35",
+      "original_blob_sha": "b894c4ec8f587e9548e28098191e5cc9bb5da2c9",
+      "applied_length": 1900,
+      "original_length": 1916
+    },
+    {
+      "version": "20260809003838",
+      "active_file": "supabase/migrations/20260809003838_criar_tabela_produtos.sql",
+      "applied_md5": "c04c9eb5b2ae61cb8ae0153e92656688",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809003838_criar_tabela_produtos.sql",
+      "original_sha256": "6e9c02aa6a9ac1d56537bb3f101da2f17edda8444901f01b95cada56024ff59b",
+      "original_blob_sha": "b920aa07a5b79381cb66102c1c54640a0553c550",
+      "applied_length": 641,
+      "original_length": 643
+    },
+    {
+      "version": "20260817151000",
+      "active_file": "supabase/migrations/20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql",
+      "applied_md5": "735053fb38fe057cc68258e77ef73b4e",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260817151000_carga_acessorios_wvetro_unidade_pendente_v1.sql",
+      "original_sha256": "663f54178b1dde88e223194e4bac161f6413e480533b90aae926a766fb8190b9",
+      "original_blob_sha": "f3d1bc68e93fb2fc01accb3d428871c1ab3656b2",
+      "applied_length": 32370,
+      "original_length": 32384
+    },
+    {
+      "version": "20260817170000",
+      "active_file": "supabase/migrations/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql",
+      "applied_md5": "b98aeb1435642f1061048be0adb91490",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260817170000_reconciliar_proveniencia_perfis_wvetro_v1.sql",
+      "original_sha256": "cc34865fdcd6e7856e13608ba13b065f2630f57c89e6079720027d385bd4a3cf",
+      "original_blob_sha": "c31e1c08eb7b8d251a0bb1ed66d845f0dc4be1dd",
+      "applied_length": 35018,
+      "original_length": 35038
+    },
+    {
+      "version": "20260823234124",
+      "active_file": "supabase/migrations/20260823234124_pdv_balcao_multiunidade.sql",
+      "applied_md5": "31d84516bd2c1cbbe875ad6659775072",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823234124_pdv_balcao_multiunidade.sql",
+      "original_sha256": "c0ad76af0c77df9f2b1d144030f3bb411c5e6ba0df458cd4f42a8faefb5ea93e",
+      "original_blob_sha": "badf0f8a7ea2210b406c0ce3783b8a730d469366",
+      "applied_length": 14179,
+      "original_length": 15190
+    },
+    {
+      "version": "20260823234024",
+      "active_file": "supabase/migrations/20260823234024_pdv_balcao_vencimentos.sql",
+      "applied_md5": "9735ee0cd7322f31f2324f20a82c90b6",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823234024_pdv_balcao_vencimentos.sql",
+      "original_sha256": "45cb23ed4d93bab12abe7d9e870d5f4edcf3c32acfd955853b27e8c39137adfc",
+      "original_blob_sha": "0b70fdcb6d54e649a4994ec9dab981dc1ba08938",
+      "applied_length": 8167,
+      "original_length": 8009
+    },
+    {
+      "version": "20260812010000",
+      "active_file": "supabase/migrations/20260812010000_ia_memoria_comercial_v1.sql",
+      "applied_md5": "1617adce023ac6ca165b9df276b5052f",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260812010000_ia_memoria_comercial_v1.sql",
+      "original_sha256": "284a79499c9f528dc2c2a34374109a42dea73fdf8ea3703b1393145f86d2eb4a",
+      "original_blob_sha": "e93fb9a34eaba02ca426a04a5bff9441801eaa8d",
+      "applied_length": 2626,
+      "original_length": 2647
+    },
+    {
+      "version": "20260903165648",
+      "active_file": "supabase/migrations/20260903165648_linhas_cadastro_progressivo_v1.sql",
+      "applied_md5": "369424bba5bcbae91deb29e5b6118eb6",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260903165648_linhas_cadastro_progressivo_v1.sql",
+      "original_sha256": "6477c03bfaa2ccde550a575cb42bbca0869a8f75422d0bbf9f4a9911e2bc62bd",
+      "original_blob_sha": "f66bf689cec59be047c52f159120dfbf52933fc6",
+      "applied_length": 1527,
+      "original_length": 255
+    },
+    {
+      "version": "20260816150000",
+      "active_file": "supabase/migrations/20260816150000_engenharia_variantes_v1.sql",
+      "applied_md5": "364fcd4d22acf3d7fe3319c986408ee2",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260816150000_engenharia_variantes_v1.sql",
+      "original_sha256": "06fbbc50c73dfa4cb0b4c4cf18606c121a63009235c29154da9c710c4f1dfc13",
+      "original_blob_sha": "10fa17294efa3a9f161d2f3207a23022081b257f",
+      "applied_length": 6348,
+      "original_length": 6387
+    },
+    {
+      "version": "20260817160000",
+      "active_file": "supabase/migrations/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql",
+      "applied_md5": "9b1e08cad250b8f5d53bf44ebb1a26e7",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260817160000_reconciliar_proveniencia_acessorios_wvetro_v1.sql",
+      "original_sha256": "2a1cd7c8f29c3cf6349caa1e6e9673396c445971ebd93ac287976fd7ddcb04b4",
+      "original_blob_sha": "3ece71d081ad79a8d510a3bc016ed62218539c14",
+      "applied_length": 110317,
+      "original_length": 110333
+    },
+    {
+      "version": "20260905173541",
+      "active_file": "supabase/migrations/20260905173541_p0_planos_corte_tenant_v1.sql",
+      "applied_md5": "348098dcc1cb970ed5ed4c1abff9327e",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905173541_p0_planos_corte_tenant_v1.sql",
+      "original_sha256": "22139bcc8c47ced5ee463e65873d084ce30d251bb3744caab2b57073825697f5",
+      "original_blob_sha": "e7cea252e7474713ada6fdfd30dd5a7ed2bb2d84",
+      "applied_length": 8072,
+      "original_length": 7934
+    },
+    {
+      "version": "20260816130000",
+      "active_file": "supabase/migrations/20260816130000_linhas_cores_precificacao_v1.sql",
+      "applied_md5": "2c5d19b8da2e967e108b678fceeb8797",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260816130000_linhas_cores_precificacao_v1.sql",
+      "original_sha256": "9c4df3a03fbdaee00b17e4e91128d2361c37ce0afec6788c4e0bad677e95bc34",
+      "original_blob_sha": "046672cf755d4a2bb46b777d1824335b73aa0928",
+      "applied_length": 1838,
+      "original_length": 1862
+    },
+    {
+      "version": "20260817150000",
+      "active_file": "supabase/migrations/20260817150000_produtos_unidade_operacional_pendente_v1.sql",
+      "applied_md5": "085bae709dc21f0a7691170ae27f8806",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260817150000_produtos_unidade_operacional_pendente_v1.sql",
+      "original_sha256": "f0b9e1c86204f76b840b52ba5e011fb7c0e8842390d4ba7d250dc36dd653d55b",
+      "original_blob_sha": "5944535d22325b3972e1ff5ed43089bd5a15b26d",
+      "applied_length": 363,
+      "original_length": 371
+    },
+    {
+      "version": "20260810203706",
+      "active_file": "supabase/migrations/20260810203706_v17_campos_extras_geral.sql",
+      "applied_md5": "30e0ca2ace5d43a0b5db7a0c0b1d12cf",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260810203706_v17_campos_extras_geral.sql",
+      "original_sha256": "388506d1e12cb36c1740e91d8c0700a28ac9b44a4a8fb192ab5e066c174643bc",
+      "original_blob_sha": "5004c29edc54df98c9dfd7a7241b9649928a7480",
+      "applied_length": 78,
+      "original_length": 80
+    },
+    {
+      "version": "20260905173700",
+      "active_file": "supabase/migrations/20260905173700_p0_automacoes_setor_tenant_v1.sql",
+      "applied_md5": "f8fe431479f9f42e080a2c53d519d7c4",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905173700_p0_automacoes_setor_tenant_v1.sql",
+      "original_sha256": "9205f457a41dc756a30d23a561ea398a1cf308b82857cd7a1eb8b229540f6e1b",
+      "original_blob_sha": "f3792411f3ca0d865348b851117858d7e106d4d4",
+      "applied_length": 2718,
+      "original_length": 2710
+    },
+    {
+      "version": "20260823005257",
+      "active_file": "supabase/migrations/20260823005257_editor_acessorios_tipologia.sql",
+      "applied_md5": "3c98525b2b2fee121b9d231d217dea3d",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260823005257_editor_acessorios_tipologia.sql",
+      "original_sha256": "27e19474c89af09de39fa04639d834fa5466e89c3232ce3632fc479db014b64e",
+      "original_blob_sha": "653cd3900146a7020fb4a4652ff36266a5f58534",
+      "applied_length": 15509,
+      "original_length": 1154
+    },
+    {
+      "version": "20260811110000",
+      "active_file": "supabase/migrations/20260811110000_medicao_final_v2.sql",
+      "applied_md5": "d6d5746f5f4f5659369e7e934196745b",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260811110000_medicao_final_v2.sql",
+      "original_sha256": "867e951962c7a7f31191d7e649de01ddad31ea2d726037b3b146d0a8628a53c7",
+      "original_blob_sha": "625454c5538af0c952c75ba85d7dd69df5e12b91",
+      "applied_length": 6040,
+      "original_length": 6077
+    },
+    {
+      "version": "20260826232740",
+      "active_file": "supabase/migrations/20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql",
+      "applied_md5": "69f677ea095ea597ece28c8ba2568467",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260826232740_workflow_automacoes_responsaveis_notificacoes_v1.sql",
+      "original_sha256": "bb89466a526359868653051878c4aaedcf1e712f48b0cad685f546323a199285",
+      "original_blob_sha": "5de9df4b64fd3d40f4861c0261090ab90b899ebf",
+      "applied_length": 33587,
+      "original_length": 31715
+    },
+    {
+      "version": "20260809014438",
+      "active_file": "supabase/migrations/20260809014438_orcamento_balcao.sql",
+      "applied_md5": "9beb227b91e06a44db97384c1d50ff9d",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260809014438_orcamento_balcao.sql",
+      "original_sha256": "526610a3f7fd7214c96c79aa4472ab76e54ef00976f640ed4c4c5f4ac8a52cc7",
+      "original_blob_sha": "4a942a5981d12e9b37bce08cc269ad2de59ae04d",
+      "applied_length": 312,
+      "original_length": 314
+    },
+    {
+      "version": "20260818020000",
+      "active_file": "supabase/migrations/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql",
+      "applied_md5": "281e983d0dbce229cb02f6e1ea805086",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260818020000_linha_tipologias_produtos_biblioteca_tecnica_v1.sql",
+      "original_sha256": "ba73953afe017ffe272ab9c29712e2d59f7a5a4faf0f961fc8eae9f138e38cba",
+      "original_blob_sha": "4ad2198aea1bce073b41e139e21ec352ee4a052a",
+      "applied_length": 5694,
+      "original_length": 5704
+    },
+    {
+      "version": "20260815100000",
+      "active_file": "supabase/migrations/20260815100000_plano_corte_producao_v1.sql",
+      "applied_md5": "92aa6a38d406fda5c767ad583bfb3f30",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260815100000_plano_corte_producao_v1.sql",
+      "original_sha256": "86db05785cdd2a85431e248621553a02fefbc31eebbb30904e756b2b327afe8e",
+      "original_blob_sha": "30a1dd76d2290c4e1dd5f3f5b7aff59bb587caf1",
+      "applied_length": 2640,
+      "original_length": 2657
+    },
+    {
+      "version": "20260905162022",
+      "active_file": "supabase/migrations/20260905162022_p0_legados_globais_bootstrap_gate_v1.sql",
+      "applied_md5": "ec9eeac64f7d028df0470732d85ae93e",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905162022_p0_legados_globais_bootstrap_gate_v1.sql",
+      "original_sha256": "bbe81b30128d8b297a1621f895f9457a365b2a3f547c8de6ab67750876dfc386",
+      "original_blob_sha": "795051a2ed732898180cbe5703646f4048ac2468",
+      "applied_length": 4127,
+      "original_length": 3719
+    },
+    {
+      "version": "20260905112957",
+      "active_file": "supabase/migrations/20260905112957_p0_multitenancy_fundacao_empresas_v1.sql",
+      "applied_md5": "53b4527958e47ece7d9b6eaf6bda3780",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260905112957_p0_multitenancy_fundacao_empresas_v1.sql",
+      "original_sha256": "64e4bc3ac2e138877c3cf73e85fc2173ba0d2e358fb573e60e8565f0219298e2",
+      "original_blob_sha": "8de7205bc445dea99c12072929f851b1465bf89b",
+      "applied_length": 9614,
+      "original_length": 9320
+    },
+    {
+      "version": "20260822234812",
+      "active_file": "supabase/migrations/20260822234812_engenharia_acessorios_pc3_formulas.sql",
+      "applied_md5": "330729f8a506d6dc8ac7b6c32cb3ad89",
+      "original_file": "supabase/migrations-review/20261010-content-differences/20260822234812_engenharia_acessorios_pc3_formulas.sql",
+      "original_sha256": "cff4d3f5549c006d05a7b5e9c2c85450ef93f7e09a757ec1e4e924af6ad72c23",
+      "original_blob_sha": "440629761be6010bae6a1eca832975aa8d92e132",
+      "applied_length": 7810,
+      "original_length": 10152
+    }
+  ],
+  "parallel_project_migration_notice": {
+    "version": "20261010203407",
+    "name": "venda_cotacao_lotes_categoria_v1",
+    "reason": "Incorporada ao main durante o PR por outra frente; conteúdo do repositório diverge do SQL do histórico remoto. Preservada sem substituição para evitar conflito com a frente de Compras.",
+    "remote_applied_md5": "018cf31592c3f02197970ad5b931ebc5",
+    "main_file_md5": "7aa7bead6105de5340af509d6ad4ee66",
+    "review_status": "pendente, fora do escopo das 87 divergências originais"
+  }
+}

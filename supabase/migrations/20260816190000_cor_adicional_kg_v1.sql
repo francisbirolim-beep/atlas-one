@@ -5,16 +5,13 @@
 -- Kg (ex: Natural R$36, Branco R$39, Anodizado Brilhante R$48,64, etc).
 -- Formula de custo: preco_kg_aluminio (natural) + cores.adicional_kg (por cor).
 
-alter table public.cores add column if not exists adicional_kg numeric not null default 0;
-
-comment on column public.cores.adicional_kg is 'Valor em R$ somado ao preco do Kg do aluminio natural quando essa cor e selecionada. Custo total da cor = configuracoes_precificacao.preco_kg_aluminio + cores.adicional_kg.';
-
+alter table public.cores add column if not exists adicional_kg numeric not null default 0
+comment on column public.cores.adicional_kg is 'Valor em R$ somado ao preco do Kg do aluminio natural quando essa cor e selecionada. Custo total da cor = configuracoes_precificacao.preco_kg_aluminio + cores.adicional_kg.'
 -- Valor real de hoje do Kg do aluminio natural (Wvetro).
-update public.configuracoes_precificacao set valor = 36.00, updated_at = now() where chave = 'preco_kg_aluminio';
+update public.configuracoes_precificacao set valor = 36.00, updated_at = now() where chave = 'preco_kg_aluminio'
 insert into public.configuracoes_precificacao (chave, valor)
 values ('preco_kg_aluminio', 36.00)
-on conflict (chave) do nothing;
-
+on conflict (chave) do nothing
 -- Seed com as cores reais e os valores de Kg extraidos da tela
 -- "Precos dos Perfis por Kg" do Wvetro (Tratamento por Cor). adicional_kg
 -- = valor total da cor no Wvetro - 36.00 (preco natural).
@@ -76,4 +73,4 @@ insert into public.cores (nome, pintura, adicional_kg, ativo) values
 ('PINTURA PRETO', true, 3.00, true),
 ('PRETO', true, 3.00, true),
 ('VERDE MUSGO 50593 LI', true, 11.74, true),
-('VERDE W 7 5BG3', true, 10.69, true);
+('VERDE W 7 5BG3', true, 10.69, true)

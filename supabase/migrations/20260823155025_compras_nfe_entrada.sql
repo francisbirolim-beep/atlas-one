@@ -1,5 +1,3 @@
--- Entrada de notas fiscais de compra (XML, PDF/DANFE ou manual)
-
 create table if not exists public.compras_nfs (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -60,8 +58,6 @@ create index if not exists compras_nf_itens_codigo_idx on public.compras_nf_iten
 alter table public.compras_nfs enable row level security;
 alter table public.compras_nf_itens enable row level security;
 
--- A primeira versão opera por rotas server-side usando service role.
--- Não abrimos políticas diretas para o cliente até o módulo de permissões de Compras ser definido.
 do $$
 begin
   insert into storage.buckets (id, name, public)

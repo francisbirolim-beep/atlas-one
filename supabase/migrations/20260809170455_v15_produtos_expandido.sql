@@ -13,4 +13,3 @@ alter table produtos add column if not exists icms_percentual numeric;
 alter table produtos add column if not exists ipi_percentual numeric;
 alter table produtos add column if not exists pis_percentual numeric;
 alter table produtos add column if not exists cofins_percentual numeric;
-;

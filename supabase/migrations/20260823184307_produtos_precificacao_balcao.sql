@@ -9,9 +9,6 @@ alter table public.produtos
   add column if not exists ultimo_preco_vendido numeric,
   add column if not exists ultimo_preco_vendido_em timestamptz;
 
--- O Atlas antigo tratava margem_percentual como markup sobre o custo.
--- Para registros já precificados, preserva custo e preço praticado e converte
--- somente a porcentagem para a margem real correspondente.
 update public.produtos
 set margem_percentual = round((((preco - custo) / preco) * 100)::numeric, 4)
 where margem_percentual is not null
