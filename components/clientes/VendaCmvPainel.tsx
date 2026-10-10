@@ -1,5 +1,5 @@
 'use client'
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Loader2, Plus, RefreshCw } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
@@ -10,6 +10,7 @@ const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',v
 const moedas=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const previstoFmt=(n:number|null)=>n===null?'Aguardando W.Vetro':moedas(n)
 const categories=Object.keys(labels) as Categoria[]
+const dataLocal=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
 function Card({titulo,valor,nota}:{titulo:string;valor:string;nota?:string}){
  return <div className="rounded-xl border bg-white p-4"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{titulo}</div><div className="mt-1 text-xl font-bold text-slate-900">{valor}</div>{nota&&<p className="mt-1 text-xs text-slate-500">{nota}</p>}</div>
 }
@@ -20,6 +21,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const [aberto,setAberto]=useState<Categoria|null>('perfil')
  const [adicionar,setAdicionar]=useState<'compra'|'adicional'|null>(null)
  const [salvando,setSalvando]=useState(false)
+ const enviandoRef=useRef(false)
  const [sucesso,setSucesso]=useState('')
  async function buscar(){
   setCarregando(true);setErro('')
@@ -36,7 +38,8 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const realizado=useMemo(()=>Object.values(comprasExistentes).reduce<number>((s,v)=>s+Number(v||0),0)+(dados?.lancamentos.reduce((s,l)=>s+Number(l.valor||0),0)||0),[dados,comprasExistentes])
  const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+(dados?.lancamentos.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)||0)])) as Record<Categoria,number>,[dados,comprasExistentes])
  async function enviar(e:FormEvent<HTMLFormElement>){
-  e.preventDefault();if(salvando)return
+  e.preventDefault();if(enviandoRef.current)return
+  enviandoRef.current=true
   setErro('');setSucesso('');setSalvando(true)
   try{
    const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
@@ -46,7 +49,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Erro ao salvar custo.')
    form.reset();setAdicionar(null);setSucesso('Registro realizado com sucesso.');await buscar()
   }catch(err){setErro(err instanceof Error?err.message:'Erro ao registrar custo.')}
-  finally{setSalvando(false)}
+  finally{enviandoRef.current=false;setSalvando(false)}
  }
  const p=dados?.previsto
  const perfis=p&&(p.categorias.perfil!==null&&p.categorias.sobra!==null)
@@ -70,7 +73,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
     <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} defaultValue={adicionar==='compra'?'compra':'outro'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option><option value="estoque">Material / sobra do estoque</option></>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
     <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" placeholder="Ex.: 1250,50" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold lg:col-span-2">Descrição<input required name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Data<input name="data" type="date" defaultValue={new Date().toISOString().slice(0,10)} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Data<input name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Quantidade (opcional)<input name="quantidade" type="number" min="0.001" step="any" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Unidade (opcional)<input name="unidade" placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Fornecedor (opcional)<input name="fornecedor" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
@@ -78,13 +81,14 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
     <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
     <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
    </div>
-   <p className="mt-3 text-xs text-slate-500">Material reaproveitado deve ser registrado como estoque pelo custo consumido. Compras já vinculadas à obra podem entrar automaticamente no realizado; não lance novamente a mesma nota sem conferir, para evitar duplicidade no CMV.</p>
+   <p className="mt-3 text-xs text-slate-500">Este formulário registra valores no CMV, mas não movimenta o Kanban de Compras. Para acompanhar pedidos e recebimentos, use a aba Compras. Material reaproveitado entra como estoque pelo custo consumido. Se a compra já tem valor real vinculado à obra, não registre a mesma nota novamente.</p>
    <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':adicionar==='compra'?'Registrar compra':'Registrar custo adicional'}</button></div>
   </form>}
   {dados&&<div className="space-y-4">
+   {realizado<=0&&<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Ainda não há custo efetivamente registrado nesta venda. O custo previsto W.Vetro é referência; não representa o realizado. Registre compras e custos antes de avaliar margem real.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <Card titulo="Custo previsto W.Vetro" valor={previstoFmt(p?.total??null)} nota={dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}/>
-    <Card titulo="Custo realizado registrado" valor={moedas(realizado)} nota="Inclui compras registradas e consumo de estoque; evite registrar a mesma compra duas vezes"/>
+    <Card titulo="Custo realizado registrado" valor={moedas(realizado)} nota="Parcial: inclui apenas valores lançados e compras com valor real informado; cotações não são despesa confirmada"/>
     <Card titulo="Diferença até agora" valor={p?.total==null?'—':moedas(p.total-realizado)} nota="Não representa economia final enquanto faltarem lançamentos"/>
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
    </div>
