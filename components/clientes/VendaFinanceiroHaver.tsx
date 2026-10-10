@@ -1,5 +1,3 @@
-[Reading 112 lines from start (total: 112 lines, 0 remaining)]
-
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -112,5 +110,3 @@ export default function VendaFinanceiroHaver({
     {creditos.length>0&&<div className="mt-3 space-y-2">{creditos.slice(0,5).map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-xs"><span>{dataBR(c.data_recebimento)} · {c.forma||'Forma não informada'}{c.referencia?` · ${c.referencia}`:''}</span><b className="text-emerald-700">{moeda(c.saldo)} livre</b></div>)}</div>}
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
