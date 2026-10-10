@@ -6,6 +6,7 @@ export type StatusFormulaCorte = 'em_desenvolvimento' | 'em_validacao' | 'valida
 export type StatusFormulaAcessorio = 'referencia' | 'em_validacao' | 'validada'
 
 export type VidroFormulaCorte = {
+  formula_quantidade?: string
   formula_largura?: string
   formula_altura?: string
   quantidade?: number
