@@ -14,6 +14,7 @@ import {
   iniciarProcessoVenda,
   salvarCadastroVenda,
 } from '@/lib/vendas'
+import { criarMedicaoDoOrcamento, verificarFluxoVendaOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import {
   CampoConfiguravel,
   camposDoContexto,
@@ -49,6 +50,9 @@ export default function ConfirmarVendaPage() {
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [orcamentoEntradaId, setOrcamentoEntradaId] = useState('')
+  const [origemFluxo, setOrigemFluxo] = useState('')
+  const [tipoMedicaoEntrada, setTipoMedicaoEntrada] = useState<TipoMedicaoFinal>('tipologia')
+  const [wvetroMedicaoDireta, setWvetroMedicaoDireta] = useState(false)
   const [orcamentos, setOrcamentos] = useState<OrcamentoRapido[]>([])
   const [selecionadoId, setSelecionadoId] = useState('')
   const [clienteId, setClienteId] = useState<string | undefined>()
@@ -75,21 +79,31 @@ export default function ConfirmarVendaPage() {
 
   useEffect(() => {
     usuarioAtual().then(setUsuario)
-    const id = new URLSearchParams(window.location.search).get('orcamento') || ''
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('orcamento') || ''
+    const origem = params.get('origem') || ''
+    const tipoEntrada: TipoMedicaoFinal = params.get('tipo') === 'contramarco' ? 'contramarco' : 'tipologia'
     setOrcamentoEntradaId(id)
+    setOrigemFluxo(origem)
+    setTipoMedicaoEntrada(tipoEntrada)
     if (!id) {
       setErro('Orçamento não informado.')
       setCarregando(false)
       return
     }
 
-    Promise.all([carregarConfirmacaoVenda(id), listarCamposConfiguraveis()]).then(async ([dados, campos]) => {
+    Promise.all([
+      carregarConfirmacaoVenda(id),
+      listarCamposConfiguraveis(),
+      origem === 'medicao-final' ? verificarFluxoVendaOrcamento(id) : Promise.resolve(null),
+    ]).then(async ([dados, campos, fluxoMedicao]) => {
       if (!dados) {
         setErro('Não foi possível carregar o orçamento.')
         setCarregando(false)
         return
       }
       setCamposConfigurados(campos)
+      setWvetroMedicaoDireta(origem === 'medicao-final' && !!fluxoMedicao?.wvetroVendidoValidado)
       setOrcamentos(dados.orcamentosCliente)
       setSelecionadoId(dados.orcamentoAtual.id)
       const idCliente = dados.cliente?.id || dados.orcamentoAtual.cliente_id
@@ -134,6 +148,12 @@ export default function ConfirmarVendaPage() {
     setErro('')
     setMensagem('')
     setObraId((o as any).obra_id || '')
+    setWvetroMedicaoDireta(false)
+    if (origemFluxo === 'medicao-final') {
+      void verificarFluxoVendaOrcamento(o.id).then(fluxo => {
+        setWvetroMedicaoDireta(!!fluxo.wvetroVendidoValidado)
+      })
+    }
   }
 
   async function salvarCadastro() {
@@ -167,6 +187,23 @@ export default function ConfirmarVendaPage() {
     if (!selecionado) return
     setErro('')
     setMensagem('')
+
+    if (origemFluxo === 'medicao-final' && wvetroMedicaoDireta) {
+      if (!prontoItens) {
+        setErro('O orçamento W.Vetro escolhido não possui itens para iniciar a Medida Final.')
+        return
+      }
+      setIniciando(true)
+      const medicao = await criarMedicaoDoOrcamento(selecionado.id, usuario, tipoMedicaoEntrada)
+      setIniciando(false)
+      if (!medicao) {
+        setErro('Não foi possível iniciar a Medida Final a partir deste orçamento W.Vetro.')
+        return
+      }
+      router.push(`/producao/medicao-final/${medicao.id}`)
+      return
+    }
+
     if (!prontoCadastro) {
       setErro('Salve o cadastro completo do cliente antes de iniciar o processo.')
       return
@@ -565,11 +602,31 @@ export default function ConfirmarVendaPage() {
 
         <section className="bg-brand-navy text-white rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} /> 5. Confirmar venda e iniciar Engenharia</div>
-            <p className="text-xs text-white/70 mt-1">Agora nascem o Financeiro e o card Conferir Projeto. A obra selecionada acompanha todos os próximos setores.</p>
+            <div className="flex items-center gap-2 font-semibold">
+              <CheckCircle2 size={18} />
+              {origemFluxo === 'medicao-final' && wvetroMedicaoDireta
+                ? '5. Iniciar Medida Final'
+                : '5. Confirmar venda e iniciar Engenharia'}
+            </div>
+            <p className="text-xs text-white/70 mt-1">
+              {origemFluxo === 'medicao-final' && wvetroMedicaoDireta
+                ? 'Este orçamento W.Vetro já está vendido e validado para este cliente. A Medida Final será criada sem duplicar Financeiro ou o fluxo comercial.'
+                : 'Agora nascem o Financeiro e o card Conferir Projeto. A obra selecionada acompanha todos os próximos setores.'}
+            </p>
           </div>
-          <button onClick={iniciar} disabled={!prontoCadastro || !prontoItens || iniciando || !!itensPreview} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40">
-            <Play size={16} /> {iniciando ? 'Confirmando...' : 'Confirmar venda'}
+          <button
+            onClick={iniciar}
+            disabled={
+              origemFluxo === 'medicao-final' && wvetroMedicaoDireta
+                ? !prontoItens || iniciando || !!itensPreview
+                : !prontoCadastro || !prontoItens || iniciando || !!itensPreview
+            }
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40"
+          >
+            <Play size={16} />
+            {iniciando
+              ? origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciando...' : 'Confirmando...'
+              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciar Medida Final' : 'Confirmar venda'}
           </button>
         </section>
 
