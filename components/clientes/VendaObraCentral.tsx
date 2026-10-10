@@ -1362,7 +1362,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={alternarSelecionarTodos} disabled={!materiaisTabela.length} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">{todosMateriaisTabelaSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
                 <span className="text-xs font-semibold text-slate-600">{selecionadosMateriais.length} selecionado(s)</span>
-                <span className="text-[11px] text-slate-500">Sem seleção, a lista inclui todos os materiais desta categoria que precisam ser cotados.</span>}
+                <span className="text-[11px] text-slate-500">Sem seleção, a lista inclui todos os materiais desta categoria que precisam ser cotados.</span>
               </div>
               <span className="text-[11px] text-slate-500">A emissão salva a lista validada em Compras → Em cotação.</span>
             </div>
