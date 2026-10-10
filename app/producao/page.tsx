@@ -240,11 +240,29 @@ export default function Producao() {
   async function moverCard(e: React.DragEvent, colunaId: string) {
     e.preventDefault()
     const id = e.dataTransfer.getData('text/plain')
-    if (!id) return
+    const card = cards.find(c => c.id === id)
+    if (!card || card.coluna_id === colunaId || liberandoId) return
+
+    const destino = colunas.find(c => c.id === colunaId)
+    const nomeDestino = String(destino?.nome || '').toLowerCase()
+    const liberadoEm = (card as SetorKanbanItem & { liberado_producao_em?: string | null }).liberado_producao_em
+
+    // Arrastar uma medição ainda não liberada para "Liberado para produzir"
+    // executa a mesma aprovação segura do botão, sem pular o plano de corte.
+    if (medicaoDoCard(card) && !liberadoEm &&
+        nomeDestino.includes('liberad') && nomeDestino.includes('produ')) {
+      await liberarProducao(card, colunaId)
+      return
+    }
+
     const anterior = cards
+    setErro('')
     setCards(prev => prev.map(c => c.id === id ? { ...c, coluna_id: colunaId } : c))
     const ok = await moverItemSetor(id, colunaId)
-    if (!ok) setCards(anterior)
+    if (!ok) {
+      setCards(anterior)
+      setErro('Não foi possível mover este card. Confira se você tem permissão para esta etapa.')
+    }
   }
 
   async function abrirRelatorioMedicao(medicaoId: string) {
@@ -260,7 +278,7 @@ export default function Producao() {
     await gerarPdfMedicaoFinal(medicao, itens)
   }
 
-  async function liberarProducao(card: SetorKanbanItem) {
+  async function liberarProducao(card: SetorKanbanItem, colunaDestinoId?: string) {
     const medicao = medicaoDoCard(card)
     if (!medicao) {
       setErro('Este card ainda não possui uma Medição Final vinculada.')
@@ -298,9 +316,11 @@ export default function Producao() {
       }
 
       const colunaAtual = colunas.find(c => c.id === card.coluna_id)
-      const proxima = colunas
-        .filter(c => Number(c.ordem || 0) > Number(colunaAtual?.ordem || 0))
-        .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))[0] || null
+      const proxima = colunaDestinoId
+        ? colunas.find(c => c.id === colunaDestinoId) || null
+        : colunas
+          .filter(c => Number(c.ordem || 0) > Number(colunaAtual?.ordem || 0))
+          .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))[0] || null
 
       const marcado = await marcarCardLiberadoProducao(card.id, proxima?.id || null, usuario)
       if (!marcado.ok) {
