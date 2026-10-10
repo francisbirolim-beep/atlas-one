@@ -13,7 +13,7 @@ import {
   type RegistroFormulaCorte,
   type StatusFormulaAcessorio,
 } from '@/lib/engenhariaFormulasCorte'
-import { listarProdutosTecnicos } from '@/lib/engenhariaReceitas'
+import { listarProdutos } from '@/lib/produtos'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import { listarTipologias, type TipologiaTecnica } from '@/lib/tipologias'
 import type { Produto } from '@/lib/tipos'
@@ -63,7 +63,7 @@ export default function EditorAcessoriosPage() {
     async function carregar() {
       setCarregando(true)
       const [formulas, catalogo, linhasTecnicas, tipologiasTecnicas] = await Promise.all([
-        listarTodasFormulasCorte(), listarProdutosTecnicos(), listarLinhasTecnicas(), listarTipologias(true),
+        listarTodasFormulasCorte(), listarProdutos(), listarLinhasTecnicas(), listarTipologias(true),
       ])
       setRegistros(formulas); setProdutos(catalogo); setLinhas(linhasTecnicas); setTipologias(tipologiasTecnicas)
 
@@ -93,8 +93,8 @@ export default function EditorAcessoriosPage() {
   const tipologiaSelecionada = useMemo(() => tipologias.find(t => t.id === tipologiaId) || null, [tipologias, tipologiaId])
   const configuracoes = useMemo(() => registros.filter(r => r.tipologia_id === tipologiaId), [registros, tipologiaId])
   const selecionada = useMemo(() => registros.find(r => r.id === configuracaoId) || null, [registros, configuracaoId])
-  const acessoriosCatalogo = useMemo(() => produtos.filter(p => p.categoria === 'acessorio' && p.codigo), [produtos])
-  const buscarAcessorio = (codigo: string) => acessoriosCatalogo.find(p => p.codigo?.trim().toUpperCase() === codigo.trim().toUpperCase()) || null
+  const acessoriosCatalogo = useMemo(() => produtos.filter(p => p.categoria === 'acessorio' && p.codigo && p.ativo !== false && Boolean(p.unidade)), [produtos])
+  const buscarAcessorio = (codigo: string) => produtos.find(p => p.categoria === 'acessorio' && p.codigo?.trim().toUpperCase() === codigo.trim().toUpperCase()) || null
   const atualizarImagem = (id: string, fotoUrl: string) => setProdutos(anteriores => anteriores.map(p => p.id === id ? { ...p, foto_url: fotoUrl } : p))
   const folhas = extrairFolhas(tipologiaSelecionada?.label || selecionada?.tipologia?.label || '')
 
