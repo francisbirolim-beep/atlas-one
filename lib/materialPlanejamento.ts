@@ -732,7 +732,9 @@ export async function gerarPacoteTecnico(
       try {
         const larguraVidro = calcularFormulaCorteIsolada(String(vidro.formula_largura), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined, formula.metadados_editor?.folgas)
         const alturaVidro = calcularFormulaCorteIsolada(String(vidro.formula_altura), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined, formula.metadados_editor?.folgas)
-        const qtdVidro = Math.max(1, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : n(vidro.quantidade, 1)) * qtdItem
+        const qtdPanos = vidro.formula_quantidade ? calcularFormulaCorteIsolada(String(vidro.formula_quantidade), largura, altura, formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : undefined, formula.metadados_editor?.folgas) : formula.variaveis?.some(v => v.chave === 'numero_folhas') ? folhasDoItem(item) : n(vidro.quantidade, 1)
+        if (!Number.isInteger(qtdPanos) || qtdPanos < 1) throw new Error('Quantidade de vidros inválida na receita técnica')
+        const qtdVidro = qtdPanos * qtdItem
         const areaVidroM2 = (larguraVidro / 1000) * (alturaVidro / 1000) * qtdVidro
         const emOrcamento = origem === 'orcamento_simulacao'
         materiais.push({
