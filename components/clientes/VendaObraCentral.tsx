@@ -1184,7 +1184,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           outros:custosPorCategoria.outros.realizado,
         }} onMudanca={setRealizadoCmvManual}/>}
 
-        {aba==='compras'&&<Box titulo="Compras desta obra">
+        {aba==='compras'&&<Box titulo="Compras e cotações desta venda">
+          {!venda.obra_id&&<div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Esta venda ainda não tem obra vinculada. Você pode validar materiais e gerar a lista de cotação, mas os pedidos e recebimentos só poderão ser vinculados à obra depois do cadastro/vínculo.</div>}
+          {mensagemMateriais&&<div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">{mensagemMateriais}</div>}
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <b className="text-sm text-slate-900">Acompanhamento de compras por categoria</b>
