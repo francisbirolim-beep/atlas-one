@@ -376,7 +376,7 @@ export default function NovoOrcamentoHub() {
       </main>
 
       {modo === 'obra' && selecionada && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.10)] backdrop-blur md:hidden">
+        <div className="fixed inset-x-0 bottom-[calc(4.9rem+env(safe-area-inset-bottom))] z-40 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.10)] backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-md min-w-0 items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-blue-600">Tipologia selecionada</p>
