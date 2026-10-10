@@ -253,7 +253,8 @@ export default function Producao() {
     // No Kanban da Produção, arrastar para "Liberado para Produção" precisa
     // executar a liberação real (aprovação da Medição Final + pacote técnico),
     // não a rotina especial da Engenharia.
-    if (destinoEhLiberacao && medicao?.status_operacional !== 'aprovado') {
+    const liberadoEm = (card as SetorKanbanItem & { liberado_producao_em?: string | null }).liberado_producao_em
+    if (destinoEhLiberacao && medicao && !liberadoEm) {
       await liberarProducao(card, colunaId)
       return
     }
