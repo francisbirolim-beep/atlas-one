@@ -62,13 +62,9 @@ begin
 
   perform pg_advisory_xact_lock(hashtext(tg_table_name || ':' || coalesce(v_empresa_id::text,'global') || ':' || v_id::text));
   if v_empresa_id is null then
-    select coalesce(max(versao),0)+1 into v_versao
-      from public.cadastro_historico
-     where entidade_tabela=tg_table_name and entidade_id=v_id and empresa_id is null;
+    select coalesce(max(versao),0)+1 into v_versao from public.cadastro_historico where entidade_tabela=tg_table_name and entidade_id=v_id and empresa_id is null;
   else
-    select coalesce(max(versao),0)+1 into v_versao
-      from public.cadastro_historico
-     where entidade_tabela=tg_table_name and entidade_id=v_id and empresa_id=v_empresa_id;
+    select coalesce(max(versao),0)+1 into v_versao from public.cadastro_historico where entidade_tabela=tg_table_name and entidade_id=v_id and empresa_id=v_empresa_id;
   end if;
 
   insert into public.cadastro_historico(empresa_id,entidade_tabela,entidade_tipo,entidade_id,versao,acao,dados_antes,dados_depois,campos_alterados,motivo,origem,usuario_id,usuario_nome)

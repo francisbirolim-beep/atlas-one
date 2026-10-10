@@ -1,3 +1,4 @@
+
 alter table public.pacote_tecnico_materiais
   add column if not exists status_compra text not null default 'necessidade',
   add column if not exists status_compra_atualizado_em timestamptz;

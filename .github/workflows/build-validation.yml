@@ -65,5 +65,8 @@ jobs:
       - name: Supabase SQL source and archived differences integrity
         run: npm run test:supabase-applied
 
+      - name: Supabase exact applied content and unapplied review
+        run: npm run test:supabase-exact
+
       - name: Build
         run: npm run build

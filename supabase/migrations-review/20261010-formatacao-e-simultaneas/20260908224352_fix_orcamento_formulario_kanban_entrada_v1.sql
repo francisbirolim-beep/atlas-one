@@ -1,0 +1,1 @@
+drop trigger if exists trg_orcamento_obra_coluna_orcamento_feito_v1 on public.orcamentos;

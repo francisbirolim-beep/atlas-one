@@ -1,0 +1,2 @@
+alter table public.configuracoes_precificacao drop constraint if exists configuracoes_precificacao_chave_compat_key;
+alter table public.configuracoes_precificacao add constraint configuracoes_precificacao_chave_compat_key unique(chave);

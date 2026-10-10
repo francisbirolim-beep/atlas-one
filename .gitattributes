@@ -1,0 +1,4 @@
+
+# Historico aplicado no Supabase: preservar CRLF/EOF originais sem falso positivo no diff.
+supabase/migrations/20260916011453_pc2_suprema_receita_v1.sql -whitespace
+supabase/migrations/20260916012340_pc2_suprema_variaveis_v1.sql -whitespace

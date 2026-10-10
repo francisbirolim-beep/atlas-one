@@ -10,3 +10,4 @@ update public.engenharia_tipologia_formulas_corte f set
   ativo = false, status = 'em_validacao', updated_at = now()
 where f.configuracao_chave = 'pc2_suprema_editor_v1'
   and not exists (select 1 from jsonb_array_elements(f.variaveis) v where v->>'chave'='montante_lateral');
+
