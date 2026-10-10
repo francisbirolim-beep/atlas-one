@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CalendarDays, Clock3, Filter, Flame, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
@@ -63,6 +65,9 @@ export default function ProspeccaoPage() {
     const item = itens.find(i => i.id === arrastando)
     setArrastando(null)
     if (!item || item.status === status) return
+    const origem=STATUS_PROSPECCAO.find(c=>c.id===item.status)
+    const destino=STATUS_PROSPECCAO.find(c=>c.id===status)
+    if (!confirmarMovimentoKanban({card:item.nome_cliente||'Prospecção',origem:origem?.label||item.status,destino:destino?.label||status,retrocesso:STATUS_PROSPECCAO.findIndex(c=>c.id===status)<STATUS_PROSPECCAO.findIndex(c=>c.id===item.status)})) return
     setItens(prev => prev.map(p => p.id === item.id ? { ...p, status, status_atualizado_em: new Date().toISOString() } : p))
     const r = await moverProspeccao(item, status)
     if (!r.ok) { alert(r.error || 'Não foi possível mover a prospecção.'); await carregar() }
