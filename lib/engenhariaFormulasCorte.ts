@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { listarLinhasTecnicas } from '@/lib/linhasTecnicas'
-import type { CondicaoFormula, PecaFormula, TipologiaFormulasCorte, VariavelTipologia } from '@/lib/formulasCorteEngine'
+import type { CondicaoFormula, PecaFormula, TipologiaFormulasCorte, FolgasEncaixe, VariavelTipologia } from '@/lib/formulasCorteEngine'
 
 export type StatusFormulaCorte = 'em_desenvolvimento' | 'em_validacao' | 'validada'
 export type StatusFormulaAcessorio = 'referencia' | 'em_validacao' | 'validada'
@@ -32,6 +32,7 @@ export type AcessorioFormulaCorte = {
 type TipologiaFormula = { id: string; label: string; chave: string; ativo: boolean }
 
 export type RegistroFormulaCorte = TipologiaFormulasCorte & {
+  metadados_editor: Record<string, unknown>
   id: string
   ativo: boolean
   configuracao_chave: string
@@ -49,6 +50,7 @@ type FormulaBanco = {
   tipologia_id: string
   variaveis: unknown
   pecas: unknown
+  metadados_editor?: unknown
   ativo: boolean
   configuracao_chave?: string | null
   configuracao_label?: string | null
@@ -60,7 +62,18 @@ type FormulaBanco = {
   tipologia?: TipologiaFormula | TipologiaFormula[] | null
 }
 
+function folgasDoMetadata(metadados: Record<string, unknown>): FolgasEncaixe {
+  const bruto = metadados.folgas as Partial<FolgasEncaixe> | undefined
+  const largura = Number(bruto?.largura_mm ?? 4)
+  const altura = Number(bruto?.altura_mm ?? 4)
+  return {
+    largura_mm: Number.isFinite(largura) ? largura : 4,
+    altura_mm: Number.isFinite(altura) ? altura : 4,
+  }
+}
+
 function normalizar(item: FormulaBanco): RegistroFormulaCorte {
+  const metadados = item.metadados_editor && typeof item.metadados_editor === 'object' && !Array.isArray(item.metadados_editor) ? item.metadados_editor as Record<string, unknown> : {}
   const tipologiaBase = Array.isArray(item.tipologia) ? item.tipologia[0] || null : item.tipologia || null
   const configuracaoLabel = item.configuracao_label || 'Padrão'
   const tipologia = tipologiaBase
@@ -70,6 +83,8 @@ function normalizar(item: FormulaBanco): RegistroFormulaCorte {
   return {
     id: item.id,
     tipologia_id: item.tipologia_id,
+    metadados_editor: metadados,
+    folgas: folgasDoMetadata(metadados),
     variaveis: Array.isArray(item.variaveis) ? item.variaveis as VariavelTipologia[] : [],
     pecas: Array.isArray(item.pecas) ? item.pecas as PecaFormula[] : [],
     ativo: Boolean(item.ativo),
@@ -86,7 +101,7 @@ function normalizar(item: FormulaBanco): RegistroFormulaCorte {
   }
 }
 
-const CAMPOS = 'id, tipologia_id, variaveis, pecas, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, acessorios, tipologia:tipologias(id,label,chave,ativo)'
+const CAMPOS = 'id, tipologia_id, variaveis, pecas, metadados_editor, ativo, configuracao_chave, configuracao_label, status, versao, observacoes, vidro, acessorios, tipologia:tipologias(id,label,chave,ativo)'
 
 export async function listarFormulasCorteAtivas(): Promise<RegistroFormulaCorte[]> {
   const [formulasResp, linhas] = await Promise.all([
@@ -140,6 +155,8 @@ export async function salvarFormulaCorte(
     status: StatusFormulaCorte
     ativo: boolean
     observacoes?: string | null
+    folgas?: FolgasEncaixe
+    metadados_editor?: Record<string, unknown>
   }
 ): Promise<RegistroFormulaCorte | null> {
   const ativoSeguro = dados.status === 'validada' ? dados.ativo : false
@@ -154,6 +171,7 @@ export async function salvarFormulaCorte(
     updated_at: new Date().toISOString(),
   }
   if (dados.acessorios !== undefined) atualizacao.acessorios = dados.acessorios
+  if (dados.folgas) atualizacao.metadados_editor = { ...(dados.metadados_editor || {}), folgas: dados.folgas }
 
   const { data, error } = await supabase
     .from('engenharia_tipologia_formulas_corte')
