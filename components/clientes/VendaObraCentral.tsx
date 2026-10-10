@@ -13,6 +13,7 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { adicionarMaterialManual, ajustarMaterial, excluirMaterialDoPacote, gerarPacoteTecnico, recalcularAproveitamentoPacote } from '@/lib/materialPlanejamento'
 import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada'
 import VendaLiberacaoOrdens from '@/components/clientes/VendaLiberacaoOrdens'
+import VendaVincularObra from '@/components/clientes/VendaVincularObra'
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
@@ -938,6 +939,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     <main className="mx-auto max-w-7xl px-4 py-5">
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
       {mensagemFluxo&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemFluxo}</div>}
+      {!venda.obra_id&&<VendaVincularObra vendaId={venda.id} clienteNome={cliente.nome} cidadeCliente={cliente.cidade} onVinculada={carregar}/>}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
