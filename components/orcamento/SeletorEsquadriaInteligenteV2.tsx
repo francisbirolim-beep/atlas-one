@@ -253,7 +253,9 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
       const status = statusTipologias[t.id]
       const imagem = imagemTipologia(t).url
       const configs = catalogo.configuracoes.filter(c => c.tipologia_id === t.id)
-      const texto = normalizar(`${t.label} ${t.chave} ${linha?.nome || ''} ${configs.map(c => c.nome).join(' ')}`)
+      const ref = referenciasWVetro[t.id]
+      const variantes = (ref?.variaveis || []).map(v => `${v.label} ${v.valor}`).join(' ')
+      const texto = normalizar(`${t.label} ${t.chave} ${linha?.nome || ''} ${configs.map(c => c.nome).join(' ')} ${variantes}`)
       if (q && !texto.includes(q)) return false
       if (filtro === 'validados' && status?.status !== 'validada_atlas') return false
       if (filtro === 'validacao' && status?.status !== 'em_validacao_atlas') return false
@@ -272,7 +274,7 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
       label: string
       obrigatorio: boolean
       atlas: boolean
-      referencia: ReferenciaVariavelWVetro | null
+      referencias: ReferenciaVariavelWVetro[]
     }>()
 
     for (const item of variaveisTipologia) {
@@ -283,14 +285,16 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
         label: item.variavel.label,
         obrigatorio: item.obrigatorio,
         atlas: true,
-        referencia: null,
+        referencias: [],
       })
     }
 
     for (const ref of referenciaAtual?.variaveis || []) {
       const atual = mapa.get(ref.chave)
-      if (atual) atual.referencia = ref
-      else {
+      if (atual) {
+        atual.referencias.push(ref)
+        if (!atual.variavelId && ref.variavelId) atual.variavelId = ref.variavelId
+      } else {
         mapa.set(ref.chave, {
           id: `wvetro-${ref.id}`,
           variavelId: ref.variavelId,
@@ -298,14 +302,14 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
           label: ref.label,
           obrigatorio: false,
           atlas: false,
-          referencia: ref,
+          referencias: [ref],
         })
       }
     }
 
     const ordem = new Map<string, number>([
       ['montagem', 1], ['trilho', 2], ['contramarco', 3], ['arremate', 4], ['fechadura', 5],
-      ['puxador', 6], ['mao_amiga', 7], ['reforco', 8], ['roldana', 9], ['folhas', 10],
+      ['puxador', 6], ['mao_amiga', 7], ['reforco', 8], ['roldana', 9], ['preenchimento', 10], ['tipo_vidro', 11], ['folhas', 12],
     ])
     return Array.from(mapa.values()).sort((a, b) => (ordem.get(a.chave) || 999) - (ordem.get(b.chave) || 999) || a.label.localeCompare(b.label, 'pt-BR'))
   }, [variaveisTipologia, referenciaAtual])
@@ -405,8 +409,15 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
     }
 
     const novos = { ...(value.variaveis || {}) }
+    const referenciasPorChave = new Map<string, Set<string>>()
     for (const ref of referenciaAtual?.variaveis || []) {
-      if (!novos[ref.chave] && ref.valor) novos[ref.chave] = ref.valor
+      if (!ref.valor) continue
+      const valores = referenciasPorChave.get(ref.chave) || new Set<string>()
+      valores.add(ref.valor)
+      referenciasPorChave.set(ref.chave, valores)
+    }
+    for (const [chave, valores] of referenciasPorChave.entries()) {
+      if (!novos[chave] && valores.size === 1) novos[chave] = Array.from(valores)[0]
     }
     const obrigatorias = variaveisTipologia.filter(v => v.obrigatorio).map(v => v.variavel.chave)
     const completas = obrigatorias.every(chave => Boolean(novos[chave]))
@@ -650,8 +661,12 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
               {variaveisUnificadas.map(v => {
                 const opcoes = v.variavelId ? catalogo.opcoes.filter(o => o.variavel_id === v.variavelId) : []
                 const atual = value.variaveis?.[v.chave] || ''
-                const refAtiva = Boolean(v.referencia?.valor && atual === v.referencia.valor)
-                const possuiOpcaoRef = Boolean(v.referencia?.valor && opcoes.some(o => o.chave === v.referencia?.valor))
+                const refsDistintas = Array.from(new Map(
+                  v.referencias.filter(r => Boolean(r.valor)).map(r => [r.valor, r]),
+                ).values())
+                const refSelecionada = refsDistintas.find(r => r.valor === atual) || null
+                const refAtiva = Boolean(refSelecionada)
+                const chavesOpcoesAtlas = new Set(opcoes.map(o => o.chave))
                 return (
                   <div key={v.id} className="rounded-lg border border-slate-200 bg-white p-2.5">
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
@@ -659,15 +674,16 @@ export default function SeletorEsquadriaInteligenteV2({ value, onChange }: Props
                       <div className="flex gap-1">
                         {v.atlas && <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700">ATLAS</span>}
                         {refAtiva && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[8px] font-bold text-blue-700">WVETRO REFERÊNCIA</span>}
-                        {v.referencia && atual && !refAtiva && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[8px] font-bold text-amber-700">AJUSTADA</span>}
+                        {v.referencias.length > 0 && atual && !refAtiva && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[8px] font-bold text-amber-700">AJUSTADA</span>}
                       </div>
                     </div>
                     <select value={atual} onChange={e => mudarVariavel(v.chave, e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white">
                       <option value="">A definir</option>
-                      {!possuiOpcaoRef && v.referencia?.valor && <option value={v.referencia.valor}>{v.referencia.valor} · W.Vetro</option>}
+                      {refsDistintas.filter(r => !chavesOpcoesAtlas.has(r.valor)).map(r => <option key={r.id} value={r.valor}>{r.valor} · W.Vetro</option>)}
                       {opcoes.map(o => <option key={o.id} value={o.chave}>{o.label}</option>)}
                     </select>
-                    {v.referencia?.evidencia && <p className="mt-1.5 text-[9px] text-blue-600">Origem: {v.referencia.evidencia}</p>}
+                    {refSelecionada?.evidencia && <p className="mt-1.5 text-[9px] text-blue-600">Origem: {refSelecionada.evidencia}</p>}
+                    {refsDistintas.length > 1 && !atual && <p className="mt-1.5 text-[9px] text-slate-500">{refsDistintas.length} opção(ões) observada(s) no histórico W.Vetro.</p>}
                   </div>
                 )
               })}
