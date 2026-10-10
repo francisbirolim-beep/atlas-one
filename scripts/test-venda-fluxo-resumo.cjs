@@ -1,0 +1,27 @@
+const assert=require('node:assert/strict')
+const fs=require('node:fs')
+const ts=require('typescript')
+const modulo={exports:{}}
+const source=fs.readFileSync('lib/vendaFluxoResumo.ts','utf8')
+new Function('module','exports',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText)(modulo,modulo.exports)
+const avaliar=modulo.exports.avaliarFluxoVenda
+const instalado={status:'instalado',quantidade:2,quantidade_instalada:2,pendencia:null,checklist:{nivelamento:true,vedacao:true,acabamento:true,limpeza:true}}
+const base={valorVenda:1000,contas:[{valor:1000,valor_pago:900,valor_desconto:100,status:'pago'}],compras:[{status:'recebido'}],ordens:[{status:'concluida',bloqueada:false}],instalacoes:[instalado]}
+const ok=avaliar(base)
+assert.equal(ok.podeEncerrar,true)
+assert.deepEqual(ok.pendencias,[])
+assert.equal(ok.progressoInstalacao,100)
+assert.deepEqual(ok.etapas.map(x=>x.id),['venda','financeiro','compras','producao','instalacao'])
+assert.equal(avaliar({...base,contas:[]}).podeEncerrar,false,'Sem contas financeiras não equivale a quitado')
+assert.equal(avaliar({...base,contas:[{valor:500,valor_pago:500}]}).parcelasCorretas,false,'Parcela divergente bloqueia encerramento')
+assert.equal(avaliar({...base,contas:[{valor:1000,valor_pago:700,valor_desconto:100}]}).saldo,200)
+assert.equal(avaliar({...base,compras:[{status:'cotacao'}]}).podeEncerrar,false,'Cotação não é compra recebida')
+assert.equal(avaliar({...base,compras:[]}).podeEncerrar,false,'Ausência de compra não é conclusão')
+assert.equal(avaliar({...base,compras:[],materiaisPlanejados:3,materiaisInteiramenteAtendidosEstoque:true}).podeEncerrar,true)
+assert.equal(avaliar({...base,ordens:[]}).podeEncerrar,false,'Sem ordem não é produção concluída')
+assert.equal(avaliar({...base,ordens:[{status:'concluida',bloqueada:true}]}).podeEncerrar,false)
+assert.equal(avaliar({...base,instalacoes:[]}).podeEncerrar,false,'Sem checklist não é instalação concluída')
+assert.equal(avaliar({...base,instalacoes:[{...instalado,quantidade_instalada:1}]}).progressoInstalacao,50)
+assert.equal(avaliar({...base,instalacoes:[{...instalado,pendencia:'ajustar borracha'}]}).podeEncerrar,false)
+assert.equal(avaliar({...base,instalacoes:[{...instalado,checklist:{nivelamento:true}}]}).podeEncerrar,false,'Checklist incompleto bloqueia conclusão')
+console.log('PASS: fluxo da venda, financeiro contínuo, compras, produção, instalação e encerramento seguro.')
