@@ -338,6 +338,7 @@ export interface SetorKanbanColuna {
       id: string
       setor_id: string
       nome: string
+      descricao?: string | null
       ordem: number
       created_at?: string
 }
