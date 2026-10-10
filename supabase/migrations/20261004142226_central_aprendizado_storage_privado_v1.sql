@@ -1,3 +1,4 @@
+
 drop policy if exists atlas_aprendizado_upload_autenticado on storage.objects;
 
 create policy atlas_aprendizado_upload_autenticado

@@ -16,11 +16,15 @@ declare v_prod_empresa uuid; v_criador_empresa uuid;
 begin
   if new.produto_id is not null then
     select empresa_id into v_prod_empresa from public.produtos where id=new.produto_id;
-    if v_prod_empresa is null or v_prod_empresa <> new.empresa_id then raise exception 'Produto do preset pertence a outra empresa'; end if;
+    if v_prod_empresa is null or v_prod_empresa <> new.empresa_id then
+      raise exception 'Produto do preset pertence a outra empresa';
+    end if;
   end if;
   if new.criado_por_id is not null then
     select empresa_id into v_criador_empresa from public.usuarios where id=new.criado_por_id;
-    if v_criador_empresa is null or v_criador_empresa <> new.empresa_id then raise exception 'Criador do preset pertence a outra empresa'; end if;
+    if v_criador_empresa is null or v_criador_empresa <> new.empresa_id then
+      raise exception 'Criador do preset pertence a outra empresa';
+    end if;
   end if;
   return new;
 end $$;
@@ -40,7 +44,12 @@ drop policy if exists tenant_engenharia_preset_insert on public.engenharia_varia
 drop policy if exists tenant_engenharia_preset_update on public.engenharia_variaveis_preset;
 drop policy if exists tenant_engenharia_preset_delete on public.engenharia_variaveis_preset;
 
-create policy tenant_engenharia_preset_select on public.engenharia_variaveis_preset for select to authenticated using (empresa_id=(select private.current_empresa_id()));
-create policy tenant_engenharia_preset_insert on public.engenharia_variaveis_preset for insert to authenticated with check (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'));
-create policy tenant_engenharia_preset_update on public.engenharia_variaveis_preset for update to authenticated using (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto')) with check (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'));
-create policy tenant_engenharia_preset_delete on public.engenharia_variaveis_preset for delete to authenticated using (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'));
+create policy tenant_engenharia_preset_select on public.engenharia_variaveis_preset for select to authenticated
+using (empresa_id=(select private.current_empresa_id()));
+create policy tenant_engenharia_preset_insert on public.engenharia_variaveis_preset for insert to authenticated
+with check (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'));
+create policy tenant_engenharia_preset_update on public.engenharia_variaveis_preset for update to authenticated
+using (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'))
+with check (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'));
+create policy tenant_engenharia_preset_delete on public.engenharia_variaveis_preset for delete to authenticated
+using (empresa_id=(select private.current_empresa_id()) and private.usuario_pode_editar_setor((select auth.uid()),empresa_id,'engenharia-projeto'));

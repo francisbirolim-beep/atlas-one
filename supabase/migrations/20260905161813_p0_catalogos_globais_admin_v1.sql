@@ -1,7 +1,12 @@
 do $$
 declare t text;
 begin
-  foreach t in array array['cores','linhas','linhas_tecnicas','linha_tipologias','tipologias','tipologia_campos_extras','engenharia_receitas','engenharia_receita_componentes','engenharia_tipologia_formulas_corte','engenharia_tipologia_variaveis','engenharia_variaveis','engenharia_variavel_opcoes','engenharia_componente_variantes','medicao_colunas'] loop
+  foreach t in array array[
+    'cores','linhas','linhas_tecnicas','linha_tipologias','tipologias','tipologia_campos_extras',
+    'engenharia_receitas','engenharia_receita_componentes','engenharia_tipologia_formulas_corte',
+    'engenharia_tipologia_variaveis','engenharia_variaveis','engenharia_variavel_opcoes',
+    'engenharia_componente_variantes','medicao_colunas'
+  ] loop
     execute format('drop policy if exists acesso_total_temporario on public.%I',t);
     execute format('drop policy if exists authenticated_full_access on public.%I',t);
     execute format('drop policy if exists engenharia_receitas_authenticated_all on public.%I',t);

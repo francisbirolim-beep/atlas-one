@@ -71,4 +71,3 @@ where not exists (
   where f.tipologia_id='c7a9d371-184c-4daa-8db1-d8c60cc3f008'::uuid
     and f.configuracao_chave='pta3_suprema_familia_a_comparador'
 );
-

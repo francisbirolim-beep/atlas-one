@@ -48,3 +48,4 @@ update public.engenharia_tipologia_formulas_corte f set
   metadados_editor = f.metadados_editor || '{"folga_largura":4,"folga_altura":4}'::jsonb || '{"codigo":"PC2-SUPREMA","linha":"Suprema","folhas":2,"status":"EM VALIDAÇÃO","versao":1}'::jsonb,
   ativo = false, status = 'em_validacao', versao = 1, updated_at = now()
 where f.configuracao_chave = 'pc2_suprema_editor_v1';
+
