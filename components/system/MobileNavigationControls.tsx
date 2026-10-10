@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
   Columns3,
   Eye,
   Home,
   LayoutGrid,
+  LogOut,
   Menu,
   Moon,
   Search,
@@ -17,7 +18,7 @@ import {
   Sun,
   X,
 } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { logout, usuarioAtual } from '@/lib/auth'
 import {
   EVENTO_ABRIR_FAVORITOS_MOBILE,
   GUIAS,
@@ -52,6 +53,7 @@ function hrefSetor(setor: Setor) {
 
 export default function MobileNavigationControls() {
   const pathname = usePathname()
+  const router = useRouter()
   const [menuAberto, setMenuAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -116,6 +118,12 @@ export default function MobileNavigationControls() {
     document.documentElement.dataset.atlasTheme = proximo
     document.documentElement.style.colorScheme = proximo === 'escuro' ? 'dark' : 'light'
     if (usuario?.id) window.localStorage.setItem(`atlas-theme:${usuario.id}`, proximo)
+  }
+
+  async function sair() {
+    await logout()
+    fecharMenu()
+    router.replace('/login')
   }
 
   function abrirFavoritos() {
@@ -419,6 +427,15 @@ export default function MobileNavigationControls() {
                   {tema === 'escuro' ? 'Claro' : 'Escuro'}
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => { void sair() }}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 active:bg-red-50 active:text-red-600"
+                aria-label="Sair do Atlas"
+              >
+                <LogOut size={18} className="shrink-0" />
+                Sair
+              </button>
             </div>
           </aside>
         </div>
