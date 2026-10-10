@@ -69,12 +69,19 @@ export async function criarItemSetor(colunaId: string, titulo: string, descricao
 
 export async function moverItemSetor(id: string, novaColunaId: string): Promise<boolean> {
   const [{ data: destino }, { data: card }, usuario] = await Promise.all([
-    supabase.from('setor_kanban_colunas').select('nome,setor_id').eq('id', novaColunaId).maybeSingle(),
-    supabase.from('setor_kanban_itens').select('orcamento_id').eq('id', id).maybeSingle(),
+    supabase.from('setor_kanban_colunas').select('nome,setor_id,ordem').eq('id', novaColunaId).maybeSingle(),
+    supabase.from('setor_kanban_itens').select('orcamento_id,coluna_id,liberado_producao_em').eq('id', id).maybeSingle(),
     usuarioAtual(),
   ])
 
   const destinoNome = String(destino?.nome || '').toLowerCase()
+
+  // Produção: a primeira passagem precisa acontecer pelo botão "Liberar Produção".
+  // Drag-and-drop não pode contornar a conferência da Medição Final.
+  if (destino?.setor_id === 'producao' && !card?.liberado_producao_em) {
+    const ordemDestino = Number(destino?.ordem || 0)
+    if (ordemDestino > 0) return false
+  }
 
   // Projeto conferido fecha o checkpoint pré-medição e gera o pacote técnico
   // inicial da obra. Fórmula ainda não validada vira pendência editável: nunca
@@ -154,7 +161,7 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
     return true
   }
 
-  if (destinoNome.includes('liberad') && destinoNome.includes('produ')) {
+  if (destino?.setor_id !== 'producao' && destinoNome.includes('liberad') && destinoNome.includes('produ')) {
     const { error } = await supabase.rpc('fn_engenharia_liberar_para_producao', {
       p_card_id: id,
       p_coluna_id: novaColunaId,
