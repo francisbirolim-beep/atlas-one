@@ -137,6 +137,37 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     }
   }
 
+  async function iniciarExecucao() {
+    if (processando) return
+    limparRetorno()
+    setProcessando(true)
+    try {
+      if (operacao?.status_operacional === 'aguardando_liberacao') {
+        if (!master) {
+          setErro('A Medição Final ainda precisa ser liberada pelo Master antes de iniciar.')
+          return
+        }
+        const liberacao = await liberarMedicaoFinal(medicaoId, usuario)
+        if (!liberacao.ok) {
+          setErro(liberacao.mensagem || 'Não foi possível liberar a medição.')
+          return
+        }
+      }
+
+      const inicio = await iniciarMedicaoFinal(medicaoId, usuario)
+      if (!inicio.ok) {
+        setErro(inicio.mensagem || 'Não foi possível iniciar a medição.')
+        return
+      }
+
+      setMensagem(operacao?.iniciado_em ? 'Medição retomada.' : 'Medição iniciada.')
+      await carregar()
+      window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+    } finally {
+      setProcessando(false)
+    }
+  }
+
   async function enviarParcialParaConferencia() {
     if (processando || resumo.pecasProntasEnvio <= 0) return
     if (!window.confirm(
@@ -281,6 +312,29 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           <div className="mt-auto pt-4">
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500"><UserRound size={13} /> Responsável: <span className="font-semibold text-slate-700">{responsavelExibicao}</span></p>
           </div>
+
+          {operacao?.status_operacional === 'aguardando_liberacao' && master && (
+            <button
+              type="button"
+              disabled={processando}
+              onClick={() => void iniciarExecucao()}
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+            >
+              <Play size={14} /> {processando ? 'Iniciando...' : 'Liberar e iniciar medição'}
+            </button>
+          )}
+
+          {operacao?.status_operacional === 'liberado' && (
+            <button
+              type="button"
+              disabled={processando}
+              onClick={() => void iniciarExecucao()}
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+            >
+              <Play size={14} /> {processando ? 'Iniciando...' : 'Iniciar medição final'}
+            </button>
+          )}
+
           {['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') && (
             <div className="mt-3 space-y-2">
               {resumo.pecasProntasEnvio > 0 && resumo.percentual < 100 && !fluxoVendaBloqueado && (
