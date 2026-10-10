@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search, Wrench, RefreshCw, Loader2 } from 'lucide-react'
@@ -393,6 +395,8 @@ if (wvetroAguardandoValidacao(card)) {
 }
 const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]?.id))
 const colunaNova = colunas.find(c => c.id === colunaId)
+if (!card || !colunaNova || colunaAnterior?.id===colunaNova.id) return
+if (!confirmarMovimentoKanban({card:card.cliente_nome||'Orçamento',origem:colunaAnterior?.nome||'Etapa anterior',destino:colunaNova.nome,retrocesso:colunas.findIndex(c=>c.id===colunaNova.id)<colunas.findIndex(c=>c.id===colunaAnterior?.id),aviso:'Automações anteriores precisam de revisão quando retornar de etapa.'})) return
 const agoraIso = new Date().toISOString()
 setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: agoraIso } : c)))
 let decisoesAutomacao: Record<string, 'substituir' | 'duplicar'> | undefined
