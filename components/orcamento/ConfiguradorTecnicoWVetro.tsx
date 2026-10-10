@@ -364,23 +364,28 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
   const resumoAoVivo = montarResumo(rascunho)
 
   function abrir() {
+    const sequencial = tipologia?.chave === 'porta_correr_sequencial_suprema'
+    const folhas = value.variaveis?.numero_folhas || value.folhas || '2'
     const base = {
       ...defaults,
       ...(value.variaveis || {}),
+      ...(sequencial ? { numero_folhas: folhas, folhas } : {}),
     }
     setRascunho(base)
     setAberto(true)
   }
 
   function alterar(chave: string, valor: string) {
-    setRascunho(prev => ({ ...prev, [chave]: valor }))
+    setRascunho(prev => ({ ...prev, [chave]: valor, ...(tipologia?.chave === 'porta_correr_sequencial_suprema' && (chave === 'numero_folhas' || chave === 'folhas') ? { folhas: valor, numero_folhas: valor } : {}) }))
   }
 
   function confirmar() {
     const obrigatoriasCompletas = obrigatoriasTotal.every(chave => valorCompleto(rascunho[chave]))
+    const sequencial = tipologia?.chave === 'porta_correr_sequencial_suprema'
+    const quantidadeFolhas = sequencial ? (rascunho.numero_folhas || rascunho.folhas || '2') : folhasDefinidas || rascunho.folhas || value.folhas
     onChange({
-      variaveis: { ...rascunho, ...(folhasDefinidas ? { folhas: folhasDefinidas } : {}) },
-      folhas: folhasDefinidas || rascunho.folhas || value.folhas,
+      variaveis: { ...rascunho, ...(sequencial ? { folhas: quantidadeFolhas, numero_folhas: quantidadeFolhas } : folhasDefinidas ? { folhas: folhasDefinidas } : {}) },
+      folhas: quantidadeFolhas,
       configuracaoPresetId: null,
       configuracaoNome: tipologia?.label || value.configuracaoNome,
       configuracaoValidada: false,
@@ -423,7 +428,7 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
               </div>
               <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                 <p className="text-[10px] uppercase text-slate-400">Folhas</p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-800">{folhasDefinidas || value.variaveis?.folhas || value.folhas || 'A definir'}</p>
+                <p className="mt-0.5 text-sm font-semibold text-slate-800">{tipologia?.chave === 'porta_correr_sequencial_suprema' ? (value.variaveis?.numero_folhas || value.folhas || '2') : folhasDefinidas || value.variaveis?.folhas || value.folhas || 'A definir'}</p>
               </div>
               <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                 <p className="text-[10px] uppercase text-slate-400">Vidro</p>
