@@ -288,10 +288,10 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     if(!orcamentoMedidaId)return
     setSalvando(true);setErro('')
     const fluxo=await verificarFluxoVendaOrcamento(orcamentoMedidaId)
-    if(!fluxo.ativo){
+    if(!fluxo.ativo&&!fluxo.wvetroVendidoValidado){
       setSalvando(false)
       setModalMedidaFinal(false)
-      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(orcamentoMedidaId)}&origem=medicao-final`)
+      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(orcamentoMedidaId)}&origem=medicao-final&tipo=tipologia`)
       return
     }
     const medicao=await criarMedicaoDoOrcamento(orcamentoMedidaId,usuario)
