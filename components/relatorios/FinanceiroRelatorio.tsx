@@ -3,7 +3,8 @@
 import { BarChart3, Landmark, WalletCards } from 'lucide-react'
 export type FinanceiroRelatorioDados = {
  dre:{receitaObras:number;receitaBalcao:number;receitaTotal:number;cmvPrevisto:number;cmvObras:number;cmvBalcao:number;margemBrutaProjetada:number|null;margemPct:number|null;despesasOperacionais:null;tributos:null;lucroLiquido:null;semPrevisao:number;obras:number;balcao:number}
- caixa:{recebido:number;pago:number;saldoParcial:number;meses:{mes:string;recebido:number;pago:number}[]}
+ classificacao?:{gastosPorGrupo:Record<string,number>;pagamentosClassificados:number;pagamentosSemClassificacao:number;valorClassificado:number}
+  caixa:{recebido:number;pago:number;saldoParcial:number;meses:{mes:string;recebido:number;pago:number}[]}
  contas:{aReceber:number;aPagar:number;receber:number;pagar:number}
  avisos:string[]
 }
@@ -47,6 +48,11 @@ export default function FinanceiroRelatorio({dados,carregando}:{dados:Financeiro
     <div className="mt-3 border-t pt-3"><Cartao titulo="Diferença dos movimentos registrados" valor={moeda(dados.caixa.saldoParcial)} nota="Parcial; não é saldo bancário nem lucro líquido"/></div>
    </section>
   </div>
+  {dados.classificacao&&<section className="rounded-xl border bg-white p-4"><h3 className="mb-2 font-bold text-slate-900">Pagamentos classificados pelo plano de contas</h3>
+    <p className="mb-3 text-xs text-slate-500">Regime de caixa; não são despesas automaticamente deduzidas da DRE por competência.</p>
+    <div className="grid gap-3 sm:grid-cols-3"><Cartao titulo="Pagamentos classificados" valor={String(dados.classificacao.pagamentosClassificados)}/><Cartao titulo="Títulos pagos sem classificação" valor={String(dados.classificacao.pagamentosSemClassificacao)}/><Cartao titulo="Total classificado" valor={moeda(dados.classificacao.valorClassificado)}/></div>
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(dados.classificacao.gastosPorGrupo).map(([grupo,valor])=><div key={grupo} className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">{({receita:'Receitas',cmv:'CMV',tributo:'Tributos',despesa_operacional:'Despesas operacionais',despesa_financeira:'Despesas financeiras',estoque:'Compras para estoque',investimento:'Investimentos',transferencia:'Transferências'} as Record<string,string>)[grupo]||grupo}</p><b>{moeda(valor)}</b></div>)}</div>
+  </section>}
   <section className="rounded-xl border bg-white p-4"><div className="mb-3 flex items-center gap-2"><WalletCards size={18}/><h3 className="font-bold">Títulos por vencimento</h3></div><div className="grid gap-3 sm:grid-cols-2"><Cartao titulo="Contas a receber" valor={moeda(dados.contas.aReceber)} nota={dados.contas.receber+' título(s) no período'}/><Cartao titulo="Contas a pagar" valor={moeda(dados.contas.aPagar)} nota={dados.contas.pagar+' título(s) no período'}/></div><p className="mt-2 text-xs text-slate-500">Saldos abertos até a consulta, filtrados pela data de vencimento. Não somar esses valores às entradas e saídas realizadas.</p></section>
   <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-4"><h3 className="text-sm font-semibold text-amber-950">Notas sobre fechamento contábil e conciliação</h3><div className="mt-2 space-y-1">{dados.avisos.map(a=><p key={a} className="text-xs text-amber-900">• {a}</p>)}</div></section>
  </section>

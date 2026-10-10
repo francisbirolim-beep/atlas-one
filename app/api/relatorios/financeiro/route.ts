@@ -93,6 +93,27 @@ export async function GET(req:NextRequest){
   const cmvProjetado=round(cmvPrevistoObras+cmvBalcao)
   const despesasIdentificadas=pagar.filter((x:any)=>x.status!=='cancelado' && inPeriod(x.data_pagamento,inicio,fim))
   const totalPagamentos=round(despesasIdentificadas.reduce((s:number,x:any)=>s+n(x.valor_pago),0))
+  // Despesas pagas: apenas classificação informada pelo Master. Valores NÃO
+  // são subtraídos da margem projetada, pois receita/CMV têm outra competência.
+  const gastosPorGrupo:Record<string,number>={}
+  let pagamentosSemClassificacao=0
+  let pagamentosClassificados=0
+  const idsPagamentos=despesasIdentificadas.map((x:any)=>x.id).filter(Boolean)
+  const classificacoes=await fetchIn('financeiro_conta_classificacoes','conta_pagar_id,plano_conta_id','conta_pagar_id',idsPagamentos,empresa)
+  const idsPlano=[...new Set(classificacoes.map((x:any)=>x.plano_conta_id))]
+  const plano=await fetchIn('financeiro_plano_contas','id,codigo,nome,grupo','id',idsPlano,empresa)
+  const classificacaoPorTitulo=new Map(classificacoes.map((x:any)=>[x.conta_pagar_id,x.plano_conta_id]))
+  const grupoPorConta=new Map(plano.map((x:any)=>[x.id,x.grupo]))
+  for(const titulo of despesasIdentificadas as any[]){
+    const gasto=n(titulo.valor_pago)
+    if(gasto<=0)continue
+    const contaId=classificacaoPorTitulo.get(titulo.id)
+    const grupo=grupoPorConta.get(contaId)
+    if(!grupo){pagamentosSemClassificacao++;continue}
+    gastosPorGrupo[String(grupo)]=round((gastosPorGrupo[String(grupo)]||0)+gasto)
+    pagamentosClassificados++
+  }
+
   const totalRecebimentos=round(recebimentos.filter((x:any)=>!['cancelado','estornado'].includes(String(x.status))).reduce((s:number,x:any)=>s+n(x.valor),0))
   const aReceber=round(receber.filter((x:any)=>x.status!=='cancelado').reduce((s:number,x:any)=>s+Math.max(0,n(x.valor)-n(x.valor_pago)-n(x.valor_desconto)),0))
   const aPagar=round(pagar.filter((x:any)=>x.status!=='cancelado' && inPeriod(x.vencimento,inicio,fim)).reduce((s:number,x:any)=>s+Math.max(0,n(x.valor)-n(x.valor_pago)),0))
@@ -105,6 +126,7 @@ export async function GET(req:NextRequest){
    'Contas a pagar incluem compras de estoque e outras obrigações. Não foram deduzidas da margem bruta para evitar contagem duplicada.',
    'Movimentações de caixa de balcão e movimentos bancários não conciliados podem não constar no fluxo.',
    'Recebimentos e pagamentos usam os registros disponíveis por data do movimento. Saldo em aberto usa vencimento no período.',
+   'Pagamentos classificados são apresentados à parte, em regime de caixa, sem dedução da margem projetada por não haver apropriação por competência.',
   ]
   if(semPrevisto||balcaoSemCusto)aviso.push('Há '+(semPrevisto+balcaoSemCusto)+' venda(s) sem CMV previsto completo; margem projetada não será exibida como resultado fechado.')
   const margemDisponivel=semPrevisto===0 && balcaoSemCusto===0
@@ -118,6 +140,7 @@ export async function GET(req:NextRequest){
     despesasOperacionais:null,tributos:null,lucroLiquido:null,
     semPrevisao:semPrevisto+balcaoSemCusto,obras:vendasValidas.length,balcao:balcaoValidos.length
    },
+   classificacao:{gastosPorGrupo,pagamentosClassificados,pagamentosSemClassificacao,valorClassificado:round(Object.values(gastosPorGrupo).reduce((s:number,v:number)=>s+v,0))},
    caixa:{recebido:totalRecebimentos,pago:totalPagamentos,saldoParcial:round(totalRecebimentos-totalPagamentos),meses},
    contas:{aReceber,aPagar,receber:receber.length,pagar:pagar.filter((x:any)=>inPeriod(x.vencimento,inicio,fim)).length},
    avisos:aviso
