@@ -12,6 +12,8 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  MessageCircle,
+  FilePlus2,
   Moon,
   Search,
   ShoppingCart,
@@ -22,6 +24,7 @@ import {
 import { logout, usuarioAtual } from '@/lib/auth'
 import {
   EVENTO_ABRIR_FAVORITOS_MOBILE,
+  EVENTO_ABRIR_MENU_MOBILE,
   GUIAS,
   agruparGuias,
 } from '@/lib/guias'
@@ -52,7 +55,7 @@ function hrefSetor(setor: Setor) {
   return setor.ativo && setor.rota ? setor.rota : `/setor/${setor.id}`
 }
 
-export default function MobileNavigationControls() {
+export default function MobileNavigationControls({ ocultarBarraInferior = false }: { ocultarBarraInferior?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const [menuAberto, setMenuAberto] = useState(false)
@@ -93,6 +96,17 @@ export default function MobileNavigationControls() {
     document.documentElement.dataset.atlasTheme = temaInicial
     document.documentElement.style.colorScheme = temaInicial === 'escuro' ? 'dark' : 'light'
   }, [usuario?.id])
+
+  useEffect(() => {
+    const abrirMenu = () => setMenuAberto(true)
+    window.addEventListener(EVENTO_ABRIR_MENU_MOBILE, abrirMenu)
+    return () => window.removeEventListener(EVENTO_ABRIR_MENU_MOBILE, abrirMenu)
+  }, [])
+
+  useEffect(() => {
+    setMenuAberto(false)
+    setBusca('')
+  }, [pathname])
 
   useEffect(() => {
     if (!menuAberto) return
@@ -186,6 +200,7 @@ export default function MobileNavigationControls() {
   const supervisaoIaCombina = usuario?.role === 'master' &&
     (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
 
+  const podeAbrirWhatsapp = Boolean(usuario) && (usuario?.role === 'master' || !setores.some(setor => setor.rota === '/whatsapp' && nivelEfetivo(usuario, setor.id, permissoes) === 'oculto'))
   const podeAbrirKanban = guiasPermitidas.some(guia => guia.href === '/kanban')
   const podeAbrirCompras = guiasPermitidas.some(guia => guia.href === '/compras')
 
@@ -226,7 +241,7 @@ export default function MobileNavigationControls() {
 
   return (
     <>
-      <nav
+      {!ocultarBarraInferior && <nav
         aria-label="Navegação principal no celular"
         className="fixed inset-x-0 bottom-0 z-[60] border-t border-slate-200 bg-white/95 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl print:hidden md:hidden"
       >
@@ -256,7 +271,7 @@ export default function MobileNavigationControls() {
             <span className="truncate">Menu</span>
           </button>
         </div>
-      </nav>
+      </nav>}
 
       {menuAberto && (
         <div
@@ -265,6 +280,8 @@ export default function MobileNavigationControls() {
         >
           <aside
             className="flex h-full w-[88%] max-w-sm flex-col border-r border-slate-200 bg-white text-slate-950 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
             aria-label="Menu completo do Atlas"
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
@@ -293,13 +310,30 @@ export default function MobileNavigationControls() {
                   value={busca}
                   onChange={event => setBusca(event.target.value)}
                   placeholder="Buscar qualquer tela..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-base sm:text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
               <div className="space-y-5">
+                {(!termo || correspondePesquisaAtlas(termo, 'Novo orçamento', 'Acesso rápido', '/orcamento-rapido') || (podeAbrirWhatsapp && correspondePesquisaAtlas(termo, 'WhatsApp Atlas', 'Acesso rápido', '/whatsapp'))) && (
+                  <section aria-label="Acesso rápido">
+                    <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Acesso rápido</p>
+                    <div className="space-y-1">
+                      {(!termo || correspondePesquisaAtlas(termo, 'Novo orçamento', 'Acesso rápido', '/orcamento-rapido')) && (
+                        <Link href="/orcamento-rapido" onClick={fecharMenu} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-emerald-700 active:bg-emerald-50">
+                          <FilePlus2 size={19} className="shrink-0" /><span>Novo orçamento</span>
+                        </Link>
+                      )}
+                      {podeAbrirWhatsapp && (!termo || correspondePesquisaAtlas(termo, 'WhatsApp Atlas', 'Acesso rápido', '/whatsapp')) && (
+                        <Link href="/whatsapp" onClick={fecharMenu} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 active:bg-slate-100">
+                          <MessageCircle size={19} className="shrink-0" /><span>WhatsApp Atlas</span>
+                        </Link>
+                      )}
+                    </div>
+                  </section>
+                )}
                 {relatoriosCombina && (
                   <Link href="/relatorios" onClick={fecharMenu} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${ativo('/relatorios') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}>
                     <BarChart3 size={19}/> Relatórios
