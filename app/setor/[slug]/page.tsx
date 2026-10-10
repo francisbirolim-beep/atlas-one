@@ -35,6 +35,7 @@ export default function SetorDetalhe() {
   const [tituloNovo, setTituloNovo] = useState('')
   const [descNova, setDescNova] = useState('')
   const [selecionado, setSelecionado] = useState<SetorKanbanItem | null>(null)
+  const [erroMovimento, setErroMovimento] = useState('')
 
   useEffect(() => {
     if (slug) carregar()
@@ -78,8 +79,14 @@ export default function SetorDetalhe() {
     setColunaArrastando(null)
     const id = e.dataTransfer.getData('text/plain')
     if (!id) return
-    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, coluna_id: colunaId } : i)))
-    await moverItemSetor(id, colunaId)
+    if (itens.find(i=>i.id===id)?.coluna_id===colunaId) return
+    setErroMovimento('')
+    const ok = await moverItemSetor(id, colunaId, mensagem => setErroMovimento(mensagem))
+    if (ok) setItens((prev) => prev.map((i) => (i.id === id ? { ...i, coluna_id: colunaId } : i)))
+    else {
+      setErroMovimento(atual=>atual||'O card não pôde ser movido. Confira as pendências de Instalação ou Financeiro.')
+      await carregarKanban()
+    }
   }
 
   async function novaColuna() {
@@ -201,6 +208,10 @@ export default function SetorDetalhe() {
             )}
           </div>
 
+          {erroMovimento && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <b>Movimento não realizado.</b> {erroMovimento}
+            <button type="button" className="ml-3 font-bold underline" onClick={()=>setErroMovimento('')}>Fechar</button>
+          </div>}
           {colunas.length === 0 ? (
             <div className="flex flex-col items-center text-center gap-3 py-16 text-slate-400">
               <LayoutGrid size={36} className="text-slate-300" />
