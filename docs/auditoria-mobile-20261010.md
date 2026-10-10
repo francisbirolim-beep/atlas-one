@@ -21,6 +21,9 @@ A aplicação já possui múltiplos ajustes responsivos existentes (Kanban, medi
 7. **Login/redefinição:** campos de 16px em celular evitam ampliação involuntária de foco no iPhone; espaçamento reduzido para telas estreitas.
 8. **Plano de corte A4:** prévia rolável na horizontal no celular; CSS de impressão/PDF não foi alterado.
 9. **Safe area do WhatsApp:** remove espaço de barra inferior em tela cheia, mantendo o compositor.
+10. **Orçamento sob medida:** barra `Continuar` fica acima da navegação inferior móvel, sem cobrir botões.
+11. **Resumo da medição final:** quantidade, responsável e data da última atualização também aparecem nas linhas da lista no celular.
+
 
 ## Testes e limites
 
