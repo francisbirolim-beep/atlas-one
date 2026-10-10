@@ -1,5 +1,3 @@
-[Reading 198 lines from start (total: 198 lines, 0 remaining)]
-
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -198,5 +196,3 @@ export default function VendaInstalacaoDetalhada({
     {!lista.length&&<div className="rounded-xl border border-dashed p-8 text-center"><RefreshCw className="mx-auto text-slate-300"/><p className="mt-2 text-sm text-slate-500">Não há tipologias para preparar a instalação desta venda.</p></div>}
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
