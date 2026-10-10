@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
-  BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
+  BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, Menu, MessageCircle, Mic, Paperclip, Search,
   Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus, Camera, Square,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
+import { EVENTO_ABRIR_MENU_MOBILE } from '@/lib/guias'
 import {
   type ChatConversa,
   type ChatMensagem,
@@ -967,6 +968,13 @@ export default function WhatsAppAtendimentoPage() {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [mensagens.length])
 
+  const conversasInternasMobile = useMemo(() => {
+    const q = busca.toLocaleLowerCase('pt-BR').trim()
+    return conversasInternas.filter(c =>
+      !q || `${c.nome || ''} ${c.ultima_mensagem || ''}`.toLocaleLowerCase('pt-BR').includes(q)
+    )
+  }, [conversasInternas, busca])
+
   const internasFiltradas = useMemo(() => {
     const q = buscaInterna.toLocaleLowerCase('pt-BR').trim()
     return conversasInternas.filter(c => {
@@ -1517,15 +1525,16 @@ export default function WhatsAppAtendimentoPage() {
   return (
     <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0">
       <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white">
-        <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-5">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded-lg p-2 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
-            <div>
+        <header className="flex h-[72px] min-w-0 items-center justify-between gap-1.5 border-b border-slate-200 bg-white px-2 sm:px-5">
+          <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
+            <button type="button" onClick={() => window.dispatchEvent(new Event(EVENTO_ABRIR_MENU_MOBILE))} aria-label="Abrir menu completo do Atlas" title="Menu do Atlas" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-white text-slate-700 hover:bg-slate-100 md:hidden"><Menu size={19}/></button>
+            <Link href="/" aria-label="Voltar ao início" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-slate-100"><ArrowLeft size={19}/></Link>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <MessageCircle className="text-emerald-600" size={20}/>
-                <h1 className="font-bold text-slate-900">WhatsApp Atlas</h1>
+                <h1 className="truncate text-sm font-bold text-slate-900 sm:text-base">WhatsApp Atlas</h1>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="max-w-[42vw] truncate text-[10px] text-slate-500 sm:max-w-none sm:text-xs">
                 {canalSelecionado
                   ? `${canalSelecionado.nome} · ${canalSelecionado.principal ? 'Empresa' : 'Pessoal'}`
                   : canais.length === 1
@@ -1534,7 +1543,7 @@ export default function WhatsAppAtendimentoPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-[52vw] shrink-0 items-center gap-1 overflow-x-auto sm:max-w-none sm:gap-2">
             <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 sm:inline-flex">
               {canaisConectados === 1 ? '1 canal conectado' : `${canaisConectados} canais conectados`}
             </span>
@@ -1543,11 +1552,12 @@ export default function WhatsAppAtendimentoPage() {
                 type="button"
                 onClick={() => void ativarNotificacoesDesktop()}
                 disabled={ativandoPush}
-                className="hidden items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60 sm:inline-flex"
-                title="Ativar notificações deste computador"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
+                title="Ativar notificações neste dispositivo"
+                aria-label="Ativar notificações neste dispositivo"
               >
                 <BellRing size={15}/>
-                {ativandoPush ? 'Ativando...' : 'Ativar notificações'}
+                <span className="hidden sm:inline">{ativandoPush ? 'Ativando...' : 'Ativar notificações'}</span>
               </button>
             )}
             <button
@@ -1673,9 +1683,35 @@ export default function WhatsAppAtendimentoPage() {
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
+              {/* A coluna de conversas internas só existe em telas XL; no celular
+                  e em tablets, o mesmo histórico fica acessível nesta lista. */}
+              {conversasInternasMobile.length > 0 && (
+                <section className="border-b border-blue-100 bg-blue-50/50 xl:hidden" aria-label="Conversas internas da equipe">
+                  <div className="flex items-center justify-between px-4 py-2">
+                    <b className="text-xs font-bold text-blue-800">Conversas internas</b>
+                    {totalInternasNaoLidas > 0 && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{totalInternasNaoLidas} não lida(s)</span>}
+                  </div>
+                  {conversasInternasMobile.map(c => (
+                      <button type="button" key={c.id}
+                        onClick={() => selecionarConversaInterna(c)}
+                        className="flex w-full min-w-0 items-center gap-3 border-t border-blue-100 px-4 py-3 text-left active:bg-blue-100">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700">
+                          {c.tipo === 'grupo' ? <Users size={18}/> : String(c.nome || '?').slice(0,1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <b className="block truncate text-sm text-slate-800">{c.nome || 'Conversa interna'}</b>
+                          <span className="block truncate text-xs text-slate-500">{c.ultima_mensagem || 'Equipe Atlas'}</span>
+                        </span>
+                        {Number(c.nao_lidas || 0) > 0 && (
+                          <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{Number(c.nao_lidas)}</span>
+                        )}
+                      </button>
+                    ))}
+                </section>
+              )}
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
+              ) : filtradas.length === 0 && conversasInternasMobile.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
@@ -1735,7 +1771,7 @@ export default function WhatsAppAtendimentoPage() {
                       {!!c.nao_lidas && <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.5 font-bold text-white">{c.nao_lidas}</span>}
                     </div>
                     {c.status !== 'finalizado' && (
-                      <div className={`mt-2 flex flex-wrap gap-1.5 ${!c.responsavel_id ? 'flex' : 'hidden group-hover:flex group-focus-within:flex'}`}>
+                      <div className={`mt-2 flex flex-wrap gap-1.5 ${!c.responsavel_id ? 'flex' : 'flex md:hidden md:group-hover:flex md:group-focus-within:flex'}`}>
                         {podeSupervisionarConversa(c) && (
                           <button type="button" onClick={async e=>{e.stopPropagation();await acaoConversaPorId(c.id,c.acompanhando?'parar_acompanhar':'acompanhar')}}
                             className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${c.acompanhando?'border-amber-300 bg-amber-50 text-amber-800':'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'}`}>
@@ -1877,7 +1913,7 @@ export default function WhatsAppAtendimentoPage() {
                     </p>
                   </div>
                   <button type="button" onClick={abrirConversaInterna}
-                    className="hidden rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 sm:inline-flex">
+                    className="inline-flex shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 sm:px-3">
                     + Pessoas
                   </button>
                 </div>
@@ -2161,7 +2197,7 @@ export default function WhatsAppAtendimentoPage() {
                     <div key={m.id} className={`group/msg flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
                       <div className={`relative min-w-0 max-w-[88%] overflow-visible rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
                         {podeResponder && (
-                          <div className={`absolute -top-3 z-10 hidden items-center gap-1 rounded-full border bg-white p-1 shadow-md group-hover/msg:flex ${saida?'right-2':'left-2'}`}>
+                          <div className={`absolute -top-3 z-10 flex items-center gap-1 rounded-full border bg-white p-1 shadow-md md:hidden md:group-hover/msg:flex ${saida?'right-2':'left-2'}`}>
                             <button type="button" onClick={()=>setMensagemRespondendo(m)}
                               className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
                               title="Responder esta mensagem">
