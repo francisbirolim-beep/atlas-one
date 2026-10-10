@@ -13,6 +13,7 @@
     "vercel:prod": "bash scripts/vercel-prod.sh",
     "release:check": "bash scripts/release-check.sh preview",
     "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts",
+    "test:venda-cmv": "node scripts/test-venda-cmv-regras.cjs",
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },
