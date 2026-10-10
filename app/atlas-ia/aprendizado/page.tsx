@@ -553,13 +553,16 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
         const aberto=itemAberto===c.id
         const pagina=Number(c.dados?.pagina_catalogo||0)
         const fontePagina=entrada.fonte_url?(entrada.fonte_url+(pagina?'#page='+pagina+'&zoom=page-width':'')):null
-        const imagemItem=String(c.dados?.imagem_item_url||c.dados?.imagem_url||'').trim()
+        const imagemItem=String(c.foto_cadastro||c.dados?.imagem_item_url||c.dados?.imagem_url||'').trim()
         const precisaValidar=['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'
         const edit=edicoesItem[c.id]||c.dados||{}
         const podeEditar=Boolean(c.pode_validar)
         return <div key={c.id} className="overflow-hidden rounded-xl border bg-white">
           <button onClick={()=>onItemAberto(aberto?null:c.id)} className="flex w-full items-start justify-between gap-3 p-3 text-left hover:bg-slate-50">
-            <div className="min-w-0">
+            <div className="flex h-14 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-50">
+              {imagemItem?<img src={imagemItem} alt={String(c.dados?.codigo||'Produto')} className="h-full w-full object-contain"/>:<span className="text-center text-[10px] text-slate-400">Sem imagem</span>}
+            </div>
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold "+statusClasse(c.status)}>{c.status}</span>
                 {c.dados?.categoria&&<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{c.dados.categoria}</span>}
@@ -615,8 +618,9 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
 
 function imagemProdutoCandidato(c:Candidato){
   const direto=String(c.dados?.imagem_item_url||c.dados?.imagem_url||c.dados?.foto_url||'').trim()
-  if(direto)return direto
+  // A imagem oficial do cadastro prevalece sobre recortes antigos não homologados.
   if(c.foto_cadastro)return c.foto_cadastro
+  if(direto)return direto
   const existente=c.deduplicacao?.produto_existente||{}
   const doExistente=String(existente.imagem_item_url||existente.imagem_url||existente.foto_url||'').trim()
   if(doExistente)return doExistente
