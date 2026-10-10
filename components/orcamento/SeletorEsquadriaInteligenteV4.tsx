@@ -208,6 +208,9 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   }, [buscaTipologia, linhaSelecionada, tipologiasDaLinha])
 
   const tipologiaAtual = tipologias.find(t => t.id === value.tipologiaId) || null
+  const portaSequencial = tipologiaAtual?.chave === 'porta_correr_sequencial_suprema'
+  const numeroFolhasSequencial = value.variaveis?.numero_folhas || value.folhas || '2'
+  const folhasValidas = ['2','3','4','5','6']
   const boxCanto = Boolean(
     (tipologiaAtual && ehBoxCantoTexto(`${tipologiaAtual.label} ${tipologiaAtual.chave}`)) ||
     ehBoxCantoTexto(value.tipoOutroTexto || '') ||
@@ -304,7 +307,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       tipologiaId: t.id,
       tipo: t.chave || 'outro',
       tipoOutroTexto: t.label,
-      folhas: folhasDefinidas,
+      folhas: t.chave === 'porta_correr_sequencial_suprema' ? '2' : folhasDefinidas,
       modoOrigem: 'manual',
       produtoId: null,
       precoUnit: null,
@@ -313,7 +316,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       configuracaoValidada: false,
       configuracaoStatus: 'pendente',
       modoConfiguracao: 'rapido',
-      variaveis: canto ? { atlas_medida_layout: 'box_canto' } : {},
+      variaveis: t.chave === 'porta_correr_sequencial_suprema' ? { numero_folhas: '2' } : canto ? { atlas_medida_layout: 'box_canto' } : {},
     })
   }
 
@@ -498,6 +501,28 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
           </div>
         )}
       </div>
+
+      {portaSequencial && (
+        <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-emerald-900">Porta de correr sequencial · Suprema</h3>
+            {tipologiasValidadas.has(value.tipologiaId || '') && <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-bold text-emerald-900">✓ Validado</span>}
+          </div>
+          <label className="mt-3 block max-w-xs text-sm font-semibold text-slate-700">Quantidade de folhas / planos
+            <select value={folhasValidas.includes(numeroFolhasSequencial) ? numeroFolhasSequencial : '2'} onChange={e => onChange({ folhas: e.target.value, variaveis: { ...value.variaveis, numero_folhas: e.target.value } })} className="mt-1 w-full rounded-lg border border-emerald-300 bg-white p-3 text-sm">
+              {folhasValidas.map(n => <option key={n} value={n}>{n} folhas · {n} planos</option>)}
+            </select>
+          </label>
+          <div className="mt-3 flex h-[84px] max-w-[400px] gap-[2px] rounded-md border-4 border-slate-700 bg-slate-100 p-1" aria-label={`Croqui esquemático com ${numeroFolhasSequencial} folhas móveis em planos sequenciais`}>
+            {Array.from({ length: Number(numeroFolhasSequencial) || 2 }).map((_, i) => (
+              <div key={i} className="relative min-w-0 flex-1 border-2 border-slate-500 bg-sky-100/80">
+                <span className="absolute inset-0 grid place-items-center text-lg font-black text-slate-700">←</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-emerald-800">O desenho e a receita mudam automaticamente de 2 a 6 folhas. Todas móveis; sentido definitivo de abertura conforme projeto e instalação.</p>
+        </section>
+      )}
 
       {boxCanto && (
         <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
