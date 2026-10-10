@@ -241,10 +241,31 @@ export default function Producao() {
     e.preventDefault()
     const id = e.dataTransfer.getData('text/plain')
     if (!id) return
+
+    const card = cards.find(item => item.id === id)
+    const destino = colunas.find(coluna => coluna.id === colunaId)
+    if (!card || !destino || card.coluna_id === colunaId) return
+
+    const destinoNome = String(destino.nome || '').toLowerCase()
+    const destinoEhLiberacao = destinoNome.includes('liberad') && destinoNome.includes('produ')
+    const medicao = medicaoDoCard(card)
+
+    // No Kanban da Produção, arrastar para "Liberado para Produção" precisa
+    // executar a liberação real (aprovação da Medição Final + pacote técnico),
+    // não a rotina especial da Engenharia.
+    if (destinoEhLiberacao && medicao?.status_operacional !== 'aprovado') {
+      await liberarProducao(card, colunaId)
+      return
+    }
+
     const anterior = cards
+    setErro('')
     setCards(prev => prev.map(c => c.id === id ? { ...c, coluna_id: colunaId } : c))
     const ok = await moverItemSetor(id, colunaId)
-    if (!ok) setCards(anterior)
+    if (!ok) {
+      setCards(anterior)
+      setErro('Não foi possível mover o card para esta etapa.')
+    }
   }
 
   async function abrirRelatorioMedicao(medicaoId: string) {
@@ -260,7 +281,7 @@ export default function Producao() {
     await gerarPdfMedicaoFinal(medicao, itens)
   }
 
-  async function liberarProducao(card: SetorKanbanItem) {
+  async function liberarProducao(card: SetorKanbanItem, colunaDestinoId?: string) {
     const medicao = medicaoDoCard(card)
     if (!medicao) {
       setErro('Este card ainda não possui uma Medição Final vinculada.')
@@ -298,7 +319,10 @@ export default function Producao() {
       }
 
       const colunaAtual = colunas.find(c => c.id === card.coluna_id)
-      const proxima = colunas
+      const destinoExplicito = colunaDestinoId
+        ? colunas.find(c => c.id === colunaDestinoId) || null
+        : null
+      const proxima = destinoExplicito || colunas
         .filter(c => Number(c.ordem || 0) > Number(colunaAtual?.ordem || 0))
         .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))[0] || null
 
