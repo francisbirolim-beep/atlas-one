@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2, ZoomIn } from 'lucide-react'
+import { Camera, Check, CheckCircle2, ChevronDown, ChevronUp, ImagePlus, Loader2, Ruler, Save, Trash2, ZoomIn } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { uploadFoto, uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
@@ -11,6 +11,12 @@ import { referenciaDaTipologia } from '@/lib/medicaoChecklistRegras'
 import MedicaoCroqui from './MedicaoCroqui'
 import LeituraTrenaIA from './LeituraTrenaIA'
 import MedicaoAdicionarCampo from './MedicaoAdicionarCampo'
+import {
+  carregarOperacaoMedicaoV2,
+  concluirMedicaoFinal,
+  iniciarMedicaoFinal,
+  liberarMedicaoFinal,
+} from '@/lib/medicaoFinalV2'
 import {
   adicionarFotoMedicaoV2,
   camposDoItemV2,
@@ -97,6 +103,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const [historicoFotos, setHistoricoFotos] = useState<CorrecaoFoto[] | null>(null)
   const [erroHistorico, setErroHistorico] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [finalizandoMedicao, setFinalizandoMedicao] = useState(false)
 
   const carregar = useCallback(async () => {
     const novo = await carregarChecklistMedicaoV2(medicaoId)
@@ -281,6 +288,76 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     setMensagem('Foto registrada na peça.')
     await carregar()
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
+  }
+
+  async function finalizarMedicaoFinalDaTela() {
+    if (!item || finalizandoMedicao) return
+
+    setFinalizandoMedicao(true)
+    setMensagem('')
+    try {
+      const medidasAtuais: MedidasFixasItemV2 = {
+        largura_baixo_mm: numeroMedida(medidas.largura_baixo_mm),
+        largura_meio_mm: numeroMedida(medidas.largura_meio_mm),
+        largura_cima_mm: numeroMedida(medidas.largura_cima_mm),
+        altura_direita_mm: numeroMedida(medidas.altura_direita_mm),
+        altura_meio_mm: numeroMedida(medidas.altura_meio_mm),
+        altura_esquerda_mm: numeroMedida(medidas.altura_esquerda_mm),
+      }
+
+      if (Object.values(medidasAtuais).some(valor => !valor)) {
+        setMensagem('Preencha as 3 larguras e as 3 alturas antes de finalizar a Medição Final.')
+        return
+      }
+
+      const salvou = await salvarMedidasFixasItemV2(medicaoId, item.id, medidasAtuais, usuario)
+      if (!salvou) {
+        setMensagem('Não foi possível salvar as medidas desta peça antes da finalização.')
+        return
+      }
+
+      const operacao = await carregarOperacaoMedicaoV2(medicaoId)
+      if (!operacao) {
+        setMensagem('Não foi possível carregar o estado da Medição Final.')
+        return
+      }
+
+      if (operacao.status_operacional === 'aguardando_liberacao') {
+        if (usuario?.role !== 'master') {
+          setMensagem('A Medição Final ainda precisa ser liberada pelo Master antes do envio.')
+          return
+        }
+        const liberacao = await liberarMedicaoFinal(medicaoId, usuario)
+        if (!liberacao.ok) {
+          setMensagem(liberacao.mensagem || 'Não foi possível liberar a Medição Final.')
+          return
+        }
+      }
+
+      if (['aguardando_liberacao', 'liberado'].includes(operacao.status_operacional)) {
+        const inicio = await iniciarMedicaoFinal(medicaoId, usuario)
+        if (!inicio.ok) {
+          setMensagem(inicio.mensagem || 'Não foi possível iniciar a Medição Final antes do envio.')
+          return
+        }
+      }
+
+      if (['concluido', 'aprovado'].includes(operacao.status_operacional)) {
+        setMensagem(operacao.status_operacional === 'aprovado'
+          ? 'Esta Medição Final já está aprovada.'
+          : 'Esta Medição Final já foi enviada.')
+        return
+      }
+
+      const resultado = await concluirMedicaoFinal(medicaoId)
+      setMensagem(resultado.ok
+        ? 'Medição Final concluída e enviada com sucesso.'
+        : (resultado.mensagem || 'Não foi possível concluir a Medição Final.'))
+      await carregar()
+      window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+    } finally {
+      setFinalizandoMedicao(false)
+    }
   }
 
   function prepararExclusao(tipo: 'larguras' | 'alturas' | 'galeria', url: string, fotoId?: string) {
@@ -604,6 +681,24 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-900">Terminou a medição?</p>
+                      <p className="mt-1 text-xs text-emerald-800">O Atlas salva as medidas atuais, confere os campos obrigatórios e envia a Medição Final para a próxima etapa.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={finalizandoMedicao || salvandoMedidas || Boolean(salvando) || Boolean(enviandoFoto)}
+                      onClick={() => void finalizarMedicaoFinalDaTela()}
+                      className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {finalizandoMedicao ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                      {finalizandoMedicao ? 'Finalizando...' : 'Finalizar e enviar Medição Final'}
+                    </button>
+                  </div>
                 </div>
 
                 {mensagem && <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{mensagem}</p>}
