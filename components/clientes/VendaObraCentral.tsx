@@ -990,7 +990,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </div>
 
           <div className="mt-5 overflow-x-auto rounded-xl border">
-            <table className="w-full min-w-[1080px] text-sm">
+            <table className="w-full min-w-[1280px] text-sm">
               <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
                 <tr><th className="px-3 py-2.5">Código / material</th><th className="px-3 py-2.5">Necessário</th><th className="px-3 py-2.5">Comprado</th><th className="px-3 py-2.5">Falta comprar</th><th className="px-3 py-2.5">Fornecedor</th><th className="px-3 py-2.5">Pedido / documento</th><th className="px-3 py-2.5">Valor / prazo</th><th className="px-3 py-2.5">Previsão</th><th className="px-3 py-2.5">Status</th></tr>
               </thead>
@@ -999,6 +999,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                   const visual=visualCompra(item)
                   const cot=cotacaoPorNecessidade[item.id]
                   const fornecedor=cot?.fornecedor_id?fornecedoresCompras[cot.fornecedor_id]?.nome:null
+                  const dados=dadosCompra(item)
                   const comprado=compraEfetivada(item.status)
                   const recebidoItem=Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido'
                   const qtd=Number(item.quantidade||0)
