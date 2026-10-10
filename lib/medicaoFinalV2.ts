@@ -122,7 +122,7 @@ export async function carregarOperacaoMedicaoV2(medicaoId: string): Promise<Oper
 
   return {
     orcamento_id: medicao.orcamento_id || null,
-    fluxo_venda_ativo: fluxoVenda ? fluxoVenda.ativo : null,
+    fluxo_venda_ativo: fluxoVenda ? (fluxoVenda.ativo || fluxoVenda.wvetroVendidoValidado) : null,
     fluxo_venda_status_orcamento: fluxoVenda?.statusOrcamento || null,
     fluxo_venda_coluna_comercial: fluxoVenda?.colunaComercial || null,
     status_operacional: (medicao.status_operacional || 'aguardando_liberacao') as StatusOperacionalMedicao,
@@ -242,7 +242,7 @@ export async function concluirMedicaoFinal(
 
   if (medicaoFluxo?.orcamento_id) {
     const fluxo = await verificarFluxoVendaOrcamento(String(medicaoFluxo.orcamento_id))
-    if (!fluxo.ativo) {
+    if (!fluxo.ativo && !fluxo.wvetroVendidoValidado) {
       return {
         ok: false,
         mensagem: 'Confirme a venda e envie o orçamento para o fluxo Vendido antes de enviar a Medição Final.',
