@@ -149,8 +149,16 @@ export default function EngenhariaPage() {
         <div><p className="atlas-eng-eyebrow">Técnico · Engenharia</p><h1>Engenharia de obras</h1><p>Obras com Medição Final aprovada entram aqui automaticamente para conferência e desenvolvimento técnico.</p></div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="atlas-eng-hero-status"><CheckCircle2 size={18} /> Fluxo conectado à Medição Final</div>
+          <Link href="/engenharia/editor-tecnico" className="inline-flex items-center gap-2 rounded-xl border border-white/40 bg-emerald-500 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-600"><Ruler size={16}/> Simular corte / Editar fórmulas <ArrowRight size={15}/></Link>
           <Link href="/engenharia/configuracoes-orcamento" className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20">Configurações de orçamento <ArrowRight size={15}/></Link>
         </div>
+      </section>
+
+      <section className="mx-4 mb-5 grid gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 md:mx-7 md:grid-cols-[1fr_auto] md:items-center">
+        <div><h2 className="font-bold">Bancada de simulação e homologação</h2>
+          <p className="mt-1 text-xs">Escolha a linha, tipologia e receita; edite descrições, variáveis, folgas, perfis, vidros e acessórios. Gere um plano de corte de teste, imprima e valide uma versão separada, sem alterar o original.</p>
+        </div>
+        <Link href="/engenharia/editor-tecnico" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800">Abrir bancada <ArrowRight size={15}/></Link>
       </section>
 
       <section className="atlas-eng-kpis">

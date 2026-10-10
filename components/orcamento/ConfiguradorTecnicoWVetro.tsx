@@ -387,7 +387,12 @@ export default function ConfiguradorTecnicoWVetro({ value, onChange }: Props) {
       variaveis: { ...rascunho, ...(sequencial ? { folhas: quantidadeFolhas, numero_folhas: quantidadeFolhas } : folhasDefinidas ? { folhas: folhasDefinidas } : {}) },
       folhas: quantidadeFolhas,
       configuracaoPresetId: null,
-      configuracaoNome: tipologia?.label || value.configuracaoNome,
+      configuracaoNome: (
+        typeof formulaSelecionada?.metadados_editor?.descricao_orcamento === 'string'
+          && formulaSelecionada.metadados_editor.descricao_orcamento.trim()
+          ? formulaSelecionada.metadados_editor.descricao_orcamento.trim().replace(/\{folhas\}/gi, quantidadeFolhas)
+          : tipologia?.label || value.configuracaoNome
+      ),
       configuracaoValidada: false,
       modoConfiguracao: 'assistido',
       configuracaoStatus: temVariaveisTecnicas && obrigatoriasCompletas ? 'preenchida' : 'pendente',

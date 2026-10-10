@@ -63,6 +63,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
   const [tipologias, setTipologias] = useState<Tipologia[]>([])
   const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
   const [tipologiasValidadas, setTipologiasValidadas] = useState<Set<string>>(new Set())
+  const [descricoesOrcamento, setDescricoesOrcamento] = useState<Record<string,string>>({})
   const [carregando, setCarregando] = useState(true)
   const [buscaTipologia, setBuscaTipologia] = useState('')
   const [buscaLinha, setBuscaLinha] = useState(value.linhaNome || '')
@@ -87,6 +88,9 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
         setTipologias(ts.filter((t: any) => t.ativo !== false))
         setLinhas(ls.filter(l => l.ativo))
         setTipologiasValidadas(new Set(formulas.filter(f => f.status === 'validada').map(f => f.tipologia_id)))
+        setDescricoesOrcamento(Object.fromEntries(formulas
+          .filter(f => f.status === 'validada' && f.ativo && typeof f.metadados_editor?.descricao_orcamento === 'string')
+          .map(f => [f.tipologia_id, String(f.metadados_editor.descricao_orcamento)])))
         setCarregando(false)
       })
       .catch(() => {
@@ -312,7 +316,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
       produtoId: null,
       precoUnit: null,
       configuracaoPresetId: null,
-      configuracaoNome: null,
+      configuracaoNome: descricoesOrcamento[t.id]?.replace(/\{folhas\}/gi, t.chave === 'porta_correr_sequencial_suprema' ? '2' : folhasDefinidas) || null,
       configuracaoValidada: false,
       configuracaoStatus: 'pendente',
       modoConfiguracao: 'rapido',
@@ -509,7 +513,7 @@ export default function SeletorEsquadriaInteligenteV4({ value, onChange }: Props
             {tipologiasValidadas.has(value.tipologiaId || '') && <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-bold text-emerald-900">✓ Validado</span>}
           </div>
           <label className="mt-3 block max-w-xs text-sm font-semibold text-slate-700">Quantidade de folhas / planos
-            <select value={folhasValidas.includes(numeroFolhasSequencial) ? numeroFolhasSequencial : '2'} onChange={e => onChange({ folhas: e.target.value, variaveis: { ...value.variaveis, numero_folhas: e.target.value } })} className="mt-1 w-full rounded-lg border border-emerald-300 bg-white p-3 text-sm">
+            <select value={folhasValidas.includes(numeroFolhasSequencial) ? numeroFolhasSequencial : '2'} onChange={e => onChange({ folhas: e.target.value, variaveis: { ...value.variaveis, numero_folhas: e.target.value }, configuracaoNome: descricoesOrcamento[value.tipologiaId || '']?.replace(/\{folhas\}/gi,e.target.value) || value.configuracaoNome })} className="mt-1 w-full rounded-lg border border-emerald-300 bg-white p-3 text-sm">
               {folhasValidas.map(n => <option key={n} value={n}>{n} folhas · {n} planos</option>)}
             </select>
           </label>
