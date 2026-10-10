@@ -1,0 +1,3 @@
+revoke all on function public.registrar_recebimento_venda_com_desconto(uuid, uuid, numeric, numeric, date, text, text, text, uuid, text) from public;
+revoke all on function public.registrar_recebimento_venda_com_desconto(uuid, uuid, numeric, numeric, date, text, text, text, uuid, text) from anon;
+revoke all on function public.registrar_recebimento_venda_com_desconto(uuid, uuid, numeric, numeric, date, text, text, text, uuid, text) from authenticated;
