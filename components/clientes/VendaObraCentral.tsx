@@ -1189,7 +1189,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <b className="text-sm text-slate-900">Acompanhamento de compras por categoria</b>
-              <p className="mt-1 text-xs text-slate-500">Selecione Perfis, Acessórios, Vidros ou Outros para ver o percentual comprado, o que já foi pedido e o que ainda falta.</p>
+              <p className="mt-1 text-xs text-slate-500">As listas validadas em Materiais criam um card por categoria em Em cotação. Cotação não é pedido nem recebimento.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm">{Math.round(progressoCompras)}% comprado</span>
@@ -1205,17 +1205,19 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               const recebidos=lista.filter(item=>Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido').length
               const progresso=progressoItens(lista,item=>compraEfetivada(item.status))
               const tema=temaCategoria(cat)
+              const lote=lotesAtivos.find(l=>l.categoria===cat)
               return <button key={cat} type="button" onClick={()=>setCategoriaAberta(cat)} className={'rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm '+(categoriaAberta===cat?tema.borda+' '+tema.fundo+' ring-2 ring-slate-100':'border-slate-200 bg-white')}>
                 <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-900">{rotuloCategoria(cat)}</b><span className={'text-lg font-black '+tema.texto}>{Math.round(progresso)}%</span></div>
-                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100"><div className={'h-full rounded-full '+tema.barra} style={{width:String(progresso)+'%'}}/></div>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500"><span>{comprados}/{lista.length} comprados</span><span>{recebidos} recebidos</span></div>
+                <div className="mt-2">{lote?<span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">{lote.quantidade_itens} itens em cotação</span>:<span className="text-[10px] font-semibold text-slate-400">Aguardando lista validada</span>}</div>
+                <div className="mt-2 h-2 rounded-full bg-slate-100"><div className={'h-full rounded-full '+tema.barra} style={{width:String(progresso)+'%'}}/></div>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>{comprados}/{lista.length} comprados</span><span>{recebidos} recebidos</span></div>
               </button>
             })}
           </div>
 
           <div className="mt-5">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div><b className="text-sm text-slate-900">Kanban de {rotuloCategoria(categoriaAberta).toLowerCase()}</b><p className="text-[11px] text-slate-500">O item muda de coluna conforme a situação da compra.</p></div>
+              <div><b className="text-sm text-slate-900">Kanban de {rotuloCategoria(categoriaAberta).toLowerCase()}</b><p className="text-[11px] text-slate-500">Cada lista de cotação é um card; pedidos e recebimentos efetivos seguem seus próprios estágios.</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={()=>{setCategoriaMaterialAberta(categoriaAberta);inputPdfCompraRef.current?.click()}} disabled={analisandoPdfCompra||ocupadoMateriais||!obra?.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">{analisandoPdfCompra?<Loader2 size={13} className="animate-spin"/>:<FileText size={13}/>} Anexar pedido/PDF</button>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{listaCategoria.length} item(ns)</span>
@@ -1229,8 +1231,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 ['entrega','Aguardando chegar','border-amber-300','bg-amber-50/50',comprasKanban.entrega],
                 ['recebido','Recebido','border-emerald-300','bg-emerald-50/50',comprasKanban.recebido],
               ] as const).map(([id,titulo,borda,fundo,itensColuna])=><div key={id} className={'rounded-xl border-t-4 p-3 '+borda+' '+fundo}>
-                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length}</span></div>
+                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length+(id==='cotacao'&&loteCategoria?1:0)}</span></div>
                 <div className="space-y-2">
+                  {id==='cotacao'&&loteCategoria&&<div className="rounded-lg border border-blue-200 bg-white p-2.5 shadow-sm">
+                    <div className="flex items-center gap-2"><FileText size={15} className="text-blue-600"/><b className="text-xs text-slate-800">Cotação · {rotuloCategoria(loteCategoria.categoria)}</b></div>
+                    <p className="mt-1 text-[11px] text-slate-500">{loteCategoria.quantidade_itens} materiais · versão {loteCategoria.versao}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">Lista validada; aguardando fornecedores e aprovação.</p>
+                    <Link target="_blank" href={`/compras/cotacoes/lote/${loteCategoria.id}?vendaId=${venda.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700"><FileDown size={12}/>Abrir / imprimir PDF</Link>
+                  </div>}
                   {itensColuna.slice(0,4).map(item=>{const visual=visualCompra(item);return <div key={item.id} className="flex items-center gap-2 rounded-lg border border-white/80 bg-white p-2 shadow-sm">
                     <div className={'grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border '+(!visual.imagem&&visual.imagemObrigatoria?'border-amber-300':'border-slate-200')}>
                       {visual.imagem?<img src={visual.imagem} alt={visual.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className={!visual.imagem&&visual.imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
@@ -1238,7 +1246,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <div className="min-w-0"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div></div>
                   </div>})}
                   {itensColuna.length>4&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/70 px-2 py-2 text-center text-[10px] font-semibold text-slate-500">+ {itensColuna.length-4} item(ns)</div>}
-                  {!itensColuna.length&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
+                  {!itensColuna.length&&!(id==='cotacao'&&loteCategoria)&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
                 </div>
               </div>)}
             </div>
@@ -1278,7 +1286,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <td className="px-3 py-3"><button type="button" disabled={ocupadoMateriais} onClick={()=>void editarCompraCentral(item)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40"><Pencil size={13}/>Editar</button></td>
                   </tr>
                 })}
-                {!listaCategoria.length&&<tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
+                {!listaCategoria.length&&<tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">{loteCategoria?'A lista foi enviada para cotação. Os pedidos reais aparecerão nesta tabela quando forem registrados.':'Nenhum pedido desta categoria. Valide os materiais e gere a cotação primeiro.'}</td></tr>}
               </tbody>
             </table>
           </div>
