@@ -154,7 +154,7 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
     return true
   }
 
-  if (destinoNome.includes('liberad') && destinoNome.includes('produ')) {
+  if (destino?.setor_id === 'engenharia-projeto' && destinoNome.includes('liberad') && destinoNome.includes('produ')) {
     const { error } = await supabase.rpc('fn_engenharia_liberar_para_producao', {
       p_card_id: id,
       p_coluna_id: novaColunaId,
