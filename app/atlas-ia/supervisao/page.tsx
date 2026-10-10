@@ -142,7 +142,11 @@ export default function SupervisaoIAPage(){
         </div>
 
         <div className="p-3 md:p-5">
-          <div className={'atlas-office relative hidden h-[560px] overflow-hidden rounded-2xl border md:block '+(!movimentoAtivo?'office-paused':'')}>
+          <p className="mb-2 text-xs text-slate-500 md:hidden">
+            Deslize o escritório para os lados para ver todos os agentes e suas mesas.
+          </p>
+          <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-2xl" role="region" aria-label="Escritório interativo dos agentes, deslize horizontalmente" tabIndex={0}>
+          <div className={'atlas-office relative h-[560px] min-w-[780px] overflow-hidden rounded-2xl border md:min-w-0 '+(!movimentoAtivo?'office-paused':'')}>
             <div className="office-wall office-wall-top"/>
             <div className="office-title">ATLAS ONE · CENTRAL DE IA</div>
             <div className="office-plant plant-1">🪴</div>
@@ -192,6 +196,7 @@ export default function SupervisaoIAPage(){
               <span><i className="legend-dot learning-dot"/> monitorando</span>
               <span><i className="legend-dot watch-dot"/> observando</span>
             </div>
+          </div>
           </div>
 
           <div className="grid gap-2 md:hidden">
