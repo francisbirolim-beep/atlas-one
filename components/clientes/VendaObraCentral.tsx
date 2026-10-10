@@ -352,6 +352,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const valorVenda=Number(venda?.valor_venda||orcamento?.valor_estimado||0)
   const custoPrevisto=Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
+  const cotacaoPorNecessidade=useMemo(()=>Object.fromEntries(cotacoesCompras.map(item=>[item.necessidade_id,item])),[cotacoesCompras])
   function custoCompraReal(item:Compra){
     const dados=dadosCompra(item)
     if(dados.valor&&dados.valor>0)return dados.valor
@@ -396,7 +397,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const ordensConcluidas=ordens.filter(o=>finalizada(o.status)).length
   const progressoProducao=pct(ordensConcluidas,ordens.length)
 
-  const cotacaoPorNecessidade=useMemo(()=>Object.fromEntries(cotacoesCompras.map(item=>[item.necessidade_id,item])),[cotacoesCompras])
   const comprasPorCategoria=useMemo(()=>{
     const base:{perfil:Compra[];vidro:Compra[];acessorios:Compra[];outros:Compra[]}={perfil:[],vidro:[],acessorios:[],outros:[]}
     compras.forEach(item=>base[categoriaMaterial(item.categoria)].push(item))
@@ -505,7 +505,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setSelecionadosPdfCompra([])
   },[categoriaMaterialAberta])
 
-  async function atualizarStatusNecessidades(necessidadeIds:string[],statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',extras?:{fornecedorNome?:string;documentoNome?:string;documentoUrl?:string;origem?:string;pedidoNumero?:string;valorTotal?:number|null;prazoEntrega?:string;previsaoEntrega?:string},materialIds:string[]=[]){
+  async function atualizarStatusNecessidades(necessidadeIds:string[],statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',extras?:{fornecedorNome?:string;documentoNome?:string;documentoUrl?:string;origem?:string;pedidoNumero?:string;valorTotal?:number|null;prazoEntrega?:string;previsaoEntrega?:string;observacoesPedido?:string},materialIds:string[]=[]){
     if(!venda||(!necessidadeIds.length&&!materialIds.length))return false
     const token=await tokenAtual()
     if(!token){setErro('Sessão expirada. Entre novamente no Atlas.');return false}
@@ -519,6 +519,41 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setMensagemMateriais(`${json.atualizadosMateriais||json.atualizados||materialIds.length||necessidadeIds.length} item(ns) movido(s) para ${rotulo}.`)
     await carregar()
     return true
+  }
+
+  async function editarCompraCentral(item:Compra){
+    const dados=dadosCompra(item)
+    const statusAtual=String(item.status||'necessidade').toLowerCase()
+    const statusInicial=statusAtual==='aprovado'||statusAtual==='pedido_emitido'?'comprado':statusAtual==='aguardando_entrega'?'entrega':statusAtual==='recebido'?'recebido':statusAtual==='cotacao'?'cotacao':'necessidade'
+    const statusDigitado=window.prompt('Status da compra: necessidade, cotacao, comprado, entrega ou recebido',statusInicial)?.trim().toLowerCase()
+    if(!statusDigitado)return
+    const mapaStatus:Record<string,'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido'>={necessidade:'necessidade',falta:'necessidade',cotacao:'cotacao','em cotacao':'cotacao',comprado:'comprado',aprovado:'comprado',pedido:'comprado',entrega:'entrega','aguardando entrega':'entrega',recebido:'recebido'}
+    const statusDestino=mapaStatus[statusDigitado]
+    if(!statusDestino){setErro('Status inválido. Use necessidade, cotacao, comprado, entrega ou recebido.');return}
+    const fornecedor=window.prompt('Fornecedor:',dados.fornecedor||'')
+    if(fornecedor==null)return
+    const pedido=window.prompt('Número do pedido:',dados.pedido||'')
+    if(pedido==null)return
+    const valor=window.prompt('Valor total deste item/pedido:',dados.valor?String(dados.valor).replace('.',','):'')
+    if(valor==null)return
+    const prazo=window.prompt('Prazo de entrega:',dados.prazo||'')
+    if(prazo==null)return
+    const previsao=window.prompt('Previsão de entrega (AAAA-MM-DD, opcional):',dados.previsaoEntrega||'')
+    if(previsao==null)return
+    const obs=window.prompt('Observação da compra:', '')
+    if(obs==null)return
+    setOcupadoMateriais(true);setErro('')
+    const ok=await atualizarStatusNecessidades([item.id],statusDestino,{
+      fornecedorNome:fornecedor.trim(),
+      pedidoNumero:pedido.trim(),
+      valorTotal:valor.trim()?numeroEntrada(valor):null,
+      prazoEntrega:prazo.trim(),
+      previsaoEntrega:previsao.trim(),
+      observacoesPedido:obs.trim(),
+      origem:'edicao_manual_compra',
+    })
+    setOcupadoMateriais(false)
+    if(ok)setMensagemMateriais('Compra atualizada manualmente. Custos e CMV recalculados com os novos dados.')
   }
 
   async function moverMateriaisEmLote(statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',materialIds=selecionadosMateriais){
@@ -1050,9 +1085,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </div>
 
           <div className="mt-5 overflow-x-auto rounded-xl border">
-            <table className="w-full min-w-[1280px] text-sm">
+            <table className="w-full min-w-[1380px] text-sm">
               <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <tr><th className="px-3 py-2.5">Código / material</th><th className="px-3 py-2.5">Necessário</th><th className="px-3 py-2.5">Comprado</th><th className="px-3 py-2.5">Falta comprar</th><th className="px-3 py-2.5">Fornecedor</th><th className="px-3 py-2.5">Pedido / documento</th><th className="px-3 py-2.5">Valor / prazo</th><th className="px-3 py-2.5">Previsão</th><th className="px-3 py-2.5">Status</th></tr>
+                <tr><th className="px-3 py-2.5">Código / material</th><th className="px-3 py-2.5">Necessário</th><th className="px-3 py-2.5">Comprado</th><th className="px-3 py-2.5">Falta comprar</th><th className="px-3 py-2.5">Fornecedor</th><th className="px-3 py-2.5">Pedido / documento</th><th className="px-3 py-2.5">Valor / prazo</th><th className="px-3 py-2.5">Previsão</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Ações</th></tr>
               </thead>
               <tbody>
                 {listaCategoria.map(item=>{
@@ -1080,9 +1115,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     </td>
                     <td className="px-3 py-3 text-slate-600">{dataBR(cot?.previsao_entrega||dados.previsaoEntrega)}</td>
                     <td className="px-3 py-3"><span className={'rounded-full px-2 py-1 text-xs font-bold '+(recebidoItem?'bg-emerald-100 text-emerald-700':comprado?'bg-violet-100 text-violet-700':String(item.status||'').toLowerCase()==='cotacao'?'bg-blue-100 text-blue-700':'bg-slate-100 text-slate-600')}>{recebidoItem?'Recebido':status(item.status)}</span></td>
+                    <td className="px-3 py-3"><button type="button" disabled={ocupadoMateriais} onClick={()=>void editarCompraCentral(item)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40"><Pencil size={13}/>Editar</button></td>
                   </tr>
                 })}
-                {!listaCategoria.length&&<tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
+                {!listaCategoria.length&&<tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
               </tbody>
             </table>
           </div>
