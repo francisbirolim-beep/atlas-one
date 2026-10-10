@@ -18,7 +18,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const [carregando,setCarregando]=useState(true)
  const [erro,setErro]=useState('')
  const [aberto,setAberto]=useState<Categoria|null>('perfil')
- const [adicionar,setAdicionar]=useState(false)
+ const [adicionar,setAdicionar]=useState<'compra'|'adicional'|null>(null)
  const [salvando,setSalvando]=useState(false)
  const [sucesso,setSucesso]=useState('')
  async function buscar(){
@@ -44,7 +44,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    const dadosEnvio=new FormData(form);dadosEnvio.append('vendaId',vendaId)
    const resp=await fetch('/api/vendas/cmv',{method:'POST',headers:{Authorization:'Bearer '+token},body:dadosEnvio})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Erro ao salvar custo.')
-   form.reset();setAdicionar(false);setSucesso('Custo realizado registrado na obra.');await buscar()
+   form.reset();setAdicionar(null);setSucesso('Registro realizado com sucesso.');await buscar()
   }catch(err){setErro(err instanceof Error?err.message:'Erro ao registrar custo.')}
   finally{setSalvando(false)}
  }
@@ -58,11 +58,29 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  return <div className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div><h3 className="font-bold text-slate-900">Custos / CMV da obra</h3><p className="text-xs text-slate-500">Previsão W.Vetro separada dos lançamentos reais e do financeiro da venda.</p></div>
-   <div className="flex gap-2"><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>setAdicionar(!adicionar)} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar custo</button></div>
+   <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>setAdicionar(adicionar==='compra'?null:'compra')} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>setAdicionar(adicionar==='adicional'?null:'adicional')} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
   </div>
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
   {sucesso&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{sucesso}</p>}
   {carregando&&!dados?<p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin"/> Carregando CMV...</p>:null}
+  {adicionar&&<form onSubmit={enviar} className="rounded-xl border bg-slate-50 p-4">
+   <h4 className="mb-3 font-bold">{adicionar==='compra'?'Registrar compra / material realizado':'Registrar custo adicional não previsto'}</h4>
+   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <label className="text-xs font-semibold">Categoria<select required name="categoria" key={adicionar} defaultValue={adicionar==='compra'?'perfil':'outros'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
+    <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} defaultValue={adicionar==='compra'?'compra':'outro'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option><option value="estoque">Material / sobra do estoque</option></>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
+    <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" placeholder="Ex.: 1250,50" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold lg:col-span-2">Descrição<input required name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Data<input name="data" type="date" defaultValue={new Date().toISOString().slice(0,10)} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Quantidade (opcional)<input name="quantidade" type="number" min="0.001" step="any" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Unidade (opcional)<input name="unidade" placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Fornecedor (opcional)<input name="fornecedor" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Nº nota/documento (opcional)<input name="documento" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
+    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+   </div>
+   <p className="mt-3 text-xs text-slate-500">Material reaproveitado deve ser registrado como estoque pelo custo consumido. Compras já vinculadas à obra podem entrar automaticamente no realizado; não lance novamente a mesma nota sem conferir, para evitar duplicidade no CMV.</p>
+   <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':adicionar==='compra'?'Registrar compra':'Registrar custo adicional'}</button></div>
+  </form>}
   {dados&&<div className="space-y-4">
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <Card titulo="Custo previsto W.Vetro" valor={previstoFmt(p?.total??null)} nota={dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}/>
@@ -101,23 +119,6 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
     </table>
    </div>
   </div>}
-  {adicionar&&<form onSubmit={enviar} className="rounded-xl border bg-slate-50 p-4">
-   <h4 className="mb-3 font-bold">Adicionar custo realizado</h4>
-   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-    <label className="text-xs font-semibold">Categoria<select required name="categoria" defaultValue="perfil" className="mt-1 w-full rounded-lg border bg-white p-2.5">{categories.map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
-    <label className="text-xs font-semibold">Origem<select required name="origem" defaultValue="compra" className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="compra">Compra</option><option value="estoque">Sobra / material de estoque</option><option value="servico">Serviço</option><option value="outro">Outro</option></select></label>
-    <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" placeholder="Ex.: 1250,50" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold lg:col-span-2">Descrição<input required name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Data<input name="data" type="date" defaultValue={new Date().toISOString().slice(0,10)} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Quantidade (opcional)<input name="quantidade" type="number" min="0.001" step="any" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Unidade (opcional)<input name="unidade" placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Fornecedor (opcional)<input name="fornecedor" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Nº nota/documento (opcional)<input name="documento" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
-    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-   </div>
-   <p className="mt-3 text-xs text-slate-500">Material reaproveitado deve ser registrado como estoque pelo custo consumido. Compras já vinculadas à obra podem entrar automaticamente no realizado; não lance novamente a mesma nota sem conferir, para evitar duplicidade no CMV.</p>
-   <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':'Registrar custo'}</button></div>
-  </form>}
+
  </div>
 }
