@@ -167,7 +167,8 @@ export default function EditorTecnicoPage() {
   )
 
   function escolherConfiguracaoDaTipologia(id: string) {
-    const preferida = registros.find(item => item.tipologia_id === id && item.configuracao_chave !== 'legado_wvetro_994')
+    const preferida = registros.find(item => item.tipologia_id === id && item.ativo && item.status === 'validada')
+      || registros.find(item => item.tipologia_id === id && item.configuracao_chave !== 'legado_wvetro_994')
       || registros.find(item => item.tipologia_id === id)
     setSelecionadaId(preferida?.id || '')
   }
@@ -301,6 +302,12 @@ export default function EditorTecnicoPage() {
       setErro('Receita homologada protegida: crie uma versão de teste antes de alterar e salvar.')
       return
     }
+    if (rascunho.ativo && registros.some(f =>
+      f.id !== rascunho.id && f.tipologia_id === rascunho.tipologia_id && f.ativo
+    )) {
+      setErro('Existe outra receita ativa nesta tipologia. Para liberar a nova, inative primeiro a anterior e depois ative a revisão validada.')
+      return
+    }
     if (rascunho.variaveis.some(v => !v.chave.trim() || !v.label.trim())) {
       setErro('Preencha nome e chave de todas as variáveis antes de salvar.')
       return
@@ -347,25 +354,29 @@ export default function EditorTecnicoPage() {
     try {
       const L = Number(largura)
       const H = Number(altura)
-      const calculados = calcularFormulasCorte(rascunho, L, H, opcoes)
+      const escolha = { ...opcoes }
+      for (const v of rascunho.variaveis) {
+        if (!escolha[v.chave] && v.opcoes[0]) escolha[v.chave] = v.opcoes[0]
+      }
+      const calculados = calcularFormulasCorte(rascunho, L, H, escolha)
       setResultados(calculados)
       setResultadosAcessorios(calcularAcessoriosTecnicos(
-        rascunho.acessorios, L, H, Number(opcoes.numero_folhas || opcoes.folhas || 2),
+        rascunho.acessorios, L, H, Number(escolha.numero_folhas || escolha.folhas || 2),
         calculados.map(p => ({ codigo: p.codigo, tamanho: p.tamanho, grupo: p.grupo })),
-        opcoes, rascunho.folgas
+        escolha, rascunho.folgas
       ))
       setTesteRealizado(true)
       const formulaL = rascunho.vidro.formula_largura
-        ? resolverFormulaCondicional(rascunho.vidro.formula_largura, rascunho.vidro.condicoes_largura, opcoes)
+        ? resolverFormulaCondicional(rascunho.vidro.formula_largura, rascunho.vidro.condicoes_largura, escolha)
         : null
       const formulaH = rascunho.vidro.formula_altura
-        ? resolverFormulaCondicional(rascunho.vidro.formula_altura, rascunho.vidro.condicoes_altura, opcoes)
+        ? resolverFormulaCondicional(rascunho.vidro.formula_altura, rascunho.vidro.condicoes_altura, escolha)
         : null
       if (formulaL && formulaH) {
         setVidroTeste({
-          largura: calcularFormulaCorteIsolada(formulaL, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas),
-          altura: calcularFormulaCorteIsolada(formulaH, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas),
-          quantidade: rascunho.vidro.formula_quantidade ? calcularFormulaCorteIsolada(rascunho.vidro.formula_quantidade, L, H, opcoes.numero_folhas ? Number(opcoes.numero_folhas) : undefined, rascunho.folgas) : Number(opcoes.numero_folhas || rascunho.vidro.quantidade || 1),
+          largura: calcularFormulaCorteIsolada(formulaL, L, H, escolha.numero_folhas ? Number(escolha.numero_folhas) : undefined, rascunho.folgas),
+          altura: calcularFormulaCorteIsolada(formulaH, L, H, escolha.numero_folhas ? Number(escolha.numero_folhas) : undefined, rascunho.folgas),
+          quantidade: rascunho.vidro.formula_quantidade ? calcularFormulaCorteIsolada(rascunho.vidro.formula_quantidade, L, H, escolha.numero_folhas ? Number(escolha.numero_folhas) : undefined, rascunho.folgas) : Number(escolha.numero_folhas || rascunho.vidro.quantidade || 1),
         })
       } else setVidroTeste(null)
     } catch (e) {
