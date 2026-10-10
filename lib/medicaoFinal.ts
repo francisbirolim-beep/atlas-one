@@ -19,6 +19,7 @@ export type FluxoVendaMedicao = {
   obraId: string | null
   statusOrcamento: string | null
   colunaComercial: string | null
+  wvetroVendidoValidado: boolean
 }
 
 export async function verificarFluxoVendaOrcamento(orcamentoId: string): Promise<FluxoVendaMedicao> {
@@ -32,7 +33,7 @@ export async function verificarFluxoVendaOrcamento(orcamentoId: string): Promise
       .maybeSingle(),
     supabase
       .from('orcamentos')
-      .select('status,obra_id,coluna_id')
+      .select('status,obra_id,coluna_id,modo_entrada,origem,wvetro_fluxo')
       .eq('id', orcamentoId)
       .maybeSingle(),
   ])
@@ -47,12 +48,24 @@ export async function verificarFluxoVendaOrcamento(orcamentoId: string): Promise
     colunaComercial = coluna?.nome || null
   }
 
+  const wvetroFluxo = orcamento?.wvetro_fluxo && typeof orcamento.wvetro_fluxo === 'object'
+    ? orcamento.wvetro_fluxo as Record<string, unknown>
+    : {}
+  const origemWVetro = String(wvetroFluxo.origem || orcamento?.modo_entrada || orcamento?.origem || '').trim().toLowerCase()
+  const situacaoWVetro = String(wvetroFluxo.situacao || '').trim().toUpperCase()
+  const vinculoWVetroValidado = wvetroFluxo.validacao_manual_cliente === true
+    || String(wvetroFluxo.fonte_registro || '') === 'historico_validado'
+  const wvetroVendidoValidado = origemWVetro.includes('wvetro')
+    && vinculoWVetroValidado
+    && ['V', 'F'].includes(situacaoWVetro)
+
   return {
     ativo: Boolean(venda?.id),
     vendaId: venda?.id || null,
     obraId: venda?.obra_id || orcamento?.obra_id || null,
     statusOrcamento: orcamento?.status || null,
     colunaComercial,
+    wvetroVendidoValidado,
   }
 }
 
