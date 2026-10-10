@@ -53,5 +53,8 @@ jobs:
       - name: Installation production-item linkage
         run: npm run test:venda-instalacao
 
+      - name: Safe work closure and installation guard
+        run: npm run test:encerramento-obra
+
       - name: Build
         run: npm run build

@@ -18,6 +18,7 @@
     "test:producao-medicao": "node scripts/test-producao-vinculo-medicao.cjs",
     "test:liberacao-op": "node scripts/test-liberacao-segura-op.cjs",
     "test:venda-instalacao": "node scripts/test-venda-instalacao-producao.cjs",
+    "test:encerramento-obra": "node scripts/test-encerramento-obra-guard.cjs",
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },
