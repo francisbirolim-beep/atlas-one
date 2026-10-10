@@ -1,5 +1,8 @@
 'use client'
 
+import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -188,6 +191,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
   const [compras,setCompras]=useState<Compra[]>([])
   const [lotesCotacao,setLotesCotacao]=useState<LoteCotacao[]>([])
+  const [movendoLoteId,setMovendoLoteId]=useState<string|null>(null)
   const [emitindoCotacao,setEmitindoCotacao]=useState(false)
   const [produtosCompras,setProdutosCompras]=useState<Record<string,ProdutoCompra>>({})
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
@@ -467,6 +471,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   },[compras])
   const listaCategoria=comprasPorCategoria[categoriaAberta]
   const loteCategoria=lotesCotacao.find(l=>l.categoria===categoriaAberta&&l.pacote_id===pacoteTecnicoId)
+  const loteNaEtapa=(id:string)=>Boolean(loteCategoria && loteCategoria.status===(id==='faltas'?'necessidade':id==='entrega'?'entrega':id))
   const lotesAtivos=lotesCotacao.filter(l=>l.pacote_id===pacoteTecnicoId&&l.status!=='cancelado')
   const materiaisPorProduto=useMemo(()=>{
     const mapa:Record<string,MaterialTecnico>={}
@@ -591,6 +596,70 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setAnalisePdfCompra(null)
     setSelecionadosPdfCompra([])
   },[categoriaMaterialAberta])
+
+  async function moverLoteCotacao(e:React.DragEvent<HTMLDivElement>,destinoId:string){
+    e.preventDefault()
+    const id=e.dataTransfer.getData('application/x-atlas-cotacao')
+    const lote=lotesCotacao.find(l=>l.id===id)
+    const statusDestino=destinoId==='faltas'?'necessidade':destinoId
+    const nomes:Record<string,string>={necessidade:'Falta comprar',cotacao:'Em cotação',comprado:'Comprado',entrega:'Aguardando chegar',recebido:'Recebido'}
+    if(!lote || !nomes[statusDestino] || lote.status===statusDestino || movendoLoteId)return
+    const ordem=['necessidade','cotacao','comprado','entrega','recebido']
+    const volta=ordem.indexOf(statusDestino)<ordem.indexOf(lote.status)
+    if(!confirmarMovimentoKanban({
+      card:'Cotação - '+rotuloCategoria(lote.categoria),
+      origem:nomes[lote.status]||lote.status,
+      destino:nomes[statusDestino],
+      retrocesso:volta,
+      aviso:'Este arrasto altera a etapa administrativa do card. O pedido de compra, a nota fiscal, o pagamento e a entrada no estoque são operações separadas.',
+    }))return
+    const motivo=volta?window.prompt('Motivo da volta de etapa (para o histórico da compra):','Correção da etapa anterior'):null
+    if(volta&&motivo===null)return
+    setMovendoLoteId(lote.id);setErro('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada.')
+      const r=await fetch('/api/vendas/cotacoes-lotes/mover',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId:venda?.id,loteId:lote.id,versao:lote.versao,destino:statusDestino,motivo}),
+      })
+      const json=await r.json().catch(()=>({}))
+      if(!r.ok)throw Error(json.error||'A movimentação não foi concluída.')
+      setLotesCotacao(prev=>prev.map(l=>l.id===lote.id?{...l,status:statusDestino,versao:json.lote?.versao||l.versao+1}:l))
+      setMensagemMateriais('Card movido para '+nomes[statusDestino]+'. Alteração registrada no histórico.')
+    }catch(err){setErro(err instanceof Error?err.message:'Não foi possível mover a cotação.');await carregar()}
+    finally{setMovendoLoteId(null)}
+  }
+
+  async function receberArrastoCompra(e:React.DragEvent<HTMLDivElement>,destinoId:string){
+    e.preventDefault()
+    const compraId=e.dataTransfer.getData('application/x-atlas-compra-item')
+    if(!compraId){
+      await moverLoteCotacao(e,destinoId)
+      return
+    }
+    const item=compras.find(c=>c.id===compraId)
+    if(!item || ocupadoMateriais || !venda?.obra_id)return
+    const nomes:Record<string,string>={faltas:'Falta comprar',cotacao:'Em cotação',comprado:'Comprado',entrega:'Aguardando chegar',recebido:'Recebido'}
+    const statusOrigem=item.recebido_em||item.status==='recebido'?'recebido':
+      item.status==='aguardando_entrega'?'entrega':
+      item.status==='aprovado'||item.status==='pedido_emitido'?'comprado':
+      item.status==='cotacao'?'cotacao':'faltas'
+    if(statusOrigem===destinoId)return
+    const ordem=['faltas','cotacao','comprado','entrega','recebido']
+    const volta=ordem.indexOf(destinoId)<ordem.indexOf(statusOrigem)
+    if(!confirmarMovimentoKanban({
+      card:item.descricao||'Material comprado',origem:nomes[statusOrigem],
+      destino:nomes[destinoId],retrocesso:volta,
+      aviso:'Confira o pedido e documentos anexados. Se houver NF, pagamento ou estoque movimentado, faça o estorno específico antes de considerar a reversão operacional concluída.',
+    }))return
+    const destino:Record<string,'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido'>={
+      faltas:'necessidade',cotacao:'cotacao',comprado:'comprado',entrega:'entrega',recebido:'recebido',
+    }
+    setOcupadoMateriais(true);setErro('')
+    try{await atualizarStatusNecessidades([item.id],destino[destinoId],{origem:'arrasto_compras_confirmado'})}
+    finally{setOcupadoMateriais(false)}
+  }
 
   async function emitirCotacaoCategoria(){
     if(!venda||!pacoteTecnicoId)return
@@ -1259,27 +1328,29 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 ['comprado','Comprado','border-violet-300','bg-violet-50/50',comprasKanban.comprado],
                 ['entrega','Aguardando chegar','border-amber-300','bg-amber-50/50',comprasKanban.entrega],
                 ['recebido','Recebido','border-emerald-300','bg-emerald-50/50',comprasKanban.recebido],
-              ] as const).map(([id,titulo,borda,fundo,itensColuna])=><div key={id} className={'rounded-xl border-t-4 p-3 '+borda+' '+fundo}>
-                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length+(id==='cotacao'&&loteCategoria?1:0)}</span></div>
+              ] as const).map(([id,titulo,borda,fundo,itensColuna])=><div key={id} onDragOver={e=>e.preventDefault()} onDrop={e=>void receberArrastoCompra(e,id)} className={'rounded-xl border-t-4 p-3 '+borda+' '+fundo}>
+                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length+(loteNaEtapa(id)?1:0)}</span></div>
                 <div className="space-y-2">
-                  {id==='cotacao'&&loteCategoria&&<div className="rounded-lg border border-blue-200 bg-white p-2.5 shadow-sm">
+                  {loteNaEtapa(id)&&loteCategoria&&<div draggable onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-atlas-cotacao',loteCategoria.id)}} className={'cursor-grab rounded-lg border border-blue-200 bg-white p-2.5 shadow-sm active:cursor-grabbing '+(movendoLoteId===loteCategoria.id?'opacity-50':'')}>
                     <div className="flex items-center gap-2"><FileText size={15} className="text-blue-600"/><b className="text-xs text-slate-800">Cotação · {rotuloCategoria(loteCategoria.categoria)}</b></div>
                     <p className="mt-1 text-[11px] text-slate-500">{loteCategoria.quantidade_itens} materiais · versão {loteCategoria.versao}</p>
-                    <p className="mt-1 text-[10px] text-slate-500">Lista validada; aguardando fornecedores e aprovação.</p>
+                    <p className="mt-1 text-[10px] text-slate-500">Arraste este card para outra etapa. Movimentação sujeita à confirmação.</p>
                     <Link target="_blank" href={`/compras/cotacoes/lote/${loteCategoria.id}?vendaId=${venda.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700"><FileDown size={12}/>Abrir / imprimir PDF</Link>
                   </div>}
-                  {itensColuna.slice(0,4).map(item=>{const visual=visualCompra(item);return <div key={item.id} className="flex items-center gap-2 rounded-lg border border-white/80 bg-white p-2 shadow-sm">
+                  {itensColuna.slice(0,4).map(item=>{const visual=visualCompra(item);return <div key={item.id} draggable onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-atlas-compra-item',item.id)}} className="flex cursor-grab items-center gap-2 rounded-lg border border-white/80 bg-white p-2 shadow-sm active:cursor-grabbing">
                     <div className={'grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border '+(!visual.imagem&&visual.imagemObrigatoria?'border-amber-300':'border-slate-200')}>
                       {visual.imagem?<img src={visual.imagem} alt={visual.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className={!visual.imagem&&visual.imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
                     </div>
                     <div className="min-w-0"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div></div>
                   </div>})}
                   {itensColuna.length>4&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/70 px-2 py-2 text-center text-[10px] font-semibold text-slate-500">+ {itensColuna.length-4} item(ns)</div>}
-                  {!itensColuna.length&&!(id==='cotacao'&&loteCategoria)&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
+                  {!itensColuna.length&&!loteNaEtapa(id)&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
                 </div>
               </div>)}
             </div>
           </div>
+
+          {loteCategoria&&<VendaCotacoesIA key={loteCategoria.id+':'+loteCategoria.versao} vendaId={venda.id} loteId={loteCategoria.id}/>}
 
           <div className="mt-5 overflow-x-auto rounded-xl border">
             <table className="w-full min-w-[1380px] text-sm">
