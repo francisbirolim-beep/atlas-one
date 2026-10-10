@@ -1317,7 +1317,26 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
           {setorPorNome.producao&&<div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">Status geral: <b>{setorPorNome.producao.nome}</b></div>}
-          <div className="space-y-2">{ordens.map(o=><div key={o.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b className="text-sm">OP #{o.numero||'—'} · {o.titulo||o.item_ref||'Peça'}</b><p className="text-xs text-slate-500">Qtd {o.quantidade||1} · criada em {dataBR(o.created_at)}</p></div><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{status(o.status)}</span></div>)}{!ordens.length&&<p className="py-6 text-center text-sm text-slate-400">Ainda não existem ordens de produção para esta venda.</p>}</div>
+          <div className="mb-4 grid gap-3 sm:grid-cols-4">
+            <Kpi titulo="Ordens" valor={String(ordens.length)}/>
+            <Kpi titulo="Produzidas" valor={String(ordensConcluidas)}/>
+            <Kpi titulo="Faltantes" valor={String(Math.max(0,ordens.length-ordensConcluidas))}/>
+            <Kpi titulo="Avanço produção" valor={progressoProducao.toFixed(0)+'%'}/>
+          </div>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full min-w-[860px] text-sm">
+              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5">Ordem / peça</th><th className="px-3 py-2.5">Quantidade</th><th className="px-3 py-2.5">Produzido</th><th className="px-3 py-2.5">Falta</th><th className="px-3 py-2.5">Criada em</th><th className="px-3 py-2.5">Status</th></tr></thead>
+              <tbody>
+                {ordens.map(o=>{const qtd=Number(o.quantidade||1);const pronta=finalizada(o.status);return <tr key={o.id} className="border-t"><td className="px-3 py-3"><b className="text-slate-800">OP #{o.numero||'—'} · {o.titulo||o.item_ref||'Peça'}</b></td><td className="px-3 py-3 font-semibold text-slate-700">{qtd}</td><td className="px-3 py-3 font-bold text-emerald-700">{pronta?qtd:0}</td><td className={'px-3 py-3 font-bold '+(pronta?'text-emerald-700':'text-amber-700')}>{pronta?0:qtd}</td><td className="px-3 py-3 text-slate-600">{dataBR(o.created_at)}</td><td className="px-3 py-3"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{status(o.status)}</span></td></tr>})}
+                {!ordens.length&&<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Ainda não existem ordens de produção para esta venda.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <h3 className="mt-5 font-bold text-slate-900">Tipologias / ambientes da venda</h3>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {itens.map((item:any,idx:number)=>{const qtd=Number(item.quantidade||1);const titulo=item.ambiente||item.descricao||item.configuracao_nome||item.tipo_esquadria||`Tipologia ${idx+1}`;const relacionadas=ordens.filter(o=>String(o.titulo||o.item_ref||'').toLowerCase().includes(String(titulo||'').toLowerCase().slice(0,12)));const produzidas=relacionadas.length?relacionadas.filter(o=>finalizada(o.status)).reduce((s,o)=>s+Number(o.quantidade||1),0):0;return <div key={item.id||idx} className="rounded-xl border p-3"><div className="flex items-start justify-between gap-3"><div><b className="text-sm text-slate-800">{titulo}</b><p className="mt-1 text-xs text-slate-500">Qtd vendida {qtd}{item.largura_mm&&item.altura_mm?` · ${item.largura_mm} x ${item.altura_mm} mm`:''}</p></div><span className={'rounded-full px-2 py-1 text-xs font-bold '+(produzidas>=qtd?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700')}>{produzidas>=qtd?'Produzido':'Pendente'}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-blue-600" style={{width:String(pct(Math.min(produzidas,qtd),qtd))+'%'}}/></div><p className="mt-1 text-[11px] text-slate-500">Produzido {Math.min(produzidas,qtd)} · falta {Math.max(0,qtd-produzidas)}</p></div>})}
+            {!itens.length&&<p className="text-sm text-slate-400">O orçamento desta venda ainda não possui itens estruturados.</p>}
+          </div>
         </Box>}
 
         {aba==='instalacao'&&<Box titulo="Instalação desta venda">
