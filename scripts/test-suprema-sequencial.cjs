@@ -77,6 +77,8 @@ for (const [folhas, corte] of [[2,1167],[3,772],[4,574],[5,456],[6,377]]) {
   console.log(folhas + 'F: travessa ' + corte + ' mm, vidro ' + (corte-6) + ' × 2033 mm')
 }
 assert.throws(()=>calcularFormulasCorte(def,2500,2200,{numero_folhas:'7'}))
+assert.throws(()=>calcularFormulasCorte({ ...def, tipologia_id:'6fded962-78f7-40c5-8da7-2134b2ed98c1' },2500,2200,{numero_folhas:'5',montante_mao_amigo:'largo_sem_reforco'}), /ainda não homologada/)
+assert.equal(calcularFormulasCorte({ ...def, tipologia_id:'6fded962-78f7-40c5-8da7-2134b2ed98c1' },2500,2200,{numero_folhas:'5',montante_mao_amigo:'comum_sem_reforco'}).find(p=>p.codigo==='SU053').tamanho,456)
 assert.equal(calcularFormulasCorte({tipologia_id:'legada',variaveis:[],pecas:[{codigo:'SU999',formula:'574.3'}]},2500,2200,{})[0].tamanho,574.3)
 assert.equal(calcularFormulasCorte({tipologia_id:'teste-folga',variaveis,pecas:[{codigo:'SU040',formula:'HF - 30'}],folgas:{largura_mm:5,altura_mm:6}},2500,2200,{numero_folhas:'2'})[0].tamanho,2164)
 console.log('OK: 2–6 folhas, 6 planos, 14 perfis, 18 acessórios, CEIL, 4 mm de folga configurável e legado intacto.')
