@@ -11,7 +11,7 @@ type Item = {
 }
 type Lote = {
   id:string;categoria:string;versao:number;quantidade_itens:number;created_at:string;
-  gerado_por_nome:string|null;itens:Item[]
+  gerado_por_nome:string|null;updated_at:string;itens:Item[]
 }
 const nomes:Record<string,string>={perfil:'Perfis',acessorios:'Acessórios',vidro:'Vidros',outros:'Outros'}
 const n=(v:number)=>Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:3})
@@ -57,7 +57,7 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
       <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
         <span>Lista #{lote.id.slice(0,8).toUpperCase()}</span>
         <span>Versão {lote.versao}</span>
-        <span>Gerada em {dataBR(lote.created_at)}</span>
+        <span>Gerada em {dataBR(lote.updated_at||lote.created_at)}</span>
         <span>{lote.quantidade_itens} itens</span>
       </div>
     </header>
