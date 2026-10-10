@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Ruler, Settings, X, Trash2, Search, FileUp, Loader2, FileText, CheckCircle2 } from 'lucide-react'
@@ -122,8 +124,14 @@ export default function MedicaoFinalQuadro() {
     setColunaArrastando(null)
     const id = e.dataTransfer.getData('text/plain')
     if (!id) return
+    const item=medicoes.find(m=>m.id===id)
+    const destino=colunas.find(c=>c.id===colunaId)
+    if (!item || !destino || item.coluna_id===colunaId) return
+    if (!confirmarMovimentoKanban({card:'Medição Final',origem:colunas.find(c=>c.id===item.coluna_id)?.nome||'Etapa anterior',destino:destino.nome,retrocesso:colunas.findIndex(c=>c.id===destino.id)<colunas.findIndex(c=>c.id===item.coluna_id)})) return
+    const anterior=medicoes
     setMedicoes(prev => prev.map(m => (m.id === id ? { ...m, coluna_id: colunaId } : m)))
-    await moverMedicao(id, colunaId)
+    const ok=await moverMedicao(id, colunaId)
+    if (!ok) setMedicoes(anterior)
   }
 
   async function novaColuna() {

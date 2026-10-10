@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, CheckCircle2, CircleAlert, ClipboardCheck, FileText, Loader2, Ruler, Save, ShieldAlert, Wrench, X } from 'lucide-react'
@@ -120,6 +122,8 @@ export default function EngenhariaPage() {
 
     const destino = colunas.find(c => c.id === colunaId)
     const obra = obras.find(o => o.id === cardId)
+    if (!destino || !obra || obra.coluna_id===colunaId) return
+    if (!confirmarMovimentoKanban({card:obra.titulo||'Obra',origem:colunas.find(c=>c.id===obra.coluna_id)?.nome||'Etapa anterior',destino:destino.nome,retrocesso:colunas.findIndex(c=>c.id===destino.id)<colunas.findIndex(c=>c.id===obra.coluna_id)})) return
     if (destino?.nome.toLowerCase().includes('liberad') && obra) {
       const dados = await carregarDetalheObraEngenharia(obra)
       const mapa = await listarConferenciasEngenharia(dados.itens.map(i => i.id))

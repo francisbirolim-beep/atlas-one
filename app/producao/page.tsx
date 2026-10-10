@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, FileSpreadsheet, FileText, Loader2, LockKeyhole, Package, Pencil, Play, Plus, Ruler, X, CheckCircle2, ClipboardCheck, ShieldCheck, UserRound } from 'lucide-react'
@@ -235,6 +237,8 @@ export default function Producao() {
     const card = cards.find(item => item.id === id)
     const destino = colunas.find(coluna => coluna.id === colunaId)
     if (!card || !destino || card.coluna_id === colunaId) return
+    const jaPossuiConfirmacaoLiberacao=String(destino.nome||'').toLowerCase().includes('liberad') && Boolean(medicaoDoCard(card)) && !(card as SetorKanbanItem & {liberado_producao_em?:string|null}).liberado_producao_em
+    if (!jaPossuiConfirmacaoLiberacao && !confirmarMovimentoKanban({card:card.titulo,origem:colunas.find(c=>c.id===card.coluna_id)?.nome||'Etapa anterior',destino:destino.nome,retrocesso:colunas.findIndex(c=>c.id===destino.id)<colunas.findIndex(c=>c.id===card.coluna_id)})) return
 
     const destinoNome = String(destino.nome || '').toLowerCase()
     const destinoEhLiberacao = destinoNome.includes('liberad') && destinoNome.includes('produ')

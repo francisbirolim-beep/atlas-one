@@ -38,6 +38,9 @@ jobs:
       - name: W.Vetro technical regression
         run: npm run test:wvetro-comparador
 
+      - name: Supplier quotation deterministic comparison
+        run: npm run test:cotacao-ia
+
       - name: Venda CMV regression
         run: npm run test:venda-cmv
 

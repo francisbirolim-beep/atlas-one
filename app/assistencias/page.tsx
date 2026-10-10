@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useState, useEffect } from 'react'
 import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench, CalendarDays, Save, Timer, Navigation } from 'lucide-react'
 import Link from 'next/link'
@@ -153,8 +155,14 @@ export default function Assistencias() {
     setColunaArrastando(null)
     const cardId = e.dataTransfer.getData('text/plain')
     if (!cardId) return
+    const card=cards.find(c=>c.id===cardId)
+    const destino=colunas.find(c=>c.id===colunaId)
+    if (!card || !destino || card.coluna_id===colunaId) return
+    if (!confirmarMovimentoKanban({card:card.cliente_nome||'Assistência',origem:colunas.find(c=>c.id===card.coluna_id)?.nome||'Etapa anterior',destino:destino.nome,retrocesso:colunas.findIndex(c=>c.id===destino.id)<colunas.findIndex(c=>c.id===card.coluna_id)})) return
+    const anterior=cards
     setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() } : c)))
-    await moverCardAssistencia(cardId, colunaId)
+    const ok=await moverCardAssistencia(cardId, colunaId)
+    if (!ok) setCards(anterior)
   }
 
   async function novaColuna() {

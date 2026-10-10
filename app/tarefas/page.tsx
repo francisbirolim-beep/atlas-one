@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar, Repeat, Users } from 'lucide-react'
 import Link from 'next/link'
@@ -76,8 +78,14 @@ export default function Tarefas() {
     setColunaArrastando(null)
     const id = e.dataTransfer.getData('text/plain')
     if (!id) return
+    const item=tarefas.find(t=>t.id===id)
+    const destino=colunas.find(c=>c.id===colunaId)
+    if (!item || !destino || item.coluna_id===colunaId) return
+    if (!confirmarMovimentoKanban({card:item.titulo,origem:colunas.find(c=>c.id===item.coluna_id)?.nome||'Etapa anterior',destino:destino.nome,retrocesso:colunas.findIndex(c=>c.id===destino.id)<colunas.findIndex(c=>c.id===item.coluna_id)})) return
+    const anterior=tarefas
     setTarefas((prev) => prev.map((t) => (t.id === id ? { ...t, coluna_id: colunaId } : t)))
-    await moverTarefa(id, colunaId)
+    const ok=await moverTarefa(id, colunaId)
+    if (!ok) setTarefas(anterior)
   }
 
   async function novaColuna() {

@@ -1,5 +1,7 @@
 'use client'
 
+import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, ShieldAlert, ArrowRight, Plus, Pencil, Trash2, X, LayoutGrid } from 'lucide-react'
@@ -79,7 +81,10 @@ export default function SetorDetalhe() {
     setColunaArrastando(null)
     const id = e.dataTransfer.getData('text/plain')
     if (!id) return
-    if (itens.find(i=>i.id===id)?.coluna_id===colunaId) return
+    const item=itens.find(i=>i.id===id)
+    const destino=colunas.find(c=>c.id===colunaId)
+    if (!item || !destino || item.coluna_id===colunaId) return
+    if (!confirmarMovimentoKanban({card:item.titulo,origem:colunas.find(c=>c.id===item.coluna_id)?.nome||'Etapa anterior',destino:destino.nome,retrocesso:colunas.findIndex(c=>c.id===destino.id)<colunas.findIndex(c=>c.id===item.coluna_id)})) return
     setErroMovimento('')
     const ok = await moverItemSetor(id, colunaId, mensagem => setErroMovimento(mensagem))
     if (ok) setItens((prev) => prev.map((i) => (i.id === id ? { ...i, coluna_id: colunaId } : i)))
