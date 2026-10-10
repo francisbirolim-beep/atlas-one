@@ -44,9 +44,11 @@ type RecebimentoVenda = { id:string; data_recebimento?:string|null; valor?:numbe
 type MaterialTecnico = { id:string; produto_id?:string|null; categoria:string; codigo?:string|null; descricao:string; unidade:string; quantidade_tecnica?:number|null; quantidade_ajustada?:number|null; comprimento_corte_mm?:number|null; comprimento_barra_mm?:number|null; cor_ref?:string|null; item_ref?:string|null; origem_calculo?:string|null; status_calculo?:string|null; status_compra?:string|null; status_compra_atualizado_em?:string|null; incluido_manual?:boolean|null; justificativa_ajuste?:string|null; custo_wvetro?:number|null; venda_wvetro?:number|null; wvetro_dados?:Record<string,any>|null }
 type ProdutoMaterial = { id:string; codigo?:string|null; nome?:string|null; unidade?:string|null; tamanho_barra_mm?:number|null; foto_url?:string|null; categoria?:string|null }
 type ItemPdfCompra = { material_id:string; necessidade_id:string; codigo?:string; descricao:string; quantidade_necessaria?:number; quantidade_documento?:number|null; unidade?:string; unidade_documento?:string; valor_unitario?:number|null; confianca:number; observacao?:string; origem?:string; validacao:'sugerido_comprado'|'pendente_validacao' }
+type DadosPedidoCompra = { numero?:string|null; valor_total?:number|null; prazo_entrega?:string|null; previsao_entrega?:string|null; observacoes?:string|null }
 type AnalisePdfCompra = {
   arquivo:{nome:string;tamanho:number;paginas?:number|null}
   fornecedor?:{id?:string|null;nome:string;cnpj?:string|null;origem?:string}|null
+  pedido?:DadosPedidoCompra|null
   itens:ItemPdfCompra[]
   sugeridos:ItemPdfCompra[]
   pendencias:Array<{texto?:string;motivo?:string}>
@@ -108,6 +110,25 @@ function imagemWvetroMaterial(material?:MaterialTecnico|null){
   const candidatos=[d.imagem_atlas_url,d.imagemAtlasUrl,d.imagem_url,d.image_url,d.foto_url,d.fotoUrl]
   return candidatos.find((v:any)=>typeof v==='string'&&v.trim())||null
 }
+function dadosCompra(item:Compra){
+  const obs=String(item.observacoes||'')
+  const pegar=(rotulo:string)=>{
+    const re=new RegExp(rotulo+'\\s*:\\s*([^\\n]+)','gi')
+    const matches=[...obs.matchAll(re)]
+    return matches.length?matches[matches.length-1][1].trim():null
+  }
+  const valorTexto=pegar('Valor(?: total)?')
+  return {
+    fornecedor:pegar('Fornecedor'),
+    pedido:pegar('Pedido|N(?:ú|u)mero do pedido|Pedido fornecedor'),
+    prazo:pegar('Prazo|Prazo de entrega'),
+    documento:pegar('Documento'),
+    documentoUrl:pegar('Documento URL'),
+    valor:valorTexto?numeroEntrada(valorTexto):null,
+    previsaoEntrega:pegar('Previsão|Previsao'),
+  }
+}
+
 function ItemCompraVisual({codigo,descricao,imagem,imagemObrigatoria}:{codigo?:string|null;descricao:string;imagem?:string|null;imagemObrigatoria:boolean}){
   return <div className="flex min-w-[250px] items-center gap-3">
     <div className={`grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border bg-white ${!imagem&&imagemObrigatoria?'border-amber-300':'border-slate-200'}`}>
@@ -453,7 +474,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setSelecionadosPdfCompra([])
   },[categoriaMaterialAberta])
 
-  async function atualizarStatusNecessidades(necessidadeIds:string[],statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',extras?:{fornecedorNome?:string;documentoNome?:string;documentoUrl?:string;origem?:string},materialIds:string[]=[]){
+  async function atualizarStatusNecessidades(necessidadeIds:string[],statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',extras?:{fornecedorNome?:string;documentoNome?:string;documentoUrl?:string;origem?:string;pedidoNumero?:string;valorTotal?:number|null;prazoEntrega?:string;previsaoEntrega?:string},materialIds:string[]=[]){
     if(!venda||(!necessidadeIds.length&&!materialIds.length))return false
     const token=await tokenAtual()
     if(!token){setErro('Sessão expirada. Entre novamente no Atlas.');return false}
@@ -530,7 +551,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   async function aplicarPdfCompra(){
     if(!analisePdfCompra||!selecionadosPdfCompra.length)return
     setOcupadoMateriais(true);setErro('')
-    const ok=await atualizarStatusNecessidades(selecionadosPdfCompra,'comprado',{fornecedorNome:analisePdfCompra.fornecedor?.nome||'',documentoNome:analisePdfCompra.arquivo?.nome||'',documentoUrl:analisePdfCompra.documentoUrl||'',origem:'pdf_compra_validado'})
+    const ok=await atualizarStatusNecessidades(selecionadosPdfCompra,'comprado',{
+      fornecedorNome:analisePdfCompra.fornecedor?.nome||'',
+      documentoNome:analisePdfCompra.arquivo?.nome||'',
+      documentoUrl:analisePdfCompra.documentoUrl||'',
+      origem:'pdf_compra_validado',
+      pedidoNumero:analisePdfCompra.pedido?.numero||'',
+      valorTotal:analisePdfCompra.pedido?.valor_total??null,
+      prazoEntrega:analisePdfCompra.pedido?.prazo_entrega||'',
+      previsaoEntrega:analisePdfCompra.pedido?.previsao_entrega||'',
+    })
     setOcupadoMateriais(false)
     if(ok){setAnalisePdfCompra(null);setSelecionadosPdfCompra([]);setMensagemMateriais('PDF validado. Os itens confirmados foram marcados como comprados; os demais continuam pendentes.')}
   }
@@ -810,6 +840,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 {listaCategoria.map(item=>{
                   const cot=cotacaoPorNecessidade[item.id]
                   const fornecedor=cot?.fornecedor_id?fornecedoresCompras[cot.fornecedor_id]?.nome:null
+                  const dados=dadosCompra(item)
                   const comprado=compraEfetivada(item.status)
                   const recebidoItem=Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido'
                   const qtd=Number(item.quantidade||0)
@@ -930,7 +961,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <div className="mt-5">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div><b className="text-sm text-slate-900">Kanban de {rotuloCategoria(categoriaAberta).toLowerCase()}</b><p className="text-[11px] text-slate-500">O item muda de coluna conforme a situação da compra.</p></div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{listaCategoria.length} item(ns)</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={()=>{setCategoriaMaterialAberta(categoriaAberta);inputPdfCompraRef.current?.click()}} disabled={analisandoPdfCompra||ocupadoMateriais||!obra?.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">{analisandoPdfCompra?<Loader2 size={13} className="animate-spin"/>:<FileText size={13}/>} Anexar pedido/PDF</button>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{listaCategoria.length} item(ns)</span>
+              </div>
             </div>
             <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-5">
               {([
@@ -958,7 +992,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <div className="mt-5 overflow-x-auto rounded-xl border">
             <table className="w-full min-w-[1080px] text-sm">
               <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <tr><th className="px-3 py-2.5">Código / material</th><th className="px-3 py-2.5">Necessário</th><th className="px-3 py-2.5">Comprado</th><th className="px-3 py-2.5">Falta comprar</th><th className="px-3 py-2.5">Fornecedor</th><th className="px-3 py-2.5">Previsão</th><th className="px-3 py-2.5">Status</th></tr>
+                <tr><th className="px-3 py-2.5">Código / material</th><th className="px-3 py-2.5">Necessário</th><th className="px-3 py-2.5">Comprado</th><th className="px-3 py-2.5">Falta comprar</th><th className="px-3 py-2.5">Fornecedor</th><th className="px-3 py-2.5">Pedido / documento</th><th className="px-3 py-2.5">Valor / prazo</th><th className="px-3 py-2.5">Previsão</th><th className="px-3 py-2.5">Status</th></tr>
               </thead>
               <tbody>
                 {listaCategoria.map(item=>{
@@ -974,12 +1008,20 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <td className="px-3 py-3 font-semibold text-slate-700">{qtd.toLocaleString('pt-BR')} {unidade}</td>
                     <td className="px-3 py-3 font-semibold text-slate-700">{(comprado?qtd:0).toLocaleString('pt-BR')} {unidade}</td>
                     <td className={'px-3 py-3 font-bold '+(comprado?'text-emerald-700':'text-amber-700')}>{(comprado?0:qtd).toLocaleString('pt-BR')} {unidade}</td>
-                    <td className="px-3 py-3 text-slate-600">{fornecedor||'—'}</td>
-                    <td className="px-3 py-3 text-slate-600">{dataBR(cot?.previsao_entrega)}</td>
+                    <td className="px-3 py-3 text-slate-600">{fornecedor||dados.fornecedor||'—'}</td>
+                    <td className="px-3 py-3 text-xs text-slate-600">
+                      <div className="font-semibold text-slate-700">{dados.pedido?'Pedido '+dados.pedido:'—'}</div>
+                      {dados.documentoUrl?<a href={dados.documentoUrl} target="_blank" rel="noreferrer" className="font-bold text-blue-700 hover:underline">{dados.documento||'Abrir documento'}</a>:dados.documento&&<span>{dados.documento}</span>}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-slate-600">
+                      <div className="font-semibold text-slate-700">{dados.valor?moeda(dados.valor):'—'}</div>
+                      {dados.prazo&&<div>Prazo: {dados.prazo}</div>}
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">{dataBR(cot?.previsao_entrega||dados.previsaoEntrega)}</td>
                     <td className="px-3 py-3"><span className={'rounded-full px-2 py-1 text-xs font-bold '+(recebidoItem?'bg-emerald-100 text-emerald-700':comprado?'bg-violet-100 text-violet-700':String(item.status||'').toLowerCase()==='cotacao'?'bg-blue-100 text-blue-700':'bg-slate-100 text-slate-600')}>{recebidoItem?'Recebido':status(item.status)}</span></td>
                   </tr>
                 })}
-                {!listaCategoria.length&&<tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
+                {!listaCategoria.length&&<tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
               </tbody>
             </table>
           </div>
