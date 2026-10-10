@@ -20,7 +20,7 @@ import {
   type StatusFormulaCorte,
 } from '@/lib/engenhariaFormulasCorte'
 import { calcularAcessoriosTecnicos, type ResultadoAcessorioFormula } from '@/lib/formulasAcessoriosEngine'
-import { listarProdutosTecnicos } from '@/lib/engenhariaReceitas'
+import { listarProdutos } from '@/lib/produtos'
 import {
   alternarLinhaTecnica,
   listarLinhasTecnicas,
@@ -101,7 +101,7 @@ export default function EditorTecnicoPage() {
       setCarregando(true)
       const [formulas, catalogo, linhasTecnicas, tipologiasTecnicas] = await Promise.all([
         listarTodasFormulasCorte(),
-        listarProdutosTecnicos(),
+        listarProdutos(),
         listarLinhasTecnicas(),
         listarTipologias(true),
       ])
@@ -182,11 +182,11 @@ export default function EditorTecnicoPage() {
   }, [rascunho, largura, altura, opcoes])
 
   const perfis = useMemo(
-    () => produtos.filter(p => p.categoria === 'perfil' && p.codigo),
+    () => produtos.filter(p => p.categoria === 'perfil' && p.codigo && p.ativo !== false && Boolean(p.unidade)),
     [produtos]
   )
 
-  const buscarPerfil = (codigo: string) => perfis.find(p => p.codigo?.trim().toUpperCase() === codigo.trim().toUpperCase()) || null
+  const buscarPerfil = (codigo: string) => produtos.find(p => p.categoria === 'perfil' && p.codigo?.trim().toUpperCase() === codigo.trim().toUpperCase()) || null
   const atualizarImagem = (id: string, fotoUrl: string) => setProdutos(anteriores => anteriores.map(p => p.id === id ? { ...p, foto_url: fotoUrl } : p))
 
   function escolherConfiguracaoDaTipologia(id: string) {
