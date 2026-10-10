@@ -749,6 +749,40 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     await atualizarFluxoMateriais(`${produto?.codigo||codigo||descricao} incluído nesta venda e conectado à lista de compras.`)
   }
 
+  async function adicionarCustoExtra(){
+    if(!venda)return
+    const tipo=window.prompt('Tipo do custo: frete, instalação, mão de obra, nota fiscal ou outros','Frete')
+    if(tipo==null||!tipo.trim())return
+    const descricao=window.prompt('Descrição do custo:',tipo.trim())
+    if(descricao==null||!descricao.trim())return
+    const valor=window.prompt('Valor do custo:', '')
+    if(valor==null)return
+    const valorNum=numeroEntrada(valor)
+    if(valorNum<=0){setErro('Informe um valor válido para o custo extra.');return}
+    const fornecedor=window.prompt('Fornecedor / responsável (opcional):','')
+    if(fornecedor==null)return
+    const pedido=window.prompt('Pedido / documento (opcional):','')
+    if(pedido==null)return
+    const prazo=window.prompt('Prazo (opcional):','')
+    if(prazo==null)return
+    const previsao=window.prompt('Previsão de pagamento/entrega AAAA-MM-DD (opcional):','')
+    if(previsao==null)return
+    const observacoes=window.prompt('Observações (opcional):','')
+    if(observacoes==null)return
+    setOcupadoMateriais(true);setErro('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const resp=await fetch('/api/vendas/custos-extra',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({vendaId:venda.id,tipo,descricao,valor:valorNum,fornecedor,pedido,prazo,previsao,observacoes})})
+      const json=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw new Error(json?.error||'Não foi possível lançar o custo extra.')
+      setMensagemMateriais('Custo extra lançado. CMV e margem real recalculados.')
+      await carregar()
+      setAba('custos')
+    }catch(e){setErro(e instanceof Error?e.message:'Não foi possível lançar o custo extra.')}
+    finally{setOcupadoMateriais(false)}
+  }
+
   async function registrarRecebimento(){
     if(!venda||!cliente)return
     const valor=numeroEntrada(recebimento.valor)
@@ -1013,6 +1047,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='custos'&&<Box titulo="Custos / CMV da obra">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+            <div><b className="text-sm text-slate-900">Custos reais da venda</b><p className="mt-1 text-xs text-slate-500">Lance frete, instalação, mão de obra, nota fiscal e outros custos para entrar no CMV real.</p></div>
+            <button type="button" onClick={()=>void adicionarCustoExtra()} disabled={ocupadoMateriais||!obra?.id} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><Plus size={13}/>Adicionar custo extra</button>
+          </div>
           <div className="grid gap-3 md:grid-cols-6">
             <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
             <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
