@@ -12,6 +12,7 @@ import { adicionarDocumentoCliente } from '@/lib/cliente360'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { adicionarMaterialManual, ajustarMaterial, excluirMaterialDoPacote, gerarPacoteTecnico, recalcularAproveitamentoPacote } from '@/lib/materialPlanejamento'
 import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada'
+import VendaLiberacaoOrdens from '@/components/clientes/VendaLiberacaoOrdens'
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
@@ -1362,6 +1363,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
+          <VendaLiberacaoOrdens vendaId={venda.id} onAtualizar={carregar}/>
           <VendaProducaoDetalhada ordens={ordens} itens={itens} statusGeral={setorPorNome.producao?.nome||null}/>
         </Box>}
 
