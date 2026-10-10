@@ -1,5 +1,3 @@
-[Reading 69 lines from start (total: 69 lines, 0 remaining)]
-
 create table if not exists public.venda_instalacao_itens (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null default private.current_empresa_id(),
@@ -69,5 +67,3 @@ before update on public.venda_instalacao_itens
 for each row execute function public.venda_instalacao_itens_touch_updated_at();
 
 revoke execute on function public.venda_instalacao_itens_touch_updated_at() from public, anon, authenticated;
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
