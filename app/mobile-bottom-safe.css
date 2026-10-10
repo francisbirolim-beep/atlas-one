@@ -3,6 +3,11 @@
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
   }
 
+  /* O WhatsApp ocupa toda a tela e não recebe a barra inferior do Atlas. */
+  body:has(.atlas-whatsapp-shell) {
+    padding-bottom: 0;
+  }
+
   nav[aria-label="Navegação principal no celular"] {
     z-index: 60 !important;
   }
@@ -94,5 +99,34 @@
   .atlas-main-surface button,
   .atlas-main-surface a {
     overflow-wrap: anywhere;
+  }
+}
+
+/* Auditoria de layout responsivo: preserva grids, tabelas e formulário sem cortar controles. */
+@media (max-width: 767px) {
+  .atlas-app-main .grid > * {
+    min-width: 0;
+  }
+
+  .atlas-app-main input:not([type="checkbox"]):not([type="radio"]),
+  .atlas-app-main select,
+  .atlas-app-main textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .atlas-app-main img,
+  .atlas-app-main video,
+  .atlas-app-main iframe {
+    max-width: 100%;
+  }
+
+  .atlas-app-main .overflow-x-auto {
+    scrollbar-width: thin;
+  }
+
+  /* O WhatsApp usa seu próprio compositor e altura em dvh. */
+  .atlas-whatsapp-shell .atlas-app-main {
+    padding-bottom: 0 !important;
   }
 }
