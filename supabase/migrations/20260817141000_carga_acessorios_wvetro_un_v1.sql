@@ -20,8 +20,7 @@
 --   - status_validacao = 'importado': nenhum item passa a ser tecnicamente
 --     validado automaticamente.
 
-begin;
-
+begin
 create temporary table _carga_acessorios_wvetro_un (
   codigo_origem_raw text not null,
   descricao_fonte text not null,
@@ -35,8 +34,7 @@ create temporary table _carga_acessorios_wvetro_un (
   motivos_fonte text,
   qtde_embalagem numeric,
   ativo_fonte text
-) on commit drop;
-
+) on commit drop
 insert into _carga_acessorios_wvetro_un (
   codigo_origem_raw,
   descricao_fonte,
@@ -699,8 +697,7 @@ insert into _carga_acessorios_wvetro_un (
   ('UDM35R-110', 'KIT MOTOR INTEGRADA TUBO 40 - 110V UDINESE', 'UN', '76101000', 'VITRALSUL | PORTA OMEGA', '15', 'VITRALSUL', 'COR_NUMERICA', 'ATENCAO', 'COR_NUMERICA', 0, 'Sim'),
   ('UDM35S-110V', 'KIT MOTOR INTEGR. TUBO 40 - 110V C/BOTÃO', 'UN', '76101000', 'VITRALSUL | PORTA OMEGA', '15', 'VITRALSUL', 'COR_NUMERICA', 'ATENCAO', 'COR_NUMERICA', 0, 'Sim'),
   ('UDM35S-220V', 'KIT MOTOR INTEGRADA TUBO 40 UDINESE 220V C/ BOTAO', 'UN', '76101000', 'VITRALSUL | PORTA OMEGA', '15', 'VITRALSUL', 'COR_NUMERICA', 'ATENCAO', 'COR_NUMERICA', 0, 'Sim'),
-  ('VED-413', 'VEDAÇÃO SUPERIOR', 'UN', '84842000', 'GERAL', '15', 'LINHA EXCLUSIVA', 'LINHA_GERAL, COR_NUMERICA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA, DESCRICAO_REPETIDA', 0, 'Sim');
-
+  ('VED-413', 'VEDAÇÃO SUPERIOR', 'UN', '84842000', 'GERAL', '15', 'LINHA EXCLUSIVA', 'LINHA_GERAL, COR_NUMERICA', 'ATENCAO', 'LINHA_GERAL, COR_NUMERICA, DESCRICAO_REPETIDA', 0, 'Sim')
 -- Guardas: se a base mudou desde a reconciliação, abortar em vez de sobrescrever.
 do $$
 declare
@@ -747,8 +744,7 @@ begin
   if v_colisoes <> 0 then
     raise exception 'Base mudou desde a reconciliação: % código(s) da carga já existem em produtos', v_colisoes;
   end if;
-end $$;
-
+end $$
 insert into public.produtos (
   nome,
   categoria,
@@ -817,8 +813,7 @@ select
     else 'pendente'
   end as ncm_status
 from _carga_acessorios_wvetro_un c
-order by regexp_replace(upper(trim(c.codigo_origem_raw)), '\s+', ' ', 'g');
-
+order by regexp_replace(upper(trim(c.codigo_origem_raw)), '\s+', ' ', 'g')
 do $$
 declare
   v_inseridos integer;
@@ -835,6 +830,5 @@ begin
   if v_inseridos <> 649 then
     raise exception 'Pós-carga esperava encontrar 649 acessórios W.Vetro desta migration; encontrou %', v_inseridos;
   end if;
-end $$;
-
-commit;
+end $$
+commit

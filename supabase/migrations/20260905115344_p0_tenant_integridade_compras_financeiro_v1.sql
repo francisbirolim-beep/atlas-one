@@ -1,7 +1,7 @@
 create or replace function private.compras_necessidade_empresa_guard()
 returns trigger language plpgsql security definer set search_path=''
 as $$
-declare v_empresa uuid;
+declare v_empresa uuid; v_ref uuid;
 begin
   if new.criado_por_id is not null then select empresa_id into v_empresa from public.usuarios where id=new.criado_por_id; end if;
   if v_empresa is null and new.responsavel_id is not null then select empresa_id into v_empresa from public.usuarios where id=new.responsavel_id; end if;

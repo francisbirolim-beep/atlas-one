@@ -15,4 +15,3 @@ alter table automacoes_setor enable row level security;
 
 drop policy if exists acesso_total_temporario on automacoes_setor;
 create policy acesso_total_temporario on automacoes_setor for all using (true) with check (true);
-;

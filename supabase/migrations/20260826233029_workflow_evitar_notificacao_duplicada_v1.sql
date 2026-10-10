@@ -110,6 +110,8 @@ begin
 
   foreach v_destinatario in array v_recipientes loop
     if v_destinatario is not null then
+      -- Quando já foi criada tarefa para outra pessoa, o trigger de tarefas já avisa o responsável.
+      -- Evita dois sinos para o mesmo evento. Destinatários adicionais continuam recebendo o aviso do workflow.
       if v_a.criar_tarefa
          and v_tarefa_id is not null
          and v_destinatario = v_a.responsavel_usuario_id

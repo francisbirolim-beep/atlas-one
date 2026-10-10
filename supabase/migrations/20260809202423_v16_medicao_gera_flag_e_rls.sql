@@ -36,4 +36,3 @@ create policy acesso_total_temporario on medicao_itens for all using (true) with
 
 drop policy if exists acesso_total_temporario on tipologia_campos_extras;
 create policy acesso_total_temporario on tipologia_campos_extras for all using (true) with check (true);
-;

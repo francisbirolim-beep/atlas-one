@@ -17,4 +17,4 @@ create table if not exists public.produtos (
 alter table public.produtos enable row level security;
 
 create policy "acesso_total_temporario" on public.produtos
-  for all using (true) with check (true);;
+  for all using (true) with check (true);

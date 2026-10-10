@@ -1,6 +1,3 @@
--- Atlas One — Assistência externa para técnico + atendimento assinado
--- Link seguro por token (hash no banco) e dados do atendimento gravados no chamado.
-
 alter table assistencias
   add column if not exists tecnico_nome text,
   add column if not exists data_atendimento date,
@@ -33,6 +30,3 @@ create index if not exists idx_assistencia_acessos_token_hash
   on assistencia_acessos_externos(token_hash);
 
 alter table assistencia_acessos_externos enable row level security;
-
--- A tabela de tokens é acessada somente pelas API routes com service role.
--- Sem policy pública o navegador não consegue listar/alterar tokens diretamente.

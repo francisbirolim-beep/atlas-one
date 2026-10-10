@@ -1,3 +1,4 @@
+
 create or replace function public.aplicar_margem_balcao_produtos(
   p_margem numeric,
   p_categoria text default null,
@@ -28,6 +29,8 @@ begin
       case
         when p.categoria='perfil' then
           case
+            -- Perfil W.Vetro ainda importado/não validado nunca pode usar custo legado
+            -- como base comercial. Calcula pela regra oficial de alumínio do Atlas.
             when p.origem='wvetro'
              and p.status_validacao='importado'
              and p.validado_em is null

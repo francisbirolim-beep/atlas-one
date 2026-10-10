@@ -19,8 +19,7 @@ create table if not exists public.planos_corte (
   criado_por_nome text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
+)
 create table if not exists public.plano_corte_componentes (
   id uuid primary key default gen_random_uuid(),
   plano_id uuid not null references public.planos_corte(id) on delete cascade,
@@ -37,22 +36,18 @@ create table if not exists public.plano_corte_componentes (
   ordem integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
-create index if not exists planos_corte_produto_idx on public.planos_corte(produto_id);
-create index if not exists planos_corte_status_idx on public.planos_corte(status);
-create index if not exists plano_corte_componentes_plano_idx on public.plano_corte_componentes(plano_id);
-
+)
+create index if not exists planos_corte_produto_idx on public.planos_corte(produto_id)
+create index if not exists planos_corte_status_idx on public.planos_corte(status)
+create index if not exists plano_corte_componentes_plano_idx on public.plano_corte_componentes(plano_id)
 -- Mantem o mesmo padrao temporario das tabelas operacionais atuais do Atlas:
 -- RLS habilitado com policy permissiva. O endurecimento das policies deve ser
 -- feito como projeto de seguranca separado, conforme DECISIONS.md.
-alter table public.planos_corte enable row level security;
-alter table public.plano_corte_componentes enable row level security;
-
-drop policy if exists "acesso_total_temporario" on public.planos_corte;
+alter table public.planos_corte enable row level security
+alter table public.plano_corte_componentes enable row level security
+drop policy if exists "acesso_total_temporario" on public.planos_corte
 create policy "acesso_total_temporario" on public.planos_corte
-  for all using (true) with check (true);
-
-drop policy if exists "acesso_total_temporario" on public.plano_corte_componentes;
+  for all using (true) with check (true)
+drop policy if exists "acesso_total_temporario" on public.plano_corte_componentes
 create policy "acesso_total_temporario" on public.plano_corte_componentes
-  for all using (true) with check (true);
+  for all using (true) with check (true)

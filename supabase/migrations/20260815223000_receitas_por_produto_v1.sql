@@ -7,23 +7,18 @@
 -- por produto cadastrado.
 
 alter table public.engenharia_receitas
-  add column if not exists produto_id uuid references public.produtos(id) on delete set null;
-
+  add column if not exists produto_id uuid references public.produtos(id) on delete set null
 -- A restricao antiga bloqueava mais de uma receita ativa dentro da mesma tipologia.
-drop index if exists public.engenharia_receitas_tipologia_ativa_uidx;
-
+drop index if exists public.engenharia_receitas_tipologia_ativa_uidx
 -- Continua permitido no maximo um fallback generico ativo por tipologia.
 create unique index if not exists engenharia_receitas_tipologia_generica_ativa_uidx
   on public.engenharia_receitas(tipologia_id)
-  where ativo = true and produto_id is null;
-
+  where ativo = true and produto_id is null
 -- Cada produto pode ter no maximo uma receita tecnica ativa.
 create unique index if not exists engenharia_receitas_produto_ativa_uidx
   on public.engenharia_receitas(produto_id)
-  where ativo = true and produto_id is not null;
-
+  where ativo = true and produto_id is not null
 create index if not exists engenharia_receitas_produto_idx
-  on public.engenharia_receitas(produto_id, ativo, versao desc);
-
+  on public.engenharia_receitas(produto_id, ativo, versao desc)
 comment on column public.engenharia_receitas.produto_id is
-  'Produto especifico desta receita. NULL = receita generica/fallback da tipologia.';
+  'Produto especifico desta receita. NULL = receita generica/fallback da tipologia.'

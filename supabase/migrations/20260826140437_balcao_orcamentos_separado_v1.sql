@@ -55,4 +55,5 @@ from public.orcamentos
 where modo_entrada = 'balcao'
 on conflict (id) do nothing;
 
+-- Orçamentos de balcão deixam de existir na fonte do Kanban.
 delete from public.orcamentos where modo_entrada = 'balcao';

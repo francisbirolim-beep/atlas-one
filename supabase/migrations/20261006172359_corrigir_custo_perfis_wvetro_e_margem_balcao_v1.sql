@@ -1,6 +1,7 @@
--- Corrige custos operacionais de perfis preenchidos indevidamente com CustoVlr
--- total observado em itens históricos do W.Vetro.
--- Preserva custo_wvetro_* como evidência e qualquer item validado/manual.
+
+-- Corrige custos operacionais de perfis que foram preenchidos indevidamente
+-- com o CustoVlr total observado em itens históricos do W.Vetro.
+-- Preserva custo_wvetro_* como evidência histórica e qualquer item validado/manual.
 
 with cfg as (
   select

@@ -1,6 +1,3 @@
--- Atlas One — Compras: fiscal completo, vínculo fornecedor, estoque e contas a pagar
--- Fluxo: NF confirmada gera fiscal/financeiro; estoque só entra no recebimento físico confirmado.
-
 alter table public.compras_nfs
   add column if not exists base_icms numeric,
   add column if not exists valor_icms numeric,
@@ -131,7 +128,6 @@ grant all on public.estoque_saldos to service_role;
 grant all on public.estoque_movimentos to service_role;
 grant all on public.financeiro_contas_pagar to service_role;
 
--- Movimento atômico de estoque por item de recebimento. A quantidade avariada não entra em saldo disponível.
 create or replace function public.aplicar_estoque_recebimento(
   p_recebimento_item_id uuid,
   p_usuario_id uuid,
