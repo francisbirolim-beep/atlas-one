@@ -374,6 +374,7 @@ export default function CentralAprendizadoPage(){
           const e=edicoes[c.id]||{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}
           const origem=entradaDo(c.entrada_id)
           const abertoAgora=aberto===c.id
+          const imagemProduto=imagemProdutoCandidato(c)
           return <article key={c.id} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <button onClick={()=>editarInicial(c)} className="w-full p-4 text-left hover:bg-slate-50">
               <div className="flex items-start justify-between gap-3">
@@ -390,6 +391,9 @@ export default function CentralAprendizadoPage(){
                   {(c.deduplicacao?.ambiguos||[]).length>0&&<p className="mt-2 text-sm text-amber-700"><b>Atenção:</b> encontrei mais de um possível item parecido. Revise antes de aprovar.</p>}
                   {(c.deduplicacao?.conflitos||[]).length>0&&<div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900"><b>Divergências encontradas:</b>{(c.deduplicacao.conflitos||[]).map((x:any,i:number)=><div key={i}>{x.campo}: Atlas <b>{String(x.atlas??'—')}</b> × catálogo <b>{String(x.catalogo??'—')}</b></div>)}</div>}
                 </div>
+                {c.tipo==='produto'&&imagemProduto&&<div className="hidden h-20 w-28 shrink-0 overflow-hidden rounded-xl border bg-white sm:block">
+                  <img src={imagemProduto} alt={String(c.dados?.descricao||c.dados?.codigo||'Produto')} className="h-full w-full object-contain"/>
+                </div>}
                 {abertoAgora?<ChevronUp size={18}/>:<ChevronDown size={18}/>}
               </div>
             </button>
@@ -410,16 +414,19 @@ export default function CentralAprendizadoPage(){
                 <Campo label="E-mail" value={e.dados.email||''} onChange={v=>campo(c.id,'email',v)}/>
                 <Campo label="Cidade" value={e.dados.cidade||''} onChange={v=>campo(c.id,'cidade',v)}/>
               </div>}
-              {c.tipo==='produto'&&<div className="grid gap-3 sm:grid-cols-2">
-                <Campo label="Código" value={e.dados.codigo||''} onChange={v=>campo(c.id,'codigo',v)}/>
-                <Campo label="Descrição" value={e.dados.descricao||''} onChange={v=>campo(c.id,'descricao',v)}/>
-                <Campo label="Categoria" value={e.dados.categoria||''} onChange={v=>campo(c.id,'categoria',v)}/>
-                <Campo label="Unidade" value={e.dados.unidade||''} onChange={v=>campo(c.id,'unidade',v)}/>
-                <Campo label="Preço do fornecedor" value={e.dados.preco_fornecedor??''} onChange={v=>campo(c.id,'preco_fornecedor',v)}/>
-                <Campo label="Peso kg/m" value={e.dados.peso_kg_m??''} onChange={v=>campo(c.id,'peso_kg_m',v)}/>
-                <Campo label="Barra (mm)" value={e.dados.tamanho_barra_mm??''} onChange={v=>campo(c.id,'tamanho_barra_mm',v)}/>
-                <Campo label="Linha" value={e.dados.linha||''} onChange={v=>campo(c.id,'linha',v)}/>
-                <div className="sm:col-span-2"><Campo label="Aplicação / onde é usado" value={e.dados.aplicacao||''} onChange={v=>campo(c.id,'aplicacao',v)}/></div>
+              {c.tipo==='produto'&&<div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+                <ProdutoImagemValidacao candidato={c} entrada={origem} onSalvar={imagem=>salvarImagemCatalogo(c,imagem)}/>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Campo label="Código" value={e.dados.codigo||''} onChange={v=>campo(c.id,'codigo',v)}/>
+                  <Campo label="Descrição" value={e.dados.descricao||''} onChange={v=>campo(c.id,'descricao',v)}/>
+                  <Campo label="Categoria" value={e.dados.categoria||''} onChange={v=>campo(c.id,'categoria',v)}/>
+                  <Campo label="Unidade" value={e.dados.unidade||''} onChange={v=>campo(c.id,'unidade',v)}/>
+                  <Campo label="Preço do fornecedor" value={e.dados.preco_fornecedor??''} onChange={v=>campo(c.id,'preco_fornecedor',v)}/>
+                  <Campo label="Peso kg/m" value={e.dados.peso_kg_m??''} onChange={v=>campo(c.id,'peso_kg_m',v)}/>
+                  <Campo label="Barra (mm)" value={e.dados.tamanho_barra_mm??''} onChange={v=>campo(c.id,'tamanho_barra_mm',v)}/>
+                  <Campo label="Linha" value={e.dados.linha||''} onChange={v=>campo(c.id,'linha',v)}/>
+                  <div className="sm:col-span-2"><Campo label="Aplicação / onde é usado" value={e.dados.aplicacao||''} onChange={v=>campo(c.id,'aplicacao',v)}/></div>
+                </div>
               </div>}
               {c.tipo==='conhecimento'&&<div className="space-y-3">
                 <Campo label="Título" value={e.titulo} onChange={v=>meta(c.id,'titulo',v)}/>
@@ -594,10 +601,45 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   </div>
 }
 
+function imagemProdutoCandidato(c:Candidato){
+  const direto=String(c.dados?.imagem_item_url||c.dados?.imagem_url||c.dados?.foto_url||'').trim()
+  if(direto)return direto
+  const existente=c.deduplicacao?.produto_existente||{}
+  const doExistente=String(existente.imagem_item_url||existente.imagem_url||existente.foto_url||'').trim()
+  if(doExistente)return doExistente
+  const codigo=String(c.dados?.codigo||existente.codigo||'').trim().toUpperCase()
+  if(/^SU\d{3}$/i.test(codigo))return `/perfis/plano-corte/${codigo}.png`
+  return ''
+}
+
 function normalizarCodigoImagem(v:string){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
 function pareceCodigoImagem(v:string){
-  const x=String(v||'').toUpperCase().replace(/s+/g,'')
-  return /^[A-Z]{1,6}d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x)||/^[A-Z]{2,6}d{2,8}$/.test(x)
+  const x=String(v||'').toUpperCase().replace(/\s+/g,'')
+  return /^[A-Z]{1,6}\d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x)||/^[A-Z]{2,6}\d{2,8}$/.test(x)
+}
+
+function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidato;entrada?:Entrada|null;onSalvar:(imagem:string)=>Promise<any>}){
+  const imagem=imagemProdutoCandidato(candidato)
+  const pagina=Number(candidato.dados?.pagina_catalogo||0)
+  const fonteUrl=entrada?.fonte_url||''
+  const codigo=String(candidato.dados?.codigo||'')
+  const descricao=String(candidato.dados?.descricao||candidato.titulo||'Produto')
+
+  return <div className="rounded-2xl border bg-white p-3">
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500"><Eye size={14}/>Imagem para validar</div>
+      {fonteUrl&&pagina>0&&<a href={fonteUrl+'#page='+pagina+'&zoom=page-width'} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Abrir catálogo</a>}
+    </div>
+    {imagem?<img src={imagem} alt={descricao||codigo} className="max-h-72 w-full rounded-xl border bg-white object-contain"/>
+    :pagina>0&&fonteUrl?<ImagemPerfilCatalogo fonteUrl={fonteUrl} pagina={pagina} codigo={codigo} descricao={descricao} onSalvar={onSalvar}/>
+    :<div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-slate-50 p-5 text-center text-sm text-slate-500">
+      <div>
+        <PackageSearch className="mx-auto mb-2 text-slate-400" size={24}/>
+        <b>Sem imagem cadastrada para este código.</b>
+        <p className="mt-1 text-xs leading-5">Para validar perfil ou acessório com segurança, envie o catálogo/foto ou gere o recorte do PDF antes de aprovar.</p>
+      </div>
+    </div>}
+  </div>
 }
 
 function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;onSalvar:(imagem:string)=>Promise<any>}){
