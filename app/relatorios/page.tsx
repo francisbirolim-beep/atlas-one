@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { BarChart3, Building2, ChevronDown, ChevronRight, ClipboardList, Download, FileText, Factory, Landmark, PackageSearch, Printer, Ruler, Search, ShoppingCart, WalletCards, Wrench } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import FinanceiroRelatorio, { FinanceiroRelatorioDados } from '@/components/relatorios/FinanceiroRelatorio'
 import { baixarCsv, carregarResumoComercial, carregarResumoMedicao, ResumoComercial, ResumoMedicao } from '@/lib/relatorios'
 import { formatarMoeda, formatarNumero, formatarPercentual } from '@/lib/formatacao'
 
@@ -52,6 +53,7 @@ export default function RelatoriosPage(){
  const [dados,setDados]=useState<RelatorioObras|null>(null)
  const [comercial,setComercial]=useState<ResumoComercial>(vazioComercial)
  const [medicao,setMedicao]=useState<ResumoMedicao>(vazioMedicao)
+ const [financeiro,setFinanceiro]=useState<FinanceiroRelatorioDados|null>(null)
  const [aberto,setAberto]=useState<string|null>(null)
  async function carregar(s:Setor=setor){
   if(inicio>fim){setErro('Confira as datas do período.');return}
@@ -64,13 +66,20 @@ export default function RelatoriosPage(){
     if(!resp.ok)throw new Error(json.error||'Não foi possível carregar as obras.')
     setDados(json as RelatorioObras)
    }
+   if(s==='financeiro'){
+    const token=await tokenAtual();if(!token)throw new Error('Entre novamente no Atlas.')
+    const resp=await fetch(`/api/relatorios/financeiro?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
+    const json=await resp.json()
+    if(!resp.ok)throw new Error(json.error||'Não foi possível carregar os relatórios financeiros.')
+    setFinanceiro(json as FinanceiroRelatorioDados)
+   }
    if(s==='comercial')setComercial(await carregarResumoComercial({inicio,fim}))
    if(s==='producao')setMedicao(await carregarResumoMedicao({inicio,fim}))
   }catch(e){setErro(e instanceof Error?e.message:'Erro ao carregar relatório.')}
   finally{setCarregando(false)}
  }
  useEffect(()=>{void carregar('obras')},[])
- function selecionar(s:Setor){setSetor(s);setBusca('');if(s==='comercial'||s==='producao'||(s==='obras'&&!dados))void carregar(s)}
+ function selecionar(s:Setor){setSetor(s);setBusca('');if(s==='comercial'||s==='producao'||s==='financeiro'||(s==='obras'&&!dados))void carregar(s)}
  const obras=(dados?.obras||[]).filter(o=>[o.cliente,o.cidade,String(o.orcamento),String(o.numero)].join(' ').toLowerCase().includes(busca.toLowerCase()))
  const escala=Math.max(1,...obras.slice(0,8).flatMap(x=>[x.previsto||0,x.realizado]))
  function exportar(){
@@ -79,6 +88,23 @@ export default function RelatoriosPage(){
    baixarCsv('atlas-relatorio-obras-cmv.csv',[
     ['Data confirmação','Venda / Obra','Cliente','Cidade','Orçamento WVetro','Status','Valor venda','Custo previsto WVetro','Compra registrada','Lançamentos manuais','Custo realizado registrado','Diferença parcial','CMV registrado %','Parcial'],
     ...obras.map(o=>[dataBR(o.data),o.numero||'',o.cliente,o.cidade,o.orcamento,rotulo(o.status),o.venda,o.previsto??'',o.compras,o.lancamentos,o.realizado,o.diferenca??'',o.venda?Math.round(o.realizado/o.venda*10000)/100:0,o.parcial?'Sim':'Não'])
+   ])
+  }else if(setor==='financeiro'&&financeiro){
+   baixarCsv('atlas-relatorio-financeiro-gerencial.csv',[
+    ['Relatório','Indicador','Valor','Observação'],
+    ['DRE prévia','Receita contratada de obras',financeiro.dre.receitaObras,'Não é receita fiscal por competência'],
+    ['DRE prévia','Vendas de balcão finalizadas',financeiro.dre.receitaBalcao,''],
+    ['DRE prévia','Receita comercial total',financeiro.dre.receitaTotal,''],
+    ['DRE prévia','CMV previsto',financeiro.dre.cmvPrevisto,'WVetro e custo de balcão'],
+    ['DRE prévia','Margem bruta projetada',financeiro.dre.margemBrutaProjetada??'Não apurado','CMV incompleto impede fechamento'],
+    ['DRE prévia','Lucro líquido','Não apurado','Exige tributos, despesas e apropriação contábil'],
+    ['Movimentos registrados','Entradas recebidas',financeiro.caixa.recebido,'Por data de recebimento'],
+    ['Movimentos registrados','Pagamentos realizados',financeiro.caixa.pago,'Por data de pagamento'],
+    ['Movimentos registrados','Diferença parcial',financeiro.caixa.saldoParcial,'Não é saldo bancário'],
+    ['Títulos','Saldo a receber',financeiro.contas.aReceber,'Por vencimento'],
+    ['Títulos','Saldo a pagar',financeiro.contas.aPagar,'Por vencimento'],
+    ...financeiro.caixa.meses.map(m=>['Movimentos mensais',m.mes+' - entradas',m.recebido,'']),
+    ...financeiro.caixa.meses.map(m=>['Movimentos mensais',m.mes+' - saídas',m.pago,'']),
    ])
   }else if(setor==='comercial'){
    baixarCsv('atlas-relatorio-comercial.csv',[
@@ -95,14 +121,14 @@ export default function RelatoriosPage(){
    <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7 print:hidden">
     {setores.map(({id,nome,descricao,Icon})=><button key={id} type="button" aria-pressed={setor===id} onClick={()=>selecionar(id)} className={`min-w-0 rounded-xl border p-3 text-left transition ${setor===id?'border-blue-600 bg-blue-50 shadow-sm':'border-slate-200 bg-white hover:border-blue-300'}`}><Icon size={19} className={setor===id?'text-blue-700':'text-slate-500'}/><b className="mt-2 block text-xs text-slate-900">{nome}</b><span className="mt-0.5 block text-[11px] text-slate-500">{descricao}</span></button>)}
    </div>
-   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 print:hidden"><label className="font-semibold" htmlFor="tipo-relatorio">Tipo de relatório</label><select id="tipo-relatorio" value={setor} onChange={e=>selecionar(e.target.value as Setor)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="obras">Obras — Previsto × realizado / CMV</option><option value="comercial">Comercial — Resumo de orçamentos e vendas</option><option value="financeiro">Financeiro — Consultas do setor</option><option value="producao">Produção — Resumo de Medição Final</option><option value="compras">Compras — Consultas do setor</option><option value="engenharia">Engenharia — Consultas do setor</option><option value="assistencia">Assistência — Consultas do setor</option></select></div>
+   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 print:hidden"><label className="font-semibold" htmlFor="tipo-relatorio">Tipo de relatório</label><select id="tipo-relatorio" value={setor} onChange={e=>selecionar(e.target.value as Setor)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="obras">Obras — Previsto × realizado / CMV</option><option value="comercial">Comercial — Resumo de orçamentos e vendas</option><option value="financeiro">Financeiro — DRE prévia, fluxo e títulos</option><option value="producao">Produção — Resumo de Medição Final</option><option value="compras">Compras — Consultas do setor</option><option value="engenharia">Engenharia — Consultas do setor</option><option value="assistencia">Assistência — Consultas do setor</option></select></div>
    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 print:border-0 print:p-0">
     <div className="flex flex-wrap items-end gap-3 print:hidden">
      <label className="text-xs font-semibold text-slate-600">De<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
      <label className="text-xs font-semibold text-slate-600">Até<input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
      <button onClick={()=>void carregar()} disabled={carregando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{carregando?'Carregando...':'Aplicar período'}</button>
     </div>
-    <div className="flex gap-2 print:hidden">{['obras','comercial','producao'].includes(setor)&&<button disabled={carregando||setor==='obras'&&!dados} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button onClick={()=>window.print()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
+    <div className="flex gap-2 print:hidden">{['obras','comercial','producao','financeiro'].includes(setor)&&<button disabled={carregando||setor==='obras'&&!dados} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button onClick={()=>window.print()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
     <p className="hidden text-sm text-slate-600 print:block">Período: {inicio} a {fim} · Data de confirmação da venda (Obras)</p>
    </div>
    {erro&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
@@ -120,7 +146,7 @@ export default function RelatoriosPage(){
    </section>}
    {setor==='comercial'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios Comerciais</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Orçamentos" valor={formatarNumero(comercial.totalOrcamentos)}/><Kpi nome="Valor orçado" valor={formatarMoeda(comercial.valorOrcado)}/><Kpi nome="Vendidos" valor={formatarNumero(comercial.vendidos)}/><Kpi nome="Conversão" valor={formatarPercentual(comercial.taxaConversao,1)}/><Kpi nome="Aprovados" valor={formatarNumero(comercial.aprovados)}/><Kpi nome="Recusados" valor={formatarNumero(comercial.recusados)}/><Kpi nome="Ticket médio" valor={formatarMoeda(comercial.ticketMedio)}/></div><Modulo nome="Orçamentos e funil" texto="Consultar os orçamentos e o andamento comercial." href="/orcamento/pesquisar"/></section>}
    {setor==='producao'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios de Produção</h2><p className="text-xs text-slate-500">Resumo existente de Medição Final</p><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Medições" valor={formatarNumero(medicao.totalMedicoes)}/><Kpi nome="Medições com itens" valor={formatarNumero(medicao.medicoesComItens)}/><Kpi nome="Itens para medir" valor={formatarNumero(medicao.itensTotal)}/><Kpi nome="Itens medidos" valor={formatarNumero(medicao.itensMedidos)}/><Kpi nome="Conclusão de itens" valor={formatarPercentual(medicao.percentualItensMedidos,1)}/></div><Modulo nome="Quadro de Produção" texto="Acompanhar os cards, etapas e liberações." href="/producao"/></section>}
-   {setor==='financeiro'&&<Catalogo setor="Financeiro" itens={[['Contas a receber','Consultar recebimentos e valores pendentes','/financeiro/contas-receber'],['Contas a pagar','Consultar compromissos financeiros','/financeiro/contas-pagar'],['Caixa','Consultar movimentos no caixa','/balcao/caixa']]}/>}
+   {setor==='financeiro'&&<><FinanceiroRelatorio dados={financeiro} carregando={carregando}/><div className="grid gap-3 md:grid-cols-3 print:hidden"><Modulo nome="Contas a receber" texto="Acessar títulos e recebimentos detalhados" href="/financeiro/contas-receber"/><Modulo nome="Contas a pagar" texto="Acessar obrigações e pagamentos detalhados" href="/financeiro/contas-pagar"/><Modulo nome="Caixa" texto="Acessar os movimentos do balcão" href="/balcao/caixa"/></div></>}
    {setor==='compras'&&<Catalogo setor="Compras / Estoque" itens={[['Compras','Consultar os pedidos e materiais','/compras'],['Notas fiscais','Consultar os documentos de compra','/compras/notas'],['Estoque','Consultar o estoque disponível','/estoque']]}/>}
    {setor==='engenharia'&&<Catalogo setor="Engenharia" itens={[['Engenharia','Consultar receitas, materiais e plano de corte','/engenharia']]}/>}
    {setor==='assistencia'&&<Catalogo setor="Assistência" itens={[['Assistências','Consultar os atendimentos e manutenções','/assistencias']]}/>}
