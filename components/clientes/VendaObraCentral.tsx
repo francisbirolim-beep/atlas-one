@@ -15,6 +15,7 @@ import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
+import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
 
 type Venda = {
   id:string
@@ -174,6 +175,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [obra,setObra]=useState<Obra|null>(null)
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
+  const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
   const [compras,setCompras]=useState<Compra[]>([])
   const [produtosCompras,setProdutosCompras]=useState<Record<string,ProdutoCompra>>({})
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
@@ -216,6 +218,22 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     tentouMaterializarVenda.current=null
     void carregar()
   },[vendaId,clienteId])
+
+  useEffect(()=>{
+    let ativo=true
+    setRealizadoCmvManual(0)
+    void (async()=>{
+      try{
+        const token=await tokenAtual()
+        if(!token)return
+        const resposta=await fetch('/api/vendas/cmv?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+        if(!resposta.ok)return
+        const dados=await resposta.json()
+        if(ativo)setRealizadoCmvManual(((dados.lancamentos||[]) as {valor:number}[]).reduce((s,l)=>s+Number(l.valor||0),0))
+      }catch{}
+    })()
+    return ()=>{ativo=false}
+  },[vendaId])
 
   useEffect(()=>{
     if(carregando||!venda||pacoteTecnicoId||sincronizandoMateriais)return
@@ -362,7 +380,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   }
 
   const valorVenda=Number(venda?.valor_venda||orcamento?.valor_estimado||0)
-  const custoPrevisto=Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
+  const custoWvetro=(orcamento?.wvetro_fluxo||{}) as Record<string,unknown>
+  const resumoWVetro=[Number(custoWvetro.custo_sem_sobra||0),Number(custoWvetro.custo_com_sobra||0)].filter(v=>Number.isFinite(v)&&v>0)
+  const custoPrevisto=resumoWVetro.length?Math.max(...resumoWVetro):Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
   const cotacaoPorNecessidade=useMemo(()=>Object.fromEntries(cotacoesCompras.map(item=>[item.necessidade_id,item])),[cotacoesCompras])
   function custoCompraReal(item:Compra){
     const dados=dadosCompra(item)
@@ -392,7 +412,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   },[materiaisTecnicos,compras,cotacoesCompras])
   const custoPrevistoTecnico=Object.values(custosPorCategoria).reduce((s,c)=>s+c.previsto,0)
   const custoPrevistoBase=custoPrevisto>0?custoPrevisto:custoPrevistoTecnico
-  const custoRealizado=Object.values(custosPorCategoria).reduce((s,c)=>s+c.realizado,0)
+  const custoRealizado=Object.values(custosPorCategoria).reduce((s,c)=>s+c.realizado,0)+realizadoCmvManual
   const margemReal=valorVenda>0&&custoRealizado>0?((valorVenda-custoRealizado)/valorVenda)*100:0
   const cmvReal=valorVenda>0&&custoRealizado>0?(custoRealizado/valorVenda)*100:0
   const recebido=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0)
@@ -1051,43 +1071,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={carregar}/>
         </Box>}
 
-        {aba==='custos'&&<Box titulo="Custos / CMV da obra">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
-            <div><b className="text-sm text-slate-900">Custos reais da venda</b><p className="mt-1 text-xs text-slate-500">Lance frete, instalação, mão de obra, nota fiscal e outros custos para entrar no CMV real.</p></div>
-            <button type="button" onClick={()=>void adicionarCustoExtra()} disabled={ocupadoMateriais||!obra?.id} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><Plus size={13}/>Adicionar custo extra</button>
-          </div>
-          <div className="grid gap-3 md:grid-cols-6">
-            <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
-            <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
-            <Kpi titulo="Custo realizado" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% CMV real':'Aguardando compras com valor'}/>
-            <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
-            <Kpi titulo="Margem real" valor={custoRealizado>0?margemReal.toFixed(1)+'%':'—'} destaque={custoRealizado>0}/>
-            <Kpi titulo="Markup" valor={markup>0?markup.toFixed(2)+'x':'—'}/>
-          </div>
-          <div className="mt-5 overflow-x-auto rounded-xl border">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <tr><th className="px-3 py-2.5">Categoria</th><th className="px-3 py-2.5">Itens</th><th className="px-3 py-2.5">Previsto técnico</th><th className="px-3 py-2.5">Realizado compras</th><th className="px-3 py-2.5">Diferença</th><th className="px-3 py-2.5">Status</th></tr>
-              </thead>
-              <tbody>
-                {(['perfil','vidro','acessorios','outros'] as const).map(cat=>{
-                  const c=custosPorCategoria[cat]
-                  const dif=c.realizado-c.previsto
-                  const temReal=c.realizado>0
-                  return <tr key={cat} className="border-t">
-                    <td className="px-3 py-3 font-bold text-slate-800">{rotuloCategoria(cat)}</td>
-                    <td className="px-3 py-3 text-slate-600">{c.itens}</td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">{c.previsto>0?moeda(c.previsto):'—'}</td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">{temReal?moeda(c.realizado):'—'}</td>
-                    <td className={'px-3 py-3 font-bold '+(dif>0?'text-amber-700':dif<0?'text-emerald-700':'text-slate-600')}>{temReal&&c.previsto>0?moeda(dif):'—'}</td>
-                    <td className="px-3 py-3"><span className={'rounded-full px-2 py-1 text-xs font-bold '+(temReal?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-600')}>{temReal?'Com valor real':'Aguardando compra com valor'}</span></td>
-                  </tr>
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-3 text-xs text-slate-500">O custo realizado usa primeiro o valor total extraído/validado do pedido/PDF. Quando não houver valor no pedido, usa cotação selecionada: preço unitário x quantidade + frete.</p>
-        </Box>}
+        {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} comprasExistentes={{
+          perfil:custosPorCategoria.perfil.realizado,
+          acessorio:custosPorCategoria.acessorios.realizado,
+          vidro:custosPorCategoria.vidro.realizado,
+          outros:custosPorCategoria.outros.realizado,
+        }} onMudanca={setRealizadoCmvManual}/>}
 
         {aba==='compras'&&<Box titulo="Compras desta obra">
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
