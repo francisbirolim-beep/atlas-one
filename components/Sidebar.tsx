@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
   BarChart3,
+  BookOpen,
   Eye,
   ChevronDown,
   ChevronRight,
@@ -109,10 +110,11 @@ export default function Sidebar() {
   const inicioCombina = !termo || correspondePesquisaAtlas(termo, 'Início', 'Geral', '/')
   const balcaoCombina = !termo || correspondePesquisaAtlas(termo, 'Venda Balcão', 'Geral', '/balcao')
   const relatoriosCombina = !termo || correspondePesquisaAtlas(termo, 'Relatórios', 'Geral', '/relatorios')
+  const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Consultoria', 'Relatórios', '/consultoria'))
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
   const supervisaoIaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
   const mostrarAdmin = usuario?.role === 'master' && (adminAberto || !!termo)
-  const semResultados = !inicioCombina && !balcaoCombina && !relatoriosCombina && !iaCombina && !supervisaoIaCombina
+  const semResultados = !inicioCombina && !balcaoCombina && !relatoriosCombina && !consultoriaCombina && !iaCombina && !supervisaoIaCombina
     && gruposVisiveis.length === 0
     && atalhosVisiveis.length === 0
     && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
@@ -151,6 +153,12 @@ export default function Sidebar() {
           {relatoriosCombina && (
             <Link href="/relatorios" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/relatorios') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
               <BarChart3 size={18} className="shrink-0" /><span>Relatórios</span>
+            </Link>
+          )}
+
+          {consultoriaCombina && (
+            <Link href="/consultoria" className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/consultoria') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+              <BookOpen size={17} className="shrink-0" /><span>Consultoria</span>
             </Link>
           )}
 

@@ -119,6 +119,10 @@ export default function RelatoriosPage(){
  }
  return <div className="min-h-screen bg-slate-50"><style>{`@media print { .atlas-sidebar-shell, .atlas-sidebar-nav, .atlas-topbar, .atlas-mobile-navigation, .atlas-app-content header {display:none!important} .atlas-app-content{height:auto!important;overflow:visible!important} .atlas-app-main{padding:0!important;min-height:auto!important} body{background:white!important} }`}</style><main className="mx-auto max-w-7xl space-y-5 px-3 py-6 md:px-6">
    <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Gestão · Atlas One</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Central de Relatórios</h1><p className="mt-1 text-sm text-slate-500">Um único lugar para consultar os relatórios por setor. Novos relatórios serão incorporados aqui.</p></div>
+   <Link href="/consultoria" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-500 print:hidden">
+    <div><b className="text-sm text-slate-900">Consultoria GR&F · Caderno Digital</b><p className="mt-1 text-xs text-slate-600">Fechamento mensal com os 33 relatórios, DRE, fluxo de caixa, gráficos e conferências · acesso Master</p></div>
+    <span className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Abrir Consultoria →</span>
+   </Link>
    <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7 print:hidden">
     {setores.map(({id,nome,descricao,Icon})=><button key={id} type="button" aria-pressed={setor===id} onClick={()=>selecionar(id)} className={`min-w-0 rounded-xl border p-3 text-left transition ${setor===id?'border-blue-600 bg-blue-50 shadow-sm':'border-slate-200 bg-white hover:border-blue-300'}`}><Icon size={19} className={setor===id?'text-blue-700':'text-slate-500'}/><b className="mt-2 block text-xs text-slate-900">{nome}</b><span className="mt-0.5 block text-[11px] text-slate-500">{descricao}</span></button>)}
    </div>
