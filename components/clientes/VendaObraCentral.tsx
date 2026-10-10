@@ -16,6 +16,7 @@ import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetal
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
 import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
+import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
 
 type Venda = {
   id:string
@@ -210,9 +211,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [erro,setErro]=useState('')
   const [modalRecebimento,setModalRecebimento]=useState(false)
   const [salvando,setSalvando]=useState(false)
+  const salvandoRecebimentoRef=useRef(false)
   const [preparandoFluxo,setPreparandoFluxo]=useState(false)
   const [mensagemFluxo,setMensagemFluxo]=useState('')
-  const [recebimento,setRecebimento]=useState({valor:'',desconto:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
+  const [recebimento,setRecebimento]=useState({valor:'',desconto:'',forma:'pix',data:dataInputLocal(new Date()),referencia:'',observacoes:''})
 
   useEffect(()=>{
     tentouMaterializarVenda.current=null
@@ -385,13 +387,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const custoPrevisto=resumoWVetro.length?Math.max(...resumoWVetro):Number(venda?.custo_previsto||orcamento?.custo_estimado||0)
   const cotacaoPorNecessidade=useMemo(()=>Object.fromEntries(cotacoesCompras.map(item=>[item.necessidade_id,item])),[cotacoesCompras])
   function custoCompraReal(item:Compra){
-    const dados=dadosCompra(item)
-    if(dados.valor&&dados.valor>0)return dados.valor
-    const cot=cotacaoPorNecessidade[item.id]
-    const qtd=Number(item.quantidade||0)
-    const unit=Number(cot?.preco_unitario||0)
-    const frete=Number(cot?.frete||0)
-    return unit>0?unit*qtd+frete:0
+    // Uma cotação, por si só, não é custo realizado; valor confirmado é obrigatório.
+    return custoRealCompraConfirmada(item.status,dadosCompra(item).valor)
   }
   const custosPorCategoria=useMemo(()=>{
     const base:{perfil:{previsto:number;realizado:number;itens:number};vidro:{previsto:number;realizado:number;itens:number};acessorios:{previsto:number;realizado:number;itens:number};outros:{previsto:number;realizado:number;itens:number}}={
@@ -808,29 +805,36 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   }
 
   async function registrarRecebimento(){
-    if(!venda||!cliente)return
+    if(salvandoRecebimentoRef.current||!venda||!cliente)return
     const valor=numeroEntrada(recebimento.valor)
     const desconto=numeroEntrada(recebimento.desconto)
     const totalBaixado=valor+desconto
     if(valor<=0){setErro('Informe um valor recebido válido.');return}
     if(desconto<0){setErro('O desconto não pode ser negativo.');return}
     if(totalBaixado>aReceber+0.009){setErro('O valor recebido mais o desconto não pode ultrapassar o saldo da venda.');return}
+    salvandoRecebimentoRef.current=true
     setSalvando(true);setErro('')
-    const r=await registrarRecebimentoVendaComDesconto({
-      vendaObraId:venda.id,
-      clienteId:venda.cliente_id,
-      valorRecebido:valor,
-      desconto,
-      dataRecebimento:recebimento.data,
-      forma:recebimento.forma,
-      referencia:recebimento.referencia,
-      observacoes:recebimento.observacoes,
-    })
-    setSalvando(false)
-    if(!r.ok){setErro(r.error||'Não foi possível registrar o recebimento.');return}
-    setModalRecebimento(false)
-    setRecebimento({valor:'',desconto:'',forma:'pix',data:new Date().toISOString().slice(0,10),referencia:'',observacoes:''})
-    await carregar()
+    try{
+      const r=await registrarRecebimentoVendaComDesconto({
+        vendaObraId:venda.id,
+        clienteId:venda.cliente_id,
+        valorRecebido:valor,
+        desconto,
+        dataRecebimento:recebimento.data,
+        forma:recebimento.forma,
+        referencia:recebimento.referencia,
+        observacoes:recebimento.observacoes,
+      })
+      if(!r.ok){setErro(r.error||'Não foi possível registrar o recebimento.');return}
+      setModalRecebimento(false)
+      setRecebimento({valor:'',desconto:'',forma:'pix',data:dataInputLocal(new Date()),referencia:'',observacoes:''})
+      await carregar()
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Falha ao registrar recebimento. Confira o histórico antes de tentar novamente.')
+    }finally{
+      salvandoRecebimentoRef.current=false
+      setSalvando(false)
+    }
   }
 
   async function prepararFluxoCompleto(){
@@ -918,7 +922,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
         <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
-        <Kpi titulo="Custo realizado" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% CMV real':'Aguardando compras com valor'}/>
+        <Kpi titulo="Custo realizado (parcial)" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% da venda já lançado como custo':'Sem custo real registrado. Cotação não é compra.'}/>
         <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
       </div>
@@ -1066,7 +1070,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </tbody></table></div>
           <div className="mt-5 border-t pt-4">
             <h3 className="mb-3 text-sm font-bold text-slate-800">Histórico de recebimentos desta venda</h3>
-            <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-600">Data do recebimento: <b>{dataBR(r.data_recebimento)}</b>{desconto>0?<> · Total baixado: {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Registrado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><span className="text-xs font-semibold text-slate-400">{status(r.status||'registrado')}</span></div></div>})}{!recebimentosVenda.length&&<p className="py-5 text-center text-sm text-slate-400">Nenhum recebimento registrado para esta venda.</p>}</div>
+            <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-600">Data do recebimento: <b>{dataBR(r.data_recebimento)}</b>{desconto>0?<> · Total baixado: {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Registrado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><span className="text-xs font-semibold text-slate-400">{status(r.status||'registrado')}</span></div></div>})}{!recebimentosVenda.length&&(recebido>0?<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">O financeiro informa {moeda(recebido)} como recebido, mas não há comprovante detalhado associado à venda neste histórico. Pode ser um pagamento importado ou um registro anterior. Consulte o Caixa Geral antes de tentar lançar o valor novamente.</p>:<p className="py-5 text-center text-sm text-slate-400">Nenhum recebimento registrado para esta venda.</p>)}</div>
           </div>
           <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={carregar}/>
         </Box>}
