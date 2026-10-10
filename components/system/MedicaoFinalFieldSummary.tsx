@@ -12,6 +12,7 @@ import {
   carregarOperacaoMedicaoV2,
   carregarResumoMedicaoV2,
   concluirMedicaoFinal,
+  sincronizarMedicaoFinalProducao,
   criarPendenciaMedicao,
   definirResponsavelMedicao,
   iniciarMedicaoFinal,
@@ -131,10 +132,8 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     const resultado = await acao()
     setProcessando(false)
     if (!resultado.ok) setErro(resultado.mensagem || 'Não foi possível concluir a ação.')
-    else {
-      setMensagem(sucesso)
-      void carregar()
-    }
+    else setMensagem(resultado.mensagem || sucesso)
+    void carregar()
   }
 
   async function iniciarExecucao() {
@@ -493,12 +492,22 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             )}
 
             {operacao?.status_operacional === 'concluido' && (
-              <Link
-                href="/producao"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
-              >
-                <ShieldCheck size={14} /> Abrir Liberar Produção
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={processando}
+                  onClick={() => void executar(() => sincronizarMedicaoFinalProducao(medicaoId), 'Medição sincronizada com Produção.')}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  {processando ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />} Reenviar para Produção
+                </button>
+                <Link
+                  href="/producao"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
+                >
+                  <ShieldCheck size={14} /> Abrir Liberar Produção
+                </Link>
+              </div>
             )}
 
             <button

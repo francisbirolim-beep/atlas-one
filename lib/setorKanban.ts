@@ -154,7 +154,8 @@ export async function moverItemSetor(id: string, novaColunaId: string): Promise<
     return true
   }
 
-  if (destinoNome.includes('liberad') && destinoNome.includes('produ')) {
+  // Apenas a Engenharia usa esta RPC. Mover cards entre etapas da Produção é livre.
+  if (destino?.setor_id === 'engenharia-projeto' && destinoNome.includes('liberad') && destinoNome.includes('produ')) {
     const { error } = await supabase.rpc('fn_engenharia_liberar_para_producao', {
       p_card_id: id,
       p_coluna_id: novaColunaId,
