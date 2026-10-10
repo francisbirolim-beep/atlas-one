@@ -350,9 +350,9 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       }
 
       const resultado = await concluirMedicaoFinal(medicaoId)
-      setMensagem(resultado.ok
+      setMensagem(resultado.mensagem || (resultado.ok
         ? 'Medição Final concluída e enviada com sucesso.'
-        : (resultado.mensagem || 'Não foi possível concluir a Medição Final.'))
+        : 'Não foi possível concluir a Medição Final.'))
       await carregar()
       window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
     } finally {
