@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
+  Bot,
   Columns3,
+  Eye,
   Home,
   LayoutGrid,
+  LogOut,
   Menu,
   Moon,
   Search,
@@ -15,7 +18,7 @@ import {
   Sun,
   X,
 } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { logout, usuarioAtual } from '@/lib/auth'
 import {
   EVENTO_ABRIR_FAVORITOS_MOBILE,
   GUIAS,
@@ -50,6 +53,7 @@ function hrefSetor(setor: Setor) {
 
 export default function MobileNavigationControls() {
   const pathname = usePathname()
+  const router = useRouter()
   const [menuAberto, setMenuAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -116,6 +120,12 @@ export default function MobileNavigationControls() {
     if (usuario?.id) window.localStorage.setItem(`atlas-theme:${usuario.id}`, proximo)
   }
 
+  async function sair() {
+    await logout()
+    fecharMenu()
+    router.replace('/login')
+  }
+
   function abrirFavoritos() {
     setMenuAberto(false)
     window.dispatchEvent(new Event(EVENTO_ABRIR_FAVORITOS_MOBILE))
@@ -168,6 +178,11 @@ export default function MobileNavigationControls() {
       .filter(item => correspondePesquisaAtlas(termo, item.label, item.grupo, item.descricao, item.palavras, item.href))
       .slice(0, 18)
   }, [termo, usuario?.role])
+
+  // Mesmo acesso à IA da barra lateral do computador.
+  const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
+  const supervisaoIaCombina = usuario?.role === 'master' &&
+    (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
 
   const podeAbrirKanban = guiasPermitidas.some(guia => guia.href === '/kanban')
   const podeAbrirCompras = guiasPermitidas.some(guia => guia.href === '/compras')
@@ -283,6 +298,37 @@ export default function MobileNavigationControls() {
 
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
               <div className="space-y-5">
+                {(iaCombina || supervisaoIaCombina) && (
+                  <section aria-label="Inteligência Artificial">
+                    <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Inteligência Artificial
+                    </p>
+                    <div className="space-y-1">
+                      {iaCombina && (
+                        <Link
+                          href="/atlas-ia"
+                          onClick={fecharMenu}
+                          aria-current={ativo('/atlas-ia') ? 'page' : undefined}
+                          className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${ativo('/atlas-ia') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}
+                        >
+                          <Bot size={19} className="shrink-0" />
+                          <span>IA Atlas</span>
+                        </Link>
+                      )}
+                      {supervisaoIaCombina && (
+                        <Link
+                          href="/atlas-ia/supervisao"
+                          onClick={fecharMenu}
+                          aria-current={ativo('/atlas-ia/supervisao') ? 'page' : undefined}
+                          className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${ativo('/atlas-ia/supervisao') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}
+                        >
+                          <Eye size={19} className="shrink-0" />
+                          <span>Supervisão da IA</span>
+                        </Link>
+                      )}
+                    </div>
+                  </section>
+                )}
                 {gruposVisiveis.map(grupo => (
                   <section key={grupo.grupo}>
                     <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{grupo.grupo}</p>
@@ -356,7 +402,7 @@ export default function MobileNavigationControls() {
                   </section>
                 )}
 
-                {gruposVisiveis.length === 0 && setoresExtras.length === 0 && adminVisiveis.length === 0 && (
+                {!iaCombina && !supervisaoIaCombina && gruposVisiveis.length === 0 && setoresExtras.length === 0 && adminVisiveis.length === 0 && atalhosVisiveis.length === 0 && (
                   <div className="mx-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                     Nenhuma opção encontrada para “{busca}”.
                   </div>
@@ -381,6 +427,15 @@ export default function MobileNavigationControls() {
                   {tema === 'escuro' ? 'Claro' : 'Escuro'}
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => { void sair() }}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 active:bg-red-50 active:text-red-600"
+                aria-label="Sair do Atlas"
+              >
+                <LogOut size={18} className="shrink-0" />
+                Sair
+              </button>
             </div>
           </aside>
         </div>
