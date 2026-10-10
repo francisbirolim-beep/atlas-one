@@ -1,5 +1,3 @@
-[Reading 119 lines from start (total: 119 lines, 0 remaining)]
-
 'use client'
 
 import { Factory, CheckCircle2, Clock3, AlertTriangle } from 'lucide-react'
@@ -119,5 +117,3 @@ export default function VendaProducaoDetalhada({
     {!ordens.length&&<div className="rounded-xl border border-dashed p-8 text-center"><Factory className="mx-auto text-slate-300" size={34}/><p className="mt-2 text-sm text-slate-500">Ainda não existem ordens de produção para esta venda.</p><p className="mt-1 text-xs text-slate-400">Quando as ordens forem geradas, o Atlas mostrará aqui produzido x faltante por tipologia e ambiente sem alterar o Kanban principal.</p></div>}
   </div>
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
