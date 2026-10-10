@@ -1,5 +1,3 @@
-[Reading 97 lines from start (total: 97 lines, 0 remaining)]
-
 create or replace function public.alocar_recebimento_cliente_em_venda(
   p_recebimento_id uuid,
   p_venda_obra_id uuid,
@@ -97,5 +95,3 @@ $$;
 
 grant execute on function public.alocar_recebimento_cliente_em_venda(uuid,uuid,numeric,uuid,text) to authenticated;
 revoke execute on function public.alocar_recebimento_cliente_em_venda(uuid,uuid,numeric,uuid,text) from public, anon;
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
