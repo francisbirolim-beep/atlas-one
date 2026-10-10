@@ -70,6 +70,11 @@ type AnalisePdfCompra = {
   documentoId?:string|null
 }
 
+type LoteCotacao = {
+  id:string;venda_obra_id:string;pacote_id:string;categoria:'perfil'|'acessorios'|'vidro'|'outros'
+  status:string;quantidade_itens:number;versao:number;itens:Array<{material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number}>
+  gerado_por_nome?:string|null;created_at:string;updated_at:string
+}
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
 
@@ -182,6 +187,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [contas,setContas]=useState<Conta[]>([])
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
   const [compras,setCompras]=useState<Compra[]>([])
+  const [lotesCotacao,setLotesCotacao]=useState<LoteCotacao[]>([])
+  const [emitindoCotacao,setEmitindoCotacao]=useState(false)
   const [produtosCompras,setProdutosCompras]=useState<Record<string,ProdutoCompra>>({})
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
   const [fornecedoresCompras,setFornecedoresCompras]=useState<Record<string,FornecedorCompra>>({})
@@ -254,6 +261,18 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const vr=await supabase.from('vendas_obras').select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,confirmado_por_nome,itens_snapshot').eq('id',vendaId).eq('cliente_id',clienteId).maybeSingle()
     if(vr.error||!vr.data){setErro('Venda não encontrada para este cliente.');setCarregando(false);return}
     const v=vr.data as Venda; setVenda(v)
+    // Cada lote é uma solicitação de cotação por categoria, independente de compra aprovada.
+    try{
+      const token=await tokenAtual()
+      if(token){
+        const resp=await fetch('/api/vendas/cotacoes-lotes?vendaId='+encodeURIComponent(v.id),
+          {headers:{Authorization:'Bearer '+token},cache:'no-store'})
+        if(resp.ok){
+          const json=await resp.json()
+          setLotesCotacao((json.lotes||[]) as LoteCotacao[])
+        }
+      }
+    }catch{/* Mantém a venda acessível quando a consulta de cotação estiver indisponível. */}
 
     const [cr,or,co,op,si,ii]=await Promise.all([
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
@@ -447,6 +466,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     return base
   },[compras])
   const listaCategoria=comprasPorCategoria[categoriaAberta]
+  const loteCategoria=lotesCotacao.find(l=>l.categoria===categoriaAberta&&l.pacote_id===pacoteTecnicoId)
+  const lotesAtivos=lotesCotacao.filter(l=>l.pacote_id===pacoteTecnicoId&&l.status!=='cancelado')
   const materiaisPorProduto=useMemo(()=>{
     const mapa:Record<string,MaterialTecnico>={}
     materiaisTecnicos.forEach(item=>{if(item.produto_id&&!mapa[item.produto_id])mapa[item.produto_id]=item})
@@ -542,7 +563,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const matches=[...obs.matchAll(/Fornecedor:\s*([^\n]+)/gi)]
     return matches.length?matches[matches.length-1][1].trim():'—'
   }
-  const materiaisTabela=filtroSituacaoMaterial==='todos'?materiaisCategoria:materiaisCategoria.filter(m=>colunaMaterial(m)===filtroSituacaoMaterial)
+  // Materiais é a lista técnica editável; etapas de compra ficam somente na aba Compras.
+  const materiaisTabela=materiaisCategoria
   const idsMateriaisTabela=materiaisTabela.map(m=>m.id)
   const todosMateriaisTabelaSelecionados=idsMateriaisTabela.length>0&&idsMateriaisTabela.every(id=>selecionadosMateriais.includes(id))
 
@@ -569,6 +591,35 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     setAnalisePdfCompra(null)
     setSelecionadosPdfCompra([])
   },[categoriaMaterialAberta])
+
+  async function emitirCotacaoCategoria(){
+    if(!venda||!pacoteTecnicoId)return
+    const categoria=categoriaMaterialAberta
+    const existentes=lotesAtivos.find(l=>l.categoria===categoria)
+    if(existentes&&!window.confirm('Já existe uma lista de cotação de '+rotuloCategoria(categoria).toLowerCase()+'. Gerar nova versão preservando a anterior no histórico?'))return
+    if(!existentes&&!window.confirm('Validou os materiais de '+rotuloCategoria(categoria).toLowerCase()+'? A lista será enviada para a coluna Em cotação de Compras, sem confirmar pedido ou recebimento.'))return
+    setEmitindoCotacao(true);setErro('');setMensagemMateriais('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente.')
+      const res=await fetch('/api/vendas/cotacoes-lotes',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({
+          vendaId:venda.id,categoria,
+          materialIds:selecionadosMateriais.filter(id=>materiaisCategoria.some(m=>m.id===id)),
+          reemitir:Boolean(existentes),
+        }),
+      })
+      const json=await res.json().catch(()=>({}))
+      if(!res.ok)throw new Error(json.error||'Não foi possível emitir a lista de cotação.')
+      await carregar()
+      setCategoriaAberta(categoria)
+      setAba('compras')
+      setMensagemMateriais('Lista de '+rotuloCategoria(categoria).toLowerCase()+' gerada. Abra o card em Compras para imprimir ou salvar PDF.')
+      setSelecionadosMateriais([])
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao emitir cotação.')}
+    finally{setEmitindoCotacao(false)}
+  }
 
   async function atualizarStatusNecessidades(necessidadeIds:string[],statusDestino:'necessidade'|'cotacao'|'comprado'|'entrega'|'recebido',extras?:{fornecedorNome?:string;documentoNome?:string;documentoUrl?:string;origem?:string;pedidoNumero?:string;valorTotal?:number|null;prazoEntrega?:string;previsaoEntrega?:string;observacoesPedido?:string},materialIds:string[]=[]){
     if(!venda||(!necessidadeIds.length&&!materialIds.length))return false
@@ -703,11 +754,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       const recalc=await recalcularAproveitamentoPacote(pacoteTecnicoId,sobraIds)
       if(!recalc.ok)setMensagemMateriais(`${mensagem} A lista técnica foi salva, mas o recálculo de compra precisa de conferência: ${recalc.error||'erro no recálculo'}.`)
       else{
-        const token=await tokenAtual()
-        if(token&&venda){
-          await fetch('/api/vendas/reconstruir-fluxo',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({vendaId:venda.id,acao:'materializar_compras'})}).catch(()=>null)
-        }
-        setMensagemMateriais(mensagem)
+        // Alterar a lista técnica não emite uma compra. O usuário precisa
+        // validar a categoria e gerar explicitamente sua lista de cotação.
+        setMensagemMateriais(mensagem+(lotesCotacao.length?' Confira se precisa reemitir alguma cotação já gerada.':''))
       }
     }else setMensagemMateriais(mensagem)
     await carregar()
@@ -894,9 +943,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         pacoteId=gerado.pacote.id
       }
 
-      const compras=await chamar({acao:'materializar_compras'})
+      // A criação do pacote técnico não deve antecipar a compra:
+      // o comprador receberá cards apenas após validar e emitir a cotação.
       setMensagemFluxo(
-        `${preparado.mensagem} Pacote técnico ${pacoteId?'gerado/conferível':'preparado'}; ${compras.compras?.totalLinhas||0} linha(s) sincronizadas com Compras. As ordens de Produção foram criadas bloqueadas para respeitar Medição Final e liberação de materiais.`
+        `${preparado.mensagem} Pacote técnico ${pacoteId?'gerado/conferível':'preparado'}. Confira Materiais e clique em Validar e gerar cotação por categoria. As ordens de Produção permanecem sujeitas à Medição Final e à liberação técnica.`
       )
       await carregar()
     }catch(e){
@@ -1134,11 +1184,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           outros:custosPorCategoria.outros.realizado,
         }} onMudanca={setRealizadoCmvManual}/>}
 
-        {aba==='compras'&&<Box titulo="Compras desta obra">
+        {aba==='compras'&&<Box titulo="Compras e cotações desta venda">
+          {!venda.obra_id&&<div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Esta venda ainda não tem obra vinculada. Você pode validar materiais e gerar a lista de cotação, mas os pedidos e recebimentos só poderão ser vinculados à obra depois do cadastro/vínculo.</div>}
+          {mensagemMateriais&&<div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">{mensagemMateriais}</div>}
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <b className="text-sm text-slate-900">Acompanhamento de compras por categoria</b>
-              <p className="mt-1 text-xs text-slate-500">Selecione Perfis, Acessórios, Vidros ou Outros para ver o percentual comprado, o que já foi pedido e o que ainda falta.</p>
+              <p className="mt-1 text-xs text-slate-500">As listas validadas em Materiais criam um card por categoria em Em cotação. Cotação não é pedido nem recebimento.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm">{Math.round(progressoCompras)}% comprado</span>
@@ -1147,6 +1199,33 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             </div>
           </div>
 
+            {analisePdfCompra&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div><b className="text-sm text-slate-900">Conferência do PDF de compra</b><p className="mt-1 text-xs text-slate-600">{analisePdfCompra.arquivo.nome}{analisePdfCompra.fornecedor?.nome?` · Fornecedor: ${analisePdfCompra.fornecedor.nome}`:' · Fornecedor não identificado'}</p></div>
+                <button type="button" onClick={()=>{setAnalisePdfCompra(null);setSelecionadosPdfCompra([])}} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500"><X size={14}/></button>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">Identificados</span><b className="block text-base text-slate-800">{analisePdfCompra.resumo.identificados}</b></div>
+                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">IA sugere comprado</span><b className="block text-base text-emerald-700">{analisePdfCompra.resumo.sugeridosComprados}</b></div>
+                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">Validar manualmente</span><b className="block text-base text-amber-700">{analisePdfCompra.resumo.pendentesValidacao}</b></div>
+                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">Ainda faltando</span><b className="block text-base text-red-700">{analisePdfCompra.resumo.aindaNaoIdentificados}</b></div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={()=>setSelecionadosPdfCompra(analisePdfCompra.itens.map(i=>i.necessidade_id))} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Selecionar identificados</button>
+                <button type="button" onClick={()=>setSelecionadosPdfCompra([])} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold text-slate-500">Limpar seleção</button>
+                <span className="text-xs text-slate-500">{selecionadosPdfCompra.length} item(ns) para confirmar</span>
+              </div>
+              <div className="mt-3 max-h-64 overflow-auto rounded-lg border bg-white">
+                {analisePdfCompra.itens.map(item=><label key={item.necessidade_id} className="flex cursor-pointer items-start gap-3 border-b p-3 last:border-b-0">
+                  <input type="checkbox" checked={selecionadosPdfCompra.includes(item.necessidade_id)} onChange={()=>setSelecionadosPdfCompra(atual=>atual.includes(item.necessidade_id)?atual.filter(id=>id!==item.necessidade_id):[...atual,item.necessidade_id])} className="mt-1 h-4 w-4"/>
+                  <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold text-slate-700">{item.codigo||'Sem código'}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${item.validacao==='sugerido_comprado'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{item.validacao==='sugerido_comprado'?'IA confiante':'Conferir'}</span><span className="text-[10px] text-slate-400">{Math.round((item.confianca||0)*100)}%</span></div><p className="truncate text-xs text-slate-700">{item.descricao}</p><p className="mt-0.5 text-[10px] text-slate-500">PDF: {item.quantidade_documento==null?'quantidade não confirmada':`${Number(item.quantidade_documento).toLocaleString('pt-BR')} ${item.unidade_documento||item.unidade||''}`} · Necessário: {Number(item.quantidade_necessaria||0).toLocaleString('pt-BR')} {item.unidade||''}</p>{item.observacao&&<p className="mt-0.5 text-[10px] text-amber-700">{item.observacao}</p>}</div>
+                </label>)}
+                {!analisePdfCompra.itens.length&&<p className="p-4 text-center text-xs text-slate-500">Nenhum material foi associado automaticamente. A lista permanece sem alteração para conferência manual.</p>}
+              </div>
+              {analisePdfCompra.pendencias.length>0&&<div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><b className="text-xs text-amber-800">Pendências para conferir</b><div className="mt-1 space-y-1">{analisePdfCompra.pendencias.slice(0,8).map((p,idx)=><p key={idx} className="text-[11px] text-amber-700">• {p.texto||'Item'}{p.motivo?` — ${p.motivo}`:''}</p>)}</div></div>}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] text-slate-500">Nada é alterado só pela leitura. A compra só muda depois da sua confirmação.</p><button type="button" disabled={ocupadoMateriais||!selecionadosPdfCompra.length} onClick={()=>void aplicarPdfCompra()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}Confirmar selecionados como comprados</button></div>
+            </div>}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {(['perfil','acessorios','vidro','outros'] as const).map(cat=>{
               const lista=comprasPorCategoria[cat]
@@ -1154,18 +1233,21 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               const recebidos=lista.filter(item=>Boolean(item.recebido_em)||String(item.status||'').toLowerCase()==='recebido').length
               const progresso=progressoItens(lista,item=>compraEfetivada(item.status))
               const tema=temaCategoria(cat)
+              const lote=lotesAtivos.find(l=>l.categoria===cat)
               return <button key={cat} type="button" onClick={()=>setCategoriaAberta(cat)} className={'rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm '+(categoriaAberta===cat?tema.borda+' '+tema.fundo+' ring-2 ring-slate-100':'border-slate-200 bg-white')}>
                 <div className="flex items-center justify-between gap-2"><b className="text-sm text-slate-900">{rotuloCategoria(cat)}</b><span className={'text-lg font-black '+tema.texto}>{Math.round(progresso)}%</span></div>
-                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100"><div className={'h-full rounded-full '+tema.barra} style={{width:String(progresso)+'%'}}/></div>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500"><span>{comprados}/{lista.length} comprados</span><span>{recebidos} recebidos</span></div>
+                <div className="mt-2">{lote?<span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">{lote.quantidade_itens} itens em cotação</span>:<span className="text-[10px] font-semibold text-slate-400">Aguardando lista validada</span>}</div>
+                <div className="mt-2 h-2 rounded-full bg-slate-100"><div className={'h-full rounded-full '+tema.barra} style={{width:String(progresso)+'%'}}/></div>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>{comprados}/{lista.length} comprados</span><span>{recebidos} recebidos</span></div>
               </button>
             })}
           </div>
 
           <div className="mt-5">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div><b className="text-sm text-slate-900">Kanban de {rotuloCategoria(categoriaAberta).toLowerCase()}</b><p className="text-[11px] text-slate-500">O item muda de coluna conforme a situação da compra.</p></div>
+              <div><b className="text-sm text-slate-900">Kanban de {rotuloCategoria(categoriaAberta).toLowerCase()}</b><p className="text-[11px] text-slate-500">Cada lista de cotação é um card; pedidos e recebimentos efetivos seguem seus próprios estágios.</p></div>
               <div className="flex flex-wrap items-center gap-2">
+                <input ref={inputPdfCompraRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={e=>void analisarPdfCompra(e.target.files?.[0]||null)}/>
                 <button type="button" onClick={()=>{setCategoriaMaterialAberta(categoriaAberta);inputPdfCompraRef.current?.click()}} disabled={analisandoPdfCompra||ocupadoMateriais||!obra?.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">{analisandoPdfCompra?<Loader2 size={13} className="animate-spin"/>:<FileText size={13}/>} Anexar pedido/PDF</button>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{listaCategoria.length} item(ns)</span>
               </div>
@@ -1178,8 +1260,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 ['entrega','Aguardando chegar','border-amber-300','bg-amber-50/50',comprasKanban.entrega],
                 ['recebido','Recebido','border-emerald-300','bg-emerald-50/50',comprasKanban.recebido],
               ] as const).map(([id,titulo,borda,fundo,itensColuna])=><div key={id} className={'rounded-xl border-t-4 p-3 '+borda+' '+fundo}>
-                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length}</span></div>
+                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length+(id==='cotacao'&&loteCategoria?1:0)}</span></div>
                 <div className="space-y-2">
+                  {id==='cotacao'&&loteCategoria&&<div className="rounded-lg border border-blue-200 bg-white p-2.5 shadow-sm">
+                    <div className="flex items-center gap-2"><FileText size={15} className="text-blue-600"/><b className="text-xs text-slate-800">Cotação · {rotuloCategoria(loteCategoria.categoria)}</b></div>
+                    <p className="mt-1 text-[11px] text-slate-500">{loteCategoria.quantidade_itens} materiais · versão {loteCategoria.versao}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">Lista validada; aguardando fornecedores e aprovação.</p>
+                    <Link target="_blank" href={`/compras/cotacoes/lote/${loteCategoria.id}?vendaId=${venda.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700"><FileDown size={12}/>Abrir / imprimir PDF</Link>
+                  </div>}
                   {itensColuna.slice(0,4).map(item=>{const visual=visualCompra(item);return <div key={item.id} className="flex items-center gap-2 rounded-lg border border-white/80 bg-white p-2 shadow-sm">
                     <div className={'grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border '+(!visual.imagem&&visual.imagemObrigatoria?'border-amber-300':'border-slate-200')}>
                       {visual.imagem?<img src={visual.imagem} alt={visual.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className={!visual.imagem&&visual.imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
@@ -1187,7 +1275,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <div className="min-w-0"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div></div>
                   </div>})}
                   {itensColuna.length>4&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/70 px-2 py-2 text-center text-[10px] font-semibold text-slate-500">+ {itensColuna.length-4} item(ns)</div>}
-                  {!itensColuna.length&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
+                  {!itensColuna.length&&!(id==='cotacao'&&loteCategoria)&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
                 </div>
               </div>)}
             </div>
@@ -1227,7 +1315,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <td className="px-3 py-3"><button type="button" disabled={ocupadoMateriais} onClick={()=>void editarCompraCentral(item)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40"><Pencil size={13}/>Editar</button></td>
                   </tr>
                 })}
-                {!listaCategoria.length&&<tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotuloCategoria(categoriaAberta).toLowerCase()} vinculado a esta obra.</td></tr>}
+                {!listaCategoria.length&&<tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">{loteCategoria?'A lista foi enviada para cotação. Os pedidos reais aparecerão nesta tabela quando forem registrados.':'Nenhum pedido desta categoria. Valide os materiais e gere a cotação primeiro.'}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1235,56 +1323,20 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
         {aba==='materiais'&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
-          const colunas=[
-            ['faltas','Falta comprar','border-red-200','bg-red-50/60','text-red-700',kanbanMateriais.faltas],
-            ['cotacao','Em cotação','border-blue-200','bg-blue-50/60','text-blue-700',kanbanMateriais.cotacao],
-            ['comprado','Comprado','border-emerald-200','bg-emerald-50/60','text-emerald-700',kanbanMateriais.comprado],
-            ['entrega','Aguardando chegar','border-amber-200','bg-amber-50/70','text-amber-700',kanbanMateriais.entrega],
-            ['recebido','Recebido','border-teal-200','bg-teal-50/60','text-teal-700',kanbanMateriais.recebido],
-          ] as const
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
           return <Box titulo="Materiais técnicos desta venda">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
               <div>
                 <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
-                <p className="mt-1 text-xs text-slate-500">Clique em Perfil, Acessório, Vidro ou Outros para visualizar somente os itens daquela categoria, alterar, substituir, incluir ou excluir.</p>
+                <p className="mt-1 text-xs text-slate-500">Confira código, descrição, quantidade, medidas e sobras. Inclua, substitua ou exclua materiais antes de gerar a lista de cotação por categoria.</p>
                 {mensagemMateriais&&<p className="mt-1 text-[11px] font-semibold text-blue-700">{mensagemMateriais}</p>}
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">Ainda comprar: {totalComprarCategoria.toLocaleString('pt-BR')}</span></div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">A cotar: {totalComprarCategoria.toLocaleString('pt-BR')}</span>{lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)&&<span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-700">Cotação emitida · confira alterações antes de reemitir</span>}</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <input ref={inputPdfCompraRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={e=>void analisarPdfCompra(e.target.files?.[0]||null)}/>
-                <button type="button" onClick={()=>inputPdfCompraRef.current?.click()} disabled={analisandoPdfCompra||ocupadoMateriais||!obra?.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">{analisandoPdfCompra?<Loader2 size={13} className="animate-spin"/>:<FileText size={13}/>} {analisandoPdfCompra?'Lendo PDF...':'Adicionar PDF de compra'}</button>
                 <button type="button" onClick={()=>void sincronizarMateriaisWVetro(false)} disabled={sincronizandoMateriais||ocupadoMateriais} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{sincronizandoMateriais?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoMateriais?'Sincronizando...':'Sincronizar W.Vetro'}</button>
                 {obra?.id&&<Link href={`/obras/${obra.id}/materiais`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><Boxes size={13}/>Editor completo</Link>}
               </div>
             </div>
-
-            {analisePdfCompra&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div><b className="text-sm text-slate-900">Conferência do PDF de compra</b><p className="mt-1 text-xs text-slate-600">{analisePdfCompra.arquivo.nome}{analisePdfCompra.fornecedor?.nome?` · Fornecedor: ${analisePdfCompra.fornecedor.nome}`:' · Fornecedor não identificado'}</p></div>
-                <button type="button" onClick={()=>{setAnalisePdfCompra(null);setSelecionadosPdfCompra([])}} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500"><X size={14}/></button>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">Identificados</span><b className="block text-base text-slate-800">{analisePdfCompra.resumo.identificados}</b></div>
-                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">IA sugere comprado</span><b className="block text-base text-emerald-700">{analisePdfCompra.resumo.sugeridosComprados}</b></div>
-                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">Validar manualmente</span><b className="block text-base text-amber-700">{analisePdfCompra.resumo.pendentesValidacao}</b></div>
-                <div className="rounded-lg bg-white p-2 text-xs"><span className="text-slate-400">Ainda faltando</span><b className="block text-base text-red-700">{analisePdfCompra.resumo.aindaNaoIdentificados}</b></div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button type="button" onClick={()=>setSelecionadosPdfCompra(analisePdfCompra.itens.map(i=>i.necessidade_id))} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Selecionar identificados</button>
-                <button type="button" onClick={()=>setSelecionadosPdfCompra([])} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold text-slate-500">Limpar seleção</button>
-                <span className="text-xs text-slate-500">{selecionadosPdfCompra.length} item(ns) para confirmar</span>
-              </div>
-              <div className="mt-3 max-h-64 overflow-auto rounded-lg border bg-white">
-                {analisePdfCompra.itens.map(item=><label key={item.necessidade_id} className="flex cursor-pointer items-start gap-3 border-b p-3 last:border-b-0">
-                  <input type="checkbox" checked={selecionadosPdfCompra.includes(item.necessidade_id)} onChange={()=>setSelecionadosPdfCompra(atual=>atual.includes(item.necessidade_id)?atual.filter(id=>id!==item.necessidade_id):[...atual,item.necessidade_id])} className="mt-1 h-4 w-4"/>
-                  <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-bold text-slate-700">{item.codigo||'Sem código'}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${item.validacao==='sugerido_comprado'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}`}>{item.validacao==='sugerido_comprado'?'IA confiante':'Conferir'}</span><span className="text-[10px] text-slate-400">{Math.round((item.confianca||0)*100)}%</span></div><p className="truncate text-xs text-slate-700">{item.descricao}</p><p className="mt-0.5 text-[10px] text-slate-500">PDF: {item.quantidade_documento==null?'quantidade não confirmada':`${Number(item.quantidade_documento).toLocaleString('pt-BR')} ${item.unidade_documento||item.unidade||''}`} · Necessário: {Number(item.quantidade_necessaria||0).toLocaleString('pt-BR')} {item.unidade||''}</p>{item.observacao&&<p className="mt-0.5 text-[10px] text-amber-700">{item.observacao}</p>}</div>
-                </label>)}
-                {!analisePdfCompra.itens.length&&<p className="p-4 text-center text-xs text-slate-500">Nenhum material foi associado automaticamente. A lista permanece sem alteração para conferência manual.</p>}
-              </div>
-              {analisePdfCompra.pendencias.length>0&&<div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><b className="text-xs text-amber-800">Pendências para conferir</b><div className="mt-1 space-y-1">{analisePdfCompra.pendencias.slice(0,8).map((p,idx)=><p key={idx} className="text-[11px] text-amber-700">• {p.texto||'Item'}{p.motivo?` — ${p.motivo}`:''}</p>)}</div></div>}
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] text-slate-500">Nada é alterado só pela leitura. A compra só muda depois da sua confirmação.</p><button type="button" disabled={ocupadoMateriais||!selecionadosPdfCompra.length} onClick={()=>void aplicarPdfCompra()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}Confirmar selecionados como comprados</button></div>
-            </div>}
 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {([
@@ -1298,25 +1350,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               </button>)}
             </div>
 
-            <div className="mt-4 grid items-start gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {colunas.map(([id,titulo,borda,fundo,texto,itensColuna])=><div key={id} onDragOver={e=>{e.preventDefault();if(materialArrastandoId)setColunaArrasteSobre(id)}} onDragLeave={e=>{if(e.currentTarget===e.target)setColunaArrasteSobre(null)}} onDrop={e=>{e.preventDefault();void soltarMaterialNoKanban(id)}} className={`overflow-hidden rounded-xl border transition ${borda} ${fundo} ${colunaArrasteSobre===id?'ring-2 ring-blue-400 shadow-md':''}`}>
-                <div className="flex items-center justify-between border-b border-white/80 px-3 py-2.5"><b className={`text-xs ${texto}`}>{titulo} ({itensColuna.length})</b><ChevronRight size={13} className={texto}/></div>
-                <div className="space-y-2 p-2.5">
-                  {itensColuna.slice(0,4).map(m=>{const img=imagemMaterial(m);return <div key={m.id} draggable={!ocupadoMateriais} onDragStart={e=>{setMaterialArrastandoId(m.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',m.id)}} onDragEnd={()=>{setMaterialArrastandoId(null);setColunaArrasteSobre(null)}} className={`flex cursor-grab items-center gap-2 rounded-lg border border-white bg-white p-2 shadow-sm active:cursor-grabbing ${materialArrastandoId===m.id?'opacity-50 ring-2 ring-blue-300':''}`} title="Arraste para outra coluna para mudar a situação">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className="text-slate-300"/>}</div>
-                    <div className="min-w-0"><div className="font-mono text-[10px] font-bold text-slate-700">{m.codigo||'Sem código'}</div><div className="truncate text-[11px] text-slate-600">{m.descricao}</div><div className="text-[10px] text-slate-400">Qtd. {Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')} {m.unidade}</div></div>
-                  </div>})}
-                  {itensColuna.length>4&&<button type="button" onClick={()=>abrirListaSituacao(id)} className="w-full rounded-lg border border-dashed bg-white/70 px-2 py-2 text-center text-[10px] font-bold text-blue-600 hover:bg-white">Ver todos ({itensColuna.length})</button>}
-                  {!itensColuna.length&&<div className="rounded-lg border border-dashed bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Solte um item aqui</div>}
-                </div>
-              </div>)}
-            </div>
-
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <div><h3 className="font-bold text-slate-900">Lista completa de materiais - {rotulo}</h3><p className="text-xs text-slate-500">Mostrando somente {rotulo.toLowerCase()}. Você pode selecionar individualmente ou arrastar os cards do Kanban para mudar a situação.</p></div>
+              <div><h3 className="font-bold text-slate-900">Lista completa de materiais - {rotulo}</h3><p className="text-xs text-slate-500">Confira cada item, ajuste a lista técnica e gere a cotação. O Kanban de compras fica exclusivamente na aba Compras.</p></div>
               <div className="flex flex-wrap gap-2">
                 {obra?.id&&grupoPdf&&<Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=${grupoPdf}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileDown size={13}/>Gerar lista de {rotulo.toLowerCase()}</Link>}
                 <button type="button" disabled={ocupadoMateriais||!pacoteTecnicoId} onClick={()=>void adicionarMaterialCentral()} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<Plus size={13}/>}Adicionar material</button>
+                <button type="button" disabled={emitindoCotacao||ocupadoMateriais||!pacoteTecnicoId||materiaisCategoria.length===0||totalComprarCategoria<=0} onClick={()=>void emitirCotacaoCategoria()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{emitindoCotacao?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}Validar e gerar cotação</button>
               </div>
             </div>
 
@@ -1324,22 +1363,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={alternarSelecionarTodos} disabled={!materiaisTabela.length} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">{todosMateriaisTabelaSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
                 <span className="text-xs font-semibold text-slate-600">{selecionadosMateriais.length} selecionado(s)</span>
-                {filtroSituacaoMaterial!=='todos'&&<button type="button" onClick={()=>setFiltroSituacaoMaterial('todos')} className="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold text-blue-700">Filtro: {filtroSituacaoMaterial==='faltas'?'Falta comprar':filtroSituacaoMaterial==='cotacao'?'Em cotação':filtroSituacaoMaterial==='comprado'?'Comprado':filtroSituacaoMaterial==='entrega'?'Aguardando chegar':'Recebido'} · mostrar todos</button>}
+                <span className="text-[11px] text-slate-500">Sem seleção, a lista inclui todos os materiais desta categoria que precisam ser cotados.</span>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('cotacao')} className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-[11px] font-bold text-blue-700 disabled:opacity-40">Em cotação</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('comprado')} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-bold text-emerald-700 disabled:opacity-40">Comprado</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('entrega')} className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-bold text-amber-700 disabled:opacity-40">Aguardando chegar</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('recebido')} className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2 text-[11px] font-bold text-teal-700 disabled:opacity-40">Recebido</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('necessidade')} className="rounded-lg border bg-white px-2.5 py-2 text-[11px] font-bold text-slate-600 disabled:opacity-40">Voltar para falta comprar</button>
-              </div>
+              <span className="text-[11px] text-slate-500">A emissão salva a lista validada em Compras → Em cotação.</span>
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-xl border">
               <table className="w-full min-w-[1560px] text-sm">
-                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Sobra usada</th><th>A comprar</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Situação</th><th>Fornecedor</th><th>Ações</th></tr></thead>
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Sobra usada</th><th>A comprar</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Lista técnica</th><th>Ações</th></tr></thead>
                 <tbody>
-                  {materiaisTabela.map(m=>{const img=imagemMaterial(m);const col=colunaMaterial(m);const situacao=col==='faltas'?'Falta comprar':col==='cotacao'?'Em cotação':col==='comprado'?'Comprado':col==='entrega'?'Aguardando chegar':'Recebido';const badge=col==='recebido'?'bg-emerald-100 text-emerald-700':col==='comprado'?'bg-teal-100 text-teal-700':col==='entrega'?'bg-amber-100 text-amber-700':col==='cotacao'?'bg-blue-100 text-blue-700':'bg-red-100 text-red-700';const compra=compraRelacionadaMaterial(m);const sobra=quantidadeSobraMaterial(m);const comprar=quantidadeComprarMaterial(m);return <tr key={m.id} className="border-t align-middle">
+                  {materiaisTabela.map(m=>{const img=imagemMaterial(m);const sobra=quantidadeSobraMaterial(m);const comprar=quantidadeComprarMaterial(m);const itemCotado=lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)?.itens.find(item=>item.material_id===m.id);const enviado=Boolean(itemCotado&&Math.abs(Number(itemCotado.quantidade_cotar)-comprar)<0.001&&itemCotado.descricao===m.descricao&&itemCotado.codigo===(m.codigo||null));const cotacaoDesatualizada=Boolean(itemCotado&&!enviado);return <tr key={m.id} className="border-t align-middle">
                     <td className="px-3 py-3"><input type="checkbox" aria-label={`Selecionar ${m.codigo||m.descricao}`} checked={selecionadosMateriais.includes(m.id)} onChange={()=>alternarSelecaoMaterial(m.id)} className="h-4 w-4 cursor-pointer"/></td>
                     <td className="px-3 py-2"><div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-1"/>:<ImageIcon size={17} className="text-slate-300"/>}</div></td>
                     <td className="px-3 py-3 font-mono text-xs font-bold text-slate-800">{m.codigo||'—'}</td>
@@ -1350,11 +1383,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <td className="px-3 py-3 text-slate-600">{m.unidade||'UN'}</td>
                     <td className="px-3 py-3 text-slate-600">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:m.comprimento_barra_mm?`Barra ${Math.round(Number(m.comprimento_barra_mm))} mm`:'—'}</td>
                     <td className="px-3 py-3 text-slate-600">{m.cor_ref||'—'}</td>
-                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${badge}`}>{situacao}</span></td>
-                    <td className="px-3 py-3 text-xs font-semibold text-slate-600">{fornecedorCompraMaterial(m)}</td>
-                    <td className="px-3 py-3"><div className="flex items-center gap-1.5">{col!=='comprado'&&col!=='entrega'&&col!=='recebido'&&<button disabled={ocupadoMateriais} onClick={()=>void confirmarCompradoMaterial(m)} title="Confirmar que este material foi comprado" className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"><CheckCircle2 size={13}/></button>}<button disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="grid h-8 w-8 place-items-center rounded-lg border text-blue-700 hover:bg-blue-50 disabled:opacity-40"><Pencil size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="grid h-8 w-8 place-items-center rounded-lg border text-violet-700 hover:bg-violet-50 disabled:opacity-40"><Replace size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="grid h-8 w-8 place-items-center rounded-lg border text-red-600 hover:bg-red-50 disabled:opacity-40"><Trash2 size={13}/></button></div></td>
+                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${comprar<=0?'bg-slate-100 text-slate-500':enviado?'bg-blue-100 text-blue-700':'bg-amber-100 text-amber-700'}`}>{comprar<=0?'Sem necessidade':cotacaoDesatualizada?'Reemitir cotação':enviado?'Enviado para cotação':'A validar'}</span></td>
+                    <td className="px-3 py-3"><div className="flex items-center gap-1.5"><button disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="grid h-8 w-8 place-items-center rounded-lg border text-blue-700 hover:bg-blue-50 disabled:opacity-40"><Pencil size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="grid h-8 w-8 place-items-center rounded-lg border text-violet-700 hover:bg-violet-50 disabled:opacity-40"><Replace size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="grid h-8 w-8 place-items-center rounded-lg border text-red-600 hover:bg-red-50 disabled:opacity-40"><Trash2 size={13}/></button></div></td>
                   </tr>})}
-                  {!materiaisTabela.length&&<tr><td colSpan={13} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
+                  {!materiaisTabela.length&&<tr><td colSpan={12} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
                 </tbody>
               </table>
             </div>
