@@ -200,6 +200,25 @@ export async function salvarFormulaCorte(
   }
 ): Promise<RegistroFormulaCorte | null> {
   const ativoSeguro = dados.status === 'validada' ? dados.ativo : false
+  if (ativoSeguro) {
+    const { data: mesmaReceita, error: erroOrigem } = await supabase
+      .from('engenharia_tipologia_formulas_corte')
+      .select('tipologia_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (erroOrigem || !mesmaReceita) return null
+    const { data: outrasAtivas, error: erroAtivas } = await supabase
+      .from('engenharia_tipologia_formulas_corte')
+      .select('id')
+      .eq('tipologia_id', mesmaReceita.tipologia_id)
+      .eq('ativo', true)
+      .neq('id', id)
+      .limit(1)
+    if (erroAtivas || (outrasAtivas && outrasAtivas.length > 0)) {
+      console.warn('Já existe uma receita ativa para esta tipologia. Liberação bloqueada.')
+      return null
+    }
+  }
   const atualizacao: Record<string, unknown> = {
     configuracao_label: dados.configuracao_label.trim() || 'Padrão',
     variaveis: dados.variaveis,
