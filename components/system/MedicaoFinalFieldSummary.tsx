@@ -20,6 +20,7 @@ import {
   listarUsuariosDisponiveisMedicao,
   resolverPendenciaMedicao,
   separarUnidadesNaoMedidas,
+  sincronizarMedicaoFinalComProducao,
   type OperacaoMedicaoV2,
   type PendenciaMedicao,
   type ResumoMedicaoV2,
@@ -44,7 +45,7 @@ const STATUS: Record<StatusOperacionalMedicao, { label: string; classe: string }
   liberado: { label: 'Liberado para medir', classe: 'border-sky-200 bg-sky-50 text-sky-700' },
   em_medicao: { label: 'Em medição', classe: 'border-blue-200 bg-blue-50 text-blue-700' },
   com_pendencia: { label: 'Com pendência', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
-  concluido: { label: 'Enviado — aguardando liberação da Produção', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  concluido: { label: 'Medição concluída — conferir envio à Produção', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
   aprovado: { label: 'Aprovado', classe: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
 }
 
@@ -132,7 +133,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     setProcessando(false)
     if (!resultado.ok) setErro(resultado.mensagem || 'Não foi possível concluir a ação.')
     else {
-      setMensagem(sucesso)
+      setMensagem(resultado.mensagem || sucesso)
       void carregar()
     }
   }
@@ -361,6 +362,17 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               {!podeConcluir && motivoNaoConcluir && <p className="text-[10px] leading-4 text-slate-500">{motivoNaoConcluir}</p>}
             </div>
           )}
+          {['concluido', 'aprovado'].includes(operacao?.status_operacional || '') && (
+            <button
+              type="button"
+              disabled={processando}
+              onClick={() => void executar(() => sincronizarMedicaoFinalComProducao(medicaoId), 'Medição confirmada na Produção.')}
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              <CheckCircle2 size={14} /> Conferir / reenviar à Produção
+            </button>
+          )}
+          {(mensagem || erro) && <p role="status" className={erro ? 'mt-2 text-xs text-red-700' : 'mt-2 text-xs text-emerald-800'}>{erro || mensagem}</p>}
           <button type="button" onClick={() => setOperacoesAbertas(true)} className="mt-2 self-start text-xs font-semibold text-slate-500">Gerenciar execução</button>
         </div>
       </section>
