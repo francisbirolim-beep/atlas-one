@@ -56,3 +56,43 @@
     line-height: 0.95rem !important;
   }
 }
+
+/* Ajustes de usabilidade exclusivamente mobile; sem mudanças em regras de negócio. */
+@media (max-width: 767px) {
+  /* Impede que painéis flex/grid alarguem a página e escondam ações. */
+  .atlas-app-main,
+  .atlas-app-content,
+  .atlas-main-surface,
+  .atlas-app-main > *,
+  .atlas-main-surface > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Campos de formulário legíveis no iPhone, evitando zoom ao receber foco. */
+  .atlas-app-main input:not([type="checkbox"]):not([type="radio"]),
+  .atlas-app-main select,
+  .atlas-app-main textarea,
+  .atlas-main-surface input:not([type="checkbox"]):not([type="radio"]),
+  .atlas-main-surface select,
+  .atlas-main-surface textarea {
+    font-size: max(16px, 1em);
+  }
+
+  /* Tabelas largas preservam colunas e permitem leitura por rolagem horizontal. */
+  .atlas-app-main .overflow-x-auto,
+  .atlas-main-surface .overflow-x-auto {
+    min-width: 0;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Ações longas não ultrapassam os limites físicos da tela. */
+  .atlas-app-main button,
+  .atlas-app-main a,
+  .atlas-main-surface button,
+  .atlas-main-surface a {
+    overflow-wrap: anywhere;
+  }
+}
