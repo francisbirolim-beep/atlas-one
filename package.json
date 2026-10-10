@@ -14,6 +14,7 @@
     "release:check": "bash scripts/release-check.sh preview",
     "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts",
     "test:venda-cmv": "node scripts/test-venda-cmv-regras.cjs",
+    "test:venda-fluxo": "node scripts/test-venda-fluxo-resumo.cjs",
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
   },

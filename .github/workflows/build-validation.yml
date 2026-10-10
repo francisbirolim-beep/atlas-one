@@ -41,5 +41,8 @@ jobs:
       - name: Venda CMV regression
         run: npm run test:venda-cmv
 
+      - name: Venda operational flow regression
+        run: npm run test:venda-fluxo
+
       - name: Build
         run: npm run build
