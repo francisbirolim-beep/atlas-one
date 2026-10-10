@@ -140,8 +140,8 @@ export default function ConsultoriaPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-          <span className="inline-flex items-center gap-2"><ShieldCheck size={17}/> Acesso reservado ao Master. Dados históricos; valores manuais da prévia interativa ainda são simulações.</span>
-          <span className="inline-flex items-center gap-1 font-semibold"><FileCheck2 size={15}/> Nenhum lançamento do Financeiro é alterado</span>
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-2 break-words"><ShieldCheck size={17}/> Acesso reservado ao Master. Dados históricos; valores manuais da prévia interativa ainda são simulações.</span>
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-1 font-semibold"><FileCheck2 size={15}/> Nenhum lançamento do Financeiro é alterado</span>
         </div>
 
         {pendente && <div role="status" className="rounded-xl border bg-white p-6 text-sm text-slate-600">Carregando documentos protegidos...</div>}
@@ -164,7 +164,7 @@ export default function ConsultoriaPage() {
           ref={iframeRef}
           title="Caderno original da Consultoria · PDF com 33 páginas"
           src={pdfUrl}
-          className="block h-[calc(100dvh-235px)] min-h-[630px] w-full rounded-xl border border-slate-300 bg-white"
+          className="block h-[calc(100dvh-235px)] min-h-[400px] w-full rounded-xl border border-slate-300 bg-white md:min-h-[630px]"
         />}
         {exibindoHtml && <iframe
           key="interativo"
@@ -172,7 +172,7 @@ export default function ConsultoriaPage() {
           title="Versão interativa do Caderno da Consultoria"
           srcDoc={conteudo}
           sandbox="allow-scripts allow-downloads allow-modals"
-          className="block h-[calc(100dvh-235px)] min-h-[630px] w-full rounded-xl border border-slate-300 bg-white"
+          className="block h-[calc(100dvh-235px)] min-h-[400px] w-full rounded-xl border border-slate-300 bg-white md:min-h-[630px]"
         />}
 
         {!pendente && (semArquivo || !pdfUrl || !conteudo) && master !== false && <section className="rounded-xl border border-blue-200 bg-white p-5">

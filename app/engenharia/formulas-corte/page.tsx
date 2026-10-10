@@ -378,7 +378,8 @@ export default function FormulasCortePage() {
             </section>
 
             {linhasPlano.length > 0 && definicao && (
-              <section className="atlas-print-area atlas-sheet mt-6 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+              <div className="mt-6 w-full max-w-full overflow-x-auto overscroll-x-contain pb-2 print:overflow-visible print:pb-0" aria-label="Prévia do plano de corte com rolagem lateral no celular">
+              <section className="atlas-print-area atlas-sheet min-w-[720px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm print:min-w-0">
                 <header className="flex h-[76px] items-center justify-between gap-5 px-5 text-white" style={{ backgroundColor: corEmpresa }}>
                   <div className="flex min-w-0 items-center gap-4">
                     {empresa?.logoUrl ? (
@@ -564,6 +565,7 @@ export default function FormulasCortePage() {
                   )}
                 </div>
               </section>
+              </div>
             )}
           </>
         )}

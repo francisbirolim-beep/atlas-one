@@ -86,7 +86,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+      <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-sm">
         <div className="text-center mb-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Esquadrifácio" className="h-14 w-auto mx-auto mb-3" />
@@ -109,7 +109,7 @@ export default function Login() {
                 onChange={e => setIdentificador(e.target.value)}
                 placeholder="Usuário ou e-mail"
                 autoComplete="username"
-                className="w-full border border-slate-300 rounded-xl py-3 pl-10 pr-3 text-sm"
+                className="w-full border border-slate-300 rounded-xl py-3 pl-10 pr-3 text-base sm:text-sm"
               />
             </div>
 
@@ -141,7 +141,7 @@ export default function Login() {
               onChange={e => setIdentificador(e.target.value)}
               placeholder="Usuário ou e-mail"
               autoComplete="username"
-              className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+              className="w-full border border-slate-300 rounded-xl p-3 text-base sm:text-sm"
             />
             <div className="relative">
               <input
@@ -150,7 +150,7 @@ export default function Login() {
                 onChange={e => setSenha(e.target.value)}
                 placeholder="Senha"
                 autoComplete="current-password"
-                className="w-full border border-slate-300 rounded-xl py-3 pl-3 pr-12 text-sm"
+                className="w-full border border-slate-300 rounded-xl py-3 pl-3 pr-12 text-base sm:text-sm"
               />
               <button
                 type="button"

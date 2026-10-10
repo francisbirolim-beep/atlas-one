@@ -62,7 +62,8 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
       </div>
     </header>
     <p className="mb-4 text-xs text-slate-600">Solicitamos cotação conforme quantidades abaixo. Informar marca, valor unitário, prazo de entrega, frete, condição de pagamento e validade da proposta. Este documento não é pedido de compra nem comprova recebimento.</p>
-    <table className="w-full table-fixed border-collapse text-left text-xs">
+    <div className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 print:overflow-visible print:pb-0" aria-label="Tabela de cotação com rolagem lateral no celular">
+    <table className="min-w-[720px] w-full table-fixed border-collapse text-left text-xs print:min-w-0">
       <thead><tr className="bg-slate-100 text-slate-700">
         <th className="w-10 border px-2 py-2">#</th>
         <th className="w-[13%] border px-2 py-2">Código</th>
@@ -80,9 +81,10 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
         <td className="border px-2 py-2">{item.unidade}</td>
       </tr>)}</tbody>
     </table>
+    </div>
     <footer className="mt-5 border-t pt-3 text-[11px] text-slate-600">
       Quantidades para cotação descontam as sobras de estoque já separadas no Atlas. Sem preço de venda, margem ou informações financeiras do cliente.
-      <div className="mt-3 flex gap-8"><span>Fornecedor: __________________________</span><span>Validade / prazo: _________________________</span></div>
+      <div className="mt-3 flex flex-wrap gap-3 sm:gap-8 print:flex-nowrap"><span>Fornecedor: __________________________</span><span>Validade / prazo: _________________________</span></div>
     </footer>
     <style jsx global>{`@media print {
       @page { size: A4 portrait; margin: 12mm }
