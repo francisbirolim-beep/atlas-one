@@ -31,13 +31,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const medicaoFinalId = medicaoIdDaRota(pathname)
 
   return (
-    <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
+    <div className={`atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex${ehWhatsAppAtendimento ? ' atlas-whatsapp-shell' : ''}`}>
       {!ehWhatsAppAtendimento && (
         <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
           <Sidebar />
         </div>
       )}
-      {!ehWhatsAppAtendimento && <MobileNavigationControls />}
+      <MobileNavigationControls ocultarBarraInferior={ehWhatsAppAtendimento} />
       <div className={`atlas-app-content min-w-0 w-full max-w-full flex-1 overflow-x-hidden ${ehWhatsAppAtendimento ? 'h-screen bg-white overflow-hidden' : 'bg-slate-50 md:h-screen md:overflow-y-auto'}`}>
         {!ehWhatsAppAtendimento && <AppTopbar />}
         {ehWhatsAppAtendimento && <ChatNotificationToast />}
