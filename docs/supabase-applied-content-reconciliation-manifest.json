@@ -6,7 +6,7 @@
   "old_version_content_mismatches": 87,
   "replaced_with_sql_from_remote_statements": 87,
   "original_versions_archived": 87,
-  "active_versions_after": 315,
+  "active_versions_after": 316,
   "white_space_only_variations_remaining_from_original_audit": 126,
   "note": "Remaining 126 same-version files had identical fingerprint when all whitespace was removed, but were not modified in this pass.",
   "entries": [
@@ -879,6 +879,14 @@
       "original_blob_sha": "440629761be6010bae6a1eca832975aa8d92e132",
       "applied_length": 7810,
       "original_length": 10152
+    }
+  ],
+  "concurrent_applied_versions_added": [
+    {
+      "version": "20261010203407",
+      "name": "venda_cotacao_lotes_categoria_v1",
+      "applied_md5": "018cf31592c3f02197970ad5b931ebc5",
+      "file": "supabase/migrations/20261010203407_venda_cotacao_lotes_categoria_v1.sql"
     }
   ]
 }

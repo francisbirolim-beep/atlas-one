@@ -28,6 +28,11 @@ for(const entry of manifest.entries){
  assert.equal(applied.length,entry.applied_length)
  assert.notEqual(md5(original),md5(applied),'Não era diferença real: '+entry.version)
 }
+for(const item of manifest.concurrent_applied_versions_added||[]){
+ assert.match(item.version,/^20\d{12}$/)
+ assert.ok(active.includes(path.basename(item.file)),'Versão aplicada durante o CI ausente')
+ assert.equal(md5(fs.readFileSync(item.file)),item.applied_md5,'SQL simultâneo não bate com o Supabase: '+item.version)
+}
 const preserved=fs.readdirSync('supabase/migrations-review/20261010-content-differences').filter(f=>f.endsWith('.sql'))
 assert.equal(preserved.length,87,'Backups originais faltantes ou extras')
 for(const file of preserved){
