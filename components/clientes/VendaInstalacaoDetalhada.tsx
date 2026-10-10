@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Camera, CheckCircle2, ClipboardCheck, ImageIcon, Loader2, RefreshCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { adicionarDocumentoCliente } from '@/lib/cliente360'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual } from '@/lib/auth'
+import { disponibilidadePeca, refItemProducaoInstalacao, type OrdemParaInstalacao } from '@/lib/vendaInstalacaoProducao'
 
 type InstalacaoItem={
   id:string
@@ -31,7 +32,7 @@ const CHECKS=[
   ['limpeza','Limpeza'],
 ] as const
 
-function refItem(item:any,idx:number){return String(item?.item_ref||item?.id||item?.ref||item?.uuid||idx+1)}
+function refItem(item:any,idx:number){return refItemProducaoInstalacao(item,idx)}
 function ambiente(item:any,idx:number){return String(item?.ambiente||item?.local||item?.descricao_curta||item?.configuracao_nome||item?.descricao||`Tipologia ${idx+1}`)}
 function descricao(item:any){return String(item?.descricao||item?.tipo_esquadria||item?.tipologia_nome||item?.configuracao_nome||'Peça')}
 function statusLabel(v:string){return v==='instalado'?'Instalado':v==='em_instalacao'?'Em instalação':v==='pendencia'?'Com pendência':'Pendente'}
@@ -49,6 +50,8 @@ export default function VendaInstalacaoDetalhada({
   onAtualizar?:()=>void
 }){
   const [lista,setLista]=useState<InstalacaoItem[]>([])
+  const [ordens,setOrdens]=useState<OrdemParaInstalacao[]>([])
+  const [qtdEditando,setQtdEditando]=useState<Record<string,string>>({})
   const [docs,setDocs]=useState<Doc[]>([])
   const [carregando,setCarregando]=useState(true)
   const [salvandoId,setSalvandoId]=useState<string|null>(null)
@@ -59,12 +62,14 @@ export default function VendaInstalacaoDetalhada({
   async function carregar(){
     if(!vendaId){setCarregando(false);return}
     setCarregando(true);setErro('')
-    const [ir,dr]=await Promise.all([
+    const [ir,dr,pr]=await Promise.all([
       supabase.from('venda_instalacao_itens').select('*').eq('venda_obra_id',vendaId).order('created_at'),
       obraId?supabase.from('cliente_documentos').select('id,titulo,url,tipo,observacoes,created_at').eq('cliente_id',clienteId).eq('obra_id',obraId).order('created_at',{ascending:false}):Promise.resolve({data:[],error:null} as any),
+      supabase.from('ordens_producao').select('id,item_ref,tipo_producao,status,bloqueada,quantidade').eq('venda_obra_id',vendaId),
     ])
-    if(ir.error){setErro(ir.error.message);setCarregando(false);return}
+    if(ir.error||pr.error){setErro('Instalação indisponível: '+(ir.error?.message||pr.error?.message));setCarregando(false);return}
     setLista((ir.data||[]) as InstalacaoItem[])
+    setOrdens((pr.data||[]) as OrdemParaInstalacao[])
     setDocs((dr.data||[]) as Doc[])
     setCarregando(false)
   }
@@ -96,41 +101,50 @@ export default function VendaInstalacaoDetalhada({
     if(inseridos)onAtualizar?.()
   }
 
-  async function patch(id:string,patch:Record<string,any>){
+  async function patch(id:string,acao:'quantidade'|'status'|'checklist'|'pendencia',dados:Record<string,unknown>){
+    if(salvandoId)return false
     setSalvandoId(id);setErro('');setMsg('')
-    const usuario=await usuarioAtual()
-    const r=await supabase.from('venda_instalacao_itens').update({...patch,atualizado_por_id:usuario?.id||null,atualizado_por_nome:usuario?.nome||null}).eq('id',id)
-    setSalvandoId(null)
-    if(r.error){setErro(r.error.message);return false}
-    setLista(atual=>atual.map(x=>x.id===id?{...x,...patch}:x))
-    onAtualizar?.()
-    return true
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente.')
+      const resp=await fetch('/api/vendas/instalacao/item',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId,itemId:id,acao,...dados}),
+      })
+      const json=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw new Error(json.error||'Não foi possível atualizar esta peça.')
+      const atualizado=json.item as InstalacaoItem
+      setLista(atual=>atual.map(x=>x.id===id?atualizado:x))
+      setQtdEditando(atual=>{const novo={...atual};delete novo[id];return novo})
+      onAtualizar?.()
+      return true
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Falha ao registrar instalação.')
+      setQtdEditando(atual=>{const novo={...atual};delete novo[id];return novo})
+      return false
+    }finally{setSalvandoId(null)}
   }
 
   async function mudarStatus(item:InstalacaoItem,status:'pendente'|'em_instalacao'|'instalado'|'pendencia'){
-    const patchData:Record<string,any>={status}
-    if(status==='instalado')patchData.quantidade_instalada=Number(item.quantidade||0)
-    if(status==='pendente')patchData.quantidade_instalada=0
-    const ok=await patch(item.id,patchData)
+    const ok=await patch(item.id,'status',{status})
     if(ok)setMsg('Status da instalação atualizado.')
   }
   async function mudarQtd(item:InstalacaoItem,valor:string){
-    const qtd=Math.max(0,Math.min(Number(item.quantidade||0),Number(valor||0)))
-    const status=qtd>=Number(item.quantidade||0)&&Number(item.quantidade||0)>0?'instalado':qtd>0?'em_instalacao':'pendente'
-    const ok=await patch(item.id,{quantidade_instalada:qtd,status})
+    if(!valor.trim())return
+    const qtd=Number(valor)
+    if(qtd===Number(item.quantidade_instalada||0))return
+    const ok=await patch(item.id,'quantidade',{quantidade:qtd})
     if(ok)setMsg('Quantidade instalada atualizada.')
   }
   async function toggleCheck(item:InstalacaoItem,chave:'nivelamento'|'vedacao'|'acabamento'|'limpeza'){
     const atual={nivelamento:false,vedacao:false,acabamento:false,limpeza:false,...(item.checklist||{})}
-    const checklist={...atual,[chave]:!atual[chave]}
-    const ok=await patch(item.id,{checklist})
+    const ok=await patch(item.id,'checklist',{chave,marcado:!atual[chave]})
     if(ok)setMsg('Checklist atualizado.')
   }
   async function editarPendencia(item:InstalacaoItem){
     const valor=window.prompt('Descreva a pendência desta peça:',item.pendencia||'')
     if(valor==null)return
-    const status=valor.trim()?'pendencia':(item.quantidade_instalada>=item.quantidade?'instalado':item.quantidade_instalada>0?'em_instalacao':'pendente')
-    const ok=await patch(item.id,{pendencia:valor.trim()||null,status})
+    const ok=await patch(item.id,'pendencia',{pendencia:valor.trim()})
     if(ok)setMsg(valor.trim()?'Pendência registrada.':'Pendência removida.')
   }
   async function anexarFoto(item:InstalacaoItem,file:File|null){
@@ -165,6 +179,10 @@ export default function VendaInstalacaoDetalhada({
   return <div className="space-y-4">
     {erro&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
     {msg&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{msg}</div>}
+    {!ordens.some(o=>o.tipo_producao==='esquadria'&&o.status!=='cancelada')&&
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        A produção ainda não possui ordens de esquadria desta venda. É possível preparar fotos e pendências, mas registrar quantidades instaladas depende das peças produzidas e liberadas.
+      </div>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl border bg-slate-50 p-4"><p className="text-[11px] font-bold uppercase text-slate-400">Status geral</p><p className="mt-1 text-lg font-bold text-slate-900">{statusGeral||'Ainda não gerada'}</p></div>
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-[11px] font-bold uppercase text-emerald-600">Instalado</p><p className="mt-1 text-2xl font-bold text-emerald-700">{instaladas}</p><p className="text-xs text-emerald-700">de {total} peça(s)</p></div>
@@ -174,16 +192,21 @@ export default function VendaInstalacaoDetalhada({
 
     <div className="space-y-3">{lista.map(item=>{
       const checks={nivelamento:false,vedacao:false,acabamento:false,limpeza:false,...(item.checklist||{})}
+      const producao=disponibilidadePeca(ordens,item.item_ref,Number(item.quantidade||0))
       const fotos=fotosPorRef[item.item_ref]||[]
       return <section key={item.id} className="rounded-xl border bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{item.ambiente||'Sem ambiente'}</b><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${badge(item.status)}`}>{statusLabel(item.status)}</span>{item.pendencia&&<span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700"><AlertTriangle size={11}/>Pendência</span>}</div><p className="mt-1 text-xs text-slate-500">{item.descricao||'Peça'} · Item {item.item_ref}</p></div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-slate-500">Instaladas <input type="number" min={0} max={Number(item.quantidade||0)} value={Number(item.quantidade_instalada||0)} disabled={salvandoId===item.id} onChange={e=>void mudarQtd(item,e.target.value)} className="ml-1 w-20 rounded-lg border px-2 py-1.5 text-sm font-bold text-slate-800"/></label><span className="text-xs text-slate-500">de <b>{Number(item.quantidade||0)}</b></span>
-            <select disabled={salvandoId===item.id} value={item.status} onChange={e=>void mudarStatus(item,e.target.value as any)} className="rounded-lg border px-2 py-1.5 text-xs font-semibold"><option value="pendente">Pendente</option><option value="em_instalacao">Em instalação</option><option value="instalado">Instalado</option><option value="pendencia">Com pendência</option></select>
+            <label className="text-xs text-slate-500">Instaladas <input type="number" min={0} max={producao.prontas} step={1} value={qtdEditando[item.id]??String(Number(item.quantidade_instalada||0))} disabled={salvandoId===item.id||(!producao.prontas&&!Number(item.quantidade_instalada||0))} onChange={e=>setQtdEditando(prev=>({...prev,[item.id]:e.target.value}))} onBlur={e=>void mudarQtd(item,e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}} className="ml-1 w-20 rounded-lg border px-2 py-1.5 text-sm font-bold text-slate-800 disabled:bg-slate-100"/></label><span className="text-xs text-slate-500">de <b>{Number(item.quantidade||0)}</b></span>
+            <select disabled={salvandoId===item.id} value={item.status} onChange={e=>void mudarStatus(item,e.target.value as any)} className="rounded-lg border px-2 py-1.5 text-xs font-semibold"><option value="pendente">Pendente</option><option value="em_instalacao" disabled={producao.prontas<=0||producao.planejadas<=1}>Em instalação</option><option value="instalado" disabled={producao.prontas<producao.planejadas}>Instalado</option><option value="pendencia">Com pendência</option></select>
           </div>
         </div>
 
+        <div className={'mt-3 rounded-lg border px-3 py-2 text-xs '+(producao.estado==='pronta'?'border-emerald-200 bg-emerald-50 text-emerald-800':'border-amber-200 bg-amber-50 text-amber-900')}>
+          <b>Produção:</b> {producao.prontas} de {producao.planejadas} peça(s) concluída(s) e liberada(s).
+          {producao.estado==='sem_ordem'?' Não existe ordem de esquadria vinculada a esta peça.':producao.faltantes>0?' Ainda faltam '+producao.faltantes+' peça(s) para instalar.':''}
+        </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{CHECKS.map(([key,label])=><button key={key} type="button" disabled={salvandoId===item.id} onClick={()=>void toggleCheck(item,key)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-semibold ${checks[key]?'border-emerald-200 bg-emerald-50 text-emerald-700':'border-slate-200 bg-white text-slate-600'}`}>{checks[key]?<CheckCircle2 size={14}/>:<ClipboardCheck size={14}/>} {label}</button>)}</div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">

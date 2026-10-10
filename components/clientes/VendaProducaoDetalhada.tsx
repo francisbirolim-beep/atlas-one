@@ -1,6 +1,7 @@
 'use client'
 
 import { Factory, CheckCircle2, Clock3, AlertTriangle } from 'lucide-react'
+import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 
 type Ordem = {
   id:string
@@ -39,9 +40,7 @@ function badge(v?:string|null){
   if(s==='cancelada')return 'bg-red-100 text-red-700'
   return 'bg-slate-100 text-slate-600'
 }
-function itemRef(item:any,idx:number){
-  return String(item?.item_ref||item?.id||item?.ref||item?.uuid||idx+1)
-}
+function itemRef(item:any,idx:number){return refItemProducaoInstalacao(item,idx)}
 function ambienteItem(item:any,idx:number){
   return String(item?.ambiente||item?.local||item?.descricao_curta||item?.configuracao_nome||item?.descricao||`Tipologia ${idx+1}`)
 }
