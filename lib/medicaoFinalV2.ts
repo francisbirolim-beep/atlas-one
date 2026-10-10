@@ -316,7 +316,7 @@ export async function concluirMedicaoFinal(
     console.warn('Medição concluída, mas não foi possível sincronizar a fila de Produção imediatamente:', erro)
   }
 
-  return { ok: true, mensagem: 'Medição Final enviada para Liberar Produção.' }
+  return { ok: true, mensagem: 'Medição Final enviada para a primeira etapa da Produção.' }
 }
 
 export async function aprovarMedicaoFinal(
