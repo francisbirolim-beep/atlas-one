@@ -16,6 +16,7 @@ import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetal
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
 import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
+import { avaliarFluxoVenda, type InstalacaoResumo } from '@/lib/vendaFluxoResumo'
 import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
 
 type Venda = {
@@ -182,6 +183,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
   const [fornecedoresCompras,setFornecedoresCompras]=useState<Record<string,FornecedorCompra>>({})
   const [ordens,setOrdens]=useState<Ordem[]>([])
+  const [instalacoes,setInstalacoes]=useState<InstalacaoResumo[]>([])
   const [setorItens,setSetorItens]=useState<SetorItem[]>([])
   const [setorColunas,setSetorColunas]=useState<Record<string,SetorColuna>>({})
   const [documentos,setDocumentos]=useState<Documento[]>([])
@@ -250,18 +252,20 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     if(vr.error||!vr.data){setErro('Venda não encontrada para este cliente.');setCarregando(false);return}
     const v=vr.data as Venda; setVenda(v)
 
-    const [cr,or,co,op,si]=await Promise.all([
+    const [cr,or,co,op,si,ii]=await Promise.all([
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
       supabase.from('orcamentos').select('id,numero,valor_estimado,custo_estimado,status,itens,wvetro_fluxo').eq('id',v.orcamento_id).maybeSingle(),
       supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,valor_desconto,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
       supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,status,created_at,tipo_producao,item_snapshot,largura_mm,altura_mm,bloqueada,bloqueio_motivo').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id,titulo,atualizado_em').eq('orcamento_id',v.orcamento_id),
+      supabase.from('venda_instalacao_itens').select('id,item_ref,status,quantidade,quantidade_instalada,pendencia,checklist').eq('venda_obra_id',v.id),
     ])
 
     if(cr.data)setCliente(cr.data as Cliente)
     if(or.data)setOrcamento(or.data as Orcamento)
     setContas((co.data||[]) as Conta[])
     setOrdens((op.data||[]) as Ordem[])
+    setInstalacoes((ii.data||[]) as InstalacaoResumo[])
     setSetorItens((si.data||[]) as SetorItem[])
 
     const pacoteResp=await supabase.from('pacotes_tecnicos').select('id').eq('orcamento_id',v.orcamento_id).neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
@@ -348,9 +352,18 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       setSetorColunas(Object.fromEntries(((cols.data||[]) as SetorColuna[]).map(c=>[c.id,c])))
     }else setSetorColunas({})
 
-    const falha=cr.error||or.error||co.error||op.error||si.error
+    const falha=cr.error||or.error||co.error||op.error||si.error||ii.error
     if(falha)setErro(falha.message)
     setCarregando(false)
+  }
+
+  async function atualizarStatusInstalacao(){
+    if(!vendaId)return
+    const rr=await supabase.from('venda_instalacao_itens')
+      .select('id,item_ref,status,quantidade,quantidade_instalada,pendencia,checklist')
+      .eq('venda_obra_id',vendaId)
+    if(rr.error){setErro('Não foi possível atualizar a instalação: '+rr.error.message);return}
+    setInstalacoes((rr.data||[]) as InstalacaoResumo[])
   }
 
   async function sincronizarMateriaisWVetro(silencioso=false){
@@ -537,8 +550,15 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   },[setorItens,setorColunas])
 
   const colunaInstalacao=setorPorNome.instalacao
-  const progressoInstalacao=colunaInstalacao?.nome.toLowerCase().includes('conclu')?100:colunaInstalacao?.nome.toLowerCase().includes('em instala')?60:colunaInstalacao?.nome.toLowerCase().includes('agendada')?30:colunaInstalacao?10:0
   const itens=(Array.isArray(orcamento?.itens)?orcamento?.itens:Array.isArray(venda?.itens_snapshot)?venda?.itens_snapshot:[])||[]
+  const fluxoVenda=avaliarFluxoVenda({
+    valorVenda,contas,compras,ordens,instalacoes,
+    materiaisPlanejados:materiaisTecnicos.length,
+    materiaisInteiramenteAtendidosEstoque:materiaisTecnicos.length>0
+      &&materiaisTecnicos.every(m=>Number(m.quantidade_ajustada??m.quantidade_tecnica??0)>0
+        &&quantidadeComprarMaterial(m)<=0.001),
+  })
+  const progressoInstalacao=fluxoVenda.progressoInstalacao
 
   useEffect(()=>{
     setSelecionadosMateriais([])
@@ -928,12 +948,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <Progresso titulo="Financeiro" valor={pct(recebido,valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
+        <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
+        <Progresso titulo="Financeiro" valor={pct(Math.max(0,valorVenda-aReceber),valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
         <Progresso titulo="Compras" valor={progressoCompras} detalhe={compras.length?`${comprasEfetivadas} de ${compras.length} item(ns) comprados`:'Ainda sem compras vinculadas'} ativo={painelEtapa==='compras'} onClick={()=>setPainelEtapa(painelEtapa==='compras'?null:'compras')}/>
         <Progresso titulo="Mercadoria recebida" valor={progressoMercadoria} detalhe={compras.length?`${comprasRecebidas} de ${compras.length} item(ns) recebidos`:'Ainda sem entradas vinculadas'} ativo={painelEtapa==='mercadoria'} onClick={()=>setPainelEtapa(painelEtapa==='mercadoria'?null:'mercadoria')}/>
         <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
-        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={colunaInstalacao?.nome||'Ainda não gerada'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
-        <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
+        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeInstalada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) instaladas':'Aguardando itens de instalação'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
       </div>
 
       {painelEtapa&&<section className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
@@ -1023,8 +1043,21 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </div>}
 
         {painelEtapa==='instalacao'&&<div className="p-4">
-          <div className="rounded-xl border p-4"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-100 text-violet-700"><Wrench size={19}/></span><div><b className="text-slate-800">{colunaInstalacao?.nome||'Ainda não gerada'}</b><p className="text-xs text-slate-500">{colunaInstalacao?'Status sincronizado com o Kanban de Instalação.':'Quando a obra entrar no fluxo de instalação, o andamento aparecerá aqui automaticamente.'}</p></div></div></div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">{itens.map((item:any,idx:number)=><div key={item.id||idx} className="flex items-center justify-between rounded-xl border p-3"><div><b className="text-sm">{item.ambiente||item.descricao||item.configuracao_nome||`Tipologia ${idx+1}`}</b><p className="text-xs text-slate-500">Qtd {item.quantidade||1}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${progressoInstalacao===100?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-600'}`}>{progressoInstalacao===100?'Instalado':'Pendente'}</span></div>)}</div>
+          <div className="rounded-xl border p-4"><div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-100 text-violet-700"><Wrench size={19}/></span>
+            <div><b className="text-slate-800">{colunaInstalacao?.nome||'Instalação'}</b>
+              <p className="text-xs text-slate-500">{fluxoVenda.quantidadeInstalada} de {fluxoVenda.totalPecas} peça(s) instaladas; checklist e pendências conferidos individualmente na aba Instalação.</p>
+            </div></div></div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">{itens.map((item:any,idx:number)=>{
+            const ref=String(item?.item_ref||item?.id||item?.ref||item?.uuid||idx+1)
+            const reg=instalacoes.find(i=>i.item_ref===ref)
+            return <div key={ref} className="flex items-center justify-between rounded-xl border p-3">
+              <div><b className="text-sm">{item.ambiente||item.descricao||item.configuracao_nome||'Tipologia '+(idx+1)}</b>
+                <p className="text-xs text-slate-500">Instalado {Number(reg?.quantidade_instalada||0)} de {Number(reg?.quantidade||item.quantidade||1)}</p>
+              </div>
+              <span className="text-xs font-bold text-slate-600">{reg?.status==='instalado'&&!reg.pendencia?'Instalado':'Pendente / conferência'}</span>
+            </div>
+          })}</div>
         </div>}
 
         {painelEtapa==='venda'&&<div className="grid gap-3 p-4 md:grid-cols-2 lg:grid-cols-4">
@@ -1041,15 +1074,30 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         {aba==='visao'&&<>
           <div className="grid gap-5 lg:grid-cols-2">
             <Box titulo="Andamento da venda">
-              <div className="space-y-3">
-                {[
-                  ['Venda','Confirmada',true],
-                  ['Engenharia / projeto',setorPorNome['engenharia-projeto']?.nome||'Aguardando',!!setorPorNome['engenharia-projeto']],
-                  ['Compras',compras.length?`${comprasRecebidas}/${compras.length} recebidas`:'Aguardando',compras.length>0],
-                  ['Produção',setorPorNome.producao?.nome||'Aguardando',!!setorPorNome.producao||ordens.length>0],
-                  ['Instalação',colunaInstalacao?.nome||'Aguardando',!!colunaInstalacao],
-                ].map(([nome,det,ativo]:any)=><div key={nome} className="flex items-center gap-3 rounded-xl border p-3"><span className={`flex h-8 w-8 items-center justify-center rounded-full ${ativo?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-400'}`}>{ativo?<CheckCircle2 size={17}/>:<ClipboardList size={17}/>}</span><div><b className="text-sm text-slate-800">{nome}</b><p className="text-xs text-slate-500">{det}</p></div></div>)}
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">Venda → Financeiro → Compras → Produção → Instalação</p>
+                <button type="button" onClick={()=>void carregar()} className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold text-slate-700">Atualizar</button>
               </div>
+              <div className="space-y-2">
+                {fluxoVenda.etapas.map(etapa=><button key={etapa.id} type="button" onClick={()=>setAba(etapa.aba)}
+                  className="flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:border-blue-300">
+                  <span className={'flex h-8 w-8 shrink-0 items-center justify-center rounded-full '+(etapa.concluida?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500')}>
+                    {etapa.concluida?<CheckCircle2 size={17}/>:<ClipboardList size={17}/>}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <b className="text-sm text-slate-800">{etapa.nome}</b>
+                    <p className="text-xs text-slate-500">{etapa.detalhe}</p>
+                  </div>
+                  <ChevronRight size={14} className="shrink-0 text-slate-400"/>
+                </button>)}
+              </div>
+              <div role="status" className="mt-4 rounded-lg border bg-slate-50 p-3 text-xs text-slate-700">
+                <b>{fluxoVenda.podeEncerrar?'Etapas operacionais conferidas':'Encerramento ainda não liberado'}</b>
+                <p className="mt-1">{fluxoVenda.podeEncerrar
+                  ?'Venda, financeiro, materiais, produção e checklist da instalação estão conferidos. Verifique notas, documentos e aceite do cliente antes de encerrar definitivamente.'
+                  :'Falta confirmar: '+fluxoVenda.pendencias.join(', ')+'. A existência de um card não significa conclusão da etapa.'}</p>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">O Financeiro continua ativo durante toda a obra. Este quadro é informativo e não encerra automaticamente o cadastro.</p>
             </Box>
             <Box titulo="Próximas informações da venda">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1318,7 +1366,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='instalacao'&&<Box titulo="Instalação desta venda">
-          <VendaInstalacaoDetalhada vendaId={venda.id} obraId={obra?.id||null} clienteId={clienteId} orcamentoId={venda.orcamento_id} itens={itens} statusGeral={colunaInstalacao?.nome||null}/>
+          <VendaInstalacaoDetalhada vendaId={venda.id} obraId={obra?.id||null} clienteId={clienteId} orcamentoId={venda.orcamento_id} itens={itens} statusGeral={colunaInstalacao?.nome||null} onAtualizar={()=>void atualizarStatusInstalacao()}/>
         </Box>}
 
         {aba==='notas'&&<Box titulo="Notas / Recibos desta venda">
