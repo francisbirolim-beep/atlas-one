@@ -231,6 +231,26 @@ export async function iniciarMedicaoFinal(
   return { ok: true }
 }
 
+export async function sincronizarMedicaoFinalComProducao(medicaoId: string): Promise<ResultadoTransicaoMedicao> {
+  try {
+    const token = await tokenAtual()
+    if (!token) return { ok: false, mensagem: 'Sessão expirada. Entre novamente para enviar à Produção.' }
+    const resp = await fetch('/api/producao/medicoes-finais/sincronizar', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ medicaoId }),
+    })
+    const json = await resp.json().catch(() => ({}))
+    if (!resp.ok || json.medicaoSincronizada !== true) {
+      return { ok: false, mensagem: json.error || 'Não foi possível confirmar o card desta Medição Final na Produção.' }
+    }
+    return { ok: true, mensagem: 'Medição Final confirmada no Kanban de Produção.' }
+  } catch (error) {
+    console.error('Falha na sincronização da Medição Final com Produção:', error)
+    return { ok: false, mensagem: 'Falha de comunicação com a Produção. Use a opção de reenviar.' }
+  }
+}
+
 export async function concluirMedicaoFinal(
   medicaoId: string,
 ): Promise<ResultadoTransicaoMedicao> {
@@ -300,23 +320,16 @@ export async function concluirMedicaoFinal(
     return { ok: false, mensagem: 'Nao foi possivel concluir a medicao.' }
   }
 
-  try {
-    const token = await tokenAtual()
-    if (token) {
-      const resp = await fetch('/api/producao/medicoes-finais/sincronizar', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!resp.ok) {
-        const json = await resp.json().catch(() => ({}))
-        console.warn('Medição concluída, mas a fila de Produção ficará para a sincronização da tela:', json?.error || resp.statusText)
-      }
+  const sincronizacao = await sincronizarMedicaoFinalComProducao(medicaoId)
+  if (!sincronizacao.ok) {
+    return {
+      ok: true,
+      mensagem: 'Medição Final concluída e salva, mas o envio à Produção está pendente: '
+        + (sincronizacao.mensagem || 'não foi possível confirmar o card.'),
     }
-  } catch (erro) {
-    console.warn('Medição concluída, mas não foi possível sincronizar a fila de Produção imediatamente:', erro)
   }
+  return { ok: true, mensagem: sincronizacao.mensagem }
 
-  return { ok: true, mensagem: 'Medição Final enviada para a primeira etapa da Produção.' }
 }
 
 export async function aprovarMedicaoFinal(
