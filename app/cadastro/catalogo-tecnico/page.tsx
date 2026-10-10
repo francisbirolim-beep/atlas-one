@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
 import { ArrowLeft, History, ImageOff, Images, PackageSearch, Plus, RefreshCcw, Search } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { alternarAtivoProduto, listarProdutos } from '@/lib/produtos'
@@ -127,6 +128,10 @@ export default function CatalogoTecnicoPage() {
       setMensagemImagens(e instanceof Error ? e.message : 'Não foi possível sincronizar as imagens.')
     }
     setSincronizandoImagens(false)
+  }
+
+  function atualizarFotoCadastro(id: string, url: string) {
+    setProdutos(prev => prev.map(p => p.id === id ? { ...p, foto_url: url } : p))
   }
 
   async function alternarAtivo(p: Produto) {
@@ -263,6 +268,7 @@ export default function CatalogoTecnicoPage() {
                   {p.status_validacao && <span className="rounded bg-slate-100 px-2 py-1">{p.status_validacao}</span>}
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
+                  <ImagemProdutoTecnico codigo={codigo} produto={p} apenasControles permitirEdicao onAtualizar={atualizarFotoCadastro} />
                   <Link href={`/cadastro/produtos/${p.id}/historico`} className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><History size={14}/>Histórico</Link>
                   <Link href={`/cadastro/produtos?categoria=${encodeURIComponent(p.categoria)}`} className="flex items-center justify-center rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</Link>
                 </div>
