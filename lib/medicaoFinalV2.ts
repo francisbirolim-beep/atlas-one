@@ -300,23 +300,31 @@ export async function concluirMedicaoFinal(
     return { ok: false, mensagem: 'Nao foi possivel concluir a medicao.' }
   }
 
+  return sincronizarMedicaoFinalProducao(medicaoId)
+}
+
+/** Também permite retentar o envio após a medição ter sido concluída no banco. */
+export async function sincronizarMedicaoFinalProducao(medicaoId: string): Promise<ResultadoTransicaoMedicao> {
+  const pendencia = 'Medição concluída e salva, mas não enviada à Produção. Use “Reenviar para Produção” para tentar novamente.'
   try {
     const token = await tokenAtual()
-    if (token) {
-      const resp = await fetch('/api/producao/medicoes-finais/sincronizar', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!resp.ok) {
-        const json = await resp.json().catch(() => ({}))
-        console.warn('Medição concluída, mas a fila de Produção ficará para a sincronização da tela:', json?.error || resp.statusText)
-      }
-    }
-  } catch (erro) {
-    console.warn('Medição concluída, mas não foi possível sincronizar a fila de Produção imediatamente:', erro)
-  }
+    if (!token) return { ok: false, mensagem: pendencia }
 
-  return { ok: true, mensagem: 'Medição Final enviada para a primeira etapa da Produção.' }
+    const resp = await fetch('/api/producao/medicoes-finais/sincronizar', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ medicaoId }),
+    })
+    if (!resp.ok) {
+      const json = await resp.json().catch(() => ({}))
+      console.warn('Sincronização da Medição Final pendente:', json?.error || resp.statusText)
+      return { ok: false, mensagem: pendencia }
+    }
+    return { ok: true, mensagem: 'Medição Final concluída e disponível no Kanban de Produção.' }
+  } catch (erro) {
+    console.warn('Falha ao enviar Medição Final para Produção:', erro)
+    return { ok: false, mensagem: pendencia }
+  }
 }
 
 export async function aprovarMedicaoFinal(

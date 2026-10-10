@@ -14,6 +14,7 @@ import MedicaoAdicionarCampo from './MedicaoAdicionarCampo'
 import {
   carregarOperacaoMedicaoV2,
   concluirMedicaoFinal,
+  sincronizarMedicaoFinalProducao,
   iniciarMedicaoFinal,
   liberarMedicaoFinal,
 } from '@/lib/medicaoFinalV2'
@@ -296,6 +297,21 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
     setFinalizandoMedicao(true)
     setMensagem('')
     try {
+      const operacao = await carregarOperacaoMedicaoV2(medicaoId)
+      if (!operacao) {
+        setMensagem('Não foi possível carregar o estado da Medição Final.')
+        return
+      }
+      // Reenvio não pode sobrescrever medidas já concluídas/aprovadas.
+      if (operacao.status_operacional === 'aprovado') {
+        setMensagem('Esta Medição Final já está aprovada.')
+        return
+      }
+      if (operacao.status_operacional === 'concluido') {
+        const reenvio = await sincronizarMedicaoFinalProducao(medicaoId)
+        setMensagem(reenvio.mensagem || 'Não foi possível reenviar a Medição Final.')
+        return
+      }
       const medidasAtuais: MedidasFixasItemV2 = {
         largura_baixo_mm: numeroMedida(medidas.largura_baixo_mm),
         largura_meio_mm: numeroMedida(medidas.largura_meio_mm),
@@ -313,12 +329,6 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       const salvou = await salvarMedidasFixasItemV2(medicaoId, item.id, medidasAtuais, usuario)
       if (!salvou) {
         setMensagem('Não foi possível salvar as medidas desta peça antes da finalização.')
-        return
-      }
-
-      const operacao = await carregarOperacaoMedicaoV2(medicaoId)
-      if (!operacao) {
-        setMensagem('Não foi possível carregar o estado da Medição Final.')
         return
       }
 
@@ -342,17 +352,10 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
         }
       }
 
-      if (['concluido', 'aprovado'].includes(operacao.status_operacional)) {
-        setMensagem(operacao.status_operacional === 'aprovado'
-          ? 'Esta Medição Final já está aprovada.'
-          : 'Esta Medição Final já foi enviada.')
-        return
-      }
-
       const resultado = await concluirMedicaoFinal(medicaoId)
-      setMensagem(resultado.ok
-        ? 'Medição Final concluída e enviada com sucesso.'
-        : (resultado.mensagem || 'Não foi possível concluir a Medição Final.'))
+      setMensagem(resultado.mensagem || (resultado.ok
+        ? 'Medição Final enviada para a Produção.'
+        : 'Não foi possível enviar a Medição Final.'))
       await carregar()
       window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
     } finally {

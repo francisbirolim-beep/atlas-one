@@ -55,6 +55,13 @@ export async function POST(req: NextRequest) {
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 
   try {
+    // A conclusão de uma medição sincroniza apenas ela; a tela da Produção
+    // continua podendo recuperar itens pendentes em lote (sem reposicioná-los).
+    const corpo = await req.json().catch(() => ({}))
+    const medicaoId = typeof corpo?.medicaoId === 'string' ? corpo.medicaoId.trim() : ''
+    if (medicaoId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(medicaoId)) {
+      return NextResponse.json({ error: 'Identificador de medição inválido.' }, { status: 400 })
+    }
     const colunaEntrada = await garantirColunaEntrada(usuario.empresa_id)
 
     const { data: colunasProducao, error: erroColunas } = await supabaseAdmin
@@ -65,15 +72,20 @@ export async function POST(req: NextRequest) {
     if (erroColunas) throw erroColunas
     const idsColunas = (colunasProducao || []).map((c: any) => c.id)
 
-    const { data: medicoes, error: erroMedicoes } = await supabaseAdmin
+    let consultaMedicoes = supabaseAdmin
       .from('medicoes_finais')
       .select('id,orcamento_id,cliente_id,cliente_nome,obra_id,status_operacional,concluido_em,aprovado_em,created_at')
       .eq('empresa_id', usuario.empresa_id)
       .eq('tipo_medicao', 'tipologia')
       .in('status_operacional', ['concluido', 'aguardando_conferencia', 'aprovado'])
+    if (medicaoId) consultaMedicoes = consultaMedicoes.eq('id', medicaoId)
+    const { data: medicoes, error: erroMedicoes } = await consultaMedicoes
       .order('concluido_em', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true })
     if (erroMedicoes) throw erroMedicoes
+    if (medicaoId && !medicoes?.length) {
+      return NextResponse.json({ error: 'Medição não encontrada ou ainda não concluída.' }, { status: 404 })
+    }
 
     let criados = 0
     let atualizados = 0
@@ -83,7 +95,7 @@ export async function POST(req: NextRequest) {
       let existente: any = null
 
       if (medicao.orcamento_id && idsColunas.length) {
-        const { data } = await supabaseAdmin
+        const { data, error: erroBusca } = await supabaseAdmin
           .from('setor_kanban_itens')
           .select('id,coluna_id,liberado_producao_em,descricao')
           .eq('empresa_id', usuario.empresa_id)
@@ -92,10 +104,11 @@ export async function POST(req: NextRequest) {
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle()
+        if (erroBusca) throw erroBusca // não criar duplicata se a consulta falhar
         existente = data
       } else if (idsColunas.length) {
         const marcador = `[medicao:${medicao.id}]`
-        const { data } = await supabaseAdmin
+        const { data, error: erroBusca } = await supabaseAdmin
           .from('setor_kanban_itens')
           .select('id,coluna_id,liberado_producao_em,descricao')
           .eq('empresa_id', usuario.empresa_id)
@@ -103,6 +116,7 @@ export async function POST(req: NextRequest) {
           .ilike('descricao', `%${marcador}%`)
           .limit(1)
           .maybeSingle()
+        if (erroBusca) throw erroBusca
         existente = data
       }
 
@@ -112,26 +126,9 @@ export async function POST(req: NextRequest) {
       ].join('\n')
 
       if (existente?.id) {
-        if (!existente.liberado_producao_em) {
-          const { error: erroUpdate } = await supabaseAdmin
-            .from('setor_kanban_itens')
-            .update({
-              titulo: medicao.cliente_nome || 'Medição Final',
-              descricao,
-              coluna_id: colunaEntrada.id,
-              cliente_id: medicao.cliente_id || null,
-              obra_id: medicao.obra_id || null,
-              atualizado_em: new Date().toISOString(),
-              atualizado_por_id: usuario.id,
-              atualizado_por_nome: usuario.nome,
-            })
-            .eq('empresa_id', usuario.empresa_id)
-            .eq('id', existente.id)
-          if (erroUpdate) throw erroUpdate
-          atualizados += 1
-        } else {
-          ignorados += 1
-        }
+        // Nunca devolver um card para a entrada, substituir sua descrição
+        // editada ou remover o estágio escolhido pela equipe.
+        ignorados += 1
         continue
       }
 
