@@ -130,9 +130,26 @@ export async function GET(req:NextRequest){
      contagens:{compras:cp.length,producao:op.length,instalacao:it.length,financeiro:co.length},
      observacoes:obs}
   })
+  const nativos:Record<string,{colunas:Array<{id:string;nome:string;ordem:number}>,cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>={}
+  if(permitidos.includes('comercial')){
+   const [cc,ca]=await Promise.all([
+    db.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id',ctx.u.empresa_id).order('ordem'),
+    db.from('orcamentos').select('id,numero,cliente_nome,obra_nome,cidade,coluna_id').eq('empresa_id',ctx.u.empresa_id).eq('eh_assistencia',false).order('created_at',{ascending:false}).limit(500),
+   ])
+   if(cc.error||ca.error)throw (cc.error||ca.error)
+   nativos.comercial={colunas:cc.data||[],cards:(ca.data||[]).map(x=>({id:x.id,cliente:x.cliente_nome||'Cliente',obra:x.obra_nome||'Orçamento',numero:x.numero||0,cidade:x.cidade||'',coluna_id:x.coluna_id,href:'/kanban/comercial?orcamento='+encodeURIComponent(x.id)}))}
+  }
+  if(permitidos.includes('assistencia')){
+   const [cc,ca]=await Promise.all([
+    db.from('assistencia_colunas').select('id,nome,ordem').eq('empresa_id',ctx.u.empresa_id).order('ordem'),
+    db.from('assistencias').select('id,numero,cliente_nome,cidade,coluna_id').eq('empresa_id',ctx.u.empresa_id).order('created_at',{ascending:false}).limit(500)
+   ])
+   if(cc.error||ca.error)throw (cc.error||ca.error)
+   nativos.assistencia={colunas:cc.data||[],cards:(ca.data||[]).map(x=>({id:x.id,cliente:x.cliente_nome||'Cliente',obra:'Assistência técnica',numero:x.numero||0,cidade:x.cidade||'',coluna_id:x.coluna_id,href:'/assistencias'}))}
+  }
   const funcionarios=ctx.u.role==='master'?(await db.from('usuarios').select('id,nome,role').eq('empresa_id',ctx.u.empresa_id).order('nome')).data||[]:[]
   return NextResponse.json({quadros:QUADROS.filter(q=>permitidos.includes(q.id)),permissoes:ctx.mapa,colunas:colunas.filter(c=>permitidos.includes(c.setor)),
-    posicoes, cards, funcionarios,acessos:acessos.data||[],atualizadoEm:new Date().toISOString()}, {headers:{'Cache-Control':'no-store'}})
+    posicoes, cards, nativos, funcionarios,acessos:acessos.data||[],atualizadoEm:new Date().toISOString()}, {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('central kanban GET',e);return erro('Não foi possível carregar a Central de Kanbans.',500)}
 }
 export async function POST(req:NextRequest){
