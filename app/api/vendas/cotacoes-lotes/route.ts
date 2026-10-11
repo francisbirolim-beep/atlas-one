@@ -175,7 +175,9 @@ export async function POST(req:NextRequest) {
       .eq('pacote_id',pacote.id).eq('categoria',categoria).maybeSingle()
     if(existingErr)throw existingErr
     if(existente&&!reemitir)return erro('Esta categoria já possui cotação. Abra o card em Compras ou confirme a reemissão para atualizar a lista.',409)
-    if(existente&&existente.status!=='cotacao')return erro('A cotação já avançou no fluxo. Não é permitido substituir a lista após a compra.',409)
+    if(existente&&(existente.status!=='cotacao' ||
+      (Array.isArray(existente.itens)&&existente.itens.some((item:any)=>String(item.status_etapa||existente.status)!=='cotacao'))))
+      return erro('Parte desta cotação já avançou no Kanban. Não é permitido substituir a lista sem preservar as etapas dos materiais.',409)
 
     let resultado:any
     if(existente){
