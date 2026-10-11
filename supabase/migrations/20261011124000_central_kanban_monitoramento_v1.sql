@@ -5,6 +5,7 @@ create table if not exists public.central_kanban_colunas(
  nome text not null check(char_length(nome) between 2 and 80), ordem integer not null,
  created_at timestamptz not null default now()
 );
+create unique index if not exists central_kanban_colunas_unica_idx on public.central_kanban_colunas(empresa_id,setor,nome);
 create index if not exists central_kanban_colunas_setor_idx on public.central_kanban_colunas(empresa_id,setor,ordem);
 create table if not exists public.central_kanban_posicoes(
  empresa_id uuid not null, setor text not null, venda_obra_id uuid not null references public.vendas_obras(id),
