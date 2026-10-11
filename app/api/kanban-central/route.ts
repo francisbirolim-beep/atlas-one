@@ -203,7 +203,7 @@ export async function POST(req:NextRequest){
    if(anterior.error)throw anterior.error
    const colunas=await db.from('central_kanban_colunas').select('id,nome,ordem').eq('empresa_id',empresa_id).eq('setor',setor).order('ordem')
    if(colunas.error)throw colunas.error
-   const origemId=anterior.data?.coluna_id||colunas.data?.[0]?.id
+   const origemId=anterior.data?.coluna_id||((colunas.data||[]).some(x=>x.id===body.origemId)?body.origemId:colunas.data?.[0]?.id)
    if(origemId===destino)return NextResponse.json({ok:true})
    if(body.origemId!==origemId)return erro('O card foi movimentado por outra pessoa. Atualize o quadro.',409)
    const antes=(colunas.data||[]).find(x=>x.id===origemId)
