@@ -23,7 +23,8 @@ const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
   { prefixo: '/estoque', titulo: 'Estoque', grupo: 'Compras' },
   { prefixo: '/assistencias', titulo: 'Assistências', grupo: 'Assistência' },
   { prefixo: '/engenharia', titulo: 'Engenharia', grupo: 'Engenharia' },
-  { prefixo: '/kanban', titulo: 'Kanban Comercial', grupo: 'Comercial' },
+  { prefixo: '/kanban/comercial', titulo: 'Kanban Comercial', grupo: 'Comercial' },
+  { prefixo: '/kanban', titulo: 'Central de Kanbans', grupo: 'Geral' },
   { prefixo: '/prospeccao', titulo: 'Prospecção em Campo', grupo: 'Comercial' },
   { prefixo: '/vendas/confirmar', titulo: 'Confirmar Venda', grupo: 'Comercial' },
   { prefixo: '/orcamento', titulo: 'Orçamentos', grupo: 'Comercial' },
@@ -43,7 +44,7 @@ const PAGINAS: { id: string; titulo: string; subtitulo: string; href: string; te
   { id: 'pagina-relatorios', titulo: 'Relatórios', subtitulo: 'Página · Relatórios por setor', href: '/relatorios', termos: ['relatorios','relatório','relatórios','cmv','custo previsto','custo realizado'] },
   { id: 'pagina-clientes', titulo: 'Clientes', subtitulo: 'Página · Clientes', href: '/clientes', termos: ['clientes', 'cliente'] },
   { id: 'pagina-orcamentos', titulo: 'Orçamentos', subtitulo: 'Página · Pesquisar orçamentos', href: '/orcamento/pesquisar', termos: ['orcamento', 'orcamentos', 'orçamento'] },
-  { id: 'pagina-kanban', titulo: 'Kanban', subtitulo: 'Página · Funil comercial', href: '/kanban', termos: ['kanban', 'funil'] },
+  { id: 'pagina-kanban', titulo: 'Kanban', subtitulo: 'Página · Monitoramento por setor', href: '/kanban', termos: ['kanban', 'funil'] },
   { id: 'pagina-prospeccao', titulo: 'Prospecção', subtitulo: 'Página · Obras e contatos em campo', href: '/prospeccao', termos: ['prospeccao', 'prospecção', 'obra', 'visita', 'vendedor'] },
   { id: 'pagina-medicao-final', titulo: 'Medição Final', subtitulo: 'Página · Medições', href: '/producao/medicao-final', termos: ['medicao final', 'medicao', 'medida'] },
   { id: 'pagina-producao', titulo: 'Produção', subtitulo: 'Página · Produção', href: '/producao', termos: ['producao'] },
@@ -132,7 +133,7 @@ export default function AppTopbar() {
         }
         const encontrados: ResultadoBusca[] = []
         for (const c of (clientesResp.data || []) as any[]) if (bateBusca(q, c.nome, c.apelido, c.cidade, c.bairro, c.cep, c.endereco, c.cpf_cnpj, c.whatsapp, c.telefone, c.email)) encontrados.push({ id: `cliente-${c.id}`, tipo: 'cliente', titulo: c.apelido ? `${c.nome || 'CLIENTE'} (${c.apelido})` : (c.nome || 'CLIENTE'), subtitulo: [c.cidade, c.whatsapp || c.telefone].filter(Boolean).join(' · ') || 'Cliente', href: `/clientes/${c.id}` })
-        for (const o of (orcamentosResp.data || []) as any[]) if (bateBusca(q, o.numero, o.cliente_nome, o.cidade, o.cliente_whatsapp, o.criado_por_nome)) encontrados.push({ id: `orcamento-${o.id}`, tipo: 'orcamento', titulo: `ORÇAMENTO ${o.numero ? `#${o.numero}` : ''} — ${o.cliente_nome || 'SEM CLIENTE'}`.trim(), subtitulo: [o.cidade, o.valor_estimado != null ? `R$ ${Number(o.valor_estimado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : null].filter(Boolean).join(' · '), href: `/kanban?orcamento=${o.id}` })
+        for (const o of (orcamentosResp.data || []) as any[]) if (bateBusca(q, o.numero, o.cliente_nome, o.cidade, o.cliente_whatsapp, o.criado_por_nome)) encontrados.push({ id: `orcamento-${o.id}`, tipo: 'orcamento', titulo: `ORÇAMENTO ${o.numero ? `#${o.numero}` : ''} — ${o.cliente_nome || 'SEM CLIENTE'}`.trim(), subtitulo: [o.cidade, o.valor_estimado != null ? `R$ ${Number(o.valor_estimado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : null].filter(Boolean).join(' · '), href: `/kanban/comercial?orcamento=${o.id}` })
         for (const m of (medicoesResp.data || []) as any[]) if (bateBusca(q, m.cliente_nome, m.cidade, m.bairro, m.endereco, m.cep)) encontrados.push({ id: `medicao-${m.id}`, tipo: 'medicao', titulo: `MEDIÇÃO — ${m.cliente_nome || 'SEM CLIENTE'}`, subtitulo: [m.endereco, m.cidade].filter(Boolean).join(' · '), href: `/producao/medicao-final/${m.id}` })
         const paginasEncontradas: ResultadoBusca[] = PAGINAS.filter(p => bateBusca(q, p.titulo, p.href, ...p.termos)).map(p => ({ id: p.id, tipo: 'pagina' as const, titulo: p.titulo, subtitulo: p.subtitulo, href: p.href }))
         encontrados.unshift(...paginasEncontradas)

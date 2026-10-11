@@ -38,7 +38,7 @@ export default function HomeKanbanBlock() {
     <article className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white shadow-sm md:p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex items-start gap-2"><Columns3 size={17} className="mt-0.5 text-cyan-300" /><div><h2 className="font-semibold">Kanban comercial</h2><p className="text-xs text-slate-500">Resumo rápido do funil de vendas.</p></div></div>
-        <Link href="/kanban" className="inline-flex items-center gap-1 text-xs font-medium text-cyan-300 hover:text-cyan-200">Abrir <ArrowUpRight size={13}/></Link>
+        <Link href="/kanban/comercial" className="inline-flex items-center gap-1 text-xs font-medium text-cyan-300 hover:text-cyan-200">Abrir <ArrowUpRight size={13}/></Link>
       </div>
 
       {carregando ? (
@@ -48,7 +48,7 @@ export default function HomeKanbanBlock() {
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {colunas.slice(0, 6).map(coluna => (
-            <Link key={coluna.id} href="/kanban" className="rounded-xl border border-white/10 bg-white/[0.025] p-3 transition hover:bg-white/5">
+            <Link key={coluna.id} href="/kanban/comercial" className="rounded-xl border border-white/10 bg-white/[0.025] p-3 transition hover:bg-white/5">
               <div className="flex items-center justify-between gap-2"><p className="truncate text-xs font-medium text-slate-300">{coluna.nome}</p><strong className="text-lg text-cyan-300">{contagem[coluna.id] || 0}</strong></div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-cyan-400/70" style={{ width: `${Math.min(100, Math.max(8, (contagem[coluna.id] || 0) * 8))}%` }} /></div>
             </Link>
