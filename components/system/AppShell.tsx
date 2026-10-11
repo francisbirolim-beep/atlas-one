@@ -19,7 +19,7 @@ import ChatNotificationToast from '@/components/system/ChatNotificationToast'
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const ehHome = pathname === '/'
-  const ehKanbanComercial = pathname.startsWith('/kanban')
+  const ehKanbanComercial = pathname.startsWith('/kanban/comercial')
   const ehOrcamentos = pathname === '/orcamento' || pathname.startsWith('/orcamento/pesquisar')
   const ehProducao = pathname === '/producao'
   const ehPlanoCorte = pathname.startsWith('/producao/plano-corte')
