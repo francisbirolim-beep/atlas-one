@@ -2,6 +2,7 @@
 
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
+import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
 import {itensEmEtapa, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
@@ -263,6 +264,22 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     tentouMaterializarVenda.current=venda.id
     void sincronizarMateriaisWVetro(true)
   },[carregando,venda?.id,pacoteTecnicoId])
+
+  async function atualizarComposicaoTipologia(){
+    if(!pacoteTecnicoId)return
+    const mt=await supabase.from('pacote_tecnico_materiais')
+      .select('id,produto_id,categoria,codigo,descricao,unidade,quantidade_tecnica,quantidade_ajustada,comprimento_corte_mm,comprimento_barra_mm,cor_ref,item_ref,origem_calculo,status_calculo,status_compra,status_compra_atualizado_em,incluido_manual,justificativa_ajuste,custo_wvetro,venda_wvetro,wvetro_dados')
+      .eq('pacote_id',pacoteTecnicoId).eq('excluido',false).order('categoria').order('ordem')
+    if(mt.error)throw Error('Não foi possível atualizar os materiais: '+mt.error.message)
+    const atuais=(mt.data||[]) as MaterialTecnico[]
+    const ids=[...new Set(atuais.map(m=>m.produto_id).filter(Boolean))] as string[]
+    if(ids.length){
+      const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').in('id',ids)
+      if(pr.error)throw Error('Não foi possível atualizar as imagens: '+pr.error.message)
+      setProdutosMateriais(Object.fromEntries(((pr.data||[]) as ProdutoMaterial[]).map(x=>[x.id,x])))
+    }else setProdutosMateriais({})
+    setMateriaisTecnicos(atuais)
+  }
 
   async function carregar(){
     setCarregando(true);setErro('')
@@ -1263,7 +1280,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             <h3 className="mb-3 text-sm font-bold text-slate-800">Histórico de recebimentos desta venda</h3>
             <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-600">Data do recebimento: <b>{dataBR(r.data_recebimento)}</b>{desconto>0?<> · Total baixado: {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Registrado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><span className="text-xs font-semibold text-slate-400">{status(r.status||'registrado')}</span></div></div>})}{!recebimentosVenda.length&&(recebido>0?<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">O financeiro informa {moeda(recebido)} como recebido, mas não há comprovante detalhado associado à venda neste histórico. Pode ser um pagamento importado ou um registro anterior. Consulte o Caixa Geral antes de tentar lançar o valor novamente.</p>:<p className="py-5 text-center text-sm text-slate-400">Nenhum recebimento registrado para esta venda.</p>)}</div>
           </div>
-          <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={carregar}/>
+          <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={atualizarComposicaoTipologia}/>
         </Box>}
 
         {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} comprasExistentes={{
@@ -1498,9 +1515,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </Box>
         })()}
 
-        {aba==='tipologias'&&<Box titulo="Tipologias vendidas">
-          <div className="grid gap-3 md:grid-cols-2">{itens.map((item:any,idx:number)=><div key={item.id||idx} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">Item {idx+1}</p><b className="mt-1 block text-slate-800">{item.ambiente||item.descricao||item.configuracao_nome||item.tipo_esquadria||'Tipologia'}</b><p className="mt-1 text-xs text-slate-500">{item.descricao||item.tipo_outro_texto||''}</p><p className="mt-2 text-xs text-slate-500">Qtd {item.quantidade||1}{item.largura_mm&&item.altura_mm?` · ${item.largura_mm} x ${item.altura_mm} mm`:''}</p></div>)}{!itens.length&&<p className="text-sm text-slate-400">O orçamento desta venda ainda não possui itens estruturados.</p>}</div>
-        </Box>}
+        {aba==='tipologias'&&<VendaTipologiasMateriais
+          itens={itens}
+          materiais={materiaisTecnicos}
+          pacoteId={pacoteTecnicoId}
+          vendaId={venda.id}
+          imagensProdutos={produtosMateriais}
+          onAtualizar={carregar}
+        />}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
           <VendaLiberacaoOrdens vendaId={venda.id} onAtualizar={carregar}/>
