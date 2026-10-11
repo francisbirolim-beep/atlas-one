@@ -286,6 +286,24 @@ async function indiceProdutosAtlas() {
   return mapa
 }
 
+function candidatosProdutosPrioritarios(
+  produtos: Map<string, any[]>,
+  categoria: string,
+  codigoWvetro: unknown,
+  codigoAlternativo: unknown,
+) {
+  for (const bruto of [codigoWvetro, codigoAlternativo]) {
+    const codigo = norm(bruto)
+    if (!codigo) continue
+    const candidatos = new Map<string, any>()
+    for (const p of produtos.get(codigo) || []) {
+      if (p.categoria === categoria) candidatos.set(p.id, p)
+    }
+    if (candidatos.size > 0) return candidatos
+  }
+  return new Map<string, any>()
+}
+
 async function upsertHistorico(payload: unknown, inicio: string, fim: string) {
   const extraido = coletarHistorico(payload)
   const linhas = await carregarLinhasCache()
@@ -328,10 +346,12 @@ async function upsertHistorico(payload: unknown, inicio: string, fim: string) {
   }
 
   for (const item of extraido.componentes) {
-    const candidatos = new Map<string, any>()
-    for (const codigo of [item.codigo, item.codigo_wvetro].map(norm).filter(Boolean)) {
-      for (const p of produtos.get(codigo) || []) candidatos.set(p.id, p)
-    }
+    const candidatos = candidatosProdutosPrioritarios(
+      produtos,
+      item.tipo,
+      item.codigo_wvetro,
+      item.codigo,
+    )
     const lista = Array.from(candidatos.values())
     const produto = lista.length === 1 ? lista[0] : null
     const { data: existente } = await supabaseAdmin
