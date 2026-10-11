@@ -134,7 +134,7 @@ export async function GET(req:NextRequest){
   if(permitidos.includes('comercial')){
    const [cc,ca]=await Promise.all([
     db.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id',ctx.u.empresa_id).order('ordem'),
-    db.from('orcamentos').select('id,numero,cliente_nome,obra_nome,cidade,coluna_id').eq('empresa_id',ctx.u.empresa_id).eq('eh_assistencia',false).order('created_at',{ascending:false}).limit(500),
+    db.from('orcamentos').select('id,numero,cliente_nome,obra_nome,cidade,coluna_id').eq('empresa_id',ctx.u.empresa_id).or('eh_assistencia.is.null,eh_assistencia.eq.false').order('created_at',{ascending:false}).limit(500),
    ])
    if(cc.error||ca.error)throw (cc.error||ca.error)
    nativos.comercial={colunas:cc.data||[],cards:(ca.data||[]).map(x=>({id:x.id,cliente:x.cliente_nome||'Cliente',obra:x.obra_nome||'Orçamento',numero:x.numero||0,cidade:x.cidade||'',coluna_id:x.coluna_id,href:'/kanban/comercial?orcamento='+encodeURIComponent(x.id)}))}
