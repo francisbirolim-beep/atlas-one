@@ -14,7 +14,7 @@ type Posicao={setor:string;venda_obra_id:string;coluna_id:string;updated_at:stri
 type Acesso={usuario_id:string;setor:string;nivel:NivelBoard;responsavel:boolean}
 type Usuario={id:string;nome:string;role:string}
 type Dados={quadros:typeof QUADROS[number][];permissoes:Record<string,NivelBoard>;colunas:Coluna[];
- posicoes:Posicao[];cards:Card[];funcionarios:Usuario[];acessos:Acesso[];atualizadoEm:string}
+ posicoes:Posicao[];cards:Card[];nativos?:Record<string,{colunas:Coluna[];cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>;funcionarios:Usuario[];acessos:Acesso[];atualizadoEm:string}
 type Comentario={id:string;setor:string;texto:string;usuario_nome:string;created_at:string}
 type Movimento={id:string;setor:string;coluna_anterior_nome:string|null;coluna_nova_nome:string|null;motivo:string|null;usuario_nome:string;created_at:string}
 const qTitulo=(id:string)=>QUADROS.find(q=>q.id===id)?.nome||id
@@ -84,7 +84,7 @@ export default function CentralKanbans(){
   return ()=>window.clearInterval(timer)
  },[carregar])
  useEffect(()=>{
-  if(dados&&!monitor.length)setMonitor(dados.quadros.map(q=>q.id).filter(s=>s!=='comercial'&&s!=='assistencia'))
+  if(dados&&!monitor.length)setMonitor(dados.quadros.map(q=>q.id))
  },[dados,monitor.length])
  const colunas=(s:string)=>dados?.colunas.filter(c=>c.setor===s).sort((a,b)=>a.ordem-b.ordem)||[]
  const origCard=(card:Card,s:string)=>{
@@ -183,6 +183,23 @@ export default function CentralKanbans(){
   </div>
  }
  function quadroOperacional(s:string,mini=false){
+  if(s==='comercial'||s==='assistencia'){
+   const n=dados?.nativos?.[s]
+   if(!n)return <div className="rounded-xl bg-white p-4 text-sm text-slate-500">Resumo nativo indisponível.</div>
+   return <section key={s} className="min-w-[320px] flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div className="mb-3 flex justify-between gap-3"><h2 className="font-bold">{qTitulo(s)} — {n.cards.length} cards</h2>
+     <Link href={QUADROS.find(q=>q.id===s)?.rota||'/kanban'} className="text-xs font-semibold text-blue-700">Abrir Kanban original ↗</Link></div>
+    <div className="flex gap-3 overflow-x-auto pb-3">{n.colunas.map(col=><div key={col.id} className="w-[250px] shrink-0 rounded-xl bg-slate-100 p-2">
+     <div className="mb-2 flex justify-between rounded-lg bg-white p-2 text-xs font-semibold"><span>{col.nome}</span><span>{n.cards.filter(x=>x.coluna_id===col.id).length}</span></div>
+     <div className="space-y-2">{n.cards.filter(x=>x.coluna_id===col.id||(!x.coluna_id&&col.id===n.colunas[0]?.id)).map(x=><Link key={x.id} href={x.href}
+      className="block rounded-lg border bg-white p-3 text-left shadow-sm hover:border-blue-500">
+      <p className="font-bold text-slate-900">{x.cliente}</p><p className="mt-1 text-xs text-slate-600">{x.obra} · # {x.numero}</p><p className="mt-1 text-xs text-slate-500">{x.cidade}</p>
+      <p className="mt-2 text-xs text-blue-700">Abrir e movimentar ↗</p>
+     </Link>)}</div>
+    </div>)}</div>
+    <p className="text-xs text-slate-500">Os cards deste quadro continuam sendo movimentados no Kanban original para preservar as automações.</p>
+   </section>
+  }
   const cols=colunas(s)
   if(!cols.length)return <div className="rounded-xl border bg-white p-4 text-sm text-slate-600">Sem colunas configuradas para {qTitulo(s)}.</div>
   return <section key={s} className={'rounded-2xl border border-slate-200 bg-slate-50 p-3 '+(mini?'min-w-[320px] flex-1':'')}>
@@ -248,7 +265,7 @@ export default function CentralKanbans(){
    {modo==='setor'&&setor&&quadroOperacional(setor)}
    {modo==='monitor'&&<section className="mt-5">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold">Monitoramento de múltiplos Kanbans</h2>
-     <div className="flex flex-wrap gap-3">{dados.quadros.filter(q=>q.id!=='comercial'&&q.id!=='assistencia').map(q=><label key={q.id} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={monitor.includes(q.id)} onChange={e=>setMonitor(m=>e.target.checked?[...m,q.id]:m.filter(x=>x!==q.id))}/>{q.nome}</label>)}</div>
+     <div className="flex flex-wrap gap-3">{dados.quadros.map(q=><label key={q.id} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={monitor.includes(q.id)} onChange={e=>setMonitor(m=>e.target.checked?[...m,q.id]:m.filter(x=>x!==q.id))}/>{q.nome}</label>)}</div>
     </div>
     <div className="flex gap-3 overflow-x-auto pb-4">{monitor.filter(s=>pode(s)).map(s=>quadroOperacional(s,true))}</div>
    </section>}
