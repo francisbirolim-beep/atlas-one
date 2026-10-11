@@ -84,10 +84,10 @@ export async function GET(req:NextRequest){
   const obraIds=[...new Set(vendas.map(v=>v.obra_id).filter(Boolean))] as string[]
   const clienteIds=[...new Set(vendas.map(v=>v.cliente_id).filter(Boolean))] as string[]
   const todos=async(tabela:string,campos:string,filtro:string,lista:string[],limite=5000)=>{
-    if(!lista.length)return []
+    if(!lista.length)return [] as any[]
     const r=await db.from(tabela).select(campos).eq('empresa_id',ctx.u.empresa_id).in(filtro,lista).limit(limite)
     if(r.error)throw r.error
-    return r.data||[]
+    return (r.data||[]) as any[]
   }
   const [clientes,obras,compras,ordens,instalacoes,contas,posicoes,comentarios]=await Promise.all([
    todos('clientes','id,nome,cidade','id',clienteIds),
