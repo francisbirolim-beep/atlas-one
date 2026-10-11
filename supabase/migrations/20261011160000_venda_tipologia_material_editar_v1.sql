@@ -109,6 +109,9 @@ begin
   elsif v_codigo is not null and v_op<>'ajustar' then
    raise exception 'Selecione o código no catálogo de produtos para manter o desenho correto';
   end if;
+  if v_op<>'ajustar' and v_cat in ('perfil','contramarco') and v_produto_id is null then
+   raise exception 'Para incluir ou substituir perfis, selecione um produto com desenho no catálogo';
+  end if;
   if v_op='ajustar' and v_material.produto_id is distinct from v_produto_id then
    raise exception 'Para trocar de produto use Substituir, preservando o histórico';
   end if;

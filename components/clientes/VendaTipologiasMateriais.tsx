@@ -123,6 +123,12 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
    setMensagem('Alteração salva com histórico. Confira Compras, lista de corte e PDFs antes de utilizar materiais.')
    setAcao(null);setMaterialEditando(null)
    await onAtualizar()
+   const tokenAtualizado=await tokenAtual()
+   if(tokenAtualizado){
+    const h=await fetch('/api/vendas/tipologias-materiais?vendaId='+encodeURIComponent(vendaId)+'&pacoteId='+encodeURIComponent(pacoteId)+'&itemRef='+encodeURIComponent(aberta),{
+      headers:{Authorization:'Bearer '+tokenAtualizado},cache:'no-store'})
+    if(h.ok){const lista=await h.json();setHistorico(lista.historico||[])}
+   }
   }catch(e){setErro(e instanceof Error?e.message:'Não foi possível salvar.')}
   finally{setSalvando(false)}
  }

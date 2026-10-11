@@ -9,7 +9,7 @@ const erro=(error:string,status=400)=>NextResponse.json({error},{status,headers:
 export async function GET(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return erro('Sessão inválida.',401)
- if(u.role!=='master')return erro('Edição técnica disponível para o Master.',403)
+
  try{
   const modo=req.nextUrl.searchParams.get('modo')||'historico'
   if(modo==='catalogo'){
