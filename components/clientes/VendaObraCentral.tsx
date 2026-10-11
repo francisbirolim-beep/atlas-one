@@ -2,6 +2,7 @@
 
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
+import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
 import {itensEmEtapa, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
@@ -1498,9 +1499,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </Box>
         })()}
 
-        {aba==='tipologias'&&<Box titulo="Tipologias vendidas">
-          <div className="grid gap-3 md:grid-cols-2">{itens.map((item:any,idx:number)=><div key={item.id||idx} className="rounded-xl border p-4"><p className="text-[11px] font-bold uppercase text-slate-400">Item {idx+1}</p><b className="mt-1 block text-slate-800">{item.ambiente||item.descricao||item.configuracao_nome||item.tipo_esquadria||'Tipologia'}</b><p className="mt-1 text-xs text-slate-500">{item.descricao||item.tipo_outro_texto||''}</p><p className="mt-2 text-xs text-slate-500">Qtd {item.quantidade||1}{item.largura_mm&&item.altura_mm?` · ${item.largura_mm} x ${item.altura_mm} mm`:''}</p></div>)}{!itens.length&&<p className="text-sm text-slate-400">O orçamento desta venda ainda não possui itens estruturados.</p>}</div>
-        </Box>}
+        {aba==='tipologias'&&<VendaTipologiasMateriais
+          itens={itens}
+          materiais={materiaisTecnicos}
+          pacoteId={pacoteTecnicoId}
+          vendaId={venda.id}
+          imagensProdutos={produtosMateriais}
+          onAtualizar={carregar}
+        />}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
           <VendaLiberacaoOrdens vendaId={venda.id} onAtualizar={carregar}/>
