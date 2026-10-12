@@ -33,6 +33,7 @@ export default function SeparacaoMateriaisPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [aberta, setAberta] = useState<string | null>(null)
+  const [gerandoPacote, setGerandoPacote] = useState<string | null>(null)
 
   const carregar = useCallback(async (filtro?: string) => {
     setCarregando(true); setErro('')
@@ -98,6 +99,24 @@ export default function SeparacaoMateriaisPage() {
     finally { setProcessando(null) }
   }
 
+  async function gerarPacote(medicaoId: string) {
+    if (!window.confirm('Gerar novo pacote técnico apenas para as unidades aprovadas nesta medição?\\n\\nIsso não libera Corte, não reserva estoque e não altera a medição das demais peças.')) return
+    setErro(''); setSucesso(''); setGerandoPacote(medicaoId)
+    try {
+      const token = await tokenAtual()
+      const res = await fetch('/api/producao/separacao/pacote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+        body: JSON.stringify({ medicaoId }),
+      })
+      const dados = await res.json()
+      if (!res.ok) throw new Error(dados.error || 'Falha ao gerar pacote parcial.')
+      await carregar(medicaoFiltro)
+      setSucesso(dados.mensagem || 'Pacote parcial gerado.')
+    } catch (e: any) { setErro(e?.message || 'Não foi possível gerar pacote parcial.') }
+    finally { setGerandoPacote(null) }
+  }
+
   return <div className="min-h-screen bg-slate-50 pb-12">
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-5">
@@ -136,8 +155,16 @@ export default function SeparacaoMateriaisPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 p-4">
             <div><h2 className="font-bold text-slate-900">{lista[0].clienteNome}</h2>
               <p className="text-xs text-slate-500">{lista.length} peça(s) aprovada(s) nesta medição</p></div>
-            <Link href={'/producao/medicao-final/' + medicaoId} className="flex items-center gap-2 text-xs font-semibold text-blue-800">
-              <Ruler size={14}/> Conferir Medição Final</Link>
+            <div className="flex flex-wrap items-center gap-3">
+              {lista.some(p => !p.listaDisponivel) && <button
+                onClick={() => void gerarPacote(medicaoId)} disabled={Boolean(gerandoPacote)}
+                className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">
+                {gerandoPacote === medicaoId ? <Loader2 size={14} className="animate-spin"/> : <PackageCheck size={14}/>}
+                Gerar pacote técnico das peças aprovadas
+              </button>}
+              <Link href={'/producao/medicao-final/' + medicaoId} className="flex items-center gap-2 text-xs font-semibold text-blue-800">
+                <Ruler size={14}/> Conferir Medição Final</Link>
+            </div>
           </div>
           <div className="space-y-3 p-3 sm:p-4">{lista.map(peca => {
             const edicao = edicoes[peca.id] || { conferidos: [], motivo: '' }

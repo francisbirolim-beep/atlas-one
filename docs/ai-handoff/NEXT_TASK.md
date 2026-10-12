@@ -8,7 +8,7 @@ Branch: `feat/producao-separacao-parcial-20261012`. NÃO implantar direto na mai
 4. Registrar pendência de um perfil riscado e marcar outra peça como conferida, quando houver pacote técnico individual válido.
 5. Verificar histórico e invalidação por mudança de lista/quantidades.
 6. Validar que Kanban anterior, ordens, estoque, instalação e recebimentos continuam intactos.
-7. Completar camada de reserva real de estoque e geração de pacote técnico parcial antes de liberar Corte/usinagem.
+7. Geração de pacote técnico parcial implementada (não publicada): validar no preview e com medida aprovada; depois implementar reserva real de estoque com movimentação auditada antes de liberar Corte/usinagem.
 8. Abrir PR, revisar, fazer merge manual; preview e produção somente com consentimento.
 
 ## TAREFA ATUAL — validar Assistente IA do WhatsApp
