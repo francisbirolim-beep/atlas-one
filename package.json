@@ -24,8 +24,10 @@
     "test:supabase-history": "node scripts/test-supabase-historico-versoes.cjs",
     "test:supabase-applied": "node scripts/test-supabase-conteudo-aplicado.cjs",
     "test:supabase-exact": "node scripts/test-supabase-formatacao-conciliada.cjs",
+    "test:supabase-hashes": "node scripts/test-supabase-remote-hashes.cjs --self-test && node scripts/test-supabase-terminadores-historicos.cjs",
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
-    "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
+    "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs",
+    "test:supabase-terminadores": "node scripts/test-supabase-terminadores-historicos.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

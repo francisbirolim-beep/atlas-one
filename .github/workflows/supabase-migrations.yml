@@ -111,6 +111,17 @@ jobs:
           echo "Lendo historico remoto de migrations via Session Pooler IPv4..."
           supabase migration list --db-url "$SUPABASE_DB_URL"
 
+      - name: Verify applied SQL content hashes
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Apenas o histórico aplicado, não dados de clientes nem credenciais.
+          psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -A -t \
+            -c "SELECT version || '|' || md5(array_to_string(statements, E'\\n')) FROM supabase_migrations.schema_migrations ORDER BY version" \
+            > "$RUNNER_TEMP/atlas-applied-migration-hashes.txt"
+          node scripts/test-supabase-remote-hashes.cjs "$RUNNER_TEMP/atlas-applied-migration-hashes.txt"
+
       - name: Dry-run pending migrations
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
         shell: bash

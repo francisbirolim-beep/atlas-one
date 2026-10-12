@@ -1,0 +1,15 @@
+const fs=require('node:fs')
+const crypto=require('node:crypto')
+const assert=require('node:assert/strict')
+const md5=x=>crypto.createHash('md5').update(x).digest('hex')
+const sha256=x=>crypto.createHash('sha256').update(x).digest('hex')
+const items=JSON.parse(fs.readFileSync('docs/supabase-migracoes-fim-de-linha-20261011.json','utf8'))
+assert.equal(items.length,3)
+for(const i of items){
+  const real=fs.readFileSync(i.active_file),old=fs.readFileSync(i.preserved_file)
+  assert.equal(md5(real),i.applied_md5)
+  assert.equal(md5(old),i.preserved_md5)
+  assert.equal(sha256(old),i.preserved_sha256)
+  assert.ok(old.equals(Buffer.concat([real,Buffer.from('\n')])),'A alteração deveria ser APENAS LF final')
+}
+console.log('PASS: 3 SQLs alinhados, 3 originais preservados sem mudança semântica.')
