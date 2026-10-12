@@ -1,0 +1,41 @@
+[
+  {
+    "version": "20261010210211",
+    "name": "cotacao_compras_movimentos_ia_v1",
+    "active_file": "supabase/migrations/20261010210211_cotacao_compras_movimentos_ia_v1.sql",
+    "applied_md5": "3e4dfb2c80884018a1c182e8a5a2a4ee",
+    "applied_length": 6461,
+    "preserved_file": "supabase/migrations-review/20261011-ending-newlines/20261010210211_cotacao_compras_movimentos_ia_v1.sql",
+    "preserved_md5": "eb5fbc96639e1a8971df46748272c196",
+    "preserved_sha256": "c6f707bb90b8fdbcc7b06cbfb5633dae0cacf7d5d809e4f75ba690b930b7830e",
+    "preserved_blob_sha": "2935ff7240f82214ab9d0585690f0012afc6591b",
+    "preserved_length": 6462,
+    "difference": "single extra trailing LF in Git version"
+  },
+  {
+    "version": "20261011133700",
+    "name": "cotacao_lote_itens_etapas_v1_20261011",
+    "active_file": "supabase/migrations/20261011133700_cotacao_lote_itens_etapas_v1.sql",
+    "applied_md5": "1f28acc930cf123f5503308840d64885",
+    "applied_length": 4274,
+    "preserved_file": "supabase/migrations-review/20261011-ending-newlines/20261011133700_cotacao_lote_itens_etapas_v1.sql",
+    "preserved_md5": "9620fa1ed9f9735dd0803a1bd78c4eb2",
+    "preserved_sha256": "1251ce9dfa2a59ef58a31425e35cff9d1be61ec9f26ca2fd5006b162cf6a8a75",
+    "preserved_blob_sha": "eefd57eb72f95154299d17a850d5054cc27d0494",
+    "preserved_length": 4275,
+    "difference": "single extra trailing LF in Git version"
+  },
+  {
+    "version": "20261012015515",
+    "name": "tipologia_imagem_perfil_contramarco_20261011",
+    "active_file": "supabase/migrations/20261012015515_tipologia_imagem_perfil_contramarco_20261011.sql",
+    "applied_md5": "d7a59fe41bb83780e73ecb340efe6396",
+    "applied_length": 8923,
+    "preserved_file": "supabase/migrations-review/20261011-ending-newlines/20261012015515_tipologia_imagem_perfil_contramarco_20261011.sql",
+    "preserved_md5": "f5a4c5ac4cba49a0c38adccd1a1640ea",
+    "preserved_sha256": "74a947c13908a122cdf7937a6338241713adf6a9006ebe345ef421d9e515705d",
+    "preserved_blob_sha": "5dc857de81de49322612a8c7d52ee5883224aa90",
+    "preserved_length": 8924,
+    "difference": "single extra trailing LF in Git version"
+  }
+]
