@@ -92,7 +92,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
    comprimento_barra_mm:material?.comprimento_barra_mm!=null?String(material.comprimento_barra_mm):'',justificativa:''})
  }
  function escolherProduto(p:Produto){
-  if(p.codigo&&!p.foto_url){setErro('Produto com código sem imagem técnica: cadastre a imagem antes de incluí-lo.');return}
+  if(['perfil','contramarco'].includes(form.categoria)&&!p.foto_url){setErro('Perfil sem desenho técnico: cadastre a imagem antes de incluí-lo.');return}
   setForm(prev=>({...prev,produto_id:p.id,codigo:p.codigo||'',descricao:p.nome,unidade:p.unidade||prev.unidade,
     comprimento_barra_mm:p.tamanho_barra_mm?String(p.tamanho_barra_mm):prev.comprimento_barra_mm}))
   setBusca(p.codigo||p.nome);setResultados([]);setErro('')
