@@ -32,6 +32,7 @@ const TITULOS: { prefixo: string; titulo: string; grupo: string }[] = [
   { prefixo: '/crm', titulo: 'CRM', grupo: 'Comercial' },
   { prefixo: '/producao/medicao-final', titulo: 'Medição Final', grupo: 'Produção' },
   { prefixo: '/producao/plano-corte', titulo: 'Plano de Corte', grupo: 'Produção' },
+  { prefixo: '/producao/separacao', titulo: 'Separação de Materiais', grupo: 'Produção' },
   { prefixo: '/producao', titulo: 'Produção', grupo: 'Produção' },
   { prefixo: '/setores', titulo: 'Setores', grupo: 'Operações' },
   { prefixo: '/financeiro', titulo: 'Financeiro', grupo: 'Financeiro' },

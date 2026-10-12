@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { vincularMateriaisGerados } from './producaoSeparacaoRegras'
 import type { Usuario } from './tipos'
 import { calcularFormulaCorteIsolada, calcularFormulasCorte, type TipologiaFormulasCorte } from './formulasCorteEngine'
 import { calcularAcessoriosTecnicos } from './formulasAcessoriosEngine'
@@ -577,8 +578,17 @@ export async function gerarPacoteTecnico(
 
   const materiais: any[] = []
   let ordem = 0
+  // Marcadores por posição física no array: itens de orçamento repetidos
+  // compartilham item_ref. Preservar a referência comercial original.
+  const marcadoresMedicao: Array<{ inicio: number; medicaoItemId: string | null }> = []
 
   for (let indice = 0; indice < itens.length; indice += 1) {
+    marcadoresMedicao.push({
+      inicio: materiais.length,
+      medicaoItemId: origem === 'medicao_final'
+        ? String(itens[indice]?.medicao_final?.medicao_item_id || '') || null
+        : null,
+    })
     const item: any = itens[indice]
     const largura = n(item?.largura_mm)
     const altura = n(item?.altura_mm)
@@ -769,8 +779,13 @@ export async function gerarPacoteTecnico(
     }
   }
 
-  if (materiais.length > 0) {
-    const { error } = await supabase.from('pacote_tecnico_materiais').insert(materiais)
+  // Identificar a unidade física sem modificar o item_ref comercial.
+  const materiaisPersistencia = origem === 'medicao_final'
+    ? vincularMateriaisGerados(materiais, marcadoresMedicao)
+    : materiais
+
+  if (materiaisPersistencia.length > 0) {
+    const { error } = await supabase.from('pacote_tecnico_materiais').insert(materiaisPersistencia)
     if (error) return { ok: false, error: error.message }
   }
 

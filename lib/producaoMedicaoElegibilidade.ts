@@ -19,3 +19,17 @@ export function medicoesElegiveisParaProducao<T extends MedicaoElegivel>(
   return lista.length>0&&lista.every(i=>i.medido===true&&Number(i.quantidade)===1)
  })
 }
+
+/** Extensão conservadora: mantém a regra de medição completa e acrescenta
+ * somente medições parciais contendo unidade realmente aprovada.
+ * A liberação técnica da obra inteira continua sujeita aos gates anteriores. */
+export function medicoesElegiveisComParcial<T extends MedicaoElegivel>(
+  medicoes: readonly T[],
+  unidades: readonly (UnidadeMedida & { status_medicao?: string | null })[],
+): T[] {
+  const completas = new Set(medicoesElegiveisParaProducao(medicoes, unidades).map(m => m.id))
+  const parciais = new Set(unidades.filter(i =>
+    i.medido === true && Number(i.quantidade) === 1 && i.status_medicao === 'aprovada',
+  ).map(i => i.medicao_id))
+  return medicoes.filter(m => completas.has(m.id) || parciais.has(m.id))
+}

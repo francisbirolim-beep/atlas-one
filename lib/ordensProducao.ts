@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { usuarioAtual } from './auth'
-import { medicoesElegiveisParaProducao } from './producaoMedicaoElegibilidade'
+import { medicoesElegiveisComParcial } from './producaoMedicaoElegibilidade'
 
 export type OrdemProducao = {
   id: string
@@ -111,7 +111,7 @@ export async function listarMedicoesFinaisProducao(): Promise<MedicaoFinalProduc
     .from('medicoes_finais')
     .select('id,orcamento_id,cliente_id,cliente_nome,obra_id,status_operacional,concluido_em,aprovado_em,aprovado_por_nome,created_at,orcamentos(numero)')
     .eq('tipo_medicao', 'tipologia')
-    .in('status_operacional', ['concluido', 'aguardando_conferencia', 'aprovado'])
+    .in('status_operacional', ['liberado', 'em_medicao', 'com_pendencia', 'concluido', 'aguardando_conferencia', 'aprovado'])
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -122,12 +122,12 @@ export async function listarMedicoesFinaisProducao(): Promise<MedicaoFinalProduc
   const ids=(data||[]).map((m:any)=>m.id)
   if(!ids.length)return []
   const {data:unidades,error:erroUnidades}=await supabase.from('medicao_itens')
-    .select('medicao_id,medido,quantidade').in('medicao_id',ids)
+    .select('medicao_id,medido,quantidade,status_medicao').in('medicao_id',ids)
   if(erroUnidades){
     console.error('Não foi possível validar unidades medidas para Produção:',erroUnidades)
     return []
   }
-  return medicoesElegiveisParaProducao((data||[]) as MedicaoFinalProducao[],unidades||[])
+  return medicoesElegiveisComParcial((data||[]) as MedicaoFinalProducao[],unidades||[])
     .map((row: any) => ({
       ...row,
       orcamento_numero: row.orcamentos?.numero || null,

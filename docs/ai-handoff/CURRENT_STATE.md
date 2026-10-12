@@ -1,3 +1,16 @@
+## 2026-10-12 — Separação de Materiais por peça aprovada — em desenvolvimento (não publicada)
+
+Branch: `feat/producao-separacao-parcial-20261012`.
+
+- Menu Produção ganha `Kanban Geral` (rota antiga preservada) e `Separação de Materiais` em `/producao/separacao`.
+- Painel de separação lista somente unidades `medicao_itens` com `medido=true`, `status_medicao='aprovada'` e quantidade 1, inclusive em medição parcial; as demais não aparecem.
+- Card do Kanban abre resumo dessas peças aprovadas e link para separação; o sincronizador passa a reconhecer medições parciais com ao menos uma posição aprovada, sem duplicar os cards existentes.
+- Separação registra aguardando, pendente com motivo ou materiais conferidos, histórico imutável e responsável.
+- Para marcar materiais conferidos, exige pacote técnico `medicao_final`, vínculo explícito da unidade `medicao_item_id` quando houver `item_ref` comercial compartilhado e todos os materiais conferidos. Fórmulas pendentes, perfil sem produto e material manual sem unidade bloqueiam conclusão. Alteração posterior do pacote/quantidade invalida a conclusão anterior na leitura.
+- Primeiro incremento NÃO reserva nem baixa estoque, NÃO altera status de ordens ou gates, NÃO libera Instalação. O estado de materiais é um checklist físico independente.
+- Migration `20261012151500_producao_separacao_por_peca_v1.sql` ainda NÃO aplicada. Inclui vínculo `pacote_tecnico_materiais.medicao_item_id`, que preserva o `item_ref` comercial, bloqueia materiais manuais sem unidade associada e valida tenant/orçamento no banco. Antes de usar o fluxo: aplicar migration de forma controlada, validar usuário Master/produção, medição parcial e lote duplicado, depois PR e release manual.
+- Validações: TypeScript, build Next.js e testes de regressão locais aprovados (não são teste funcional autenticado).
+
 ## 2026-10-04 — WhatsApp IA supervisionada — candidata a teste
 
 Branch: `feat/whatsapp-ia-aprendizado-v1`

@@ -1,3 +1,16 @@
+## PRÓXIMO PASSO — Separação de Materiais por peça (12/10/2026)
+
+Branch: `feat/producao-separacao-parcial-20261012`. NÃO implantar direto na main.
+
+1. Revisar diff e checar migration aditiva/RLS/trigger de aprovação, sem executar na produção antes da janela aprovada.
+2. Aplicar migration somente quando autorizado e verificar a política por empresa.
+3. Testar fluxo do Samuel ou obra de homologação: parte aprovada aparece; peça sem medição/aprovação fica invisível.
+4. Registrar pendência de um perfil riscado e marcar outra peça como conferida, quando houver pacote técnico individual válido.
+5. Verificar histórico e invalidação por mudança de lista/quantidades.
+6. Validar que Kanban anterior, ordens, estoque, instalação e recebimentos continuam intactos.
+7. Completar camada de reserva real de estoque e geração de pacote técnico parcial antes de liberar Corte/usinagem.
+8. Abrir PR, revisar, fazer merge manual; preview e produção somente com consentimento.
+
 ## TAREFA ATUAL — validar Assistente IA do WhatsApp
 
 Branch: `feat/whatsapp-ia-aprendizado-v1`

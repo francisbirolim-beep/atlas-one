@@ -1,3 +1,12 @@
+## 2026-10-12 — Separação de Materiais (candidata local)
+
+- Implementado quadro de conferência por unidade da Medição Final aprovada (inclusive parcial), sem misturar itens não medidos.
+- Criados menu, painel, API autenticada com permissão do setor e migration multitenant com RLS, guard de aprovação e auditoria imutável.
+- Estados independentes: aguardando, pendente (comentário obrigatório), separado com todos os materiais conferidos.
+- Ligação a pacotes técnicos individuais, falha fechada para itens sem pacote ou com `item_ref` duplicado; assinatura técnica invalida conferência obsoleta.
+- Sincronização do Kanban expandida para medições parciais; card da obra expõe apenas unidades aprovadas.
+- Build/TypeScript e testes de integração local aprovados. Migration e deploy não realizados.
+
 ## 2026-10-04 — Assistente IA supervisionado no WhatsApp
 
 - Criado controle de autonomia do WhatsApp com três modos: Observando, Sugerindo e Automático.
