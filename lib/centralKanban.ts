@@ -50,3 +50,14 @@ export function percentualFinanceiroKanban(contas:ContaFinanceiraKanban[],alocac
  return Math.min(99,calcPct(liquidado,venda))
 }
 export const progressoOperacional=(compras:number,producao:number,instalacao:number)=>Math.round((100+compras+producao+instalacao)/4)
+
+
+// Uma coluna final operacional não é apenas uma posição visual: requer conclusão real.
+// Engenharia mantém fluxo próprio de liberação técnica, sem mudança automática aqui.
+export const indiceConclusaoOperacional=(setor:string):number|null=>
+ ['compras','producao','instalacao','financeiro'].includes(setor)
+  ?ETAPAS[setor as SetorBoard].length-1:null
+export const ehColunaConclusaoOperacional=(setor:string,ordem:number):boolean=>{
+ const indice=indiceConclusaoOperacional(setor)
+ return indice!==null&&ordem===indice
+}
