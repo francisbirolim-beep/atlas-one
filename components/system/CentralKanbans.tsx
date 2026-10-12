@@ -118,6 +118,8 @@ export default function CentralKanbans(){
    &&(!cidade||c.cidade===cidade)&&(!atrasados||(!!c.previsao&&new Date(c.previsao+'T23:59:59').getTime()<Date.now()&&c.percentualGeral<100)))
  },[dados,filtro,cidade,atrasados])
  const cidades=[...new Set((dados?.cards||[]).map(c=>c.cidade).filter(Boolean))].sort()
+ // Detalhe do card acompanha a atualização periódica, sem conservar números antigos.
+ const detalheAtual=detalhe?(dados?.cards.find(c=>c.id===detalhe.id)||detalhe):null
 
  async function detalheCard(card:Card,etapa?:string){
   setDetalhe(card);setAbaDetalhe(etapa||((dados?.quadros.some(q=>q.id==='compras')?'compras':dados?.quadros[0]?.id)||'comercial'))
@@ -294,12 +296,12 @@ export default function CentralKanbans(){
   {detalhe&&dados&&<div role="dialog" aria-modal="true" aria-label="Acompanhamento da obra" className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-2 md:p-6" onMouseDown={e=>{if(e.target===e.currentTarget)setDetalhe(null)}}>
    <div className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl md:p-6">
     <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{detalhe.cliente}</h2><p className="text-sm text-slate-600">{detalhe.obra} · Venda #{detalhe.numero}</p>
-     <p className="mt-1 text-sm font-bold text-blue-700">Progresso operacional {detalhe.percentualGeral}%</p></div>
+     <p className="mt-1 text-sm font-bold text-blue-700">Progresso operacional {detalheAtual?.percentualGeral}%</p></div>
      <button aria-label="Fechar" onClick={()=>setDetalhe(null)} className="rounded-lg border p-2"><X size={19}/></button>
     </div>
     <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3">{setoresMedidos.filter(x=>pode(x.quadro)).map(x=><button key={x.id} onClick={()=>setAbaDetalhe(x.quadro)} className={'rounded-xl border p-3 text-left '+(abaDetalhe===x.quadro?'border-blue-500 bg-blue-50':'border-slate-200')}>
-     <div className="flex items-center justify-between text-xs"><b>{x.nome}</b><span>{pct(detalhe.percentuais[x.id])}</span></div>
-     <div className="mt-2 h-1.5 rounded-full bg-white"><div className="h-full rounded-full bg-blue-600" style={{width:(detalhe.percentuais[x.id]||0)+'%'}}/></div>
+     <div className="flex items-center justify-between text-xs"><b>{x.nome}</b><span>{pct(detalheAtual?.percentuais[x.id])}</span></div>
+     <div className="mt-2 h-1.5 rounded-full bg-white"><div className="h-full rounded-full bg-blue-600" style={{width:(detalheAtual?.percentuais[x.id]||0)+'%'}}/></div>
     </button>)}</div>
     <div className="mt-3 flex flex-wrap gap-2">{dados.quadros.filter(q=>!setoresMedidos.some(x=>x.quadro===q.id)).map(q=><button key={q.id} onClick={()=>setAbaDetalhe(q.id)} className={'rounded-lg border px-2 py-1 text-xs '+(abaDetalhe===q.id?'bg-slate-900 text-white':'')}>{q.nome}</button>)}</div>
     <div className="mt-5 flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Histórico e comentários — {qTitulo(abaDetalhe)}</h3>
