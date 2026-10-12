@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarCompras } from '@/lib/comprasServer'
+import { impedirRetornoDeRecebimento, type NecessidadeRecebimento } from '@/lib/comprasStatusGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -65,6 +66,28 @@ export async function POST(req: NextRequest) {
     const origem = texto(body.origem, 80) || 'ajuste_manual_materiais'
     const agora = new Date().toISOString()
 
+    // Validação ANTES de gravar materiais: nenhum item de outra obra pode ser atualizado
+    // e uma compra realmente recebida não pode perder o histórico pelo Kanban.
+    if (necessidadeIds.length && !venda.obra_id) {
+      return NextResponse.json({ error: 'Vincule uma obra à venda antes de movimentar as compras.' }, { status: 409 })
+    }
+    let necessidadesValidadas: Array<NecessidadeRecebimento & { observacoes: string | null; obra_id: string; descricao: string }> = []
+    if (necessidadeIds.length) {
+      const { data, error } = await supabaseAdmin
+        .from('compras_necessidades')
+        .select('id,status,recebido_em,observacoes,obra_id,descricao')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('obra_id', venda.obra_id)
+        .in('id', necessidadeIds)
+      if (error) throw new Error(error.message)
+      if ((data || []).length !== necessidadeIds.length) {
+        return NextResponse.json({ error: 'Um ou mais materiais não pertencem a esta obra. Nenhum status foi alterado.' }, { status: 409 })
+      }
+      necessidadesValidadas = data || []
+      const impedimento = impedirRetornoDeRecebimento(necessidadesValidadas, status)
+      if (impedimento) return NextResponse.json({ error: impedimento }, { status: 409 })
+    }
+
     let atualizadosMateriais = 0
     if (materialIds.length) {
       const { data: pacote, error: pacoteError } = await supabaseAdmin
@@ -88,7 +111,7 @@ export async function POST(req: NextRequest) {
         .in('id', materialIds)
       if (materiaisError) throw new Error(materiaisError.message)
       const idsValidos = (materiais || []).map((m:any)=>m.id)
-      if (!idsValidos.length) return NextResponse.json({ error: 'Nenhum material válido desta venda foi localizado.' }, { status: 404 })
+      if (idsValidos.length !== materialIds.length) return NextResponse.json({ error: 'Um ou mais materiais técnicos não pertencem a esta venda. Nenhum status foi alterado.' }, { status: 409 })
 
       const { data: alterados, error: updateMaterialError } = await supabaseAdmin
         .from('pacote_tecnico_materiais')
@@ -107,16 +130,8 @@ export async function POST(req: NextRequest) {
     }
 
     const resultados:any[] = []
-    if (venda.obra_id && necessidadeIds.length) {
-      const { data: necessidades, error: necessidadesError } = await supabaseAdmin
-        .from('compras_necessidades')
-        .select('id,status,observacoes,obra_id,descricao')
-        .eq('empresa_id', usuario.empresa_id)
-        .eq('obra_id', venda.obra_id)
-        .in('id', necessidadeIds)
-      if (necessidadesError) throw new Error(necessidadesError.message)
-
-      for (const necessidade of necessidades || []) {
+    if (necessidadeIds.length) {
+      for (const necessidade of necessidadesValidadas) {
         const linhas = [
           texto(necessidade.observacoes, 3000),
           `[Atlas Materiais] ${agora} · ${usuario.nome} · ${origem} · status: ${status}`,
@@ -134,8 +149,8 @@ export async function POST(req: NextRequest) {
           updated_at: agora,
           observacoes: linhas.join('\n').slice(-6000),
         }
-        if (status === 'recebido') atualizacao.recebido_em = agora
-        else atualizacao.recebido_em = null
+        // A data recebido_em pertence à conferência de recebimento, nunca ao arrasto.
+        // Mesmo quando o card vai para Recebido, esta rotina NÃO confirma entrada física.
 
         const { data, error } = await supabaseAdmin
           .from('compras_necessidades')
@@ -158,6 +173,9 @@ export async function POST(req: NextRequest) {
       solicitadosMateriais: materialIds.length,
       status,
       itens: resultados,
+      aviso: status === 'recebido'
+        ? 'Etapa administrativa registrada. A conferência física, a NF e a entrada no estoque continuam sendo operações próprias.'
+        : 'Etapa administrativa atualizada. Esta operação não estorna estoque, notas fiscais nem pagamentos.',
     })
   } catch (error) {
     console.error('[Materiais][status-lote]', error)

@@ -675,6 +675,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       await moverLoteCotacao(e,destinoId)
       return
     }
+    await moverCompraPorId(compraId,destinoId)
+  }
+
+  async function moverCompraPorId(compraId:string,destinoId:string){
     const item=compras.find(c=>c.id===compraId)
     if(!item || ocupadoMateriais || !venda?.obra_id)return
     const nomes:Record<string,string>={faltas:'Falta comprar',cotacao:'Em cotação',comprado:'Comprado',entrega:'Aguardando chegar',recebido:'Recebido'}
@@ -738,7 +742,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const json=await resp.json().catch(()=>({}))
     if(!resp.ok){setErro(json?.error||'Não foi possível atualizar os materiais.');return false}
     const rotulo=statusDestino==='necessidade'?'Falta comprar':statusDestino==='cotacao'?'Em cotação':statusDestino==='comprado'?'Comprado':statusDestino==='entrega'?'Aguardando chegar':'Recebido'
-    setMensagemMateriais(`${json.atualizadosMateriais||json.atualizados||materialIds.length||necessidadeIds.length} item(ns) movido(s) para ${rotulo}.`)
+    setMensagemMateriais(`${json.atualizadosMateriais||json.atualizados||materialIds.length||necessidadeIds.length} item(ns) movido(s) para ${rotulo}. ${json.aviso||''}`)
     await carregar()
     return true
   }
@@ -1385,7 +1389,11 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <div className={'grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border '+(!visual.imagem&&visual.imagemObrigatoria?'border-amber-300':'border-slate-200')}>
                       {visual.imagem?<img src={visual.imagem} alt={visual.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className={!visual.imagem&&visual.imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
                     </div>
-                    <div className="min-w-0"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div></div>
+                    <div className="min-w-0 flex-1"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div>
+                      <select aria-label={`Mover material ${visual.codigo||visual.descricao} para outra etapa`} value={id} disabled={ocupadoMateriais||!venda.obra_id} onChange={e=>{const destino=e.target.value;e.target.value=id;void moverCompraPorId(item.id,destino)}} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-1 py-2 text-[10px] font-medium text-slate-700">
+                        <option value="faltas">Falta comprar</option><option value="cotacao">Em cotação</option><option value="comprado">Comprado</option><option value="entrega">Aguardando chegar</option><option value="recebido">Recebido</option>
+                      </select>
+                    </div>
                   </div>})}
                   {itensColuna.length>4&&<button type="button" onClick={()=>setComprasColunasExpandidas(prev=>prev.includes(categoriaAberta+'-'+id)?prev.filter(x=>x!==categoriaAberta+'-'+id):[...prev,categoriaAberta+'-'+id])} className="w-full rounded-lg border border-dashed border-slate-300 bg-white/70 px-2 py-2 text-center text-[10px] font-semibold text-blue-700">{comprasColunasExpandidas.includes(categoriaAberta+'-'+id)?'Recolher itens':'Ver todos os '+itensColuna.length+' itens'}</button>}
                   {!itensColuna.length&&!itensLoteNaEtapa(id).length&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}

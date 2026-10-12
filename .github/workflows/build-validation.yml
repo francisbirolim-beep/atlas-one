@@ -41,6 +41,9 @@ jobs:
       - name: Supplier quotation deterministic comparison
         run: npm run test:cotacao-ia
 
+      - name: Purchases receipt and rollback safety
+        run: npm run test:compras-recebimento
+
       - name: Venda CMV regression
         run: npm run test:venda-cmv
 
