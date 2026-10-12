@@ -1,6 +1,8 @@
 import { NextRequest,NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
+import { progressoLotesCotacao } from '@/lib/cotacaoEtapas'
+import { avaliarFluxoVenda } from '@/lib/vendaFluxoResumo'
 import { ETAPAS,SETORES_ACESSO,QUADROS,calcPct,progressoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
 
 export const dynamic='force-dynamic'
@@ -74,7 +76,7 @@ export async function GET(req:NextRequest){
   const setorColunas=selecionado?[selecionado]:permitidos
   const [colunas,vr,acessos]=await Promise.all([
     semearColunas(ctx.u.empresa_id,setorColunas),
-    db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,created_at,status').eq('empresa_id',ctx.u.empresa_id)
+    db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,valor_venda,created_at,status').eq('empresa_id',ctx.u.empresa_id)
       .order('created_at',{ascending:false}).limit(1000),
     ctx.u.role==='master'?db.from('central_kanban_acessos').select('usuario_id,setor,nivel,responsavel').eq('empresa_id',ctx.u.empresa_id):
       Promise.resolve({data:[],error:null}),
@@ -83,15 +85,19 @@ export async function GET(req:NextRequest){
   const vendas=vr.data||[],vids=vendas.map(v=>v.id)
   const obraIds=[...new Set(vendas.map(v=>v.obra_id).filter(Boolean))] as string[]
   const clienteIds=[...new Set(vendas.map(v=>v.cliente_id).filter(Boolean))] as string[]
+  const orcamentoIds=[...new Set(vendas.map(v=>v.orcamento_id).filter(Boolean))] as string[]
   const todos=async(tabela:string,campos:string,filtro:string,lista:string[],limite=5000)=>{
     if(!lista.length)return [] as any[]
     const r=await db.from(tabela).select(campos).eq('empresa_id',ctx.u.empresa_id).in(filtro,lista).limit(limite)
     if(r.error)throw r.error
     return (r.data||[]) as any[]
   }
-  const [clientes,obras,compras,ordens,instalacoes,contas,posicoes,comentarios]=await Promise.all([
+  const [clientes,obras,orcamentos,pacotes,lotes,compras,ordens,instalacoes,contas,posicoes,comentarios]=await Promise.all([
    todos('clientes','id,nome,cidade','id',clienteIds),
    todos('obras','id,nome,cidade,previsao_entrega','id',obraIds),
+   todos('orcamentos','id,valor_estimado','id',orcamentoIds),
+   todos('pacotes_tecnicos','id,orcamento_id,status,created_at','orcamento_id',orcamentoIds),
+   todos('venda_cotacao_lotes','id,venda_obra_id,pacote_id,status,itens','venda_obra_id',vids),
    todos('compras_necessidades','id,obra_id,status,recebido_em','obra_id',obraIds),
    todos('ordens_producao','id,venda_obra_id,status,bloqueada','venda_obra_id',vids),
    todos('venda_instalacao_itens','id,venda_obra_id,status,quantidade,quantidade_instalada,pendencia,checklist','venda_obra_id',vids),
@@ -101,6 +107,19 @@ export async function GET(req:NextRequest){
   ])
   const nomeCliente=new Map(clientes.map(x=>[x.id,x.nome]))
   const nomesObra=new Map(obras.map(x=>[x.id,{nome:x.nome,cidade:x.cidade,previsao:x.previsao_entrega}]))
+  const valorOrcamento=new Map(orcamentos.map(x=>[x.id,numero(x.valor_estimado)]))
+  // Mesmo pacote técnico escolhido pela Área da Venda: último não substituído do orçamento.
+  const pacoteAtual=new Map<string,string>()
+  for(const p of [...pacotes].filter(p=>p.status!=='substituido').sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))){
+   if(!pacoteAtual.has(p.orcamento_id))pacoteAtual.set(p.orcamento_id,p.id)
+  }
+  const lotesPorVenda=new Map<string,typeof lotes>()
+  for(const lote of lotes){
+   if(lote.status==='cancelado')continue
+   const lista=lotesPorVenda.get(lote.venda_obra_id)||[]
+   lista.push(lote)
+   lotesPorVenda.set(lote.venda_obra_id,lista)
+  }
   const comentarioMaisRecente=new Map<string,string>()
   const qtdComentarios=new Map<string,number>()
   for(const x of comentarios){
@@ -112,22 +131,28 @@ export async function GET(req:NextRequest){
    const cp=compras.filter(x=>x.obra_id===v.obra_id&&v.obra_id)
    const op=ordens.filter(x=>x.venda_obra_id===v.id)
    const it=instalacoes.filter(x=>x.venda_obra_id===v.id)
-   const co=contas.filter(x=>x.venda_obra_id===v.id&&ativo(x.status))
-   const comprado=cp.filter(x=>['aprovado','pedido_emitido','aguardando_entrega','recebido'].includes(x.status)).length
-   const recebido=cp.filter(x=>x.recebido_em||x.status==='recebido').length
-   const feito=op.filter(x=>!x.bloqueada&&['concluido','concluida','concluído','concluída','finalizado','finalizada','produzido','pronto'].includes(String(x.status||'').toLowerCase())).length
-   const pecas=it.reduce((s,x)=>s+numero(x.quantidade),0)
-   const pecasFeitas=it.reduce((s,x)=>s+Math.min(numero(x.quantidade),Math.max(0,numero(x.quantidade_instalada))),0)
-   const previsto=co.reduce((s,x)=>s+numero(x.valor),0)
-   const recebidoFinanceiro=co.reduce((s,x)=>s+Math.min(numero(x.valor),numero(x.valor_pago)),0)
-   const pv={compras:calcPct(comprado,cp.length),mercadoria:calcPct(recebido,cp.length),producao:calcPct(feito,op.length),instalacao:calcPct(pecasFeitas,pecas),financeiro:calcPct(recebidoFinanceiro,previsto)}
+   const contasVenda=contas.filter(x=>x.venda_obra_id===v.id)
+   const co=contasVenda.filter(x=>ativo(x.status))
+   // Os cards de cotação por material são a fonte prioritária da tela da venda.
+   const lotesAtuais=(lotesPorVenda.get(v.id)||[]).filter(l=>l.pacote_id===pacoteAtual.get(v.orcamento_id))
+   const resumo=progressoLotesCotacao(lotesAtuais.map(l=>({status:String(l.status||''),itens:Array.isArray(l.itens)?l.itens:[]})))
+   const totalCompras=resumo.total||cp.length
+   const comprado=resumo.total?resumo.comprados:cp.filter(x=>['aprovado','pedido_emitido','aguardando_entrega','recebido'].includes(String(x.status||'').toLowerCase())).length
+   const recebido=resumo.total?resumo.recebidos:cp.filter(x=>x.recebido_em||String(x.status||'').toLowerCase()==='recebido').length
+   const feito=op.filter(x=>['concluido','concluida','concluído','concluída','finalizado','finalizada','produzido','pronto','recebido'].includes(String(x.status||'').toLowerCase())).length
+   const valorVenda=numero(v.valor_venda)||valorOrcamento.get(v.orcamento_id)||0
+   const recebidoFinanceiro=co.reduce((s,x)=>s+numero(x.valor_pago),0)
+   const saldoContas=co.reduce((s,x)=>s+Math.max(0,numero(x.valor)-numero(x.valor_pago)-numero(x.valor_desconto)),0)
+   const aReceber=contasVenda.length?saldoContas:Math.max(0,valorVenda-recebidoFinanceiro)
+   const instalacao=avaliarFluxoVenda({valorVenda,contas:co,compras:cp,ordens:op,instalacoes:it})
+   const pv={compras:calcPct(comprado,totalCompras),mercadoria:calcPct(recebido,totalCompras),producao:calcPct(feito,op.length),instalacao:instalacao.progressoInstalacao,financeiro:calcPct(Math.max(0,valorVenda-aReceber),valorVenda)}
    const obra=nomesObra.get(v.obra_id)
    const obs:Object=Object.fromEntries(permitidos.filter(s=>s!=='financeiro'||acesso(ctx.mapa,'financeiro')).map(s=>[s,{comentarios:qtdComentarios.get(v.id+':'+s)||0,ultimoComentario:comentarioMaisRecente.get(v.id+':'+s)||null}]))
    return {id:v.id,numero:v.numero,clienteId:v.cliente_id,cliente:nomeCliente.get(v.cliente_id)||'Cliente não identificado',
      obra:obra?.nome||('Venda #'+v.numero),cidade:obra?.cidade||'',previsao:obra?.previsao||null,
      percentualGeral:progressoOperacional(pv.compras,pv.producao,pv.instalacao),
      percentuais:Object.fromEntries(Object.entries(pv).filter(([s])=>s!=='financeiro'||acesso(ctx.mapa,'financeiro'))),
-     contagens:{compras:cp.length,producao:op.length,instalacao:it.length,financeiro:co.length},
+     contagens:{compras:totalCompras,producao:op.length,instalacao:it.length,financeiro:co.length},
      observacoes:obs}
   })
   const nativos:Record<string,{colunas:Array<{id:string;nome:string;ordem:number}>,cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>={}
