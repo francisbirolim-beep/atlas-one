@@ -1,4 +1,6 @@
 import { supabase } from './supabase'
+import { vincularMateriaisGerados } from './producaoSeparacaoRegras'
+import { selecionarUnidadesAprovadas } from './producaoPacoteParcial'
 import type { Usuario } from './tipos'
 import { calcularFormulaCorteIsolada, calcularFormulasCorte, type TipologiaFormulasCorte } from './formulasCorteEngine'
 import { calcularAcessoriosTecnicos } from './formulasAcessoriosEngine'
@@ -159,7 +161,7 @@ function folhasDoItem(item: any) {
   return 1
 }
 
-async function carregarProdutosTecnicos(codigos?: string[]) {
+async function carregarProdutosTecnicos(codigos?: string[], db: typeof supabase = supabase) {
   const codigosUnicos = Array.from(new Set((codigos || []).map(codigoKey).filter(Boolean)))
   const produtos: ProdutoTecnico[] = []
 
@@ -170,7 +172,7 @@ async function carregarProdutosTecnicos(codigos?: string[]) {
   if (codigosUnicos.length) {
     for (let i = 0; i < codigosUnicos.length; i += 150) {
       const lote = codigosUnicos.slice(i, i + 150)
-      const { data } = await supabase
+      const { data } = await db
         .from('produtos')
         .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
         .eq('ativo', true)
@@ -182,7 +184,7 @@ async function carregarProdutosTecnicos(codigos?: string[]) {
     // paginando para não truncar o catálogo.
     const tamanhoPagina = 1000
     for (let inicio = 0; ; inicio += tamanhoPagina) {
-      const { data } = await supabase
+      const { data } = await db
         .from('produtos')
         .select('id,codigo,nome,categoria,unidade,unidade_origem,tamanho_barra_mm,custo,preco')
         .eq('ativo', true)
@@ -199,8 +201,8 @@ async function carregarProdutosTecnicos(codigos?: string[]) {
   return mapa
 }
 
-async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['origem']) {
-  const { data: venda } = await supabase
+async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['origem'], medicaoId?: string, db: typeof supabase = supabase) {
+  const { data: venda } = await db
     .from('vendas_obras')
     .select('id,cliente_id,obra_id,itens_snapshot,config_snapshot,custo_previsto')
     .eq('orcamento_id', orcamento.id)
@@ -219,22 +221,25 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
     }
   }
 
-  const { data: estado } = await supabase.rpc('fn_venda_estado_atual_v1', { p_venda_obra_id: venda.id })
+  const { data: estado } = await db.rpc('fn_venda_estado_atual_v1', { p_venda_obra_id: venda.id })
   const atual: any = estado || {}
   const itensVenda = Array.isArray(atual?.itens_snapshot) ? atual.itens_snapshot : (venda.itens_snapshot || [])
   const configVenda = atual?.config_snapshot || venda.config_snapshot || {}
 
   if (origem === 'medicao_final') {
-    const { data: medicao } = await supabase
+    let consultaMedicao = db
       .from('medicoes_finais')
       .select('id,status_operacional,aprovado_em')
       .eq('orcamento_id', orcamento.id)
       .eq('tipo_medicao', 'tipologia')
-      .eq('status_operacional', 'aprovado')
+    if (medicaoId) consultaMedicao = consultaMedicao.eq('id', medicaoId)
+    else consultaMedicao = consultaMedicao.eq('status_operacional', 'aprovado')
+    const { data: medicao, error: erroMedicao } = await consultaMedicao
       .order('aprovado_em', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+    if (erroMedicao) throw erroMedicao
 
     if (!medicao?.id) {
       return {
@@ -247,56 +252,67 @@ async function estadoAtualDoOrcamento(orcamento: any, origem: PacoteTecnico['ori
       }
     }
 
-    const { data: itensMedicao } = await supabase
+    let consultaItens = db
       .from('medicao_itens')
       .select('id,ordem,descricao,ambiente,quantidade,medido,status_medicao,contramarco,producao_largura_mm,producao_altura_mm,largura_baixo_mm,largura_meio_mm,largura_cima_mm,altura_direita_mm,altura_meio_mm,altura_esquerda_mm')
       .eq('medicao_id', medicao.id)
-      .eq('medido', true)
+    if (!medicaoId) consultaItens = consultaItens.eq('medido', true)
+    const { data: itensMedicao, error: erroItensMedicao } = await consultaItens
       .order('ordem', { ascending: true })
 
-    const listaMedida = Array.isArray(itensMedicao) ? itensMedicao : []
-    const usaBlocosDeOrdem = listaMedida.some((item: any) => Number(item?.ordem || 0) >= 100)
+    if (erroItensMedicao) throw erroItensMedicao
+    let itensFinais: any[]
+    if (medicaoId) {
+      // Novo fluxo: estritamente as unidades aprovadas, sem depender da
+      // aprovação global e sem movimentar o restante da obra.
+      const selecao = selecionarUnidadesAprovadas(itensVenda, itensMedicao || [], medicao.id, medicao.aprovado_em || null)
+      if (selecao.erro) throw new Error(selecao.erro)
+      itensFinais = selecao.itens
+    } else {
+      // Legado: manter a mesma seleção da medição inteiramente aprovada.
+      const listaMedida = Array.isArray(itensMedicao) ? itensMedicao : []
+      const usaBlocosDeOrdem = listaMedida.some((item: any) => Number(item?.ordem || 0) >= 100)
 
-    const menorPositiva = (valores: unknown[]) => {
-      const validos = valores.map(Number).filter(v => Number.isFinite(v) && v > 0)
-      return validos.length ? Math.min(...validos) : 0
-    }
+      const menorPositiva = (valores: unknown[]) => {
+        const validos = valores.map(Number).filter(v => Number.isFinite(v) && v > 0)
+        return validos.length ? Math.min(...validos) : 0
+      }
 
-    const itensFinais = listaMedida.flatMap((med: any) => {
-      const ordem = Math.max(0, Math.floor(Number(med?.ordem || 0)))
-      const indice = usaBlocosDeOrdem ? Math.floor(ordem / 100) : ordem
-      const base = itensVenda[indice]
-      if (!base) return []
+      itensFinais = listaMedida.flatMap((med: any) => {
+        const ordem = Math.max(0, Math.floor(Number(med?.ordem || 0)))
+        const indice = usaBlocosDeOrdem ? Math.floor(ordem / 100) : ordem
+        const base = itensVenda[indice]
+        if (!base) return []
 
-      const largura = Number(med?.producao_largura_mm) > 0
-        ? Number(med.producao_largura_mm)
-        : menorPositiva([med?.largura_baixo_mm, med?.largura_meio_mm, med?.largura_cima_mm])
-      const altura = Number(med?.producao_altura_mm) > 0
-        ? Number(med.producao_altura_mm)
-        : menorPositiva([med?.altura_direita_mm, med?.altura_meio_mm, med?.altura_esquerda_mm])
+        const largura = Number(med?.producao_largura_mm) > 0
+          ? Number(med.producao_largura_mm)
+          : menorPositiva([med?.largura_baixo_mm, med?.largura_meio_mm, med?.largura_cima_mm])
+        const altura = Number(med?.producao_altura_mm) > 0
+          ? Number(med.producao_altura_mm)
+          : menorPositiva([med?.altura_direita_mm, med?.altura_meio_mm, med?.altura_esquerda_mm])
 
-      if (largura <= 0 || altura <= 0) return []
+        if (largura <= 0 || altura <= 0) return []
 
-      return [{
-        ...base,
-        ambiente: med?.ambiente || base?.ambiente || null,
-        descricao: med?.descricao || base?.descricao || null,
-        contramarco: med?.contramarco || base?.contramarco || null,
-        largura_mm: largura,
-        altura_mm: altura,
-        quantidade: 1,
-        medicao_final: {
-          medicao_id: medicao.id,
-          medicao_item_id: med.id,
+        return [{
+          ...base,
+          ambiente: med?.ambiente || base?.ambiente || null,
+          descricao: med?.descricao || base?.descricao || null,
+          contramarco: med?.contramarco || base?.contramarco || null,
           largura_mm: largura,
           altura_mm: altura,
-          larguras_mm: [med?.largura_baixo_mm, med?.largura_meio_mm, med?.largura_cima_mm],
-          alturas_mm: [med?.altura_direita_mm, med?.altura_meio_mm, med?.altura_esquerda_mm],
-          aprovado_em: medicao.aprovado_em || null,
-        },
-      }]
-    })
-
+          quantidade: 1,
+          medicao_final: {
+            medicao_id: medicao.id,
+            medicao_item_id: med.id,
+            largura_mm: largura,
+            altura_mm: altura,
+            larguras_mm: [med?.largura_baixo_mm, med?.largura_meio_mm, med?.largura_cima_mm],
+            alturas_mm: [med?.altura_direita_mm, med?.altura_meio_mm, med?.altura_esquerda_mm],
+            aprovado_em: medicao.aprovado_em || null,
+          },
+        }]
+      })
+    }
     return {
       venda,
       itens: itensFinais,
@@ -486,22 +502,25 @@ export async function gerarPacoteTecnico(
     perdaCorteMm?: number
     minimoSobraReaproveitavelMm?: number
     referenciasWvetro?: Record<string, any>
+    medicaoId?: string
+    db?: typeof supabase
   } = {}
 ): Promise<{ ok: true; pacote: PacoteTecnico } | { ok: false; error: string }> {
-  const { data: orcamento, error: erroOrc } = await supabase
+  const db = opcoes.db || supabase
+  const { data: orcamento, error: erroOrc } = await db
     .from('orcamentos')
     .select('id,cliente_id,obra_id,itens,contramarco,acabamento,valor_estimado')
     .eq('id', orcamentoId)
     .maybeSingle()
   if (erroOrc || !orcamento) return { ok: false, error: 'Orçamento não encontrado.' }
 
-  const estado = await estadoAtualDoOrcamento(orcamento, origem)
+  const estado = await estadoAtualDoOrcamento(orcamento, origem, opcoes.medicaoId, db)
   const itens = Array.isArray(estado.itens) ? estado.itens : []
   if (itens.length === 0) return { ok: false, error: 'O orçamento não possui itens estruturados.' }
 
   const tipologiaIds = Array.from(new Set(itens.map((i: any) => i?.tipologia_id).filter(Boolean))) as string[]
   const formulas = tipologiaIds.length > 0
-    ? await supabase
+    ? await db
         .from('engenharia_tipologia_formulas_corte')
         .select('id,tipologia_id,configuracao_label,versao,variaveis,pecas,acessorios,vidro,metadados_editor,status,ativo')
         .in('tipologia_id', tipologiaIds)
@@ -546,9 +565,9 @@ export async function gerarPacoteTecnico(
     ]
     return raws.flatMap((raw: any) => candidatosCodigoWvetro(raw))
   })
-  const produtos = await carregarProdutosTecnicos([...codigosFormula, ...codigosWvetro])
+  const produtos = await carregarProdutosTecnicos([...codigosFormula, ...codigosWvetro], db)
 
-  const { data: versoes } = await supabase
+  const { data: versoes } = await db
     .from('pacotes_tecnicos')
     .select('versao')
     .eq('orcamento_id', orcamentoId)
@@ -557,7 +576,7 @@ export async function gerarPacoteTecnico(
     .limit(1)
   const versao = n(versoes?.[0]?.versao, 0) + 1
 
-  const { data: pacoteRaw, error: erroPacote } = await supabase.from('pacotes_tecnicos').insert({
+  const { data: pacoteRaw, error: erroPacote } = await db.from('pacotes_tecnicos').insert({
     orcamento_id: orcamentoId,
     venda_obra_id: estado.venda?.id || null,
     cliente_id: estado.cliente_id || null,
@@ -577,8 +596,17 @@ export async function gerarPacoteTecnico(
 
   const materiais: any[] = []
   let ordem = 0
+  // Marcadores por posição física no array: itens de orçamento repetidos
+  // compartilham item_ref. Preservar a referência comercial original.
+  const marcadoresMedicao: Array<{ inicio: number; medicaoItemId: string | null }> = []
 
   for (let indice = 0; indice < itens.length; indice += 1) {
+    marcadoresMedicao.push({
+      inicio: materiais.length,
+      medicaoItemId: origem === 'medicao_final'
+        ? String(itens[indice]?.medicao_final?.medicao_item_id || '') || null
+        : null,
+    })
     const item: any = itens[indice]
     const largura = n(item?.largura_mm)
     const altura = n(item?.altura_mm)
@@ -769,13 +797,19 @@ export async function gerarPacoteTecnico(
     }
   }
 
-  if (materiais.length > 0) {
-    const { error } = await supabase.from('pacote_tecnico_materiais').insert(materiais)
+  // Identificar a unidade física sem modificar o item_ref comercial.
+  const materiaisPersistencia = origem === 'medicao_final'
+    ? vincularMateriaisGerados(materiais, marcadoresMedicao)
+    : materiais
+
+  if (materiaisPersistencia.length > 0) {
+    const { error } = await db.from('pacote_tecnico_materiais').insert(materiaisPersistencia)
     if (error) return { ok: false, error: error.message }
   }
 
-  await recalcularAproveitamentoPacote(pacote.id, [])
-  await supabase.from('pacotes_tecnicos').update({ status: 'calculado' }).eq('id', pacote.id)
+  const aproveitamento = await recalcularAproveitamentoPacote(pacote.id, [], db)
+  if (opcoes.medicaoId && !aproveitamento.ok) return { ok: false, error: aproveitamento.error }
+  await db.from('pacotes_tecnicos').update({ status: 'calculado' }).eq('id', pacote.id)
   return { ok: true, pacote: { ...pacote, status: 'calculado' } }
 }
 
@@ -798,6 +832,22 @@ export async function gerarPacoteMedicaoFinal(
     .neq('status', 'substituido')
 
   return gerado
+}
+
+
+export async function gerarPacoteMedicaoFinalParcial(
+  orcamentoId: string, medicaoId: string, usuario: Usuario | null,
+  db: typeof supabase = supabase,
+): Promise<{ ok: true; pacote: PacoteTecnico } | { ok: false; error: string }> {
+  // Gerar pacote com unidades aprovadas, preservando os demais pacotes ativos.
+  // Não liberar OP, corte, compra, reserva ou instalação por esta operação.
+  try {
+    return await gerarPacoteTecnico(orcamentoId, 'medicao_final', usuario, {
+      medicaoId, db, perdaCorteMm: 0, minimoSobraReaproveitavelMm: 300,
+    })
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Falha ao gerar pacote parcial.' }
+  }
 }
 
 export async function listarPacotesDaObra(obraId: string): Promise<PacoteTecnico[]> {
@@ -831,12 +881,12 @@ export async function listarSobrasDisponiveis(produtoIds?: string[]): Promise<So
   return (data || []) as SobraPerfil[]
 }
 
-export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds: string[]) {
+export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds: string[], db: typeof supabase = supabase) {
   const [{ data: pacote }, { data: materiais }, { data: sobras }, { data: separacoes }] = await Promise.all([
-    supabase.from('pacotes_tecnicos').select('*').eq('id', pacoteId).maybeSingle(),
-    supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).in('categoria', ['perfil', 'contramarco']).eq('excluido', false),
-    sobraIds.length ? supabase.from('estoque_sobras_perfis').select('*').in('id', sobraIds) : Promise.resolve({ data: [] as any[] }),
-    supabase.from('pacote_tecnico_separacoes').select('*').eq('pacote_id', pacoteId).eq('tipo_origem', 'barra_inteira_estoque').neq('status', 'cancelado'),
+    db.from('pacotes_tecnicos').select('*').eq('id', pacoteId).maybeSingle(),
+    db.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).in('categoria', ['perfil', 'contramarco']).eq('excluido', false),
+    sobraIds.length ? db.from('estoque_sobras_perfis').select('*').in('id', sobraIds) : Promise.resolve({ data: [] as any[] }),
+    db.from('pacote_tecnico_separacoes').select('*').eq('pacote_id', pacoteId).eq('tipo_origem', 'barra_inteira_estoque').neq('status', 'cancelado'),
   ])
   if (!pacote) return { ok: false as const, error: 'Pacote técnico não encontrado.' }
 
@@ -859,12 +909,12 @@ export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds:
     minimoSobraReaproveitavelMm: n(pacote.minimo_sobra_reaproveitavel_mm),
   })
 
-  const { data: barrasAntigas } = await supabase.from('pacote_tecnico_barras').select('id').eq('pacote_id', pacoteId)
-  if (barrasAntigas?.length) await supabase.from('pacote_tecnico_barras').delete().eq('pacote_id', pacoteId)
+  const { data: barrasAntigas } = await db.from('pacote_tecnico_barras').select('id').eq('pacote_id', pacoteId)
+  if (barrasAntigas?.length) await db.from('pacote_tecnico_barras').delete().eq('pacote_id', pacoteId)
 
   for (let i = 0; i < resultado.barras.length; i += 1) {
     const barra = resultado.barras[i]
-    const { data: criada, error } = await supabase.from('pacote_tecnico_barras').insert({
+    const { data: criada, error } = await db.from('pacote_tecnico_barras').insert({
       pacote_id: pacoteId,
       produto_id: barra.produto_id,
       cor_ref: barra.cor_ref || null,
@@ -878,7 +928,7 @@ export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds:
     }).select('id').single()
     if (error || !criada) return { ok: false as const, error: error?.message || 'Erro ao salvar barras.' }
     if (barra.cortes.length) {
-      await supabase.from('pacote_tecnico_cortes').insert(barra.cortes.map((corte, ordem) => ({
+      await db.from('pacote_tecnico_cortes').insert(barra.cortes.map((corte, ordem) => ({
         barra_id: criada.id,
         material_id: corte.material_id || null,
         item_ref: corte.item_ref || null,
@@ -891,8 +941,8 @@ export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds:
   }
 
   // Recria somente linhas automáticas de perfis. Itens manuais são preservados.
-  await supabase.from('pacote_tecnico_compras').delete().eq('pacote_id', pacoteId).eq('categoria', 'perfil').eq('origem', 'automatico')
-  await supabase.from('pacote_tecnico_compras').delete().eq('pacote_id', pacoteId).eq('categoria', 'contramarco').eq('origem', 'automatico')
+  await db.from('pacote_tecnico_compras').delete().eq('pacote_id', pacoteId).eq('categoria', 'perfil').eq('origem', 'automatico')
+  await db.from('pacote_tecnico_compras').delete().eq('pacote_id', pacoteId).eq('categoria', 'contramarco').eq('origem', 'automatico')
 
   const separadasPorProduto = new Map<string, number>()
   ;((separacoes || []) as SeparacaoPacote[]).forEach(s => separadasPorProduto.set(s.produto_id, (separadasPorProduto.get(s.produto_id) || 0) + n(s.quantidade)))
@@ -901,7 +951,7 @@ export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds:
   ;((materiais || []) as MaterialPacote[]).forEach(m => { if (m.produto_id && !materiaisMapa.has(m.produto_id)) materiaisMapa.set(m.produto_id, m) })
 
   if (compraBarras.length) {
-    await supabase.from('pacote_tecnico_compras').insert(compraBarras.map(item => {
+    await db.from('pacote_tecnico_compras').insert(compraBarras.map(item => {
       const material = materiaisMapa.get(item.produto_id)
       const separadas = separadasPorProduto.get(item.produto_id) || 0
       const faltante = Math.max(0, item.quantidade - separadas)
@@ -923,11 +973,11 @@ export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds:
   }
 
   // Demais materiais calculados entram na lista apenas quando a regra está validada.
-  const demais = ((await supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).not('categoria', 'in', '(perfil,contramarco)').eq('excluido', false)).data || []) as MaterialPacote[]
-  await supabase.from('pacote_tecnico_compras').delete().eq('pacote_id', pacoteId).neq('categoria', 'perfil').neq('categoria', 'contramarco').eq('origem', 'automatico')
+  const demais = ((await db.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).not('categoria', 'in', '(perfil,contramarco)').eq('excluido', false)).data || []) as MaterialPacote[]
+  await db.from('pacote_tecnico_compras').delete().eq('pacote_id', pacoteId).neq('categoria', 'perfil').neq('categoria', 'contramarco').eq('origem', 'automatico')
   const calculados = demais.filter(m => m.status_calculo === 'calculado' && n(m.quantidade_ajustada) > 0)
   if (calculados.length) {
-    await supabase.from('pacote_tecnico_compras').insert(calculados.map(m => ({
+    await db.from('pacote_tecnico_compras').insert(calculados.map(m => ({
       pacote_id: pacoteId,
       material_id: m.id,
       categoria: m.categoria,
@@ -942,7 +992,7 @@ export async function recalcularAproveitamentoPacote(pacoteId: string, sobraIds:
     })))
   }
 
-  await supabase.from('pacotes_tecnicos').update({ status: 'calculado' }).eq('id', pacoteId)
+  await db.from('pacotes_tecnicos').update({ status: 'calculado' }).eq('id', pacoteId)
   return { ok: true as const, resultado }
 }
 

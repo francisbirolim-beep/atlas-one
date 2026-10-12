@@ -7,6 +7,7 @@ import {
   Landmark,
   MapPinned,
   PackageSearch,
+  PackageCheck,
   ReceiptText,
   Ruler,
   BarChart3,
@@ -43,7 +44,8 @@ export const GUIAS: Guia[] = [
   { href: '/whatsapp/configuracao', label: 'Configuração WhatsApp', icon: Settings, grupo: 'Comercial', masterOnly: true },
 
   { href: '/producao/medicao-final', label: 'Medição Final', icon: Ruler, grupo: 'Produção' },
-  { href: '/producao', label: 'Produção', icon: Factory, grupo: 'Produção' },
+  { href: '/producao', label: 'Kanban Geral', icon: Factory, grupo: 'Produção' },
+  { href: '/producao/separacao', label: 'Separação de Materiais', icon: PackageCheck, grupo: 'Produção' },
 
   { href: '/engenharia', label: 'Engenharia', icon: Landmark, grupo: 'Engenharia' },
 

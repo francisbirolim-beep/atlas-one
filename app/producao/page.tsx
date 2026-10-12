@@ -71,6 +71,9 @@ export default function Producao() {
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
   const [medicoes, setMedicoes] = useState<MedicaoFinalProducao[]>([])
+  const [pecasAprovadas, setPecasAprovadas] = useState<Array<{id: string; descricao: string; ambiente: string; status: string; motivo: string}>>([])
+  const [carregandoPecas, setCarregandoPecas] = useState(false)
+  const [erroPecas, setErroPecas] = useState('')
   const [liberandoId, setLiberandoId] = useState<string | null>(null)
   const [editandoCard, setEditandoCard] = useState(false)
   const [tituloCard, setTituloCard] = useState('')
@@ -161,11 +164,32 @@ export default function Producao() {
     return String(card.descricao || '').replace(/\s*\[medicao:[^\]]+\]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
   }
 
+  async function carregarPecasAprovadas(medicaoId: string) {
+    setCarregandoPecas(true)
+    setErroPecas('')
+    try {
+      const token = await tokenAtual()
+      const res = await fetch('/api/producao/separacao?medicao=' + encodeURIComponent(medicaoId), {
+        headers: { Authorization: 'Bearer ' + (token || '') }, cache: 'no-store',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'A lista de peças não está disponível.')
+      setPecasAprovadas(Array.isArray(json.itens) ? json.itens : [])
+    } catch (e: any) {
+      setErroPecas(e?.message || 'Não foi possível conferir as peças.')
+    } finally {
+      setCarregandoPecas(false)
+    }
+  }
+
   function abrirCard(card: SetorKanbanItem) {
     setSelecionado(card)
     setEditandoCard(false)
     setTituloCard(card.titulo)
     setDescricaoCard(descricaoVisivel(card))
+    setPecasAprovadas([])
+    const medicao = medicaoDoCard(card)
+    if (medicao) void carregarPecasAprovadas(medicao.id)
   }
 
   function abrirNovaEtapa() {
@@ -262,6 +286,10 @@ export default function Producao() {
     const liberadoEm = (card as SetorKanbanItem & { liberado_producao_em?: string | null }).liberado_producao_em
     if (destinoEhLiberacao && medicao && !liberadoEm) {
       await liberarProducao(card, colunaId)
+      return
+    }
+    if (medicao && !liberadoEm) {
+      setErro('Este card possui Medição Final ainda não liberada integralmente. Confira as peças aprovadas na Separação de Materiais, sem avançar a obra inteira.')
       return
     }
 
@@ -387,6 +415,12 @@ export default function Producao() {
 
   const ordensSelecionadas = selecionado ? (ordensPorCard.get(selecionado.id) || []) : []
   const medicaoSelecionada = medicaoDoCard(selecionado)
+  // Em medição parcial, jamais exibir OP de peça não aprovada como liberada.
+  const ordensVisiveis = medicaoSelecionada && medicaoSelecionada.status_operacional !== 'aprovado'
+    ? ordensSelecionadas.filter(o =>
+      Boolean(o.item_snapshot?.medicao_final?.medicao_item_id) &&
+      pecasAprovadas.some(p => p.id === o.item_snapshot?.medicao_final?.medicao_item_id))
+    : ordensSelecionadas
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -397,6 +431,7 @@ export default function Producao() {
             <div><h1 className="text-lg font-bold text-brand-navy">Produção</h1><p className="text-xs text-slate-500">Cliente → Obra → Venda → Ordem de Produção → Plano de Corte</p></div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/producao/separacao" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><Package size={16}/> Separação de Materiais</Link>
             <Link href="/producao/plano-corte" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><FileSpreadsheet size={16}/> Plano de Corte</Link>
             <button onClick={abrirNovaEtapa} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700"><Plus size={16}/> Nova etapa</button>
             <button onClick={() => setNovaAberta(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium"><Plus size={16}/> Nova produção</button>
@@ -554,7 +589,7 @@ export default function Producao() {
                     {selecionado?.orcamento_id && medicaoSelecionada.status_operacional === 'aprovado' && (
                       <Link href={`/orcamento/${selecionado.orcamento_id}/plano-corte`} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"><FileSpreadsheet size={14}/> Plano de corte final</Link>
                     )}
-                    {medicaoSelecionada.status_operacional !== 'aprovado' && (
+                    {medicaoSelecionada.status_operacional === 'concluido' && (
                       <button
                         onClick={() => selecionado && void liberarProducao(selecionado)}
                         disabled={liberandoId === selecionado?.id}
@@ -568,8 +603,29 @@ export default function Producao() {
                   <p className="mt-3 text-[11px] leading-5 text-slate-500">Ao liberar, o Atlas aprova a Medição Final, dispara os fluxos de Vidros/MEE e gera o pacote técnico usando as menores medidas finais registradas.</p>
                 </div>
               )}
-              {ordensSelecionadas.length === 0 && <p className="text-sm text-slate-400">As ordens de produção aparecerão aqui quando os gates técnicos e de materiais forem liberados.</p>}
-              {ordensSelecionadas.map(o => (
+              {medicaoSelecionada && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">Peças medidas e aprovadas para separação</h4>
+                    <Link href={`/producao/separacao?medicao=${medicaoSelecionada.id}`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white">Abrir separação</Link>
+                  </div>
+                  {carregandoPecas && <p className="mt-2 text-xs text-slate-500">Conferindo peças aprovadas...</p>}
+                  {erroPecas && <p className="mt-2 text-xs text-amber-700">{erroPecas}</p>}
+                  {!carregandoPecas && !erroPecas && pecasAprovadas.length === 0 && (
+                    <p className="mt-2 text-xs text-slate-500">Nenhuma peça aprovada individualmente. Peças ainda não medidas não entram nesta fila.</p>
+                  )}
+                  <div className="mt-3 space-y-2">{pecasAprovadas.map(p => (
+                    <div key={p.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      <div><p className="text-xs font-semibold text-slate-800">{p.descricao}</p>
+                        <p className="text-[11px] text-slate-500">{p.ambiente || 'Ambiente não informado'}</p>
+                        {p.status === 'pendente' && p.motivo && <p className="text-[11px] text-amber-700">Motivo: {p.motivo}</p>}</div>
+                      <span className="text-[11px] font-semibold text-slate-600">{p.status === 'separado' ? 'Material conferido' : p.status === 'pendente' ? 'Aguardando material' : 'Aguardando separação'}</span>
+                    </div>
+                  ))}</div>
+                </div>
+              )}
+              {ordensVisiveis.length === 0 && <p className="text-sm text-slate-400">Ordens operacionais aparecem após a liberação técnica correspondente. Peças sem Medição Final aprovada ficam ocultas nesta etapa.</p>}
+              {ordensVisiveis.map(o => (
                 <div key={o.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
