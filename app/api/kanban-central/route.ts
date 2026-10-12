@@ -1,7 +1,7 @@
 import { NextRequest,NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
-import { ETAPAS,SETORES_ACESSO,QUADROS,calcPct,progressoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
+import { ETAPAS,SETORES_ACESSO,QUADROS,calcPct,percentualFinanceiroKanban,progressoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
 import { progressoLotesCotacao } from '@/lib/cotacaoEtapas'
 import { avaliarFluxoVenda } from '@/lib/vendaFluxoResumo'
 
@@ -105,6 +105,30 @@ export async function GET(req:NextRequest){
    vids.length?db.from('central_kanban_posicoes').select('setor,venda_obra_id,coluna_id,updated_at').eq('empresa_id',ctx.u.empresa_id).in('setor',permitidos).in('venda_obra_id',vids).limit(5000).then(r=>{if(r.error)throw r.error;return r.data||[]}):Promise.resolve([]),
    vids.length?db.from('central_kanban_comentarios').select('venda_obra_id,setor,created_at').eq('empresa_id',ctx.u.empresa_id).in('setor',permitidos).in('venda_obra_id',vids).order('created_at',{ascending:false}).limit(5000).then(r=>{if(r.error)throw r.error;return r.data||[]}):Promise.resolve([]),
   ])
+  // A Venda 360 também considera descontos lançados nas alocações financeiras.
+  // Consultar somente contas da empresa já filtradas acima, sem expor dados de terceiros.
+  const descontosFinanceiro:Array<{conta_receber_id:string;tipo:string;valor:number}>=[]
+  if(acesso(ctx.mapa,'financeiro')){
+   const idsContas=contas.map(c=>c.id)
+   for(let i=0;i<idsContas.length;i+=200){
+    let inicio=0
+    while(true){
+     const pagina=await db.from('financeiro_recebimento_alocacoes')
+      .select('conta_receber_id,tipo,valor')
+      .in('conta_receber_id',idsContas.slice(i,i+200))
+      .eq('tipo','desconto').range(inicio,inicio+999)
+     if(pagina.error)throw pagina.error
+     descontosFinanceiro.push(...(pagina.data||[]))
+     if((pagina.data||[]).length<1000)break
+     inicio+=1000
+    }
+   }
+  }
+  const descontosPorConta=new Map<string,typeof descontosFinanceiro>()
+  for(const a of descontosFinanceiro){
+   if(!descontosPorConta.has(a.conta_receber_id))descontosPorConta.set(a.conta_receber_id,[])
+   descontosPorConta.get(a.conta_receber_id)!.push(a)
+  }
   const nomeCliente=new Map(clientes.map(x=>[x.id,x.nome]))
   const nomesObra=new Map(obras.map(x=>[x.id,{nome:x.nome,cidade:x.cidade,previsao:x.previsao_entrega}]))
   const valorOrcamento=new Map(orcamentos.map(x=>[x.id,numero(x.valor_estimado)]))
@@ -135,18 +159,17 @@ export async function GET(req:NextRequest){
    const comprado=cp.filter(x=>['aprovado','pedido_emitido','aguardando_entrega','recebido'].includes(x.status)).length
    const recebido=cp.filter(x=>x.recebido_em||x.status==='recebido').length
    const valorVenda=numero(v.valor_venda)||valorOrcamento.get(v.orcamento_id)||0
-   const recebidoFinanceiro=co.reduce((s,x)=>s+numero(x.valor_pago),0)
-   const saldoContas=co.reduce((s,x)=>s+Math.max(0,numero(x.valor)-numero(x.valor_pago)-numero(x.valor_desconto)),0)
-   const aReceber=contasVenda.length?saldoContas:Math.max(0,valorVenda-recebidoFinanceiro)
    const instalacao=avaliarFluxoVenda({valorVenda,contas:co,compras:cp,ordens:op,instalacoes:it})
-   const pv={compras:calcPct(resumoLotes.total?resumoLotes.comprados:comprado,comprasBase),mercadoria:calcPct(resumoLotes.total?resumoLotes.recebidos:recebido,comprasBase),producao:calcPct(instalacao.ordensConcluidas,op.length),instalacao:instalacao.progressoInstalacao,financeiro:calcPct(Math.max(0,valorVenda-aReceber),valorVenda)}
+   const financeiro=acesso(ctx.mapa,'financeiro')
+    ?percentualFinanceiroKanban(co,co.flatMap(c=>descontosPorConta.get(c.id)||[]),valorVenda):0
+   const pv={compras:calcPct(resumoLotes.total?resumoLotes.comprados:comprado,comprasBase),mercadoria:calcPct(resumoLotes.total?resumoLotes.recebidos:recebido,comprasBase),producao:calcPct(instalacao.ordensConcluidas,op.length),instalacao:instalacao.progressoInstalacao,financeiro}
    const obra=nomesObra.get(v.obra_id)
    const obs:Object=Object.fromEntries(permitidos.filter(s=>s!=='financeiro'||acesso(ctx.mapa,'financeiro')).map(s=>[s,{comentarios:qtdComentarios.get(v.id+':'+s)||0,ultimoComentario:comentarioMaisRecente.get(v.id+':'+s)||null}]))
    return {id:v.id,numero:v.numero,clienteId:v.cliente_id,cliente:nomeCliente.get(v.cliente_id)||'Cliente não identificado',
      obra:obra?.nome||('Venda #'+v.numero),cidade:obra?.cidade||'',previsao:obra?.previsao||null,
      percentualGeral:progressoOperacional(pv.compras,pv.producao,pv.instalacao),
      percentuais:Object.fromEntries(Object.entries(pv).filter(([s])=>s!=='financeiro'||acesso(ctx.mapa,'financeiro'))),
-     contagens:{compras:comprasBase,producao:op.length,instalacao:it.length,financeiro:co.length},
+     contagens:{compras:comprasBase,producao:op.length,instalacao:it.length,financeiro:acesso(ctx.mapa,'financeiro')?co.length:0},
      observacoes:obs}
   })
   const nativos:Record<string,{colunas:Array<{id:string;nome:string;ordem:number}>,cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>={}
