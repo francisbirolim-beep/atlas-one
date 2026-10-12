@@ -147,7 +147,15 @@ export default function Producao() {
     return vincularCardAMedicao(card, medicoes)
   }
 
-  function cardsDaColuna(id: string) { return cards.filter(c => c.coluna_id === id) }
+  function cardsDaColuna(id: string) {
+    return cards.filter(c => {
+      if(c.coluna_id!==id)return false
+      // Serviços avulsos, sem orçamento, preservam seu fluxo independente.
+      if(!c.orcamento_id)return true
+      // Uma obra só entra na fila medida por um card de Medição Final identificado.
+      return temMarcadorMedicaoDoCard(c)&&Boolean(vincularCardAMedicao(c,medicoes))
+    })
+  }
 
   function descricaoVisivel(card: SetorKanbanItem) {
     return String(card.descricao || '').replace(/\s*\[medicao:[^\]]+\]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()

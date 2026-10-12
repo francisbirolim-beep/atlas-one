@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { usuarioAtual } from './auth'
+import { medicoesElegiveisParaProducao } from './producaoMedicaoElegibilidade'
 
 export type OrdemProducao = {
   id: string
@@ -118,10 +119,19 @@ export async function listarMedicoesFinaisProducao(): Promise<MedicaoFinalProduc
     return []
   }
 
-  return (data || []).map((row: any) => ({
-    ...row,
-    orcamento_numero: row.orcamentos?.numero || null,
-  })) as MedicaoFinalProducao[]
+  const ids=(data||[]).map((m:any)=>m.id)
+  if(!ids.length)return []
+  const {data:unidades,error:erroUnidades}=await supabase.from('medicao_itens')
+    .select('medicao_id,medido,quantidade').in('medicao_id',ids)
+  if(erroUnidades){
+    console.error('Não foi possível validar unidades medidas para Produção:',erroUnidades)
+    return []
+  }
+  return medicoesElegiveisParaProducao((data||[]) as MedicaoFinalProducao[],unidades||[])
+    .map((row: any) => ({
+      ...row,
+      orcamento_numero: row.orcamentos?.numero || null,
+    })) as MedicaoFinalProducao[]
 }
 
 export async function marcarCardLiberadoProducao(

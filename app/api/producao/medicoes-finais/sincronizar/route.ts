@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { medicoesElegiveisParaProducao } from '@/lib/producaoMedicaoElegibilidade'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -85,11 +86,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Medição concluída não encontrada nesta empresa.' }, { status: 404 })
     }
 
+    // Conferir cada unidade antes de inserir o card. Medição incompleta
+    // permanece na Medição Final; não é antecipada para a Produção.
+    const idsMedicoes = (medicoes||[]).map(m=>m.id)
+    const {data:unidades,error:erroUnidades}=idsMedicoes.length
+      ?await supabaseAdmin.from('medicao_itens')
+       .select('medicao_id,medido,quantidade')
+       .eq('empresa_id',usuario.empresa_id).in('medicao_id',idsMedicoes)
+      :{data:[],error:null}
+    if(erroUnidades)throw erroUnidades
+    const elegiveis=medicoesElegiveisParaProducao(medicoes||[],unidades||[])
+    if(medicaoId&&elegiveis.length===0){
+      return NextResponse.json({error:'A medição tem unidades sem medida final concluída ou agrupadas. Libere apenas as peças medidas individualmente.'},{status:409})
+    }
+
     let criados = 0
     let atualizados = 0
     let ignorados = 0
 
-    for (const medicao of medicoes || []) {
+    for (const medicao of elegiveis) {
       // A identificação é pela Medição Final, nunca só pelo orçamento:
       // dois envios do mesmo orçamento não podem sobrescrever o card um do outro.
       const marcador = '[medicao:' + medicao.id + ']'
@@ -140,6 +155,7 @@ export async function POST(req: NextRequest) {
       atualizados,
       ignorados,
       totalMedicoes: medicoes?.length || 0,
+      medicoesElegiveis: elegiveis.length,
       ...(medicaoId ? { medicaoSincronizada: criados + atualizados + ignorados > 0 } : {}),
     })
   } catch (error: any) {
