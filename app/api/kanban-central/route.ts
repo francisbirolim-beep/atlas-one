@@ -1,7 +1,7 @@
 import { NextRequest,NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
-import { ETAPAS,SETORES_ACESSO,QUADROS,calcPct,percentualFinanceiroKanban,progressoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
+import { ETAPAS,SETORES_ACESSO,QUADROS,calcPct,percentualFinanceiroKanban,progressoOperacional,ehColunaConclusaoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
 import { progressoLotesCotacao } from '@/lib/cotacaoEtapas'
 import { avaliarFluxoVenda } from '@/lib/vendaFluxoResumo'
 
@@ -162,6 +162,10 @@ export async function GET(req:NextRequest){
    const instalacao=avaliarFluxoVenda({valorVenda,contas:co,compras:cp,ordens:op,instalacoes:it})
    const financeiro=acesso(ctx.mapa,'financeiro')
     ?percentualFinanceiroKanban(co,co.flatMap(c=>descontosPorConta.get(c.id)||[]),valorVenda):0
+   // As conclusões vêm do setor. Financeiro também confere os descontos alocados,
+   // usando a mesma regra conciliada que determina seu percentual na Central.
+   const conclusoes=Object.fromEntries(instalacao.etapas.filter(e=>e.id!=='venda').map(e=>[e.id,e.concluida]))
+   if(acesso(ctx.mapa,'financeiro'))conclusoes.financeiro=financeiro===100
    const pv={compras:calcPct(resumoLotes.total?resumoLotes.comprados:comprado,comprasBase),mercadoria:calcPct(resumoLotes.total?resumoLotes.recebidos:recebido,comprasBase),producao:calcPct(instalacao.ordensConcluidas,op.length),instalacao:instalacao.progressoInstalacao,financeiro}
    const obra=nomesObra.get(v.obra_id)
    const obs:Object=Object.fromEntries(permitidos.filter(s=>s!=='financeiro'||acesso(ctx.mapa,'financeiro')).map(s=>[s,{comentarios:qtdComentarios.get(v.id+':'+s)||0,ultimoComentario:comentarioMaisRecente.get(v.id+':'+s)||null}]))
@@ -169,6 +173,7 @@ export async function GET(req:NextRequest){
      obra:obra?.nome||('Venda #'+v.numero),cidade:obra?.cidade||'',previsao:obra?.previsao||null,
      percentualGeral:progressoOperacional(pv.compras,pv.producao,pv.instalacao),
      percentuais:Object.fromEntries(Object.entries(pv).filter(([s])=>s!=='financeiro'||acesso(ctx.mapa,'financeiro'))),
+     conclusoes:Object.fromEntries(Object.entries(conclusoes).filter(([s])=>s!=='financeiro'||acesso(ctx.mapa,'financeiro'))),
      contagens:{compras:comprasBase,producao:op.length,instalacao:it.length,financeiro:acesso(ctx.mapa,'financeiro')?co.length:0},
      observacoes:obs}
   })
@@ -252,6 +257,63 @@ export async function POST(req:NextRequest){
    if(r.error)throw r.error
    return NextResponse.json({ok:true})
   }
+  // Mover card não executa recebimento, fechamento financeiro nem finalização.
+  // Impede também que uma coluna final aparente sucesso sem conclusão operacional.
+  const conclusaoOperacional=async(vendaId:string,quadro:string):Promise<boolean>=>{
+   const vr=await db.from('vendas_obras').select('id,obra_id,orcamento_id,valor_venda')
+     .eq('empresa_id',empresa_id).eq('id',vendaId).maybeSingle()
+   if(vr.error)throw vr.error
+   if(!vr.data)return false
+   let contas:any[]=[],compras:any[]=[],ordens:any[]=[],instalacoes:any[]=[]
+   if(quadro==='compras'&&vr.data.obra_id){
+    const q=await db.from('compras_necessidades').select('status,recebido_em')
+      .eq('empresa_id',empresa_id).eq('obra_id',vr.data.obra_id)
+    if(q.error)throw q.error;compras=q.data||[]
+   }
+   if(quadro==='producao'){
+    const q=await db.from('ordens_producao').select('status,bloqueada')
+      .eq('empresa_id',empresa_id).eq('venda_obra_id',vendaId)
+    if(q.error)throw q.error;ordens=q.data||[]
+   }
+   if(quadro==='instalacao'){
+    const q=await db.from('venda_instalacao_itens').select('status,quantidade,quantidade_instalada,pendencia,checklist')
+      .eq('empresa_id',empresa_id).eq('venda_obra_id',vendaId)
+    if(q.error)throw q.error;instalacoes=q.data||[]
+   }
+   let valorVenda=numero(vr.data.valor_venda)
+   if(quadro==='financeiro'){
+    const q=await db.from('financeiro_contas_receber').select('id,status,valor,valor_pago,valor_desconto')
+      .eq('empresa_id',empresa_id).eq('venda_obra_id',vendaId)
+    if(q.error)throw q.error
+    contas=(q.data||[]).filter(x=>ativo(x.status))
+    if(!valorVenda&&vr.data.orcamento_id){
+     const or=await db.from('orcamentos').select('valor_estimado')
+       .eq('empresa_id',empresa_id).eq('id',vr.data.orcamento_id).maybeSingle()
+     if(or.error)throw or.error
+     valorVenda=numero(or.data?.valor_estimado)
+    }
+   }
+   if(quadro==='financeiro'){
+    const descontos:Array<{conta_receber_id:string;tipo:string;valor:number}>=[]
+    const idsContas=contas.map(c=>c.id)
+    for(let i=0;i<idsContas.length;i+=200){
+     let inicio=0
+     while(true){
+      const pagina=await db.from('financeiro_recebimento_alocacoes')
+       .select('conta_receber_id,tipo,valor')
+       .in('conta_receber_id',idsContas.slice(i,i+200))
+       .eq('tipo','desconto').range(inicio,inicio+999)
+      if(pagina.error)throw pagina.error
+      descontos.push(...(pagina.data||[]))
+      if((pagina.data||[]).length<1000)break
+      inicio+=1000
+     }
+    }
+    return percentualFinanceiroKanban(contas,descontos,valorVenda)===100
+   }
+   const andamento=avaliarFluxoVenda({valorVenda,contas,compras,ordens,instalacoes})
+   return andamento.etapas.some(e=>e.id===quadro&&e.concluida)
+  }
   if(acao==='mover'){
    if(!boards.has(setor)||!acesso(ctx.mapa,setor,'movimentar'))return erro('Sem permissão para movimentar este quadro.',403)
    const venda=txt(body.vendaId,60),destino=txt(body.colunaId,60)
@@ -262,6 +324,10 @@ export async function POST(req:NextRequest){
    if(anterior.error)throw anterior.error
    const colunas=await db.from('central_kanban_colunas').select('id,nome,ordem').eq('empresa_id',empresa_id).eq('setor',setor).order('ordem')
    if(colunas.error)throw colunas.error
+   if(ehColunaConclusaoOperacional(setor,col.data.ordem)){
+    if(!await conclusaoOperacional(venda,setor))
+     return erro('A conclusão desta etapa depende dos registros do setor. Atualize a operação no painel da venda antes de finalizar o card.',409)
+   }
    const origemId=anterior.data?.coluna_id||((colunas.data||[]).some(x=>x.id===body.origemId)?body.origemId:colunas.data?.[0]?.id)
    if(origemId===destino)return NextResponse.json({ok:true})
    if(body.origemId!==origemId)return erro('O card foi movimentado por outra pessoa. Atualize o quadro.',409)

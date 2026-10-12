@@ -3,12 +3,12 @@ import { useCallback,useEffect,useMemo,useRef,useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft,ArrowUpRight,Check,ChevronRight,Columns3,Fullscreen,MessageSquare,Plus,RefreshCcw,Settings2,X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
-import { QUADROS,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
+import { QUADROS,indiceConclusaoOperacional,ehColunaConclusaoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
 
 type Coluna={id:string,setor:string,nome:string,ordem:number}
 type Percentuais={compras?:number;mercadoria?:number;producao?:number;instalacao?:number;financeiro?:number}
 type Card={id:string;numero:number;clienteId:string;cliente:string;obra:string;cidade:string;previsao:string|null;
- percentualGeral:number;percentuais:Percentuais;contagens:Record<string,number>;
+ percentualGeral:number;percentuais:Percentuais;conclusoes?:Record<string,boolean>;contagens:Record<string,number>;
  observacoes:Record<string,{comentarios:number;ultimoComentario:string|null}>}
 type Posicao={setor:string;venda_obra_id:string;coluna_id:string;updated_at:string}
 type Acesso={usuario_id:string;setor:string;nivel:NivelBoard;responsavel:boolean}
@@ -89,25 +89,30 @@ export default function CentralKanbans(){
  const colunas=(s:string)=>dados?.colunas.filter(c=>c.setor===s).sort((a,b)=>a.ordem-b.ordem)||[]
  const origCard=(card:Card,s:string)=>{
   const cols=colunas(s),p=dados?.posicoes.find(p=>p.venda_obra_id===card.id&&p.setor===s)
-  if(p&&cols.some(c=>c.id===p.coluna_id))return p.coluna_id
   if(!cols.length)return ''
+  const indiceFinal=indiceConclusaoOperacional(s)
+  const etapaFinal=indiceFinal!==null?cols.find(c=>c.ordem===indiceFinal):undefined
+  const concluida=card.conclusoes?.[s]===true
+  // O estado operacional prevalece sobre deslocamentos administrativos anteriores.
+  if(etapaFinal&&concluida)return etapaFinal.id
+  if(p&&cols.some(c=>c.id===p.coluna_id)&&(!etapaFinal||p.coluna_id!==etapaFinal.id))return p.coluna_id
   const x=card.percentuais
   if(s==='compras'){
-   if(x.mercadoria===100&&card.contagens.compras>0)return cols[cols.length-1].id
+   if(x.mercadoria===100&&card.contagens.compras>0&&concluida)return etapaFinal?.id||cols[cols.length-1].id
    if(x.mercadoria&&x.mercadoria>0)return cols.find(c=>c.nome==='Recebimento parcial')?.id||cols[0].id
    if(x.compras===100&&card.contagens.compras>0)return cols.find(c=>c.nome==='Aguardando mercadoria')?.id||cols[0].id
    if(x.compras&&x.compras>0)return cols.find(c=>c.nome==='Pedido realizado')?.id||cols[0].id
   }
   if(s==='producao'&&card.contagens.producao>0){
-   if(x.producao===100)return cols[cols.length-1].id
+   if(x.producao===100&&concluida)return etapaFinal?.id||cols[cols.length-1].id
    if((x.producao||0)>0)return cols[Math.min(2,cols.length-1)].id
   }
   if(s==='instalacao'&&card.contagens.instalacao>0){
-   if(x.instalacao===100)return cols[cols.length-1].id
+   if(x.instalacao===100&&concluida)return etapaFinal?.id||cols[cols.length-1].id
    if((x.instalacao||0)>0)return cols[Math.min(2,cols.length-1)].id
   }
   if(s==='financeiro'&&card.contagens.financeiro>0){
-   if(x.financeiro===100)return cols[cols.length-1].id
+   if(x.financeiro===100&&concluida)return etapaFinal?.id||cols[cols.length-1].id
    if((x.financeiro||0)>0)return cols[Math.min(1,cols.length-1)].id
   }
   return cols[0].id
@@ -146,6 +151,9 @@ export default function CentralKanbans(){
   if(!card||!cols.length||!pode(s,'movimentar'))return
   const atual=origCard(card,s),a=cols.find(c=>c.id===atual),b=cols.find(c=>c.id===destino)
   if(!a||!b||atual===destino)return
+  if(ehColunaConclusaoOperacional(s,b.ordem)&&!card.conclusoes?.[s]){
+   setErro('Este card só pode entrar na última etapa após a conclusão confirmada no painel da venda.');return
+  }
   if(!window.confirm('Mover '+card.cliente+' — '+card.obra+' de "'+a.nome+'" para "'+b.nome+'"?'))return
   let motivo=''
   if(b.ordem<a.ordem){
