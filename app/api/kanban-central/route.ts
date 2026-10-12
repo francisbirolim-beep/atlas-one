@@ -134,13 +134,12 @@ export async function GET(req:NextRequest){
    const co=contasVenda.filter(x=>ativo(x.status))
    const comprado=cp.filter(x=>['aprovado','pedido_emitido','aguardando_entrega','recebido'].includes(x.status)).length
    const recebido=cp.filter(x=>x.recebido_em||x.status==='recebido').length
-   const feito=op.filter(x=>['concluido','concluida','concluído','concluída','finalizado','finalizada','produzido','pronto','recebido'].includes(String(x.status||'').toLowerCase())).length
    const valorVenda=numero(v.valor_venda)||valorOrcamento.get(v.orcamento_id)||0
    const recebidoFinanceiro=co.reduce((s,x)=>s+numero(x.valor_pago),0)
    const saldoContas=co.reduce((s,x)=>s+Math.max(0,numero(x.valor)-numero(x.valor_pago)-numero(x.valor_desconto)),0)
    const aReceber=contasVenda.length?saldoContas:Math.max(0,valorVenda-recebidoFinanceiro)
    const instalacao=avaliarFluxoVenda({valorVenda,contas:co,compras:cp,ordens:op,instalacoes:it})
-   const pv={compras:calcPct(resumoLotes.total?resumoLotes.comprados:comprado,comprasBase),mercadoria:calcPct(resumoLotes.total?resumoLotes.recebidos:recebido,comprasBase),producao:calcPct(feito,op.length),instalacao:instalacao.progressoInstalacao,financeiro:calcPct(Math.max(0,valorVenda-aReceber),valorVenda)}
+   const pv={compras:calcPct(resumoLotes.total?resumoLotes.comprados:comprado,comprasBase),mercadoria:calcPct(resumoLotes.total?resumoLotes.recebidos:recebido,comprasBase),producao:calcPct(instalacao.ordensConcluidas,op.length),instalacao:instalacao.progressoInstalacao,financeiro:calcPct(Math.max(0,valorVenda-aReceber),valorVenda)}
    const obra=nomesObra.get(v.obra_id)
    const obs:Object=Object.fromEntries(permitidos.filter(s=>s!=='financeiro'||acesso(ctx.mapa,'financeiro')).map(s=>[s,{comentarios:qtdComentarios.get(v.id+':'+s)||0,ultimoComentario:comentarioMaisRecente.get(v.id+':'+s)||null}]))
    return {id:v.id,numero:v.numero,clienteId:v.cliente_id,cliente:nomeCliente.get(v.cliente_id)||'Cliente não identificado',
