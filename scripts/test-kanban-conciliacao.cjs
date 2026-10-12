@@ -1,0 +1,28 @@
+const assert=require('node:assert/strict')
+const fs=require('node:fs')
+const ts=require('typescript')
+const modulo={exports:{}}
+const source=fs.readFileSync('lib/centralKanban.ts','utf8')
+new Function('module','exports',ts.transpileModule(source,{
+ compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}
+}).outputText)(modulo,modulo.exports)
+const calcular=modulo.exports.percentualFinanceiroKanban
+const conta=(pago,desconto=0,valor=1000,status='aberto')=>({id:'parcela-1',valor,valor_pago:pago,valor_desconto:desconto,status})
+const desconto=(valor,tipo='desconto')=>({conta_receber_id:'parcela-1',valor,tipo})
+assert.equal(calcular([conta(900,100)],[],1000),100,'Desconto da conta quita a venda')
+assert.equal(calcular([conta(900)],[desconto(100)],1000),100,'Alocacao de desconto quita a venda')
+assert.equal(calcular([conta(800,100)],[desconto(100)],1000),90,'Desconto da conta e alocacao nao duplicam')
+assert.equal(calcular([conta(500)],[],1000),50,'Pagamento parcial')
+assert.equal(calcular([conta(995)],[],1000),99,'Saldo residual nao mostra 100%')
+assert.equal(calcular([conta(1000,0,1000),{id:'cancelada',valor:9999,valor_pago:0,status:'cancelado'}],[],1000),100,'Contas canceladas nao contam')
+assert.equal(calcular([conta(500,0,500)],[],1000),50,'Parcela total menor que venda nao pode ser quitacao')
+assert.equal(calcular([conta(1000,0,1200)],[],1000),99,'Parcelas divergentes nao podem encerrar a venda')
+assert.equal(calcular([conta(800)],[desconto(200,'pagamento')],1000),80,'So desconto conta como desconto')
+assert.equal(calcular([],[],1000),0,'Sem parcelas nao equivale a quitacao')
+assert.equal(calcular([conta(1000)],[],0),0,'Venda sem valor validado nao equivale a quitacao')
+const api=fs.readFileSync('app/api/kanban-central/route.ts','utf8')
+assert.match(api,/\.in\('conta_receber_id',idsContas\.slice\(i,i\+200\)\)/,'Consulta alocacoes vinculadas a contas da empresa')
+assert.match(api,/if\(acesso\(ctx\.mapa,'financeiro'\)\)/,'So consultar descontos com permissao')
+assert.match(api,/percentualFinanceiroKanban\(co,co\.flatMap/,'Usar calculo unificado na API')
+assert.match(api,/producao:calcPct\(instalacao\.ordensConcluidas,op\.length\)/,'Produzido so se concluido e nao bloqueado')
+console.log('PASS: Central de Kanbans consistente com a venda em pagamentos, descontos, ordens e permissoes.')

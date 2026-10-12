@@ -47,6 +47,9 @@ jobs:
       - name: Venda operational flow regression
         run: npm run test:venda-fluxo
 
+      - name: Kanban and sale financial and production consistency
+        run: npm run test:kanban-conciliacao
+
       - name: Production card measurement mapping
         run: npm run test:producao-medicao
 

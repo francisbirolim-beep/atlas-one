@@ -23,4 +23,30 @@ export const SETORES_ACESSO:Record<QuadroId,string[]>={
  producao:['producao'],instalacao:['instalacao'],financeiro:['financeiro'],assistencia:['assistencia-painel']
 }
 export const calcPct=(parte:number,total:number)=>total>0?Math.max(0,Math.min(100,Math.round(parte/total*100))):0
+
+// O mesmo desconto considerado no painel da venda precisa contar na Central de Kanbans.
+// A alocação e o campo da conta representam o MESMO desconto: nunca somar os dois.
+type ContaFinanceiraKanban={id:string;status?:string|null;valor?:number|null;valor_pago?:number|null;valor_desconto?:number|null}
+type AlocacaoDescontoKanban={conta_receber_id?:string|null;tipo?:string|null;valor?:number|null}
+const valorSeguro=(valor:unknown)=>{const n=Number(valor);return Number.isFinite(n)?Math.max(0,n):0}
+export function percentualFinanceiroKanban(contas:ContaFinanceiraKanban[],alocacoes:AlocacaoDescontoKanban[],valorVenda:number){
+ const descontos=new Map<string,number>()
+ for(const a of alocacoes)if(a.tipo==='desconto'&&a.conta_receber_id){
+  descontos.set(a.conta_receber_id,(descontos.get(a.conta_receber_id)||0)+valorSeguro(a.valor))
+ }
+ let total=0,liquidado=0
+ for(const c of contas){
+  if(['cancelado','cancelada'].includes(String(c.status||'').toLowerCase()))continue
+  const valor=valorSeguro(c.valor),pago=valorSeguro(c.valor_pago)
+  const desconto=Math.max(valorSeguro(c.valor_desconto),descontos.get(c.id)||0)
+  total+=valor
+  liquidado+=Math.min(valor,pago+desconto)
+ }
+ const venda=valorSeguro(valorVenda)
+ if(venda<=0||total<=0)return 0
+ // A venda só pode aparecer quitada se as parcelas conferirem com o valor da venda.
+ if(Math.abs(total-venda)<=0.02&&liquidado>=venda-0.01)return 100
+ // Evita mostrar 100% com saldo residual ou parcelas inconsistentes.
+ return Math.min(99,calcPct(liquidado,venda))
+}
 export const progressoOperacional=(compras:number,producao:number,instalacao:number)=>Math.round((100+compras+producao+instalacao)/4)
