@@ -16,6 +16,7 @@ export type OrdemProducao = {
   tipo_producao: 'contramarco' | 'esquadria' | 'personalizada'
   titulo: string
   quantidade: number
+  quantidade_produzida?: number | null
   largura_mm?: number | null
   altura_mm?: number | null
   status: 'aguardando' | 'liberada' | 'em_producao' | 'conferencia' | 'concluida' | 'cancelada'

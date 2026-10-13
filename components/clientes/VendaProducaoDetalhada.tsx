@@ -9,6 +9,7 @@ type Ordem = {
   titulo?:string|null
   item_ref?:string|null
   quantidade?:number|null
+  quantidade_produzida?:number|null
   status?:string|null
   created_at:string
   tipo_producao?:string|null
@@ -69,7 +70,7 @@ export default function VendaProducaoDetalhada({
     const ambiente=String(snap.ambiente||snap.local||vinculo?.ambiente||o.titulo||'Sem ambiente informado')
     const descricao=String(snap.descricao||snap.tipo_esquadria||vinculo?.descricao||o.titulo||'Peça')
     const qtd=Math.max(0,Number(o.quantidade||1))
-    const produzida=pronta(o.status)?qtd:0
+    const produzida=o.quantidade_produzida!==null&&o.quantidade_produzida!==undefined?Math.min(qtd,Math.max(0,Number(o.quantidade_produzida||0))):pronta(o.status)?qtd:0
     const faltante=Math.max(0,qtd-produzida)
     return {...o,ambiente,descricao,qtd,produzida,faltante}
   })

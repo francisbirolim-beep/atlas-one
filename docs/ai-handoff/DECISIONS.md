@@ -133,3 +133,16 @@ Regra obrigatória para qualquer alteração no Atlas:
 - antes do merge, conferir regressão do fluxo imediatamente vizinho ao que foi alterado.
 
 Exemplo canônico: sincronizar um orçamento W.Vetro pode atualizar itens, valores e metadados da integração, mas não pode apagar anexos, fotos, observações, histórico ou outros dados preenchidos manualmente no card.
+
+## Regra global do Atlas — cards e andamento parciais por item (13/10/2026)
+
+Sempre que um processo movimenta apenas parte de uma obra, compra, tipologia, ordem ou instalação:
+- a identidade de cada grupo/card, peça ou unidade deve ser preservada entre etapas, sem unir cards apenas porque chegaram à mesma coluna;
+- cada movimentação atinge somente os itens explicitamente escolhidos, e o saldo fica na etapa anterior, inclusive após atualização/reabertura e em fornecedores ou datas distintos;
+- o card pai consolida o progresso, mas não significa conclusão global enquanto existir qualquer peça obrigatória pendente;
+- PDF, listas e relatórios gerados *dentro de um card* usam apenas seus itens; versões gerais devem ter ação separada e explícita;
+- Produção e Instalação devem mostrar produzido/instalado versus ainda não feito, sem confundir material comprado, material recebido, peça produzida, conferência, instalação e baixa de estoque;
+- liberar instalação exige peças efetivamente produzidas e conferidas; fechar a obra exige todos os gates já estabelecidos, inclusive checklist;
+- proteger empresa/permissões, histórico, vínculo à obra, reversões justificadas e concorrência; jamais recriar ou apagar silenciosamente os registros existentes.
+
+A implementação segue incremental por módulo: Compras publicada na PR #800; Produção e Instalação em validação na PR #803. Este padrão é obrigatório para novos fluxos e futuras ampliações, sem substituir automaticamente estruturas antigas não auditadas.

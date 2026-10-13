@@ -62,7 +62,7 @@ export async function POST(req:NextRequest){
   // mas registrar peças instaladas exige produção física concluída.
   if(acao==='status'||acao==='quantidade'){
    const ordens=await supabaseAdmin.from('ordens_producao')
-    .select('id,item_ref,tipo_producao,status,bloqueada,quantidade')
+    .select('id,item_ref,tipo_producao,status,bloqueada,quantidade,quantidade_produzida')
     .eq('empresa_id',usuario.empresa_id).eq('venda_obra_id',vendaId).eq('item_ref',item.item_ref)
    if(ordens.error)throw ordens.error
    const disponibilidade=disponibilidadePeca(ordens.data||[],item.item_ref,prevista)
