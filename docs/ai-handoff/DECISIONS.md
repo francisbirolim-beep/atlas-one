@@ -135,12 +135,17 @@ Regra obrigatória para qualquer alteração no Atlas:
 Exemplo canônico: ao vincular manualmente um orçamento W.Vetro no Kanban, qualquer enriquecimento técnico autorizado deve preservar fotos, medidas, anexos, observações, histórico e dados manuais do card.
 
 
-## W.Vetro → Atlas: importação de orçamentos somente novos (13/10/2026)
+## W.Vetro → Atlas: importação e atualização controlada por número (13/10/2026)
 
-- A identidade de um orçamento importado é `(empresa_id, número original W.Vetro)`, não o número sequencial interno atribuído pelo Atlas.
-- A sincronização automática só pode **criar** orçamentos cuja identidade ainda não exista em `orcamentos`.
-- Reexecução de período, chamada forçada (`forcar`, `corrigir_tudo`) ou mudança de payload no W.Vetro **não** reimporta nem regrava orçamento existente.
-- Na verificação, considerar inclusive orçamento ocultado por vínculo (`modo_entrada='wvetro_api_vinculado'`) e referências legadas `wvetro_fluxo.numero_wvetro`.
-- O vínculo **manual e explícito** de um orçamento W.Vetro a um card Atlas preexistente é uma operação distinta de importação automática; não pode criar dois cards ativos para a mesma referência e deve preservar o trabalho realizado no Atlas.
-- Não apagar/mesclar automaticamente históricos duplicados antigos. Auditar números repetidos e tratar o saneamento em procedimento separado e reversível.
-- Antes de publicar mudanças, testar reprocessamento do mesmo período duas vezes, orçamento já vinculado/oculto, orçamento novo e duas sincronizações concorrentes. A proteção contra concorrência deve ser garantida no banco antes da liberação definitiva em produção.
+- A identidade é `(empresa_id, número original W.Vetro)`, jamais o número interno sequencial do Atlas.
+- Se não há número existente, importar como orçamento novo; se houver, nunca criar uma segunda ficha para o mesmo número.
+- Se o mesmo número for recebido sem alterações comerciais, ignorar (inclusive reprocessamentos repetidos, payload com timestamps diferentes e `forcar`).
+- Se o mesmo número for recebido com alteração de medidas, quantidades, tipologias, itens adicionados/removidos, valor ou situação, registrar a nova versão em `wvetro_fluxo.atualizacao_pendente` com snapshot e diferenças estruturadas, **sem sobrescrever automaticamente** a versão operacional já validada.
+- Avisar no Kanban e Cliente 360, listando item, campo, antes/depois. O botão **Aplicar nova versão após conferência** promove a revisão para o **mesmo ID de orçamento**, com preservação de fotos, observações e identidade das peças.
+- Se o orçamento já tiver venda ou medição final, bloquear substituição técnica/financeira; a revisão segue disponível para análise e deverá passar pelo fluxo oficial de revisão da obra.
+- A promoção da versão passa a exigir nova validação comercial; o histórico mantém hash anterior, hash novo, diferenças, data e responsável.
+- O vínculo manual explícito do W.Vetro a um card Atlas é uma operação distinta da importação automática, sem gerar duplicata.
+- Considerar cards ocultos/vinculados e referências legadas `wvetro_fluxo.numero_wvetro` ao pesquisar o número.
+- Nunca limpar duplicados históricos automaticamente. A auditoria e saneamento serão separados e reversíveis.
+- Testar ao menos: mesmo lote duas vezes, nova janela incluída, medida alterada, tipologia trocada, peça removida, valor revisado, card já vinculado, vendido/medido e duas sincronizações concorrentes.
+- Antes da publicação definitiva, verificar segurança concorrente no banco (unicidade por número original ou serialização transacional) após resolver duplicados preexistentes. Não criar índice único diretamente sobre base suja.
