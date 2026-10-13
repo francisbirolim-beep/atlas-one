@@ -662,3 +662,15 @@ Branch: `fix/kanban-wvetro-sync-preservacao-v1`
 - regra global de preservação funcional registrada em `CLAUDE.md` e `DECISIONS.md`.
 
 Validação técnica pendente nesta branch.
+
+## 2026-10-13 — WVetro: corte de Produção x barras comerciais de Compras
+
+Branch `fix/wvetro-corte-barras-setores-20261013` — preview não publicado em produção sem validação.
+
+- Orçamento #872 (Samuel): PDF real do W.Vetro recuperado de sessão autorizada do usuário, identificado por número, e analisado com texto/colunas por posição. 18 linhas = 31 barras de 6.000 mm; o pacote técnico tem 40 linhas de peças cortadas.
+- Banco: `venda_wvetro_barras` (barras comerciais separadas do pacote técnico), `venda_wvetro_barras_aprendizado` (registro de validações/correções), migração aditiva aplicada. Samuel importado com todas as 18 linhas pendentes de validação; nenhuma compra ou corte existente alterado.
+- Aba Produção: lista de corte por material, medida, tipologia, PDF por categoria e botão para edição técnica.
+- Aba Compras: Kanban independente de barras comerciais por código/tratamento/tipo/comprimento; importação futura de PDF com prévia editável, validação/correção supervisionada, status operacionais e PDF geral ou por card validado.
+- Cotação de perfis a partir de cortes bloqueada somente para vendas ligadas ao W.Vetro; fluxo Atlas nativo e cotações já existentes são preservados.
+- Correções podem gerar sugestões reutilizáveis no próximo relatório, sem replicar quantidades automaticamente.
+- Próximo passo: validar visualmente o preview autenticado; conferir 31 barras, cores, lista de 40 cortes, cards legados, correção/validação e PDF antes do merge.
