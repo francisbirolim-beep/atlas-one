@@ -89,16 +89,19 @@ export async function POST(req:NextRequest){
   if(!venda)return erro('Venda não localizada nesta empresa.',404)
   const categoria=txt(form.get('categoria'),30)
   const origem=txt(form.get('origem'),30)
-  const descricao=txt(form.get('descricao'),500)
+  // Descrição opcional na tela; banco exige texto não vazio.
+  const descricao=txt(form.get('descricao'),500)||`Custo de ${categoria.replaceAll('_',' ')}`
   const valor=numerico(form.get('valor'))
   const quantidade=numerico(form.get('quantidade'))
-  const data_lancamento=txt(form.get('data'),10)||new Date().toISOString().slice(0,10)
+  const data_lancamento=txt(form.get('data'),10)
+  const fornecedor=txt(form.get('fornecedor'),150)
   if(!categorias.includes(categoria))return erro('Categoria inválida.')
   if(!origens.includes(origem))return erro('Origem de custo inválida.')
-  if(!descricao)return erro('Informe a descrição do custo.')
   if(valor===null||valor<=0||valor>999999999)return erro('Informe um valor positivo.')
   if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
+  if(!data_lancamento)return erro('Informe a data do lançamento.')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
+  if(!fornecedor)return erro('Informe o fornecedor.')
   const anexo=form.get('arquivo')
   let anexoNome:string|null=null
   let anexoMime:string|null=null
@@ -115,7 +118,7 @@ export async function POST(req:NextRequest){
     empresa_id:usuario.empresa_id,venda_obra_id:vendaId,orcamento_id:venda.orcamento_id,
     categoria,origem,descricao,valor:Math.round(valor*100)/100,
     quantidade,unidade:txt(form.get('unidade'),30)||null,data_lancamento,
-    fornecedor:txt(form.get('fornecedor'),150)||null,documento:txt(form.get('documento'),100)||null,
+    fornecedor,documento:txt(form.get('documento'),100)||null,
     observacoes:txt(form.get('observacoes'),1000)||null,
     anexo_nome:anexoNome,anexo_mime:anexoMime,anexo_path:anexoPath,
     criado_por_id:usuario.id,criado_por_nome:usuario.nome
