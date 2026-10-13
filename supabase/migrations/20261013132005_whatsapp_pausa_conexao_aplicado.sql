@@ -1,0 +1,1 @@
+ALTER TABLE public.atendimento_whatsapp_canais ADD COLUMN IF NOT EXISTS conexao_pausada boolean NOT NULL DEFAULT false; COMMENT ON COLUMN public.atendimento_whatsapp_canais.conexao_pausada IS 'Quando true, gateway nao conecta; fechamento manual preserva credenciais e historico para retomar via Master ou autorizado.';

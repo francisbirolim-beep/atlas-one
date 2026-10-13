@@ -1,0 +1,1 @@
+ALTER TABLE public.atendimento_whatsapp_permissoes ADD COLUMN IF NOT EXISTS pode_gerenciar_conexao boolean NOT NULL DEFAULT false; COMMENT ON COLUMN public.atendimento_whatsapp_permissoes.pode_gerenciar_conexao IS 'Autorizacao explicita do Master para conectar, pausar e recuperar sessao de um canal WhatsApp; nao implica acesso ao historico de conversas.';
