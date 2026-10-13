@@ -469,6 +469,123 @@ async function garantirCliente(
   return { cliente, criado: true, pendencia: incompleto }
 }
 
+/**
+ * Aprovação explícita de uma revisão recebida. A detecção nunca altera itens
+ * operacionais; este caminho só é invocado pelo botão de conferência no Kanban.
+ * Orçamentos com venda/medição não podem ser reescritos por sincronização.
+ */
+export async function aplicarAtualizacaoPendenteWVetro(empresaId: string, orcamentoId: string, usuario: UsuarioWVetro) {
+  const { data: o, error } = await supabaseAdmin.from('orcamentos')
+    .select('id,cliente_id,itens,wvetro_fluxo,valor_estimado')
+    .eq('id', orcamentoId).eq('empresa_id', empresaId).maybeSingle()
+  if (error) throw error
+  if (!o) throw new Error('Orçamento não encontrado.')
+  const fluxo = obj(o.wvetro_fluxo) || {}
+  const pendente = obj(fluxo.atualizacao_pendente)
+  const payload = obj(pendente?.payload)
+  const numero = txt(fluxo.numero, fluxo.numero_wvetro)
+  if (!pendente || !payload) throw new Error('Não existe atualização W.Vetro pendente.')
+  if (txt(pendente.payload_hash) === txt(fluxo.payload_hash)) throw new Error('Esta revisão já foi aplicada.')
+  if (!numero) throw new Error('Referência W.Vetro ausente.')
+
+  const [{ data: vendas, error: vendasErro }, { data: medicoes, error: medicoesErro }] = await Promise.all([
+    supabaseAdmin.from('vendas_obras').select('id').eq('empresa_id', empresaId).eq('orcamento_id', orcamentoId).limit(1),
+    supabaseAdmin.from('medicoes_finais').select('id').eq('orcamento_id', orcamentoId).limit(1),
+  ])
+  if (vendasErro) throw vendasErro
+  if (medicoesErro) throw medicoesErro
+  if ((vendas || []).length || (medicoes || []).length ||
+    arr(o.itens).some((i: any) => txt(i?.tipo_medida).toLowerCase() === 'final')) {
+    throw new Error('Este orçamento já possui venda ou medição final. A nova versão W.Vetro foi preservada para revisão da obra, sem alterar produção, medidas ou valores fechados.')
+  }
+
+  const contexto = await carregarContexto(empresaId)
+  const raw = arr(payload.Itens).length ? arr(payload.Itens) : arr(payload.itens)
+  const novos = raw.map((x, i) => itemWVetro(obj(x) || {}, i, contexto.refs, contexto.linhas, contexto.tipologias))
+  const antigos = arr(o.itens)
+  const usados = new Set<number>()
+  const mesclados = novos.map((novo: any, indice: number) => {
+    const idNovo = txt(novo?.wvetro_item?.Id, novo?.wvetro_item?.ItemId)
+    let indiceAntigo = idNovo ? antigos.findIndex((a: any, j: number) =>
+      !usados.has(j) && txt(a?.wvetro_item?.Id, a?.wvetro_item?.ItemId) === idNovo) : -1
+    if (indiceAntigo < 0) {
+      indiceAntigo = antigos.findIndex((a: any, j: number) =>
+        !usados.has(j) &&
+        txt(a?.wvetro_item?.Modelo, a?.wvetro_item?.Nome) === txt(novo?.wvetro_item?.Modelo, novo?.wvetro_item?.Nome) &&
+        txt(a?.wvetro_item?.Linha) === txt(novo?.wvetro_item?.Linha) &&
+        Number(a?.largura_mm) === Number(novo?.largura_mm) &&
+        Number(a?.altura_mm) === Number(novo?.altura_mm))
+    }
+    if (indiceAntigo < 0 && antigos.length === novos.length && !usados.has(indice)) indiceAntigo = indice
+    if (indiceAntigo < 0) return novo
+    usados.add(indiceAntigo)
+    const atual = antigos[indiceAntigo] || {}
+    const preservar = [
+      'id', 'foto_url', 'foto_urls', 'foto_larguras_url', 'foto_alturas_url',
+      'observacao_producao', 'observacao_tempera', 'contramarco',
+      'largura_baixo_mm', 'largura_meio_mm', 'largura_cima_mm',
+      'altura_direita_mm', 'altura_meio_mm', 'altura_esquerda_mm',
+    ]
+    const integrado = { ...novo }
+    for (const campo of preservar) {
+      if (atual[campo] !== undefined && atual[campo] !== null) integrado[campo] = atual[campo]
+    }
+    // Anotações locais nunca são sobrescritas por comentários da fonte.
+    for (const campo of ['descricao', 'ambiente']) {
+      if (atual[campo] && !novo[campo]) integrado[campo] = atual[campo]
+    }
+    return integrado
+  })
+  const primeiro = mesclados[0] || {}
+  const valor = num(payload.ValorTotal, payload.Total, payload.ValorBruto, payload.Valor)
+  const agora = new Date().toISOString()
+  const historicoVersoes = arr(fluxo.historico_revisoes).slice(-19)
+  const diffs = compararVersoesOrcamentoWVetro(fluxo.payload_bruto, payload)
+  const novoFluxo = {
+    ...fluxo,
+    payload_bruto: payload,
+    payload_hash: pendente.payload_hash,
+    fonte_registro: pendente.fonte_registro || fluxo.fonte_registro,
+    sincronizado_em: agora,
+    validacao_status: 'aguardando',
+    validado_em: null,
+    validado_por_id: null,
+    validado_por_nome: null,
+    atualizacao_pendente: null,
+    historico_revisoes: [...historicoVersoes, {
+      aplicado_em: agora,
+      aplicado_por_id: usuario.id,
+      numero_wvetro: numero,
+      hash_anterior: fluxo.payload_hash || null,
+      hash_atual: pendente.payload_hash,
+      diferencas: diffs,
+    }],
+  }
+  const { data: atualizado, error: gravacaoErro } = await supabaseAdmin.from('orcamentos').update({
+    itens: mesclados,
+    tipo_esquadria: primeiro.tipo_esquadria || 'outro',
+    largura_mm: primeiro.largura_mm || null,
+    altura_mm: primeiro.altura_mm || null,
+    quantidade: primeiro.quantidade || 1,
+    valor_estimado: valor > 0 ? valor : null,
+    wvetro_fluxo: novoFluxo,
+    updated_at: agora,
+  }).eq('id', orcamentoId).eq('empresa_id', empresaId)
+    .contains('wvetro_fluxo', { atualizacao_pendente: { payload_hash: pendente.payload_hash } })
+    .select('*').maybeSingle()
+  if (gravacaoErro) throw gravacaoErro
+  if (!atualizado) throw new Error('A versão mudou durante a aprovação. Atualize a ficha e confira novamente.')
+  const { error: historicoErro } = await supabaseAdmin.from('historico').insert({
+    orcamento_id: orcamentoId,
+    usuario_id: usuario.id,
+    usuario_nome: usuario.nome || 'Usuário',
+    acao: 'Aplicou revisão W.Vetro no orçamento',
+    detalhes: `W.Vetro #${numero}: ${diffs.length} diferença(s) aplicada(s). Referência anterior preservada no histórico de versões. Aguardando validação comercial.`,
+  })
+  if (historicoErro) throw historicoErro
+  return { atualizado, diferencas: diffs }
+}
+
 export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVetro, diasPadrao = 7) {
   const usuario = usuarioForcado || await autenticarMasterWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 401 })
