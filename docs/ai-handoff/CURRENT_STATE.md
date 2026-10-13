@@ -686,3 +686,13 @@ Branch `fix/wvetro-corte-barras-setores-20261013` — preview não publicado em 
 - Perfis e acessórios nas listas de Materiais, Compras, Produção e PDFs: resolver por cadastro ID/código exato com isolamento de empresa, alternativamente desenho técnico do próprio item WVetro.
 - Ausência de foto não pode ser representada por imagem arbitrária; mostrar claramente `Imagem pendente` e exigir completar cadastro, sem apagar registros nem misturar cards.
 - Implementação inicial na lista de barras comerciais WVetro, cards de Compras, lista de corte e PDFs de barras/cortes. Demais fluxos usam esta decisão como requisito de aceitação.
+
+## 2026-10-13 — Instalação por tipologia da venda, fase inicial
+
+Branch `fix/instalacao-tipologias-venda-20261013` (preview apenas).
+- Caso de validação: cliente `1ffc2956-7b0b-4df4-9557-af0abc0da8ed`, venda `e3ee802a-d65e-413c-9b80-0f3f93f890c0` (#18, orçamento #177). Snapshot vendido tem 1 tipologia, obra_id NULL, nenhuma OP ou checklist preexistente.
+- Origem do problema: aba Instalação interrompia em `!obraId` e nem preparava os itens; agora POST autenticado e idempotente usa snapshot vendido e suporta `obra_id` nulo, sem reescrever registros antigos.
+- UI Instalação: Kanban por tipologia, foto técnica/croqui quando disponível, dimensões, quantidade instalada, pendência de acabamento/cantoneira/arremate, checklist de 4 etapas e confirmação específica da finalização.
+- Fechamento requer checklists, produção, ausência de pendências e obra formalmente vinculada. Progresso de Instalação no resumo reflete unidades efetivamente **finalizadas**, com quantidade instalada fisicamente informada à parte.
+- Testes unitários `scripts/test-instalacao-tipologias-vendidas-20261013.cjs` e `scripts/test-venda-instalacao-producao.cjs`, typecheck e build aprovados.
+- Pendente: preview autenticado e validação funcional da venda #18, em seguida testar venda com várias tipologias e instalação parcial antes do merge em produção.
