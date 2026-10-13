@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plu
 import { tokenAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
-type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'conciliacao_wvetro'|null}
+type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'uso_mais_sobra_wvetro'|null;total_uso?:number|null;total_com_sobra?:number|null;perfil_centro_custo?:number|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
 type Lancamento={id:string;categoria:Categoria;origem:string;descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null}
 type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number}
 const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',vidro:'Vidros',perda:'Perda de corte',mao_obra:'Mão de obra',instalacao:'Instalação',frete:'Frete',outros:'Outros'}
@@ -148,6 +148,21 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
     <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-realizado)} nota="Não representa economia final enquanto faltarem lançamentos"/>
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
    </div>
+   <section aria-label="Resultado original da obra W.Vetro" className="rounded-xl border border-slate-200 p-3">
+    <h4 className="mb-2 text-sm font-bold text-slate-800">Resultado do orçamento no W.Vetro · valores originais</h4>
+    <div className="grid gap-3 sm:grid-cols-3">
+     <Card titulo="Usado na obra" valor={previstoFmt(p?.total_uso??null)} nota="Soma dos materiais utilizados e perda de corte, sem sobra"/>
+     <Card titulo="Sobra de material" valor={previstoFmt(p?.categorias.sobra??null)} nota="Somada somente no resultado com sobra"/>
+     <Card titulo="Resultado com sobra" valor={previstoFmt(p?.total_com_sobra??null)} nota="Usado na obra + sobra · não é custo realizado"/>
+    </div>
+    {p?.total_uso!=null&&p?.total_com_sobra!=null&&p?.categorias.sobra!=null&&
+     <p className={`mt-2 text-xs font-semibold ${Math.abs(p.total_uso+p.categorias.sobra-p.total_com_sobra)<=0.02?'text-emerald-700':'text-amber-700'}`}>
+      {Math.abs(p.total_uso+p.categorias.sobra-p.total_com_sobra)<=0.02
+       ?'Conciliação dos resultados W.Vetro: valores conferem.'
+       :'Atenção: resultado da obra e sobra não conciliados. Conferir antes de validar.'}
+     </p>}
+    <p className="mt-2 text-[11px] text-slate-500">Não confundir com Despesas Extras/Previsão: os centros de custos podem agregar perda de corte a materiais.</p>
+   </section>
    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <div><b className="text-sm text-slate-800">Conferência de custos W.Vetro com aprendizado da IA</b><p className="mt-1 text-xs text-slate-600">Valide o que está correto ou corrija com justificativa. Os valores originais do W.Vetro e o CMV realizado não são alterados. Feedbacks armazenados: {dados.feedbackIA||0}.</p></div>
@@ -159,7 +174,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    {p?.aviso&&<div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{p.aviso}</div>}
    <div className="overflow-x-auto rounded-xl border">
     <table className="w-full min-w-[650px] text-sm">
-     <thead><tr className="border-b bg-slate-50 text-left text-xs uppercase text-slate-500"><th className="p-3">Categoria</th><th className="p-3 text-right">Previsto conferido</th><th className="p-3 text-right">Realizado</th><th className="p-3 text-right">Diferença parcial</th></tr></thead>
+     <thead><tr className="border-b bg-slate-50 text-left text-xs uppercase text-slate-500"><th className="p-3">Categoria</th><th className="p-3 text-right">Previsto W.Vetro / revisado</th><th className="p-3 text-right">Realizado</th><th className="p-3 text-right">Diferença parcial</th></tr></thead>
      {categories.map(c=>{
       const e=esperado[c],r=porCategoria[c],dif=e===null?null:e-r
       return <tbody key={c}>
@@ -177,11 +192,14 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
          <div className="grid gap-2 sm:grid-cols-3">
           <div className="rounded-xl border bg-white p-3"><Card titulo="Uso técnico · ResumoObra W.Vetro" valor={previstoFmt(p?.categorias.perfil??null)}/>{botoesRevisao('perfil_uso')}</div>
           <div className="rounded-xl border bg-white p-3"><Card titulo="Sobra do perfil · W.Vetro original" valor={previstoFmt(p?.categorias.sobra??null)} nota="Custo da sobra, mesmo não cobrada ao cliente"/>{botoesRevisao('sobra')}</div>
-          <Card titulo="Previsão de perfis" valor={previstoFmt(perfis)} nota={p?.perfil_previsao_fonte==='despesas_extras_wvetro'?'Despesas Extras/Previsão · MATÉRIA PRIMA - PERFIL':p?.perfil_previsao_fonte==='conciliacao_wvetro'?'Conciliado pelo total do W.Vetro, acessórios e vidros: conferir antes de validar':'Uso + sobra (quando disponíveis)'}/>
+          <Card titulo={p?.perfil_previsao_fonte==='despesas_extras_wvetro'?'Previsão do centro de custo':'Perfis utilizados + sobra'} valor={previstoFmt(perfis)} nota={p?.perfil_previsao_fonte==='despesas_extras_wvetro'?'Despesas Extras/Previsão · conferir componentes do valor':'Somente perfis + sobra, sem perda de corte'}/>
          </div>
          {formularioRevisao('perfil_uso')}
          {formularioRevisao('sobra')}
+         {p?.perfil_centro_custo!=null&&p.perfil_previsao_fonte!=='despesas_extras_wvetro'&&
+          <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">Referência separada de Despesas Extras/Previsão · MATÉRIA PRIMA - PERFIL: <b>{moedas(p.perfil_centro_custo)}</b>. Esse centro de custo não substitui a decomposição de materiais utilizados e sobra.</p>}
         </div>}
+        {c==='perda'&&p?.perda_fonte==='conciliacao_wvetro'&&<p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Perda obtida pela conciliação do resultado da obra com perfis usados, acessórios e vidros. Confirme no quadro Conferir Valores do W.Vetro antes de validar.</p>}
         <div className="mt-3 space-y-2">{Number(comprasExistentes[c]||0)>0&&<p className="text-xs text-slate-600">Compras vinculadas anteriormente: {moedas(Number(comprasExistentes[c]))}</p>}{dados.lancamentos.filter(l=>l.categoria===c).map(l=><div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-3">
          <div className="text-xs"><b>{l.descricao}</b><p className="mt-1 text-slate-500">{l.origem==='estoque'?'Retirado do estoque':'Compra / custo'} · {l.data_lancamento}{l.fornecedor?' · '+l.fornecedor:''}{l.documento?' · Doc. '+l.documento:''}</p>{l.anexo_url&&<a href={l.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/> {l.anexo_nome||'Comprovante'}</a>}</div>
          <b>{moedas(Number(l.valor))}</b>

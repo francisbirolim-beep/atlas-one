@@ -1,6 +1,13 @@
 // Conserva os totais do quadro Conferir Valores do W.Vetro.
 type Campo = 'perfil'|'acessorio'|'vidro'|'sobra'|'perda'
-export type ResumoCmv = { categorias: Record<Campo,number|null>; total:number|null; fonte:string; aviso:string|null; perfil_previsao:number|null; perfil_previsao_fonte:'despesas_extras_wvetro'|'conciliacao_wvetro'|null }
+export type ResumoCmv = {
+ categorias: Record<Campo,number|null>; total:number|null; fonte:string; aviso:string|null
+ // Os campos CustoSemSobra / CustoComSobra do payload podem vir invertidos.
+ // Só publicamos os dois resultados quando os dois totais originais existem.
+ total_uso:number|null;total_com_sobra:number|null
+ perfil_previsao:number|null;perfil_previsao_fonte:'despesas_extras_wvetro'|'uso_mais_sobra_wvetro'|null
+ perfil_centro_custo:number|null;perda_fonte:'wvetro'|'conciliacao_wvetro'|null
+}
 const vazio=()=>({perfil:null,acessorio:null,vidro:null,sobra:null,perda:null}) as Record<Campo,number|null>
 const normal=(v:unknown)=>String(v??'').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g,'')
 const numero=(v:unknown):number|null=>{
@@ -61,6 +68,9 @@ export function extrairPrevisaoWVetro(bruto:unknown):ResumoCmv{
  // Orçamentos recentes trazem estes totais no payload_bruto, sem linha no histórico.
  const totalValores=[numero(f.custo_sem_sobra??p.CustoSemSobra),numero(f.custo_com_sobra??p.CustoComSobra)].filter((v):v is number=>v!==null)
  const historico=totalValores.length?Math.max(...totalValores):null
+ const total_uso=totalValores.length===2?Math.min(...totalValores):null
+ const total_com_sobra=totalValores.length===2?Math.max(...totalValores):null
+ let perda_fonte:ResumoCmv['perda_fonte']=categorias.perda!==null?'wvetro':null
  // O payload operacional do W.Vetro guarda custos utilizados no ResumoObra.
  // No orçamento Samuel #872, SobraCusto/PerdaCorte vieram zerados no ResumoObra,
  // embora os dois totais históricos e o quadro Conferir Valores os incluam.
@@ -80,35 +90,30 @@ export function extrairPrevisaoWVetro(bruto:unknown):ResumoCmv{
  }
  if(categorias.perda===null){
    const perdaResumo=numero(resumo.OrcamentoValorCustoPerdaCorte)
-   if(perdaResumo!==null&&perdaResumo>0)categorias.perda=perdaResumo
+   if(perdaResumo!==null&&perdaResumo>0){categorias.perda=perdaResumo;perda_fonte='wvetro'}
  }
  const outras=[p.CustoMaoObraVlr,resumo.OrcamentoValorCustoServicos,resumo.OrcamentoValorVlrCustoKit,resumo.OrcamentoValorTratamentoCusto,resumo.OrcamentoValorVlrAcesEmbCusto].some(v=>(numero(v)||0)>0)
  if(categorias.perda===null&&menor!==null&&!outras&&categorias.perfil!==null&&categorias.acessorio!==null&&categorias.vidro!==null){
    const residual=Math.round((menor-categorias.perfil-categorias.acessorio-categorias.vidro)*100)/100
-   if(residual>=0&&residual<=Math.max(10,menor*0.015))categorias.perda=residual
- }
- const perfilDireto=perfilDasPrevisoes(f,p)
- let perfil_previsao=perfilDireto
- let perfil_previsao_fonte:ResumoCmv['perfil_previsao_fonte']=perfilDireto===null?null:'despesas_extras_wvetro'
- // Fallback de conciliação (não importação direta): somente quando o total técnico
- // menor bate com o uso + materiais + perda pequena e não há outros custos.
- // Em caso de divergência não atribuir automaticamente o resíduo aos perfis.
- if(perfil_previsao===null&&historico!==null&&menor!==null&&historico>menor&&
-    !outras&&categorias.perfil!==null&&categorias.acessorio!==null&&categorias.vidro!==null){
-  const subtotalTecnico=categorias.perfil+categorias.acessorio+categorias.vidro
-  const diferencaTecnica=Math.round((menor-subtotalTecnico)*100)/100
-  if(diferencaTecnica>=0&&diferencaTecnica<=Math.max(10,menor*0.015)){
-   const residual=Math.round((historico-categorias.acessorio-categorias.vidro)*100)/100
-   if(residual>categorias.perfil){
-    perfil_previsao=residual
-    perfil_previsao_fonte='conciliacao_wvetro'
+   if(residual>=0&&residual<=Math.max(10,menor*0.015)){
+    categorias.perda=residual
+    perda_fonte='conciliacao_wvetro'
    }
-  }
  }
+ // O centro de custo Despesas Extras/Previsão pode reunir perda de corte e outros
+ // componentes. Nunca atribuímos a diferença do total à categoria PERFIS:
+ // #1176: 1790,84 - 289,09 - 401,80 = 1099,95 (mistura perfis+sobra+perda).
+ // Materiais utilizados: perfis 525,90 + sobra 570,28 = 1096,18.
+ const perfil_centro_custo=perfilDasPrevisoes(f,p)
+ const perfilComSobra=categorias.perfil!==null&&categorias.sobra!==null
+  ?Math.round((categorias.perfil+categorias.sobra)*100)/100:null
+ const perfil_previsao=perfilComSobra??perfil_centro_custo
+ const perfil_previsao_fonte:ResumoCmv['perfil_previsao_fonte']=perfilComSobra!==null
+  ?'uso_mais_sobra_wvetro':perfil_centro_custo!==null?'despesas_extras_wvetro':null
  const completo=Object.values(categorias).every(v=>v!==null)
  const soma=completo?Math.round(Object.values(categorias).reduce<number>((s,v)=>s+(v??0),0)*100)/100:null
  const quantidade=Object.values(categorias).filter(v=>v!==null).length
  const aviso=quantidade===0?'O W.Vetro informou o total histórico, mas ainda não forneceu o detalhamento por categoria.':!completo?'O detalhamento W.Vetro ainda está incompleto.':historico!==null&&soma!==null&&Math.abs(historico-soma)>0.03?'Total histórico W.Vetro diferente da soma das categorias.':null
  const fonte=quantidade===0?(historico!==null?'resumo_wvetro':'indisponivel'):(Object.keys(resumo).length?'resumo_obra_wvetro':'conferir_valores')
- return {categorias,total:historico??soma,fonte,aviso:historico===null&&quantidade===0?'Resumo W.Vetro indisponível.':aviso,perfil_previsao,perfil_previsao_fonte}
+ return {categorias,total:historico??soma,fonte,aviso:historico===null&&quantidade===0?'Resumo W.Vetro indisponível.':aviso,perfil_previsao,perfil_previsao_fonte,perfil_centro_custo,perda_fonte,total_uso,total_com_sobra}
 }
