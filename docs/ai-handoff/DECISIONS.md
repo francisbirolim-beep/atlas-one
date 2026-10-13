@@ -132,4 +132,15 @@ Regra obrigatória para qualquer alteração no Atlas:
 - se for realmente necessário retirar ou mudar um comportamento existente, isso exige pedido explícito e deve aparecer no diff/validação;
 - antes do merge, conferir regressão do fluxo imediatamente vizinho ao que foi alterado.
 
-Exemplo canônico: sincronizar um orçamento W.Vetro pode atualizar itens, valores e metadados da integração, mas não pode apagar anexos, fotos, observações, histórico ou outros dados preenchidos manualmente no card.
+Exemplo canônico: ao vincular manualmente um orçamento W.Vetro no Kanban, qualquer enriquecimento técnico autorizado deve preservar fotos, medidas, anexos, observações, histórico e dados manuais do card.
+
+
+## W.Vetro → Atlas: importação de orçamentos somente novos (13/10/2026)
+
+- A identidade de um orçamento importado é `(empresa_id, número original W.Vetro)`, não o número sequencial interno atribuído pelo Atlas.
+- A sincronização automática só pode **criar** orçamentos cuja identidade ainda não exista em `orcamentos`.
+- Reexecução de período, chamada forçada (`forcar`, `corrigir_tudo`) ou mudança de payload no W.Vetro **não** reimporta nem regrava orçamento existente.
+- Na verificação, considerar inclusive orçamento ocultado por vínculo (`modo_entrada='wvetro_api_vinculado'`) e referências legadas `wvetro_fluxo.numero_wvetro`.
+- O vínculo **manual e explícito** de um orçamento W.Vetro a um card Atlas preexistente é uma operação distinta de importação automática; não pode criar dois cards ativos para a mesma referência e deve preservar o trabalho realizado no Atlas.
+- Não apagar/mesclar automaticamente históricos duplicados antigos. Auditar números repetidos e tratar o saneamento em procedimento separado e reversível.
+- Antes de publicar mudanças, testar reprocessamento do mesmo período duas vezes, orçamento já vinculado/oculto, orçamento novo e duas sincronizações concorrentes. A proteção contra concorrência deve ser garantida no banco antes da liberação definitiva em produção.
