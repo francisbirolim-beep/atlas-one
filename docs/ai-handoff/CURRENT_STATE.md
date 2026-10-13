@@ -681,3 +681,8 @@ Branch `fix/wvetro-corte-barras-setores-20261013` — preview não publicado em 
 - **Produção** mostra a lista de peças cortadas e, ao clicar Editar cortes, expande o editor técnico nessa própria aba; não usa Materiais para exibir 40 cortes.
 - **Compras** exibe o Kanban das barras, preservando cotações históricas já movimentadas sem consolidá-las ou reescrevê-las.
 - Mudança visual solicitada pelo usuário após testar PR #811; preview original não atendia à posição correta. Validar esta revisão antes de publicar em produção.
+
+## 2026-10-13 — Regra transversal obrigatória de imagens
+- Perfis e acessórios nas listas de Materiais, Compras, Produção e PDFs: resolver por cadastro ID/código exato com isolamento de empresa, alternativamente desenho técnico do próprio item WVetro.
+- Ausência de foto não pode ser representada por imagem arbitrária; mostrar claramente `Imagem pendente` e exigir completar cadastro, sem apagar registros nem misturar cards.
+- Implementação inicial na lista de barras comerciais WVetro, cards de Compras, lista de corte e PDFs de barras/cortes. Demais fluxos usam esta decisão como requisito de aceitação.
