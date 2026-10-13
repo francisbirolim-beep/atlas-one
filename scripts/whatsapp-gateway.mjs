@@ -62,6 +62,7 @@ const qrStates = new Map()
 const groupSyncTimers = new Map()
 const groupSyncLastAt = new Map()
 const groupSyncInFlight = new Set()
+const pausedChannels = new Set()
 const reconnectAttempts = new Map()
 const reconnectAfter = new Map()
 let shuttingDown = false
@@ -894,10 +895,19 @@ async function disconnectChannel(channelId, markOffline = true) {
   if (markOffline) await reportState(channelId, 'offline')
   try { state.sock?.end?.(new Error('Canal encerrado')) } catch {}
   sessions.delete(channelId)
+  reconnectAttempts.delete(channelId)
+  reconnectAfter.delete(channelId)
+  qrStates.set(channelId, {
+    id: channelId,
+    nome: state.channel?.nome || 'WhatsApp',
+    status: pausedChannels.has(channelId) ? 'paused' : 'offline',
+    qrDataUrl: null,
+    updatedAt: new Date().toISOString(),
+  })
 }
 
 async function connectChannel(channel) {
-  if (shuttingDown || sessions.has(channel.id) || !canReconnect(channel.id)) return
+  if (shuttingDown || pausedChannels.has(channel.id) || sessions.has(channel.id) || !canReconnect(channel.id)) return
 
   const sessionDir = path.join(SESSIONS_DIR, channel.session_slug || channel.id)
   fs.mkdirSync(sessionDir, { recursive: true })
@@ -961,6 +971,16 @@ async function connectChannel(channel) {
       if (connection === 'open') {
         const connectedJid = sock?.user?.id || null
         const result = await reportState(channel.id, 'connected', { connectedJid })
+        if (result?.paused === true) {
+          stateEntry.stopping = true
+          try { sock.end(new Error('Canal pausado pelo Atlas')) } catch {}
+          sessions.delete(channel.id)
+          qrStates.set(channel.id, {
+            id: channel.id, nome: channel.nome, status: 'paused',
+            qrDataUrl: null, updatedAt: new Date().toISOString(),
+          })
+          return
+        }
         if (result?.accepted === false) {
           stateEntry.mismatch = true
           console.error(
@@ -996,7 +1016,16 @@ async function connectChannel(channel) {
 
         if (loggedOut || stateEntry.mismatch) {
           await reportState(channel.id, stateEntry.mismatch ? 'mismatch' : 'offline')
-          fs.rmSync(sessionDir, { recursive: true, force: true })
+          // Não apagar credenciais e histórico ao perder autenticação.
+          // Arquivar o conjunto anterior e preparar uma sessão limpa para o novo QR.
+          try {
+            if (fs.existsSync(sessionDir)) {
+              fs.renameSync(sessionDir, `${sessionDir}.expirada-${Date.now()}`)
+            }
+          } catch (error) {
+            console.error(`[gateway] falha ao preservar sessão expirada de ${channel.nome}:`, error)
+            return
+          }
           console.log(`[gateway] nova leitura de QR necessaria: ${channel.nome}`)
         } else {
           await reportState(channel.id, 'disconnected')
@@ -1092,7 +1121,10 @@ async function connectChannel(channel) {
 async function refreshChannels() {
   if (shuttingDown) return
   try {
-    const channels = await listChannels()
+    const allChannels = await listChannels()
+    pausedChannels.clear()
+    for (const c of allChannels) if (c.conexao_pausada === true) pausedChannels.add(c.id)
+    const channels = allChannels.filter(c => !pausedChannels.has(c.id))
     const activeIds = new Set(channels.map((c) => c.id))
 
     for (const [id] of sessions) {
