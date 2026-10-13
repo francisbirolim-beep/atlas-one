@@ -440,3 +440,6 @@ Nenhum merge para `main`.
 - Vínculo usa o card atual como destino; dados técnicos do W.Vetro são atualizados sem apagar informações manuais.
 - Duplicado W.Vetro já importado pode ser consolidado no card escolhido e ocultado das visões Kanban/Cliente 360.
 - Regra de preservação funcional adicionada ao repositório para impedir regressões por alterações fora do escopo.
+
+## 2026-10-13 — Separação WVetro: lista de corte e barras utilizadas (candidato)
+Novos `VendaListaCorteWVetro`, `VendaBarrasWVetro`, parser posicional PDF WVetro, API de importação/validação e acompanhamento, página de impressão por card e tabela de feedback. Samuel #872: 18 linhas / 31 barras pendentes, preservando 40 cortes. Build, TypeScript e regressão do PDF real validados; falta teste funcional do preview.
