@@ -64,6 +64,7 @@ const groupSyncLastAt = new Map()
 const groupSyncInFlight = new Set()
 const pausedChannels = new Set()
 const reconnectAttempts = new Map()
+const reconnectRequestsHandled = new Map()
 const reconnectAfter = new Map()
 let shuttingDown = false
 let refreshTimer = null
@@ -1010,7 +1011,8 @@ async function connectChannel(channel) {
           lastDisconnect?.error?.output?.statusCode ||
           lastDisconnect?.error?.statusCode
         const loggedOut = statusCode === DisconnectReason.loggedOut
-        sessions.delete(channel.id)
+        // Eventos de sockets antigos não podem apagar uma nova sessão.
+        if (sessions.get(channel.id) === stateEntry) sessions.delete(channel.id)
 
         if (stateEntry.stopping || shuttingDown) return
 
@@ -1132,6 +1134,17 @@ async function refreshChannels() {
     }
 
     for (const channel of channels) {
+      const pedido = Date.parse(String(channel.gateway_reconnect_requested_at || ''))
+      const anterior = reconnectRequestsHandled.get(channel.id) || 0
+      if (Number.isFinite(pedido) && pedido > anterior) {
+        reconnectRequestsHandled.set(channel.id, pedido)
+        // O botão Recuperar deve acordar a conexão, inclusive se um socket travou.
+        // Encerramento leve mantém credentials e mensagens já sincronizadas.
+        if (sessions.has(channel.id)) await disconnectChannel(channel.id, false)
+        reconnectAttempts.delete(channel.id)
+        reconnectAfter.delete(channel.id)
+        console.log(`[gateway] reconexão solicitada pelo Atlas: ${channel.nome}`)
+      }
       if (!sessions.has(channel.id) && canReconnect(channel.id)) void connectChannel(channel)
     }
     refreshErrorStreak = 0

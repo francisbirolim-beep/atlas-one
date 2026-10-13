@@ -182,23 +182,36 @@ export async function PATCH(req: NextRequest) {
       if (!(await podeOperarConexao(usuario, canal.id))) {
         return NextResponse.json({ error: 'Somente Master ou usuário autorizado pode conectar/desconectar este WhatsApp.' }, { status: 403 })
       }
-      // Não mudar session_slug, número, credenciais ou conversas.
-      // O gateway reconecta com a sessão persistida; mostra QR apenas se precisar.
-      const status = acao === 'desconectar' ? 'paused' : 'disconnected'
+      // Registrar comando explícito sem trocar session_slug e sem descartar o histórico.
+      // Se o gateway estiver indisponível, a solicitação permanece registrada.
+      const desconectar = acao === 'desconectar'
+      const agora = new Date().toISOString()
+      const ultimoSinal = Date.parse(String(canal.gateway_last_seen_at || ''))
+      const sinalRecente = Number.isFinite(ultimoSinal) && Date.now() - ultimoSinal < 10 * 60_000
       const { data, error } = await supabaseAdmin
         .from('atendimento_whatsapp_canais')
         .update({
-          gateway_status: status,
-          conexao_pausada: acao === 'desconectar',
+          gateway_status: desconectar ? 'paused' : 'disconnected',
+          conexao_pausada: desconectar,
           gateway_qr_data_url: null,
-          updated_at: new Date().toISOString(),
+          // Requisição nova é identificável pelo gateway mesmo que já exista sessão.
+          ...(!desconectar ? { gateway_reconnect_requested_at: agora } : {}),
+          updated_at: agora,
         })
         .eq('id', id)
         .eq('empresa_id', usuario.empresa_id)
         .select('*')
         .single()
       if (error) throw error
-      return NextResponse.json({ ok: true, canal: data })
+      const mensagem = desconectar
+        ? 'Desconexão solicitada. A sessão e o histórico foram preservados.'
+        : sinalRecente
+          ? 'Solicitação enviada. A conexão existente será recuperada ou um novo QR será exibido se necessário.'
+          : 'Solicitação registrada, mas o gateway não apresenta sinal recente. É necessário restabelecer o serviço do WhatsApp no computador para gerar o QR Code.'
+      return NextResponse.json({
+        ok: true, canal: data, mensagem,
+        gateway_sem_sinal: !sinalRecente,
+      }, { status: !desconectar && !sinalRecente ? 202 : 200 })
     }
 
     if (acao !== 'editar') {
