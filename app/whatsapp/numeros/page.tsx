@@ -18,6 +18,7 @@ type PermissaoCanal = {
   pode_atender: boolean
   pode_transferir: boolean
   pode_supervisionar: boolean
+  pode_gerenciar_conexao: boolean
 }
 type Canal = {
   id: string
@@ -33,6 +34,7 @@ type Canal = {
   criado_por_nome?: string | null
   ativo: boolean
   gateway_status: string
+  pode_gerenciar_conexao?: boolean
   gateway_qr_data_url?: string | null
   gateway_qr_updated_at?: string | null
   gateway_connected_jid?: string | null
@@ -63,6 +65,7 @@ function statusLabel(status: string) {
   if (status === 'connecting') return 'Conectando'
   if (status === 'mismatch') return 'Número divergente'
   if (status === 'disconnected') return 'Reconectando'
+  if (status === 'paused') return 'Desconectado manualmente'
   return 'Desconectado'
 }
 
@@ -158,6 +161,7 @@ export default function NumerosWhatsAppPage() {
       nome:canal.nome,tipoConta:canal.tipo_conta,usuarioId:canal.usuario_id||'',
       nivelHierarquia:Number(canal.nivel_hierarquia||100),
     }
+    if(acao==='desconectar'&&!window.confirm('Desconectar este WhatsApp do Atlas? A sessão e as conversas serão preservadas.'))return
     const headers=await headersJson()
     const resp=await fetch('/api/integracoes/whatsapp/canais',{
       method:'PATCH',headers,
@@ -188,19 +192,20 @@ export default function NumerosWhatsAppPage() {
       pode_atender:false,
       pode_transferir:false,
       pode_supervisionar:false,
+      pode_gerenciar_conexao:false,
     }
   }
 
   async function salvarPermissao(
     canalId:string,
     usuarioId:string,
-    campo:'pode_visualizar'|'pode_atender'|'pode_transferir'|'pode_supervisionar',
+    campo:'pode_visualizar'|'pode_atender'|'pode_transferir'|'pode_supervisionar'|'pode_gerenciar_conexao',
     valor:boolean,
   ) {
     setErro('')
     const atual=permissaoDoUsuario(canalId,usuarioId)
     const proxima={...atual,[campo]:valor}
-    if(campo!=='pode_visualizar'&&valor)proxima.pode_visualizar=true
+    if(campo!=='pode_visualizar'&&campo!=='pode_gerenciar_conexao'&&valor)proxima.pode_visualizar=true
     if(campo==='pode_visualizar'&&!valor){
       proxima.pode_atender=false
       proxima.pode_transferir=false
@@ -222,6 +227,7 @@ export default function NumerosWhatsAppPage() {
           podeAtender:proxima.pode_atender,
           podeTransferir:proxima.pode_transferir,
           podeSupervisionar:proxima.pode_supervisionar,
+          podeGerenciarConexao:proxima.pode_gerenciar_conexao,
         }),
       })
       const json=await resp.json()
@@ -270,7 +276,7 @@ export default function NumerosWhatsAppPage() {
         {erro&&<div className="border-b bg-red-50 px-5 py-2 text-sm text-red-700">{erro}</div>}
 
         <div className="space-y-6 p-5">
-          <section className="rounded-2xl border bg-slate-50 p-4">
+          {eu?.role==='master'&&<section className="rounded-2xl border bg-slate-50 p-4">
             <h2 className="flex items-center gap-2 font-bold text-slate-900">
               <Plus size={17}/> Adicionar canal
             </h2>
@@ -301,7 +307,7 @@ export default function NumerosWhatsAppPage() {
             <p className="mt-2 text-[11px] text-slate-500">
               Hierarquia 0 é exclusiva do canal principal. Nos demais, valores menores representam maior nível hierárquico.
             </p>
-          </section>
+          </section>}
 
           {carregando?(
             <div className="p-10 text-center text-sm text-slate-400">Carregando números...</div>
@@ -315,7 +321,7 @@ export default function NumerosWhatsAppPage() {
                   nivelHierarquia:Number(canal.nivel_hierarquia||100),
                 }
                 const conectado=canal.gateway_status==='connected'
-                const qr=canal.gateway_status==='qr'&&canal.gateway_qr_data_url
+                const qr=canal.pode_gerenciar_conexao&&canal.gateway_status==='qr'&&canal.gateway_qr_data_url
                 return (
                   <article key={canal.id} className={`rounded-2xl border p-4 ${canal.principal?'border-emerald-300 bg-emerald-50/30':'bg-white'}`}>
                     <div className="flex items-start gap-3">
@@ -404,7 +410,7 @@ export default function NumerosWhatsAppPage() {
                           <div>
                             <b className="text-xs text-slate-800">Permissões da equipe</b>
                             <p className="text-[10px] text-slate-500">
-                              Ver, atender, transferir ou apenas supervisionar este canal.
+                              Ver, atender, transferir, supervisionar ou conectar este canal.
                             </p>
                           </div>
                           {canal.usuario_nome&&(
@@ -414,9 +420,9 @@ export default function NumerosWhatsAppPage() {
                           )}
                         </div>
                         <div className="space-y-2">
-                          {usuarios.filter(u=>u.role!=='master'&&u.id!==canal.usuario_id).map(u=>{
+                          {usuarios.filter(u=>u.role!=='master').map(u=>{
                             const p=permissaoDoUsuario(canal.id,u.id)
-                            const ativa=Boolean(p.id||p.pode_visualizar||p.pode_atender||p.pode_transferir||p.pode_supervisionar)
+                            const ativa=Boolean(p.id||p.pode_visualizar||p.pode_atender||p.pode_transferir||p.pode_supervisionar||p.pode_gerenciar_conexao)
                             return(
                               <div key={u.id} className="rounded-lg border bg-white p-2.5">
                                 <div className="flex items-center justify-between gap-2">
@@ -428,12 +434,13 @@ export default function NumerosWhatsAppPage() {
                                     </button>
                                   )}
                                 </div>
-                                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
+                                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-3">
                                   {([
                                     ['pode_visualizar','Ver canal'],
                                     ['pode_atender','Atender'],
                                     ['pode_transferir','Transferir'],
                                     ['pode_supervisionar','Supervisionar'],
+                                    ['pode_gerenciar_conexao','Conectar / desconectar'],
                                   ] as const).map(([campo,rotulo])=>(
                                     <label key={campo} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1.5">
                                       <input type="checkbox" checked={Boolean(p[campo])}
@@ -445,7 +452,7 @@ export default function NumerosWhatsAppPage() {
                               </div>
                             )
                           })}
-                          {usuarios.filter(u=>u.role!=='master'&&u.id!==canal.usuario_id).length===0&&(
+                          {usuarios.filter(u=>u.role!=='master').length===0&&(
                             <p className="py-2 text-center text-[11px] text-slate-400">
                               Nenhum outro usuário disponível.
                             </p>
@@ -459,10 +466,20 @@ export default function NumerosWhatsAppPage() {
                         className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">
                         <Save size={14}/> Salvar
                       </button>
-                      <button onClick={()=>void atualizar(canal,'reconectar')}
-                        className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold">
-                        <RefreshCw size={14}/> Novo QR
-                      </button>
+                      {canal.pode_gerenciar_conexao&&(
+                        <>
+                          <button onClick={()=>void atualizar(canal,'conectar')}
+                            disabled={conectado||canal.gateway_status==='connecting'||canal.gateway_status==='qr'}
+                            className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-40">
+                            <RefreshCw size={14}/> {canal.gateway_status==='paused'?'Conectar':'Conectar / recuperar QR'}
+                          </button>
+                          <button onClick={()=>void atualizar(canal,'desconectar')}
+                            disabled={canal.gateway_status==='paused'}
+                            className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-40">
+                            <WifiOff size={14}/> Desconectar
+                          </button>
+                        </>
+                      )}
                       {!canal.principal&&(
                         <button onClick={()=>void remover(canal)}
                           className="ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
