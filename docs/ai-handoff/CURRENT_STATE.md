@@ -662,3 +662,16 @@ Branch: `fix/kanban-wvetro-sync-preservacao-v1`
 - regra global de preservação funcional registrada em `CLAUDE.md` e `DECISIONS.md`.
 
 Validação técnica pendente nesta branch.
+
+## 2026-10-13 — Cards parciais, Produção e Instalação — Preview/validação
+
+Branch: `feat/producao-instalacao-cards-parciais-20261013`, PR #803 (draft).
+
+- Compras/Perfil com cards 38 + 2 e PDFs filtrados foram aprovados pelo usuário, PR #800 mesclada e deploy production READY.
+- Nova conferência por unidade de OP em Produção: seleção das unidades efetivamente produzidas, registro de usuário e data, parcial preservado e conclusão da OP somente com todas as unidades conferidas.
+- Tabela backend-only de unidades, quantidade produzida opcional e trigger para impedir conclusão integral de OP individualizada pendente. Migração aditiva aplicada no Supabase; nenhuma unidade preexistente foi inserida.
+- Instalação passa a exibir Kanban por item/quantidade nas colunas A instalar, Em instalação, Instalado e Com pendência dentro da Venda; modifica apenas o controle existente, sem criar fonte paralela.
+- Instalação usa quantidade conferida por OP para limitar instalação parcial, com fallback ao status de OPs legadas.
+- Painel de Produção mostra progresso por unidade; arrastar card global para finalização com OP pendente é bloqueado.
+- Validados: testes de quantidade parcial 2/4 versus instalação, teste legado de instalação, TypeScript e build local.
+- PENDENTE antes do merge/release: validação funcional autenticada de OP em Conferência, conferência das unidades produzidas e instalação parcial, atualização de Kanban, recarga e verificação dos gates de encerramento. NÃO mesclar automaticamente.
