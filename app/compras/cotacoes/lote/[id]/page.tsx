@@ -3,15 +3,17 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowLeft, FileDown, ImageOff, Loader2, PackageSearch } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { ETAPAS_COTACAO, itensDoCardCotacao, type EtapaCotacao } from '@/lib/cotacaoEtapas'
 
 type Item = {
+  material_id:string;status_etapa?:string|null;grupo_card_id?:string|null;
   codigo:string|null;descricao:string;cor:string|null;unidade:string;
   quantidade_tecnica:number;sobra_utilizada:number;quantidade_cotar:number;
   comprimento_corte_mm:number|null;comprimento_barra_mm:number|null;
   imagem_url?:string|null
 }
 type Lote = {
-  id:string;categoria:string;versao:number;quantidade_itens:number;created_at:string;
+  id:string;status:string;categoria:string;versao:number;quantidade_itens:number;created_at:string;
   gerado_por_nome:string|null;updated_at:string;itens:Item[]
 }
 type Contexto = {
@@ -31,8 +33,12 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
   const [erro,setErro]=useState('')
   const [erroImpressao,setErroImpressao]=useState('')
   const [vendaId,setVendaId]=useState('')
+  const [escopoCard,setEscopoCard]=useState<{etapa:EtapaCotacao;grupoId:string}|null>(null)
   useEffect(()=>{
-    const id=new URLSearchParams(window.location.search).get('vendaId')||''
+    const parametros=new URLSearchParams(window.location.search)
+    const id=parametros.get('vendaId')||''
+    const grupoId=parametros.get('grupoCardId')
+    const etapaTexto=parametros.get('etapaCard')
     setVendaId(id)
     let ativo=true
     void (async()=>{
@@ -44,7 +50,22 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
         const json=await r.json().catch(()=>({}))
         if(!r.ok)throw new Error(json?.error||'Não foi possível consultar esta cotação.')
         if(!json.lotes?.length)throw new Error('Cotação não encontrada nesta venda.')
-        if(ativo){setLote(json.lotes[0] as Lote);setContexto((json.contexto||null) as Contexto|null)}
+        const completo=json.lotes[0] as Lote
+        let exibido=completo
+        let escopo:null|{etapa:EtapaCotacao;grupoId:string}=null
+        if(grupoId!==null||etapaTexto!==null){
+          if(!grupoId||!etapaTexto||!ETAPAS_COTACAO.includes(etapaTexto as EtapaCotacao)){
+            throw new Error('Link do card inválido. Abra o PDF novamente pelo Kanban de Compras.')
+          }
+          const etapa=etapaTexto as EtapaCotacao
+          const itens=itensDoCardCotacao(completo,etapa,grupoId)
+          if(!itens.length){
+            throw new Error('Os materiais deste card mudaram de etapa. Volte ao Kanban e abra o PDF novamente.')
+          }
+          exibido={...completo,itens,quantidade_itens:itens.length}
+          escopo={etapa,grupoId}
+        }
+        if(ativo){setLote(exibido);setEscopoCard(escopo);setContexto((json.contexto||null) as Contexto|null)}
       }catch(e){if(ativo)setErro(e instanceof Error?e.message:'Falha ao abrir cotação.')}
       finally{if(ativo)setCarregando(false)}
     })()
@@ -108,9 +129,9 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
             <p className="text-[10px] text-slate-500">Soluções em Alumínio · Atlas One</p>
           </div>
         </div>
-        <span className="rounded border border-slate-300 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">Solicitação de cotação</span>
+        <span className="rounded border border-slate-300 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">{escopoCard?'Lista dos materiais do card':'Solicitação de cotação'}</span>
       </div>
-      <h1 className="mt-4 text-xl font-black md:text-2xl print:mt-2 print:text-lg">Cotação de {nomes[lote.categoria]||lote.categoria}</h1>
+      <h1 className="mt-4 text-xl font-black md:text-2xl print:mt-2 print:text-lg">{escopoCard?'Materiais do card':'Cotação'} de {nomes[lote.categoria]||lote.categoria}</h1>
       <div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-3 print:grid-cols-3 print:gap-y-1 print:p-2">
         <div><span className="font-semibold text-slate-500">Cliente:</span><p className="font-bold">{fallback(contexto?.cliente)}</p></div>
         <div><span className="font-semibold text-slate-500">Obra:</span><p className="font-bold">{fallback(contexto?.obra)}{contexto?.numero_obra?' · Nº '+contexto.numero_obra:''}</p></div>
@@ -119,6 +140,7 @@ export default function ListaCotacaoPage({params}:{params:{id:string}}){
         <div><span className="font-semibold text-slate-500">Lista / versão:</span><p className="font-bold">#{lote.id.slice(0,8).toUpperCase()} · v{lote.versao}</p></div>
         <div><span className="font-semibold text-slate-500">Orçamento / itens:</span><p className="font-bold">{contexto?.numero_orcamento?'#'+contexto.numero_orcamento+' · ':''}{lote.quantidade_itens} itens</p></div>
       </div>
+      {escopoCard&&<p className="mt-2 text-[11px] font-semibold text-blue-800">Documento parcial: somente os {lote.itens.length} materiais deste card. Outros cards da mesma obra não estão incluídos.</p>}
       {contexto?.responsavel&&<p className="mt-2 text-[11px] text-slate-500">Responsável pela emissão: {contexto.responsavel}</p>}
     </header>
 
