@@ -133,3 +133,12 @@ Regra obrigatória para qualquer alteração no Atlas:
 - antes do merge, conferir regressão do fluxo imediatamente vizinho ao que foi alterado.
 
 Exemplo canônico: sincronizar um orçamento W.Vetro pode atualizar itens, valores e metadados da integração, mas não pode apagar anexos, fotos, observações, histórico ou outros dados preenchidos manualmente no card.
+
+## WVetro: peças cortadas não são barras para comprar (2026-10-13)
+
+- `wvetro_composicao.perfis` de `orcamentos.itens` origina linhas de corte (`pacote_tecnico_materiais`, com `comprimento_corte_mm` por peça). Essa fonte pertence à Produção e à Lista de Corte; não determina quantidade de barras comerciais.
+- As barras inteiras são obtidas do relatório separado **BARRAS UTILIZADAS / Relatório de Cotação de Barras**, agrupadas por código, acabamento/tratamento, tipo e comprimento de barra.
+- Um pedido deve usar apenas barras validadas e sempre manter os cortes originais, as cotações históricas e os grupos de card anteriores. Não recalcular arbitrariamente barras como ceil(soma dos cortes / 6000) porque sobra, usinagem, perdas e otimização mudam o resultado.
+- Importação deve conferir número WVetro original da venda, quantidade de barras (BR), peso/sobra como indicadores e manter hash e campos originais do documento. Correções precisam de motivo e registro `antes/depois`, usuário e data.
+- Aprendizado supervisionado de correções pode sugerir mapeamento em novos relatórios da mesma empresa e mesma chave; nunca corrigir automaticamente quantidades de outras obras, nem inferir uma compra realizada.
+- Fonte PDF autenticada no WVetro depende do acesso do usuário; a API operacional atualmente não fornece diretamente `relbarrasutilizadasnovo`. Para importar futuros relatórios usar PDF exportado do WVetro, sem simular uma integração automática inexistente.
