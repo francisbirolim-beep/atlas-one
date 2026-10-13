@@ -2,13 +2,13 @@
 
 import {useMemo,useState} from 'react'
 import Link from 'next/link'
-import {FileDown,Scissors} from 'lucide-react'
+import {FileDown,ImageOff,Scissors} from 'lucide-react'
 
 export type CorteWVetro={
- id:string;categoria:string;codigo?:string|null;descricao:string;unidade:string;
+ id:string;categoria:string;codigo?:string|null;produto_id?:string|null;descricao:string;unidade:string;
  quantidade_ajustada?:number|null;quantidade_tecnica?:number|null;
  comprimento_corte_mm?:number|null;comprimento_barra_mm?:number|null;
- cor_ref?:string|null;item_ref?:string|null;justificativa_ajuste?:string|null;origem_calculo?:string|null
+ cor_ref?:string|null;item_ref?:string|null;justificativa_ajuste?:string|null;origem_calculo?:string|null;wvetro_dados?:Record<string,unknown>|null
 }
 const filtros=[
  {id:'perfil',titulo:'Perfis'},
@@ -16,8 +16,8 @@ const filtros=[
  {id:'vidro',titulo:'Vidros'},
  {id:'outros',titulo:'Outros'},
 ] as const
-export default function VendaListaCorteWVetro({materiais,obraId,pacoteId,orcamentoId,onEditar}:{
- materiais:CorteWVetro[];obraId?:string|null;pacoteId?:string|null;orcamentoId:string;onEditar:()=>void
+export default function VendaListaCorteWVetro({materiais,obraId,pacoteId,orcamentoId,onEditar,imagensPorCodigo,imagensPorProduto}:{
+ materiais:CorteWVetro[];obraId?:string|null;pacoteId?:string|null;orcamentoId:string;onEditar:()=>void;imagensPorCodigo?:Record<string,string>;imagensPorProduto?:Record<string,string>
 }){
  const [categoria,setCategoria]=useState<(typeof filtros)[number]['id']>('perfil')
  const dados=useMemo(()=>materiais.filter(m=>{
@@ -43,8 +43,17 @@ export default function VendaListaCorteWVetro({materiais,obraId,pacoteId,orcamen
   <div className="mt-3 flex flex-wrap gap-2">{filtros.map(f=><button key={f.id} onClick={()=>setCategoria(f.id)} className={'rounded-lg border px-3 py-2 text-xs font-semibold '+(categoria===f.id?'border-blue-600 bg-blue-600 text-white':'bg-slate-50 text-slate-700')}>{f.titulo}</button>)}</div>
   <div className="mt-3 max-h-[420px] overflow-auto rounded-lg border">
    <table className="w-full min-w-[950px] text-left text-xs">
-    <thead className="sticky top-0 bg-slate-100 text-slate-600"><tr><th className="p-2">Código</th><th>Descrição</th><th>Ambiente / tipologia</th><th>Qtde de peças</th><th>Medida do corte</th><th>Cor</th><th>Barra de origem</th></tr></thead>
-    <tbody>{dados.map(m=><tr key={m.id} className="border-t">
+    <thead className="sticky top-0 bg-slate-100 text-slate-600"><tr><th className="p-2">Imagem do produto</th><th className="p-2">Código</th><th>Descrição</th><th>Ambiente / tipologia</th><th>Qtde de peças</th><th>Medida do corte</th><th>Cor</th><th>Barra de origem</th></tr></thead>
+    <tbody>{dados.map(m=>{
+     const candidatos=m.wvetro_dados||{}
+     const wvetro=([candidatos.imagem_atlas_url,candidatos.imagemAtlasUrl,candidatos.imagem_url,candidatos.image_url,candidatos.foto_url,candidatos.fotoUrl]).find(x=>typeof x==='string'&&x.trim()) as string|undefined
+     const imagem=(m.produto_id&&imagensPorProduto?.[m.produto_id])||imagensPorCodigo?.[String(m.codigo||'').trim().toUpperCase()]||wvetro||null
+     const exigeImagem=m.categoria==='perfil'||m.categoria==='contramarco'||m.categoria==='acessorio'||m.categoria==='acessorios'
+     return <tr key={m.id} className="border-t">
+     <td className="p-2"><div className={'flex min-w-[80px] flex-col items-center justify-center gap-1 rounded-lg border p-1 '+(!imagem&&exigeImagem?'border-amber-300 bg-amber-50':'border-slate-200')}>
+      {imagem?<img src={imagem} alt={'Imagem técnica '+(m.codigo||m.descricao)} className="h-12 w-12 object-contain"/>:<ImageOff size={18} className="text-amber-500"/>}
+      {!imagem&&exigeImagem&&<span className="text-center text-[10px] font-semibold text-amber-800">Imagem pendente</span>}
+     </div></td>
      <td className="p-2 font-mono font-bold">{m.codigo||'—'}</td>
      <td className="p-2">{m.descricao}</td>
      <td className="p-2 text-slate-500">{m.item_ref||'Geral da obra'}</td>
@@ -52,9 +61,9 @@ export default function VendaListaCorteWVetro({materiais,obraId,pacoteId,orcamen
      <td className="p-2 font-bold">{m.comprimento_corte_mm?Number(m.comprimento_corte_mm).toLocaleString('pt-BR')+' mm':'—'}</td>
      <td className="p-2">{m.cor_ref||'—'}</td>
      <td className="p-2">{m.comprimento_barra_mm?Number(m.comprimento_barra_mm).toLocaleString('pt-BR')+' mm':'—'}</td>
-    </tr>)}{!dados.length&&<tr><td colSpan={7} className="p-8 text-center text-slate-500">Nenhum corte desta categoria no pacote técnico.</td></tr>}</tbody>
+    </tr>})}{!dados.length&&<tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhum corte desta categoria no pacote técnico.</td></tr>}</tbody>
    </table>
   </div>
-  <p className="mt-2 text-[11px] text-slate-500">Esta lista técnica não libera pedidos de barras. A compra das barras do WVetro ocorre exclusivamente em Compras → Barras comerciais, após validação.</p>
+  <p className="mt-2 text-[11px] text-slate-500">Esta lista técnica não libera pedidos de barras. A compra das barras do WVetro ocorre em Materiais → Barras Utilizadas, após validação. Perfis e acessórios exigem imagem técnica cadastrada; itens sem foto permanecem sinalizados como pendentes.</p>
  </section>
 }
