@@ -64,6 +64,22 @@ export async function GET(req:NextRequest){
   const {count:totalFeedback}=await supabaseAdmin.from('agente_memorias')
    .select('id',{head:true,count:'exact'}).eq('empresa_id',usuario.empresa_id)
    .eq('chave','atlas_operacional:v1:cmv_wvetro')
+  const {data:historico,error:erroHistorico}=await supabaseAdmin.from('venda_cmv_lancamentos_historico')
+   .select('id,lancamento_id,antes,depois,alterado_por_nome,alterado_em')
+   .eq('empresa_id',usuario.empresa_id).eq('venda_obra_id',vendaId)
+   .order('alterado_em',{ascending:false}).limit(100)
+  // Prévia compatível com o banco antes da migração aditiva.
+  if(erroHistorico&&!['42P01','PGRST205'].includes(erroHistorico.code||''))throw erroHistorico
+  const trilha=await Promise.all((historico||[]).map(async h=>{
+   const anterior=h.antes as Record<string,any>
+   let anexoAnteriorUrl:string|null=null
+   if(anterior?.anexo_path){
+    const {data}=await supabaseAdmin.storage.from(BUCKET).createSignedUrl(anterior.anexo_path,600)
+    anexoAnteriorUrl=data?.signedUrl||null
+   }
+   return {id:h.id,lancamento_id:h.lancamento_id,alterado_por_nome:h.alterado_por_nome,
+    alterado_em:h.alterado_em,antes:h.antes,depois:h.depois,anexo_anterior_url:anexoAnteriorUrl}
+  }))
   const linhas=await Promise.all((lancamentos||[]).map(async linha=>{
    let anexo_url:string|null=null
    if(linha.anexo_path){
@@ -72,7 +88,7 @@ export async function GET(req:NextRequest){
    }
    return {...linha,anexo_url}
   }))
-  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:linhas,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0})
+  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:linhas,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0})
  }catch(e){
   console.error('Falha ao carregar CMV da venda:',e)
   return erro('Não foi possível carregar o CMV. Confira se a migração de lançamentos foi aplicada.',500)
@@ -131,5 +147,84 @@ export async function POST(req:NextRequest){
   if(anexoPath)await supabaseAdmin.storage.from(BUCKET).remove([anexoPath]).catch(()=>{})
   console.error('Falha ao registrar custo da obra:',e)
   return erro('Não foi possível registrar o custo. Confira a migração e o armazenamento.',500)
+ }
+}
+
+
+// Edição do mesmo lançamento, sem inserir novo custo ou apagar comprovantes.
+// Cliente e obra são sempre resolvidos pelo JWT, nunca pelo payload.
+export async function PATCH(req:NextRequest){
+ const usuario=await autenticarTenant(req)
+ if(!usuario)return erro('Sessão inválida.',401)
+ let novoAnexoPath:string|null=null
+ let gravado=false
+ try{
+  const form=await req.formData()
+  const vendaId=txt(form.get('vendaId'),80)
+  const lancamentoId=txt(form.get('lancamentoId'),80)
+  const versao=Number(form.get('versao'))
+  if(!/^[0-9a-f-]{36}$/i.test(vendaId)||!/^[0-9a-f-]{36}$/i.test(lancamentoId)
+    ||!Number.isInteger(versao)||versao<1)return erro('Identificação do lançamento inválida.')
+  const venda=await vendaVerificada(usuario.empresa_id,vendaId)
+  if(!venda)return erro('Venda não encontrada nesta empresa.',404)
+  const {data:antigo,error:erroAntigo}=await supabaseAdmin.from('venda_cmv_lancamentos')
+   .select('*').eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
+   .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id).maybeSingle()
+  if(erroAntigo)throw erroAntigo
+  if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
+  // Evita que outro colaborador altere lançamentos de terceiros sem autorização Master.
+  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id)
+    return erro('A edição deste lançamento exige o autor original ou o Master.',403)
+  if(antigo.versao!==versao)return erro('Este lançamento foi alterado por outra pessoa. Atualize antes de editar.',409)
+  const categoria=txt(form.get('categoria'),30)
+  const origem=txt(form.get('origem'),30)
+  const valor=numerico(form.get('valor'))
+  const quantidade=numerico(form.get('quantidade'))
+  const data_lancamento=txt(form.get('data'),10)
+  const fornecedor=txt(form.get('fornecedor'),150)
+  if(!categorias.includes(categoria))return erro('Categoria inválida.')
+  if(!origens.includes(origem))return erro('Origem inválida.')
+  if(valor===null||valor<=0||valor>999999999)return erro('Informe um valor positivo.')
+  if(!data_lancamento)return erro('Informe a data do custo.')
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
+  if(!fornecedor)return erro('Informe o fornecedor.')
+  if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
+  const descricao=txt(form.get('descricao'),500)||[categoria.replace(/_/g,' '),origem.replace(/_/g,' ')].join(' · ')
+  const anexo=form.get('arquivo')
+  const patch:Record<string,unknown>={
+   categoria,origem,descricao,valor:Math.round(valor*100)/100,quantidade,
+   unidade:txt(form.get('unidade'),30)||null,data_lancamento,fornecedor,
+   documento:txt(form.get('documento'),100)||null,observacoes:txt(form.get('observacoes'),1000)||null,
+   atualizado_em:new Date().toISOString(),atualizado_por_id:usuario.id,atualizado_por_nome:usuario.nome,
+   versao:versao+1,
+  }
+  if(anexo instanceof File&&anexo.size>0){
+   if(anexo.size>15*1024*1024)return erro('Comprovante maior que 15 MB.',413)
+   if(!tipos.includes(anexo.type))return erro('Envie PDF, JPG, PNG ou WEBP.')
+   novoAnexoPath=[usuario.empresa_id,vendaId,crypto.randomUUID()].join('/')
+    +'.'+(anexo.type==='application/pdf'?'pdf':anexo.type.split('/')[1])
+   const {error:erroUpload}=await supabaseAdmin.storage.from(BUCKET)
+    .upload(novoAnexoPath,Buffer.from(await anexo.arrayBuffer()),{contentType:anexo.type,upsert:false})
+   if(erroUpload)throw new Error('Falha ao guardar comprovante: '+erroUpload.message)
+   patch.anexo_nome=anexo.name.split('/').pop()!.slice(0,120)
+   patch.anexo_mime=anexo.type
+   patch.anexo_path=novoAnexoPath
+  }
+  const {data:atualizado,error:erroUpdate}=await supabaseAdmin.from('venda_cmv_lancamentos')
+   .update(patch).eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
+   .eq('venda_obra_id',vendaId).eq('versao',versao).select('id,versao').maybeSingle()
+  if(erroUpdate)throw erroUpdate
+  if(!atualizado)return erro('O lançamento mudou enquanto você editava. Atualize e tente novamente.',409)
+  gravado=true
+  return NextResponse.json({ok:true,id:atualizado.id,versao:atualizado.versao})
+ }catch(e){
+  console.error('Falha ao editar lançamento do CMV:',e)
+  return erro('Não foi possível salvar a edição. Confira o comprovante e tente novamente.',500)
+ }finally{
+  // Arquivo recém-enviado que não foi vinculado deve ser apagado;
+  // comprovantes antigos nunca são excluídos.
+  if(novoAnexoPath&&!gravado){
+   try{await supabaseAdmin.storage.from(BUCKET).remove([novoAnexoPath])}catch{}
+  }
  }
 }
