@@ -52,7 +52,7 @@ type Compra = { id:string; produto_id?:string|null; descricao?:string|null; cate
 type ProdutoCompra = { id:string; codigo?:string|null; nome?:string|null; foto_url?:string|null; categoria?:string|null }
 type CotacaoCompra = { id:string; necessidade_id:string; fornecedor_id?:string|null; preco_unitario?:number|null; frete?:number|null; prazo_dias?:number|null; previsao_entrega?:string|null; selecionada?:boolean|null }
 type FornecedorCompra = { id:string; nome:string }
-type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:string|null; quantidade?:number|null; status?:string|null; created_at:string; tipo_producao?:string|null; item_snapshot?:Record<string,any>|null; largura_mm?:number|null; altura_mm?:number|null; bloqueada?:boolean|null; bloqueio_motivo?:string|null }
+type Ordem = { id:string; numero?:number|null; titulo?:string|null; item_ref?:string|null; quantidade?:number|null; quantidade_produzida?:number|null; status?:string|null; created_at:string; tipo_producao?:string|null; item_snapshot?:Record<string,any>|null; largura_mm?:number|null; altura_mm?:number|null; bloqueada?:boolean|null; bloqueio_motivo?:string|null }
 type SetorItem = { id:string; coluna_id:string; titulo?:string|null; atualizado_em?:string|null }
 type SetorColuna = { id:string; setor_id:string; nome:string; ordem:number }
 type Documento = { id:string; obra_id?:string|null; titulo:string; nome_arquivo?:string|null; url:string; created_at:string; tipo?:string|null }
@@ -303,7 +303,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
       supabase.from('orcamentos').select('id,numero,valor_estimado,custo_estimado,status,itens,wvetro_fluxo').eq('id',v.orcamento_id).maybeSingle(),
       supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,valor_desconto,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
-      supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,status,created_at,tipo_producao,item_snapshot,largura_mm,altura_mm,bloqueada,bloqueio_motivo').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
+      supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,quantidade_produzida,status,created_at,tipo_producao,item_snapshot,largura_mm,altura_mm,bloqueada,bloqueio_motivo').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id,titulo,atualizado_em').eq('orcamento_id',v.orcamento_id),
       supabase.from('venda_instalacao_itens').select('id,item_ref,status,quantidade,quantidade_instalada,pendencia,checklist').eq('venda_obra_id',v.id),
     ])
@@ -487,7 +487,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const progressoCompras=pct(comprasEfetivadas,totalAcompanhar)
   const progressoMercadoria=pct(comprasRecebidas,totalAcompanhar)
   const ordensConcluidas=ordens.filter(o=>finalizada(o.status)).length
-  const progressoProducao=pct(ordensConcluidas,ordens.length)
+  const ordensAtivas=ordens.filter(o=>String(o.status||'')!=='cancelada')
+  const totalPecasProducao=ordensAtivas.reduce((s,o)=>s+Math.max(0,Number(o.quantidade||0)),0)
+  const pecasProduzidas=ordensAtivas.reduce((s,o)=>{
+    const total=Math.max(0,Number(o.quantidade||0))
+    return s+Math.min(total,Math.max(0,o.quantidade_produzida!=null?Number(o.quantidade_produzida):finalizada(o.status)?total:0))
+  },0)
+  const progressoProducao=pct(pecasProduzidas,totalPecasProducao)
 
   const comprasPorCategoria=useMemo(()=>{
     const base:{perfil:Compra[];vidro:Compra[];acessorios:Compra[];outros:Compra[]}={perfil:[],vidro:[],acessorios:[],outros:[]}
@@ -1114,7 +1120,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Progresso titulo="Financeiro" valor={pct(Math.max(0,valorVenda-aReceber),valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
         <Progresso titulo="Compras" valor={progressoCompras} detalhe={totalAcompanhar?`${comprasEfetivadas} de ${totalAcompanhar} itens no Kanban comprados` : 'Sem lista de compras'} ativo={painelEtapa==='compras'} onClick={()=>setPainelEtapa(painelEtapa==='compras'?null:'compras')}/>
         <Progresso titulo="Mercadoria recebida" valor={progressoMercadoria} detalhe={totalAcompanhar?`${comprasRecebidas} de ${totalAcompanhar} itens no Kanban Recebido (não atesta NF/estoque)` : 'Sem lista de compras'} ativo={painelEtapa==='mercadoria'} onClick={()=>setPainelEtapa(painelEtapa==='mercadoria'?null:'mercadoria')}/>
-        <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
+        <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${pecasProduzidas} de ${totalPecasProducao} unidade(s) produzidas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
         <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeInstalada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) instaladas':'Aguardando itens de instalação'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
       </div>
 
@@ -1201,7 +1207,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {painelEtapa==='producao'&&<div className="p-4">
           <div className="mb-4 grid gap-3 sm:grid-cols-3"><Kpi titulo="Ordens" valor={String(ordens.length)}/><Kpi titulo="Produzidas" valor={String(ordensConcluidas)}/><Kpi titulo="Faltam" valor={String(Math.max(0,ordens.length-ordensConcluidas))}/></div>
-          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Peça / ordem</th><th>Quantidade</th><th>Produzido</th><th>Falta</th><th>Status</th></tr></thead><tbody>{ordens.map(o=>{const qtd=Number(o.quantidade||1);const pronta=finalizada(o.status);return <tr key={o.id} className="border-t"><td className="px-3 py-3 font-semibold">OP #{o.numero||'—'} · {o.titulo||o.item_ref||'Peça'}</td><td>{qtd}</td><td>{pronta?qtd:0}</td><td>{pronta?0:qtd}</td><td><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{status(o.status)}</span></td></tr>})}{!ordens.length&&<tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Ainda não existem ordens de produção para esta venda.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-400"><tr><th className="px-3 py-2.5">Peça / ordem</th><th>Quantidade</th><th>Produzido</th><th>Falta</th><th>Status</th></tr></thead><tbody>{ordens.map(o=>{const qtd=Number(o.quantidade||1);const pronta=finalizada(o.status);const qtdFeita=o.quantidade_produzida!=null?Number(o.quantidade_produzida):pronta?qtd:0;return <tr key={o.id} className="border-t"><td className="px-3 py-3 font-semibold">OP #{o.numero||'—'} · {o.titulo||o.item_ref||'Peça'}</td><td>{qtd}</td><td>{qtdFeita}</td><td>{Math.max(0,qtd-qtdFeita)}</td><td><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{status(o.status)}</span></td></tr>})}{!ordens.length&&<tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Ainda não existem ordens de produção para esta venda.</td></tr>}</tbody></table></div>
         </div>}
 
         {painelEtapa==='instalacao'&&<div className="p-4">
